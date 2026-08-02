@@ -139,24 +139,6 @@ function basePorts(overrides: Partial<AuthorizePreparationPorts> = {}): Authoriz
 }
 
 describe('authorizePreparation', () => {
-  it('returns needs_attention for historical requests', async () => {
-    const ports = basePorts({
-      loadCurrent: vi.fn(async () => ({
-        kind: 'needs_attention' as const,
-        requestId: 'req:1',
-        reason: 'historical_request_resubmit_required' as const,
-        resumable: false as const,
-      })),
-    })
-    const result = await authorizePreparation(baseInput(), ports)
-    expect(result).toMatchObject({
-      kind: 'request',
-      state: 'needs_attention',
-      nextAction: 'retry',
-    })
-    expect(ports.prepare).not.toHaveBeenCalled()
-  })
-
   it('refuses when the request is missing', async () => {
     const ports = basePorts({
       loadCurrent: vi.fn(async () => ({ kind: 'not_found' as const })),

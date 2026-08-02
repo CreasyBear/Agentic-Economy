@@ -1,3 +1,4 @@
+import { readCookie, serializeCookie } from '@/lib/http/cookies'
 import type { AnswerThreadRecord, AnswerTurnRecord } from '@/modules/answer-thread/public'
 import { buildPublicThreadProjection } from '@/modules/answer-thread/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
@@ -80,11 +81,18 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
         [...store.turns.values()].filter((turn) => turn.threadId === threadId),
       )
     },
-    getThreadTurns: async (threadId) => ({
-      turns: [...store.turns.values()]
+    getThreadTurns: async (threadId, _pseudonymousSessionId, paginationOpts) => {
+      const rows = [...store.turns.values()]
         .filter((turn) => turn.threadId === threadId)
-        .sort((a, b) => a.seq - b.seq),
-    }),
+        .sort((a, b) => a.seq - b.seq)
+      const start = paginationOpts.cursor === null ? 0 : Number(paginationOpts.cursor)
+      const page = rows.slice(start, start + paginationOpts.numItems)
+      return {
+        page,
+        isDone: start + page.length >= rows.length,
+        continueCursor: String(start + page.length),
+      }
+    },
     getAnswerThread: async (threadId) => {
       const thread = store.threads.get(threadId)
       if (thread === undefined) {
@@ -127,17 +135,13 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
 }
 
 export function readSessionCookieFromResponse(response: Response): string {
-  const setCookie = response.headers.get('set-cookie')
-  if (setCookie === null) {
-    return ''
+  for (const setCookie of response.headers.getSetCookie()) {
+    const session = readCookie(setCookie, 'ae_session')
+    if (session !== undefined) return session
   }
-  const match = setCookie.match(/ae_session=([^;]+)/)
-  if (match === null) {
-    return ''
-  }
-  return decodeURIComponent(match[1] ?? '')
+  return ''
 }
 
 export function sessionCookieHeader(sessionId: string): string {
-  return sessionId.length === 0 ? '' : `ae_session=${encodeURIComponent(sessionId)}`
+  return sessionId.length === 0 ? '' : serializeCookie('ae_session', sessionId)
 }

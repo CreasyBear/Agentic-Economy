@@ -1,13 +1,13 @@
 import type { BusinessRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type { BusinessOfferingRecord } from '@/modules/catalog/public'
 import type { CorrelationId, OperationKey } from '@/modules/common/ids'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ModuleResult } from '@/modules/common/result'
 import {
   GOVERNED_ACTION_DIGEST_ALGORITHM,
   encodeGovernedAction,
 } from '@/modules/governed-action/public'
-import { rateLimitClaim } from '@/modules/security/public'
 import { evaluateR1TargetAdmission, type AdmissionBlocker, type R1TargetAdmissionState } from '../admission'
 import {
   issueInquiryCustomerAccess,
@@ -38,6 +38,7 @@ import {
   type GovernedSendReceiptRecord,
 } from '../governed-send'
 import { findUnsafeInquiryActionIntent } from '../policy'
+import { normalizeInquiryWhitespace } from '../normalize-text'
 import {
   admissionError,
   auditRecord,
@@ -49,7 +50,6 @@ import {
   inquiryMessageId,
   inquiryNotificationId,
   inquiryThreadId,
-  normalizeText,
   notificationRecord,
   notificationStatusFromDispatchBindings,
   operationRecord,
@@ -65,7 +65,7 @@ export type SubmitInquiryCommand = {
   operationKey: OperationKey
   correlationId: CorrelationId
   pseudonymousSessionId: string
-  abuseBucketKey: string
+  abuseBucketKey?: string
   now: number
   expectedDigest: string
   origin?: InquiryThreadRecord['origin']
@@ -97,8 +97,15 @@ export type SubmitInquiryResult = ModuleResult<
     notification: InquiryNotificationRecord
     customerAccessKey: string
   },
-  { reason: string; blockers?: readonly AdmissionBlocker[]; field?: string; retryAfter?: number; state?: InquirySourceState }
+  {
+    reason: string
+    blockers?: readonly AdmissionBlocker[]
+    field?: string
+    retryAfter?: number
+    state?: InquirySourceState
+  }
 >
+
 
 export type BindInquiryNotificationDispatchesCommand = {
   notificationId: InquiryNotificationId
@@ -171,7 +178,7 @@ export function submitInquiry(
     return error('inquiry_unsafe_future_surface_field', 'Public inquiry input cannot carry future-surface fields.', unsafeField)
   }
 
-  const body = normalizeText(command.body)
+  const body = normalizeInquiryWhitespace(command.body)
   if (body.length === 0 || body.length > state.operatorControls.maxBodyLength) {
     return error('inquiry_invalid_input', 'Inquiry body must be non-empty and within the source-owned length cap.')
   }
@@ -204,11 +211,10 @@ export function submitInquiry(
   }
 
 
-  const requestHash = stableHash({
+  const requestHash = canonicalDigest({
     target: requestTarget(command.target),
     body,
     contact: contact.hashInput,
-    abuseBucketKey: command.abuseBucketKey,
     ...(command.origin === undefined ? {} : { origin: command.origin }),
   })
   const existingOperation = findOperation(state, command.operationKey)
@@ -253,37 +259,18 @@ export function submitInquiry(
       return { kind: 'ok', code: 'inquiry_replayed', ...replay, state: replayState, customerAccessKey: issued.accessKey }
     }
   }
-
   const target = resolveInquiryTarget(state, command.target)
   if (target.kind !== 'ready') {
     return admissionError('inquiry_target_not_admitted', target.blockers)
   }
 
-  const abuseRateLimitBuckets = state.abuseRateLimitBuckets.map((bucket) => ({ ...bucket }))
-  const rateLimitDecision = rateLimitClaim(abuseRateLimitBuckets, {
-    scope: 'inquiry_submit',
-    key: command.abuseBucketKey,
-    now: command.now,
-    limit: state.operatorControls.abuseMaxSubmissionsPerWindow,
-    windowMs: state.operatorControls.abuseWindowMs,
-  })
-  if (rateLimitDecision.kind === 'limited') {
-    return {
-      kind: 'error',
-      code: 'inquiry_rate_limited',
-      retryable: true,
-      reason: `Retry after ${rateLimitDecision.retryAfter}.`,
-      retryAfter: rateLimitDecision.retryAfter,
-      state: { ...state, abuseRateLimitBuckets },
-    }
-  }
 
-  const bodyHash = stableHash(body)
-  const contactHash = stableHash(contact.hashInput)
+
+  const bodyHash = canonicalDigest(body)
+  const contactHash = canonicalDigest(contact.hashInput)
   const threadId = inquiryThreadId({
     businessId: target.business.businessId,
-    serviceId: target.service.serviceId,
-    capabilityKind: target.capability.kind,
+    offeringRef: target.offering.offeringRef,
     bodyHash,
     contactHash,
     operationKey: command.operationKey,
@@ -295,11 +282,10 @@ export function submitInquiry(
     threadId,
     businessId: target.business.businessId,
     ownerId: target.business.ownerId,
-    serviceId: target.service.serviceId,
-    capabilityKind: target.capability.kind,
+    offeringRef: target.offering.offeringRef,
     status: 'unread',
     firstMessageId: messageId,
-    sourceHash: stableHash({
+    sourceHash: canonicalDigest({
       threadId,
       bodyHash,
       contactHash,
@@ -324,8 +310,7 @@ export function submitInquiry(
   }
   const redactedPayload = {
     businessId: target.business.businessId,
-    serviceId: target.service.serviceId,
-    capabilityKind: target.capability.kind,
+    offeringRef: target.offering.offeringRef,
     bodyHash,
     contactHash,
   }
@@ -363,7 +348,7 @@ export function submitInquiry(
     pseudonymousSessionId: command.pseudonymousSessionId,
     redactedPayload: {
       threadId,
-      serviceId: target.service.serviceId,
+      offeringRef: target.offering.offeringRef,
       notificationStatus,
       ...(command.origin === undefined ? {} : { originKind: command.origin.kind }),
     },
@@ -400,8 +385,7 @@ export function submitInquiry(
     targetBinding: {
       businessId: target.business.businessId,
       ownerId: target.business.ownerId,
-      serviceId: target.service.serviceId,
-      capabilityKind: target.capability.kind,
+      offeringRef: target.offering.offeringRef,
       claimRef: commitAdmission.proof.claimRef,
       recipientRef: commitAdmission.proof.recipientRef,
     },
@@ -412,7 +396,7 @@ export function submitInquiry(
     businessId: target.business.businessId,
     correlationId: command.correlationId,
     pseudonymousSessionId: command.pseudonymousSessionId,
-    redactedPayload: { threadId, serviceId: target.service.serviceId },
+    redactedPayload: { threadId, offeringRef: target.offering.offeringRef },
     now: command.now,
   })
   const nextState: InquirySourceState = {
@@ -421,7 +405,6 @@ export function submitInquiry(
     messages: [...state.messages, message],
     notifications: [...state.notifications, notification],
     customerAccessGrants: [...state.customerAccessGrants, issuedCustomerAccess.grant],
-    abuseRateLimitBuckets,
     auditEvents: [...state.auditEvents, auditEvent],
     funnelEvents: [...state.funnelEvents, funnelEvent, admittedSendEvent],
     governedSendReceipts: [...state.governedSendReceipts, governedSendReceipt],
@@ -480,7 +463,7 @@ export function markInquiryRead(state: InquirySourceState, command: MarkInquiryR
     return error('inquiry_not_found', 'Inquiry was not found for this owner.')
   }
 
-  const requestHash = stableHash({ action: 'mark_read', threadId: command.threadId, ownerId: command.authority.ownerId })
+  const requestHash = canonicalDigest({ action: 'mark_read', threadId: command.threadId, ownerId: command.authority.ownerId })
   const existingOperation = findOperation(state, command.operationKey)
   if (existingOperation !== undefined) {
     if (existingOperation.requestHash !== requestHash) {
@@ -542,12 +525,12 @@ export function replyToInquiry(state: InquirySourceState, command: ReplyToInquir
     return error('inquiry_not_found', 'Inquiry was not found for this owner.')
   }
 
-  const body = normalizeText(command.body)
+  const body = normalizeInquiryWhitespace(command.body)
   if (body.length === 0 || body.length > state.operatorControls.maxBodyLength) {
     return error('inquiry_invalid_input', 'Reply body must be non-empty and within the source-owned length cap.')
   }
 
-  const requestHash = stableHash({ action: 'reply', threadId: command.threadId, ownerId: command.authority.ownerId, body })
+  const requestHash = canonicalDigest({ action: 'reply', threadId: command.threadId, ownerId: command.authority.ownerId, body })
   const existingOperation = findOperation(state, command.operationKey)
   if (existingOperation !== undefined) {
     if (existingOperation.requestHash !== requestHash) {
@@ -570,7 +553,7 @@ export function replyToInquiry(state: InquirySourceState, command: ReplyToInquir
     return error('inquiry_stale_version', 'Inquiry version is stale.')
   }
 
-  const bodyHash = stableHash(body)
+  const bodyHash = canonicalDigest(body)
   const messageId = inquiryMessageId({ threadId: thread.threadId, sender: 'owner', bodyHash, operationKey: command.operationKey })
   const notificationId = inquiryNotificationId({ messageId, recipientRole: 'customer' })
   const nextThread: InquiryThreadRecord = {
@@ -641,7 +624,7 @@ export function closeInquiry(state: InquirySourceState, command: CloseInquiryCom
     return error('inquiry_not_found', 'Inquiry was not found for this owner.')
   }
 
-  const requestHash = stableHash({ action: 'close', threadId: command.threadId, ownerId: command.authority.ownerId })
+  const requestHash = canonicalDigest({ action: 'close', threadId: command.threadId, ownerId: command.authority.ownerId })
   const existingOperation = findOperation(state, command.operationKey)
   if (existingOperation !== undefined) {
     if (existingOperation.requestHash !== requestHash) {
@@ -701,7 +684,7 @@ function resolveInquiryTarget(
   state: InquirySourceState,
   target: InquiryTargetRef
 ):
-  | { kind: 'ready'; business: BusinessRecord; service: BusinessServiceRecord; capability: ServiceCapabilityRecord }
+  | { kind: 'ready'; business: BusinessRecord; offering: BusinessOfferingRecord }
   | { kind: 'blocked'; blockers: readonly AdmissionBlocker[] } {
   const admission = evaluateR1TargetAdmission(state, target)
   if (!admission.admitted) {
@@ -709,31 +692,25 @@ function resolveInquiryTarget(
   }
 
   const business = state.businesses.find((candidate) => candidate.businessId === target.businessId)
-  const service = state.businessServices.find(
-    (candidate) => candidate.businessId === target.businessId && candidate.serviceId === target.serviceId
+  const offering = state.businessOfferings.find(
+    (candidate) => candidate.businessId === target.businessId && candidate.offeringRef === target.offeringRef
   )
-  const capability = state.serviceCapabilities.find(
-    (candidate) =>
-      candidate.businessId === target.businessId &&
-      candidate.serviceId === target.serviceId &&
-      candidate.kind === target.capabilityKind
-  )
-  if (business === undefined || service === undefined || capability === undefined) {
+  if (business === undefined || offering === undefined) {
     return {
       kind: 'blocked',
       blockers: [{ kind: 'not_ready', ownerLabel: 'Finish inquiry setup' }],
     }
   }
 
-  return { kind: 'ready', business, service, capability }
+  return { kind: 'ready', business, offering }
 }
 
 function normalizeContact(input: PublicInquiryContactInput):
   | { kind: 'valid'; hashInput: StableHashValue; redacted: { name: string; email: string; phone: string }; replyEmail?: string }
   | { kind: 'invalid'; reason: string } {
-  const name = normalizeText(input.name ?? '')
-  const email = normalizeText(input.email ?? '').toLowerCase()
-  const phone = normalizeText(input.phone ?? '')
+  const name = normalizeInquiryWhitespace(input.name ?? '')
+  const email = normalizeInquiryWhitespace(input.email ?? '').toLowerCase()
+  const phone = normalizeInquiryWhitespace(input.phone ?? '')
 
   if (email.length === 0 && phone.length === 0) {
     return { kind: 'invalid', reason: 'Inquiry contact requires an email or phone value.' }

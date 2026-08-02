@@ -1,4 +1,4 @@
-import { internalMutation, type MutationCtx } from './_generated/server'
+import { internalMutation, type DatabaseWriter, type MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
@@ -11,25 +11,33 @@ import {
   type DevSeedBusinessFixture,
 } from '../src/modules/dev/public'
 import { persistDevSeedCatalogState } from './devSeedStore'
-import { runtimeDb } from './source_state'
 import { claimBusinessCommand } from './business'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
+  ensureCatalogProjectionControlsCommand,
   publishBusinessCatalogCommand,
+  readCatalogDescriptor,
   rebuildBusinessSupplyProjectionSnapshotCommand,
-  seedBusinessOfferingSupplyCommand,
+  reviseBusinessOfferingCommand,
+  upsertOfferingAccessPathCommand,
 } from './catalog'
 import { seedDiscoveryManifestForBusinessCommand } from './discovery'
 import { registerCapabilityContractDocument } from './capabilityContractDocuments'
+import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import {
+  publishCapabilityForSeed,
   registerCapabilityBindingCommand,
   registerCapabilityOfferingCommand,
   setCapabilitySupplyEligibilityCommand,
 } from './capabilitySupply'
-import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
+import {
+  MAX_ACCESS_PATHS_PER_OFFERING,
+  MAX_OFFERINGS_PER_BUSINESS,
+  type OfferingAccessPathDescriptor,
+  type OfferingPrice,
+} from '@/modules/catalog/public'
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
-import type { OfferingPrice } from '@/modules/catalog/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { capabilityOfferingRegistrationHash } from '@/modules/capability-supply/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
@@ -82,9 +90,8 @@ export const seedDevCatalog = internalMutation({
     const ordinaryFixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => !isSandboxFixture(fixture))
     const sandboxFixtures = DEV_SEED_BUSINESS_FIXTURES.filter(isSandboxFixture)
     const bundle = buildDevSeedCatalogState(ordinaryFixtures)
-    const db = runtimeDb(ctx.db)
     const [result, existingSandboxBusinesses, currentClaimOperations] = await Promise.all([
-      persistDevSeedCatalogState(db, bundle),
+      persistDevSeedCatalogState(ctx.db, bundle),
       Promise.all(sandboxFixtures.map(async (fixture) => (
         await ctx.db.query('businesses')
           .withIndex('by_slug', (query) => query.eq('slug', fixture.requestedSlug))
@@ -118,9 +125,7 @@ export const seedDevCatalog = internalMutation({
       existingSandboxBusinesses[index] === null
       || (currentClaimOperations[index] !== null && transferredSandboxBusinesses[index] !== true)
     ))
-    const registeredSandboxBusinesses = await registerSandboxBusinesses(
-      db, replayOrMissingFixtures, seedStartedAt,
-    )
+    const registeredSandboxBusinesses = await registerSandboxBusinesses(ctx.db, replayOrMissingFixtures, seedStartedAt)
     const sandboxBusinesses = {
       seededSlugs: sandboxFixtures.map((fixture) => fixture.requestedSlug),
       businessIdsBySlug: {
@@ -143,41 +148,34 @@ export const seedDevCatalog = internalMutation({
     ] = await Promise.all([
       admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500),
       admitSandboxV2Supply(ctx.db, sandboxRouteRegistrations, seedStartedAt + 2_600),
-      Promise.all(sandboxRegistrations.map(async (registration, index) => {
-        const publicationRef = await seedSandboxCapabilityPublication(
-          ctx.db, registration, seedStartedAt + 2_750 + index,
-        )
-        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-          publicationRef, expectedRevision: 1,
-        })
-        return publicationRef
-      })),
-      Promise.all(sandboxRouteRegistrations.map(async (registration, index) => {
-        const publicationRef = await seedSandboxCapabilityPublication(
-          ctx.db, registration, seedStartedAt + 2_800 + index,
-        )
-        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-          publicationRef, expectedRevision: 1,
-        })
-        return publicationRef
-      })),
+      Promise.all(sandboxRegistrations.map((registration, index) => (
+        seedSandboxCapabilityPublication(ctx, registration, seedStartedAt + 2_750 + index)
+      ))),
+      Promise.all(sandboxRouteRegistrations.map((registration, index) => (
+        seedSandboxCapabilityPublication(ctx, registration, seedStartedAt + 2_800 + index)
+      ))),
     ])
     const sandboxCapabilityPublicationRef = sandboxCapabilityPublicationRefs[0]
     if (sandboxCapabilityPublicationRef === undefined) {
       throw new Error('sandbox_capability_publication_registration_missing')
     }
     await retireSupersededSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
-    await retireSupersededSandboxRouteSupply(ctx.db, sandboxRouteRegistrations, seedStartedAt + 3_100)
-    const firstOfferingSeed: {
+    let offeringSeed: {
       processed: number
-      migrated: number
-      modes: { legacy: number; compare: number; offering: number }
+      seeded: number
       errors: string[]
       nextCursor: string | null
       done: boolean
     } = await ctx.runMutation(internal.devSeed.seedOfferingSupply, { cursor: null })
-    if (firstOfferingSeed.errors.length > 0) {
-      throw new Error(`dev_seed_offering_supply:${firstOfferingSeed.errors.join(',')}`)
+    while (true) {
+      if (offeringSeed.errors.length > 0) {
+        throw new Error(`dev_seed_offering_supply:${offeringSeed.errors.join(',')}`)
+      }
+      if (offeringSeed.done) break
+      if (offeringSeed.nextCursor === null) throw new Error('dev_seed_offering_supply_cursor_missing')
+      offeringSeed = await ctx.runMutation(internal.devSeed.seedOfferingSupply, {
+        cursor: offeringSeed.nextCursor,
+      })
     }
     await ctx.scheduler.runAfter(0, internal.devSeed.seedDiscoveryManifests, { cursor: null })
     return {
@@ -196,66 +194,47 @@ export const seedOfferingSupply = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
   returns: v.object({
     processed: v.number(),
-    migrated: v.number(),
-    modes: v.object({ legacy: v.number(), compare: v.number(), offering: v.number() }),
+    seeded: v.number(),
     errors: v.array(v.string()),
     nextCursor: v.union(v.string(), v.null()),
     done: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
     const now = Date.now()
     if (args.cursor === null) {
-      for (const key of ['offering_public_projection_enabled', 'offering_authoring_enabled'] as const) {
-        const existing = await ctx.db.query('operatorControls').withIndex('by_key', (query) => query.eq('key', key)).unique()
-        if (existing === null) {
-          await ctx.db.insert('operatorControls', { key, enabled: true, changedByAdminRef: 'system:dev-seed', reasonCode: 'dev_seed_enable', evidenceRefs: ['seed:operator-control'], correlationId: `seed:operator-control:${key}`, operationKey: `seed:operator-control:${key}`, updatedAt: now })
-        } else if (existing.enabled !== true) {
-          await ctx.db.patch(existing._id, { enabled: true, updatedAt: now })
-        }
-      }
+      await ensureCatalogProjectionControlsCommand(ctx.db, {
+        actorRef: 'system:dev-seed',
+        operationKey: 'seed:operator-control',
+        correlationId: 'seed:operator-control',
+        reasonCode: 'dev_seed_enable',
+        evidenceRefs: ['seed:operator-control'],
+      }, now)
     }
     const page = await ctx.db.query('businesses').paginate({ cursor: args.cursor, numItems: 10 })
-    const modes = { legacy: 0, compare: 0, offering: 0 }
     const errors: string[] = []
-    let migrated = 0
+    let seeded = 0
     for (const business of page.page) {
-      // Deterministic mode spread across businesses for full cutover-state variety.
-      // A business carrying a seeded price always requests 'offering': price is the
-      // one public fact the retained v1 service row cannot hold, so leaving a priced
-      // business in 'compare' or 'legacy' silently drops it and the catalog
-      // demonstrates no prices at all.
-      const pricingSummary = DEV_SEED_PRICING_BY_SLUG[business.slug]
-      const price = DEV_SEED_PRICE_BY_SLUG[business.slug]
-      const bucket = [...business.slug].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 10
-      const requestedMode = pricingSummary !== undefined
-        ? 'offering'
-        : bucket < 7 ? 'offering' : bucket < 9 ? 'compare' : 'legacy'
-      const result = await seedBusinessOfferingSupplyCommand(db, business._id, requestedMode, now)
+      const result = await seedBusinessOfferings(ctx, business, now)
       if (result.kind === 'error') {
         errors.push(`${business.slug}:${result.code}`)
         continue
       }
-      migrated += result.migrated
-      modes[result.mode] += 1
-      // A price is the one public fact the retained v1 service row cannot hold,
-      // so the seeded catalog can only demonstrate it by writing the Offering
-      // revision directly. Only worth doing in 'offering' mode: 'compare' and
-      // 'legacy' serve the v1 adapter, which has nowhere to put a price.
-      if (pricingSummary !== undefined && result.mode === 'offering') {
-        const priced = await publishSeedOfferingPrice(ctx, business._id, pricingSummary, price, now)
-        if (priced.kind === 'error') errors.push(`${business.slug}:price_${priced.code}`)
-        else if (business.slug === 'adelaide-dental-clinic') {
-          const callable = await seedAdelaideCheckupAccessPath(ctx, business._id, now)
-          if (callable.kind === 'error') errors.push(`${business.slug}:callable_${callable.code}`)
-        }
+      seeded += result.seeded
+      if (business.slug === 'adelaide-dental-clinic') {
+        const callable = await seedAdelaideCheckupAccessPath(ctx, business._id, now)
+        if (callable.kind === 'error') errors.push(`${business.slug}:callable_${callable.code}`)
       }
     }
     if (!page.isDone) {
       await ctx.scheduler.runAfter(0, internal.devSeed.seedOfferingSupply, { cursor: page.continueCursor })
     }
-
-    return { processed: page.page.length, migrated, modes, errors, nextCursor: page.isDone ? null : page.continueCursor, done: page.isDone }
+    return {
+      processed: page.page.length,
+      seeded,
+      errors,
+      nextCursor: page.isDone ? null : page.continueCursor,
+      done: page.isDone,
+    }
   },
 })
 
@@ -264,12 +243,14 @@ async function seedAdelaideCheckupAccessPath(
   businessId: Id<'businesses'>,
   now: number,
 ): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
-  const offering = await ctx.db.query('businessOfferings')
+  const offeringRows = await ctx.db.query('businessOfferings')
     .withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
-    .first()
-  if (offering === null) return { kind: 'error', code: 'offering_not_found' }
+    .take(1)
+  const offering = offeringRows[0]
+  if (offering === undefined) return { kind: 'error', code: 'offering_not_found' }
   const revision = await ctx.db.query('businessOfferingRevisions')
     .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+
     .unique()
   if (revision === null) return { kind: 'error', code: 'revision_not_found' }
   if (revision.price?.kind !== 'fixed' || revision.price.amountMinor === undefined) {
@@ -277,40 +258,134 @@ async function seedAdelaideCheckupAccessPath(
   }
   const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
   const accessPathRef = 'access:adelaide-dental-clinic:callable'
-  const descriptor = {
-    kind: 'external_operation' as const,
+  const descriptor: OfferingAccessPathDescriptor = {
+    kind: 'external_operation',
     name: revision.name,
     summary: 'Quotes this published offering through the labelled sandbox provider.',
     url: new URL('/api/sandbox/adelaide-dental-clinic/checkup-quote', siteUrl).href,
     method: 'POST',
     pricingSummary: revision.pricingSummary ?? 'Published fixed price.',
-    provenance: 'business_declared' as const,
+    provenance: 'business_declared',
   }
-  const row = {
-    accessPathRef,
+  const business = await ctx.db.get(businessId)
+  const owner = business === null ? null : await ctx.db.get(business.ownerId)
+  if (owner === null) return { kind: 'error', code: 'owner_not_found' }
+  const sourceDb = ctx.db
+  const result = await upsertOfferingAccessPathCommand(sourceDb, {
+    actorRef: owner.clerkUserId,
     businessId,
     offeringRef: offering.offeringRef,
-    offeringRevision: revision.revision,
-    offeringSourceHash: revision.sourceHash,
-    status: 'published' as const,
+    accessPathRef,
+    expectedRevision: revision.revision,
+    operationKey: `seed:access-path:${accessPathRef}:${revision.revision}:${canonicalDigest(descriptor)}`,
     descriptor,
-    sourceHash: await canonicalDigest({ accessPathRef, descriptor }),
-    createdAt: now,
-    updatedAt: now,
-  }
-  const existing = await ctx.db.query('offeringAccessPaths')
-    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
-    .unique()
-  if (existing === null) await ctx.db.insert('offeringAccessPaths', row)
-  else await ctx.db.patch(existing._id, row)
-  const db = runtimeDb(ctx.db)
-  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand(
-    db,
+  }, now)
+  if (result.kind === 'error') return { kind: 'error', code: result.code }
+  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(sourceDb, businessId, now)
+  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
+    db: sourceDb,
+    sourceDb,
     businessId,
-    await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now),
+    support,
     now,
-  )
-  return rebuilt.kind === 'ok' ? { kind: 'ok' } : { kind: 'error', code: rebuilt.code }
+  })
+  return rebuilt.kind === 'ok'
+    ? { kind: 'ok' }
+    : { kind: 'error', code: `projection_${rebuilt.code}` }
+}
+async function seedBusinessOfferings(
+  ctx: MutationCtx,
+  business: Doc<'businesses'>,
+  now: number,
+): Promise<{ kind: 'ok'; seeded: number } | { kind: 'error'; code: string }> {
+  const offerings = await ctx.db
+    .query('businessOfferings')
+    .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id))
+    .take(MAX_OFFERINGS_PER_BUSINESS + 1)
+  if (offerings.length > MAX_OFFERINGS_PER_BUSINESS) return { kind: 'error', code: 'offering_capacity_exceeded' }
+  const owner = await ctx.db.get(business.ownerId)
+  if (owner === null) return { kind: 'error', code: 'owner_not_found' }
+  let seeded = 0
+
+  for (const offering of offerings) {
+    let revision = await ctx.db
+      .query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => (
+        query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
+      ))
+      .unique()
+    if (revision === null) return { kind: 'error', code: 'revision_not_found' }
+    const pricingSummary = DEV_SEED_PRICING_BY_SLUG[business.slug]
+    const price = DEV_SEED_PRICE_BY_SLUG[business.slug]
+    if (pricingSummary !== undefined) {
+      const facts = {
+        name: revision.name,
+        category: revision.category,
+        summary: revision.summary,
+        ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
+        ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
+        pricingSummary,
+        ...(price === undefined ? {} : { price }),
+      }
+      const priceMatches = canonicalDigest(revision.price ?? null) === canonicalDigest(price ?? null)
+      if (revision.pricingSummary !== pricingSummary || !priceMatches) {
+        const revised = await reviseBusinessOfferingCommand(ctx.db, {
+          actorRef: owner.clerkUserId,
+          businessId: business._id,
+          offeringRef: offering.offeringRef,
+          expectedRevision: revision.revision,
+          operationKey: `seed:offering-pricing:${business.slug}:${offering.offeringRef}:${canonicalDigest({ pricingSummary, price: price ?? null })}`,
+          facts,
+        }, now)
+        if (revised.kind === 'error') return { kind: 'error', code: `pricing_${revised.code}` }
+        revision = await ctx.db
+          .query('businessOfferingRevisions')
+          .withIndex('by_offeringRef_and_revision', (query) => (
+            query.eq('offeringRef', offering.offeringRef).eq('revision', revised.currentRevision ?? offering.currentRevision)
+          ))
+          .unique()
+        if (revision === null) return { kind: 'error', code: 'revision_not_found_after_pricing' }
+      }
+      const accessPaths = await ctx.db.query('offeringAccessPaths')
+        .withIndex('by_offeringRef_and_status', (query) => query.eq('offeringRef', offering.offeringRef))
+        .take(MAX_ACCESS_PATHS_PER_OFFERING + 1)
+      if (accessPaths.length > MAX_ACCESS_PATHS_PER_OFFERING) {
+        return { kind: 'error', code: 'access_path_capacity_exceeded' }
+      }
+      for (const accessPath of accessPaths) {
+        if (accessPath.status === 'withdrawn') continue
+        if (
+          accessPath.offeringRevision === revision.revision
+          && accessPath.offeringSourceHash === revision.sourceHash
+        ) {
+          continue
+        }
+        const updated = await upsertOfferingAccessPathCommand(ctx.db, {
+          actorRef: owner.clerkUserId,
+          businessId: business._id,
+          offeringRef: offering.offeringRef,
+          accessPathRef: accessPath.accessPathRef,
+          expectedRevision: revision.revision,
+          operationKey: `seed:offering-access-path:${business.slug}:${accessPath.accessPathRef}:${revision.revision}`,
+          descriptor: readCatalogDescriptor(accessPath.descriptor),
+        }, now)
+        if (updated.kind === 'error') return { kind: 'error', code: `access_path_${updated.code}` }
+      }
+    }
+
+    seeded += 1
+  }
+  const sourceDb = ctx.db
+  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(sourceDb, business._id, now)
+  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
+    db: sourceDb,
+    sourceDb,
+    businessId: business._id,
+    support,
+    now,
+  })
+  if (rebuilt.kind === 'error') return { kind: 'error', code: `projection_${rebuilt.code}` }
+  return { kind: 'ok', seeded }
 }
 
 export const seedDiscoveryManifests = internalMutation({
@@ -328,7 +403,7 @@ export const seedDiscoveryManifests = internalMutation({
     let generated = 0
     let skipped = 0
     for (const business of page.page) {
-      const result = await seedDiscoveryManifestForBusinessCommand(ctx.db as never, business as never, now)
+      const result = await seedDiscoveryManifestForBusinessCommand(ctx.db, business, now)
       if (result === 'generated') generated += 1
       else skipped += 1
     }
@@ -426,7 +501,7 @@ export const seedTestCapabilityPublication = internalMutation({
     if (business === null || offering === null || binding === null || offering.businessId !== business._id) {
       throw new Error('sandbox_capability_publication_supply_missing')
     }
-    const publicationRef = await seedSandboxCapabilityPublication(ctx.db, {
+    const publicationRef = await seedSandboxCapabilityPublication(ctx, {
       slug: profile.slug,
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
@@ -438,17 +513,14 @@ export const seedTestCapabilityPublication = internalMutation({
       offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
     }, Date.now())
-    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-      publicationRef, expectedRevision: 1,
-    })
     return { publicationRef, credentialRef: binding.credentialRef }
   },
 })
 
 const DEV_SEED_PRICING_BY_SLUG: Readonly<Record<string, string>> = Object.fromEntries(
-  DEV_SEED_BUSINESS_FIXTURES.flatMap((fixture) => (
-    fixture.pricingSummary === undefined ? [] : [[fixture.requestedSlug, fixture.pricingSummary]]
-  )),
+  DEV_SEED_BUSINESS_FIXTURES.flatMap((fixture) => fixture.offerings.flatMap((offering) => (
+    offering.pricingSummary === undefined ? [] : [[fixture.requestedSlug, offering.pricingSummary]]
+  ))),
 )
 
 /**
@@ -481,34 +553,6 @@ export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = O
   }),
 )
 
-async function publishSeedOfferingPrice(
-  ctx: MutationCtx,
-  businessId: Id<'businesses'>,
-  pricingSummary: string,
-  price: OfferingPrice | undefined,
-  now: number,
-): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
-  const offering = await ctx.db
-    .query('businessOfferings')
-    .withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
-    .first()
-  if (offering === null) return { kind: 'error', code: 'offering_not_found' }
-  const revision = await ctx.db
-    .query('businessOfferingRevisions')
-    .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
-    .unique()
-  if (revision === null) return { kind: 'error', code: 'revision_not_found' }
-  // Prose and structured price publish together, so a revision carrying only the
-  // prose is not yet seeded — re-running has to finish the pair.
-  if (revision.pricingSummary === pricingSummary && (price === undefined || revision.price !== undefined)) return { kind: 'ok' }
-
-  await ctx.db.patch(revision._id, { pricingSummary, ...(price === undefined ? {} : { price }) })
-  const db = runtimeDb(ctx.db)
-  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand(
-    db, businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now), now,
-  )
-  return rebuilt.kind === 'ok' ? { kind: 'ok' } : { kind: 'error', code: rebuilt.code }
-}
 
 function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug.startsWith('sandbox-')
@@ -527,9 +571,12 @@ async function isExactAuthenticatedSandboxOwnerTransfer(
     || business.suburb !== fixture.suburb || business.stateTerritory !== fixture.stateTerritory
     || business.claimStatus !== 'published' || business.publicStatus !== 'published') return false
 
+  const currentOwnerId = db.normalizeId('owners', business.ownerId)
+  const originalOwnerId = db.normalizeId('owners', operation.actorRef)
+  if (currentOwnerId === null || originalOwnerId === null) return false
   const [currentOwner, originalOwner, claims, context] = await Promise.all([
-    db.get(business.ownerId as Id<'owners'>),
-    db.get(operation.actorRef as Id<'owners'>),
+    db.get(currentOwnerId),
+    db.get(originalOwnerId),
     db.query('claims').withIndex('by_business_status', (query) => query.eq('businessId', business._id)).take(2),
     db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', business._id)).unique(),
   ])
@@ -554,65 +601,74 @@ async function isExactAuthenticatedSandboxOwnerTransfer(
 }
 
 export async function seedSandboxCapabilityPublication(
-  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  ctx: MutationCtx,
   registration: SandboxV2SupplyRegistration | undefined,
   observedAt: number,
 ): Promise<string> {
   if (registration === undefined) throw new Error('sandbox_capability_publication_registration_missing')
-  const business = await db.query('businesses')
-    .withIndex('by_slug', (query) => query.eq('slug', registration.slug))
-    .unique()
+  const [business, contract, offering, binding] = await Promise.all([
+    ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', registration.slug)).unique(),
+    ctx.db.query('capabilityContractDocuments').withIndex('by_capabilityId_and_version', (query) => (
+      query.eq('capabilityId', registration.contractRef.capabilityId).eq('version', registration.contractRef.version)
+    )).unique(),
+    ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (query) => query.eq('offeringId', registration.offeringId)).unique(),
+    ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', registration.bindingId)).unique(),
+  ])
   if (business === null) throw new Error('sandbox_capability_publication_business_missing')
-  const existing = await db.query('capabilityPublications')
-    .withIndex('by_publicationRef_and_revision', (query) => (
-      query.eq('publicationRef', registration.offeringId).eq('revision', 1)
-    ))
-    .unique()
-  const sourceDigest = canonicalDigest({
-    kind: 'seeded_sandbox_capability',
-    offeringId: registration.offeringId,
-    bindingId: registration.bindingId,
-  })
-  if (existing !== null) {
-    if (
-      existing.businessId !== business._id
-      || existing.sourceDigest !== sourceDigest
-      || existing.offeringId !== registration.offeringId
-      || existing.bindingId !== registration.bindingId
-      || existing.contractDigest !== registration.contractRef.contractDigest
-    ) throw new Error('sandbox_capability_publication_identity_mismatch')
-    await db.patch(existing._id, {
-      credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
-      readinessObservedAt: undefined, readinessValidUntil: undefined, updatedAt: observedAt,
-    })
-    return existing.publicationRef
+  if (contract === null) throw new Error('sandbox_capability_publication_contract_missing')
+  if (offering === null || binding === null || offering.businessId !== business._id || binding.offeringId !== offering.offeringId) {
+    throw new Error('sandbox_capability_publication_registration_missing')
   }
-  await db.insert('capabilityPublications', {
-    publicationRef: registration.offeringId,
-    revision: 1,
+  if (
+    offering.registrationHash !== registration.offeringRegistrationHash
+    || binding.registrationHash !== registration.bindingRegistrationHash
+    || offering.contractDigest !== registration.contractRef.contractDigest
+    || binding.contractDigest !== registration.contractRef.contractDigest
+  ) throw new Error('sandbox_capability_publication_identity_mismatch')
+  const result = await publishCapabilityForSeed(ctx, {
     businessId: business._id,
-    networkId: 'ae:public',
-    sourceKind: 'ae_envelope',
-    sourceDigest,
-    ...registration.contractRef,
-    offeringId: registration.offeringId,
-    bindingId: registration.bindingId,
-    disposition: 'current',
-    credentialState: 'unobserved',
-    healthState: 'unobserved',
-    readinessEvidenceRefs: [],
-    registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
-    createdAt: observedAt,
-    updatedAt: observedAt,
+    source: { kind: 'ae_envelope', documentJson: contract.documentJson },
+    offering: {
+      offeringId: offering.offeringId,
+      networkId: offering.networkId,
+      ...(offering.origin === undefined ? {} : { origin: offering.origin }),
+      presentation: offering.presentation,
+      searchTerms: offering.searchTerms,
+      registrationEvidenceRefs: offering.registrationEvidenceRefs,
+    },
+    binding: {
+      bindingId: binding.bindingId,
+      endpointUrl: binding.endpointUrl,
+      credentialRef: binding.credentialRef,
+      continuation: binding.continuation,
+      cancellation: binding.cancellation,
+      adapter: { adapterId: binding.adapterId, config: JSON.parse(binding.configJson) },
+      registrationEvidenceRefs: binding.registrationEvidenceRefs,
+    },
+    operationKey: `seed:capability-publication:${registration.offeringId}`,
+    correlationId: `seed:capability-publication:${registration.slug}`,
+    reasonCode: 'labelled_sandbox_capability_publication',
+    evidenceRefs: ['seed:sandbox-labelled-business'],
+    now: observedAt,
   })
-  return registration.offeringId
+  if (result.kind !== 'published') {
+    throw new Error(`sandbox_capability_publication_${result.reason}`)
+  }
+  return result.publicationRef
 }
 
 export async function registerSandboxBusinesses(
-  db: ReturnType<typeof runtimeDb>,
+  db: DatabaseWriter,
   fixtures: readonly DevSeedBusinessFixture[],
   registeredAt: number,
 ): Promise<{ seededSlugs: string[]; businessIdsBySlug: Record<string, string> }> {
+  await ensureCatalogProjectionControlsCommand(db, {
+    actorRef: 'system:dev-seed',
+    operationKey: 'seed:operator-control',
+    correlationId: 'seed:operator-control',
+    reasonCode: 'dev_seed_enable',
+    evidenceRefs: ['seed:operator-control'],
+  }, registeredAt)
   const businessIdsBySlug: Record<string, string> = {}
   for (const [index, fixture] of fixtures.entries()) {
     const now = registeredAt + index * 1_000
@@ -634,7 +690,7 @@ export async function registerSandboxBusinesses(
         sourceRefs: [{
           label: fixture.sourceLabel,
           evidenceRef: `private:evidence:dev-seed:${fixture.requestedSlug}`,
-          sourceHash: `hash:dev-seed:${fixture.requestedSlug}`,
+          sourceHash: canonicalDigest(`dev-seed:${fixture.requestedSlug}`),
         }],
       },
       operationKey: `seed:claim:${fixture.requestedSlug}`,
@@ -649,24 +705,24 @@ export async function registerSandboxBusinesses(
       claimId: claim.claim.claimId,
       operationKey: `seed:catalog:${fixture.requestedSlug}`,
       correlationId: `seed:catalog:${fixture.requestedSlug}`,
-      services: [{
-        name: fixture.serviceName,
-        category: fixture.serviceCategory,
-        summary: fixture.serviceSummary,
-        serviceArea: fixture.serviceArea,
-        hoursOrUnknown: fixture.hoursOrUnknown,
-        firstRequest: fixture.firstRequestMode === 'not_available_yet'
+      services: fixture.offerings.map((offering) => ({
+        name: offering.name,
+        category: offering.category,
+        summary: offering.summary,
+        serviceArea: offering.serviceAreaSummary,
+        hoursOrUnknown: offering.availabilitySummary,
+        firstRequest: offering.firstRequestMode === 'not_available_yet'
           ? {
-              mode: fixture.firstRequestMode,
+              mode: offering.firstRequestMode,
               publicChannel: 'not_available',
-              noContactReason: fixture.noContactReason || 'Sandbox contact is unavailable.',
+              noContactReason: offering.noContactReason,
             }
           : {
-              mode: fixture.firstRequestMode,
+              mode: offering.firstRequestMode,
               publicChannel: 'ae_status_only',
-              publicDisclosure: fixture.publicDisclosure,
+              publicDisclosure: offering.publicDisclosure,
             },
-      }],
+      })),
     }, now + 500)
     if (published.kind !== 'ok') {
       throw new Error(`sandbox_business_publish_${published.code}:${fixture.requestedSlug}:${published.reason}`)
@@ -1509,11 +1565,12 @@ export const seedCallableOffering = internalMutation({
     const business = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', args.slug)).unique()
     if (business === null) return { kind: 'error', reason: 'business_not_found' }
 
-    const offering = await ctx.db
+    const offeringRows = await ctx.db
       .query('businessOfferings')
       .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id).eq('status', 'published'))
-      .first()
-    if (offering === null) return { kind: 'error', reason: 'published_offering_not_found' }
+      .take(1)
+    const offering = offeringRows[0]
+    if (offering === undefined) return { kind: 'error', reason: 'published_offering_not_found' }
 
     const revision = await ctx.db
       .query('businessOfferingRevisions')
@@ -1522,37 +1579,38 @@ export const seedCallableOffering = internalMutation({
     if (revision === null) return { kind: 'error', reason: 'offering_revision_not_found' }
 
     const accessPathRef = `access:${args.slug}:callable`
-    const descriptor = {
-      kind: 'external_operation' as const,
+    const descriptor: OfferingAccessPathDescriptor = {
+      kind: 'external_operation',
       name: args.name,
       summary: args.summary,
       url: args.url,
       method: 'POST',
       pricingSummary: args.pricingSummary,
-      provenance: 'business_declared' as const,
+      provenance: 'business_declared',
     }
-    // Lineage must match the current revision or the public projection rejects the offering.
-    const row = {
-      accessPathRef,
+    const owner = await ctx.db.get(business.ownerId)
+    if (owner === null) return { kind: 'error', reason: 'owner_not_found' }
+    const sourceDb = ctx.db
+    const accessPath = await upsertOfferingAccessPathCommand(sourceDb, {
+      actorRef: owner.clerkUserId,
       businessId: business._id,
       offeringRef: offering.offeringRef,
-      offeringRevision: revision.revision,
-      offeringSourceHash: revision.sourceHash,
-      status: 'published' as const,
+      accessPathRef,
+      expectedRevision: revision.revision,
+      operationKey: `seed:access-path:${accessPathRef}:${revision.revision}:${canonicalDigest(descriptor)}`,
       descriptor,
-      sourceHash: await canonicalDigest({ accessPathRef, descriptor }),
-      createdAt: now,
-      updatedAt: now,
-    }
-    const existing = await ctx.db.query('offeringAccessPaths').withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef)).unique()
-    if (existing === null) await ctx.db.insert('offeringAccessPaths', row)
-    else await ctx.db.patch(existing._id, row)
+    }, now)
+    if (accessPath.kind === 'error') return { kind: 'error', reason: `access_path:${accessPath.code}` }
 
-    // Serve it publicly: the native model only reaches the public projection in
-    // 'offering' mode, and parity now permits additive native capability.
-    const cutover = await seedBusinessOfferingSupplyCommand(runtimeDb(ctx.db), business._id, 'offering', now)
-    if (cutover.kind === 'error') return { kind: 'error', reason: `cutover:${cutover.code}` }
-
-    return { kind: 'ok', accessPathRef, reason: `mode:${cutover.mode}` }
+    const support = await deriveBusinessOfferingSupportFromCapabilitySupply(sourceDb, business._id, now)
+    const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
+      db: sourceDb,
+      sourceDb,
+      businessId: business._id,
+      support,
+      now,
+    })
+    if (rebuilt.kind === 'error') return { kind: 'error', reason: `projection:${rebuilt.code}` }
+    return { kind: 'ok', accessPathRef, reason: 'offering_projection_rebuilt' }
   },
 })

@@ -1,8 +1,13 @@
+import { parseJsonEventStream } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
+import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { readJsonPointer } from '@/modules/common/json-pointer'
 
+import { decodeX402PaymentRequiredHeader } from './internal/x402-payment-signer'
 import { PUBLIC_CREDENTIAL_REF, validPublicHttpsEndpoint } from './internal/transport-adapters'
 
 const MAX_RESPONSE_BYTES = 64 * 1024
@@ -107,7 +112,6 @@ export type RouteTransportRuntime = Readonly<{
     payTo: string
     maximumSpend: Readonly<{ currency: string; amountMinor: number }>
   }>) => boolean
-  createX402PaymentSignature: (request: X402PaymentSignatureRequest) => Promise<string | undefined>
   prepareX402PaymentAuthorization?: (
     request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
   ) => Promise<X402PreparedAuthorization | undefined>
@@ -125,6 +129,19 @@ export type RouteTransportRuntime = Readonly<{
       evidenceRefs: readonly string[]
     }>,
   ) => Promise<void> | void
+}>
+
+export type X402RouteTransportRuntime = RouteTransportRuntime & Readonly<{
+  prepareX402PaymentAuthorization: (
+    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+  ) => Promise<X402PreparedAuthorization | undefined>
+  readX402PaymentAuthorization: (
+    prepared: X402PreparedAuthorization,
+  ) => Promise<string | undefined>
+  /** Restores custody material by the persisted opaque digest after process loss. */
+  readX402PaymentAuthorizationByDigest: (
+    prepared: X402PreparedAuthorization,
+  ) => Promise<string | undefined>
 }>
 
 export type RouteTransportObservation = Readonly<{
@@ -163,33 +180,27 @@ export type RouteTransportCancellationObservation = Readonly<{
 
 export function parseRouteTransportObservationJson(value: string): RouteTransportObservation | undefined {
   if (new TextEncoder().encode(value).byteLength > MAX_RESPONSE_BYTES) return undefined
-  const parsed = parseJson(value)
-  if (!isJsonObject(parsed)
-    || !['http', 'mcp', 'x402', 'unknown'].includes(String(parsed.transport))
-    || !['succeeded', 'refused', 'partial', 'unknown'].includes(String(parsed.disposition))
-    || typeof parsed.releaseStarted !== 'boolean'
-    || !boundedString(parsed.requestDigest, 200)) return undefined
-  const optionalStrings = [
-    'responseDigest', 'outputJson', 'providerReceipt', 'paymentProof', 'paymentChallengeDigest',
-    'continuationToken', 'failureCode',
-  ] as const
-  if (optionalStrings.some((key) => parsed[key] !== undefined && !boundedString(parsed[key], MAX_RESPONSE_BYTES))) {
-    return undefined
-  }
-  const optionalStatuses = {
-    queryReleaseStatus: ['not_released', 'released', 'unknown'],
-    paymentAuthorizationStatus: ['not_created', 'created', 'unknown'],
-    paymentSubmissionStatus: ['not_submitted', 'possibly_submitted', 'observed', 'unknown'],
-    settlementStatus: ['not_evidenced', 'provider_asserted', 'unknown'],
-    quoteDeliveryStatus: ['not_delivered', 'delivered', 'unknown'],
-  } as const
-  if (Object.entries(optionalStatuses).some(([key, allowed]) =>
-    parsed[key] !== undefined && !(allowed as readonly unknown[]).includes(parsed[key]))) return undefined
-  if (Object.keys(parsed).some((key) => ![
-    'transport', 'disposition', 'releaseStarted', 'requestDigest', ...optionalStrings,
-    ...Object.keys(optionalStatuses),
-  ].includes(key))) return undefined
-  return parsed as RouteTransportObservation
+  const bounded = (max: number) => z.string().refine((text) => boundedString(text, max))
+  const observationSchema: z.ZodType<RouteTransportObservation> = z.strictObject({
+    transport: z.enum(['http', 'mcp', 'x402', 'unknown']),
+    disposition: z.enum(['succeeded', 'refused', 'partial', 'unknown']),
+    releaseStarted: z.boolean(),
+    queryReleaseStatus: z.enum(['not_released', 'released', 'unknown']).exactOptional(),
+    paymentAuthorizationStatus: z.enum(['not_created', 'created', 'unknown']).exactOptional(),
+    paymentSubmissionStatus: z.enum(['not_submitted', 'possibly_submitted', 'observed', 'unknown']).exactOptional(),
+    settlementStatus: z.enum(['not_evidenced', 'provider_asserted', 'unknown']).exactOptional(),
+    quoteDeliveryStatus: z.enum(['not_delivered', 'delivered', 'unknown']).exactOptional(),
+    requestDigest: bounded(200),
+    responseDigest: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+    outputJson: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+    providerReceipt: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+    paymentProof: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+    paymentChallengeDigest: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+    continuationToken: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+    failureCode: bounded(MAX_RESPONSE_BYTES).exactOptional(),
+  })
+  const parsed = observationSchema.safeParse(parseBoundedJson(value))
+  return parsed.success ? parsed.data : undefined
 }
 
 type AuxiliaryExchange = Readonly<{ path: string; requestTimeoutMs: number }>
@@ -292,19 +303,6 @@ export type RouteTransportPreparation =
   | Readonly<{ kind: 'prepared'; prepared: PreparedRouteTransportInvocation }>
   | Readonly<{ kind: 'refused'; observation: RouteTransportObservation }>
 
-export async function invokeRegisteredRouteTransport(
-  invocation: RouteTransportInvocation,
-  runtime: RouteTransportRuntime,
-): Promise<RouteTransportObservation> {
-  const preparation = prepareRegisteredRouteTransportInvocation(
-    invocation,
-    runtime.resolveCredential,
-    runtime.x402PaymentSigningAvailable,
-  )
-  return preparation.kind === 'refused'
-    ? preparation.observation
-    : await invokePreparedRouteTransport(preparation.prepared, runtime)
-}
 
 export async function invokeRegisteredRouteCancellation(
   invocation: RouteTransportCancellationInvocation,
@@ -347,9 +345,9 @@ export async function invokeRegisteredRouteCancellation(
       return { disposition: 'unknown', requestDigest, failureCode: `provider_http_${response.status}` }
     }
     const text = await readBoundedText(response)
-    const parsed = text === undefined ? undefined : parseJson(text)
+    const parsed = text === undefined ? undefined : parseBoundedJson(text)
     const responseDigest = text === undefined ? undefined : canonicalDigest(text)
-    if (!isJsonObject(parsed)
+    if (!isRecord(parsed)
       || !['cancellation_accepted', 'cancellation_rejected', 'cancellation_unknown'].includes(String(parsed.kind))
       || (parsed.providerReference !== undefined && !boundedString(parsed.providerReference, 500))
       || (parsed.reason !== undefined && !boundedString(parsed.reason, 500))
@@ -360,9 +358,16 @@ export async function invokeRegisteredRouteCancellation(
         failureCode: 'cancellation_response_invalid',
       }
     }
+    if (responseDigest === undefined) {
+      return {
+        disposition: 'unknown',
+        requestDigest,
+        failureCode: 'cancellation_response_invalid',
+      }
+    }
     const common = {
       requestDigest,
-      responseDigest: responseDigest!,
+      responseDigest,
       ...(parsed.providerReference === undefined ? {} : { providerReference: parsed.providerReference as string }),
     }
     if (parsed.kind === 'cancellation_accepted') return { ...common, disposition: 'accepted' }
@@ -442,7 +447,7 @@ export function prepareRegisteredRouteTransportInvocation(
     }
   }
   if (invocation.binding.adapterId === 'mcp-jsonrpc:v1'
-    && !isJsonObject(parseJson(invocation.inputJson))) {
+    && !isRecord(parseBoundedJson(invocation.inputJson))) {
     return { kind: 'refused', observation: refused('mcp', requestDigest, false, 'input_invalid') }
   }
   if (invocation.binding.adapterId === 'x402-fetch:v2') {
@@ -503,12 +508,14 @@ export async function invokePreparedRouteTransport(
             runtime.send,
           )
     case 'x402-fetch:v2':
-      return credential === undefined
-        ? refused('x402', requestDigest, false, 'credential_unavailable')
-        : await invokeX402(
-            endpoint, configuration as X402Configuration, invocation, credential, requestDigest,
-            runtime, prepared.target,
-          )
+      if (credential === undefined) return refused('x402', requestDigest, false, 'credential_unavailable')
+      if (!isX402RouteTransportRuntime(runtime)) {
+        return refused('x402', requestDigest, false, 'payment_custody_unavailable')
+      }
+      return await invokeX402(
+        endpoint, configuration as X402Configuration, invocation, credential, requestDigest,
+        runtime, prepared.target,
+      )
     default:
       return refused('unknown', requestDigest, false, 'adapter_not_registered')
   }
@@ -569,7 +576,7 @@ async function invokeMcp(
     if (!initialized.ok) return refused('mcp', requestDigest, false, 'mcp_initialize_refused')
     const initializeBody = await readJsonRpc(initialized, initializeId)
     if (!isJsonRpcResult(initializeBody, initializeId)
-      || !isJsonObject(initializeBody.result)
+      || !isRecord(initializeBody.result)
       || initializeBody.result.protocolVersion !== configuration.protocolVersion) {
       return refused('mcp', requestDigest, false, 'mcp_initialize_invalid')
     }
@@ -590,8 +597,8 @@ async function invokeMcp(
   }
 
   try {
-    const input = parseJson(invocation.inputJson)
-    if (!isJsonObject(input)) return refused('mcp', requestDigest, false, 'input_invalid')
+    const input = parseBoundedJson(invocation.inputJson)
+    if (!isRecord(input)) return refused('mcp', requestDigest, false, 'input_invalid')
     const response = await send(endpoint, {
       method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: {
@@ -611,7 +618,7 @@ async function invokeMcp(
       return unknown('mcp', requestDigest, true, 'mcp_result_invalid')
     }
     const result = body.result
-    if (!isJsonObject(result) || result.isError === true) {
+    if (!isRecord(result) || result.isError === true) {
       return refused('mcp', requestDigest, true, 'provider_refused')
     }
     const output = mcpOutput(result)
@@ -634,7 +641,7 @@ async function invokeX402(
   invocation: RouteTransportInvocation,
   credential: string,
   requestDigest: string,
-  runtime: RouteTransportRuntime,
+  runtime: X402RouteTransportRuntime,
   preparedTarget: URL | undefined,
 ): Promise<RouteTransportObservation> {
   const headers = callHeaders(invocation, undefined)
@@ -683,31 +690,15 @@ async function invokeX402(
     attemptRef: invocation.authority.attemptRef,
     effectGeneration: invocation.authority.effectGeneration ?? 0,
   }
-  let legacyPaymentSignature: string | undefined
-  let preparedAuthorization: X402PreparedAuthorization | undefined
-  if (runtime.prepareX402PaymentAuthorization === undefined) {
-    legacyPaymentSignature = await runtime.createX402PaymentSignature({
-        challenge, credential, paymentIdentifier: invocation.authority.operationKeyDigest,
-        selectedRequirement: requirement,
-      })
-    preparedAuthorization = legacyPaymentSignature === undefined || legacyPaymentSignature.length === 0
-      ? undefined
-      : {
-          custodyRef: `legacy:${canonicalDigest(legacyPaymentSignature)}`,
-          authorizationDigest: canonicalDigest(legacyPaymentSignature),
-        }
-  } else {
-    preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
-        challenge, credential,
-        selectedRequirement: requirement,
-        ...authorizationIdentity,
-      })
-  }
+  const preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
+    challenge, credential,
+    selectedRequirement: requirement,
+    ...authorizationIdentity,
+  })
   if (preparedAuthorization === undefined) {
     return { ...refused('x402', requestDigest, true, 'payment_signature_unavailable'), paymentChallengeDigest }
   }
-  const paymentSignature = legacyPaymentSignature
-    ?? await runtime.readX402PaymentAuthorization?.(preparedAuthorization)
+  const paymentSignature = await runtime.readX402PaymentAuthorization(preparedAuthorization)
   if (paymentSignature === undefined || paymentSignature.length === 0) {
     return { ...refused('x402', requestDigest, true, 'payment_signature_unavailable'), paymentChallengeDigest }
   }
@@ -779,7 +770,7 @@ async function normalizeJsonResponse(
   }
   const text = await readBoundedText(response)
   if (text === undefined) return unknown(transport, requestDigest, releaseStarted, 'response_unreadable')
-  const output = parseJson(text)
+  const output = parseBoundedJson(text)
   if (output === undefined) return unknown(transport, requestDigest, releaseStarted, 'response_json_invalid')
   const common = {
     transport, releaseStarted, requestDigest, responseDigest: canonicalDigest(text), outputJson: JSON.stringify(output),
@@ -811,8 +802,8 @@ function callHeaders(
 }
 
 function parseConfiguration(value: string): Readonly<Record<string, unknown>> | undefined {
-  const parsed = parseJson(value)
-  return isJsonObject(parsed) ? parsed : undefined
+  const parsed = parseBoundedJson(value)
+  return isRecord(parsed) ? parsed : undefined
 }
 
 function isHttpConfiguration(value: Readonly<Record<string, unknown>>): value is HttpConfiguration {
@@ -826,6 +817,14 @@ function isMcpConfiguration(value: Readonly<Record<string, unknown>>): value is 
 function isX402Configuration(value: Readonly<Record<string, unknown>>): value is X402Configuration {
   return x402Configuration.safeParse(value).success
 }
+function isX402RouteTransportRuntime(
+  runtime: RouteTransportRuntime,
+): runtime is X402RouteTransportRuntime {
+  const candidate = runtime as Partial<X402RouteTransportRuntime>
+  return typeof candidate.prepareX402PaymentAuthorization === 'function'
+    && typeof candidate.readX402PaymentAuthorization === 'function'
+    && typeof candidate.readX402PaymentAuthorizationByDigest === 'function'
+}
 
 function requestTarget(
   endpoint: URL,
@@ -834,8 +833,8 @@ function requestTarget(
   inputJson: string,
 ): URL | undefined {
   if (method === 'POST') return new URL(endpoint)
-  const input = parseJson(inputJson)
-  if (!isJsonObject(input) || query === undefined) return undefined
+  const input = parseBoundedJson(inputJson)
+  if (!isRecord(input) || query === undefined) return undefined
   const target = new URL(endpoint)
   for (const mapping of query) {
     const value = readJsonPointer(input, mapping.inputPointer)
@@ -845,28 +844,20 @@ function requestTarget(
   return target
 }
 
-function readJsonPointer(input: unknown, pointer: string): unknown {
-  let current = input
-  for (const token of pointer.slice(1).split('/').map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))) {
-    if (!isJsonObject(current) || !(token in current)) return undefined
-    current = current[token]
-  }
-  return current
-}
 
 function decodeX402Challenge(header: string | null): X402Challenge | undefined {
   if (header === null || header.length > MAX_RESPONSE_BYTES * 2) return undefined
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(header, 'base64').toString('utf8'))
-    if (!isJsonObject(parsed) || parsed.x402Version !== 2 || !isJsonObject(parsed.resource)
+    const parsed: unknown = decodeX402PaymentRequiredHeader(header)
+    if (!isRecord(parsed) || parsed.x402Version !== 2 || !isRecord(parsed.resource)
       || !boundedString(parsed.resource.url, 2_000) || !Array.isArray(parsed.accepts)
       || parsed.accepts.length < 1 || parsed.accepts.length > 16) return undefined
     for (const candidate of parsed.accepts) {
-      if (!isJsonObject(candidate) || !boundedString(candidate.scheme, 100)
+      if (!isRecord(candidate) || !boundedString(candidate.scheme, 100)
         || !boundedString(candidate.network, 100) || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(candidate.network)
         || !/^\d{1,78}$/.test(String(candidate.amount))
         || !boundedString(candidate.asset, 200) || !boundedString(candidate.payTo, 200)
-        || !Number.isSafeInteger(candidate.maxTimeoutSeconds) || !isJsonObject(candidate.extra)) return undefined
+        || !Number.isSafeInteger(candidate.maxTimeoutSeconds) || !isRecord(candidate.extra)) return undefined
     }
     return parsed as X402Challenge
   } catch {
@@ -886,15 +877,20 @@ async function readJsonRpc(
   const text = await readBoundedText(response)
   if (text === undefined) return undefined
   if ((response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream')) {
-    for (const line of text.split(/\r?\n/)) {
-      if (!line.startsWith('data:')) continue
-      const candidate = parseJson(line.slice(5).trim())
-      if (isJsonObject(candidate) && candidate.id === expectedId) return candidate
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${text}\n\n`))
+        controller.close()
+      },
+    })
+    for await (const candidate of parseJsonEventStream({ stream, schema: z.unknown() })) {
+      if (!candidate.success) continue
+      if (isRecord(candidate.value) && candidate.value.id === expectedId) return candidate.value
     }
     return undefined
   }
-  const parsed = parseJson(text)
-  return isJsonObject(parsed) ? parsed : undefined
+  const parsed = parseBoundedJson(text)
+  return isRecord(parsed) ? parsed : undefined
 }
 
 async function readBoundedText(response: RouteTransportResponse): Promise<string | undefined> {
@@ -907,23 +903,17 @@ async function readBoundedText(response: RouteTransportResponse): Promise<string
 function mcpOutput(result: Readonly<Record<string, unknown>>): unknown {
   if (result.structuredContent !== undefined) return result.structuredContent
   if (!Array.isArray(result.content)) return undefined
-  const text = result.content.find((item) => isJsonObject(item) && item.type === 'text' && typeof item.text === 'string')
-  return isJsonObject(text) && typeof text.text === 'string' ? parseJson(text.text) : undefined
+  const text = result.content.find((item) => isRecord(item) && item.type === 'text' && typeof item.text === 'string')
+  return isRecord(text) && typeof text.text === 'string' ? parseBoundedJson(text.text) : undefined
 }
 
 function isJsonRpcResult(value: unknown, expectedId: string): value is Readonly<{
   jsonrpc: '2.0'; id: string; result: unknown
 }> {
-  return isJsonObject(value) && value.jsonrpc === '2.0' && value.id === expectedId && 'result' in value
+  return isRecord(value) && value.jsonrpc === '2.0' && value.id === expectedId && 'result' in value
 }
 
-function parseJson(value: string): unknown {
-  try { return JSON.parse(value) as unknown } catch { return undefined }
-}
 
-function isJsonObject(value: unknown): value is Readonly<Record<string, unknown>> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 
 function boundedString(value: unknown, max: number): value is string {

@@ -5,36 +5,34 @@ import {
   documentMatchesRegistryQuery,
 } from '@/modules/registry/internal/search-documents'
 import { canonicalTradeToken, TRADE_VOCABULARY, TRADE_WORDS, tradeAliasesForText } from '@/modules/registry/internal/trade-vocabulary'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/internal/search'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
-function catalogFor(slug: string, name: string, category: string, serviceName: string, summary: string) {
+function catalogFor(slug: string, name: string, category: string, offeringName: string, summary: string): PublicBusinessCatalogApiV2Dto {
   return {
+    schemaVersion: 'public-business-catalog-api:v2',
+    businessId: `business:${slug}`,
     slug,
     name,
     category,
     suburb: 'Adelaide',
     stateTerritory: 'SA',
+    publicUrl: `/${slug}`,
     trustTier: 'claimed',
-    updatedAt: 1,
-    services: [
-      {
-        slug: 'primary-service',
-        name: serviceName,
-        category,
-        summary,
-        serviceArea: 'Adelaide and nearby suburbs',
-        hoursOrUnknown: 'Unknown',
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicChannel: 'not_available',
-          publicDisclosure: '',
-          noContactReason: '',
-          rawContactExcluded: true,
-        },
-        capabilities: [],
-      },
-    ],
-  } as unknown as PublicBusinessCatalogApiDto
+    observedAt: 1,
+    disposition: 'current',
+    photos: [],
+    offerings: [{
+      offeringRef: `offering:${slug}:primary-service`,
+      revision: 1,
+      name: offeringName,
+      category,
+      summary,
+      serviceAreaSummary: 'Adelaide and nearby suburbs',
+      accessPaths: [],
+      support: { integrated: false, aeSupportedAction: false },
+    }],
+    accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+  }
 }
 
 const electrical = buildRegistrySearchDocumentsForCatalog(
@@ -72,8 +70,8 @@ describe('trade vocabulary bridges customer words to published supply', () => {
    * support, so every alias a customer might type has to be present in the
    * stored document or that backend silently returns nothing.
    */
-  it('stores every alias on the indexed document for substring-only backends', () => {
-    const stored = new Set(electrical.serviceKeywords)
+  it('stores every alias on the indexed Offering document', () => {
+    const stored = new Set(electrical.keywords)
     for (const alias of ['electrician', 'electricians', 'electrical', 'sparky']) {
       expect(stored, `indexed aliases must contain ${alias}`).toContain(alias)
     }

@@ -2,6 +2,8 @@ import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestAuthorityModeForScopes,
   customerRequestScopeForMode,
+  isWorkTreeAgentScope,
+  workTreeScopeAllowedForMode,
   type CustomerRequestAuthorityMode,
 } from './agent-contract'
 
@@ -28,10 +30,20 @@ export type CustomerRequestAgentKeyRevocationResult =
   | { kind: 'revoked' | 'already_revoked'; keyId: string }
   | { kind: 'error'; code: 'missing_auth' | 'invalid_input' | 'key_not_found' | 'revocation_unavailable'; retryable: boolean }
 
+export type CustomerRequestAgentPrincipalRegistration = Readonly<{
+  principalId: string
+  credentialId: string
+  scopes: readonly string[]
+  seenAt: number
+}>
+export type CustomerRequestAgentPrincipalRegistrationResult = Readonly<{
+  kind: 'recorded' | 'conflict' | 'unavailable'
+}>
 export type CustomerRequestAgentKeyApi = Readonly<{
   list: (input: { subject: string; includeInvalid: boolean; limit: number }) => Promise<{ data: readonly AgentKeyRecord[] }>
   create: (input: AgentKeyCreateInput) => Promise<{ id: string; secret?: string | undefined }>
   getSecret: (keyId: string) => Promise<{ secret: string }>
+  revoke?: (input: { apiKeyId: string; revocationReason: string }) => Promise<void>
 }>
 type AgentKeyApi = CustomerRequestAgentKeyApi
 
@@ -58,7 +70,6 @@ export type AgentKeyCreateInput = Readonly<{
   description: string
 }>
 
-
 type IssueInput = Readonly<{
   ownerId?: string
   principal: { userId: string } | undefined
@@ -69,6 +80,9 @@ type IssueInput = Readonly<{
     grantRef?: string
   }
   api: AgentKeyApi
+  registerPrincipal?: (
+    input: CustomerRequestAgentPrincipalRegistration
+  ) => Promise<CustomerRequestAgentPrincipalRegistrationResult>
   returnSecret?: boolean
 }>
 
@@ -77,12 +91,12 @@ export async function issueCustomerRequestAgentKey(input: IssueInput): Promise<C
   if (ownerId === undefined) return { kind: 'error', code: 'missing_auth', retryable: false }
   const name = input.input.name.trim()
   const idempotencyKey = input.input.idempotencyKey.trim()
-  const scopes = input.input.scopes ?? [CUSTOMER_REQUEST_AGENT_SCOPE, customerRequestScopeForMode('inspect_only')]
-  const authorityMode = customerRequestAuthorityModeForScopes(scopes)
+  const rawScopes = input.input.scopes ?? [CUSTOMER_REQUEST_AGENT_SCOPE, customerRequestScopeForMode('inspect_only')]
+  const scopes = canonicalAgentScopes(rawScopes)
+  const authorityMode = scopes === undefined ? undefined : customerRequestAuthorityModeForScopes(scopes)
   const grantRef = input.input.grantRef?.trim() || idempotencyKey
   if (name.length < 1 || name.length > 80 || !/^[A-Za-z0-9][A-Za-z0-9 _.-]{7,127}$/u.test(idempotencyKey)
-    || grantRef.length < 1 || grantRef.length > 300 || authorityMode === undefined
-    || scopes.length !== 2 || !scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) {
+    || grantRef.length < 1 || grantRef.length > 300 || authorityMode === undefined || scopes === undefined) {
     return { kind: 'error', code: 'invalid_input', retryable: false }
   }
   try {
@@ -92,6 +106,10 @@ export async function issueCustomerRequestAgentKey(input: IssueInput): Promise<C
     if (existing !== undefined) {
       if (existing.claims?.aeDisplayName !== name || (existing.claims.aeAuthorityMode !== undefined && existing.claims.aeAuthorityMode !== authorityMode)) {
         return { kind: 'error', code: 'idempotency_conflict', retryable: false }
+      }
+      if (!await bindAgentPrincipal(input, existing.id, scopes)) {
+        await rollbackAgentKey(input.api, existing.id)
+        return { kind: 'error', code: 'issuance_unavailable', retryable: true }
       }
       const secret = input.returnSecret === false ? '' : (await input.api.getSecret(existing.id)).secret
       return { kind: 'replayed', keyId: existing.id, secret, expiresInSeconds: CUSTOMER_REQUEST_AGENT_KEY_TTL_SECONDS, authorityMode, scopes: [...scopes], grantRef }
@@ -111,25 +129,58 @@ export async function issueCustomerRequestAgentKey(input: IssueInput): Promise<C
       },
       description: 'Use Agentic Economy Customer Requests with this assistant.',
     })
-    const secret = input.returnSecret === false ? '' : (created.secret ?? (await input.api.getSecret(created.id)).secret)
-    return { kind: 'created', keyId: created.id, secret, expiresInSeconds: CUSTOMER_REQUEST_AGENT_KEY_TTL_SECONDS, authorityMode, scopes: [...scopes], grantRef }
+    if (!await bindAgentPrincipal(input, created.id, scopes)) {
+      await rollbackAgentKey(input.api, created.id)
+      return { kind: 'error', code: 'issuance_unavailable', retryable: true }
+    }
+    try {
+      const secret = input.returnSecret === false ? '' : (created.secret ?? (await input.api.getSecret(created.id)).secret)
+      return { kind: 'created', keyId: created.id, secret, expiresInSeconds: CUSTOMER_REQUEST_AGENT_KEY_TTL_SECONDS, authorityMode, scopes: [...scopes], grantRef }
+    } catch (error) {
+      await rollbackAgentKey(input.api, created.id)
+      throw error
+    }
   } catch {
     return { kind: 'error', code: 'issuance_unavailable', retryable: true }
   }
 }
 
+async function bindAgentPrincipal(input: IssueInput, keyId: string, scopes: readonly string[]): Promise<boolean> {
+  if (input.registerPrincipal === undefined) return true
+  try {
+    const result = await input.registerPrincipal({
+      principalId: `clerk_api_key:${keyId}`,
+      credentialId: keyId,
+      scopes: [...scopes],
+      seenAt: Date.now(),
+    })
+    return result.kind === 'recorded'
+  } catch {
+    return false
+  }
+}
+
+async function rollbackAgentKey(api: AgentKeyApi, keyId: string): Promise<void> {
+  if (api.revoke === undefined) return
+  try {
+    await api.revoke({ apiKeyId: keyId, revocationReason: 'Source principal binding failed.' })
+  } catch {
+    // Best effort rollback: the issuance still fails closed.
+  }
+}
+
 export function projectCustomerRequestAgentKey(record: AgentKeyRecord): CustomerRequestAgentKeyInventoryItem | undefined {
-  const authorityMode = typeof record.claims?.aeAuthorityMode === 'string'
-    ? customerRequestAuthorityModeForScopes([CUSTOMER_REQUEST_AGENT_SCOPE, record.claims.aeAuthorityMode])
-    : customerRequestAuthorityModeForScopes(record.scopes ?? [])
-  if (authorityMode === undefined) return undefined
+  const fallbackModeScope = typeof record.claims?.aeAuthorityMode === 'string' ? record.claims.aeAuthorityMode : customerRequestScopeForMode('inspect_only')
+  const scopes = canonicalAgentScopes(record.scopes ?? [CUSTOMER_REQUEST_AGENT_SCOPE, fallbackModeScope])
+  const authorityMode = scopes === undefined ? undefined : customerRequestAuthorityModeForScopes(scopes)
+  if (authorityMode === undefined || scopes === undefined) return undefined
   const displayName = typeof record.claims?.aeDisplayName === 'string' ? record.claims.aeDisplayName : record.name
   const grantRef = typeof record.claims?.aeGrantRef === 'string' ? record.claims.aeGrantRef : undefined
   return {
     keyId: record.id,
     name: displayName,
     authorityMode,
-    scopes: Object.freeze([CUSTOMER_REQUEST_AGENT_SCOPE, customerRequestScopeForMode(authorityMode)]),
+    scopes: Object.freeze([...scopes]),
     ...(record.createdAt === undefined ? {} : { createdAt: record.createdAt }),
     ...(record.expiresAt === undefined && record.expiration === undefined ? {} : { expiresAt: record.expiresAt ?? record.expiration }),
     revoked: record.revoked,
@@ -150,7 +201,7 @@ export async function listCustomerRequestAgentKeys(input: Readonly<{
 export async function revokeCustomerRequestAgentKey(input: Readonly<{
   principal: { userId: string } | undefined
   keyId: string
-  api: { get: (keyId: string) => Promise<AgentKeyRecord>; revoke: (input: { apiKeyId: string; revocationReason: string }) => Promise<unknown> }
+  api: { get: (keyId: string) => Promise<AgentKeyRecord>; revoke: (input: { apiKeyId: string; revocationReason: string }) => Promise<void> }
 }>): Promise<CustomerRequestAgentKeyRevocationResult> {
   if (input.principal === undefined) return { kind: 'error', code: 'missing_auth', retryable: false }
   if (!/^ak_[A-Za-z0-9_]{4,}$/u.test(input.keyId) && !/^key_[A-Za-z0-9_]{4,}$/u.test(input.keyId)) return { kind: 'error', code: 'invalid_input', retryable: false }
@@ -163,4 +214,14 @@ export async function revokeCustomerRequestAgentKey(input: Readonly<{
   } catch {
     return { kind: 'error', code: 'revocation_unavailable', retryable: true }
   }
+}
+
+function canonicalAgentScopes(scopes: readonly string[]): readonly string[] | undefined {
+  if (scopes.length < 2 || !scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE) || new Set(scopes).size !== scopes.length) return undefined
+  const authorityMode = customerRequestAuthorityModeForScopes(scopes)
+  if (authorityMode === undefined) return undefined
+  const modeScope = customerRequestScopeForMode(authorityMode)
+  const extras = scopes.filter((scope) => scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== modeScope)
+  if (extras.some((scope) => !isWorkTreeAgentScope(scope) || !workTreeScopeAllowedForMode(scope, authorityMode))) return undefined
+  return [CUSTOMER_REQUEST_AGENT_SCOPE, modeScope, ...extras.sort()]
 }

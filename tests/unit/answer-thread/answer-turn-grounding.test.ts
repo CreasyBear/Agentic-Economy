@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent, AnswerSource } from '@/modules/answer/public'
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
+import type { AnswerRunReport, FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
 import {
   streamAnswerTurn,
   type AnswerTurnRecord,
@@ -30,6 +32,25 @@ const provider: AnswerSource = {
       summary: 'Emergency plumbing support.',
     },
   ],
+}
+function currentPriorEvidence(): FrozenTurnEvidenceDraft & { answerRun: AnswerRunReport } {
+  const draft: FrozenTurnEvidenceDraft = {
+    providers: [provider],
+    allowedSlugs: [],
+    agentJsonUrl: '/api/businesses/search?q=emergency+plumber+in+Perth&limit=3',
+    toolCalls: [],
+    timings: [],
+    workLog: [],
+  }
+  return {
+    ...draft,
+    answerRun: buildAnswerRunReport({
+      intent: 'refine_search',
+      status: 'complete',
+      snapshotHash: 'prior-hash',
+      evidence: draft,
+    }),
+  }
 }
 
 describe('answer turn catalog grounding', () => {
@@ -64,7 +85,7 @@ describe('answer turn catalog grounding', () => {
       },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [] }),
+      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
     })
 
     try {
@@ -100,11 +121,7 @@ function buildUngroundedPriorTurn(): AnswerTurnRecord {
     seq: 1,
     query: 'emergency plumber in Perth',
     intent: 'refine_search',
-    evidenceJson: JSON.stringify({
-      providers: [provider],
-      allowedSlugs: [],
-      agentJsonUrl: '/api/businesses/search?q=emergency+plumber+in+Perth&limit=3',
-    }),
+    evidenceJson: JSON.stringify(currentPriorEvidence()),
     snapshotHash: 'prior-hash',
     proseJson: JSON.stringify({
       oneLine: 'One listed business matches.',

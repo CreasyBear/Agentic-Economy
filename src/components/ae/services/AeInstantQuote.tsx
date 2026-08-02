@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
 import type { EndpointDto } from '@/modules/registry/public'
+import { formatTimestamp } from '@/lib/ui/format-time'
+import type { JsonValue } from '@/modules/capability-contract/public'
+import { isRecord } from '@/modules/common/is-record'
 import { formatMoney } from './money'
 
 type AeInstantQuoteProps = Readonly<{
@@ -140,8 +143,8 @@ function QuoteCard({
       <p className="block text-sm text-muted-foreground">{quote.service}</p>
       <dl className="grid gap-2 text-sm sm:grid-cols-3">
         <QuoteFact label="Example price" value={formatQuotePrice(quote.price)} />
-        <QuoteFact label="Next available" value={formatDate(quote.nextAvailable)} />
-        <QuoteFact label="Valid until" value={formatDate(quote.validUntil)} />
+        <QuoteFact label="Next available" value={formatQuoteTimestamp(quote.nextAvailable)} />
+        <QuoteFact label="Valid until" value={formatQuoteTimestamp(quote.validUntil)} />
       </dl>
       <Button asChild variant={emphasized ? 'default' : 'secondary'} {...(emphasized ? { 'data-variant': 'primary' } : {})} size="default" className="min-h-11 justify-self-start">
         <a href={businessHref}>Contact {businessName}</a>
@@ -183,7 +186,7 @@ function QuoteFact({ label, value }: { label: string; value: string }) {
   )
 }
 
-async function readJson(response: Response): Promise<unknown> {
+async function readJson(response: Response): Promise<JsonValue | undefined> {
   try {
     return await response.json()
   } catch {
@@ -191,9 +194,6 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
 
 function isSandboxQuote(value: unknown): value is SandboxQuote {
   if (!isRecord(value) || value.provenance !== 'ae_sandbox_provider') return false
@@ -214,9 +214,9 @@ function formatQuotePrice(price: SandboxQuote['price']): string {
   return `${formatMoney(price.currency, price.amountMinor)}${unit}${tax}`
 }
 
-function formatDate(value: string): string {
+function formatQuoteTimestamp(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })
+  return formatTimestamp(date)
 }
 

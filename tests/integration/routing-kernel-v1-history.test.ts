@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexModules as modules, ownerAdmin } from '../helpers/convex-fixtures'
 
 describe('V1 routing history readback', () => {
   it('requires source-owned admin readback authority and never mutates history', async () => {
@@ -28,7 +26,7 @@ describe('V1 routing history readback', () => {
   it('returns bounded redacted metadata for exact binding, grant, preparation and run references', async () => {
     const backend = convexTest(schema, modules)
     await seedRepresentativeHistory(backend)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_history_admin')
     const before = await historyRows(backend)
 
     await expect(admin.query(api.routingKernelV1History.read, {
@@ -81,7 +79,7 @@ describe('V1 routing history readback', () => {
 
   it('returns typed not-found and oversize refusals instead of scanning or truncating history', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_history_admin')
     await expect(admin.query(api.routingKernelV1History.read, {
       reference: { kind: 'run', rootRunId: 'run:missing' },
     })).resolves.toEqual({ kind: 'not_found', referenceKind: 'run', ref: 'run:missing' })
@@ -110,16 +108,6 @@ describe('V1 routing history readback', () => {
   })
 })
 
-async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
-  const identity = { subject: 'user_history_admin', issuer: 'https://identity.example', tokenIdentifier: 'token_history_admin' }
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('adminMemberships', {
-      clerkUserId: identity.subject, tokenIdentifier: identity.tokenIdentifier,
-      role: 'owner_admin', state: 'active', grantedBy: 'test_bootstrap', grantedAt: 1,
-    })
-  })
-  return backend.withIdentity(identity)
-}
 
 async function seedRepresentativeHistory(backend: ReturnType<typeof convexTest>) {
   await backend.run(async (ctx) => {

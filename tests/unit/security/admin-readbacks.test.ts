@@ -76,7 +76,7 @@ describe('admin route readbacks', () => {
     expect(rows.every((row) => row.rowState === 'indexed')).toBe(true)
     expect(rows.every((row) => row.repairResult === 'succeeded')).toBe(true)
     expect(rows.flatMap((row) => row.affectedPublicSurfaces ?? [])).toEqual(
-      expect.arrayContaining(['/registry', '/api/businesses', '/api/businesses/search', '/api/businesses/{slug}']),
+      expect.arrayContaining(['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}']),
     )
     expect(rows.find((row) => row.rowId === 'row:index:latest-attempt')).toMatchObject({
       readbackState: 'available',
@@ -114,6 +114,7 @@ describe('admin route readbacks', () => {
 function activeMembership(role: AdminMembership['role']): AdminMembership {
   return {
     clerkUserId: `admin_${role}`,
+    tokenIdentifier: `clerk|admin_${role}`,
     role,
     state: 'active',
     grantedBy: 'bootstrap',

@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../../helpers/source-files'
 
 const convexHost = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 const portsSource = readFileSync('convex/customerRequestEvidenceLoadPorts.ts', 'utf8')
@@ -19,7 +20,6 @@ const movedSymbols = [
 
 const hostMachines = [
   'startOrResume',
-  'leaseNextDispatch',
   'recordOutcome',
 ] as const
 
@@ -44,11 +44,12 @@ describe('customer-request route-execution evidence-load thinness', () => {
 
     const exportStart = convexHost.indexOf('export const exportCustomerEvidence = internalQuery({')
     expect(exportStart).toBeGreaterThanOrEqual(0)
-    const exportEnd = convexHost.indexOf('\nfunction parseBoundedJson(', exportStart)
+    const exportEnd = convexHost.indexOf('\n})', exportStart)
     expect(exportEnd).toBeGreaterThan(exportStart)
     const exportBody = convexHost.slice(exportStart, exportEnd)
-    expect(exportBody).toContain('assembleCustomerEvidenceExport')
-    expect(exportBody).toContain('evidenceLoadPorts(ctx)')
+    expect(exportBody).toContain(
+      'handler: async (ctx, args) => await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx))',
+    )
     expect(exportBody).not.toContain("query('customerRequestRouteRunHeads')")
     expect(exportBody).not.toContain("query('capabilityTransportBindings')")
     expect(exportBody.split('\n').length).toBeLessThanOrEqual(120)
@@ -67,7 +68,7 @@ describe('customer-request route-execution evidence-load thinness', () => {
     expect(listBody).not.toContain("query('customerRequestRouteProblemReports')")
   })
 
-  it('keeps host start/lease/outcome machines in Convex', () => {
+  it('keeps host start/outcome machines in Convex', () => {
     for (const symbol of hostMachines) {
       expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
@@ -121,14 +122,4 @@ describe('customer-request route-execution evidence-load thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

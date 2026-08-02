@@ -144,10 +144,9 @@ export function createDevelopmentDynamicPublishedSource(
         prior.claim = { ...prior.claim, status: 'uncertain', outcome }
         return { kind: 'reuse', outcome }
       }
-      return {
-        kind: 'wait',
-        outcome: new Promise((resolve) => prior.waiters.push(resolve)),
-      }
+      const { promise, resolve } = Promise.withResolvers<DynamicPublishedSharedOutcome>()
+      prior.waiters.push(resolve)
+      return { kind: 'wait', outcome: promise }
     },
     completeSemanticEffect: ({ semanticBaseKey, outcome }) => {
       const prior = semantic.get(semanticBaseKey)

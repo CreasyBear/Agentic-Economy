@@ -25,7 +25,6 @@ import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
-import { runtimeDb } from './source_state'
 
 type DbCtx = MutationCtx | QueryCtx
 
@@ -92,7 +91,7 @@ export function problemMutationPorts(ctx: MutationCtx): ProblemMutationPorts {
 
     resolveSupportAnnotateAuthority: async () => {
       const authority = await resolveAdminAuthority(
-        { db: runtimeDb(ctx.db), auth: ctx.auth },
+        { db: ctx.db, auth: ctx.auth },
         'annotate_triage',
       )
       if (authority.kind === 'denied') {
@@ -154,46 +153,59 @@ async function loadSupportExportMaterial(
   const problem = await ctx.db.query('customerRequestRouteProblemReports')
     .withIndex('by_reportRef', (query) => query.eq('reportRef', reportRef)).unique()
   if (problem === null) return null
+  const attemptRef = problem.attemptRef
+  const mandateRef = problem.mandateRef
   const ports = evidenceLoadPorts(ctx)
-  const [updates, businessReports, attempt, requestRevisions, mandateIssue, run, revocation,
+  const [mandateIssue, run] = await Promise.all([
+    mandateRef === undefined
+      ? null
+      : ctx.db.query('customerRequestRouteMandateIssues')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', mandateRef)).unique(),
+    ctx.db.query('customerRequestRouteRuns')
+      .withIndex('by_runRef', (query) => query.eq('runRef', problem.runRef)).unique(),
+  ])
+  const [updates, businessReports, attempt, requestRevisionRow, revocation,
     reservations, attempts] = await Promise.all([
     loadProblemUpdates(ports, problem.reportRef),
     loadProblemBusinessReports(ports, problem.reportRef),
-    problem.attemptRef === undefined
+    attemptRef === undefined
       ? null
       : ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', problem.attemptRef!)).unique(),
-    ctx.db.query('customerRequestV2Revisions')
-      .withIndex('by_requestId_and_requestRevision', (query) => (
-        query.eq('requestId', problem.requestId)
-      )).collect(),
-    problem.mandateRef === undefined
-      ? null
-      : ctx.db.query('customerRequestRouteMandateIssues')
-        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).unique(),
-    ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', problem.runRef)).unique(),
-    problem.mandateRef === undefined
+        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attemptRef)).unique(),
+    mandateIssue === null
+      ? undefined
+      : ctx.db.query('customerRequestV2Revisions')
+        .withIndex('by_requestId_and_requestRevision', (query) => (
+          query.eq('requestId', problem.requestId)
+            .eq('requestRevision', mandateIssue.mandate.request.requestRevision)
+        )).unique(),
+    mandateRef === undefined
       ? null
       : ctx.db.query('customerRequestRouteMandateRevocations')
-        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).first(),
-    problem.mandateRef === undefined
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', mandateRef)).first(),
+    mandateRef === undefined || mandateIssue === null
       ? []
       : ctx.db.query('customerRequestRouteStepReservations')
-        .withIndex('by_mandateRef_and_recordedAt', (query) => query.eq('mandateRef', problem.mandateRef!))
-        .collect(),
-    ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_runRef_and_position', (query) => query.eq('runRef', problem.runRef))
-      .collect(),
+        .withIndex('by_mandateRef_and_recordedAt', (query) => query.eq('mandateRef', mandateRef))
+        .order('asc')
+        .take(mandateIssue.mandate.route.steps.length + 1),
+    run === null
+      ? []
+      : ctx.db.query('customerRequestRouteStepAttempts')
+        .withIndex('by_runRef_and_position', (query) => query.eq('runRef', problem.runRef))
+        .order('asc')
+        .take(run.totalSteps + 1),
   ])
   if (attempt !== null && !routeAttemptIntegrityValid(attempt)) {
     throw new Error('customer_request_route_problem_attempt_integrity_failure')
   }
-  const requestRevision = mandateIssue === null
-    ? undefined
-    : requestRevisions.find((revision) => (
-        revision.requestRevision === mandateIssue.mandate.request.requestRevision
-      ))
+  if (mandateIssue !== null && reservations.length > mandateIssue.mandate.route.steps.length) {
+    throw new Error('customer_request_route_step_budget_integrity_failure')
+  }
+  if (run !== null && attempts.length > run.totalSteps) {
+    throw new Error('customer_request_route_run_attempt_integrity_failure')
+  }
+  const requestRevision = requestRevisionRow ?? undefined
   if (run === null) {
     throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
   }
@@ -230,15 +242,20 @@ async function resolveBusinessAuthority(
   }
   const report = await ctx.db.query('customerRequestRouteProblemReports')
     .withIndex('by_reportRef', (query) => query.eq('reportRef', reportRef)).unique()
-  if (report === null || report.attemptRef === undefined) {
+  if (report === null) {
+    return { kind: 'refused', reason: 'report_not_found' }
+  }
+  const attemptRef = report.attemptRef
+  if (attemptRef === undefined) {
     return { kind: 'refused', reason: 'report_not_found' }
   }
   if ((report.visibility ?? 'customer_and_ae_only') !== 'share_with_affected_business') {
     return { kind: 'refused', reason: 'sharing_not_authorized' }
   }
   const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-    .withIndex('by_attemptRef', (query) => query.eq('attemptRef', report.attemptRef!)).unique()
-  if (attempt === null || attempt.requestId !== report.requestId || attempt.position !== report.step
+    .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attemptRef)).unique()
+  if (attempt === null || report.attemptRef === undefined
+    || attempt.requestId !== report.requestId || attempt.position !== report.step
     || !routeAttemptIntegrityValid(attempt)) {
     throw new Error('customer_request_route_problem_attempt_integrity_failure')
   }

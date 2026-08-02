@@ -2,6 +2,7 @@ import { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from '@/modul
 import { formatOfferingPrice } from '@/modules/catalog/public'
 import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { DiscoveryListingBoundaryLine } from './discovery-files'
 import { safePublicText } from './ucp-manifest'
@@ -18,7 +19,7 @@ export type AgentPageMarkdownOptions = Readonly<{ canonicalBaseUrl: string }>
 export const AgentCatalogMarkdownLimit = 25
 
 export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): string {
-  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
   return [
     '# Agentic Economy',
     '',
@@ -66,7 +67,7 @@ export function buildCatalogMarkdown(
   businesses: readonly PublicBusinessCatalogApiV2Dto[],
   options: AgentPageMarkdownOptions & Readonly<{ query?: string; total?: number }>,
 ): string {
-  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
   const shown = businesses.slice(0, AgentCatalogMarkdownLimit)
   const heading = options.query === undefined || options.query.length === 0
     ? '# Listed businesses'
@@ -98,7 +99,7 @@ export function buildBusinessMarkdown(
   business: PublicBusinessCatalogApiV2Dto,
   options: AgentPageMarkdownOptions,
 ): string {
-  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
   return [
     `# ${oneLine(business.name)}`,
     '',
@@ -135,7 +136,7 @@ export function buildUnknownPageMarkdown(
   path: string,
   options: AgentPageMarkdownOptions,
 ): string {
-  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
   return [
     '# No markdown projection for this path',
     '',
@@ -154,7 +155,7 @@ export function buildMissingBusinessMarkdown(
   slug: string,
   options: AgentPageMarkdownOptions,
 ): string {
-  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
   return [
     '# No published listing',
     '',
@@ -179,6 +180,3 @@ function oneLine(value: string): string {
   return safePublicText(value).replace(/\s+/gu, ' ').replaceAll('|', '/').trim()
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/u, '')
-}

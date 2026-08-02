@@ -1,14 +1,12 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { OwnerId, Slug } from '@/modules/common/ids'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
 import type {
-  AbuseRateLimitBucketRecord,
   ClaimFingerprintInput,
   ClaimFingerprintRecord,
   CsrfCheckInput,
   CsrfDecision,
   DuplicateClaimDecision,
-  RateLimitClaimInput,
-  RateLimitDecision,
 } from '@/modules/security/public'
 
 export function assertCsrf(input: CsrfCheckInput): CsrfDecision {
@@ -30,38 +28,6 @@ export function assertCsrf(input: CsrfCheckInput): CsrfDecision {
   return { kind: 'rejected', reason: 'missing_csrf' }
 }
 
-export function rateLimitClaim(
-  buckets: AbuseRateLimitBucketRecord[],
-  input: RateLimitClaimInput
-): RateLimitDecision {
-  const window = String(Math.floor(input.now / input.windowMs))
-  const existing = buckets.find((bucket) => bucket.scope === input.scope && bucket.key === input.key && bucket.window === window)
-
-  if (existing === undefined) {
-    const bucket: AbuseRateLimitBucketRecord = {
-      scope: input.scope,
-      key: input.key,
-      window,
-      count: 1,
-      state: 'open',
-      resetAt: (Number(window) + 1) * input.windowMs,
-      updatedAt: input.now,
-    }
-    buckets.push(bucket)
-    return { kind: 'accepted', bucket }
-  }
-
-  if (existing.count >= input.limit) {
-    existing.state = 'limited'
-    existing.updatedAt = input.now
-    return { kind: 'limited', bucket: existing, retryAfter: existing.resetAt }
-  }
-
-  existing.count += 1
-  existing.updatedAt = input.now
-  existing.state = existing.count >= input.limit ? 'limited' : 'open'
-  return { kind: 'accepted', bucket: existing }
-}
 
 export function allocateDeterministicSlug(requestedSlug: string, existingSlugs: readonly Slug[]): Slug {
   const baseSlug = normalizeSlug(requestedSlug)
@@ -119,10 +85,3 @@ function normalizeFingerprintPart(value: string): string {
     .replace(/\s+/g, ' ')
 }
 
-function normalizeSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72)
-}

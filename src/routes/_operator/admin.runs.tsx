@@ -3,6 +3,7 @@ import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { AeHarnessRunList } from '@/components/ae/harness/AeHarnessRunViewer'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { stringSearch } from '@/lib/operator/string-search'
 import {
   readAdminRunViewerListServer,
 } from '@/modules/harness/run-viewer.functions'
@@ -68,13 +69,6 @@ function compactSearch(filters: HarnessRunViewerFilters): HarnessRunViewerFilter
   }
 }
 
-function stringSearch(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const trimmed = value.trim()
-  return trimmed.length === 0 ? undefined : trimmed
-}
 
 function enumSearch<T extends string>(
   value: unknown,

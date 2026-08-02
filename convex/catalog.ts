@@ -1,49 +1,56 @@
-import { mutationGeneric, queryGeneric, type IndexRange, type UserIdentity } from 'convex/server'
+import { mutationGeneric, queryGeneric, type GenericDatabaseReader, type GenericDatabaseWriter } from 'convex/server'
 import { v } from 'convex/values'
+import { literalUnion } from '../src/modules/common/convex-literals'
+
+import type { MutationCtx } from './_generated/server'
+import type { DataModel, Doc, Id } from './_generated/dataModel'
+
+import { brandNonEmpty } from '../src/modules/common/ids'
 
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { runtimeDb } from './source_state'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
-import {
-  numberField,
-  optionalStringField,
-  stringField,
-} from './inquiryRuntimeDbHelpers'
-import { stableHash } from '../src/modules/common/stable-hash'
+import { hasActiveBusinessSuppression } from './catalogRuntimeQueries'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { requireAdminAuthority } from '../src/modules/security/public'
+import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './catalogSupplyProjection'
+} from './capabilitySupplyProjection'
+import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
 export {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './catalogSupplyProjection'
+} from './capabilitySupplyProjection'
 import {
+  BusinessOfferingStatusValues,
+  OfferingAccessPathStatusValues,
   changeOfferingStatusInState,
   createOfferingInState,
-  decideCatalogSupplyCutover,
-  migrateLegacyServiceToOffering,
-  legacyOfferingParityMatches,
+  MAX_ACCESS_PATHS_PER_OFFERING,
+  MAX_OFFERINGS_PER_BUSINESS,
   OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
-  planLegacyOfferingMigrationBatch,
   reviseOfferingInState,
   upsertAccessPathInState,
   withdrawAccessPathInState,
   type OfferingAccessPathDescriptor,
+  type OfferingAccessPathStatus,
+  type OfferingPrice,
   type OfferingSourceResult,
   type OfferingSourceState,
+  type BusinessOfferingStatus,
   validateServiceCatalogInput,
 } from '../src/modules/catalog/public'
-import { requireAdminAuthority } from '../src/modules/security/public'
-import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
-import type { BusinessOfferingRevisionRecord, BusinessServiceRecord, OfferingPrice, ServiceCapabilityRecord, ServiceCatalogInput, ValidatedServiceCatalogInput } from '../src/modules/catalog/public'
-import { literalUnion } from '../src/modules/common/convex-literals'
-
-/** Chainable equality builder for a compound index, which schema-less `mutationGeneric` cannot type. */
-type CompoundIndexEq = IndexRange & { eq: (field: string, value: unknown) => CompoundIndexEq }
+import type {
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+  OfferingFactsInput,
+  ServiceCatalogInput,
+  ValidatedServiceCatalogInput,
+} from '../src/modules/catalog/public'
+import { projectBusinessSupplyToPublicApi } from '../src/modules/registry/public'
 
 const firstRequestArg = v.object({
   mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
@@ -85,47 +92,50 @@ const externalAccessPathArg = v.object({
 })
 const offeringCommandResult = v.object({ kind: v.union(v.literal('ok'), v.literal('error')), code: v.string(), reason: v.optional(v.string()), resultRef: v.optional(v.string()), currentRevision: v.optional(v.number()) })
 
-const firstRequestResult = v.object({
-  mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
-  publicDisclosure: v.string(),
-  publicChannel: v.union(v.literal('public_business_contact'), v.literal('ae_status_only'), v.literal('not_available')),
-  noContactReason: v.optional(v.string()),
-  rawContactExcluded: v.literal(true),
-})
+const publicOfferingAccessPathResult = v.union(
+  v.object({
+    accessPathRef: v.string(),
+    kind: v.literal('human_request'),
+    channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')),
+    disclosure: v.string(),
+    url: v.optional(v.string()),
+  }),
+  v.object({
+    accessPathRef: v.string(),
+    kind: v.literal('external_operation'),
+    name: v.string(),
+    summary: v.string(),
+    url: v.string(),
+    method: v.optional(v.string()),
+    documentationUrl: v.optional(v.string()),
+    interfaceDescription: v.optional(v.object({ format: v.string(), url: v.optional(v.string()) })),
+    authenticationSummary: v.optional(v.string()),
+    pricingSummary: v.optional(v.string()),
+    provenance: v.union(v.literal('business_declared'), v.literal('publicly_observed')),
+  }),
+)
 
-const capabilityResult = v.object({
-  serviceId: v.string(),
-  kind: v.union(
-    v.literal('phone_inquiry'),
-    v.literal('quote_request'),
-    v.literal('booking_interest'),
-    v.literal('emergency_callout_interest'),
-    v.literal('ae_hosted_discovery')
-  ),
-  status: v.union(v.literal('available'), v.literal('degraded'), v.literal('unavailable'), v.literal('stale')),
-  firstRequest: firstRequestResult,
-  callable: v.literal(false),
-  paymentRequired: v.literal(false),
-  reason: v.optional(v.string()),
-  sourceHash: v.string(),
-})
-
-const publicServiceResult = v.object({
-  serviceId: v.string(),
-  serviceSlug: v.string(),
-  businessId: v.string(),
+const publicOfferingResult = v.object({
+  offeringRef: v.string(),
+  revision: v.number(),
   name: v.string(),
   category: v.string(),
   summary: v.string(),
-  serviceArea: v.string(),
-  hoursOrUnknown: v.string(),
-  firstRequest: firstRequestResult,
-  status: v.literal('published'),
-  capabilities: v.array(capabilityResult),
-  sourceHash: v.string(),
+  serviceAreaSummary: v.optional(v.string()),
+  availabilitySummary: v.optional(v.string()),
+  pricingSummary: v.optional(v.string()),
+  price: v.optional(offeringPriceArg),
+  accessPaths: v.array(publicOfferingAccessPathResult),
+  support: v.object({
+    integrated: v.boolean(),
+    aeSupportedAction: v.boolean(),
+    observedAt: v.optional(v.number()),
+    validUntil: v.optional(v.number()),
+  }),
 })
 
-const publicCatalogResult = v.object({
+const publicCatalogV2Result = v.object({
+  schemaVersion: v.literal('public-business-catalog-api:v2'),
   businessId: v.string(),
   slug: v.string(),
   name: v.string(),
@@ -135,26 +145,32 @@ const publicCatalogResult = v.object({
   publishedPhone: v.optional(v.string()),
   postcode: v.optional(v.string()),
   publicUrl: v.string(),
-  publicStatus: v.literal('published'),
   trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
-  indexStatus: v.union(v.literal('not_queued'), v.literal('queued'), v.literal('indexed'), v.literal('failed'), v.literal('stale')),
-  discoveryStatus: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
-  services: v.array(publicServiceResult),
-  sourceHash: v.string(),
-  schemaVersion: v.literal('public-catalog:v1'),
-  updatedAt: v.number(),
+  responseTimeMinutes: v.optional(v.number()),
+  photos: v.array(v.object({ url: v.string(), alt: v.string() })),
+  observedAt: v.number(),
+  disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
+  offerings: v.array(publicOfferingResult),
+  accessSummary: v.object({
+    humanRequest: v.boolean(),
+    externalOperation: v.boolean(),
+    aeSupportedAction: v.boolean(),
+  }),
 })
 
 const publicCatalogReadbackResult = v.union(
   v.object({
     kind: v.literal('available'),
-    catalog: publicCatalogResult,
+    catalog: publicCatalogV2Result,
   }),
   v.object({
     kind: v.literal('not_found'),
     reason: v.union(v.literal('not_public'), v.literal('no_such_business')),
   })
 )
+function catalogReadNotFound(reason: 'not_public' | 'no_such_business' = 'not_public') {
+  return { kind: 'not_found' as const, reason }
+}
 
 const auditEventResult = v.object({
   eventId: v.string(),
@@ -213,6 +229,82 @@ const discoveryAttemptResult = v.object({
   repairAction: v.union(v.literal('regenerate_manifest'), v.literal('invalidate_manifest'), v.literal('no_repair')),
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
 })
+const catalogOfferingPriceValue = v.object({
+  kind: v.union(v.literal('fixed'), v.literal('from'), v.literal('range'), v.literal('quote_only')),
+  currency: v.string(),
+  amountMinor: v.optional(v.number()),
+  maximumAmountMinor: v.optional(v.number()),
+  unit: v.optional(v.union(
+    v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'),
+    v.literal('day'), v.literal('week'), v.literal('month'),
+  )),
+  taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+})
+const catalogAccessPathDescriptorValue = v.union(
+  humanAccessPathArg,
+  externalAccessPathArg,
+)
+const catalogOwnerSupplyResult = v.union(
+  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
+  v.object({ kind: v.literal('not_found') }),
+  v.object({
+    kind: v.literal('available'),
+    businessId: v.string(),
+    business: v.object({
+      name: v.string(),
+      slug: v.string(),
+      publicStatus: v.union(v.literal('unpublished'), v.literal('published'), v.literal('suppressed')),
+      publishedPhone: v.optional(v.string()),
+    }),
+    offerings: v.array(v.object({
+      offeringRef: v.string(),
+      businessId: v.string(),
+      currentRevision: v.number(),
+      status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      revision: v.optional(v.object({
+        offeringRef: v.string(),
+        businessId: v.string(),
+        revision: v.number(),
+        name: v.string(),
+        category: v.string(),
+        summary: v.string(),
+        serviceAreaSummary: v.optional(v.string()),
+        availabilitySummary: v.optional(v.string()),
+        pricingSummary: v.optional(v.string()),
+        price: v.optional(catalogOfferingPriceValue),
+        sourceHash: v.string(),
+        createdAt: v.number(),
+      })),
+      accessPaths: v.array(v.object({
+        accessPathRef: v.string(),
+        businessId: v.string(),
+        offeringRef: v.string(),
+        offeringRevision: v.number(),
+        offeringSourceHash: v.string(),
+        status: v.union(v.literal('draft'), v.literal('published'), v.literal('withdrawn')),
+        descriptor: catalogAccessPathDescriptorValue,
+        sourceHash: v.string(),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+      })),
+    })),
+    projection: v.union(
+      v.object({ status: v.literal('projection_pending') }),
+      v.object({
+        status: v.union(v.literal('current'), v.literal('projection_pending')),
+        observedAt: v.number(),
+        disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
+        lastErrorCode: v.optional(v.string()),
+      }),
+    ),
+  }),
+)
+const catalogProjectionRetryResult = v.union(
+  v.object({ kind: v.literal('ok'), sourceDigest: v.string() }),
+  v.object({ kind: v.literal('error'), code: v.string(), reason: v.optional(v.string()) }),
+)
 
 const catalogErrorCode = v.union(
   v.literal('catalog_publish_unauthenticated'),
@@ -261,7 +353,7 @@ const catalogOkResult = v.object({
     createdAt: v.number(),
     updatedAt: v.number(),
   }),
-  catalog: publicCatalogResult,
+  catalog: publicCatalogV2Result,
   auditEvent: auditEventResult,
   registryProjectionAttempts: v.array(registryAttemptResult),
   discoveryManifestAttempts: v.array(discoveryAttemptResult),
@@ -269,7 +361,7 @@ const catalogOkResult = v.object({
 
 export const publishBusinessCatalog = mutationGeneric({
   args: {
-    claimId: v.string(),
+    claimId: v.id('claims'),
     operationKey: v.string(),
     correlationId: v.string(),
     csrfToken: v.optional(v.string()),
@@ -290,7 +382,7 @@ export const publishBusinessCatalog = mutationGeneric({
       return catalogError('catalog_publish_unauthenticated', 'Authentication is required to publish a business catalog.')
     }
 
-    return publishBusinessCatalogCommand(runtimeDb(ctx.db), {
+    return publishBusinessCatalogCommand(ctx.db, {
       actor,
       claimId: args.claimId,
       operationKey: args.operationKey,
@@ -301,530 +393,805 @@ export const publishBusinessCatalog = mutationGeneric({
 })
 
 export async function publishBusinessCatalogCommand(
-  db: RuntimeDb,
+  db: GenericDatabaseWriter<DataModel>,
   command: {
     actor: { kind: 'authenticated_owner'; clerkUserId: string }
-    claimId: string
+    claimId: Id<'claims'>
     operationKey: string
     correlationId: string
     services: readonly ServiceInput[]
   },
   now: number,
 ) {
-    const claim = await db.get(command.claimId)
-    if (claim === null) {
-      return catalogError('catalog_publish_claim_not_found', 'Claim was not found.')
+  const claim = await db.get(command.claimId)
+  if (claim === null) {
+    return catalogError('catalog_publish_claim_not_found', 'Claim was not found.')
+  }
+
+  if (claim.status === 'contested' || claim.status === 'disputed') {
+    return catalogError('catalog_publish_pending_review', 'Claim must finish review before publishing.')
+  }
+
+  const businessId = claim.businessId
+  if (businessId === undefined) {
+    return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
+  }
+
+  const owner = await db.get(claim.ownerId)
+  if (owner === null || owner.clerkUserId !== command.actor.clerkUserId) {
+    return catalogError('catalog_publish_wrong_owner', 'Only the source-bound owner can publish this catalog.')
+  }
+
+  const [business, context] = await Promise.all([
+    db.get(businessId),
+    db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', businessId)).unique(),
+  ])
+  if (business === null || context === null) {
+    return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
+  }
+
+  const normalizedServices: ServiceCatalogInput[] = []
+  for (const service of command.services) {
+    const normalizedService = toServiceInput(service)
+    if (normalizedService.kind === 'invalid') {
+      return catalogError('catalog_publish_invalid_services', 'invalid_first_request')
     }
+    normalizedServices.push(normalizedService.service)
+  }
+  const validation = validateServiceCatalogInput(normalizedServices)
+  if (validation.kind === 'invalid') {
+    return catalogError('catalog_publish_invalid_services', validation.reason)
+  }
 
-    const claimStatus = stringField(claim, 'status')
-    if (claimStatus === 'contested' || claimStatus === 'disputed') {
-      return catalogError('catalog_publish_pending_review', 'Claim must finish review before publishing.')
+  const requestHash = canonicalDigest({
+    claimId: command.claimId,
+    services: validation.services.map((service) => ({
+      category: service.category,
+      firstRequest: {
+        mode: service.firstRequest.mode,
+        noContactReason: service.firstRequest.noContactReason ?? '',
+        publicChannel: service.firstRequest.publicChannel,
+        publicDisclosure: service.firstRequest.publicDisclosure,
+      },
+      hoursOrUnknown: service.hoursOrUnknown,
+      name: service.name,
+      serviceArea: service.serviceArea,
+      summary: service.summary,
+    })),
+  })
+  const existingOperation = await db
+    .query('operationKeys')
+    .withIndex('by_actor_operation_key', (query) =>
+      query.eq('actorRef', claim.ownerId).eq('operationName', 'publishBusinessCatalog').eq('key', command.operationKey)
+    )
+    .unique()
+  if (existingOperation !== null) {
+    if (existingOperation.requestHash !== requestHash || existingOperation.status !== 'succeeded') {
+      return catalogError('catalog_publish_operation_conflict', 'Operation key is already reserved for a different publish request.')
     }
-
-    const ownerId = stringField(claim, 'ownerId')
-    const businessId = optionalStringField(claim, 'businessId')
-    if (businessId === undefined) {
-      return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
+    const replayCatalog = await publicCatalogForBusiness(db, businessId)
+    if (existingOperation.sourceHash !== business.sourceHash) {
+      return catalogError('catalog_publish_operation_conflict', 'Published operation source no longer matches this business.')
     }
-
-    const owner = await db.get(ownerId)
-    if (owner === null || stringField(owner, 'clerkUserId') !== command.actor.clerkUserId) {
-      return catalogError('catalog_publish_wrong_owner', 'Only the source-bound owner can publish this catalog.')
+    const replayAudit = await findPublishAuditEvent(db, businessId, command.operationKey)
+    if (replayCatalog === undefined || replayAudit === undefined) {
+      return catalogError('catalog_publish_operation_conflict', 'Published operation readback is incomplete.')
     }
-
-    const [business, context] = await Promise.all([
-      db.get(businessId),
-      db
-        .query('businessContexts')
-        .withIndex('by_business', (query) => query.eq('businessId', businessId))
-        .unique(),
-    ])
-    if (business === null || context === null) {
-      return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
-    }
-
-    const normalizedServices: ServiceCatalogInput[] = []
-    for (const service of command.services) {
-      const normalizedService = toServiceInput(service)
-      if (normalizedService.kind === 'invalid') {
-        return catalogError('catalog_publish_invalid_services', 'invalid_first_request')
-      }
-      normalizedServices.push(normalizedService.service)
-    }
-    const validation = validateServiceCatalogInput(normalizedServices)
-    if (validation.kind === 'invalid') {
-      return catalogError('catalog_publish_invalid_services', validation.reason)
-    }
-
-    const requestHash = stableHash({
-      claimId: command.claimId,
-      services: validation.services.map((service) => ({
-        category: service.category,
-        firstRequest: {
-          mode: service.firstRequest.mode,
-          noContactReason: service.firstRequest.noContactReason ?? '',
-          publicChannel: service.firstRequest.publicChannel,
-          publicDisclosure: service.firstRequest.publicDisclosure,
-        },
-        hoursOrUnknown: service.hoursOrUnknown,
-        name: service.name,
-        serviceArea: service.serviceArea,
-        summary: service.summary,
-      })),
-    })
-    const existingOperation = await db
-      .query('operationKeys')
-      .withIndex('by_actor_operation_key', (query) =>
-        query.eq('actorRef', ownerId).eq('operationName', 'publishBusinessCatalog').eq('key', command.operationKey)
-      )
-      .unique()
-    if (existingOperation !== null) {
-      if (stringField(existingOperation, 'requestHash') !== requestHash || stringField(existingOperation, 'status') !== 'succeeded') {
-        return catalogError('catalog_publish_operation_conflict', 'Operation key is already reserved for a different publish request.')
-      }
-      const replayCatalog = await publicCatalogForBusiness(db, businessId)
-      if (stringField(existingOperation, 'sourceHash') !== stringField(business, 'sourceHash')) {
-        return catalogError('catalog_publish_operation_conflict', 'Published operation source no longer matches this business.')
-      }
-      const replayAudit = await findPublishAuditEvent(db, businessId, command.operationKey)
-      if (replayCatalog === undefined || replayAudit === undefined) {
-        return catalogError('catalog_publish_operation_conflict', 'Published operation readback is incomplete.')
-      }
-      const replayBusiness = publishedBusinessContract(businessId, business, nowFromDoc(existingOperation))
-      const replayClaim = publishedClaimContract(command.claimId, claim, businessId, nowFromDoc(existingOperation))
-      return {
-        kind: 'ok' as const,
-        code: 'catalog_publish_replayed' as const,
-        business: replayBusiness,
-        claim: replayClaim,
-        catalog: replayCatalog,
-        auditEvent: replayAudit,
-        registryProjectionAttempts: await registryAttemptsForBusiness(db, businessId),
-        discoveryManifestAttempts: await discoveryAttemptsForBusiness(db, businessId),
-      }
-    }
-
-    const operationId = await db.insert('operationKeys', {
-      scope: 'catalog',
-      actorKind: 'owner',
-      actorRef: ownerId,
-      operationName: 'publishBusinessCatalog',
-      key: command.operationKey,
-      requestHash,
-      sourceHash: stringField(business, 'sourceHash'),
-      status: 'in_progress',
-      effectRefs: [],
-      createdAt: now,
-      updatedAt: now,
-    })
-
-    await db.patch(businessId, { publicStatus: 'published', claimStatus: 'published', updatedAt: now })
-    await db.patch(command.claimId, { status: 'published', updatedAt: now })
-    const services = await upsertServices(db, businessId, validation.services, now)
-    const catalog = await publicCatalogForBusiness(db, businessId)
-    if (catalog === undefined) {
-      return catalogError('catalog_publish_invalid_services', 'no_published_services')
-    }
-    // Projection failure never rolls back source publication. The last safe snapshot remains visible and marked stale.
-    await rebuildBusinessSupplyProjectionSnapshotCommand(db, businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now), now)
-
-    const auditEvent = await ensurePublishAuditEvent(db, businessId, ownerId, stringField(business, 'slug'), command, now)
-    const registryAttempts = await ensureRegistryAttempts(db, businessId, stringField(business, 'sourceHash'), services, now)
-    const discoveryAttempts = await ensureDiscoveryAttempt(db, businessId, stringField(business, 'sourceHash'), now)
-    await upsertBusinessIndexStatus(db, businessId, stringField(business, 'sourceHash'), now)
-    await db.patch(operationId, {
-      status: 'succeeded',
-      resultHash: stableHash({ auditEventId: auditEvent.eventId, businessId, slug: stringField(business, 'slug') }),
-      effectRefs: [auditEvent.eventId, ...registryAttempts.map((attempt) => attempt.logicalKey), ...discoveryAttempts.map((attempt) => attempt.attemptId)],
-      updatedAt: now,
-    })
-
-    const publishedBusiness = publishedBusinessContract(businessId, business, now)
-    const publishedClaim = publishedClaimContract(command.claimId, claim, businessId, now)
+    const replayBusiness = publishedBusinessContract(businessId, business, existingOperation.updatedAt)
+    const replayClaim = publishedClaimContract(command.claimId, claim, businessId, existingOperation.updatedAt)
     return {
       kind: 'ok' as const,
-      code: 'catalog_published' as const,
-      business: publishedBusiness,
-      claim: publishedClaim,
-      catalog,
-      auditEvent,
-      registryProjectionAttempts: registryAttempts,
-      discoveryManifestAttempts: discoveryAttempts,
+      code: 'catalog_publish_replayed' as const,
+      business: replayBusiness,
+      claim: replayClaim,
+      catalog: replayCatalog,
+      auditEvent: replayAudit,
+      registryProjectionAttempts: await registryAttemptsForBusiness(db, businessId, business.sourceHash),
+      discoveryManifestAttempts: await discoveryAttemptsForBusiness(db, businessId, business.sourceHash),
     }
+  }
+
+  const operationId = await db.insert('operationKeys', {
+    scope: 'catalog',
+    actorKind: 'owner',
+    actorRef: claim.ownerId,
+    operationName: 'publishBusinessCatalog',
+    key: command.operationKey,
+    requestHash,
+    sourceHash: business.sourceHash,
+    status: 'in_progress',
+    effectRefs: [],
+    createdAt: now,
+    updatedAt: now,
+  })
+  await Promise.all([
+    db.patch(businessId, {
+      publicStatus: 'published',
+      claimStatus: 'published',
+      updatedAt: now,
+    }),
+    db.patch(command.claimId, {
+      status: 'published',
+      updatedAt: now,
+    }),
+  ])
+  const persistedOfferings = await persistPublishedOfferings(db, businessId, owner.clerkUserId, validation.services, command.operationKey, now)
+  if (persistedOfferings.kind === 'error') {
+    return catalogError('catalog_publish_invalid_services', `offering_${persistedOfferings.code}`)
+  }
+  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now)
+  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
+    db,
+    sourceDb: db,
+    businessId,
+    support,
+    now,
+  })
+  if (rebuilt.kind === 'error') {
+    return catalogError('catalog_publish_invalid_services', `offering_projection_${rebuilt.code}`)
+  }
+  const catalog = await publicCatalogForBusiness(db, businessId)
+  if (catalog === undefined) {
+    return catalogError('catalog_publish_invalid_services', 'no_published_offerings')
+  }
+
+  const auditEvent = await ensurePublishAuditEvent(db, businessId, claim.ownerId, business.slug, command, now)
+  const registryAttempts = await ensureRegistryAttempts(db, businessId, business.sourceHash, now)
+  const discoveryAttempts = await ensureDiscoveryAttempt(db, businessId, business.sourceHash, now)
+  await upsertBusinessIndexStatus(db, businessId, business.sourceHash, now)
+  await db.patch(operationId, {
+    status: 'succeeded',
+    resultHash: canonicalDigest({ auditEventId: auditEvent.eventId, businessId, slug: business.slug }),
+    effectRefs: [auditEvent.eventId, ...registryAttempts.map((attempt) => attempt.logicalKey), ...discoveryAttempts.map((attempt) => attempt.attemptId)],
+    updatedAt: now,
+  })
+
+  const publishedBusiness = publishedBusinessContract(businessId, business, now)
+  const publishedClaim = publishedClaimContract(command.claimId, claim, businessId, now)
+  return {
+    kind: 'ok' as const,
+    code: 'catalog_published' as const,
+    business: publishedBusiness,
+    claim: publishedClaim,
+    catalog,
+    auditEvent,
+    registryProjectionAttempts: registryAttempts,
+    discoveryManifestAttempts: discoveryAttempts,
+  }
+}
+
+
+export async function ensureCatalogProjectionControlsCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    operationKey: string
+    correlationId: string
+    reasonCode: string
+    evidenceRefs: readonly string[]
+  }>,
+  now: number,
+): Promise<void> {
+  for (const key of ['offering_public_projection_enabled', 'offering_authoring_enabled'] as const) {
+    const existing = await db.query('operatorControls').withIndex('by_key', (query) => query.eq('key', key)).unique()
+    if (existing === null) {
+      await db.insert('operatorControls', {
+        key,
+        enabled: true,
+        changedByAdminRef: command.actorRef,
+        reasonCode: command.reasonCode,
+        evidenceRefs: [...command.evidenceRefs],
+        correlationId: command.correlationId,
+        operationKey: `${command.operationKey}:${key}`,
+        updatedAt: now,
+      })
+    } else if (!existing.enabled) {
+      await db.patch(existing._id, {
+        enabled: true,
+        changedByAdminRef: command.actorRef,
+        reasonCode: command.reasonCode,
+        evidenceRefs: [...command.evidenceRefs],
+        correlationId: command.correlationId,
+        operationKey: `${command.operationKey}:${key}`,
+        updatedAt: now,
+      })
+    }
+  }
+}
+export async function createBusinessOfferingCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    businessId: Id<'businesses'>
+    offeringRef: string
+    operationKey: string
+    facts: OfferingFactsInput
+  }>,
+  now: number,
+) {
+  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'createOffering' }, (state, authority) => createOfferingInState(state, {
+    authority,
+    operationKey: command.operationKey,
+    businessId: brandNonEmpty(command.businessId, 'BusinessId'),
+    offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
+    facts: command.facts,
+    now,
+  }), now)
+}
+export async function changeBusinessOfferingStatusCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    businessId: Id<'businesses'>
+    offeringRef: string
+    expectedRevision: number
+    operationKey: string
+    status: 'draft' | 'published' | 'paused' | 'retired'
+  }>,
+  now: number,
+) {
+  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'changeOfferingStatus' }, (state, authority) => changeOfferingStatusInState(state, {
+    authority,
+    operationKey: command.operationKey,
+    offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
+    expectedRevision: command.expectedRevision,
+    status: command.status,
+    now,
+  }), now)
+}
+export async function reviseBusinessOfferingCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    businessId: Id<'businesses'>
+    offeringRef: string
+    expectedRevision: number
+    operationKey: string
+    facts: OfferingFactsInput
+  }>,
+  now: number,
+) {
+  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'reviseOffering' }, (state, authority) => reviseOfferingInState(state, {
+    authority,
+    operationKey: command.operationKey,
+    offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
+    expectedRevision: command.expectedRevision,
+    facts: command.facts,
+    now,
+  }), now)
+}
+export async function upsertOfferingAccessPathCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    businessId: Id<'businesses'>
+    offeringRef: string
+    accessPathRef: string
+    expectedRevision: number
+    operationKey: string
+    descriptor: OfferingAccessPathDescriptor
+  }>,
+  now: number,
+) {
+  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'upsertAccessPath' }, (state, authority) => upsertAccessPathInState(state, {
+    authority,
+    operationKey: command.operationKey,
+    offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
+    accessPathRef: brandNonEmpty(command.accessPathRef, 'AccessPathRef'),
+    expectedRevision: command.expectedRevision,
+    status: 'published',
+    descriptor: command.descriptor,
+    now,
+  }), now)
+}
+export async function withdrawOfferingAccessPathCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    businessId: Id<'businesses'>
+    accessPathRef: string
+    expectedRevision: number
+    operationKey: string
+  }>,
+  now: number,
+) {
+  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'withdrawAccessPath' }, (state, authority) => withdrawAccessPathInState(state, {
+    authority,
+    operationKey: command.operationKey,
+    accessPathRef: brandNonEmpty(command.accessPathRef, 'AccessPathRef'),
+    expectedRevision: command.expectedRevision,
+    now,
+  }), now)
+}
+
+type SystemOfferingCommand = Readonly<{
+  actorRef: string
+  businessId: Id<'businesses'>
+  operationName: string
+  operationKey: string
+}>
+async function runSystemOfferingSourceCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: SystemOfferingCommand,
+  mutate: (
+    state: OfferingSourceState,
+    authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string },
+  ) => OfferingSourceResult<unknown>,
+  now: number,
+): Promise<{ kind: 'ok'; code: string; resultRef?: string; currentRevision?: number } | { kind: 'error'; code: string; reason: string }> {
+  const business = await db.get(command.businessId)
+  if (business === null) return { kind: 'error', code: 'not_found', reason: 'Business was not found.' }
+  const owner = await db.get(business.ownerId)
+  const ownerRef = owner?.clerkUserId ?? ''
+  if (ownerRef.length === 0 || command.actorRef !== ownerRef) {
+    return { kind: 'error', code: 'wrong_owner', reason: 'Only the source-bound owner may change this business.' }
+  }
+  const state = await loadOfferingSourceState(db, command.businessId, {
+    actorRef: ownerRef,
+    operationName: command.operationName,
+    operationKey: command.operationKey,
+  })
+  const result = mutate(state, { actorRef: command.actorRef, ownerRef, businessOwnerRef: ownerRef })
+  if (result.kind === 'error') return { kind: 'error', code: result.code, reason: result.reason }
+  const persisted = await persistOfferingSourceState(db, command.businessId, state, result.state)
+  if (persisted.kind === 'error') return persisted
+  const value = result.value
+  const resultRef = typeof value === 'object' && value !== null
+    ? ('offeringRef' in value && typeof value.offeringRef === 'string'
+      ? value.offeringRef
+      : 'accessPathRef' in value && typeof value.accessPathRef === 'string' ? value.accessPathRef : undefined)
+    : undefined
+  const currentRevision = typeof value === 'object' && value !== null && 'currentRevision' in value && typeof value.currentRevision === 'number'
+    ? value.currentRevision
+    : undefined
+  return { kind: 'ok', code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(currentRevision === undefined ? {} : { currentRevision }) }
 }
 
 export const createBusinessOffering = mutationGeneric({
   args: { businessId: v.id('businesses'), offeringRef: v.string(), operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs, facts: offeringFactsArg },
   returns: offeringCommandResult,
-  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, (state, authority, now) => createOfferingInState(state, {
-    authority, operationKey: args.operationKey, businessId: args.businessId as unknown as BusinessId, offeringRef: args.offeringRef as OfferingRef, facts: args.facts, now,
+  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, 'createOffering', (state, authority, now) => createOfferingInState(state, {
+    authority,
+    operationKey: args.operationKey,
+    businessId: brandNonEmpty(args.businessId, 'BusinessId'),
+    offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
+    facts: args.facts,
+    now,
   })),
 })
 
 export const reviseBusinessOffering = mutationGeneric({
   args: { businessId: v.id('businesses'), offeringRef: v.string(), operationKey: v.string(), correlationId: v.string(), expectedRevision: v.number(), ...sourceWriteArgs, facts: offeringFactsArg },
   returns: offeringCommandResult,
-  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, (state, authority, now) => reviseOfferingInState(state, {
-    authority, operationKey: args.operationKey, offeringRef: args.offeringRef as OfferingRef, expectedRevision: args.expectedRevision, facts: args.facts, now,
+  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, 'reviseOffering', (state, authority, now) => reviseOfferingInState(state, {
+    authority,
+    operationKey: args.operationKey,
+    offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
+    expectedRevision: args.expectedRevision,
+    facts: args.facts,
+    now,
   })),
 })
 
 export const changeBusinessOfferingStatus = mutationGeneric({
   args: { businessId: v.id('businesses'), offeringRef: v.string(), operationKey: v.string(), correlationId: v.string(), expectedRevision: v.number(), status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')), ...sourceWriteArgs },
   returns: offeringCommandResult,
-  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, (state, authority, now) => changeOfferingStatusInState(state, {
-    authority, operationKey: args.operationKey, offeringRef: args.offeringRef as OfferingRef, expectedRevision: args.expectedRevision, status: args.status, now,
+  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, 'changeOfferingStatus', (state, authority, now) => changeOfferingStatusInState(state, {
+    authority,
+    operationKey: args.operationKey,
+    offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
+    expectedRevision: args.expectedRevision,
+    status: args.status,
+    now,
   })),
 })
 
 export const upsertOfferingAccessPath = mutationGeneric({
   args: { businessId: v.id('businesses'), offeringRef: v.string(), accessPathRef: v.string(), operationKey: v.string(), correlationId: v.string(), expectedRevision: v.number(), status: v.union(v.literal('draft'), v.literal('published')), descriptor: v.union(humanAccessPathArg, externalAccessPathArg), ...sourceWriteArgs },
   returns: offeringCommandResult,
-  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, (state, authority, now) => upsertAccessPathInState(state, {
-    authority, operationKey: args.operationKey, offeringRef: args.offeringRef as OfferingRef, accessPathRef: args.accessPathRef as AccessPathRef,
-    expectedRevision: args.expectedRevision, status: args.status, descriptor: args.descriptor as OfferingAccessPathDescriptor, now,
+  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, 'upsertAccessPath', (state, authority, now) => upsertAccessPathInState(state, {
+    authority,
+    operationKey: args.operationKey,
+    offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
+    accessPathRef: brandNonEmpty(args.accessPathRef, 'AccessPathRef'),
+    expectedRevision: args.expectedRevision,
+    status: args.status,
+    descriptor: args.descriptor,
+    now,
   })),
 })
 
 export const withdrawOfferingAccessPath = mutationGeneric({
   args: { businessId: v.id('businesses'), accessPathRef: v.string(), operationKey: v.string(), correlationId: v.string(), expectedRevision: v.number(), ...sourceWriteArgs },
   returns: offeringCommandResult,
-  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, (state, authority, now) => withdrawAccessPathInState(state, {
-    authority, operationKey: args.operationKey, accessPathRef: args.accessPathRef as AccessPathRef, expectedRevision: args.expectedRevision, now,
+  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, 'withdrawAccessPath', (state, authority, now) => withdrawAccessPathInState(state, {
+    authority,
+    operationKey: args.operationKey,
+    accessPathRef: brandNonEmpty(args.accessPathRef, 'AccessPathRef'),
+    expectedRevision: args.expectedRevision,
+    now,
   })),
 })
 
 async function runOfferingSourceMutation(
-  ctx: { db: object; auth: { getUserIdentity: () => Promise<unknown> } },
-  args: { businessId: string; operationKey: string; correlationId: string; sourceWrite?: unknown },
+  ctx: MutationCtx,
+  args: { businessId: Id<'businesses'>; operationKey: string; correlationId: string; sourceWrite?: unknown },
+  operationName: string,
   mutate: (state: OfferingSourceState, authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string }, now: number) => OfferingSourceResult<unknown>,
-) {
-  const admitted = await requireSourceWrite(ctx as never, args as never, 'catalog_publish')
-  if (admitted.kind === 'rejected') return { kind: 'error' as const, code: 'operation_conflict', reason: admitted.reason }
-  const actor = await resolveBusinessActor(ctx as never, args)
-  if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated', reason: 'Authentication is required.' }
-  const db = runtimeDb(ctx.db)
-  if (!await operatorControlEnabled(db, 'offering_authoring_enabled', Date.now())) {
-    return { kind: 'error' as const, code: 'operation_conflict', reason: 'Offering authoring is currently disabled.' }
+): Promise<{ kind: 'ok'; code: string; resultRef?: string; currentRevision?: number } | { kind: 'error'; code: string; reason: string }> {
+  const admitted = await requireSourceWrite(ctx, args, 'catalog_publish')
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return { kind: 'error', code: 'unauthenticated', reason: 'Authentication is required.' }
+  const now = Date.now()
+  const operatorControl = await ctx.db
+    .query('operatorControls')
+    .withIndex('by_key', (query) => query.eq('key', 'offering_authoring_enabled'))
+    .unique()
+  if (
+    operatorControl === null
+    || operatorControl.enabled !== true
+    || (operatorControl.expiresAt !== undefined && operatorControl.expiresAt <= now)
+  ) {
+    return { kind: 'error', code: 'operation_conflict', reason: 'Offering authoring is currently disabled.' }
   }
-  const business = await db.get(args.businessId)
-  if (business === null) return { kind: 'error' as const, code: 'wrong_owner', reason: 'Business was not found.' }
-  const ownerId = stringField(business, 'ownerId')
-  const owner = await db.get(ownerId)
-  const businessOwnerRef = owner === null ? '' : stringField(owner, 'clerkUserId')
-  const state = await loadOfferingSourceState(db, args.businessId, businessOwnerRef)
-  const result = mutate(state, { actorRef: actor.clerkUserId, ownerRef: businessOwnerRef, businessOwnerRef }, Date.now())
-  if (result.kind === 'error') return { kind: 'error' as const, code: result.code, reason: result.reason }
-  const persisted = await persistOfferingSourceState(db, args.businessId, state, result.state)
+  const business = await ctx.db.get(args.businessId)
+  if (business === null) return { kind: 'error', code: 'wrong_owner', reason: 'Business was not found.' }
+  const owner = await ctx.db.get(business.ownerId)
+  const businessOwnerRef = owner?.clerkUserId ?? ''
+  const state = await loadOfferingSourceState(ctx.db, args.businessId, {
+    actorRef: businessOwnerRef,
+    operationName,
+    operationKey: args.operationKey,
+  })
+  const result = mutate(state, { actorRef: actor.clerkUserId, ownerRef: businessOwnerRef, businessOwnerRef }, now)
+  if (result.kind === 'error') return { kind: 'error', code: result.code, reason: result.reason }
+  const persisted = await persistOfferingSourceState(ctx.db, args.businessId, state, result.state)
   if (persisted.kind === 'error') return persisted
-  await ensureGreenfieldOfferingCutover(db, args.businessId, Date.now())
-  // Source success is authoritative even if the removable projection cannot rebuild.
-  await rebuildBusinessSupplyProjectionSnapshotCommand(db, args.businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, args.businessId, Date.now()), Date.now())
-  const value = result.value as { offeringRef?: string; accessPathRef?: string; currentRevision?: number }
-  const resultRef = value.offeringRef ?? value.accessPathRef
-  return { kind: 'ok' as const, code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(value.currentRevision === undefined ? {} : { currentRevision: value.currentRevision }) }
+  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, args.businessId, now)
+  await rebuildBusinessSupplyProjectionSnapshotCommand({ db: ctx.db, sourceDb: ctx.db, businessId: args.businessId, support, now })
+  const value = result.value
+  const resultRef = typeof value === 'object' && value !== null
+    ? ('offeringRef' in value && typeof value.offeringRef === 'string'
+      ? value.offeringRef
+      : 'accessPathRef' in value && typeof value.accessPathRef === 'string' ? value.accessPathRef : undefined)
+    : undefined
+  const currentRevision = typeof value === 'object' && value !== null && 'currentRevision' in value && typeof value.currentRevision === 'number'
+    ? value.currentRevision
+    : undefined
+  return { kind: 'ok', code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(currentRevision === undefined ? {} : { currentRevision }) }
 }
 
 export const retryBusinessSupplyProjection = mutationGeneric({
-  args: { businessId: v.id('businesses') }, returns: v.any(),
+  args: { businessId: v.id('businesses') },
+  returns: catalogProjectionRetryResult,
   handler: async (ctx, args) => {
+    const now = Date.now()
     const db = await requireCatalogSupplyAdmin(ctx)
     if ('kind' in db) return db
-    return rebuildBusinessSupplyProjectionSnapshotCommand(db, args.businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, args.businessId, Date.now()), Date.now())
+    const support = await deriveBusinessOfferingSupportFromCapabilitySupply(db, args.businessId, now)
+    return rebuildBusinessSupplyProjectionSnapshotCommand({ db, sourceDb: db, businessId: args.businessId, support, now })
   },
 })
 
-export const migrateLegacyOfferingBatch = mutationGeneric({
-  args: { businessId: v.id('businesses'), cursor: v.union(v.string(), v.null()) }, returns: v.any(),
-  handler: async (ctx, args) => {
-    const db = await requireCatalogSupplyAdmin(ctx)
-    if ('kind' in db) return db
-    const page = await ctx.db.query('businessServices')
-      .withIndex('by_business_status', (q) => q.eq('businessId', args.businessId))
-      .paginate({ cursor: args.cursor, numItems: 50 })
-    const services = page.page
-    const capabilityPages = await Promise.all(services.map((service) => ctx.db.query('serviceCapabilities')
-      // `mutationGeneric` has no schema, so the compound-index chain is unexpressible; assert the shape it does have.
-      .withIndex('by_business_service_status', (q) => (q as unknown as CompoundIndexEq).eq('businessId', args.businessId).eq('serviceId', service._id))
-      .take(21)))
-    if (capabilityPages.some((rows) => rows.length > 20)) return { kind: 'error' as const, code: 'migration_capability_limit_exceeded' as const }
-    const capabilities = capabilityPages.flat()
-    const serviceRecords = services.map(toBusinessServiceRecord)
-    const capabilityRecords = capabilities.map(toServiceCapabilityRecord)
-    const planned = planLegacyOfferingMigrationBatch({ services: serviceRecords, capabilities: capabilityRecords })
-    if (!Array.isArray(planned)) return planned
-    for (const migration of planned) {
-      const existing = await db.query('legacyOfferingCrosswalks').withIndex('by_serviceId', (q) => q.eq('serviceId', migration.crosswalk.serviceId)).unique()
-      if (existing !== null && stringField(existing, 'serviceSourceHash') !== migration.crosswalk.serviceSourceHash) {
-        return { kind: 'error' as const, code: 'legacy_source_changed' as const, serviceId: migration.crosswalk.serviceId }
-      }
-      await persistOfferingMigration(db, migration, existing, Date.now())
-    }
-    if (page.isDone) await upsertCutover(db, args.businessId, { mode: 'compare', lastCheckStatus: 'not_run', postCutoverNativeChanges: false }, Date.now())
-    return { kind: 'ok' as const, code: 'legacy_batch_migrated' as const, count: planned.length, nextCursor: page.continueCursor, done: page.isDone }
-  },
-})
-
-export const changeCatalogSupplyCutover = mutationGeneric({
-  args: { businessId: v.id('businesses'), requested: v.union(v.literal('legacy'), v.literal('compare'), v.literal('offering')) },
-  returns: v.any(),
-  handler: async (ctx, args) => {
-    const db = await requireCatalogSupplyAdmin(ctx)
-    if ('kind' in db) return db
-    const currentRow = await db.query('catalogSupplyCutovers').withIndex('by_businessId', (q) => q.eq('businessId', args.businessId)).unique()
-    const current = currentRow === null ? 'legacy' : cutoverMode(currentRow)
-    const parity = await computeCatalogMigrationParity(db, args.businessId)
-    const decision = decideCatalogSupplyCutover({ current, requested: args.requested, ...(parity === undefined ? {} : { expectedDigest: parity.expectedDigest as never, observedDigest: parity.observedDigest as never }) })
-    if (decision.kind === 'refused') return { kind: 'error' as const, code: decision.code }
-    const matched = parity?.matched === true
-    await upsertCutover(db, args.businessId, { mode: decision.mode, ...(parity === undefined ? {} : { expectedProjectionDigest: parity.expectedDigest, latestProjectionDigest: parity.observedDigest }), lastCheckStatus: matched ? 'matched' : 'not_run', postCutoverNativeChanges: currentRow?.postCutoverNativeChanges === true }, Date.now())
-    if (parity !== undefined) {
-      const checkRef = `catalog-check:${args.businessId}:${parity.expectedDigest}:${parity.observedDigest}`
-      const existing = await db.query('catalogProjectionChecks').withIndex('by_checkRef', (q) => q.eq('checkRef', checkRef)).unique()
-      if (existing === null) await db.insert('catalogProjectionChecks', { businessId: args.businessId, checkRef, mode: decision.mode, expectedDigest: parity.expectedDigest, observedDigest: parity.observedDigest, status: matched ? 'matched' : 'mismatch', ...(matched ? {} : { errorCode: 'projection_mismatch' }), observedAt: Date.now() })
-    }
-    await rebuildBusinessSupplyProjectionSnapshotCommand(db, args.businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, args.businessId, Date.now()), Date.now())
-    return { kind: 'ok' as const, code: decision.mode === 'legacy' ? 'catalog_supply_rolled_back' : 'catalog_supply_cutover_changed', mode: decision.mode }
-  },
-})
-
-async function requireCatalogSupplyAdmin(ctx: { db: object; auth: { getUserIdentity: () => Promise<UserIdentity | null> } }) {
+async function requireCatalogSupplyAdmin(ctx: MutationCtx) {
   const identity = await ctx.auth.getUserIdentity()
-  const db = runtimeDb(ctx.db)
-  const membership = identity === null ? undefined : await readActiveAdminMembership(db, identity)
+  const membership = identity === null ? undefined : await readActiveAdminMembership(ctx.db, identity)
   const authority = requireAdminAuthority(membership, 'set_operator_control')
-  return authority.kind === 'allowed' ? db : { kind: 'error' as const, code: 'admin_denied' as const, reason: authority.reason }
+  return authority.kind === 'allowed' ? ctx.db : { kind: 'error' as const, code: 'admin_denied' as const, reason: authority.reason }
 }
 
-async function operatorControlEnabled(db: RuntimeDb, key: string, now: number): Promise<boolean> {
-  const control = await db.query('operatorControls').withIndex('by_key', (q) => q.eq('key', key)).unique()
-  return control !== null && control.enabled === true && (typeof control.expiresAt !== 'number' || control.expiresAt > now)
+
+function isCatalogRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function toBusinessServiceRecord(row: RuntimeDocument): BusinessServiceRecord {
+
+type CatalogStringKey<Row extends object> = Extract<keyof Row, string>
+
+
+function requiredCatalogString<Row extends object>(row: Row, field: CatalogStringKey<Row>): string {
+  const value = row[field]
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`catalog_invalid_${field}`)
+  }
+  return value
+}
+
+function requiredCatalogNumber<Row extends object>(row: Row, field: CatalogStringKey<Row>): number {
+  const value = row[field]
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`catalog_invalid_${field}`)
+  }
+  return value
+}
+
+function optionalCatalogString<Row extends object>(row: Row, field: CatalogStringKey<Row>): string | undefined {
+  const value = row[field]
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new Error(`catalog_invalid_${field}`)
+  return value
+}
+
+function optionalCatalogNumber<Row extends object>(row: Row, field: CatalogStringKey<Row>): number | undefined {
+  const value = row[field]
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`catalog_invalid_${field}`)
+  return value
+}
+
+function requiredCatalogLiteral<T extends string>(
+  values: readonly T[],
+  value: unknown,
+  field: string,
+): T {
+  const match = values.find((candidate) => candidate === value)
+  if (match === undefined) throw new Error(`catalog_invalid_${field}`)
+  return match
+}
+
+function readCatalogPrice(value: unknown): OfferingPrice | undefined {
+  if (value === undefined) return undefined
+  if (!isCatalogRecord(value)) throw new Error('catalog_invalid_price')
+  const amountMinor = optionalCatalogNumber(value, 'amountMinor')
+  const maximumAmountMinor = optionalCatalogNumber(value, 'maximumAmountMinor')
+  const unit = value.unit === undefined
+    ? undefined
+    : requiredCatalogLiteral(OfferingPriceUnitValues, value.unit, 'price_unit')
   return {
-    serviceId: row._id as never, serviceSlug: stringField(row, 'serviceSlug') as never, businessId: stringField(row, 'businessId') as never,
-    name: stringField(row, 'name'), category: stringField(row, 'category'), summary: stringField(row, 'summary'),
-    serviceArea: stringField(row, 'serviceArea'), hoursOrUnknown: stringField(row, 'hoursOrUnknown'),
-    status: stringField(row, 'status') === 'published' ? 'published' : stringField(row, 'status') === 'suppressed' ? 'suppressed' : 'draft',
-    sortOrder: numberField(row, 'sortOrder'), sourceHash: stringField(row, 'sourceHash') as never,
-    createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt'),
+    kind: requiredCatalogLiteral(OfferingPriceKindValues, value.kind, 'price_kind'),
+    currency: requiredCatalogString(value, 'currency'),
+    ...(amountMinor === undefined ? {} : { amountMinor }),
+    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
+    ...(unit === undefined ? {} : { unit }),
+    taxTreatment: requiredCatalogLiteral(OfferingPriceTaxTreatmentValues, value.taxTreatment, 'price_taxTreatment'),
   }
 }
 
-function toServiceCapabilityRecord(row: RuntimeDocument): ServiceCapabilityRecord {
-  return {
-    businessId: stringField(row, 'businessId') as never, serviceId: stringField(row, 'serviceId') as never,
-    kind: legacyCapabilityKind(row), status: capabilityStatus(row),
-    firstRequest: { mode: firstRequestMode(row), publicDisclosure: stringField(row, 'publicDisclosure'), publicChannel: publicChannel(row), ...(optionalStringField(row, 'noContactReason') ? { noContactReason: stringField(row, 'noContactReason') } : {}), rawContactExcluded: true },
-    callable: false, paymentRequired: false, ...(optionalStringField(row, 'reason') ? { reason: stringField(row, 'reason') } : {}),
-    sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-/**
- * The v1 service `sourceHash` does not cover every fact the mirror copies, so
- * drift has to be read off the mirrored fields themselves.
- */
-const LEGACY_MIRRORED_REVISION_FIELDS = ['name', 'category', 'summary', 'serviceAreaSummary', 'availabilitySummary', 'sourceHash'] as const
-
-async function persistOfferingMigration(db: RuntimeDb, migration: ReturnType<typeof migrateLegacyServiceToOffering>, existingCrosswalk: RuntimeDocument | null, now: number) {
-  const existingOffering = await db.query('businessOfferings').withIndex('by_offeringRef', (q) => q.eq('offeringRef', migration.offering.offeringRef)).unique()
-  if (existingOffering === null) await db.insert('businessOfferings', migration.offering)
-  const existingRevision = await db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', migration.revision.offeringRef).eq('revision', migration.revision.revision)).unique()
-  if (existingRevision === null) {
-    await db.insert('businessOfferingRevisions', migration.revision)
-  } else if (LEGACY_MIRRORED_REVISION_FIELDS.some((field) => stringField(existingRevision, field) !== (migration.revision[field] ?? ''))) {
-    // Revision 1 is a mirror of the v1 service row, not owner-authored history.
-    // When the v1 row changes, leaving the mirror stale makes parity mismatch
-    // forever with no repair path, silently demoting the business to `compare`.
-    // Patching (not replacing) refreshes the mirrored facts and keeps natively
-    // published ones like `pricingSummary`, which the v1 row cannot express.
-    await db.patch(existingRevision._id, migration.revision)
-  }
-  for (const path of migration.accessPaths) {
-    const existingPath = await db.query('offeringAccessPaths').withIndex('by_accessPathRef', (q) => q.eq('accessPathRef', path.accessPathRef)).unique()
-    if (existingPath === null) await db.insert('offeringAccessPaths', path)
-  }
-  const row = { ...migration.crosswalk, businessId: migration.offering.businessId, updatedAt: now }
-  if (existingCrosswalk === null) await db.insert('legacyOfferingCrosswalks', { ...row, createdAt: now }); else await db.patch(existingCrosswalk._id, row)
-}
-
-async function upsertCutover(db: RuntimeDb, businessId: string, input: { mode: 'legacy' | 'compare' | 'offering'; expectedProjectionDigest?: string; latestProjectionDigest?: string; lastCheckStatus: 'not_run' | 'matched' | 'mismatch'; postCutoverNativeChanges: boolean }, now: number) {
-  const existing = await db.query('catalogSupplyCutovers').withIndex('by_businessId', (q) => q.eq('businessId', businessId)).unique()
-  const row = { businessId, mode: input.mode, ...(input.expectedProjectionDigest === undefined ? {} : { expectedProjectionDigest: input.expectedProjectionDigest }), ...(input.latestProjectionDigest === undefined ? {} : { latestProjectionDigest: input.latestProjectionDigest }), lastCheckStatus: input.lastCheckStatus, postCutoverNativeChanges: input.postCutoverNativeChanges, updatedAt: now }
-  if (existing === null) await db.insert('catalogSupplyCutovers', row); else await db.patch(existing._id, row)
-}
-
-function cutoverMode(row: RuntimeDocument): 'legacy' | 'compare' | 'offering' {
-  const value = stringField(row, 'mode'); return value === 'compare' || value === 'offering' ? value : 'legacy'
-}
-
-function legacyCapabilityKind(row: RuntimeDocument): ServiceCapabilityRecord['kind'] {
-  const value = capabilityKind(row)
-  return value === 'booking_interest' ? 'ae_hosted_discovery' : value
-}
-
-async function computeCatalogMigrationParity(db: RuntimeDb, businessId: string): Promise<{ expectedDigest: string; observedDigest: string; matched: boolean } | undefined> {
-  const crosswalks = await db.query('legacyOfferingCrosswalks').withIndex('by_businessId_and_offeringRef', (q) => q.eq('businessId', businessId)).collect()
-  if (crosswalks.length === 0) return undefined
-  const expectedItems: unknown[] = []
-  const observedItems: unknown[] = []
-  const persisted = await loadOfferingSourceState(db, businessId, '')
-  let matched = true
-  for (const crosswalk of crosswalks) {
-    const service = await db.get(stringField(crosswalk, 'serviceId'))
-    if (service === null || stringField(service, 'sourceHash') !== stringField(crosswalk, 'serviceSourceHash')) { matched = false; continue }
-    const capabilityRows = await db.query('serviceCapabilities').withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).collect()
-    const expected = migrateLegacyServiceToOffering({ service: toBusinessServiceRecord(service), capabilities: capabilityRows.map(toServiceCapabilityRecord) })
-    const offering = await db.query('businessOfferings').withIndex('by_offeringRef', (q) => q.eq('offeringRef', expected.offering.offeringRef)).unique()
-    const revision = await db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', expected.offering.offeringRef).eq('revision', expected.revision.revision)).unique()
-    const paths = await db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (q) => q.eq('offeringRef', expected.offering.offeringRef).eq('offeringRevision', expected.revision.revision)).collect()
-    expectedItems.push({ offering: expected.offering, revision: expected.revision, accessPaths: expected.accessPaths })
-    if (offering === null || revision === null) { matched = false; continue }
-    // Parity asserts the legacy contract is still projected faithfully; it must not cap
-    // native expressiveness. Access paths authored natively (a capability the legacy
-    // inquiry model cannot represent) are additive and excluded from the comparison,
-    // so adding one can never block cutover. `pricingSummary` and its structured
-    // twin `price` are the same case in field form: the v1 service row has no price
-    // column at all, so a published price can only ever be native, and comparing
-    // either would demote the business to `compare` — where the legacy projection
-    // serves, and the price disappears from the catalog.
-    const legacyPathRefs = new Set(expected.accessPaths.map((item) => item.accessPathRef))
-    const persistedRevision = persisted.revisions.find((item) => item.offeringRef === expected.offering.offeringRef && item.revision === expected.revision.revision)
-    const observed = {
-      offering: persisted.offerings.find((item) => item.offeringRef === expected.offering.offeringRef)!,
-      revision: (persistedRevision === undefined
-        ? undefined
-        : withoutNativeOnlyFacts(persistedRevision))!,
-      accessPaths: persisted.accessPaths.filter((item) => (
-        item.offeringRef === expected.offering.offeringRef && legacyPathRefs.has(item.accessPathRef)
-      )),
+export function readCatalogDescriptor(value: unknown): OfferingAccessPathDescriptor {
+  if (!isCatalogRecord(value)) throw new Error('catalog_invalid_descriptor')
+  const kind = value.kind
+  if (kind === 'human_request') {
+    const url = optionalCatalogString(value, 'url')
+    return {
+      kind,
+      channel: requiredCatalogLiteral(['phone', 'website', 'ae_inquiry'], value.channel, 'access_path_channel'),
+      disclosure: requiredCatalogString(value, 'disclosure'),
+      ...(url === undefined ? {} : { url }),
     }
-    observedItems.push(observed)
-    if (!observed.offering || !observed.revision || !legacyOfferingParityMatches(expected, observed)) matched = false
   }
-  const expectedDigest = stableHash(expectedItems as never)
-  const observedDigest = matched ? stableHash(observedItems as never) : stableHash({ observedItems, mismatch: true } as never)
-  return { expectedDigest, observedDigest, matched: matched && expectedDigest === observedDigest }
-}
-
-/**
- * Strips the facts the retained v1 service row cannot hold — a published price,
- * in both its prose and its structured form — so a natively published Offering
- * never reads as legacy drift.
- */
-export function withoutNativeOnlyFacts(revision: BusinessOfferingRevisionRecord): BusinessOfferingRevisionRecord {
-  const { pricingSummary, price, ...legacyExpressible } = revision
-  void pricingSummary
-  void price
-  return legacyExpressible
-}
-
-/**
- * System-callable (no admin gate) offering supply seeding for dev: migrates a
- * business's retained v1 services into offerings, sets the requested cutover
- * mode (honoring the compare->offering parity gate), and rebuilds the supply
- * projection. Reuses the exact migration/cutover/parity helpers the
- * admin-gated mutations use.
- */
-export async function seedBusinessOfferingSupplyCommand(
-  db: RuntimeDb,
-  businessId: string,
-  requestedMode: 'legacy' | 'compare' | 'offering',
-  now: number,
-): Promise<{ kind: 'ok'; migrated: number; mode: 'legacy' | 'compare' | 'offering' } | { kind: 'error'; code: string }> {
-  const services = await db.query('businessServices').withIndex('by_business_status', (q) => q.eq('businessId', businessId)).collect()
-  if (services.length === 0) return { kind: 'ok', migrated: 0, mode: 'legacy' }
-  const capabilityRows = await Promise.all(services.map(async (service) => await db.query('serviceCapabilities')
-    .withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).take?.(21)
-    ?? (await db.query('serviceCapabilities').withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).collect()).slice(0, 21)))
-  if (capabilityRows.some((rows) => rows.length > 20)) return { kind: 'error', code: 'migration_capability_limit_exceeded' }
-  const planned = planLegacyOfferingMigrationBatch({
-    services: services.map(toBusinessServiceRecord),
-    capabilities: capabilityRows.flat().map(toServiceCapabilityRecord),
-  })
-  if ('kind' in planned) return { kind: 'error', code: planned.kind === 'refused' ? planned.code : 'migration_refused' }
-  for (const migration of planned) {
-    const existing = await db.query('legacyOfferingCrosswalks').withIndex('by_serviceId', (q) => q.eq('serviceId', migration.crosswalk.serviceId)).unique()
-    if (existing !== null && stringField(existing, 'serviceSourceHash') !== migration.crosswalk.serviceSourceHash) {
-      return { kind: 'error', code: 'legacy_source_changed' }
+  if (kind === 'external_operation') {
+    const method = optionalCatalogString(value, 'method')
+    const documentationUrl = optionalCatalogString(value, 'documentationUrl')
+    const authenticationSummary = optionalCatalogString(value, 'authenticationSummary')
+    const pricingSummary = optionalCatalogString(value, 'pricingSummary')
+    const interfaceDescriptionValue = value.interfaceDescription
+    const interfaceDescription = interfaceDescriptionValue === undefined
+      ? undefined
+      : (() => {
+          if (!isCatalogRecord(interfaceDescriptionValue)) throw new Error('catalog_invalid_interface_description')
+          const url = optionalCatalogString(interfaceDescriptionValue, 'url')
+          return {
+            format: requiredCatalogString(interfaceDescriptionValue, 'format'),
+            ...(url === undefined ? {} : { url }),
+          }
+        })()
+    return {
+      kind,
+      name: requiredCatalogString(value, 'name'),
+      summary: requiredCatalogString(value, 'summary'),
+      url: requiredCatalogString(value, 'url'),
+      ...(method === undefined ? {} : { method }),
+      ...(documentationUrl === undefined ? {} : { documentationUrl }),
+      ...(interfaceDescription === undefined ? {} : { interfaceDescription }),
+      ...(authenticationSummary === undefined ? {} : { authenticationSummary }),
+      ...(pricingSummary === undefined ? {} : { pricingSummary }),
+      provenance: requiredCatalogLiteral(['business_declared', 'publicly_observed'], value.provenance, 'access_path_provenance'),
     }
-    await persistOfferingMigration(db, migration, existing, now)
   }
-  const parity = await computeCatalogMigrationParity(db, businessId)
-  let mode: 'legacy' | 'compare' | 'offering' = requestedMode === 'legacy' ? 'legacy' : 'compare'
-  if (requestedMode === 'offering') {
-    const decision = decideCatalogSupplyCutover({ current: 'compare', requested: 'offering', ...(parity === undefined ? {} : { expectedDigest: parity.expectedDigest as never, observedDigest: parity.observedDigest as never }) })
-    mode = decision.kind === 'allowed' ? 'offering' : 'compare'
-  }
-  const matched = parity?.matched === true
-  await upsertCutover(db, businessId, { mode, ...(parity === undefined ? {} : { expectedProjectionDigest: parity.expectedDigest, latestProjectionDigest: parity.observedDigest }), lastCheckStatus: matched ? 'matched' : 'not_run', postCutoverNativeChanges: false }, now)
-  await rebuildBusinessSupplyProjectionSnapshotCommand(db, businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now), now)
-  return { kind: 'ok', migrated: planned.length, mode }
+  throw new Error('catalog_invalid_descriptor_kind')
 }
 
-async function loadOfferingSourceState(db: RuntimeDb, businessId: string, actorRef: string): Promise<OfferingSourceState> {
-  const [offerings, revisions, accessPaths, operations] = await Promise.all([
-    db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId)).collect(),
-    db.query('businessOfferingRevisions').withIndex('by_businessId_and_createdAt', (q) => q.eq('businessId', businessId)).collect(),
-    db.query('offeringAccessPaths').withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId)).collect(),
-    db.query('operationKeys').withIndex('by_actor_operation_key', (q) => q.eq('actorRef', actorRef)).collect(),
-  ])
+function readCatalogStatus(value: unknown): BusinessOfferingStatus {
+  return requiredCatalogLiteral(BusinessOfferingStatusValues, value, 'offering_status')
+}
+
+function readCatalogAccessPathStatus(value: unknown): OfferingAccessPathStatus {
+  return requiredCatalogLiteral(OfferingAccessPathStatusValues, value, 'access_path_status')
+}
+
+function readCatalogRevision(row: Doc<'businessOfferingRevisions'>): BusinessOfferingRevisionRecord {
+  const serviceAreaSummary = optionalCatalogString(row, 'serviceAreaSummary')
+  const availabilitySummary = optionalCatalogString(row, 'availabilitySummary')
+  const pricingSummary = optionalCatalogString(row, 'pricingSummary')
+  const price = readCatalogPrice(row.price)
   return {
-    offerings: offerings.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, currentRevision: numberField(row, 'currentRevision'), status: offeringStatus(row), createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt') })),
-    revisions: revisions.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, revision: numberField(row, 'revision'), name: stringField(row, 'name'), category: stringField(row, 'category'), summary: stringField(row, 'summary'), ...(optionalStringField(row, 'serviceAreaSummary') ? { serviceAreaSummary: stringField(row, 'serviceAreaSummary') } : {}), ...(optionalStringField(row, 'availabilitySummary') ? { availabilitySummary: stringField(row, 'availabilitySummary') } : {}), ...(optionalStringField(row, 'pricingSummary') ? { pricingSummary: stringField(row, 'pricingSummary') } : {}), ...(row.price === undefined ? {} : { price: row.price as OfferingPrice }), sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt') })),
-    accessPaths: accessPaths.map((row) => ({ accessPathRef: stringField(row, 'accessPathRef') as AccessPathRef, businessId: stringField(row, 'businessId') as BusinessId, offeringRef: stringField(row, 'offeringRef') as OfferingRef, offeringRevision: numberField(row, 'offeringRevision'), offeringSourceHash: stringField(row, 'offeringSourceHash') as never, status: accessPathStatus(row), descriptor: row.descriptor as OfferingAccessPathDescriptor, sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt') })),
-    operations: operations.filter((row) => stringField(row, 'scope') === 'catalog_offering').map((row) => ({ actorRef: stringField(row, 'actorRef'), operationName: stringField(row, 'operationName'), operationKey: stringField(row, 'key'), requestHash: stringField(row, 'requestHash') as never, resultRef: stringArrayField(row, 'effectRefs')[0] ?? '' })),
+    offeringRef: brandNonEmpty(requiredCatalogString(row, 'offeringRef'), 'OfferingRef'),
+    businessId: brandNonEmpty(requiredCatalogString(row, 'businessId'), 'BusinessId'),
+    revision: requiredCatalogNumber(row, 'revision'),
+    name: requiredCatalogString(row, 'name'),
+    category: requiredCatalogString(row, 'category'),
+    summary: requiredCatalogString(row, 'summary'),
+    ...(serviceAreaSummary === undefined ? {} : { serviceAreaSummary }),
+    ...(availabilitySummary === undefined ? {} : { availabilitySummary }),
+    ...(pricingSummary === undefined ? {} : { pricingSummary }),
+    ...(price === undefined ? {} : { price }),
+    sourceHash: brandNonEmpty(requiredCatalogString(row, 'sourceHash'), 'SourceHash'),
+    createdAt: requiredCatalogNumber(row, 'createdAt'),
   }
 }
 
-export async function persistOfferingSourceState(db: RuntimeDb, businessId: string, before: OfferingSourceState, after: OfferingSourceState): Promise<{ kind: 'ok' } | { kind: 'error'; code: 'operation_conflict'; reason: string }> {
+function readCatalogAccessPath(row: Doc<'offeringAccessPaths'>): OfferingAccessPathRecord {
+  return {
+    accessPathRef: brandNonEmpty(requiredCatalogString(row, 'accessPathRef'), 'AccessPathRef'),
+    businessId: brandNonEmpty(requiredCatalogString(row, 'businessId'), 'BusinessId'),
+    offeringRef: brandNonEmpty(requiredCatalogString(row, 'offeringRef'), 'OfferingRef'),
+    offeringRevision: requiredCatalogNumber(row, 'offeringRevision'),
+    offeringSourceHash: brandNonEmpty(requiredCatalogString(row, 'offeringSourceHash'), 'SourceHash'),
+    status: readCatalogAccessPathStatus(row.status),
+    descriptor: readCatalogDescriptor(row.descriptor),
+    sourceHash: brandNonEmpty(requiredCatalogString(row, 'sourceHash'), 'SourceHash'),
+    createdAt: requiredCatalogNumber(row, 'createdAt'),
+    updatedAt: requiredCatalogNumber(row, 'updatedAt'),
+  }
+}
+
+async function loadOfferingSourceState(
+  db: GenericDatabaseReader<DataModel>,
+  businessId: Id<'businesses'>,
+  operation?: Readonly<{ actorRef: string; operationName: string; operationKey: string }>,
+): Promise<OfferingSourceState> {
+  const offeringRows = await db.query('businessOfferings').withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId)).take(MAX_OFFERINGS_PER_BUSINESS + 1)
+  if (offeringRows.length > MAX_OFFERINGS_PER_BUSINESS) {
+    throw new Error('business_offering_capacity_exceeded')
+  }
+  const offerings = offeringRows.map((row) => ({
+    offeringRef: brandNonEmpty(requiredCatalogString(row, 'offeringRef'), 'OfferingRef'),
+    businessId: brandNonEmpty(requiredCatalogString(row, 'businessId'), 'BusinessId'),
+    currentRevision: requiredCatalogNumber(row, 'currentRevision'),
+    status: readCatalogStatus(row.status),
+    createdAt: requiredCatalogNumber(row, 'createdAt'),
+    updatedAt: requiredCatalogNumber(row, 'updatedAt'),
+  }))
+  const revisionRows = await Promise.all(offerings.map((offering) => (
+    db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => (
+        query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
+      ))
+      .unique()
+  )))
+  const pathRows = await Promise.all(offerings.map((offering) => (
+    db.query('offeringAccessPaths')
+      .withIndex('by_offeringRef_and_status', (query) => query.eq('offeringRef', offering.offeringRef))
+      .take(MAX_ACCESS_PATHS_PER_OFFERING + 1)
+  )))
+  if (pathRows.some((rows) => rows.length > MAX_ACCESS_PATHS_PER_OFFERING)) {
+    throw new Error('offering_access_path_capacity_exceeded')
+  }
+  const operationRow = operation === undefined
+    ? null
+    : await db.query('operationKeys')
+      .withIndex('by_actor_operation_key', (query) => (
+        query.eq('actorRef', operation.actorRef)
+          .eq('operationName', operation.operationName)
+          .eq('key', operation.operationKey)
+      ))
+      .unique()
+  const operationRefs = operationRow === null || operationRow.scope !== 'catalog_offering'
+    ? []
+    : (() => {
+        const value = operationRow.effectRefs
+        if (!Array.isArray(value) || value.some((ref) => typeof ref !== 'string')) {
+          throw new Error('catalog_invalid_operation_effect_refs')
+        }
+        return value
+      })()
+  return {
+    offerings,
+    revisions: revisionRows.flatMap((row) => row === null ? [] : [readCatalogRevision(row)]),
+    accessPaths: pathRows.flat().map(readCatalogAccessPath),
+    operations: operationRefs[0] === undefined || operationRow === null
+      ? []
+      : [{
+          actorRef: requiredCatalogString(operationRow, 'actorRef'),
+          operationName: requiredCatalogString(operationRow, 'operationName'),
+          operationKey: requiredCatalogString(operationRow, 'key'),
+          requestHash: brandNonEmpty(requiredCatalogString(operationRow, 'requestHash'), 'SourceHash'),
+          resultRef: operationRefs[0],
+        }],
+  }
+}
+
+
+export async function persistOfferingSourceState(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  before: OfferingSourceState,
+  after: OfferingSourceState,
+): Promise<{ kind: 'ok' } | { kind: 'error'; code: 'operation_conflict'; reason: string }> {
   // Preflight the entire write set before the first patch/insert. Domain refs are globally
   // addressable, but an owner command may never capture another business's ref.
   for (const item of after.offerings) {
-    const existing = await db.query('businessOfferings').withIndex('by_offeringRef', (q) => q.eq('offeringRef', item.offeringRef)).unique()
-    if (existing !== null && stringField(existing, 'businessId') !== businessId) return { kind: 'error', code: 'operation_conflict', reason: 'Offering reference belongs to another business.' }
+    const existing = await db.query('businessOfferings')
+      .withIndex('by_offeringRef', (query) => query.eq('offeringRef', item.offeringRef))
+      .unique()
+    if (existing !== null && requiredCatalogString(existing, 'businessId') !== businessId) {
+      return { kind: 'error', code: 'operation_conflict', reason: 'Offering reference belongs to another business.' }
+    }
   }
   for (const item of after.accessPaths) {
-    const existing = await db.query('offeringAccessPaths').withIndex('by_accessPathRef', (q) => q.eq('accessPathRef', item.accessPathRef)).unique()
-    if (existing !== null && stringField(existing, 'businessId') !== businessId) return { kind: 'error', code: 'operation_conflict', reason: 'Access path reference belongs to another business.' }
+    const existing = await db.query('offeringAccessPaths')
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', item.accessPathRef))
+      .unique()
+    if (existing !== null && requiredCatalogString(existing, 'businessId') !== businessId) {
+      return { kind: 'error', code: 'operation_conflict', reason: 'Access path reference belongs to another business.' }
+    }
   }
   for (const item of after.offerings) {
-    const existing = await db.query('businessOfferings').withIndex('by_offeringRef', (q) => q.eq('offeringRef', item.offeringRef)).unique()
-    if (existing) await db.patch(existing._id, item); else await db.insert('businessOfferings', item)
+    const existing = await db.query('businessOfferings')
+      .withIndex('by_offeringRef', (query) => query.eq('offeringRef', item.offeringRef))
+      .unique()
+    const value = {
+      offeringRef: item.offeringRef,
+      businessId,
+      currentRevision: item.currentRevision,
+      status: item.status,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    }
+    if (existing === null) await db.insert('businessOfferings', value)
+    else await db.patch(existing._id, value)
   }
-  for (const revision of after.revisions.slice(before.revisions.length)) await db.insert('businessOfferingRevisions', revision)
+  for (const revision of after.revisions.slice(before.revisions.length)) {
+    const value = {
+      offeringRef: revision.offeringRef,
+      businessId,
+      revision: revision.revision,
+      name: revision.name,
+      category: revision.category,
+      summary: revision.summary,
+      ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
+      ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
+      ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
+      ...(revision.price === undefined ? {} : { price: revision.price }),
+      sourceHash: revision.sourceHash,
+      createdAt: revision.createdAt,
+    }
+    await db.insert('businessOfferingRevisions', value)
+  }
   for (const item of after.accessPaths) {
-    const existing = await db.query('offeringAccessPaths').withIndex('by_accessPathRef', (q) => q.eq('accessPathRef', item.accessPathRef)).unique()
-    if (existing) await db.patch(existing._id, item); else await db.insert('offeringAccessPaths', item)
+    const existing = await db.query('offeringAccessPaths')
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', item.accessPathRef))
+      .unique()
+    const value = {
+      accessPathRef: item.accessPathRef,
+      businessId,
+      offeringRef: item.offeringRef,
+      offeringRevision: item.offeringRevision,
+      offeringSourceHash: item.offeringSourceHash,
+      status: item.status,
+      descriptor: item.descriptor,
+      sourceHash: item.sourceHash,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    }
+    if (existing === null) await db.insert('offeringAccessPaths', value)
+    else await db.patch(existing._id, value)
   }
-  for (const op of after.operations.slice(before.operations.length)) await db.insert('operationKeys', { scope: 'catalog_offering', actorKind: 'owner', actorRef: op.actorRef, operationName: op.operationName, key: op.operationKey, requestHash: op.requestHash, status: 'succeeded', effectRefs: [op.resultRef], createdAt: Date.now(), updatedAt: Date.now() })
+  for (const operation of after.operations.slice(before.operations.length)) {
+    await db.insert('operationKeys', {
+      scope: 'catalog_offering',
+      actorKind: 'owner',
+      actorRef: operation.actorRef,
+      operationName: operation.operationName,
+      key: operation.operationKey,
+      requestHash: operation.requestHash,
+      status: 'succeeded',
+      effectRefs: [operation.resultRef],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+  }
   return { kind: 'ok' }
-}
-
-/** First native Offering write opts a truly greenfield business into the new source model. */
-export async function ensureGreenfieldOfferingCutover(db: RuntimeDb, businessId: string, now: number): Promise<'created' | 'existing' | 'legacy_preserved'> {
-  const existing = await db.query('catalogSupplyCutovers').withIndex('by_businessId', (q) => q.eq('businessId', businessId)).unique()
-  if (existing !== null) return 'existing'
-  const legacy = await db.query('businessServices').withIndex('by_business_status', (q) => q.eq('businessId', businessId)).take?.(1)
-    ?? (await db.query('businessServices').withIndex('by_business_status', (q) => q.eq('businessId', businessId)).collect()).slice(0, 1)
-  if (legacy.length > 0) return 'legacy_preserved'
-  await db.insert('catalogSupplyCutovers', {
-    businessId,
-    mode: 'offering',
-    lastCheckStatus: 'matched',
-    postCutoverNativeChanges: false,
-    updatedAt: now,
-  })
-  return 'created'
-}
-
-function offeringStatus(row: RuntimeDocument): 'draft' | 'published' | 'paused' | 'retired' {
-  const value = stringField(row, 'status'); return value === 'published' || value === 'paused' || value === 'retired' ? value : 'draft'
-}
-function accessPathStatus(row: RuntimeDocument): 'draft' | 'published' | 'withdrawn' {
-  const value = stringField(row, 'status'); return value === 'published' || value === 'withdrawn' ? value : 'draft'
 }
 
 export const getPublicBusinessCatalogBySlug = queryGeneric({
@@ -833,16 +1200,15 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
   },
   returns: publicCatalogReadbackResult,
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
-    const business = await db
+    const business = await ctx.db
       .query('businesses')
-      .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug)))
+      .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug) || 'service'))
       .unique()
     if (business === null) {
       return catalogReadNotFound('no_such_business')
     }
 
-    const catalog = await publicCatalogForBusiness(db, business._id)
+    const catalog = await publicCatalogForBusiness(ctx.db, business._id)
     return catalog === undefined ? catalogReadNotFound() : { kind: 'available' as const, catalog }
   },
 })
@@ -856,8 +1222,7 @@ export const getCurrentOwnerPublicCatalog = queryGeneric({
       return catalogReadNotFound()
     }
 
-    const db = runtimeDb(ctx.db)
-    const owner = await db
+    const owner = await ctx.db
       .query('owners')
       .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
       .unique()
@@ -865,58 +1230,64 @@ export const getCurrentOwnerPublicCatalog = queryGeneric({
       return catalogReadNotFound()
     }
 
-    const publishedClaims = await db
+    const latestClaims = await ctx.db
       .query('claims')
-      .withIndex('by_owner_status', (query) => query.eq('ownerId', owner._id).eq('status', 'published'))
-      .collect()
-    const orderedClaims = publishedClaims.sort((left, right) => numberField(right, 'updatedAt') - numberField(left, 'updatedAt'))
-    for (const claim of orderedClaims) {
-      const businessId = optionalStringField(claim, 'businessId')
-      if (businessId === undefined) {
-        continue
-      }
-
-      const catalog = await publicCatalogForBusiness(db, businessId)
-      if (catalog !== undefined) {
-        return { kind: 'available' as const, catalog }
-      }
+      .withIndex('by_owner_status', (query) => query.eq('ownerId', owner._id))
+      .order('desc')
+      .take(20)
+    const latestClaim = latestClaims.find((claim) => claim.status === 'published')
+    if (latestClaim === undefined || latestClaim.businessId === undefined) {
+      return catalogReadNotFound()
     }
-
-    return catalogReadNotFound()
+    const catalog = await publicCatalogForBusiness(ctx.db, latestClaim.businessId)
+    return catalog === undefined ? catalogReadNotFound() : { kind: 'available' as const, catalog }
   },
 })
 
 /** Authenticated source read for the protected owner Offering editor. */
 export const getCurrentOwnerOfferingSupply = queryGeneric({
   args: {},
-  returns: v.any(),
+  returns: catalogOwnerSupplyResult,
   handler: async (ctx) => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
-    const db = runtimeDb(ctx.db)
-    const owner = await db.query('owners').withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', actor.clerkUserId)).unique()
+    const owner = await ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId)).unique()
     if (owner === null) return { kind: 'not_found' as const }
-    const businesses = await db.query('businesses').withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id)).collect()
-    const business = businesses.sort((a, b) => numberField(b, 'updatedAt') - numberField(a, 'updatedAt')).at(0)
-    if (business === undefined) return { kind: 'not_found' as const }
-    const state = await loadOfferingSourceState(db, business._id, actor.clerkUserId)
-    const cutover = await db.query('catalogSupplyCutovers').withIndex('by_businessId', (q) => q.eq('businessId', business._id)).unique()
-    const snapshot = await db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (q) => q.eq('businessId', business._id)).unique()
+    const business = await ctx.db
+      .query('businesses')
+      .withIndex('by_owner_updatedAt', (query) => query.eq('ownerId', owner._id))
+      .order('desc')
+      .first()
+    if (business === null) return { kind: 'not_found' as const }
+    const state = await loadOfferingSourceState(ctx.db, business._id)
+    const snapshot = await ctx.db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (query) => query.eq('businessId', business._id)).unique()
+    const projection = snapshot === null || snapshot.projection === undefined
+      ? { status: 'projection_pending' as const }
+      : {
+          status: snapshot.status,
+          observedAt: snapshot.observedAt,
+          disposition: snapshot.disposition,
+          ...(snapshot.lastErrorCode === undefined ? {} : { lastErrorCode: snapshot.lastErrorCode }),
+        }
+    const offerings = state.offerings.map((offering) => {
+      const revision = state.revisions.find((candidate) => candidate.offeringRef === offering.offeringRef && candidate.revision === offering.currentRevision)
+      return {
+        ...offering,
+        ...(revision === undefined ? {} : { revision }),
+        accessPaths: state.accessPaths.filter((path) => path.offeringRef === offering.offeringRef),
+      }
+    })
     return {
       kind: 'available' as const,
       businessId: business._id,
-      business: { name: stringField(business, 'name'), slug: stringField(business, 'slug'), publicStatus: stringField(business, 'publicStatus'), publishedPhone: optionalStringField(business, 'publishedPhone') },
-      offerings: state.offerings.map((offering) => ({
-        ...offering,
-        revision: state.revisions.find((revision) => revision.offeringRef === offering.offeringRef && revision.revision === offering.currentRevision),
-        accessPaths: state.accessPaths.filter((path) => path.offeringRef === offering.offeringRef),
-      })),
-      cutover: cutover === null ? { mode: 'offering', lastCheckStatus: 'not_run', postCutoverNativeChanges: false } : {
-        mode: stringField(cutover, 'mode'), lastCheckStatus: stringField(cutover, 'lastCheckStatus'), postCutoverNativeChanges: Boolean(cutover.postCutoverNativeChanges),
+      business: {
+        name: business.name,
+        slug: business.slug,
+        publicStatus: business.publicStatus,
+        ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
       },
-      projection: snapshot === null ? { status: 'projection_pending' } : {
-        status: stringField(snapshot, 'status'), observedAt: numberField(snapshot, 'observedAt'), disposition: stringField(snapshot, 'disposition'), lastErrorCode: optionalStringField(snapshot, 'lastErrorCode'),
-      },
+      offerings,
+      projection,
     }
   },
 })
@@ -940,78 +1311,14 @@ type NormalizedServiceInput =
   | { kind: 'valid'; service: ServiceCatalogInput }
   | { kind: 'invalid' }
 
-type PersistedService = {
-  serviceId: string
-  serviceSlug: string
-  sourceHash: string
-}
 
-type CatalogTrustTier = 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'
-type CatalogIndexStatus = 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'
-type CatalogDiscoveryStatus = 'unavailable' | 'degraded' | 'available' | 'stale'
-type CatalogCapabilityKind = 'phone_inquiry' | 'quote_request' | 'booking_interest' | 'emergency_callout_interest' | 'ae_hosted_discovery'
-
-
-type PublicCatalog = {
-  businessId: string
-  slug: string
-  name: string
-  category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
-  postcode?: string
-  publicUrl: string
-  publicStatus: 'published'
-  trustTier: CatalogTrustTier
-  indexStatus: CatalogIndexStatus
-  discoveryStatus: CatalogDiscoveryStatus
-  services: PublicService[]
-  sourceHash: string
-  schemaVersion: 'public-catalog:v1'
-  updatedAt: number
-}
-
-type PublicService = {
-  serviceId: string
-  serviceSlug: string
-  businessId: string
-  name: string
-  category: string
-  summary: string
-  serviceArea: string
-  hoursOrUnknown: string
-  firstRequest: FirstRequest
-  status: 'published'
-  capabilities: PublicCapability[]
-  sourceHash: string
-}
-
-type FirstRequest = {
-  mode: 'inquiry_available' | 'quote_request_available' | 'not_available_yet'
-  publicDisclosure: string
-  publicChannel: 'public_business_contact' | 'ae_status_only' | 'not_available'
-  noContactReason?: string
-  rawContactExcluded: true
-}
-
-type PublicCapability = {
-  serviceId: string
-  kind: CatalogCapabilityKind
-  status: CatalogDiscoveryStatus
-  firstRequest: FirstRequest
-  callable: false
-  paymentRequired: false
-  reason?: string
-  sourceHash: string
-}
 
 type AuditEvent = {
   eventId: string
   eventType: string
   actorKind: string
   actorRef: string
-  businessId?: string
+  businessId?: Id<'businesses'>
   slug?: string
   targetType: string
   targetRef: string
@@ -1026,7 +1333,7 @@ type AuditEvent = {
 }
 
 type RegistryAttempt = {
-  businessId: string
+  businessId: Id<'businesses'>
   serviceId?: string
   logicalKey: string
   projectionKind: 'business_catalog' | 'service_catalog'
@@ -1041,7 +1348,7 @@ type RegistryAttempt = {
 
 type DiscoveryAttempt = {
   attemptId: string
-  businessId: string
+  businessId: Id<'businesses'>
   ucpVersion: string
   pathKind: 'ae_hosted_fallback'
   sourceHash: string
@@ -1111,219 +1418,174 @@ function toServiceInput(service: ServiceInput): NormalizedServiceInput {
     },
   }
 }
-
-async function upsertServices(db: RuntimeDb, businessId: string, services: readonly ValidatedServiceCatalogInput[], now: number): Promise<PersistedService[]> {
-  const nextSlugs = new Set<string>()
-  const persisted: PersistedService[] = []
-  for (const [sortOrder, service] of services.entries()) {
-    const serviceSlug = normalizeSlug(service.name)
-    nextSlugs.add(serviceSlug)
-    const sourceHash = stableHash({
-      businessId,
-      category: service.category,
+async function persistPublishedOfferings(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  ownerRef: string,
+  services: readonly ValidatedServiceCatalogInput[],
+  publishOperationKey: string,
+  now: number,
+): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
+  const before = await loadOfferingSourceState(db, businessId)
+  let after = before
+  const authority = { actorRef: ownerRef, ownerRef, businessOwnerRef: ownerRef }
+  const offeringRefs = new Set<string>()
+  for (const service of services) {
+    const slug = normalizeSlug(service.name) || 'offering'
+    const offeringRef = `offering:${businessId}:${slug}`
+    offeringRefs.add(offeringRef)
+    const facts: OfferingFactsInput = {
       name: service.name,
-      serviceArea: service.serviceArea,
+      category: service.category,
       summary: service.summary,
+      serviceAreaSummary: service.serviceArea,
+      availabilitySummary: service.hoursOrUnknown,
+    }
+    let offering = after.offerings.find((candidate) => candidate.offeringRef === offeringRef)
+    if (offering === undefined) {
+      const created = createOfferingInState(after, {
+        authority,
+        operationKey: `${publishOperationKey}:offering:${slug}:create`,
+        businessId: brandNonEmpty(businessId, 'BusinessId'),
+        offeringRef: brandNonEmpty(offeringRef, 'OfferingRef'),
+        facts,
+        now,
+      })
+      if (created.kind === 'error') return { kind: 'error', code: created.code }
+      after = created.state
+      offering = created.value
+    } else {
+      const revised = reviseOfferingInState(after, {
+        authority,
+        operationKey: `${publishOperationKey}:offering:${slug}:revise:${offering.currentRevision}`,
+        offeringRef: offering.offeringRef,
+        expectedRevision: offering.currentRevision,
+        facts,
+        now,
+      })
+      if (revised.kind === 'error') return { kind: 'error', code: revised.code }
+      after = revised.state
+      offering = revised.value
+    }
+    if (offering.status !== 'published') {
+      const published = changeOfferingStatusInState(after, {
+        authority,
+        operationKey: `${publishOperationKey}:offering:${slug}:publish`,
+        offeringRef: offering.offeringRef,
+        expectedRevision: offering.currentRevision,
+        status: 'published',
+        now,
+      })
+      if (published.kind === 'error') return { kind: 'error', code: published.code }
+      after = published.state
+      offering = published.value
+    }
+
+    const humanChannel = service.firstRequest.publicChannel === 'public_business_contact'
+      ? 'phone'
+      : service.firstRequest.publicChannel === 'ae_status_only'
+        ? 'ae_inquiry'
+        : undefined
+    const existingPaths = after.accessPaths.filter((path) => path.offeringRef === offering.offeringRef && path.status !== 'withdrawn')
+    if (humanChannel !== undefined && service.firstRequest.mode !== 'not_available_yet') {
+      const upserted = upsertAccessPathInState(after, {
+        authority,
+        operationKey: `${publishOperationKey}:offering:${slug}:access-path`,
+        offeringRef: offering.offeringRef,
+        accessPathRef: brandNonEmpty(`access:${businessId}:${slug}:human`, 'AccessPathRef'),
+        expectedRevision: offering.currentRevision,
+        status: 'published',
+        descriptor: {
+          kind: 'human_request',
+          channel: humanChannel,
+          disclosure: service.firstRequest.publicDisclosure ?? 'Contact the business to begin.',
+        },
+        now,
+      })
+      if (upserted.kind === 'error') return { kind: 'error', code: upserted.code }
+      after = upserted.state
+    } else {
+      for (const path of existingPaths) {
+        const withdrawn = withdrawAccessPathInState(after, {
+          authority,
+          operationKey: `${publishOperationKey}:offering:${slug}:withdraw:${path.accessPathRef}`,
+          accessPathRef: path.accessPathRef,
+          expectedRevision: offering.currentRevision,
+          now,
+        })
+        if (withdrawn.kind === 'error') return { kind: 'error', code: withdrawn.code }
+        after = withdrawn.state
+      }
+    }
+  }
+
+  for (const offering of after.offerings) {
+    if (offeringRefs.has(offering.offeringRef) || offering.status === 'retired') continue
+    const drafted = changeOfferingStatusInState(after, {
+      authority,
+      operationKey: `${publishOperationKey}:offering:${offering.offeringRef}:draft`,
+      offeringRef: offering.offeringRef,
+      expectedRevision: offering.currentRevision,
+      status: 'draft',
+      now,
     })
-    const existingService = await db
-      .query('businessServices')
-      .withIndex('by_slug_serviceSlug', (query) => query.eq('serviceSlug', serviceSlug).eq('businessId', businessId))
-      .unique()
-    const servicePatch = {
-      businessId,
-      serviceSlug,
-      name: service.name,
-      category: service.category,
-      summary: service.summary,
-      serviceArea: service.serviceArea,
-      hoursOrUnknown: service.hoursOrUnknown,
-      status: 'published',
-      sortOrder,
-      sourceHash,
-      updatedAt: now,
-    }
-    const serviceId =
-      existingService === null
-        ? await db.insert('businessServices', { ...servicePatch, createdAt: now })
-        : await patchExistingService(db, existingService, servicePatch)
-    await upsertCapability(db, businessId, serviceId, service.firstRequest, now)
-    persisted.push({ serviceId, serviceSlug, sourceHash })
+    if (drafted.kind === 'error') return { kind: 'error', code: drafted.code }
+    after = drafted.state
   }
-
-  const currentServices = await db
-    .query('businessServices')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
-    .collect()
-  for (const service of currentServices) {
-    if (!nextSlugs.has(stringField(service, 'serviceSlug'))) {
-      await db.patch(service._id, { status: 'draft', updatedAt: now })
-    }
-  }
-
-  return persisted
+  const persisted = await persistOfferingSourceState(db, businessId, before, after)
+  return persisted.kind === 'error' ? persisted : { kind: 'ok' }
 }
 
-async function patchExistingService(db: RuntimeDb, existingService: RuntimeDocument, servicePatch: Record<string, unknown>): Promise<string> {
-  await db.patch(existingService._id, servicePatch)
-  return existingService._id
-}
-
-async function upsertCapability(db: RuntimeDb, businessId: string, serviceId: string, firstRequest: FirstRequest, now: number): Promise<void> {
-  const kind = firstRequest.mode === 'quote_request_available' ? 'quote_request' : 'phone_inquiry'
-  const status = firstRequest.mode === 'not_available_yet' ? 'unavailable' : 'available'
-  const sourceHash = stableHash({ firstRequestMode: firstRequest.mode, serviceId })
-  const existingCapabilities = await db
-    .query('serviceCapabilities')
-    .withIndex('by_business_service_status', (query) => query.eq('businessId', businessId).eq('serviceId', serviceId))
-    .collect()
-  const capabilityPatch = {
-    businessId,
-    serviceId,
-    kind,
-    status,
-    firstRequestMode: firstRequest.mode,
-    publicDisclosure: firstRequest.publicDisclosure,
-    publicChannel: firstRequest.publicChannel,
-    ...(firstRequest.noContactReason === undefined ? {} : { noContactReason: firstRequest.noContactReason, reason: firstRequest.noContactReason }),
-    callable: false,
-    paymentRequired: false,
-    sourceHash,
-    updatedAt: now,
-  }
-  const existing = existingCapabilities.at(0)
-  if (existing === undefined) {
-    await db.insert('serviceCapabilities', { ...capabilityPatch, createdAt: now })
-    return
-  }
-
-  await db.patch(existing._id, capabilityPatch)
-}
-
-async function publicCatalogForBusiness(db: RuntimeDb, businessId: string): Promise<PublicCatalog | undefined> {
+async function publicCatalogForBusiness(
+  db: GenericDatabaseReader<DataModel>,
+  businessId: Id<'businesses'>,
+) {
   const business = await db.get(businessId)
-  if (business === null || stringField(business, 'publicStatus') !== 'published') {
-    return undefined
-  }
-  if (await hasActiveBusinessSuppression(db, businessId)) {
-    return undefined
-  }
-  const context = await db
-    .query('businessContexts')
-    .withIndex('by_business', (query) => query.eq('businessId', businessId))
+  if (business === null || business.publicStatus !== 'published') return undefined
+  if (await hasActiveBusinessSuppression(db, businessId)) return undefined
+  const snapshot = await db
+    .query('businessSupplyProjectionSnapshots')
+    .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
     .unique()
-  if (context === null) {
-    return undefined
-  }
-  const services = await db
-    .query('businessServices')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
-    .collect()
-  const [capabilities, indexStatus, discoveryStatus] = await Promise.all([
-    db
-      .query('serviceCapabilities')
-      .withIndex('by_business_service_status', (query) => query.eq('businessId', businessId))
-      .collect(),
-    indexStatusForBusiness(db, businessId),
-    discoveryStatusForBusiness(db, businessId, stringField(business, 'sourceHash')),
-  ])
+  if (snapshot === null || snapshot.projection === undefined) return undefined
+  const projected = projectBusinessSupplyToPublicApi(readBusinessSupplyProjectionSnapshot(snapshot.projection, 'catalog'))
+  const catalog = snapshot.status === 'projection_pending'
+    ? { ...projected, disposition: 'stale' as const }
+    : projected
   return {
-    businessId,
-    slug: stringField(business, 'slug'),
-    name: stringField(business, 'name'),
-    category: stringField(context, 'category'),
-    suburb: stringField(context, 'suburb'),
-    stateTerritory: stringField(context, 'stateTerritory'),
-    ...(optionalStringField(business, 'publishedPhone') === undefined ? {} : { publishedPhone: stringField(business, 'publishedPhone') }),
-    ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
-    publicUrl: `/${stringField(business, 'slug')}`,
-    publicStatus: 'published',
-    trustTier: trustTier(business),
-    indexStatus,
-    discoveryStatus,
-    services: services
-      .sort((left, right) => numberField(left, 'sortOrder') - numberField(right, 'sortOrder'))
-      .map((service) => toPublicService(service, capabilities)),
-    sourceHash: stringField(business, 'sourceHash'),
-    schemaVersion: 'public-catalog:v1',
-    updatedAt: numberField(business, 'updatedAt'),
+    ...catalog,
+    photos: catalog.photos.map((photo) => ({ ...photo })),
+    offerings: catalog.offerings.map((offering) => ({
+      ...offering,
+      ...(offering.price === undefined ? {} : { price: { ...offering.price } }),
+      accessPaths: offering.accessPaths.map((path) => ({ ...path })),
+      support: { ...offering.support },
+    })),
+    accessSummary: { ...catalog.accessSummary },
   }
 }
 
-function catalogReadNotFound(reason: 'not_public' | 'no_such_business' = 'not_public') {
-  return { kind: 'not_found' as const, reason }
-}
-
-function toPublicService(service: RuntimeDocument, capabilities: readonly RuntimeDocument[]): PublicService {
-  const serviceCapabilities: PublicCapability[] = []
-  for (const capability of capabilities) {
-    if (stringField(capability, 'serviceId') === service._id) {
-      serviceCapabilities.push(toPublicCapability(capability))
-    }
-  }
-  const firstRequest = serviceCapabilities.at(0)?.firstRequest ?? {
-    mode: 'not_available_yet' as const,
-    publicDisclosure: 'First request is not available yet.',
-    publicChannel: 'not_available' as const,
-    noContactReason: 'Owner has not supplied public contact instructions.',
-    rawContactExcluded: true as const,
-  }
-  return {
-    serviceId: service._id,
-    serviceSlug: stringField(service, 'serviceSlug'),
-    businessId: stringField(service, 'businessId'),
-    name: stringField(service, 'name'),
-    category: stringField(service, 'category'),
-    summary: stringField(service, 'summary'),
-    serviceArea: stringField(service, 'serviceArea'),
-    hoursOrUnknown: stringField(service, 'hoursOrUnknown'),
-    firstRequest,
-    status: 'published',
-    capabilities: serviceCapabilities,
-    sourceHash: stringField(service, 'sourceHash'),
-  }
-}
-
-function toPublicCapability(capability: RuntimeDocument): PublicCapability {
-  return {
-    serviceId: stringField(capability, 'serviceId'),
-    kind: capabilityKind(capability),
-    status: capabilityStatus(capability),
-    firstRequest: {
-      mode: firstRequestMode(capability),
-      publicDisclosure: stringField(capability, 'publicDisclosure'),
-      publicChannel: publicChannel(capability),
-      ...(optionalStringField(capability, 'noContactReason') === undefined ? {} : { noContactReason: stringField(capability, 'noContactReason') }),
-      rawContactExcluded: true,
-    },
-    callable: false,
-    paymentRequired: false,
-    ...(optionalStringField(capability, 'reason') === undefined ? {} : { reason: stringField(capability, 'reason') }),
-    sourceHash: stringField(capability, 'sourceHash'),
-  }
-}
 
 async function ensurePublishAuditEvent(
-  db: RuntimeDb,
-  businessId: string,
-  ownerId: string,
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  ownerId: Id<'owners'>,
   slug: string,
   args: { operationKey: string; correlationId: string },
   now: number
 ): Promise<AuditEvent> {
   const eventId = `audit:claim.published:${businessId}:${args.operationKey}`
   const existing = await findPublishAuditEvent(db, businessId, args.operationKey)
-  if (existing !== undefined) {
-    return existing
-  }
+  if (existing !== undefined) return existing
   const redactedPayload = { replayed: false, slug }
   const auditEvent = {
     eventId,
-    eventType: 'claim.published',
-    actorKind: 'owner',
+    eventType: 'claim.published' as const,
+    actorKind: 'owner' as const,
     actorRef: ownerId,
     businessId,
     slug,
-    targetType: 'business',
+    targetType: 'business' as const,
     targetRef: businessId,
     beforeState: 'authenticated',
     afterState: 'published',
@@ -1331,7 +1593,7 @@ async function ensurePublishAuditEvent(
     correlationId: args.correlationId,
     evidenceRefs: [],
     redactedPayloadJson: JSON.stringify(redactedPayload),
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: now,
   }
   await db.insert('auditEvents', auditEvent)
@@ -1339,52 +1601,49 @@ async function ensurePublishAuditEvent(
 }
 
 async function findPublishAuditEvent(
-  db: RuntimeDb,
-  businessId: string,
+  db: GenericDatabaseReader<DataModel>,
+  businessId: Id<'businesses'>,
   operationKey: string,
 ): Promise<AuditEvent | undefined> {
-  const eventId = `audit:claim.published:${businessId}:${operationKey}`
   const event = await db
     .query('auditEvents')
-    .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
+    .withIndex('by_eventId', (query) => query.eq('eventId', `audit:claim.published:${businessId}:${operationKey}`))
     .unique()
   if (
     event === null
-    || stringField(event, 'businessId') !== businessId
-    || stringField(event, 'idempotencyKey') !== operationKey
-    || stringField(event, 'eventType') !== 'claim.published'
+    || event.businessId !== businessId
+    || event.idempotencyKey !== operationKey
+    || event.eventType !== 'claim.published'
   ) {
     return undefined
   }
-
   return {
-    eventId: stringField(event, 'eventId'),
-    eventType: stringField(event, 'eventType'),
-    actorKind: stringField(event, 'actorKind'),
-    actorRef: stringField(event, 'actorRef'),
-    businessId: stringField(event, 'businessId'),
-    ...(optionalStringField(event, 'slug') === undefined ? {} : { slug: stringField(event, 'slug') }),
-    targetType: stringField(event, 'targetType'),
-    targetRef: stringField(event, 'targetRef'),
-    ...(optionalStringField(event, 'beforeState') === undefined ? {} : { beforeState: stringField(event, 'beforeState') }),
-    ...(optionalStringField(event, 'afterState') === undefined ? {} : { afterState: stringField(event, 'afterState') }),
-    idempotencyKey: stringField(event, 'idempotencyKey'),
-    correlationId: stringField(event, 'correlationId'),
-    evidenceRefs: stringArrayField(event, 'evidenceRefs'),
-    redactedPayloadJson: stringField(event, 'redactedPayloadJson'),
-    payloadHash: stringField(event, 'payloadHash'),
-    createdAt: numberField(event, 'createdAt'),
+    eventId: event.eventId,
+    eventType: event.eventType,
+    actorKind: event.actorKind,
+    actorRef: event.actorRef,
+    ...(event.businessId === undefined ? {} : { businessId: event.businessId }),
+    ...(event.slug === undefined ? {} : { slug: event.slug }),
+    targetType: event.targetType,
+    targetRef: event.targetRef,
+    ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
+    ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+    idempotencyKey: event.idempotencyKey,
+    correlationId: event.correlationId,
+    evidenceRefs: event.evidenceRefs,
+    redactedPayloadJson: event.redactedPayloadJson,
+    payloadHash: event.payloadHash,
+    createdAt: event.createdAt,
   }
 }
 
 async function ensureRegistryAttempts(
-  db: RuntimeDb,
-  businessId: string,
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
   businessSourceHash: string,
-  services: readonly PersistedService[],
-  now: number
+  now: number,
 ): Promise<RegistryAttempt[]> {
-  const businessAttempt = await upsertRegistryAttempt(db, {
+  return [await upsertRegistryAttempt(db, {
     businessId,
     logicalKey: `registry:business:${businessId}:${businessSourceHash}`,
     projectionKind: 'business_catalog',
@@ -1395,29 +1654,10 @@ async function ensureRegistryAttempts(
     startedAt: now,
     repairAction: 'rebuild_projection',
     repairResult: 'not_run',
-  })
-  const serviceAttempts: RegistryAttempt[] = []
-  for (const service of services) {
-    serviceAttempts.push(
-      await upsertRegistryAttempt(db, {
-        businessId,
-        serviceId: service.serviceId,
-        logicalKey: `registry:service:${service.serviceId}:${service.sourceHash}`,
-        projectionKind: 'service_catalog',
-        sourceHash: service.sourceHash,
-        sourceVersion: 'public-catalog:v1',
-        status: 'queued',
-        retryCount: 0,
-        startedAt: now,
-        repairAction: 'rebuild_projection',
-        repairResult: 'not_run',
-      })
-    )
-  }
-  return [businessAttempt, ...serviceAttempts]
+  })]
 }
 
-async function upsertRegistryAttempt(db: RuntimeDb, attempt: RegistryAttempt): Promise<RegistryAttempt> {
+async function upsertRegistryAttempt(db: GenericDatabaseWriter<DataModel>, attempt: RegistryAttempt): Promise<RegistryAttempt> {
   const existing = await db
     .query('registryProjectionAttempts')
     .withIndex('by_logicalKey', (query) => query.eq('logicalKey', attempt.logicalKey))
@@ -1431,8 +1671,8 @@ async function upsertRegistryAttempt(db: RuntimeDb, attempt: RegistryAttempt): P
 }
 
 async function ensureDiscoveryAttempt(
-  db: RuntimeDb,
-  businessId: string,
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
   sourceHash: string,
   now: number
 ): Promise<DiscoveryAttempt[]> {
@@ -1449,227 +1689,120 @@ async function ensureDiscoveryAttempt(
     repairAction: 'regenerate_manifest' as const,
     repairResult: 'not_run' as const,
   }
-  const existingAttempts = await db
+  const existing = await db
     .query('discoveryManifestAttempts')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
-    .collect()
-  const existing = existingAttempts.find((candidate) => stringField(candidate, 'attemptId') === attempt.attemptId)
-  if (existing === undefined) {
-    await db.insert('discoveryManifestAttempts', attempt)
-  } else {
-    await db.patch(existing._id, attempt)
-  }
+    .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
+    .unique()
+  if (existing === null) await db.insert('discoveryManifestAttempts', attempt)
+  else await db.patch(existing._id, attempt)
   return [attempt]
 }
 
-async function upsertBusinessIndexStatus(db: RuntimeDb, businessId: string, sourceHash: string, now: number): Promise<void> {
-  const statuses = await db
+async function upsertBusinessIndexStatus(db: GenericDatabaseWriter<DataModel>, businessId: Id<'businesses'>, sourceHash: string, now: number): Promise<void> {
+  const existing = await db
     .query('indexStatus')
-    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
-    .collect()
-  const existing = statuses.find(
-    (status) => stringField(status, 'targetType') === 'business' && stringField(status, 'targetRef') === businessId
-  )
+    .withIndex('by_target', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
+    .unique()
   const next = {
-    targetType: 'business',
+    targetType: 'business' as const,
     targetRef: businessId,
     businessId,
-    status: 'queued',
+    status: 'queued' as const,
     lastAttemptAt: now,
     sourceHash,
-    sourceVersion: 'public-catalog:v1',
+    sourceVersion: 'public-catalog:v1' as const,
   }
-  if (existing === undefined) {
-    await db.insert('indexStatus', next)
-    return
-  }
-  await db.patch(existing._id, next)
+  if (existing === null) await db.insert('indexStatus', next)
+  else await db.patch(existing._id, next)
 }
 
-async function registryAttemptsForBusiness(db: RuntimeDb, businessId: string): Promise<RegistryAttempt[]> {
-  const attempts = await db
+async function registryAttemptsForBusiness(
+  db: GenericDatabaseReader<DataModel>,
+  businessId: Id<'businesses'>,
+  businessSourceHash: string,
+): Promise<RegistryAttempt[]> {
+  const attempt = await db
     .query('registryProjectionAttempts')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
-    .collect()
-  return attempts.map((attempt) => ({
-    businessId: stringField(attempt, 'businessId'),
-    ...(optionalStringField(attempt, 'serviceId') === undefined ? {} : { serviceId: stringField(attempt, 'serviceId') }),
-    logicalKey: stringField(attempt, 'logicalKey'),
-    projectionKind: projectionKind(attempt),
-    sourceHash: stringField(attempt, 'sourceHash'),
+    .withIndex('by_logicalKey', (query) => query.eq('logicalKey', `registry:business:${businessId}:${businessSourceHash}`))
+    .unique()
+  if (attempt === null) return []
+  return [{
+    businessId: attempt.businessId,
+    ...(attempt.offeringRef === undefined ? {} : { serviceId: attempt.offeringRef }),
+    logicalKey: attempt.logicalKey,
+    projectionKind: attempt.projectionKind,
+    sourceHash: attempt.sourceHash,
     sourceVersion: 'public-catalog:v1',
     status: 'queued',
-    retryCount: numberField(attempt, 'retryCount'),
-    startedAt: numberField(attempt, 'startedAt'),
+    retryCount: attempt.retryCount,
+    startedAt: attempt.startedAt,
     repairAction: 'rebuild_projection',
     repairResult: 'not_run',
-  }))
+  }]
 }
 
-async function discoveryAttemptsForBusiness(db: RuntimeDb, businessId: string): Promise<DiscoveryAttempt[]> {
-  const attempts = await db
+async function discoveryAttemptsForBusiness(
+  db: GenericDatabaseReader<DataModel>,
+  businessId: Id<'businesses'>,
+  sourceHash: string,
+): Promise<DiscoveryAttempt[]> {
+  const attempt = await db
     .query('discoveryManifestAttempts')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
-    .collect()
-  return attempts.map((attempt) => ({
-    attemptId: stringField(attempt, 'attemptId'),
-    businessId: stringField(attempt, 'businessId'),
-    ucpVersion: stringField(attempt, 'ucpVersion'),
+    .withIndex('by_attemptId', (query) => query.eq('attemptId', `discovery:manifest:${businessId}:${sourceHash}:v1`))
+    .unique()
+  if (attempt === null) return []
+  return [{
+    attemptId: attempt.attemptId,
+    businessId: attempt.businessId,
+    ucpVersion: attempt.ucpVersion,
     pathKind: 'ae_hosted_fallback',
-    sourceHash: stringField(attempt, 'sourceHash'),
+    sourceHash: attempt.sourceHash,
     sourceVersion: 'public-catalog:v1',
     status: 'queued',
-    retryCount: numberField(attempt, 'retryCount'),
-    startedAt: numberField(attempt, 'startedAt'),
+    retryCount: attempt.retryCount,
+    startedAt: attempt.startedAt,
     repairAction: 'regenerate_manifest',
     repairResult: 'not_run',
-  }))
+  }]
 }
 
-function publishedBusinessContract(businessId: string, business: RuntimeDocument, updatedAt: number) {
+function publishedBusinessContract(businessId: Id<'businesses'>, business: Doc<'businesses'>, updatedAt: number) {
   return {
     businessId,
-    ownerId: stringField(business, 'ownerId'),
-    slug: stringField(business, 'slug'),
-    name: stringField(business, 'name'),
-    normalizedName: stringField(business, 'normalizedName'),
-    category: stringField(business, 'category'),
-    suburb: stringField(business, 'suburb'),
-    stateTerritory: stringField(business, 'stateTerritory'),
-    ...(optionalStringField(business, 'publishedPhone') === undefined
-      ? {}
-      : { publishedPhone: stringField(business, 'publishedPhone') }),
+    ownerId: business.ownerId,
+    slug: business.slug,
+    name: business.name,
+    normalizedName: business.normalizedName,
+    category: business.category,
+    suburb: business.suburb,
+    stateTerritory: business.stateTerritory,
+    ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
     publicStatus: 'published' as const,
-    trustTier: trustTier(business),
+    trustTier: business.trustTier,
     claimStatus: 'published' as const,
-    sourceHash: stringField(business, 'sourceHash'),
-    createdAt: numberField(business, 'createdAt'),
+    sourceHash: business.sourceHash,
+    createdAt: business.createdAt,
     updatedAt,
   }
 }
 
-function publishedClaimContract(claimId: string, claim: RuntimeDocument, businessId: string, updatedAt: number) {
+function publishedClaimContract(claimId: Id<'claims'>, claim: Doc<'claims'>, businessId: Id<'businesses'>, updatedAt: number) {
   return {
     claimId,
-    ownerId: stringField(claim, 'ownerId'),
+    ownerId: claim.ownerId,
     businessId,
-    slug: stringField(claim, 'slug'),
+    slug: claim.slug,
     status: 'published' as const,
-    submittedFactsHash: stringField(claim, 'submittedFactsHash'),
-    createdAt: numberField(claim, 'createdAt'),
+    submittedFactsHash: claim.submittedFactsHash,
+    createdAt: claim.createdAt,
     updatedAt,
   }
 }
 
-async function indexStatusForBusiness(db: RuntimeDb, businessId: string): Promise<'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'> {
-  const statuses = await db
-    .query('indexStatus')
-    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
-    .collect()
-  const status = statuses.find(
-    (candidate) => stringField(candidate, 'targetType') === 'business' && stringField(candidate, 'targetRef') === businessId
-  )
-  const value = status === undefined ? undefined : stringField(status, 'status')
-  return value === 'queued' || value === 'indexed' || value === 'failed' || value === 'stale' ? value : 'not_queued'
-}
 
-async function discoveryStatusForBusiness(
-  db: RuntimeDb,
-  businessId: string,
-  sourceHash: string
-): Promise<'unavailable' | 'degraded' | 'available' | 'stale'> {
-  const attempts = await db
-    .query('discoveryManifestAttempts')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
-    .collect()
-  const latest = attempts.sort((left, right) => numberField(right, 'startedAt') - numberField(left, 'startedAt')).at(0)
-  if (latest === undefined) {
-    return 'degraded'
-  }
-  if (stringField(latest, 'sourceHash') !== sourceHash || stringField(latest, 'status') === 'stale') {
-    return 'stale'
-  }
-  return stringField(latest, 'status') === 'succeeded' ? 'available' : 'degraded'
-}
-
-async function hasActiveBusinessSuppression(db: RuntimeDb, businessId: string): Promise<boolean> {
-  const suppression = await db
-    .query('suppressionRules')
-    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active'))
-    .unique()
-  return suppression !== null
-}
-
-
-function nowFromDoc(document: RuntimeDocument): number {
-  const updatedAt = document.updatedAt
-  return typeof updatedAt === 'number' ? updatedAt : Date.now()
-}
-
-function stringArrayField(document: RuntimeDocument, field: string): string[] {
-  const value = document[field]
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
-}
-
-function firstRequestMode(document: RuntimeDocument): FirstRequest['mode'] {
-  const value = stringField(document, 'firstRequestMode')
-  if (value === 'inquiry_available' || value === 'quote_request_available' || value === 'not_available_yet') {
-    return value
-  }
-  return 'not_available_yet'
-}
-
-function publicChannel(document: RuntimeDocument): FirstRequest['publicChannel'] {
-  const value = stringField(document, 'publicChannel')
-  if (value === 'public_business_contact' || value === 'ae_status_only' || value === 'not_available') {
-    return value
-  }
-  return 'not_available'
-}
-
-function capabilityKind(document: RuntimeDocument): PublicCapability['kind'] {
-  const value = stringField(document, 'kind')
-  if (
-    value === 'phone_inquiry' ||
-    value === 'quote_request' ||
-    value === 'booking_interest' ||
-    value === 'emergency_callout_interest' ||
-    value === 'ae_hosted_discovery'
-  ) {
-    return value
-  }
-  return 'ae_hosted_discovery'
-}
-
-function capabilityStatus(document: RuntimeDocument): PublicCapability['status'] {
-  const value = stringField(document, 'status')
-  return value === 'available' || value === 'degraded' || value === 'stale' ? value : 'unavailable'
-}
-
-function projectionKind(document: RuntimeDocument): RegistryAttempt['projectionKind'] {
-  return stringField(document, 'projectionKind') === 'service_catalog' ? 'service_catalog' : 'business_catalog'
-}
-
-
-function trustTier(document: RuntimeDocument): PublicCatalog['trustTier'] {
-  const value = stringField(document, 'trustTier')
-  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified' ? value : 'claimed'
-}
-
-function normalizeSlug(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72)
-  return normalized.length === 0 ? 'service' : normalized
-}
 
 export type {
-  PublicCatalogContract,
   PublicFirstRequestDisclosure,
-  PublicServiceContract,
-  ServiceCapabilityContract,
   PublishBusinessCatalogCommand,
   PublishBusinessCatalogResult,
 } from '../src/modules/catalog/public'

@@ -174,6 +174,7 @@ function validCommand(overrides: Partial<SetOperatorControlCommand> = {}): SetOp
 function activeMembership(role: AdminMembership['role']): AdminMembership {
   return {
     clerkUserId: `admin_${role}`,
+    tokenIdentifier: `clerk|admin_${role}`,
     role,
     state: 'active',
     grantedBy: 'bootstrap',

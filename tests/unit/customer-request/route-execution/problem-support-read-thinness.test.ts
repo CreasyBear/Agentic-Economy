@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../../helpers/source-files'
 
 const convexHost = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 const problemPortsSource = readFileSync(
@@ -86,14 +87,4 @@ describe('customer-request route-execution problem support-read thinness', () =>
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

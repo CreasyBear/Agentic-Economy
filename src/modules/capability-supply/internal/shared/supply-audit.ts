@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sameStringList } from '@/modules/common/same-string-list'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { RegistrationContext, SupplyCommandActor } from './command-envelope'
@@ -87,11 +88,8 @@ export function storedAuditMatches(
     && existing.idempotencyKey === input.context.operationKey
     && existing.correlationId === input.context.correlationId
     && existing.reasonCode === input.context.reasonCode
-    && sameStrings(existing.evidenceRefs ?? [], input.context.evidenceRefs)
+    && sameStringList(existing.evidenceRefs ?? [], input.context.evidenceRefs)
     && existing.redactedPayloadJson === redactedPayloadJson
     && existing.payloadHash === payloadHash
 }
 
-function sameStrings(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index])
-}

@@ -51,7 +51,7 @@ export async function refreshRoutePlanGeneration(
   }
   if (requestHead.principalId !== args.principalId) return { kind: 'identity_conflict' }
   const revision = await ports.loadRevision(args.requestId, args.expectedRequestRevision)
-  if (revision === null || 'routes' in revision.aggregate.plan
+  if (revision === null
     || revision.aggregate.aggregateDigest !== requestHead.currentAggregateDigest
     || !aggregateIsInternallyConsistent(revision.aggregate, args.expectedRequestRevision - 1)) {
     throw new Error('customer_request_v2_refresh_request_integrity_failure')

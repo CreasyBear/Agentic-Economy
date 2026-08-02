@@ -1,6 +1,7 @@
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
-import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim, rateLimitClaim } from '@/modules/security/public'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim } from '@/modules/security/public'
 import { validateOwnerPublishedPhone } from './published-phone'
 import type {
   BusinessContextRecord,
@@ -21,7 +22,6 @@ export function createEmptyBusinessSourceState(): BusinessSourceState {
     businessContexts: [],
     claims: [],
     claimFingerprints: [],
-    abuseRateLimitBuckets: [],
   }
 }
 
@@ -36,15 +36,6 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     }
   }
 
-  const rateLimitDecision = rateLimitClaim(state.abuseRateLimitBuckets, command.security.rateLimit)
-  if (rateLimitDecision.kind === 'limited') {
-    return {
-      kind: 'error',
-      code: 'claim_rate_limited',
-      retryable: true,
-      reason: `Retry after ${rateLimitDecision.retryAfter}.`,
-    }
-  }
 
   if (command.actor.kind === 'anonymous') {
     return {
@@ -98,7 +89,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
       ownerId: owner.ownerId,
       slug: allocatedSlug,
       status: 'contested',
-      submittedFactsHash: stableHash({
+      submittedFactsHash: canonicalDigest({
         category: normalizedFacts.category,
         duplicate: duplicateDecision.publicReason,
         name: normalizedFacts.name,
@@ -132,7 +123,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
   }
 
   const businessId = brandNonEmpty(`business:${allocatedSlug}`, 'BusinessId')
-  const sourceHash = stableHash({
+  const sourceHash = canonicalDigest({
     category: normalizedFacts.category,
     name: normalizedFacts.name,
     slug: allocatedSlug,
@@ -320,13 +311,6 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
 }
 
 
-function normalizeSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72)
-}
 
 function normalizeIdentityText(value: string): string {
   return normalizePublicText(value).toLowerCase()

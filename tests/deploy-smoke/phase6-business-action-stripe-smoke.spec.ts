@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { parseHttpsUrl, resolvePath } from '../helpers/deployed-smoke'
 
 type Phase6BusinessActionStripeSmokeConfig = {
   baseUrl: URL
@@ -128,30 +129,14 @@ function readPhase6BusinessActionStripeSmokeConfig(): Phase6BusinessActionStripe
   }
 
   return {
-    baseUrl: parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string),
+    baseUrl: parseHttpsUrl(
+      'DEPLOY_BASE_URL',
+      required.DEPLOY_BASE_URL as string,
+      'deployed business-action Stripe smoke',
+    ),
     ownerStorageState,
     ...evidence,
   }
-}
-
-function parseHttpsUrl(name: string, rawValue: string): URL {
-  let parsed: URL
-
-  try {
-    parsed = new URL(rawValue)
-  } catch {
-    throw new Error(`${name} must be a valid HTTPS URL.`)
-  }
-
-  if (parsed.protocol !== 'https:') {
-    throw new Error(`${name} must use https:// for deployed business-action Stripe smoke.`)
-  }
-
-  if (/^(localhost|127\.0\.0\.1)$/.test(parsed.hostname) || parsed.hostname.endsWith('.local')) {
-    throw new Error(`${name} must point at a deployed environment, not localhost.`)
-  }
-
-  return parsed
 }
 
 function assertSourceEvidenceRef(name: string, rawValue: string): string {
@@ -182,6 +167,3 @@ function assertRedactedOperatorNextAction(rawValue: string): string {
 
 const decorativeProofPattern = /\b(?:screenshot|return URL|dashboard|env var|webhook arrival|webhook arrived)\b/i
 
-function resolvePath(path: string, baseUrl: URL): string {
-  return new URL(path, baseUrl).toString()
-}

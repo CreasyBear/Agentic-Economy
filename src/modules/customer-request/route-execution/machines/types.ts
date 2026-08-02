@@ -68,27 +68,6 @@ export type StartResult = Readonly<
   }
 >
 
-export type LeaseCommand = Readonly<{
-  workerId: string
-  leaseDurationMs: number
-}>
-
-export type DispatchLease = Readonly<{
-  dispatchRef: string
-  attemptRef: string
-  runRef: string
-  position: number
-  operationKeyDigest: string
-  inputJson: string
-  grant: RouteStepGrant
-  leaseExpiresAt: number
-}>
-
-export type LeaseResult = Readonly<
-  | { kind: 'leased'; dispatch: DispatchLease }
-  | { kind: 'none' }
-  | { kind: 'refused'; reason: 'lease_invalid' }
->
 
 export type OutcomeCommand = Readonly<{
   attemptRef: string
@@ -186,11 +165,9 @@ export type DispatchRecordSnapshot = Readonly<{
   runRef: string
   attemptRef: string
   operationKeyDigest: string
-  state: 'pending' | 'leased' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
+  state: 'pending' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
   availableAt: number
   createdAt: number
-  leaseOwner?: string
-  leaseExpiresAt?: number
 }>
 
 export type ValidatedAttemptOutput = Readonly<{
@@ -323,12 +300,11 @@ export type ResolveCancellationResult = Readonly<
   | { kind: 'refused' }
 >
 
-export type OpenLeasedDispatchCommand = Readonly<{
+export type OpenDispatchCommand = Readonly<{
   dispatchRef: string
-  workerId: string
 }>
 
-export type LeasedInvocation = Readonly<{
+export type DispatchInvocation = Readonly<{
   dispatchRef: string
   attemptRef: string
   runRef: string
@@ -351,56 +327,34 @@ export type LeasedInvocation = Readonly<{
   }>
 }>
 
-export type OpenLeasedDispatchResult = Readonly<
-  | { kind: 'available'; invocation: LeasedInvocation }
+export type OpenDispatchResult = Readonly<
+  | { kind: 'available'; invocation: DispatchInvocation }
   | { kind: 'unavailable' }
->
-
-export type RecoverExpiredDispatchCommand = Readonly<{
-  dispatchRef: string
-}>
-
-export type RecoverExpiredDispatchResult = Readonly<
-  | { kind: 'requeued' }
-  | { kind: 'outcome_unknown' }
-  | { kind: 'unchanged' }
 >
 
 export type MarkDispatchedCommand = Readonly<{
   dispatchRef: string
   attemptRef: string
-  workerId: string
 }>
 
 export type MarkDispatchedResult = Readonly<
   | { kind: 'recorded' }
   | { kind: 'replayed' }
-  | { kind: 'refused'; reason: 'lease_not_current' }
+  | { kind: 'refused'; reason: 'dispatch_not_current' }
 >
 
 export type RecordNotReleasedCommand = Readonly<{
   dispatchRef: string
   attemptRef: string
-  workerId: string
   observationJson: string
 }>
 
 export type RecordNotReleasedResult = Readonly<
   | { kind: 'failed'; run: RunProjection }
   | { kind: 'replayed'; run: RunProjection }
-  | { kind: 'refused'; reason: 'lease_not_current' }
+  | { kind: 'refused'; reason: 'dispatch_not_current' }
 >
 
-export type MarkAcceptedCommand = Readonly<{
-  attemptRef: string
-  operationKeyDigest: string
-}>
-
-export type MarkAcceptedResult = Readonly<
-  | { kind: 'recorded' }
-  | { kind: 'replayed' }
-  | { kind: 'refused'; reason: 'attempt_not_current' }
->
 
 export type DispatchPublicationSnapshot = Readonly<{
   disposition: string

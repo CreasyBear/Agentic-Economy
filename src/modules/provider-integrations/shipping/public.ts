@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 export type ShippingQuoteRequest = Readonly<{
   requestId: string
@@ -74,7 +75,7 @@ export function deriveShippingQuoteInput(request: ShippingQuoteRequest): Shippin
   if (!parsed.success) return Object.freeze({
     kind: 'refused' as const,
     reason: 'shipping_quote_input_invalid' as const,
-    fields: Object.freeze([...new Set(parsed.error.issues.map((issue) => issue.path.join('.')))].sort()),
+    fields: Object.freeze(uniqueSorted(parsed.error.issues.map((issue) => issue.path.join('.')))),
   })
   const frozenMaterial = deepFreeze(parsed.data)
   return Object.freeze({

@@ -1,5 +1,6 @@
 import type { CliOptions } from '../lib/args'
-import { CliFailure, callJson, heading, isRecord, line, printJson } from '../lib/output'
+import { isRecord } from '@/modules/common/is-record'
+import { CliFailure, callJson, heading, line, printJson } from '../lib/output'
 
 /**
  * The agent-legibility litmus. A cold agent must be able to derive each next

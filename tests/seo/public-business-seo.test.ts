@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
@@ -12,7 +12,7 @@ describe('public business SEO builder', () => {
       options: { canonicalBaseUrl: 'https://ae.example/' },
     })
     const jsonLd = serializeJsonLd(seo.jsonLd)
-
+    const offeringJsonLd = seo.jsonLd.find((item) => item['@type'] === 'Service')
     expect(seo).toMatchObject({
       slug: 'parramatta-emergency-plumbing',
       h1: 'Parramatta Emergency Plumbing',
@@ -24,6 +24,13 @@ describe('public business SEO builder', () => {
     expect(jsonLd).toContain('LocalBusiness')
     expect(jsonLd).toContain('Service')
     expect(jsonLd).toContain('BreadcrumbList')
+    expect(offeringJsonLd).toMatchObject({
+      '@id': expect.stringContaining('#offering-'),
+      name: 'Emergency pipe repair',
+      serviceType: 'Emergency plumbing',
+      description: 'Burst pipe triage and repair for urgent local plumbing jobs.',
+      areaServed: 'Parramatta and nearby suburbs',
+    })
     expect(jsonLd).not.toMatch(/AggregateRating|Review|Offer|paymentAccepted|priceRange/)
   })
 
@@ -34,30 +41,18 @@ describe('public business SEO builder', () => {
    * of whatever happens to be in a shared deployment.
    */
   it('serves the public business JSON route as a public catalog subset only', async () => {
-    const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
 
     try {
       await assertPublicCatalogSubsetResponse()
     } finally {
-      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)
-      restoreEnv('CONVEX_URL', previousConvexUrl)
-      restoreEnv('VITE_CONVEX_URL', previousViteConvexUrl)
+      vi.unstubAllEnvs()
     }
   })
 })
 
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name]
-    return
-  }
-  process.env[name] = value
-}
 
 async function assertPublicCatalogSubsetResponse(): Promise<void> {
   const response = await handleDurableBusinessDetailRequest('parramatta-emergency-plumbing')

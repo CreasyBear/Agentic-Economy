@@ -1,7 +1,6 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
-import { isLegacyReferenceableInvocationOutcome } from '@/modules/actions/legacy-invocation-result-compatibility'
 import type {
   ActionInvocationTracer,
   ActionInvocationView,
@@ -464,7 +463,6 @@ export {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
 } from './internal/development-durable-port'
-export type { AsyncDurableActionInvocationPort } from './internal/async-durable-port'
 
 export type CompletedResultIdentity =
   | Readonly<{
@@ -512,9 +510,7 @@ export function readCompletedResultIdentity<Result extends ActionResult>(
   if (row.terminalBusinessOutcome === undefined) {
     return { kind: 'refused', code: 'outcome_not_referenceable' }
   }
-  const referenceable = row.terminalResultReferenceable
-    ?? isLegacyReferenceableInvocationOutcome(row.terminalBusinessOutcome)
-  if (!referenceable) {
+  if (row.terminalResultReferenceable !== true) {
     return { kind: 'refused', code: 'outcome_not_referenceable' }
   }
   const source = resolve(row.sourceRef)

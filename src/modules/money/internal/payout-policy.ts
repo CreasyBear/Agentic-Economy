@@ -34,7 +34,7 @@ export type PayoutTransitionInput = Readonly<{
     | Readonly<{ kind: 'transfer_failed'; failureCode: string; released: false }>
     | Readonly<{ kind: 'transfer_unknown'; stripeTransferId?: string }>
     | Readonly<{ kind: 'reconcile'; outcome: 'not_released' | 'paid'; stripeTransferId?: string }>
-  account: Readonly<{ detailsSubmitted: boolean; recipientCapabilityActive: boolean }>
+  account: Readonly<{ state: PayoutAccountState; detailsSubmitted: boolean; recipientCapabilityActive: boolean }>
 }>
 
 export type PayoutReviewWindow = Readonly<{
@@ -65,7 +65,7 @@ export function transitionPayoutAccount(input: PayoutAccountTransitionInput): Pa
     return { kind: 'accepted', value: { ...base, state: 'onboarding_started', updatedAt: input.event.observedAt } }
   }
   if (input.event.kind === 'onboarding_returned') {
-    const state: PayoutAccountState = base.state === 'ready' ? 'ready' : 'submitted'
+    const state: PayoutAccountState = base.state === 'ready' || base.state === 'restricted' ? base.state : 'submitted'
     return { kind: 'accepted', value: { ...base, state, updatedAt: input.event.observedAt } }
   }
   const state: PayoutAccountState = input.event.restricted
@@ -113,7 +113,7 @@ export function transitionPayout(input: PayoutTransitionInput): PayoutPolicyResu
   const current = input.current
   if (input.action.kind === 'review') {
     if (!input.action.autoApprove || current.state !== 'review') return { kind: 'accepted', value: current }
-    if (!input.account.detailsSubmitted || !input.account.recipientCapabilityActive) {
+    if (input.account.state !== 'ready' || !input.account.detailsSubmitted || !input.account.recipientCapabilityActive) {
       return { kind: 'accepted', value: { ...current, state: 'held_kyc', updatedAt: input.now } }
     }
     if (current.providerNetMinor < current.minimumPayoutMinor) {
@@ -124,7 +124,7 @@ export function transitionPayout(input: PayoutTransitionInput): PayoutPolicyResu
   if (input.action.kind === 'release_transfer') {
     if (current.state === 'outcome_unknown') return { kind: 'refused', code: 'payout_reconciliation_required', retryable: false }
     if (current.state !== 'held_threshold' && current.state !== 'held_kyc') return { kind: 'refused', code: 'payout_not_ready', retryable: false }
-    if (!input.account.detailsSubmitted || !input.account.recipientCapabilityActive) return { kind: 'refused', code: 'payout_not_ready', retryable: false }
+    if (input.account.state !== 'ready' || !input.account.detailsSubmitted || !input.account.recipientCapabilityActive) return { kind: 'refused', code: 'payout_not_ready', retryable: false }
     if (current.providerNetMinor < current.minimumPayoutMinor) return { kind: 'refused', code: 'payout_below_threshold', retryable: false }
     return { kind: 'accepted', value: { ...current, state: 'transfer_pending', ...(input.action.stripeTransferId === undefined ? {} : { stripeTransferId: input.action.stripeTransferId }), updatedAt: input.now } }
   }

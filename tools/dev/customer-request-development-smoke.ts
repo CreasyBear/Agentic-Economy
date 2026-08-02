@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 import { loadEnv } from 'vite'
 
+import { trimTrailingSlashes } from '../../src/modules/common/trim-trailing-slashes'
 import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
 import {
   freezeAgentJourneyCohort,
@@ -61,7 +62,7 @@ export function customerRequestDevelopmentSmokeConfig(
   env: Record<string, string | undefined>,
   sourceRevision = currentSourceRevision(),
 ): CustomerRequestDevelopmentSmokeConfig {
-  const baseUrl = (env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/u, '')
+  const baseUrl = trimTrailingSlashes(env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL)
   const shared = customerRequestProductionSmokeConfigFromEnvironment({
     AE_CUSTOMER_REQUEST_BASE_URL: baseUrl,
     AE_CUSTOMER_REQUEST_TEXT: env.AE_CUSTOMER_REQUEST_TEXT ?? DEFAULT_REQUEST,
@@ -257,10 +258,10 @@ function resolveTrustedDevelopmentOrigin(baseUrl: string, value: string | undefi
   }
   if (base.protocol !== 'https:') return undefined
   const isExactBaseOrigin = base.username === '' && base.password === ''
-    && base.pathname.replace(/\/+$/u, '') === '' && base.search === '' && base.hash === ''
+    && trimTrailingSlashes(base.pathname) === '' && base.search === '' && base.hash === ''
     && baseUrl === base.origin
   if (!isExactBaseOrigin) throw new Error('AE_CUSTOMER_REQUEST_BASE_URL must be an exact HTTPS origin')
-  const trusted = required(value, 'AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN').replace(/\/+$/u, '')
+  const trusted = trimTrailingSlashes(required(value, 'AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN'))
   let trustedUrl: URL
   try {
     trustedUrl = new URL(trusted)
@@ -268,7 +269,7 @@ function resolveTrustedDevelopmentOrigin(baseUrl: string, value: string | undefi
     throw new Error('AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN must be an exact HTTPS origin')
   }
   const isExactOrigin = trustedUrl.protocol === 'https:' && trustedUrl.username === ''
-    && trustedUrl.password === '' && trustedUrl.pathname.replace(/\/+$/u, '') === ''
+    && trustedUrl.password === '' && trimTrailingSlashes(trustedUrl.pathname) === ''
     && trustedUrl.search === '' && trustedUrl.hash === ''
   if (!isExactOrigin || trustedUrl.origin !== base.origin || trusted !== base.origin) {
     throw new Error('AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN must exactly match AE_CUSTOMER_REQUEST_BASE_URL')

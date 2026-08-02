@@ -670,8 +670,8 @@ export const customerRequestRouteMandateTables = {
     }))),
     state: v.union(
       v.literal('queued'),
-      v.literal('leased'),
       v.literal('dispatched'),
+      // reserved: historical rows only, no live producer
       v.literal('accepted'),
       v.literal('succeeded'),
       v.literal('failed'),
@@ -693,19 +693,48 @@ export const customerRequestRouteMandateTables = {
     operationKeyDigest: v.string(),
     state: v.union(
       v.literal('pending'),
-      v.literal('leased'),
       v.literal('delivered'),
       v.literal('failed'),
       v.literal('outcome_unknown'),
       v.literal('cancelled'),
     ),
     availableAt: v.number(),
-    leaseOwner: v.optional(v.string()),
-    leaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index('by_dispatchRef', ['dispatchRef'])
     .index('by_attemptRef', ['attemptRef'])
     .index('by_state_and_availableAt', ['state', 'availableAt']),
+  customerRequestX402PaymentAttempts: defineTable({
+    dispatchRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    paymentIdentifier: v.string(),
+    operationKeyDigest: v.string(),
+    challengeDigest: v.string(),
+    challengeJson: v.string(),
+    selectedRequirementJson: v.string(),
+    providerEndpoint: v.string(),
+    credentialRef: v.string(),
+    scheme: v.string(),
+    network: v.string(),
+    asset: v.string(),
+    payTo: v.string(),
+    amount: v.string(),
+    custodyRef: v.string(),
+    authorizationDigest: v.string(),
+    state: v.union(
+      v.literal('prepared'),
+      v.literal('possibly_submitted'),
+      v.literal('observed'),
+      v.literal('reconciliation_required'),
+    ),
+    preparedAt: v.number(),
+    submissionStartedAt: v.optional(v.number()),
+    observedAt: v.optional(v.number()),
+    evidenceRefs: v.array(v.string()),
+  })
+    .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
+    .index('by_custodyRef', ['custodyRef'])
+    .index('by_authorizationDigest', ['authorizationDigest']),
 }

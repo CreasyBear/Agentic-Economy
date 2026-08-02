@@ -11,13 +11,13 @@ import type {
   HarnessRunStatus,
   HarnessRunLoopPhaseHandlers,
 } from '@/modules/harness/public'
+import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import {
   aeSearchContextLocationQuery,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
 import { resolveIntentRoute } from './intent-router'
 import {
-  isDeterministicExactSearch,
   planAnswerTurn,
   type AnswerResponsePlan,
 } from './answer-response-planner'
@@ -62,7 +62,6 @@ import {
   insufficientFrozenTurnPath,
   makeCopyId,
   reindexProviders,
-  proposalTurnPath,
   retrievalFirstTurnPath,
   selectFrozenProviders,
   type SnapshotAssemblyPlan,
@@ -236,7 +235,7 @@ function buildStreamAnswerTurnPhases(input: {
   return {
     context: async ({ state }) => {
       const priorTurns = input.input.preloadedPriorTurns === undefined
-        ? await readPriorCompleteTurns(input.input.threadId)
+        ? await readPriorCompleteTurns(input.input.threadId, input.input.sessionId)
         : input.input.preloadedPriorTurns.filter((turn) => turn.status === 'complete')
       return {
         ...state,
@@ -294,13 +293,6 @@ function buildStreamAnswerTurnPhases(input: {
         priorTurnsCount: state.priorTurnCount,
         searchContext: state.searchContext,
       })
-      if (engineProposalsEnabled() && !isDeterministicExactSearch({
-        query: state.query,
-        priorTurnsCount: state.priorTurnCount,
-        searchContext: state.searchContext,
-      }, responsePlan)) {
-        return { ...state, responsePlan }
-      }
       if (responsePlan.mode === 'clarify') {
         return { ...state, responsePlan }
       }
@@ -330,25 +322,6 @@ function buildStreamAnswerTurnPhases(input: {
       }
 
       const responsePlan = state.responsePlan
-      if (engineProposalsEnabled()
-        && route.kind === 'tool_search'
-        && state.narrowSuburb === undefined
-        && (responsePlan?.mode === 'answer'
-          || (responsePlan?.mode === 'clarify' && responsePlan.reason === 'missing_place'))
-        && !isDeterministicExactSearch({
-          query: state.query,
-          priorTurnsCount: state.priorTurnCount,
-          searchContext: state.searchContext,
-        }, responsePlan)) {
-        return applyToolLedResult(
-          state,
-          await proposalTurnPath.run(
-            runtimeTurnPathContext(input, state),
-            responsePlan,
-            state.retrievalFirst?.toolCalls ?? [],
-          ),
-        )
-      }
       switch (route.kind) {
         case 'boundary_explain':
         case 'unsupported':
@@ -403,6 +376,7 @@ function buildStreamAnswerTurnPhases(input: {
             },
             state.retrievalFirst?.toolCalls ?? [],
             undefined,
+            state.responsePlan?.toolPolicy,
           )
           return applyToolLedResult(state, result)
         }
@@ -561,9 +535,6 @@ class AnswerHarnessFinalizationError extends Error {
   }
 }
 
-function engineProposalsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.AE_ENGINE_PROPOSALS === 'true'
-}
 
 function runtimeTurnPathContext(
   input: {
@@ -842,7 +813,7 @@ function createTurnTimingCollector(): TurnTimingCollector {
   const record: TurnTimingCollector['record'] = (name, durationMs, metadata) => {
     entries.push({
       name,
-      durationMs: Math.max(0, Math.round(durationMs * 100) / 100),
+      durationMs: roundNonNegative2(durationMs),
       atMs: Date.now(),
       ...(metadata === undefined ? {} : { metadata }),
     })

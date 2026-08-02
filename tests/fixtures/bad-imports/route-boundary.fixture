@@ -1,5 +1,4 @@
 import schema from 'convex/schema'
 import { ConvexHttpClient } from 'convex/browser'
-import { privateMutation } from '@/modules/clearance/clearance.functions'
 
-export const routeBoundaryFixture = { schema, ConvexHttpClient, privateMutation }
+export const routeBoundaryFixture = { schema, ConvexHttpClient }

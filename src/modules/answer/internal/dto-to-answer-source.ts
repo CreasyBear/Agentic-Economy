@@ -65,9 +65,8 @@ export function toAnswerSource(
     serviceArea: serviceArea ?? '',
     hoursLabel: plainHoursLabel(availabilitySummary ?? dto.offerings[0]?.availabilitySummary),
     availabilityLabel: plainAvailabilityLabel({
-      // V2 publishes no discovery status. `available` is the pass-through branch
-      // of the helper, so the label stays fully determined by the access paths.
-      discoveryStatus: 'available',
+      // V2 disposition is the source-owned freshness signal for this public catalog.
+      disposition: dto.disposition,
       firstRequestMode,
     }),
     trustLabel,

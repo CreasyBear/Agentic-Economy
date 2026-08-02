@@ -1,5 +1,5 @@
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
+import { handleCustomerRequestPostBoundary } from '@/lib/server/customer-request-route-action-api'
 import {
   customerRequestAllowRepeatPermissionAction,
   customerRequestInspectRepeatPermissionAction,
@@ -42,20 +42,19 @@ export async function handleCustomerRequestRepeatPermissionAllowPost(
   requestRef: string,
   options: AllowOptions = {},
 ): Promise<Response> {
-  const parsed = await parseBody(request, requestRef, customerRequestRepeatPermissionAllowInputSchema)
-  if (parsed instanceof Response) return parsed
-  try {
-    const command = { requestRef, ...parsed }
-    const result = customerRequestRepeatPermissionResultSchema.parse(await (options.allow === undefined
-      ? customerRequestAllowRepeatPermissionAction.run({
-          data: customerRequestAllowRepeatPermissionAction.schema.parse(command),
-          context: { request },
-        })
-      : options.allow(command)))
-    return resultResponse(result)
-  } catch (error) {
-    return unavailable(error, 'repeat_permission_unavailable')
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 4 * 1024,
+    inputSchema: customerRequestRepeatPermissionAllowInputSchema,
+    resultSchema: customerRequestRepeatPermissionResultSchema,
+    run: options.allow ?? (async (command) => await customerRequestAllowRepeatPermissionAction.run({
+      data: customerRequestAllowRepeatPermissionAction.schema.parse(command),
+      context: { request },
+    })),
+    unavailableError: 'repeat_permission_unavailable',
+    resultToStatus: repeatPermissionResultStatus,
+  })
 }
 
 export async function handleCustomerRequestConnectedAssistantsGet(
@@ -85,20 +84,20 @@ export async function handleCustomerRequestRepeatPermissionUsePost(
   options: UseOptions = {},
 ): Promise<Response> {
   if (!validRef(permissionRef, 300)) return response({ error: 'invalid_permission_ref' }, 400)
-  const parsed = await parseBody(request, requestRef, customerRequestRepeatPermissionUseInputSchema)
-  if (parsed instanceof Response) return parsed
-  try {
-    const command = { requestRef, permissionRef, ...parsed }
-    const result = customerRequestAgentResultSchema.parse(await (options.use === undefined
-      ? customerRequestUseRepeatPermissionAction.run({
-          data: customerRequestUseRepeatPermissionAction.schema.parse(command),
-          context: { request },
-        })
-      : options.use(command)))
-    return resultResponse(result)
-  } catch (error) {
-    return unavailable(error, 'repeat_permission_use_unavailable')
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 4 * 1024,
+    inputSchema: customerRequestRepeatPermissionUseInputSchema,
+    resultSchema: customerRequestAgentResultSchema,
+    buildCommand: (input) => ({ requestRef, permissionRef, ...(input as Record<string, unknown>) }),
+    run: options.use ?? (async (command) => await customerRequestUseRepeatPermissionAction.run({
+      data: customerRequestUseRepeatPermissionAction.schema.parse(command),
+      context: { request },
+    })),
+    unavailableError: 'repeat_permission_use_unavailable',
+    resultToStatus: repeatPermissionResultStatus,
+  })
 }
 
 export async function handleCustomerRequestRepeatPermissionGet(
@@ -134,47 +133,32 @@ export async function handleCustomerRequestRepeatPermissionWithdrawPost(
   options: WithdrawOptions = {},
 ): Promise<Response> {
   if (!validRef(permissionRef, 300)) return response({ error: 'invalid_permission_ref' }, 400)
-  const parsed = await parseBody(request, requestRef, customerRequestRepeatPermissionWithdrawInputSchema)
-  if (parsed instanceof Response) return parsed
-  try {
-    const command = { requestRef, permissionRef, ...parsed }
-    const result = customerRequestRepeatPermissionResultSchema.parse(await (options.withdraw === undefined
-      ? customerRequestWithdrawRepeatPermissionAction.run({
-          data: customerRequestWithdrawRepeatPermissionAction.schema.parse(command),
-          context: { request },
-        })
-      : options.withdraw(command)))
-    return resultResponse(result)
-  } catch (error) {
-    return unavailable(error, 'repeat_permission_withdrawal_unavailable')
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 4 * 1024,
+    inputSchema: customerRequestRepeatPermissionWithdrawInputSchema,
+    resultSchema: customerRequestRepeatPermissionResultSchema,
+    buildCommand: (input) => ({ requestRef, permissionRef, ...(input as Record<string, unknown>) }),
+    run: options.withdraw ?? (async (command) => await customerRequestWithdrawRepeatPermissionAction.run({
+      data: customerRequestWithdrawRepeatPermissionAction.schema.parse(command),
+      context: { request },
+    })),
+    unavailableError: 'repeat_permission_withdrawal_unavailable',
+    resultToStatus: repeatPermissionResultStatus,
+  })
 }
 
-async function parseBody<Output>(
-  request: Request,
-  requestRef: string,
-  schema: Readonly<{ safeParse: (value: unknown) => { success: true; data: Output } | { success: false } }>,
-): Promise<Output | Response> {
-  if (!validRef(requestRef, 200)) return response({ error: 'invalid_request_ref' }, 400)
-  const bounded = await readBoundedRequestText(request, 4 * 1024)
-  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
-  let body: unknown
-  try {
-    body = JSON.parse(bounded.text)
-  } catch {
-    return response({ error: 'invalid_json' }, 400)
-  }
-  const parsed = schema.safeParse(body)
-  return parsed.success ? parsed.data : response({ error: 'invalid_request' }, 400)
+
+function repeatPermissionResultStatus(result: { kind: string; reason?: string }): number {
+  if (result.kind === 'refused') return result.reason === 'authentication_required' ? 401 : 404
+  if (result.kind === 'conflict') return 409
+  if (result.kind === 'unavailable') return 422
+  return 200
 }
 
 function resultResponse(result: { kind: string; reason?: string }): Response {
-  if (result.kind === 'refused') {
-    return response(result, result.reason === 'authentication_required' ? 401 : 404)
-  }
-  if (result.kind === 'conflict') return response(result, 409)
-  if (result.kind === 'unavailable') return response(result, 422)
-  return response(result, 200)
+  return response(result, repeatPermissionResultStatus(result))
 }
 
 function unavailable(error: unknown, code: string): Response {

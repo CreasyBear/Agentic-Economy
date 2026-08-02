@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateAuditEvent, type AuditEventInput } from '@/modules/observability/internal/audit'
 import { payloadHash, redactPayload } from '@/modules/observability/internal/redaction'
 import type { AuditEventType, AuditTargetType } from '@/modules/observability/public'
@@ -101,7 +102,7 @@ function auditInput(overrides: Partial<AuditEventInput> = {}): AuditEventInput {
     idempotencyKey: brandNonEmpty('op:base', 'OperationKey'),
     correlationId: brandNonEmpty('corr:base', 'CorrelationId'),
     redactedPayload: null,
-    payloadHash: brandNonEmpty('hash:payload', 'SourceHash'),
+    payloadHash: canonicalDigest('payload'),
     createdAt: 1,
     ...overrides,
   }

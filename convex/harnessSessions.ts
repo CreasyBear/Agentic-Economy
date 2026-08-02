@@ -1,11 +1,11 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import type { Doc } from './_generated/dataModel'
+import { mutation, query, type MutationCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
-import { runtimeDb } from './source_state'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import type { RuntimeDocument, RuntimeQuery } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
+
 import {
   HarnessRunStatusValues,
   HarnessSessionEntryKindValues,
@@ -16,11 +16,6 @@ import type {
   HarnessSessionEntryKind,
 } from '../src/modules/harness/harness.schema'
 import { createHarnessSessionEntry } from '../src/modules/harness/session-journal'
-
-type OrderedRuntimeQuery = Omit<RuntimeQuery, 'order' | 'take'> & {
-  order: (direction: 'asc' | 'desc') => OrderedRuntimeQuery
-  take: (limit: number) => Promise<RuntimeDocument[]>
-}
 
 const harnessRunStatus = literalUnion(HarnessRunStatusValues)
 const harnessSessionEntryKind = literalUnion(HarnessSessionEntryKindValues)
@@ -188,7 +183,7 @@ const readAdminHarnessSessionEntriesResult = v.union(
   }),
 )
 
-export const appendHarnessSessionEntry = mutationGeneric({
+export const appendHarnessSessionEntry = mutation({
   args: {
     ownerKey: v.string(),
     operationKey: v.string(),
@@ -223,30 +218,29 @@ export const appendHarnessSessionEntry = mutationGeneric({
       }
     }
 
-    const db = runtimeDb(ctx.db)
     const idempotencyKey = args.idempotencyKey ?? args.entryId
     const [existingByIdempotency, session] = await Promise.all([
-      db
+      ctx.db
         .query('harnessSessionEntries')
         .withIndex('by_sessionId_idempotencyKey', (query) =>
           query.eq('sessionId', args.sessionId).eq('idempotencyKey', idempotencyKey)
         )
         .unique(),
-      db
+      ctx.db
         .query('harnessSessions')
         .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
         .unique(),
     ])
-    const activeLeafEntryId = optionalStringField(session ?? {}, 'activeLeafEntryId')
+    const activeLeafEntryId = session?.activeLeafEntryId
 
     if (existingByIdempotency !== null) {
       const replayAttempt = normalizeEntryForStorage(args, args.ownerKey, {
-        parentEntryId: optionalStringField(existingByIdempotency, 'parentEntryId'),
-        seq: numberField(existingByIdempotency, 'seq'),
+        parentEntryId: existingByIdempotency.parentEntryId,
+        seq: existingByIdempotency.seq,
         idempotencyKey,
       })
 
-      if (replayAttempt.requestHash === stringField(existingByIdempotency, 'requestHash')) {
+      if (replayAttempt.requestHash === existingByIdempotency.requestHash) {
         return {
           status: 'replayed' as const,
           entry: toEntryReceipt(existingByIdempotency),
@@ -263,7 +257,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
       })
     }
 
-    if (session !== null && stringField(session, 'ownerKey') !== args.ownerKey) {
+    if (session !== null && session.ownerKey !== args.ownerKey) {
       return conflictResult({
         reason: 'parent_conflict',
         message: 'Session owner does not match the existing harness session.',
@@ -272,7 +266,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
     }
 
     const expectedParentEntryId = session === null ? undefined : activeLeafEntryId
-    const expectedSeq = session === null ? 1 : numberField(session, 'entryCount') + 1
+    const expectedSeq = session === null ? 1 : session.entryCount + 1
     const parentEntryId = args.parentEntryId ?? expectedParentEntryId
     const seq = args.seq ?? expectedSeq
 
@@ -282,7 +276,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
       idempotencyKey,
     })
 
-    const existingByEntryId = await db
+    const existingByEntryId = await ctx.db
       .query('harnessSessionEntries')
       .withIndex('by_sessionId_entryId', (query) =>
         query.eq('sessionId', args.sessionId).eq('entryId', args.entryId)
@@ -308,7 +302,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
       })
     }
 
-    await db.insert('harnessSessionEntries', attemptedEntry)
+    await ctx.db.insert('harnessSessionEntries', attemptedEntry)
 
     const sessionPatch = {
       activeLeafEntryId: attemptedEntry.entryId,
@@ -319,7 +313,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
     }
 
     if (session === null) {
-      await db.insert('harnessSessions', {
+      await ctx.db.insert('harnessSessions', {
         sessionId: attemptedEntry.sessionId,
         ownerKey: args.ownerKey,
         entryCount: attemptedEntry.seq,
@@ -330,7 +324,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
         ...(attemptedEntry.status === undefined ? {} : { status: attemptedEntry.status }),
       })
     } else {
-      await db.patch(session._id, sessionPatch)
+      await ctx.db.patch(session._id, sessionPatch)
     }
 
     return {
@@ -341,7 +335,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
   },
 })
 
-export const finalizeAnswerTurnHarnessRun = mutationGeneric({
+export const finalizeAnswerTurnHarnessRun = mutation({
   args: {
     turnId: v.string(),
     snapshotHash: v.string(),
@@ -384,8 +378,7 @@ export const finalizeAnswerTurnHarnessRun = mutationGeneric({
       }
     }
 
-    const db = runtimeDb(ctx.db)
-    const turn = await db
+    const turn = await ctx.db
       .query('answerTurns')
       .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
       .unique()
@@ -398,7 +391,7 @@ export const finalizeAnswerTurnHarnessRun = mutationGeneric({
       }
     }
 
-    if (stringField(turn, 'snapshotHash') !== args.snapshotHash) {
+    if (turn.snapshotHash !== args.snapshotHash) {
       return {
         status: 'conflict' as const,
         reason: 'snapshot_mismatch' as const,
@@ -406,7 +399,7 @@ export const finalizeAnswerTurnHarnessRun = mutationGeneric({
       }
     }
 
-    const currentEvidenceJson = stringField(turn, 'evidenceJson')
+    const currentEvidenceJson = turn.evidenceJson
     const currentFinalizationHash = readHarnessFinalizationHash(currentEvidenceJson)
     if (currentFinalizationHash !== undefined && currentFinalizationHash !== args.finalizationHash) {
       return {
@@ -416,24 +409,24 @@ export const finalizeAnswerTurnHarnessRun = mutationGeneric({
       }
     }
 
-    const validation = await validateHarnessSessionEntryBatch(db, args.entries.map(coerceFinalizationEntryInput))
+    const validation = await validateHarnessSessionEntryBatch(ctx.db, args.entries.map(coerceFinalizationEntryInput))
     if (validation.status === 'conflict') {
       return validation
     }
 
     const evidenceAlreadyFinal = currentFinalizationHash === args.finalizationHash || currentEvidenceJson === args.evidenceJson
     if (!evidenceAlreadyFinal) {
-      await db.patch(turn._id, { evidenceJson: args.evidenceJson })
+      await ctx.db.patch(turn._id, { evidenceJson: args.evidenceJson })
     }
 
     for (const entry of validation.entriesToInsert) {
-      await db.insert('harnessSessionEntries', entry)
+      await ctx.db.insert('harnessSessionEntries', entry)
     }
 
     if (validation.entriesToInsert.length > 0) {
       const lastEntry = validation.entriesToInsert.at(-1)
       if (lastEntry !== undefined) {
-        await upsertHarnessSessionForFinalization(db, validation.session, lastEntry)
+        await upsertHarnessSessionForFinalization(ctx.db, validation.session, lastEntry)
       }
     }
 
@@ -452,23 +445,22 @@ export const finalizeAnswerTurnHarnessRun = mutationGeneric({
   },
 })
 
-export const listHarnessSessionEntries = queryGeneric({
+export const listHarnessSessionEntries = query({
   args: {
     sessionId: v.string(),
     limit: v.optional(v.number()),
   },
   returns: listHarnessSessionEntriesResult,
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
     const limit = normalizeLimit(args.limit)
     const [session, rows] = await Promise.all([
-      db
+      ctx.db
         .query('harnessSessions')
         .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
         .unique(),
-      orderedQuery(
-        db.query('harnessSessionEntries').withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
-      )
+      ctx.db
+        .query('harnessSessionEntries')
+        .withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
         .order('desc')
         .take(limit),
     ])
@@ -478,23 +470,22 @@ export const listHarnessSessionEntries = queryGeneric({
       session: session === null ? null : toPublicSessionSummary(session),
       entries: rows.map(toPublicEntry).sort(comparePublicEntries),
       limit,
-      truncated: session !== null && numberField(session, 'entryCount') > rows.length,
+      truncated: session !== null && session.entryCount > rows.length,
     }
   },
 })
 
-export const listHarnessRunEntries = queryGeneric({
+export const listHarnessRunEntries = query({
   args: {
     runId: v.string(),
     limit: v.optional(v.number()),
   },
   returns: listHarnessRunEntriesResult,
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
     const limit = normalizeLimit(args.limit)
-    const rows = await orderedQuery(
-      db.query('harnessSessionEntries').withIndex('by_runId_seq', (query) => query.eq('runId', args.runId))
-    )
+    const rows = await ctx.db
+      .query('harnessSessionEntries')
+      .withIndex('by_runId_seq', (query) => query.eq('runId', args.runId))
       .order('desc')
       .take(limit)
 
@@ -507,16 +498,15 @@ export const listHarnessRunEntries = queryGeneric({
   },
 })
 
-export const readAdminHarnessSessionEntries = queryGeneric({
+export const readAdminHarnessSessionEntries = query({
   args: {
     sessionId: v.string(),
     limit: v.optional(v.number()),
   },
   returns: readAdminHarnessSessionEntriesResult,
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
     const limit = normalizeLimit(args.limit)
-    const authority = await resolveAdminAuthority({ db, auth: ctx.auth }, 'read_admin_readbacks')
+    const authority = await resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'read_admin_readbacks')
     if (authority.kind === 'denied') {
       return {
         kind: 'denied' as const,
@@ -529,13 +519,13 @@ export const readAdminHarnessSessionEntries = queryGeneric({
     }
 
     const [session, rows] = await Promise.all([
-      db
+      ctx.db
         .query('harnessSessions')
         .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
         .unique(),
-      orderedQuery(
-        db.query('harnessSessionEntries').withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
-      )
+      ctx.db
+        .query('harnessSessionEntries')
+        .withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
         .order('desc')
         .take(limit),
     ])
@@ -545,7 +535,7 @@ export const readAdminHarnessSessionEntries = queryGeneric({
       session: session === null ? null : toSessionSummary(session),
       entries: rows.map(toPrivateEntry).sort(comparePrivateEntries),
       limit,
-      truncated: session !== null && numberField(session, 'entryCount') > rows.length,
+      truncated: session !== null && session.entryCount > rows.length,
     }
   },
 })
@@ -613,7 +603,7 @@ function coerceFinalizationEntryInput(input: {
 }
 
 async function validateHarnessSessionEntryBatch(
-  db: ReturnType<typeof runtimeDb>,
+  db: MutationCtx['db'],
   entries: ReadonlyArray<{
     ownerKey: string
     entryId: string
@@ -637,7 +627,7 @@ async function validateHarnessSessionEntryBatch(
 ): Promise<
   | {
       status: 'ok'
-      session: RuntimeDocument | null
+      session: Doc<'harnessSessions'> | null
       activeLeafEntryId: string | undefined
       entriesToInsert: Array<HarnessSessionEntry & { ownerKey: string }>
       entriesReplayed: number
@@ -675,9 +665,9 @@ async function validateHarnessSessionEntryBatch(
     .withIndex('by_sessionId', (query) => query.eq('sessionId', first.sessionId))
     .unique()
 
-  let activeLeafEntryId = optionalStringField(session ?? {}, 'activeLeafEntryId')
-  let entryCount = session === null ? 0 : numberField(session, 'entryCount')
-  let sessionOwnerKey = session === null ? first.ownerKey : stringField(session, 'ownerKey')
+  let activeLeafEntryId = session?.activeLeafEntryId
+  let entryCount = session === null ? 0 : session.entryCount
+  let sessionOwnerKey = session === null ? first.ownerKey : session.ownerKey
   const entriesToInsert: Array<HarnessSessionEntry & { ownerKey: string }> = []
   let entriesReplayed = 0
 
@@ -710,11 +700,11 @@ async function validateHarnessSessionEntryBatch(
 
     if (existingByIdempotency !== null) {
       const replayAttempt = normalizeEntryForStorage(entry, entry.ownerKey, {
-        parentEntryId: optionalStringField(existingByIdempotency, 'parentEntryId'),
-        seq: numberField(existingByIdempotency, 'seq'),
+        parentEntryId: existingByIdempotency.parentEntryId,
+        seq: existingByIdempotency.seq,
         idempotencyKey,
       })
-      if (replayAttempt.requestHash !== stringField(existingByIdempotency, 'requestHash')) {
+      if (replayAttempt.requestHash !== existingByIdempotency.requestHash) {
         return {
           status: 'conflict',
           reason: 'idempotency_conflict',
@@ -776,8 +766,8 @@ async function validateHarnessSessionEntryBatch(
 }
 
 async function upsertHarnessSessionForFinalization(
-  db: ReturnType<typeof runtimeDb>,
-  session: RuntimeDocument | null,
+  db: MutationCtx['db'],
+  session: Doc<'harnessSessions'> | null,
   lastEntry: HarnessSessionEntry & { ownerKey: string },
 ): Promise<void> {
   const patch = {
@@ -813,10 +803,6 @@ function readHarnessFinalizationHash(evidenceJson: string): string | undefined {
   } catch {
     return undefined
   }
-}
-
-function orderedQuery(query: RuntimeQuery): OrderedRuntimeQuery {
-  return query as OrderedRuntimeQuery
 }
 
 function normalizeEntryForStorage(
@@ -868,7 +854,6 @@ function normalizeEntryForStorage(
   }
 }
 
-
 function conflictResult(input: {
   reason: 'entry_id_conflict' | 'idempotency_conflict' | 'parent_conflict'
   message: string
@@ -893,7 +878,7 @@ function conflictResult(input: {
   }
 }
 
-function toSessionSummary(row: RuntimeDocument): {
+function toSessionSummary(row: Doc<'harnessSessions'>): {
   sessionId: string
   ownerKey: string
   entryCount: number
@@ -903,39 +888,37 @@ function toSessionSummary(row: RuntimeDocument): {
   createdAt: number
   updatedAt: number
 } {
-  const activeLeafEntryId = optionalStringField(row, 'activeLeafEntryId')
-  const lastRunId = optionalStringField(row, 'lastRunId')
-  const status = harnessStatusField(row)
+  const status = harnessStatusValue(row.status)
   return {
-    sessionId: stringField(row, 'sessionId'),
-    ownerKey: stringField(row, 'ownerKey'),
-    entryCount: numberField(row, 'entryCount'),
-    ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
-    ...(lastRunId === undefined ? {} : { lastRunId }),
+    sessionId: row.sessionId,
+    ownerKey: row.ownerKey,
+    entryCount: row.entryCount,
+    ...(row.activeLeafEntryId === undefined ? {} : { activeLeafEntryId: row.activeLeafEntryId }),
+    ...(row.lastRunId === undefined ? {} : { lastRunId: row.lastRunId }),
     ...(status === undefined ? {} : { status }),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   }
 }
 
-function toPublicSessionSummary(row: RuntimeDocument): {
+function toPublicSessionSummary(row: Doc<'harnessSessions'>): {
   sessionId: string
   entryCount: number
   status?: HarnessRunStatus
   createdAt: number
   updatedAt: number
 } {
-  const status = harnessStatusField(row)
+  const status = harnessStatusValue(row.status)
   return {
-    sessionId: stringField(row, 'sessionId'),
-    entryCount: numberField(row, 'entryCount'),
+    sessionId: row.sessionId,
+    entryCount: row.entryCount,
     ...(status === undefined ? {} : { status }),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   }
 }
 
-function toEntryReceipt(row: RuntimeDocument | (HarnessSessionEntry & { ownerKey?: string })): {
+function toEntryReceipt(row: Doc<'harnessSessionEntries'> | (HarnessSessionEntry & { ownerKey?: string })): {
   entryId: string
   sessionId: string
   runId: string
@@ -947,24 +930,22 @@ function toEntryReceipt(row: RuntimeDocument | (HarnessSessionEntry & { ownerKey
   idempotencyKey: string
   createdAt: number
 } {
-  const turnId = optionalStringField(row, 'turnId')
-  const parentEntryId = optionalStringField(row, 'parentEntryId')
-  const status = harnessStatusField(row)
+  const status = harnessStatusValue(row.status)
   return {
-    entryId: stringField(row, 'entryId'),
-    sessionId: stringField(row, 'sessionId'),
-    runId: stringField(row, 'runId'),
-    ...(turnId === undefined ? {} : { turnId }),
-    seq: numberField(row, 'seq'),
-    ...(parentEntryId === undefined ? {} : { parentEntryId }),
-    kind: harnessKindField(row),
+    entryId: row.entryId,
+    sessionId: row.sessionId,
+    runId: row.runId,
+    ...(row.turnId === undefined ? {} : { turnId: row.turnId }),
+    seq: row.seq,
+    ...(row.parentEntryId === undefined ? {} : { parentEntryId: row.parentEntryId }),
+    kind: harnessKindValue(row.kind),
     ...(status === undefined ? {} : { status }),
-    idempotencyKey: stringField(row, 'idempotencyKey'),
-    createdAt: numberField(row, 'createdAt'),
+    idempotencyKey: row.idempotencyKey,
+    createdAt: row.createdAt,
   }
 }
 
-function toPrivateEntry(row: RuntimeDocument): {
+function toPrivateEntry(row: Doc<'harnessSessionEntries'>): {
   entryId: string
   sessionId: string
   ownerKey: string
@@ -985,38 +966,33 @@ function toPrivateEntry(row: RuntimeDocument): {
   sourceSnapshotHash?: string
 } {
   const receipt = toEntryReceipt(row)
-  const publicSummaryJson = optionalStringField(row, 'publicSummaryJson')
-  const privatePayloadJson = optionalStringField(row, 'privatePayloadJson')
-  const toolContractHash = optionalStringField(row, 'toolContractHash')
-  const sourceSnapshotHash = optionalStringField(row, 'sourceSnapshotHash')
   return {
     ...receipt,
-    ownerKey: stringField(row, 'ownerKey'),
-    requestHash: stringField(row, 'requestHash'),
-    payloadJson: stringField(row, 'payloadJson'),
-    ...(publicSummaryJson === undefined ? {} : { publicSummaryJson }),
-    ...(privatePayloadJson === undefined ? {} : { privatePayloadJson }),
-    schemaVersion: numberField(row, 'schemaVersion'),
-    ...(toolContractHash === undefined ? {} : { toolContractHash }),
-    ...(sourceSnapshotHash === undefined ? {} : { sourceSnapshotHash }),
+    ownerKey: row.ownerKey,
+    requestHash: row.requestHash,
+    payloadJson: row.payloadJson,
+    ...(row.publicSummaryJson === undefined ? {} : { publicSummaryJson: row.publicSummaryJson }),
+    ...(row.privatePayloadJson === undefined ? {} : { privatePayloadJson: row.privatePayloadJson }),
+    schemaVersion: row.schemaVersion,
+    ...(row.toolContractHash === undefined ? {} : { toolContractHash: row.toolContractHash }),
+    ...(row.sourceSnapshotHash === undefined ? {} : { sourceSnapshotHash: row.sourceSnapshotHash }),
   }
 }
 
-function toPublicEntry(row: RuntimeDocument): {
+function toPublicEntry(row: Doc<'harnessSessionEntries'>): {
   seq: number
   kind: HarnessSessionEntryKind
   status?: HarnessRunStatus
   createdAt: number
   publicSummaryJson?: string
 } {
-  const status = harnessStatusField(row)
-  const publicSummaryJson = optionalStringField(row, 'publicSummaryJson')
+  const status = harnessStatusValue(row.status)
   return {
-    seq: numberField(row, 'seq'),
-    kind: harnessKindField(row),
+    seq: row.seq,
+    kind: harnessKindValue(row.kind),
     ...(status === undefined ? {} : { status }),
-    createdAt: numberField(row, 'createdAt'),
-    ...(publicSummaryJson === undefined ? {} : { publicSummaryJson }),
+    createdAt: row.createdAt,
+    ...(row.publicSummaryJson === undefined ? {} : { publicSummaryJson: row.publicSummaryJson }),
   }
 }
 
@@ -1035,21 +1011,6 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(Math.trunc(limit), 1), 500)
 }
 
-function stringField(row: Record<string, unknown>, field: string): string {
-  const value = row[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(row: Record<string, unknown>, field: string): string | undefined {
-  const value = row[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(row: Record<string, unknown>, field: string): number {
-  const value = row[field]
-  return typeof value === 'number' ? value : 0
-}
-
 function harnessKindValue(value: unknown): HarnessSessionEntryKind {
   return HarnessSessionEntryKindValues.includes(value as HarnessSessionEntryKind)
     ? value as HarnessSessionEntryKind
@@ -1058,12 +1019,4 @@ function harnessKindValue(value: unknown): HarnessSessionEntryKind {
 
 function harnessStatusValue(value: unknown): HarnessRunStatus | undefined {
   return HarnessRunStatusValues.includes(value as HarnessRunStatus) ? value as HarnessRunStatus : undefined
-}
-
-function harnessKindField(row: Record<string, unknown>): HarnessSessionEntryKind {
-  return harnessKindValue(stringField(row, 'kind'))
-}
-
-function harnessStatusField(row: Record<string, unknown>): HarnessRunStatus | undefined {
-  return harnessStatusValue(optionalStringField(row, 'status'))
 }

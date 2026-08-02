@@ -1,11 +1,10 @@
-import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
+import { rehydrateCapabilitySelectionKey, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { routeChoiceSignature } from '@/modules/customer-request/compiler'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
-import { rebindStoredFacts } from '../interpret-compile'
+import { rebindPlanSelections, rebindStoredFacts } from '../interpret-compile'
 import type {
-  RefineAggregate,
   RefineCustomerRequestInput,
   RefineCustomerRequestPorts,
   RefineCustomerRequestResult,
@@ -110,20 +109,21 @@ export async function refineCustomerRequest(
     const graph = await ports.loadRequestGraph(current.aggregate.snapshot.networkId)
     if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
     const reboundFacts = rebindStoredFacts(current.aggregate.snapshot.facts as never, graph.models)
-    const selections = current.aggregate.plan.actions.flatMap((action: RefineAggregate['plan']['actions'][number]) => {
-      const model = graph.models.find((candidate) => (
-        sameCapabilityContractRef(candidate.contractRef, action.contractRef)
-      ))
-      if (model === undefined || model.selectionKey !== action.selectionKey
-        || model.semanticDigest !== action.semanticDigest) return []
-      return [{
-        selectionKey: model.selectionKey,
-        contractRef: model.contractRef,
-        facts: reboundFacts.filter((fact) => fact.selectionKey === model.selectionKey
-          && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
-      }]
-    })
-    if (selections.length !== current.aggregate.plan.actions.length) {
+    const planActions: readonly Readonly<{
+      contractRef: CapabilityContractRef
+      selectionKey: string
+      semanticDigest: string
+    }>[] = current.aggregate.plan.actions
+    const selections = rebindPlanSelections(
+      planActions.map(({ contractRef, selectionKey, semanticDigest }) => ({
+        contractRef,
+        selectionKey: rehydrateCapabilitySelectionKey(selectionKey),
+        semanticDigest,
+      })),
+      reboundFacts,
+      graph.models,
+    )
+    if (selections === undefined) {
       return projectNeedsAttention({
         requestRef: input.requestRef,
         revision: input.expectedRevision,

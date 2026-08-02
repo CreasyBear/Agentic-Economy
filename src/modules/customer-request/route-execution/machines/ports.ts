@@ -5,7 +5,6 @@ import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-ad
 import type {
   AttemptRecordSnapshot,
   DispatchRecordSnapshot,
-  LeaseResult,
   MandateLoadResult,
   OutcomeResult,
   PriorRunCommand,
@@ -137,24 +136,6 @@ export type JournalMutationPorts = Readonly<{
     head: RunHeadSnapshot | null
   }>) => Promise<StartResult>
 
-  scanPendingDispatches: (now: number) => Promise<readonly DispatchRecordSnapshot[]>
-
-  failExpiredUnreleasedAttempt: (input: Readonly<{
-    dispatchRef: string
-    attemptRef: string
-    now: number
-  }>) => Promise<void>
-
-  grantDispatchLease: (input: Readonly<{
-    dispatchRef: string
-    attemptRef: string
-    workerId: string
-    leaseExpiresAt: number
-    leaseDurationMs: number
-    now: number
-  }>) => Promise<LeaseResult>
-
-  scheduleExpiredDispatchCleanup: (now: number) => Promise<void>
 
   validateAttemptOutput: (
     attemptRef: string,

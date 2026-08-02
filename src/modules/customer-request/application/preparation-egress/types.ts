@@ -33,7 +33,6 @@ export type PreparationMutationResult = Readonly<
       kind: 'needs_attention'
       reason:
         | 'capability_graph_changed'
-        | 'historical_request_resubmit_required'
         | 'preparation_recipient_unsupported'
     }
   | {

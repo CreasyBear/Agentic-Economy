@@ -1,20 +1,3 @@
-import {
-  bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesImpl,
-  closeInquiry as closeInquiryImpl,
-  createEmptyInquirySourceState as createEmptyInquirySourceStateImpl,
-  deleteInquiryPrivateContent as deleteInquiryPrivateContentImpl,
-  evaluateInquiryLaunchSupportReadiness as evaluateInquiryLaunchSupportReadinessImpl,
-  listOwnerInbox as listOwnerInboxImpl,
-  markInquiryRead as markInquiryReadImpl,
-  readCustomerRecord as readCustomerRecordImpl,
-  readInquiryPrivacyTombstone as readInquiryPrivacyTombstoneImpl,
-  readInquiryDeliveryReadback as readInquiryDeliveryReadbackImpl,
-  readInquiryOperatorReconstruction as readInquiryOperatorReconstructionImpl,
-  readOwnerInquiry as readOwnerInquiryImpl,
-  replyToInquiry as replyToInquiryImpl,
-  requestInquiryExport as requestInquiryExportImpl,
-  submitInquiry as submitInquiryImpl,
-} from './internal/commands'
 
 export type {
   BindInquiryNotificationDispatchesCommand,
@@ -39,8 +22,7 @@ export type {
   SubmitInquiryErrorCode,
   SubmitInquiryResult,
 } from './internal/commands'
-export type { InquirySourceStatePorts } from './internal/ledger/ports'
-export type { InquiryNotificationPorts } from './internal/notification-ports'
+export type { InquirySourceStateLoadScope } from './internal/ledger/ports'
 export type {
   CapabilityLaunchSupportRecord,
   InquiryAuditRecord,
@@ -113,10 +95,19 @@ export {
   InquiryUnsafeFutureSurfaceFieldValues,
   OwnerInboxBucketValues,
 } from './internal/schema'
+export {
+  serializeCustomerRecord,
+  serializeInquiryDeliveryReadback,
+  serializeInquiryExport,
+  serializeInquiryPrivacyTombstone,
+  serializeOwnerInbox,
+  serializeOwnerInquiryDetail,
+} from './internal/projections/serialize'
 export { findUnsafeInquiryActionIntent } from './internal/policy'
 export type { InquiryUnsafeActionIntent } from './internal/policy'
 export {
   evaluateR1TargetAdmission,
+  unconfiguredR1TargetAdmission,
   R1TargetAdmissionVersion,
 } from './internal/admission'
 export type {
@@ -159,27 +150,21 @@ export type {
   GovernedSendIntegrityTargetBinding,
   GovernedSendReceiptRecord,
 } from './internal/governed-send'
-export {
-  serializeCustomerRecord,
-  serializeInquiryDeliveryReadback,
-  serializeInquiryExport,
-  serializeInquiryPrivacyTombstone,
-  serializeOwnerInbox,
-  serializeOwnerInquiryDetail,
-} from './internal/projections/serialize'
 
-export const createEmptyInquirySourceState = createEmptyInquirySourceStateImpl
-export const submitInquiry = submitInquiryImpl
-export const bindInquiryNotificationDispatches = bindInquiryNotificationDispatchesImpl
-export const listOwnerInbox = listOwnerInboxImpl
-export const readOwnerInquiry = readOwnerInquiryImpl
-export const markInquiryRead = markInquiryReadImpl
-export const replyToInquiry = replyToInquiryImpl
-export const closeInquiry = closeInquiryImpl
-export const readCustomerRecord = readCustomerRecordImpl
-export const readInquiryDeliveryReadback = readInquiryDeliveryReadbackImpl
-export const readInquiryOperatorReconstruction = readInquiryOperatorReconstructionImpl
-export const requestInquiryExport = requestInquiryExportImpl
-export const deleteInquiryPrivateContent = deleteInquiryPrivateContentImpl
-export const readInquiryPrivacyTombstone = readInquiryPrivacyTombstoneImpl
-export const evaluateInquiryLaunchSupportReadiness = evaluateInquiryLaunchSupportReadinessImpl
+export {
+  createEmptyInquirySourceState,
+  submitInquiry,
+  bindInquiryNotificationDispatches,
+  listOwnerInbox,
+  readOwnerInquiry,
+  markInquiryRead,
+  replyToInquiry,
+  closeInquiry,
+  readCustomerRecord,
+  readInquiryDeliveryReadback,
+  readInquiryOperatorReconstruction,
+  requestInquiryExport,
+  deleteInquiryPrivateContent,
+  readInquiryPrivacyTombstone,
+  evaluateInquiryLaunchSupportReadiness,
+} from './internal/commands'

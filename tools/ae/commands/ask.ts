@@ -1,7 +1,9 @@
+import { readAnswerTurnFrames } from '@/modules/answer/public'
+
 import type { CliOptions } from '../lib/args'
 import { CliFailure, heading, line, printJson } from '../lib/output'
 
-/** /api/answer/turn streams server-sent events rather than a JSON document. */
+/** /api/answer/turn streams AI SDK UI message chunks rather than a JSON document. */
 export async function runAskCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (query.length === 0) throw new CliFailure('Usage: ae ask "<question>"')
@@ -18,7 +20,7 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
     throw new CliFailure(`/api/answer/turn returned ${response.status}\n${text.slice(0, 600)}`)
   }
 
-  const events = await readEventStream(response)
+  const events = await readTurnEvents(response)
   const durationMs = Date.now() - startedAt
 
   if (options.json) {
@@ -33,18 +35,11 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
   }
 }
 
-async function readEventStream(response: Response): Promise<readonly unknown[]> {
-  const raw = await response.text()
+async function readTurnEvents(response: Response): Promise<readonly unknown[]> {
+  if (response.body === null) return []
   const events: unknown[] = []
-  for (const chunk of raw.split('\n')) {
-    if (!chunk.startsWith('data:')) continue
-    const payload = chunk.slice('data:'.length).trim()
-    if (payload.length === 0) continue
-    try {
-      events.push(JSON.parse(payload))
-    } catch {
-      events.push(payload)
-    }
+  for await (const frame of readAnswerTurnFrames(response.body)) {
+    events.push(frame.event)
   }
   return events
 }

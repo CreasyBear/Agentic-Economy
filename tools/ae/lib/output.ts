@@ -70,7 +70,4 @@ export function table(rows: readonly (readonly [string, string])[]): void {
   }
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 

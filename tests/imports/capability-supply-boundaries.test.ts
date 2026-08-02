@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../helpers/source-files'
 
 const neutralSources = [
   'src/modules/capability-supply/public.ts',
@@ -46,7 +47,7 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('publishBusinessCatalogCommand')
     expect(seed).toContain('setCapabilitySupplyEligibilityCommand')
     expect(seed).toContain('DEV_SEED_BUSINESS_FIXTURES.filter')
-    expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessServices|capabilityOfferings|capabilityTransportBindings)['"]/)
+    expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
 
   it('keeps publication importers production-owned and fixture-independent', () => {
@@ -74,14 +75,4 @@ function sources(): string[] {
   ]
 }
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

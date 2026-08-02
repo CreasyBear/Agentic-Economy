@@ -14,6 +14,7 @@ import {
   markJourneyViewedAfterReopenWindow,
 } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
+import { isRecord } from '@/modules/common/is-record'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
   aeSearchContextLocationLabel,
@@ -427,8 +428,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const scrollerKey = routeThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
   const defaultScrollPosition =
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
-  const settleMessageId =
-    liveTurn === null && completedTurns.length > 0 ? (completedTurns[completedTurns.length - 1]?.turnId ?? null) : null
+  const settleMessageId = liveTurn === null ? (completedTurns.at(-1)?.turnId ?? null) : null
   const followUpComposerCopy = buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
 
   // Both large-screen column states are explicit so the content column resizes
@@ -449,22 +449,22 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       >
         <DialogContent
           id="ae-thread-mobile-sidebar"
-          role="dialog"
-          aria-labelledby="ae-thread-mobile-sidebar-title"
           className="h-dvh w-dvw max-w-none rounded-none border-0 bg-transparent p-0 shadow-none lg:hidden"
           showCloseButton={false}
         >
         <div className="relative h-dvh w-dvw overflow-hidden">
-          <button
+          <Button
             type="button"
-            className="absolute inset-0 bg-primary/20"
+            variant="ghost"
+            size="icon"
+            className="absolute inset-0 size-auto rounded-none bg-primary/20 hover:bg-primary/20 dark:hover:bg-primary/20"
             aria-label="Close recent questions panel"
             tabIndex={-1}
             onClick={closeMobileSidebar}
           />
         <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-background shadow-low">
             <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4">
-              <DialogTitle id="ae-thread-mobile-sidebar-title" className="font-heading text-base font-semibold text-foreground">
+              <DialogTitle className="font-heading text-base font-semibold text-foreground">
                 Recent questions
               </DialogTitle>
               <DialogDescription className="sr-only">Choose a recent question to reopen.</DialogDescription>
@@ -664,7 +664,7 @@ function mergeProjectionWithOptimisticTurns(input: {
 
   return {
     ...input.serverProjection,
-    turns: [...input.serverProjection.turns, ...pendingTurns].sort((left, right) => left.seq - right.seq),
+    turns: [...input.serverProjection.turns, ...pendingTurns].toSorted((left, right) => left.seq - right.seq),
   } satisfies PublicThreadProjection
 }
 
@@ -740,7 +740,7 @@ function mergeThreadRecords(
     return incomingIds.has(sanitized.threadId) ? [] : [sanitized]
   })
   return [...normalizedIncoming, ...optimistic]
-    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .toSorted((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, RECENT_THREADS_LIMIT)
 }
 
@@ -789,9 +789,7 @@ function writeStoredThreadRecords(threads: readonly AnswerThreadRecord[]): void 
 }
 
 function readStoredThreadRecord(value: unknown): AnswerThreadRecord[] {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return []
-  }
+  if (!isRecord(value)) return []
   const record = value as Partial<AnswerThreadRecord>
   if (
     typeof record.threadId !== 'string' ||

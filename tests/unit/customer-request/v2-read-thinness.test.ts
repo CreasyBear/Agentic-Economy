@@ -1,7 +1,8 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const hostSource = readFileSync('convex/customerRequestV2.ts', 'utf8')
 const readPortsSource = readFileSync('convex/customerRequestV2ReadPorts.ts', 'utf8')
@@ -25,16 +26,7 @@ const moduleFiles = [
 ] as const
 
 function collectModuleSources(root: string): string[] {
-  const sources: string[] = []
-  for (const entry of readdirSync(root)) {
-    const path = join(root, entry)
-    if (statSync(path).isDirectory()) {
-      sources.push(...collectModuleSources(path))
-      continue
-    }
-    if (path.endsWith('.ts')) sources.push(readFileSync(path, 'utf8'))
-  }
-  return sources
+  return listTsFiles(root).map((path) => readFileSync(path, 'utf8'))
 }
 
 describe('customer-request v2-read thinness', () => {
@@ -105,11 +97,19 @@ describe('customer-request v2-read thinness', () => {
     }
   })
 
-  it('does not reopen ADR-014 write ports or absorb reads into WritePorts', () => {
-    expect(writePortsSource).not.toContain('getCurrentAggregate')
-    expect(writePortsSource).not.toContain('getRoutePlanGenerationRefreshReplay')
-    expect(writePortsSource).not.toContain('customerRequestV2ReadPorts(')
-    expect(writePortsSource).not.toContain('CustomerRequestV2ReadPorts')
+  it('composes shared read ports without redefining read mappers in WritePorts', () => {
+    expect(writePortsSource).toContain('customerRequestV2ReadPorts(')
+    // Read mapper/query names may be IMPORTED from ReadPorts but never redefined here.
+    for (const symbol of [
+      'toGenerationCommandRow',
+      'toRequestHead',
+      'toRoutePlanHead',
+      'domainRouteGeneration',
+      'domainAggregate',
+      'loadCurrentDecisionAggregate',
+    ]) {
+      expect(writePortsSource).not.toMatch(new RegExp(`(?:function|const)\\s+${symbol}\\b`))
+    }
     expect(writePortsSource).not.toContain('export async function readExactRoutePlanGeneration')
     expect(writePortsSource).not.toContain('export async function readGenerationRefreshCommandResult')
     expect(writePortsSource).not.toContain('export async function readCurrentDecisionAggregate')

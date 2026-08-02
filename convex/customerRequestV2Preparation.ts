@@ -25,8 +25,7 @@ const prepareResultValue = v.union(
   v.object({
     kind: v.literal('needs_attention'),
     reason: v.union(
-      v.literal('capability_graph_changed'), v.literal('historical_request_resubmit_required'),
-      v.literal('preparation_recipient_unsupported'),
+      v.literal('capability_graph_changed'), v.literal('preparation_recipient_unsupported'),
     ),
   }),
   v.object({
@@ -52,7 +51,7 @@ export const prepare = internalMutation({
   returns: prepareResultValue,
   handler: async (ctx, args): Promise<Infer<typeof prepareResultValue>> => (
     await prepareActionPreparationMachine(
-      args as unknown as Parameters<typeof prepareActionPreparationMachine>[0],
+      args,
       customerRequestV2PreparationPorts(ctx),
     ) as Infer<typeof prepareResultValue>
   ),
@@ -63,7 +62,7 @@ export const resume = internalQuery({
   returns: resumeResultValue,
   handler: async (ctx, args): Promise<Infer<typeof resumeResultValue>> => (
     await resumeActionPreparationMachine(
-      args as unknown as Parameters<typeof resumeActionPreparationMachine>[0],
+      args,
       customerRequestV2PreparationPorts(ctx),
     ) as Infer<typeof resumeResultValue>
   ),

@@ -59,7 +59,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       },
     ]
 
-    render(
+    renderWithRouter(
       <AeGenerativeAnswer
         artifacts={artifacts}
         query="message the first one"
@@ -178,7 +178,8 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
 function renderWithRouter(ui: ReactElement) {
   const rootRoute = createRootRoute()
   const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
-  const routeTree = rootRoute.addChildren([slugRoute])
+  const inquiryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug/inquiry' })
+  const routeTree = rootRoute.addChildren([slugRoute, inquiryRoute])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

@@ -1,4 +1,5 @@
 import type { BusinessId } from '@/modules/common/ids'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { notificationsForThread } from '../ledger/facts'
 import type {
@@ -126,7 +127,7 @@ function operatorReconstructionRow(state: InquirySourceState, thread: InquiryThr
     rowId: `inquiry-operator:${thread.threadId}`,
     threadId: thread.threadId,
     businessId: thread.businessId,
-    serviceId: thread.serviceId,
+    offeringRef: thread.offeringRef,
     status: thread.status,
     sourceHash: thread.sourceHash,
     correlationIds: uniqueStrings([
@@ -222,6 +223,6 @@ function redactedPayloadHasValue(value: StableHashValue, needle: string): boolea
   return false
 }
 
-function uniqueStrings(values: readonly (string | undefined)[]): string[] {
-  return Array.from(new Set(values.filter((value): value is string => value !== undefined && value.length > 0))).sort()
+function uniqueStrings(values: readonly (string | undefined)[]): readonly string[] {
+  return uniqueSorted(values.filter((value): value is string => value !== undefined && value.length > 0))
 }

@@ -7,7 +7,7 @@ import {
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
+import { capabilityContractV2, objectSchema } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('capability preparation projection', () => {
   it('owns commitment input, disclosure, and linked effect authority for one exact action', () => {
@@ -303,12 +303,3 @@ function requiredInput(model: CapabilityDecisionModel, annotationId: string) {
   return input
 }
 
-function objectSchema(properties: Record<string, unknown>, required: string[]) {
-  return {
-    $schema: 'https://json-schema.org/draft/2020-12/schema',
-    type: 'object',
-    properties,
-    required,
-    additionalProperties: false,
-  }
-}

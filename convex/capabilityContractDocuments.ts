@@ -6,7 +6,9 @@ import {
   type DurableCapabilityContract,
 } from '@/modules/capability-contract-registry/public'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
-import { stableHash, stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { internalQuery, mutation, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
@@ -59,7 +61,7 @@ export const register = mutation({
   ),
   handler: async (ctx, args) => {
     const authority = await resolveAdminAuthority(
-      { db: ctx.db as never, auth: ctx.auth },
+      { db: ctx.db, auth: ctx.auth },
       'register_capability_contract',
     )
     if (authority.kind !== 'allowed') {
@@ -76,7 +78,7 @@ export const register = mutation({
       return invalidContractResult(error)
     }
     const actorRef = authority.membership.clerkUserId
-    const requestHash = stableHash({
+    const requestHash = canonicalDigest({
       documentJson: encoded.documentJson,
       correlationId: args.correlationId,
       reasonCode: args.reasonCode,
@@ -122,7 +124,7 @@ export const register = mutation({
     if (result.kind === 'refused') {
       await ctx.db.patch(operationId, {
         status: 'failed_terminal',
-        resultHash: stableHash({ reason: result.reason }),
+        resultHash: canonicalDigest({ reason: result.reason }),
         updatedAt: registeredAt,
       })
       return result
@@ -138,7 +140,7 @@ export const register = mutation({
     })
     await ctx.db.patch(operationId, {
       status: 'succeeded',
-      resultHash: stableHash(result.ref),
+      resultHash: canonicalDigest(result.ref),
       effectRefs: [auditEventId],
       updatedAt: registeredAt,
     })
@@ -299,7 +301,7 @@ async function ensureRegistrationAudit(
     contractDigest: input.ref.contractDigest,
   } satisfies StableHashValue
   const redactedPayloadJson = stableStringify(redactedPayload)
-  const payloadHash = stableHash(redactedPayload)
+  const payloadHash = canonicalDigest(redactedPayload)
   const targetRef = `${input.ref.capabilityId}@${input.ref.version}:${input.ref.contractDigest}`
   const existing = await db.query('auditEvents')
     .withIndex('by_eventId', (query) => query.eq('eventId', eventId))

@@ -1,12 +1,15 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type {
   BuildCatalogDiscoveryManifestInput,
   BuildCatalogDiscoveryManifestResult,
-  DiscoveryManifestCapabilityContract,
   DiscoveryManifestContract,
   DiscoveryManifestRouteContract,
-  DiscoveryManifestServiceContract,
 } from '@/modules/discovery/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { projectManifestCatalog, safePublicText } from './manifest-projection'
+export { safePublicText } from './manifest-projection'
 
 export function buildCatalogDiscoveryManifest(
   input: BuildCatalogDiscoveryManifestInput
@@ -16,74 +19,43 @@ export function buildCatalogDiscoveryManifest(
   }
 
   const catalog = input.catalog
-  if (catalog.publicStatus !== 'published') {
-    return { kind: 'hidden', reason: 'not_public' }
-  }
-
-  const canonicalBaseUrl = trimTrailingSlash(input.canonicalBaseUrl)
-  const publicUrl = `${canonicalBaseUrl}/${catalog.slug}`
+  const catalogProjection = projectManifestCatalog(catalog, (offering, projection) => ({
+    ...projection,
+    accessPaths: offering.accessPaths.map(sanitizeAccessPath),
+    support: offering.support,
+  }))
+  const businessId = brandNonEmpty(catalogProjection.businessId, 'BusinessId')
+  const slug = brandNonEmpty(catalogProjection.slug, 'Slug')
+  const canonicalBaseUrl = trimTrailingSlashes(input.canonicalBaseUrl)
+  const publicUrl = `${canonicalBaseUrl}/${slug}`
   const manifestUrl = `${publicUrl}/ucp`
-  const routes = buildRoutes(canonicalBaseUrl, publicUrl, manifestUrl, catalog.slug)
-  const services = catalog.services.map(
-    (service): DiscoveryManifestServiceContract => ({
-      slug: service.serviceSlug,
-      name: safePublicText(service.name),
-      category: safePublicText(service.category),
-      summary: safePublicText(service.summary),
-      serviceArea: safePublicText(service.serviceArea),
-      hoursOrUnknown: safePublicText(service.hoursOrUnknown),
-      status: 'published',
-      capabilities: service.capabilities.map(
-        (capability): DiscoveryManifestCapabilityContract => ({
-          kind: capability.kind,
-          status: capability.status,
-          firstRequest: {
-            mode: capability.firstRequest.mode,
-            publicDisclosure: safePublicText(capability.firstRequest.publicDisclosure),
-            publicChannel: capability.firstRequest.publicChannel,
-            ...(capability.firstRequest.noContactReason === undefined
-              ? {}
-              : { noContactReason: safePublicText(capability.firstRequest.noContactReason) }),
-          },
-          callable: false,
-          paymentRequired: false,
-          ...(capability.reason === undefined ? {} : { reason: safePublicText(capability.reason) }),
-        })
-      ),
-    })
-  )
+  const routes = buildRoutes(canonicalBaseUrl, publicUrl, manifestUrl, slug)
+  const offerings = catalogProjection.offerings
   const body = {
     schemaVersion: 'ae-ucp-fallback:v1',
-    businessId: catalog.businessId,
-    slug: catalog.slug,
-    businessName: safePublicText(catalog.name),
-    category: safePublicText(catalog.category),
-    location: {
-      suburb: safePublicText(catalog.suburb),
-      stateTerritory: safePublicText(catalog.stateTerritory),
-      ...(catalog.postcode === undefined ? {} : { postcode: safePublicText(catalog.postcode) }),
-    },
+    businessCatalogSchemaVersion: catalog.schemaVersion,
+    businessId,
+    slug,
+    businessName: catalogProjection.businessName,
+    category: catalogProjection.category,
+    location: catalogProjection.location,
     publicUrl,
     manifestUrl,
     ucpVersion: 'v1',
     pathKind: 'ae_hosted_fallback',
-    status: catalog.discoveryStatus,
-    sourceHash: catalog.sourceHash,
+    disposition: catalog.disposition,
+    ...(input.sourceHash === undefined ? {} : { sourceHash: input.sourceHash }),
     sourceVersion: 'public-catalog:v1',
-    updatedAt: catalog.updatedAt,
+    observedAt: catalog.observedAt,
     routes,
-    services,
-    unsupportedCapabilities: {
-      callable: false,
-      paymentRequired: false,
-    },
-    ...degradedReason(catalog.discoveryStatus),
+    offerings,
+    ...degradedReason(catalog.disposition),
   } as const
-  const bodyHash = stableHash(body)
-  const urlHash = stableHash({ urls: routes.map((route) => route.url) })
-  const generatedHash = stableHash({
+  const bodyHash = canonicalDigest(body)
+  const urlHash = canonicalDigest({ urls: routes.map((route) => route.url) })
+  const generatedHash = canonicalDigest({
     bodyHash,
-    sourceHash: catalog.sourceHash,
+    ...(input.sourceHash === undefined ? {} : { sourceHash: input.sourceHash }),
     sourceVersion: 'public-catalog:v1',
     urlHash,
   })
@@ -96,6 +68,41 @@ export function buildCatalogDiscoveryManifest(
   }
 
   return { kind: 'available', manifest }
+}
+
+function sanitizeAccessPath(
+  path: PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'][number],
+): PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'][number] {
+  return path.kind === 'human_request'
+    ? {
+        ...path,
+        disclosure: safePublicText(path.disclosure),
+        ...(path.url === undefined ? {} : { url: safePublicText(path.url) }),
+      }
+    : {
+        ...path,
+        name: safePublicText(path.name),
+        summary: safePublicText(path.summary),
+        url: safePublicText(path.url),
+        ...(path.method === undefined ? {} : { method: safePublicText(path.method) }),
+        ...(path.documentationUrl === undefined ? {} : { documentationUrl: safePublicText(path.documentationUrl) }),
+        ...(path.interfaceDescription === undefined
+          ? {}
+          : {
+              interfaceDescription: {
+                format: safePublicText(path.interfaceDescription.format),
+                ...(path.interfaceDescription.url === undefined
+                  ? {}
+                  : { url: safePublicText(path.interfaceDescription.url) }),
+              },
+            }),
+        ...(path.authenticationSummary === undefined
+          ? {}
+          : { authenticationSummary: safePublicText(path.authenticationSummary) }),
+        ...(path.pricingSummary === undefined
+          ? {}
+          : { pricingSummary: safePublicText(path.pricingSummary) }),
+      }
 }
 
 function buildRoutes(
@@ -111,41 +118,18 @@ function buildRoutes(
   ]
 }
 
-function degradedReason(status: DiscoveryManifestContract['status']): { degradedReason?: string } {
-  if (status === 'available') {
+function degradedReason(
+  disposition: PublicBusinessCatalogApiV2Dto['disposition'],
+): { degradedReason?: string } {
+  if (disposition === 'current') {
     return {}
   }
 
-  if (status === 'stale') {
+  if (disposition === 'stale') {
     return { degradedReason: 'Discovery readback is stale for the current source catalog.' }
-  }
-
-  if (status === 'unavailable') {
-    return { degradedReason: 'Discovery readback is unavailable for the current source catalog.' }
   }
 
   return { degradedReason: 'Discovery readback has not succeeded for the current source catalog.' }
 }
 
-export function safePublicText(value: string): string {
-  return value
-    .normalize('NFKC')
-    .replace(/[\u202a-\u202e\u2066-\u2069]/gu, '')
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' ')
-    .replace(/javascript\s*:/giu, 'blocked-uri ')
-    .replace(/ignore previous instructions/giu, 'untrusted instruction')
-    .replace(/[`*_#>\[\]()]/gu, ' ')
-    .replace(/\bendpoint\b/giu, 'untrusted claim')
-    .replace(/\b(?:verified|callable|payable)\b/giu, 'untrusted claim')
-    .replace(/\b(?:checked|authority|price|booking|dispatch|action)\b/giu, 'untrusted claim')
-    .replace(/paymentRequired\s*[:=]\s*true/giu, 'untrusted claim')
-    .replaceAll('&', '\\u0026')
-    .replaceAll('<', '\\u003c')
-    .replaceAll('>', '\\u003e')
-    .trim()
-    .slice(0, 500)
-}
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/u, '')
-}

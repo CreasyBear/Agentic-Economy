@@ -1,6 +1,13 @@
-import type { NotificationOutboxSourceState } from './schema'
+import type { NotificationProviderFamily } from './schema'
 
-export type NotificationOutboxSourceStatePorts = Readonly<{
-  load: () => Promise<NotificationOutboxSourceState>
-  persist: (state: NotificationOutboxSourceState) => Promise<void>
-}>
+export type NotificationOutboxSourceStateLoadScope =
+  | Readonly<{ kind: 'thread'; inquiryThreadId: string; operationKeys?: readonly string[] }>
+  | Readonly<{ kind: 'dispatch'; dispatchId: string }>
+  | Readonly<{
+      kind: 'webhook'
+      providerFamily: NotificationProviderFamily
+      providerEventId: string
+      logicalObjectKey: string
+      dispatchId?: string
+    }>
+

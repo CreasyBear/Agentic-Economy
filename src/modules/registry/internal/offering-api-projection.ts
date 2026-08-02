@@ -3,6 +3,7 @@ import type {
   OfferingPrice,
   PublicAccessPath,
 } from '@/modules/catalog/public'
+import { normalizeTrustTier } from '@/modules/business/public'
 
 // Stays v2 across the `price` addition: an optional field a consumer can ignore
 // is not worth forcing every pinned reader to re-pin for.
@@ -75,6 +76,14 @@ export type PublicBusinessCatalogApiV2Dto = Readonly<{
 }>
 
 export type PublicBusinessCatalogApiV2Page = Readonly<{
+  kind: 'ok'
+  schemaVersion: typeof PublicBusinessCatalogApiSchemaVersion
+  page: readonly PublicBusinessCatalogApiV2Dto[]
+  isDone: boolean
+  continueCursor: string
+}>
+
+export type PublicBusinessCatalogApiV2SearchPage = Readonly<{
   kind: 'ok'
   schemaVersion: typeof PublicBusinessCatalogApiSchemaVersion
   query?: string
@@ -197,11 +206,6 @@ function spreadAvailability(value: string | undefined): { availabilitySummary?: 
  * boundary defaults them instead of trusting the compile-time shape of a
  * value that came off disk.
  */
-function normalizeTrustTier(value: unknown): PublicBusinessCatalogApiV2Dto['trustTier'] {
-  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified'
-    ? value
-    : 'claimed'
-}
 
 function normalizePhotos(value: unknown): readonly Readonly<{ url: string; alt: string }>[] {
   if (!Array.isArray(value)) return []
@@ -213,110 +217,7 @@ function normalizePhotos(value: unknown): readonly Readonly<{ url: string; alt: 
   })
 }
 
-export function summarizeOfferingAccess(dto: PublicBusinessCatalogApiV2Dto): Readonly<{
-  offeringNames: readonly string[]
-  access: PublicBusinessCatalogApiV2Dto['accessSummary']
-}> {
-  return {
-    offeringNames: dto.offerings.slice(0, 2).map((offering) => offering.name),
-    access: dto.accessSummary,
-  }
-}
 
-/** Explicit migration adapter. Remove after every business is in Offering mode. */
-export function adaptLegacyCatalogToOfferingApi(catalog: Readonly<{
-  businessId?: string
-  slug: string
-  name: string
-  category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
-  postcode?: string
-  publicUrl: string
-  trustTier: BusinessSupplyProjection['business']['trustTier']
-  responseTimeMinutes?: number
-  photos?: readonly Readonly<{ url: string; alt: string }>[]
-  updatedAt: number
-  services: readonly Readonly<{
-    slug: string
-    name: string
-    category: string
-    summary: string
-    serviceArea: string
-    hoursOrUnknown: string
-    firstRequest: Readonly<{
-      mode: 'inquiry_available' | 'quote_request_available' | 'not_available_yet'
-      publicDisclosure: string
-      publicChannel: 'public_business_contact' | 'ae_status_only' | 'not_available'
-    }>
-  }>[]
-}>): PublicBusinessCatalogApiV2Dto {
-  const offerings: PublicOfferingDto[] = catalog.services.map((service) => {
-    /**
-     * `mode` and `publicChannel` are independent V1 facts: a business can both
-     * publish a phone number and accept an AE inquiry. Collapsing them into a
-     * single channel silently dropped the inquiry path, and with it the
-     * "Send inquiry" step, wherever this adapter runs.
-     */
-    const requestable = service.firstRequest.mode !== 'not_available_yet'
-    const publishesPhone = service.firstRequest.publicChannel === 'public_business_contact'
-      && catalog.publishedPhone !== undefined
-    const accessPaths: PublicOfferingAccessPathDto[] = requestable
-      ? [
-          ...(publishesPhone ? [{
-            accessPathRef: `legacy-access:${catalog.slug}:${service.slug}:phone`,
-            kind: 'human_request' as const,
-            channel: 'phone' as const,
-            disclosure: service.firstRequest.publicDisclosure,
-          }] : []),
-          {
-            accessPathRef: `legacy-access:${catalog.slug}:${service.slug}`,
-            kind: 'human_request' as const,
-            channel: 'ae_inquiry' as const,
-            disclosure: service.firstRequest.publicDisclosure,
-          },
-        ]
-      : []
-    return {
-      offeringRef: `legacy-offering:${catalog.slug}:${service.slug}`,
-      revision: 1,
-      name: service.name,
-      category: service.category,
-      summary: service.summary,
-      serviceAreaSummary: service.serviceArea,
-      ...spreadAvailability(service.hoursOrUnknown),
-      // No `price`: the v1 service model has no price column, and a legacy row
-      // must not acquire a comparable number nobody published.
-      accessPaths,
-      support: { integrated: false, aeSupportedAction: false },
-    }
-  })
-  const paths = offerings.flatMap((offering) => offering.accessPaths)
-  return {
-    schemaVersion: PublicBusinessCatalogApiSchemaVersion,
-    businessId: catalog.businessId ?? `legacy-business:${catalog.slug}`,
-    slug: catalog.slug,
-    name: catalog.name,
-    category: catalog.category,
-    suburb: catalog.suburb,
-    stateTerritory: catalog.stateTerritory,
-    ...(catalog.publishedPhone === undefined ? {} : { publishedPhone: catalog.publishedPhone }),
-    ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
-    publicUrl: catalog.publicUrl,
-    trustTier: catalog.trustTier,
-    ...(catalog.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: catalog.responseTimeMinutes }),
-    photos: catalog.photos ?? [],
-    observedAt: catalog.updatedAt,
-    disposition: 'current',
-    offerings,
-    accessSummary: {
-      humanRequest: paths.some((path) => path.kind === 'human_request'),
-      externalOperation: false,
-      aeSupportedAction: false,
-    },
-  }
-}
 
 function projectAccessPath(path: PublicAccessPath): PublicOfferingAccessPathDto {
   return path.descriptor.kind === 'human_request'

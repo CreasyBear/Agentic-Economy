@@ -61,8 +61,8 @@ export function parseAgentJourneyCohortInput(value: unknown): AgentJourneyCohort
 export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
   const normalized = {
     request: input.request,
-    customerAnswers: cloneStableRecord(input.customerAnswers),
-    directAnswers: cloneStableRecord(input.directAnswers ?? {}),
+    customerAnswers: structuredClone(input.customerAnswers),
+    directAnswers: structuredClone(input.directAnswers ?? {}),
     providerOrigins: [...input.providerOrigins].sort(),
     maximumTotalCost: { ...input.maximumTotalCost },
     authorityScope: {
@@ -89,17 +89,4 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
 }
 
 export type FrozenAgentJourneyCohort = ReturnType<typeof freezeAgentJourneyCohort>
-
-
-function cloneStable(value: StableHashValue): StableHashValue {
-  if (value === null || typeof value !== 'object') return value
-  if (Array.isArray(value)) return value.map(cloneStable)
-  return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneStable(nested)]))
-}
-
-function cloneStableRecord(
-  value: Readonly<Record<string, StableHashValue>>,
-): Readonly<Record<string, StableHashValue>> {
-  return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneStable(nested)]))
-}
 

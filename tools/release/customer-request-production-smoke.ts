@@ -1,5 +1,7 @@
 import { pathToFileURL } from 'node:url'
 
+import { isRecord } from '../../src/modules/common/is-record'
+import { trimTrailingSlashes } from '../../src/modules/common/trim-trailing-slashes'
 import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
 import {
   freezeAgentJourneyCohort,
@@ -14,6 +16,7 @@ import {
 } from '../../src/modules/customer-request/hosted-agent-journey'
 
 import { verifyHostedCustomerRequestRelease } from './verify-customer-request-release'
+import { resolveVercelProtectionBypassSecret } from './work-tree-parity-release'
 
 const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
 
@@ -62,13 +65,13 @@ export function customerRequestProductionSmokeConfigFromEnvironment(
   agentApiKey = env.AE_CUSTOMER_REQUEST_API_KEY,
 ): CustomerRequestProductionSmokeConfig {
   const normalizedAgentKey = optionalText(agentApiKey)
-  const bypass = optionalText(env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET)
+  const bypass = resolveVercelProtectionBypassSecret(env)
   const revision = optionalText(env.AE_RELEASE_SOURCE_REVISION)
   const deploymentId = optionalText(env.AE_RELEASE_DEPLOYMENT_ID)
   const finish = parseFinish(env.AE_CUSTOMER_REQUEST_FINISH)
   const directBaseline = parseDirectBaseline(env, finish)
   return {
-    baseUrl: (env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/u, ''),
+    baseUrl: trimTrailingSlashes(env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL),
     ...(normalizedAgentKey === undefined ? {} : { agentApiKey: normalizedAgentKey }),
     ...(bypass === undefined ? {} : { deploymentProtectionBypass: bypass }),
     ...(revision === undefined ? {} : { expectedRevision: revision }),
@@ -209,8 +212,8 @@ function isSafeProviderOrigin(value: string): boolean {
 }
 
 function isMoney(value: unknown): value is Readonly<{ currency: string; amountMinor: number }> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const candidate = value as Record<string, unknown>
+  if (!isRecord(value)) return false
+  const candidate = value
   return typeof candidate.currency === 'string' && candidate.currency.length > 0
     && typeof candidate.amountMinor === 'number' && Number.isInteger(candidate.amountMinor)
     && candidate.amountMinor >= 0
@@ -269,8 +272,8 @@ function parseExpectedRoute(
 function isExpectedRecipient(
   value: unknown,
 ): value is Readonly<{ name: string; purposes: readonly string[] }> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const recipient = value as Record<string, unknown>
+  if (!isRecord(value)) return false
+  const recipient = value
   return typeof recipient.name === 'string' && recipient.name.length > 0
     && Array.isArray(recipient.purposes) && recipient.purposes.length > 0
     && recipient.purposes.every((purpose) => typeof purpose === 'string' && purpose.length > 0)
@@ -279,7 +282,7 @@ function isExpectedRecipient(
 function parseFacts(value: string | undefined): Readonly<Record<string, unknown>> {
   if (value === undefined || value.trim().length === 0) return {}
   const parsed: unknown = JSON.parse(value)
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new Error('AE_CUSTOMER_REQUEST_FACTS_JSON must be a JSON object keyed by requirementKey')
   }
   return parsed as Readonly<Record<string, unknown>>

@@ -2,6 +2,8 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AeInstantQuote } from '@/components/ae/services/AeInstantQuote'
@@ -39,7 +41,7 @@ describe('rider service surfaces', () => {
       id: `service:dental-checkup-${index}`,
       name: `Dental check-up option ${index + 1}`,
     }))
-    const { container } = render(
+    const { container } = renderWithRouter(
       <AeServiceList services={services} query="dental check-up in Adelaide" />,
     )
 
@@ -85,7 +87,7 @@ describe('rider service surfaces', () => {
       authority: 'inspect_only',
     }
 
-    render(<AeServiceList services={[]} query="dental check-up in Adelaide" plan={plan} />)
+    renderWithRouter(<AeServiceList services={[]} query="dental check-up in Adelaide" plan={plan} />)
 
     expect(screen.getByRole('heading', { name: 'Dental check-up in Adelaide' })).toBeTruthy()
     expect(screen.getByText('Ready for your decision')).toBeTruthy()
@@ -95,7 +97,7 @@ describe('rider service surfaces', () => {
   })
 
   it('gives an unmatched ask a useful retry and clear browsing boundary', () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <AeServiceList services={[]} query="moon dentist in Adelaide" />,
     )
 
@@ -208,3 +210,12 @@ const serviceWithDemoQuote = {
   },
   endpoints: [quoteEndpoint],
 } satisfies ServiceDto
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' })
+  const claimRoute = createRoute({ getParentRoute: () => rootRoute, path: '/claim' })
+  const routeTree = rootRoute.addChildren([indexRoute, claimRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+}

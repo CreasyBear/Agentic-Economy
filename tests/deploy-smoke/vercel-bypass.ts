@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { resolveVercelProtectionBypassSecret } from '../../tools/release/work-tree-parity-release'
 
 type RequestContextFactory = {
   newContext(options?: RequestContextOptions): Promise<APIRequestContext>
@@ -28,7 +29,7 @@ type RequestContextOptions = {
 }
 
 export function vercelProtectionBypassHeaders(options: { setBypassCookie?: boolean } = {}): Record<string, string> {
-  const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
+  const secret = resolveVercelProtectionBypassSecret(process.env)
 
   if (secret === undefined || secret.length === 0) {
     return {}

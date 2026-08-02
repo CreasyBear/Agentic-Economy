@@ -424,7 +424,8 @@ export const customerRequestTables = {
     .index('by_grantRef', ['grantRef'])
     .index('by_deviceCodeHash', ['deviceCodeHash'])
     .index('by_userCodeHash', ['userCodeHash'])
-    .index('by_authorizationCodeHash', ['authorizationCodeHash']),
+    .index('by_authorizationCodeHash', ['authorizationCodeHash'])
+    .index('by_expiresAt', ['expiresAt']),
 
   customerRequestAgentOAuthClients: defineTable({
     clientId: v.string(),

@@ -1,12 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { generateText } from 'ai'
+import type * as Ai from 'ai'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  buildFollowUpChipsSystemPrompt,
+  buildFollowUpChipsUserPrompt,
+} from '@/modules/answer/public'
 import {
   buildDeterministicFollowUpChips,
   buildFollowUpChips,
   classifyFollowUpIntent,
+  generateLlmFollowUpChips,
   validateFollowUpChip,
 } from '@/modules/answer-thread/public'
 import type { PublicThreadTurn } from '@/modules/answer-thread/public'
+
+vi.mock('ai', async (importOriginal) => ({
+  ...await importOriginal<typeof Ai>(),
+  generateText: vi.fn(),
+}))
+
+afterEach(() => {
+  vi.mocked(generateText).mockReset()
+  vi.unstubAllEnvs()
+})
 
 function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
   return {
@@ -74,6 +91,29 @@ describe('follow-up chips', () => {
     expect(chips.map((chip) => chip.submitQuery)).toContain('Compare the top two')
     expect(chips.some((chip) => chip.submitQuery.startsWith('Narrow to '))).toBe(true)
     expect(chips.map((chip) => chip.submitQuery)).not.toContain('What can Agentic Economy do here?')
+  })
+
+  it('uses v7 instructions for structured follow-up chips', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key')
+    vi.mocked(generateText).mockResolvedValue({
+      output: {
+        chips: [' Compare the top two ', 'Book now and pay today', 'Which take inquiries?'],
+      },
+    } as never)
+
+    const query = 'emergency plumber parramatta'
+    const providers = [provider()]
+    const chips = await generateLlmFollowUpChips({ query, providers })
+
+    expect(chips).toEqual(['Compare the top two', 'Which take inquiries?'])
+    const call = vi.mocked(generateText).mock.calls[0]
+    expect(call).toBeDefined()
+    const options = call?.[0]
+    expect(options).toMatchObject({
+      instructions: buildFollowUpChipsSystemPrompt(),
+      prompt: buildFollowUpChipsUserPrompt(query, providers),
+    })
+    expect(options).not.toHaveProperty('system')
   })
 
   it('appends validated LLM chips after deterministic chips', () => {

@@ -1,5 +1,5 @@
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateAuditEvent } from '@/modules/common/audit-events'
 import type { AuditEventContract, AuditEventSink, AuditTargetType } from '@/modules/common/audit-events'
 import type {
@@ -88,7 +88,7 @@ export type AdminAuthorityState = AuditEventSink & {
 
 export type AdminBootstrapCommand = {
   clerkUserId: string
-  tokenIdentifier?: string
+  tokenIdentifier: string
   authorizedClerkUserIds: readonly string[]
   reasonCode: string
   evidenceRefs: readonly string[]
@@ -100,7 +100,7 @@ export type AdminBootstrapCommand = {
 export type AdminGrantMembershipCommand = {
   actorMembership: AdminMembership | undefined
   targetClerkUserId: string
-  targetTokenIdentifier?: string
+  targetTokenIdentifier: string
   role: AdminRole
   reasonCode: string
   evidenceRefs: readonly string[]
@@ -170,6 +170,28 @@ export function bootstrapOwnerAdmin(
   if (validated.kind === 'error') {
     return validated
   }
+  if (command.tokenIdentifier.trim().length === 0) {
+    const denied = recordAdminActionDenied(state, {
+      actorMembership: undefined,
+      action: 'manage_admin_membership',
+      targetType: 'admin_membership',
+      targetRef: command.clerkUserId,
+      reasonCode: 'missing_token_identifier',
+      evidenceRefs: command.evidenceRefs,
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      now: command.now,
+    })
+    return {
+      kind: 'error',
+      code: 'admin_bootstrap_denied',
+      retryable: false,
+      reason: 'missing_token_identifier',
+      auditEvent: denied.auditEvent,
+      membershipAuditEvent: denied.membershipAuditEvent,
+    }
+  }
+
 
   const activeOwnerAdminCount = countActiveOwnerAdmins(state.adminMemberships)
   if (
@@ -203,7 +225,7 @@ export function bootstrapOwnerAdmin(
 
   const membership: AdminMembership = {
     clerkUserId: command.clerkUserId,
-    ...(command.tokenIdentifier === undefined ? {} : { tokenIdentifier: command.tokenIdentifier }),
+    tokenIdentifier: command.tokenIdentifier,
     role: 'owner_admin',
     state: 'active',
     grantedBy: `bootstrap:${command.clerkUserId}`,
@@ -269,14 +291,12 @@ export function grantAdminMembership(
   }
 
   const existing =
-    command.targetTokenIdentifier === undefined
-      ? undefined
-      : state.adminMemberships.find((membership) => membership.tokenIdentifier === command.targetTokenIdentifier)
+    state.adminMemberships.find((membership) => membership.tokenIdentifier === command.targetTokenIdentifier)
   const existingBySubject = existing ?? state.adminMemberships.find((membership) => membership.clerkUserId === command.targetClerkUserId)
   const beforeState = existingBySubject === undefined ? 'none' : `${existingBySubject.state}:${existingBySubject.role}`
   const membership = existingBySubject ?? {
     clerkUserId: command.targetClerkUserId,
-    ...(command.targetTokenIdentifier === undefined ? {} : { tokenIdentifier: command.targetTokenIdentifier }),
+    tokenIdentifier: command.targetTokenIdentifier,
     role: command.role,
     state: 'active',
     grantedBy: authority.membership.clerkUserId,
@@ -287,10 +307,7 @@ export function grantAdminMembership(
   membership.state = 'active'
   membership.grantedBy = authority.membership.clerkUserId
   membership.grantedAt = command.now
-  membership.evidenceRef = validated.evidenceRef
-  if (command.targetTokenIdentifier !== undefined) {
-    membership.tokenIdentifier = command.targetTokenIdentifier
-  }
+  membership.tokenIdentifier = command.targetTokenIdentifier
   delete membership.revokedBy
   delete membership.revokedAt
 
@@ -496,7 +513,7 @@ function recordAdminMembershipAudit(
     reasonCode: input.reasonCode,
     evidenceRefs: input.evidenceRefs,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: input.now,
   })
 

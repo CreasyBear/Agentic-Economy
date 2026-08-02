@@ -1,6 +1,7 @@
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 import { bindingIntegrityIsValid } from '../binding'
 import {
@@ -75,7 +76,7 @@ export async function qualifySuppliedCandidate(
     kind: 'publication',
     ref: `${publication.publicationRef}@${publication.revision}`,
     digest: publication.sourceDigest,
-    evidenceRefs: sorted(publication.registrationEvidenceRefs),
+    evidenceRefs: uniqueSorted(publication.registrationEvidenceRefs),
   }]
   const reasons: SuppliedCandidateQualificationReason[] = []
   if (publication.disposition !== 'current') reasons.push('publication_not_current')
@@ -119,7 +120,7 @@ export async function qualifySuppliedCandidate(
       kind: 'offering',
       ref: `offering:${offering.offeringId}`,
       digest: offering.registrationHash,
-      evidenceRefs: sorted([
+      evidenceRefs: uniqueSorted([
         ...offering.registrationEvidenceRefs,
         ...offering.admissionEvidenceRefs,
       ]),
@@ -141,7 +142,7 @@ export async function qualifySuppliedCandidate(
       kind: 'binding',
       ref: `binding:${binding.bindingId}`,
       digest: binding.registrationHash,
-      evidenceRefs: sorted([
+      evidenceRefs: uniqueSorted([
         ...binding.registrationEvidenceRefs,
         ...binding.admissionEvidenceRefs,
         ...binding.conformanceEvidenceRefs,
@@ -181,7 +182,7 @@ export async function qualifySuppliedCandidate(
     healthState: publication.healthState,
     observedAt: publication.readinessObservedAt ?? null,
     validUntil: publication.readinessValidUntil ?? null,
-  }, publication.readinessEvidenceRefs))
+  }, uniqueSorted(publication.readinessEvidenceRefs)))
 
   return result(
     candidate,
@@ -199,7 +200,7 @@ function result(
   sources: readonly SuppliedCandidateSourceReference[],
   validUntil?: number,
 ): SuppliedCandidateQualification {
-  const deterministicReasons = [...new Set(reasons)].sort()
+  const deterministicReasons = uniqueSorted(reasons)
   const deterministicSources = [...sources].sort((left, right) => (
     left.kind.localeCompare(right.kind) || left.ref.localeCompare(right.ref)
   ))
@@ -229,11 +230,7 @@ function source(
   value: StableHashValue,
   evidenceRefs: readonly string[],
 ): SuppliedCandidateSourceReference {
-  return { kind, ref, digest: canonicalDigest(value), evidenceRefs: sorted(evidenceRefs) }
-}
-
-function sorted(values: readonly string[]): string[] {
-  return [...new Set(values)].sort()
+  return { kind, ref, digest: canonicalDigest(value), evidenceRefs: uniqueSorted(evidenceRefs) }
 }
 
 function sameRef(left: CapabilityContractRef, right: CapabilityContractRef): boolean {

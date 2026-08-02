@@ -104,6 +104,5 @@ export type CommitResult = Readonly<
 export type CommandReplayResult = Readonly<
   | { kind: 'not_found' }
   | { kind: 'conflict' }
-  | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
   | { kind: 'replayed'; aggregate: unknown; routeGenerationRef?: string; noEffect: boolean }
 >

@@ -109,6 +109,21 @@ export const storefrontImportDraftAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http'],
+  invocationContract: {
+    version: 'storefront.importDraft:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['websiteUrl', 'abn'],
+    authorityRequirement: 'owner',
+    retryClass: 'replayable',
+    expectedEvidence: ['owner-reviewed storefront draft or import refusal'],
+    safeContinuations: ['review imported facts before publication'],
+    invalidationConditions: [
+      'website URL or ABN changes',
+      'owner authority changes',
+      'action contract version changes',
+    ],
+    developmentAttemptTimeoutMs: 60_000,
+  },
   run: async ({ data }) => {
     const { importStorefrontDraftFromWebsite } = await import('@/modules/storefront/public')
     return importStorefrontDraftFromWebsite(data)
@@ -196,6 +211,21 @@ export const storefrontEnrichDraftAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http'],
+  invocationContract: {
+    version: 'storefront.enrichDraft:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['businessName', 'suburb'],
+    authorityRequirement: 'owner',
+    retryClass: 'replayable',
+    expectedEvidence: ['owner-reviewed web-search draft or enrichment refusal'],
+    safeContinuations: ['review gathered facts before publication'],
+    invalidationConditions: [
+      'business name or suburb changes',
+      'owner authority changes',
+      'action contract version changes',
+    ],
+    developmentAttemptTimeoutMs: 30_000,
+  },
   run: async ({ data }) => {
     const [{ enrichBusinessFromWebSearch }, { openRouterGatewayConfig }] = await Promise.all([
       import('@/modules/storefront/public'),
@@ -273,7 +303,20 @@ export const webDiscoverAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['answerThread'],
+  surfaces: ['ui', 'answerThread'],
+  invocationContract: {
+    version: 'web.discover:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['query', 'location'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['grounded web-search claims or explicit no-match result'],
+    safeContinuations: ['review imported claims before inviting a business to list'],
+    invalidationConditions: [
+      'query or location changes',
+      'action contract version changes',
+    ],
+  },
   run: async ({ data }) => {
     const [{ discoverBusinessesFromWebSearch }, { openRouterGatewayConfig }] = await Promise.all([
       import('@/modules/storefront/public'),

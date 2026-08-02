@@ -19,7 +19,7 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 describe('discovery route handlers', () => {
-  it('generates a non-default source UCP manifest with strict public capability fields', async () => {
+  it('generates a non-default source UCP manifest with strict public Offering fields', async () => {
     const state = createDurablePublishedDiscoveryState({
       businessName: 'Fremantle Heat Pump Repairs',
       requestedSlug: 'fremantle-heat-pump-repairs',
@@ -42,25 +42,19 @@ describe('discovery route handlers', () => {
 
     expect(body).toMatchObject({
       schemaVersion: 'ae-ucp-fallback:v1',
+      businessCatalogSchemaVersion: 'public-business-catalog-api:v2',
       slug: 'fremantle-heat-pump-repairs',
       businessName: 'Fremantle Heat Pump Repairs',
-      manifestUrl: 'https://ae.example/fremantle-heat-pump-repairs/ucp',
       pathKind: 'ae_hosted_fallback',
-      status: 'available',
-      unsupportedCapabilities: {
-        callable: false,
-        paymentRequired: false,
-      },
-      services: [
+      disposition: 'current',
+      offerings: [
         {
-          slug: 'heat-pump-diagnostics',
-          status: 'published',
-          capabilities: [
-            {
-              callable: false,
-              paymentRequired: false,
-            },
-          ],
+          name: 'Heat pump diagnostics',
+          accessPaths: [],
+          support: expect.objectContaining({
+            integrated: false,
+            aeSupportedAction: false,
+          }),
         },
       ],
     })
@@ -83,24 +77,19 @@ describe('discovery route handlers', () => {
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
     expect(body).toMatchObject({
       schemaVersion: 'ae-ucp-fallback:v1',
+      businessCatalogSchemaVersion: 'public-business-catalog-api:v2',
       slug: 'parramatta-emergency-plumbing',
       manifestUrl: 'https://ae.example/parramatta-emergency-plumbing/ucp',
       pathKind: 'ae_hosted_fallback',
-      status: 'available',
-      unsupportedCapabilities: {
-        callable: false,
-        paymentRequired: false,
-      },
-      services: [
+      disposition: 'current',
+      offerings: [
         {
-          slug: 'emergency-pipe-repair',
-          status: 'published',
-          capabilities: [
-            {
-              callable: false,
-              paymentRequired: false,
-            },
-          ],
+          name: 'Emergency pipe repair',
+          accessPaths: [],
+          support: expect.objectContaining({
+            integrated: false,
+            aeSupportedAction: false,
+          }),
         },
       ],
     })

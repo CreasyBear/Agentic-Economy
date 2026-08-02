@@ -8,7 +8,7 @@ if (demoBusiness === undefined) {
 
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|agent-native/i
-const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|serviceId|sourceHash|rawContact|clerk|admin)\b/i
+const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|offeringRef|sourceHash|rawContact|clerk|admin)\b/i
 
 test.describe('landing query -> thread answer', () => {
   test('submits a need and streams a cited provider answer on a thread page', async ({ page }) => {

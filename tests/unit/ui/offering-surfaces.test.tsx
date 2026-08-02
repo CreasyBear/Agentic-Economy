@@ -1,6 +1,9 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
@@ -14,14 +17,6 @@ import {
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation(() => ({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  })),
-})
 
 afterEach(cleanup)
 
@@ -57,20 +52,20 @@ describe('Offering market surfaces', () => {
   })
 
   it('uses the first two services and compact access summary in registry cards', () => {
-    render(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [
+    renderWithRouter(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [
       ...v2BusinessFixture().offerings,
       { offeringRef: 'offering:second', revision: 1, name: 'Second service', category: 'Data', summary: 'Second.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
       { offeringRef: 'offering:third', revision: 1, name: 'Hidden third service', category: 'Data', summary: 'Third.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
     ] }} />)
-    expect(screen.getByLabelText('Published services').textContent).toContain('Data lookup')
-    expect(screen.getByLabelText('Published services').textContent).toContain('Second service')
+    expect(screen.getByLabelText('Published offerings').textContent).toContain('Data lookup')
+    expect(screen.getByLabelText('Published offerings').textContent).toContain('Second service')
     expect(screen.queryByText('Hidden third service')).toBeNull()
     // Every business can be contacted, so contactability is not a badge.
     expect(screen.queryByText('Contact available')).toBeNull()
   })
 
   it('keeps a profile-only business visible in the v2 registry card', () => {
-    render(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [], accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false } }} />)
+    renderWithRouter(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [], accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false } }} />)
     expect(screen.getByText('V2 Business')).toBeTruthy()
     expect(screen.queryByText('No services published yet')).toBeNull()
     expect(screen.queryByText('No contact or request published yet')).toBeNull()
@@ -204,4 +199,12 @@ function v2BusinessFixture() {
     offerings: [{ offeringRef: 'offering:v2', revision: 1, name: 'Data lookup', category: 'Data', summary: 'Look up public data.', accessPaths: [{ accessPathRef: 'access:v2:web', kind: 'human_request' as const, channel: 'website' as const, disclosure: 'Start on the business website.', url: 'https://example.com/start' }], support: { integrated: false, aeSupportedAction: false } }],
     accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
   }
+}
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
+  const routeTree = rootRoute.addChildren([slugRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

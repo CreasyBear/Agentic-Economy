@@ -7,6 +7,8 @@ import {
   CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
   customerRequestAuthorityModeForScopes,
   customerRequestScopeForMode,
+  isWorkTreeAgentScope,
+  workTreeScopeAllowedForMode,
   type CustomerRequestAuthorityMode,
 } from './agent-contract'
 
@@ -116,8 +118,14 @@ export type CustomerRequestAgentOAuthCreatedAuthorizationGrant = Readonly<{
   expiresIn: number
 }>
 
-export function requestedScopesForMode(mode: CustomerRequestAuthorityMode): readonly string[] {
-  return [CUSTOMER_REQUEST_AGENT_SCOPE, customerRequestScopeForMode(mode)]
+export function requestedScopesForMode(
+  mode: CustomerRequestAuthorityMode,
+  additionalScopes: readonly string[] = [],
+): readonly string[] {
+  const extras = [...new Set(additionalScopes)]
+    .filter((scope): scope is string => isWorkTreeAgentScope(scope))
+    .sort()
+  return [CUSTOMER_REQUEST_AGENT_SCOPE, customerRequestScopeForMode(mode), ...extras]
 }
 
 export function normalizeRequestedScopes(scopeText: string | null | undefined): Readonly<{
@@ -126,12 +134,13 @@ export function normalizeRequestedScopes(scopeText: string | null | undefined): 
 }> | undefined {
   if (scopeText === null || scopeText === undefined) return undefined
   const scopes = scopeText.split(/\s+/u).filter((scope) => scope.length > 0)
-  if (scopes.length !== 2 || !scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
+  if (scopes.length < 2 || !scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE) || new Set(scopes).size !== scopes.length) return undefined
   const mode = customerRequestAuthorityModeForScopes(scopes)
-  if (mode === undefined || scopes.some((scope) => scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== customerRequestScopeForMode(mode))) {
-    return undefined
-  }
-  return { mode, scopes: requestedScopesForMode(mode) }
+  if (mode === undefined) return undefined
+  const modeScope = customerRequestScopeForMode(mode)
+  const extras = scopes.filter((scope) => scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== modeScope)
+  if (extras.some((scope) => !isWorkTreeAgentScope(scope) || !workTreeScopeAllowedForMode(scope, mode))) return undefined
+  return { mode, scopes: requestedScopesForMode(mode, extras) }
 }
 
 export async function hashOAuthValue(value: string): Promise<string> {

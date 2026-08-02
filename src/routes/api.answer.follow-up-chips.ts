@@ -1,17 +1,23 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { jsonError } from '@/lib/server/json-error'
+import { response as jsonResponse } from '@/lib/server/no-store-response'
+import { assertHttpAdmission, rateLimitedResponse, requestAdmissionKey } from '@/lib/server/rate-limit'
 
-import { readLlmFollowUpChipsEnabled } from '@/modules/answer/public'
+import {
+  AnswerSourceSchema,
+  readLlmFollowUpChipsEnabled,
+  type AnswerArtifact,
+  type AnswerSource,
+} from '@/modules/answer/public'
 import {
   appendSessionCookie,
   buildFollowUpChips,
   buildDeterministicFollowUpChips,
-  checkAnswerFollowUpChipsRateLimit,
   generateLlmFollowUpChips,
   resolveOrCreateSessionId,
 } from '@/modules/answer-thread/public'
-import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 
 const followUpChipsRequestSchema = z.object({
   query: z.string().trim().min(1).max(200),
@@ -31,26 +37,19 @@ const MAX_FOLLOW_UP_CHIPS_BODY_BYTES = 64 * 1024
 export async function handleFollowUpChipsRequest(request: Request): Promise<Response> {
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
-  const boundedBody = await readBoundedRequestText(request, MAX_FOLLOW_UP_CHIPS_BODY_BYTES)
+  const boundedBody = await readBoundedRequestJson(request, MAX_FOLLOW_UP_CHIPS_BODY_BYTES)
   if (!boundedBody.ok) {
-    return jsonError('payload_too_large', 413)
+    return jsonError(boundedBody.code === 'payload_too_large' ? 'payload_too_large' : 'invalid_body', boundedBody.code === 'payload_too_large' ? 413 : 400)
   }
 
-  let body: unknown
-  try {
-    body = JSON.parse(boundedBody.text)
-  } catch {
-    return jsonError('invalid_body', 400)
-  }
-
-  const parsed = followUpChipsRequestSchema.safeParse(body)
+  const parsed = followUpChipsRequestSchema.safeParse(boundedBody.value)
   if (!parsed.success) {
     return jsonError('invalid_body', 400)
   }
 
-  const rateLimit = checkAnswerFollowUpChipsRateLimit(sessionId)
-  if (rateLimit.kind === 'limited') {
-    return jsonError('rate_limited', 429)
+  const admission = await assertHttpAdmission(request, 'answer-follow-up-chips', { key: requestAdmissionKey(request) })
+  if (!admission.ok) {
+    return rateLimitedResponse(admission.retryAfter)
   }
 
   const providers = normalizeProviders(parsed.data.providers)
@@ -66,7 +65,7 @@ export async function handleFollowUpChipsRequest(request: Request): Promise<Resp
   }
 
   if (!readLlmFollowUpChipsEnabled()) {
-    return withSession(jsonResponse({ chips: buildDeterministicFollowUpChips(turn) }), sessionId, setCookie, request)
+    return appendSessionCookie(jsonResponse({ chips: buildDeterministicFollowUpChips(turn) }, 200), sessionId, setCookie, request)
   }
 
   const llmChips = await generateLlmFollowUpChips({
@@ -75,10 +74,10 @@ export async function handleFollowUpChipsRequest(request: Request): Promise<Resp
     signal: request.signal,
   })
 
-  return withSession(
+  return appendSessionCookie(
     jsonResponse({
       chips: buildFollowUpChips({ turn, llmChips }),
-    }),
+    }, 200),
     sessionId,
     setCookie,
     request,
@@ -93,27 +92,10 @@ function providerCardsArtifact(providers: readonly AnswerSource[]): AnswerArtifa
 }
 
 function normalizeProviders(raw: readonly Record<string, unknown>[]): AnswerSource[] {
-  return raw.filter(isCompleteAnswerSource) as AnswerSource[]
+  return raw.flatMap((provider) => {
+    const parsed = AnswerSourceSchema.safeParse(provider)
+    return parsed.success ? [parsed.data as AnswerSource] : []
+  })
 }
 
-function isCompleteAnswerSource(provider: Record<string, unknown>): provider is AnswerSource {
-  return (
-    typeof provider.citationIndex === 'number' &&
-    typeof provider.slug === 'string' &&
-    provider.slug.length > 0 &&
-    typeof provider.name === 'string' &&
-    typeof provider.detailUrl === 'string'
-  )
-}
 
-function jsonResponse(body: unknown): Response {
-  return Response.json(body, { headers: { 'Cache-Control': 'no-store' } })
-}
-
-function jsonError(code: string, status: number): Response {
-  return Response.json({ error: code }, { status })
-}
-
-function withSession(response: Response, sessionId: string, setCookie: boolean, request: Request): Response {
-  return appendSessionCookie(response, sessionId, setCookie, request)
-}

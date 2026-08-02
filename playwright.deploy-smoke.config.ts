@@ -4,7 +4,10 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  reporter: [['list']],
+  reporter: [
+    ['list'],
+    ['json', { outputFile: 'output/release/playwright-deploy-smoke.json' }],
+  ],
   timeout: 45_000,
   expect: { timeout: 5_000 },
   use: {

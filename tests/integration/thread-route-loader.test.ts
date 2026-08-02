@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
+import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
 import type { AnswerThreadRecord, AnswerTurnRecord } from '@/modules/answer-thread/public'
 import { loadThreadRouteReadback, Route } from '@/routes/t.$threadId'
 import {
@@ -8,17 +10,14 @@ import {
 } from '../helpers/answer-thread-test-port'
 
 describe('/t/$threadId route loader', () => {
-  const previousConvexUrl = process.env.CONVEX_URL
-  const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
 
   afterEach(() => {
-    restoreEnv('CONVEX_URL', previousConvexUrl)
-    restoreEnv('VITE_CONVEX_URL', previousPublicConvexUrl)
+    vi.unstubAllEnvs()
   })
 
   it('does not strand a completed answer when the client transition cannot read Convex directly', async () => {
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
 
     await expect(
       (Route.options.loader as (input: { params: { threadId: string } }) => Promise<unknown>)({
@@ -40,23 +39,35 @@ describe('/t/$threadId route loader', () => {
       createdAt: 1_000,
       updatedAt: 2_000,
     }
+    const evidenceDraft: FrozenTurnEvidenceDraft = {
+      providers: [],
+      allowedSlugs: [],
+      agentJsonUrl: '/api/businesses/search?q=leaking+tap',
+      searchContext: {
+        mode: 'whole_catalogue',
+        timing: 'date',
+        timingDate: '2026-07-18',
+      },
+      toolCalls: [],
+      timings: [],
+      workLog: [],
+    }
+    const evidence = {
+      ...evidenceDraft,
+      answerRun: buildAnswerRunReport({
+        intent: 'refine_search',
+        status: 'complete',
+        snapshotHash: 'snapshot-private',
+        evidence: evidenceDraft,
+      }),
+    }
     const turn: AnswerTurnRecord = {
       turnId: 'turn_timing',
       threadId: thread.threadId,
       seq: 1,
       query: 'Replace a leaking kitchen tap',
       intent: 'refine_search',
-      evidenceJson: JSON.stringify({
-        providers: [],
-        allowedSlugs: [],
-        agentJsonUrl: '/api/businesses/search?q=leaking+tap',
-        searchContext: {
-          mode: 'whole_catalogue',
-          timing: 'date',
-          timingDate: '2026-07-18',
-        },
-        workLog: [],
-      }),
+      evidenceJson: JSON.stringify(evidence),
       snapshotHash: 'snapshot-private',
       proseJson: JSON.stringify({
         oneLine: 'No published business pages match yet.',
@@ -72,22 +83,20 @@ describe('/t/$threadId route loader', () => {
     const resetPort = installAnswerThreadTestPort(store)
 
     try {
-      const readback = await loadThreadRouteReadback(thread.threadId)
+      vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'public.agentic.test')
+      const readback = await loadThreadRouteReadback(
+        thread.threadId,
+        new Request(`https://public.agentic.test/t/${thread.threadId}`),
+      )
       expect(readback.projection?.turns[0]).toMatchObject({
         query: turn.query,
         timing: 'date',
         timingDate: '2026-07-18',
       })
+      expect(readback.seo?.canonicalUrl).toBe(`https://public.agentic.test/t/${thread.threadId}`)
     } finally {
       resetPort()
     }
   })
 })
 
-function restoreEnv(name: 'CONVEX_URL' | 'VITE_CONVEX_URL', value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name]
-    return
-  }
-  process.env[name] = value
-}

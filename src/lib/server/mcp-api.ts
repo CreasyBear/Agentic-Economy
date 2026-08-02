@@ -8,9 +8,13 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { ZodObject } from 'zod'
 
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
+import { readBoundedRequestJson, readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { authenticateCustomerRequestAgent } from '@/lib/server/customer-request-agent-auth'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
+
+const MAX_MCP_REQUEST_BODY_BYTES = 64 * 1024
 
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
@@ -76,7 +80,8 @@ type McpRequestOptions = Readonly<{
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   const actions = options.actions ?? listMcpActions()
-  const protectedAction = await protectedActionForRequest(request, actions)
+  const boundedRequest = await boundedMcpRequest(request)
+  const protectedAction = await protectedActionForRequest(boundedRequest, actions)
   if (protectedAction !== undefined) {
     const requiredMode = requiredModeForAction(protectedAction)
     const admitted = await authenticateCustomerRequestAgent({
@@ -84,7 +89,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       requiredMode,
     })
     if (admitted.kind === 'refused') {
-      const base = new URL(request.url).origin
+      const base = resolveCanonicalBaseUrl(request).baseUrl
       const challenge = requiredMode === 'inspect_only'
         ? bearerChallenge(base)
         : bearerModeChallenge(base, requiredMode)
@@ -95,15 +100,25 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       })
       return Response.json({ kind: 'refused', reason: admitted.reason }, { status: admitted.status, headers })
     }
-    const server = createAeMcpServer(request, actions, {
+    const server = createAeMcpServer(boundedRequest, actions, {
       tier: 'authenticated',
       authorityMode: admitted.principal.authorityMode,
       principalId: admitted.principal.principalId,
     })
-    return await serveMcp(server, request)
+    return await serveMcp(server, boundedRequest)
   }
-  const server = createAeMcpServer(request, actions, { tier: 'anonymous' })
-  return await serveMcp(server, request)
+  const server = createAeMcpServer(boundedRequest, actions, { tier: 'anonymous' })
+  return await serveMcp(server, boundedRequest)
+}
+
+async function boundedMcpRequest(request: Request): Promise<Request> {
+  if (request.method !== 'POST') return request
+  try {
+    const boundedBody = await readBoundedRequestText(request, MAX_MCP_REQUEST_BODY_BYTES)
+    return new Request(request, { body: boundedBody.ok ? boundedBody.text : '' })
+  } catch {
+    return new Request(request, { body: '' })
+  }
 }
 
 async function serveMcp(server: McpServer, request: Request): Promise<Response> {
@@ -114,17 +129,18 @@ async function serveMcp(server: McpServer, request: Request): Promise<Response> 
 
 async function protectedActionForRequest(request: Request, actions: readonly AnyAction[]): Promise<AnyAction | undefined> {
   if (request.method !== 'POST') return undefined
-  let body: unknown
   try {
-    body = await request.clone().json()
+    const boundedBody = await readBoundedRequestJson(request.clone(), MAX_MCP_REQUEST_BODY_BYTES)
+    if (!boundedBody.ok) return undefined
+    const body = boundedBody.value
+    if (typeof body !== 'object' || body === null || !('params' in body)) return undefined
+    const params = body.params
+    if (typeof params !== 'object' || params === null || !('name' in params) || typeof params.name !== 'string') return undefined
+    const action = actions.find((candidate) => mcpToolName(candidate) === params.name)
+    return action !== undefined && !action.readOnly ? action : undefined
   } catch {
     return undefined
   }
-  if (typeof body !== 'object' || body === null || !('params' in body)) return undefined
-  const params = body.params
-  if (typeof params !== 'object' || params === null || !('name' in params) || typeof params.name !== 'string') return undefined
-  const action = actions.find((candidate) => mcpToolName(candidate) === params.name)
-  return action !== undefined && !action.readOnly ? action : undefined
 }
 
 function requiredModeForAction(action: AnyAction): CustomerRequestAuthorityMode {

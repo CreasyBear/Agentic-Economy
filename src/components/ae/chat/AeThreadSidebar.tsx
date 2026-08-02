@@ -1,20 +1,24 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
 import { ChevronDownIcon, CopyIcon, EllipsisVerticalIcon, PlusIcon, TrashIcon } from 'lucide-react'
 import { copyThreadLink } from './copy-thread-link'
 
 import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorTrigger,
-} from '@/components/ai-elements/model-selector'
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +31,6 @@ import { formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
 import { cn } from '@/lib/utils'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import { useAnswerModel } from './AeAnswerModelContext'
-
 
 export type AeThreadSidebarProps = {
   threads: readonly AnswerThreadRecord[]
@@ -107,14 +110,6 @@ function AnswerModelSelector() {
     [modelsByProvider],
   )
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    document.querySelector<HTMLInputElement>(`[data-model-selector-input="${listboxId}"]`)?.focus()
-  }, [listboxId, open])
-
   if (loading) {
     return (
       <div className="inline-flex items-center gap-2" aria-hidden="true">
@@ -135,66 +130,71 @@ function AnswerModelSelector() {
       <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground" id={`${listboxId}-label`}>
         Model
       </span>
-      <ModelSelector open={open} onOpenChange={setOpen}>
-        <ModelSelectorTrigger asChild>
-          <button
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button
             type="button"
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border-strong bg-card px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            variant="ghost"
+            className="h-auto min-h-9 max-sm:min-h-9 gap-1.5 border border-border-strong bg-card px-3 py-0 text-xs text-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label="Choose answer model"
             aria-labelledby={`${listboxId}-label`}
-            aria-controls={`${listboxId}-menu`}
-            aria-expanded={open}
-            aria-haspopup="menu"
           >
             <span className="inline-flex size-5 items-center justify-center rounded-md bg-muted font-mono text-2xs font-semibold uppercase text-muted-foreground" aria-hidden="true">
               {selectedModel.provider.slice(0, 1)}
             </span>
             <span className="max-w-44 truncate">{selectedModel.name}</span>
             <ChevronDownIcon aria-hidden="true" className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} />
-          </button>
-        </ModelSelectorTrigger>
-        <ModelSelectorContent
+          </Button>
+        </DialogTrigger>
+        <DialogContent
           id={`${listboxId}-menu`}
+          aria-describedby={undefined}
           aria-label="Choose answer model"
-          className="w-[18.75rem] max-w-[calc(100vw-2rem)] p-2"
+          className={cn(
+            'outline! border-none! p-0 outline-border! outline-solid!',
+            'w-[18.75rem] max-w-[calc(100vw-2rem)] p-2',
+          )}
         >
-          <ModelSelectorInput
-            data-model-selector-input={listboxId}
-            aria-controls={`${listboxId}-options`}
-            onValueChange={setQuery}
-            placeholder="Search models…"
-            value={query}
-          />
-          <ModelSelectorList id={`${listboxId}-options`} className="max-h-56 gap-1 overflow-auto">
-            <ModelSelectorEmpty>No model found.</ModelSelectorEmpty>
-            {providerEntries.map(([provider, models]) => (
-              <ModelSelectorGroup key={provider} heading={provider}>
-                {models.map((model) => {
-                  const isSelected = model.id === selectedModelId
-                  return (
-                    <ModelSelectorItem
-                      key={model.id}
-                      value={`${provider} ${model.name} ${model.id}`}
-                      keywords={[provider, model.name, model.id]}
-                      aria-selected={isSelected}
-                      data-selected={isSelected ? 'true' : undefined}
-                      data-current={isSelected ? 'true' : undefined}
-                      className="min-h-9 text-foreground data-[current=true]:bg-muted data-[current=true]:font-medium"
-                      onSelect={() => {
-                        setSelectedModelId(model.id)
-                        setOpen(false)
-                        setQuery('')
-                      }}
-                    >
-                      <span className="truncate">{model.name}</span>
-                    </ModelSelectorItem>
-                  )
-                })}
-              </ModelSelectorGroup>
-            ))}
-          </ModelSelectorList>
-        </ModelSelectorContent>
-      </ModelSelector>
+          <DialogTitle className="sr-only">Model Selector</DialogTitle>
+          <Command className="**:data-[slot=command-input-wrapper]:h-auto">
+            <CommandInput
+              className="h-auto py-3.5"
+              aria-controls={`${listboxId}-options`}
+              onValueChange={setQuery}
+              placeholder="Search models…"
+              value={query}
+            />
+            <CommandList id={`${listboxId}-options`} className="max-h-56 gap-1 overflow-auto">
+              <CommandEmpty>No model found.</CommandEmpty>
+              {providerEntries.map(([provider, models]) => (
+                <CommandGroup key={provider} heading={provider}>
+                  {models.map((model) => {
+                    const isSelected = model.id === selectedModelId
+                    return (
+                      <CommandItem
+                        key={model.id}
+                        value={`${provider} ${model.name} ${model.id}`}
+                        keywords={[provider, model.name, model.id]}
+                        aria-selected={isSelected}
+                        data-selected={isSelected ? 'true' : undefined}
+                        data-current={isSelected ? 'true' : undefined}
+                        className="min-h-9 text-foreground data-[current=true]:bg-muted data-[current=true]:font-medium"
+                        onSelect={() => {
+                          setSelectedModelId(model.id)
+                          setOpen(false)
+                          setQuery('')
+                        }}
+                      >
+                        <span className="truncate">{model.name}</span>
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

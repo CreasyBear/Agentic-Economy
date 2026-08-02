@@ -5,8 +5,12 @@ import {
   verifyDevelopmentPublishedOperationEvidence,
 } from '@/modules/capability-supply/development-published-operation-evidence'
 import {
-  invokeRegisteredRouteTransport,
+  invokePreparedRouteTransport,
+  prepareRegisteredRouteTransportInvocation,
   type RouteTransportInvocation,
+  type RouteTransportRuntime,
+  type X402PaymentSignatureRequest,
+  type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import {
   admitRegisteredTransport,
@@ -19,6 +23,20 @@ import {
 } from '@/modules/capability-supply/public'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+
+async function invokeRouteTransport(
+  routeInvocation: RouteTransportInvocation,
+  runtime: RouteTransportRuntime,
+) {
+  const preparation = prepareRegisteredRouteTransportInvocation(
+    routeInvocation,
+    runtime.resolveCredential,
+    runtime.x402PaymentSigningAvailable,
+  )
+  return preparation.kind === 'refused'
+    ? preparation.observation
+    : await invokePreparedRouteTransport(preparation.prepared, runtime)
+}
 
 describe('published operation materialization', () => {
   it('binds exact publication, contract, offering, transport, price, readiness and separate usage evidence', () => {
@@ -129,10 +147,10 @@ describe('published operation materialization', () => {
       },
       inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
     }
-    await expect(invokeRegisteredRouteTransport(invocation, {
+    await expect(invokeRouteTransport(invocation, {
       send,
       resolveCredential: () => 'mock-credential',
-      createX402PaymentSignature: async () => undefined,
+      ...preparedX402Custody(async () => 'mock:payment-signature'),
     })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
     expect(send).toHaveBeenCalledTimes(1)
   })
@@ -161,7 +179,7 @@ describe('published operation materialization', () => {
           },
         })
       })
-      await expect(invokeRegisteredRouteTransport({
+      await expect(invokeRouteTransport({
         binding: {
           adapterId: operation.identity.adapterId,
           endpointUrl: operation.binding.endpointUrl,
@@ -182,7 +200,7 @@ describe('published operation materialization', () => {
       }, {
         send,
         resolveCredential: () => 'mock-credential',
-        createX402PaymentSignature: async () => undefined,
+        ...preparedX402Custody(async () => 'mock:payment-signature'),
       })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
     },
   )
@@ -300,4 +318,45 @@ function buildImportedOperation(method: 'GET' | 'POST') {
     qualification,
     ...(source.usageObservation === undefined ? {} : { usageObservation: source.usageObservation }),
   })
+}
+function preparedX402Custody(
+  create: (request: X402PaymentSignatureRequest) => Promise<string | undefined>,
+): Pick<
+  X402RouteTransportRuntime,
+  'prepareX402PaymentAuthorization'
+  | 'readX402PaymentAuthorization'
+  | 'readX402PaymentAuthorizationByDigest'
+> {
+  const custody = new Map<string, Readonly<{
+    authorizationDigest: string
+    paymentSignature: string
+  }>>()
+  return {
+    prepareX402PaymentAuthorization: async (request) => {
+      const paymentSignature = await create(request)
+      if (paymentSignature === undefined || paymentSignature.length === 0) return undefined
+      const custodyRef = canonicalDigest({
+        kind: 'test-x402-custody:v1',
+        paymentIdentifier: request.paymentIdentifier,
+        challengeDigest: request.challengeDigest,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      })
+      const authorizationDigest = canonicalDigest(paymentSignature)
+      custody.set(custodyRef, { authorizationDigest, paymentSignature })
+      return { custodyRef, authorizationDigest }
+    },
+    readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) => {
+      const prepared = custody.get(custodyRef)
+      return prepared?.authorizationDigest === authorizationDigest
+        ? prepared.paymentSignature
+        : undefined
+    },
+    readX402PaymentAuthorizationByDigest: async ({ custodyRef, authorizationDigest }) => {
+      const prepared = custody.get(custodyRef)
+      return prepared?.authorizationDigest === authorizationDigest
+        ? prepared.paymentSignature
+        : undefined
+    },
+  }
 }

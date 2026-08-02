@@ -1,16 +1,3 @@
-import {
-  createEmptyNotificationOutboxSourceState as createEmptyNotificationOutboxSourceStateImpl,
-  dispatchNotificationOutbox as dispatchNotificationOutboxImpl,
-  enqueueInquiryNotification as enqueueInquiryNotificationImpl,
-  ingestNotificationWebhook as ingestNotificationWebhookImpl,
-  markNotificationNoRepair as markNotificationNoRepairImpl,
-  readNotificationDispatchReadback as readNotificationDispatchReadbackImpl,
-  retryNotificationDispatch as retryNotificationDispatchImpl,
-} from './internal/commands'
-import {
-  readDispatchId as readDispatchIdImpl,
-  requireDispatchAuthorization as requireDispatchAuthorizationImpl,
-} from './internal/dispatch-request'
 
 export type {
   DispatchNotificationOutboxCommand,
@@ -44,10 +31,13 @@ export type {
   NotificationWebhookEventRecord,
   NotificationWebhookEventStatus,
 } from './internal/schema'
-export type { NotificationOutboxSourceStatePorts } from './internal/source-state-ports'
+export type { NotificationOutboxSourceStateLoadScope } from './internal/source-state-ports'
 export { MAX_NOTIFICATION_DISPATCH_BODY_BYTES } from './internal/dispatch-request'
 export {
   defaultNotificationOperatorControls,
+  MAX_NOTIFICATION_ATTEMPTS_PER_DISPATCH,
+  MAX_NOTIFICATION_THREAD_DISPATCH_READBACK,
+  MAX_NOTIFICATION_WEBHOOK_EVENT_READBACK,
   NotificationAttemptStatusValues,
   NotificationDispatchStatusValues,
   NotificationProviderFamilyValues,
@@ -56,12 +46,16 @@ export {
   NotificationWebhookEventStatusValues,
 } from './internal/schema'
 
-export const createEmptyNotificationOutboxSourceState = createEmptyNotificationOutboxSourceStateImpl
-export const enqueueInquiryNotification = enqueueInquiryNotificationImpl
-export const dispatchNotificationOutbox = dispatchNotificationOutboxImpl
-export const ingestNotificationWebhook = ingestNotificationWebhookImpl
-export const readNotificationDispatchReadback = readNotificationDispatchReadbackImpl
-export const retryNotificationDispatch = retryNotificationDispatchImpl
-export const markNotificationNoRepair = markNotificationNoRepairImpl
-export const requireDispatchAuthorization = requireDispatchAuthorizationImpl
-export const readDispatchId = readDispatchIdImpl
+export {
+  createEmptyNotificationOutboxSourceState,
+  enqueueInquiryNotification,
+  dispatchNotificationOutbox,
+  ingestNotificationWebhook,
+  readNotificationDispatchReadback,
+  retryNotificationDispatch,
+  markNotificationNoRepair,
+} from './internal/commands'
+export {
+  requireDispatchAuthorization,
+  readDispatchId,
+} from './internal/dispatch-request'

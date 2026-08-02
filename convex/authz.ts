@@ -1,43 +1,20 @@
-import type { UserIdentity } from 'convex/server'
+import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
 
-import { stableHash } from '../src/modules/common/stable-hash'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
-import type { AdminAction, AdminAuthorityMutationResult, AdminMembership } from '../src/modules/security/public'
-import {
-  numberField,
-  optionalNumberField,
-  optionalStringField,
-  stringField,
-} from './inquiryRuntimeDbHelpers'
-
-type RuntimeDocument = Record<string, unknown> & { _id: string }
-
-type RuntimeIndexBuilder = {
-  eq: (field: string, value: unknown) => RuntimeIndexBuilder
-}
-
-type RuntimeQuery = {
-  withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
-  collect: () => Promise<RuntimeDocument[]>
-  unique: () => Promise<RuntimeDocument | null>
-}
-
-type RuntimeDb = {
-  query: (tableName: string) => RuntimeQuery
-}
+import type { AdminAction, AdminAuthorityMutationResult, AdminAuthorityResult, AdminMembership } from '../src/modules/security/public'
+import type { DataModel, Doc } from './_generated/dataModel'
+import type { QueryCtx } from './_generated/server'
+type IgnoredBrowserAuthorityPayload = Readonly<Record<string, unknown>>
+type AdminIdentityLookup = Pick<UserIdentity, 'tokenIdentifier'>
 
 type AuthzCtx = {
-  db: RuntimeDb
-  auth: {
-    getUserIdentity: () => Promise<UserIdentity | null>
-  }
+  db: GenericDatabaseReader<DataModel>
+  auth: QueryCtx['auth']
 }
 
-type AdminAuthorityResult = ReturnType<typeof requireAdminAuthority>
 
-type IgnoredBrowserAuthorityPayload = Readonly<Record<string, unknown>>
-type AdminIdentityLookup = Pick<UserIdentity, 'issuer' | 'subject' | 'tokenIdentifier'>
 
 
 export async function resolveBusinessActor(
@@ -65,37 +42,34 @@ export async function resolveAdminAuthority(ctx: AuthzCtx, action: AdminAction):
   return requireAdminAuthority(membership, action)
 }
 
-export async function readActiveAdminMembership(db: RuntimeDb, identity: AdminIdentityLookup): Promise<AdminMembership | undefined> {
-  const tokenRow = await db
+export async function readCurrentActiveAdminMembership(
+  ctx: Readonly<{
+    db: GenericDatabaseReader<DataModel>
+    auth: QueryCtx['auth']
+  }>,
+): Promise<AdminMembership | undefined> {
+  const identity = await ctx.auth.getUserIdentity()
+  return identity === null ? undefined : readActiveAdminMembership(ctx.db, identity)
+}
+
+export async function readActiveAdminMembership(
+  db: GenericDatabaseReader<DataModel>,
+  identity: AdminIdentityLookup,
+): Promise<AdminMembership | undefined> {
+  if (typeof identity.tokenIdentifier !== 'string' || identity.tokenIdentifier.length === 0) {
+    return undefined
+  }
+
+  const row = await db
     .query('adminMemberships')
     .withIndex('by_tokenIdentifier_state', (query) => query.eq('tokenIdentifier', identity.tokenIdentifier).eq('state', 'active'))
     .unique()
-  const tokenMembership = tokenRow === null ? undefined : adminMembershipFromDoc(tokenRow)
-  if (tokenMembership !== undefined) {
-    return tokenMembership
-  }
-
-  if (!allowsLegacySubjectFallback(identity)) {
-    return undefined
-  }
-
-  const subjectRow = await db
-    .query('adminMemberships')
-    .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', identity.subject).eq('state', 'active'))
-    .unique()
-  const subjectMembership = subjectRow === null ? undefined : adminMembershipFromDoc(subjectRow)
-  if (
-    subjectMembership?.tokenIdentifier !== undefined &&
-    subjectMembership.tokenIdentifier !== identity.tokenIdentifier
-  ) {
-    return undefined
-  }
-  return subjectMembership
+  return row === null ? undefined : adminMembershipFromDoc(row)
 }
 
 export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor {
   const displayName = optionalIdentityText(identity.name ?? identity.preferredUsername)
-  const emailHash = identity.email === undefined ? undefined : stableHash({ email: identity.email.toLowerCase() })
+  const emailHash = identity.email === undefined ? undefined : canonicalDigest({ email: identity.email.toLowerCase() })
   return {
     kind: 'authenticated_owner',
     clerkUserId: identity.subject,
@@ -105,48 +79,18 @@ export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor
   }
 }
 
-function adminMembershipFromDoc(document: RuntimeDocument): AdminMembership | undefined {
-  const role = adminRole(document)
-  const state = adminMembershipState(document)
-  const clerkUserId = stringField(document, 'clerkUserId')
-  const grantedBy = stringField(document, 'grantedBy')
-  const grantedAt = numberField(document, 'grantedAt')
-  if (role === undefined || state === undefined || clerkUserId.length === 0 || grantedBy.length === 0) {
-    return undefined
-  }
-
+function adminMembershipFromDoc(document: Doc<'adminMemberships'>): AdminMembership {
   return {
-    clerkUserId,
-    ...(optionalStringField(document, 'tokenIdentifier') === undefined ? {} : { tokenIdentifier: stringField(document, 'tokenIdentifier') }),
-    role,
-    state,
-    grantedBy,
-    grantedAt,
-    ...(optionalStringField(document, 'revokedBy') === undefined ? {} : { revokedBy: stringField(document, 'revokedBy') }),
-    ...(optionalNumberField(document, 'revokedAt') === undefined ? {} : { revokedAt: numberField(document, 'revokedAt') }),
-    ...(optionalStringField(document, 'evidenceRef') === undefined ? {} : { evidenceRef: stringField(document, 'evidenceRef') }),
+    clerkUserId: document.clerkUserId,
+    tokenIdentifier: document.tokenIdentifier,
+    role: document.role,
+    state: document.state,
+    grantedBy: document.grantedBy,
+    grantedAt: document.grantedAt,
+    ...(document.revokedBy === undefined ? {} : { revokedBy: document.revokedBy }),
+    ...(document.revokedAt === undefined ? {} : { revokedAt: document.revokedAt }),
+    ...(document.evidenceRef === undefined ? {} : { evidenceRef: document.evidenceRef }),
   }
-}
-
-function adminRole(document: RuntimeDocument): AdminMembership['role'] | undefined {
-  const value = stringField(document, 'role')
-  if (value === 'owner_admin' || value === 'support' || value === 'reviewer') {
-    return value
-  }
-  return undefined
-}
-
-function adminMembershipState(document: RuntimeDocument): AdminMembership['state'] | undefined {
-  const value = stringField(document, 'state')
-  if (value === 'active' || value === 'revoked' || value === 'suspended') {
-    return value
-  }
-  return undefined
-}
-
-function allowsLegacySubjectFallback(identity: AdminIdentityLookup): boolean {
-  const expectedIssuer = typeof process === 'undefined' ? undefined : process.env.CLERK_JWT_ISSUER_DOMAIN
-  return expectedIssuer === undefined || expectedIssuer.length === 0 || identity.issuer === expectedIssuer
 }
 
 function optionalIdentityText(value: string | undefined): string | undefined {
@@ -157,6 +101,7 @@ function optionalIdentityText(value: string | undefined): string | undefined {
   const normalized = value.replace(/\s+/g, ' ').trim().slice(0, 160)
   return normalized.length === 0 ? undefined : normalized
 }
+
 
 
 export type { AdminAuthorityResult, AdminAuthorityMutationResult }

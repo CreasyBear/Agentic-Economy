@@ -60,6 +60,7 @@ describe('admin authority contract', () => {
 
     const arbitrary = bootstrapOwnerAdmin(state, {
       clerkUserId: 'random_user',
+      tokenIdentifier: 'clerk|random_user',
       authorizedClerkUserIds: ['user_allowed'],
       reasonCode: 'source_owned_setup',
       evidenceRefs: ['local-config:ADMIN_BOOTSTRAP_PRINCIPAL_IDS'],
@@ -78,6 +79,7 @@ describe('admin authority contract', () => {
 
     const allowed = bootstrapOwnerAdmin(state, {
       clerkUserId: 'user_allowed',
+      tokenIdentifier: 'clerk|user_allowed',
       authorizedClerkUserIds: ['user_allowed'],
       reasonCode: 'source_owned_setup',
       evidenceRefs: ['local-config:ADMIN_BOOTSTRAP_PRINCIPAL_IDS'],
@@ -95,6 +97,7 @@ describe('admin authority contract', () => {
 
     const second = bootstrapOwnerAdmin(state, {
       clerkUserId: 'another_allowed_user',
+      tokenIdentifier: 'clerk|another_allowed_user',
       authorizedClerkUserIds: ['another_allowed_user'],
       reasonCode: 'source_owned_setup',
       evidenceRefs: ['local-config:ADMIN_BOOTSTRAP_PRINCIPAL_IDS'],
@@ -120,6 +123,7 @@ describe('admin authority contract', () => {
     const grant = grantAdminMembership(state, {
       actorMembership: owner,
       targetClerkUserId: 'support_user',
+      targetTokenIdentifier: 'clerk|support_user',
       role: 'support',
       reasonCode: 'support_queue_access',
       evidenceRefs: ['ticket:admin-access'],
@@ -156,6 +160,7 @@ describe('admin authority contract', () => {
     const reviewerGrant = grantAdminMembership(state, {
       actorMembership: activeMembership('reviewer'),
       targetClerkUserId: 'reviewer_target',
+      targetTokenIdentifier: 'clerk|reviewer_target',
       role: 'support',
       reasonCode: 'not_allowed',
       evidenceRefs: ['ticket:denied'],
@@ -200,6 +205,7 @@ describe('admin authority contract', () => {
       grantAdminMembership(createEmptyAdminAuthorityState(), {
         actorMembership: activeMembership('owner_admin'),
         targetClerkUserId: 'support_user',
+        targetTokenIdentifier: 'clerk|support_user',
         role: 'support',
         reasonCode: ' ',
         evidenceRefs: ['ticket:admin-access'],
@@ -213,6 +219,7 @@ describe('admin authority contract', () => {
       grantAdminMembership(createEmptyAdminAuthorityState(), {
         actorMembership: activeMembership('owner_admin'),
         targetClerkUserId: 'support_user',
+        targetTokenIdentifier: 'clerk|support_user',
         role: 'support',
         reasonCode: 'support_queue_access',
         evidenceRefs: [],
@@ -227,6 +234,7 @@ describe('admin authority contract', () => {
 function activeMembership(role: AdminMembership['role']): AdminMembership {
   return {
     clerkUserId: 'user_1',
+    tokenIdentifier: 'clerk|user_1',
     role,
     state: 'active',
     grantedBy: 'bootstrap',

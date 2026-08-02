@@ -8,16 +8,28 @@ import {
   hasInjectionUpgrade,
   runAnswerToolUseAgent,
 } from '../../../src/modules/answer/public'
-import type { AnswerEvent, AnswerSnapshot, AnswerWorkStep } from '../../../src/modules/answer/public'
+import type { AnswerSnapshot, AnswerWorkStep } from '../../../src/modules/answer/public'
 import { validateFollowUpChip } from '../../../src/modules/answer-thread/public'
 import { resetAnswerTurnGuardForTests, setAnswerThreadPortForTests } from '../../../src/modules/answer-thread/testing'
 import type { FrozenTurnEvidence } from '../../../src/modules/answer-thread/harness'
 import { handleAnswerTurnRequest } from '../../../src/routes/api.answer.turn'
+import { round2 } from '../../../src/modules/common/round-2'
+import { buildDevSeedCatalogState } from '../../../src/modules/dev/public'
+import {
+  getPublicBusinessOfferingSupplyBySlug,
+  listPublicBusinessOfferingSupply,
+  resolvePublishedInquiryTarget,
+  searchPublicBusinessOfferingSupply,
+} from '../../../src/modules/registry/public'
+import { setPublicRegistrySourcePortForTests } from '../../../src/modules/registry/registry.functions'
+import { stableUnique } from '../../../src/modules/common/stable-unique'
+import { sameStringList } from '../../../src/modules/common/same-string-list'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../../../tests/helpers/answer-thread-test-port'
+import { readAnswerTurnStream, type AnswerTurnFrame } from '../../../tests/helpers/answer-turn-stream'
 import {
   findAnswerThreadEvalCase,
   findAnswerTurnEvalCase,
@@ -29,6 +41,7 @@ import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../../../tests/helpers/openrouter-contract-server'
+import { BROAD_ANSWER_EVAL_BUSINESS_FIXTURES } from './registry-seed'
 
 type GateVars = {
   snapshot: string
@@ -69,7 +82,96 @@ type AnswerThreadVars = {
   caseId: string
 }
 
-type StreamFrame = { seq: number; event: AnswerEvent }
+
+export type AnswerEvalPerformancePath = 'deterministic' | 'model'
+
+export type AnswerEvalUsage = {
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  cacheWriteTokens: number
+  reasoningOutputTokens: number
+  totalTokens: number
+}
+
+type AnswerEvalHarnessMetrics = {
+  performancePath: AnswerEvalPerformancePath
+  modelRequestCount: number
+  toolRunCount: number
+  usage: AnswerEvalUsage
+  estimatedUsd?: number
+  costUnavailableReasons: readonly string[]
+}
+
+function emptyAnswerEvalHarnessMetrics(): AnswerEvalHarnessMetrics {
+  return {
+    performancePath: 'deterministic',
+    modelRequestCount: 0,
+    toolRunCount: 0,
+    usage: emptyAnswerEvalUsage(),
+    costUnavailableReasons: [],
+  }
+}
+
+function emptyAnswerEvalUsage(): AnswerEvalUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningOutputTokens: 0,
+    totalTokens: 0,
+  }
+}
+
+function readAnswerEvalHarnessMetrics(
+  harnessRun: FrozenTurnEvidence['harnessRun'],
+): AnswerEvalHarnessMetrics {
+  const modelRequestCount = finiteCount(harnessRun?.summary.models?.total)
+  const toolRunCount = finiteCount(harnessRun?.summary.tools.total)
+  const usage = harnessRun?.summary.usage
+  const cost = harnessRun?.summary.cost
+  const estimatedUsd = finiteNonNegative(cost?.estimatedUsd)
+  return {
+    performancePath: modelRequestCount > 0 ? 'model' : 'deterministic',
+    modelRequestCount,
+    toolRunCount,
+    usage: {
+      inputTokens: finiteCount(usage?.inputTokens),
+      outputTokens: finiteCount(usage?.outputTokens),
+      cachedInputTokens: finiteCount(usage?.cachedInputTokens),
+      cacheWriteTokens: finiteCount(usage?.cacheWriteTokens),
+      reasoningOutputTokens: finiteCount(usage?.reasoningOutputTokens),
+      totalTokens: finiteCount(usage?.totalTokens),
+    },
+    ...(estimatedUsd === undefined ? {} : { estimatedUsd }),
+    costUnavailableReasons: [...new Set(
+      (cost?.unavailableReasons ?? []).filter((reason): reason is string => typeof reason === 'string' && reason.length > 0),
+    )].sort((left, right) => left.localeCompare(right)),
+  }
+}
+
+function finiteCount(value: number | undefined): number {
+  return value !== undefined && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0
+}
+
+function finiteNonNegative(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+function elapsedMs(start: number, end: number): number {
+  return round2(Math.max(0, end - start))
+}
+
+function performanceMetrics(start: number, firstProgress: number | undefined, completion: number): {
+  requestToFirstProgressMs: number
+  requestToCompletionMs: number
+} {
+  return {
+    requestToFirstProgressMs: elapsedMs(start, firstProgress ?? completion),
+    requestToCompletionMs: elapsedMs(start, completion),
+  }
+}
 
 export type AnswerTurnEvalResult = {
   ok: boolean
@@ -82,6 +184,14 @@ export type AnswerTurnEvalResult = {
   workStepIds: string[]
   workSteps: AnswerWorkStep[]
   totalTimingMs: number
+  performancePath: AnswerEvalPerformancePath
+  requestToFirstProgressMs: number
+  requestToCompletionMs: number
+  modelRequestCount: number
+  toolRunCount: number
+  usage: AnswerEvalUsage
+  estimatedUsd?: number
+  costUnavailableReasons: readonly string[]
   hasHarnessRun: boolean
   harnessStatus?: string
   harnessToolsInvoked: readonly string[]
@@ -186,6 +296,9 @@ async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<AnswerTurnE
       workStepIds: [],
       workSteps: [],
       totalTimingMs: 0,
+      requestToFirstProgressMs: 0,
+      requestToCompletionMs: 0,
+      ...emptyAnswerEvalHarnessMetrics(),
       hasHarnessRun: false,
       harnessToolsInvoked: [],
       harnessPhases: [],
@@ -200,10 +313,15 @@ async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<AnswerTurnE
 export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promise<AnswerTurnEvalResult> {
   const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
   const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+  const previousConvexUrl = process.env.CONVEX_URL
+  const previousViteConvexUrl = process.env.VITE_CONVEX_URL
   const store = createAnswerThreadTestStore()
   const resetThreadPort = installAnswerThreadTestPort(store)
+  const resetRegistryPort = installEvalRegistrySeed(testCase.registrySeed)
   const previousApiKey = process.env.OPENROUTER_API_KEY
   delete process.env.OPENROUTER_API_KEY
+  delete process.env.CONVEX_URL
+  delete process.env.VITE_CONVEX_URL
   resetAnswerTurnGuardForTests()
 
   try {
@@ -220,6 +338,9 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
       workStepIds: [],
       workSteps: [],
       totalTimingMs: 0,
+      requestToFirstProgressMs: 0,
+      requestToCompletionMs: 0,
+      ...emptyAnswerEvalHarnessMetrics(),
       hasHarnessRun: false,
       harnessToolsInvoked: [],
       harnessPhases: [],
@@ -236,6 +357,7 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
 
     return result
   } finally {
+    resetRegistryPort()
     resetThreadPort()
     setAnswerThreadPortForTests(undefined)
     resetAnswerTurnGuardForTests()
@@ -248,6 +370,16 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
       delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
     } else {
       process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+    }
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousViteConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousViteConvexUrl
     }
     if (previousApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY
@@ -274,10 +406,15 @@ async function evaluateAnswerThreadCase(vars: AnswerThreadVars): Promise<AnswerT
 export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): Promise<AnswerThreadEvalResult> {
   const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
   const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+  const previousConvexUrl = process.env.CONVEX_URL
+  const previousViteConvexUrl = process.env.VITE_CONVEX_URL
   const store = createAnswerThreadTestStore()
   const resetThreadPort = installAnswerThreadTestPort(store)
+  const resetRegistryPort = installEvalRegistrySeed(testCase.registrySeed)
   const previousApiKey = process.env.OPENROUTER_API_KEY
   delete process.env.OPENROUTER_API_KEY
+  delete process.env.CONVEX_URL
+  delete process.env.VITE_CONVEX_URL
   resetAnswerTurnGuardForTests()
 
   try {
@@ -307,6 +444,7 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
       turns,
     }
   } finally {
+    resetRegistryPort()
     resetThreadPort()
     setAnswerThreadPortForTests(undefined)
     resetAnswerTurnGuardForTests()
@@ -320,12 +458,34 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
     } else {
       process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
     }
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousViteConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousViteConvexUrl
+    }
     if (previousApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY
     } else {
       process.env.OPENROUTER_API_KEY = previousApiKey
     }
   }
+}
+
+function installEvalRegistrySeed(seed: AnswerTurnEvalCase['registrySeed']): () => void {
+  if (seed !== 'broad') return () => {}
+
+  const state = buildDevSeedCatalogState(BROAD_ANSWER_EVAL_BUSINESS_FIXTURES).state
+  return setPublicRegistrySourcePortForTests({
+    list: (input) => Promise.resolve(listPublicBusinessOfferingSupply(state, input)),
+    search: (input) => Promise.resolve(searchPublicBusinessOfferingSupply(state, input)),
+    detail: (input) => Promise.resolve(getPublicBusinessOfferingSupplyBySlug(state, input)),
+    resolveInquiryTarget: (input) => Promise.resolve(resolvePublishedInquiryTarget(state, input)),
+  })
 }
 
 async function runAnswerTurnInStore(input: {
@@ -340,6 +500,8 @@ async function runAnswerTurnInStore(input: {
     : await startOpenRouterContractServer(openRouterToolThenProseResponses(input.testCase.openRouterAgent))
   const restoreOpenRouter = server?.installEnv()
   try {
+    const requestStartedAt = performance.now()
+    let firstProgressAt: number | undefined
     const response = await handleAnswerTurnRequest(
       new Request('https://ae.example/api/answer/turn', {
         method: 'POST',
@@ -354,9 +516,12 @@ async function runAnswerTurnInStore(input: {
           ...(input.testCase.searchContext === undefined ? {} : { searchContext: input.testCase.searchContext }),
         }),
       }),
+      { admit: async () => ({ ok: true }) },
     )
 
     if (!response.ok) {
+      const errorText = await response.text()
+      const responseCompletedAt = performance.now()
       return {
         ok: false,
         caseId: input.testCase.id,
@@ -368,15 +533,22 @@ async function runAnswerTurnInStore(input: {
         workStepIds: [],
         workSteps: [],
         totalTimingMs: 0,
+        ...emptyAnswerEvalHarnessMetrics(),
+        ...performanceMetrics(requestStartedAt, undefined, responseCompletedAt),
         hasHarnessRun: false,
         harnessToolsInvoked: [],
         harnessPhases: [],
         problems: [`http_${response.status}`],
-        diagnostics: { errorCode: await response.text() },
+        diagnostics: { errorCode: errorText },
       }
     }
 
-    const frames = parseStream(await response.text())
+    const frames = await readAnswerTurnStream(response, (frame) => {
+      if (firstProgressAt === undefined && frame.event.type !== 'thread') {
+        firstProgressAt = performance.now()
+      }
+    })
+    const completedAt = performance.now()
     const lastEvent = frames.at(-1)?.event
     const complete = lastEvent?.type === 'complete' ? lastEvent.answer : undefined
     const error = lastEvent?.type === 'error' ? lastEvent : undefined
@@ -392,6 +564,10 @@ async function runAnswerTurnInStore(input: {
     const totalTimingMs = sumTimingMs(timingEntries)
     const harnessToolsInvoked = harnessRun?.coverage.toolsInvoked ?? []
     const harnessPhases = harnessRun?.coverage.phases ?? []
+    const harnessMetrics = harnessRun === undefined
+      ? emptyAnswerEvalHarnessMetrics()
+      : readAnswerEvalHarnessMetrics(harnessRun)
+    const requestMetrics = performanceMetrics(requestStartedAt, firstProgressAt, completedAt)
     const status = complete !== undefined ? 'complete' : error !== undefined ? 'error' : 'missing'
     const slugs = complete?.providers.map((provider) => provider.slug) ?? []
     const diagnostics = {
@@ -409,6 +585,8 @@ async function runAnswerTurnInStore(input: {
       testCase: input.testCase,
       status,
       slugs,
+      ...requestMetrics,
+      ...harnessMetrics,
       toolQueries,
       timingNames,
       artifactKinds,
@@ -430,6 +608,8 @@ async function runAnswerTurnInStore(input: {
       timingNames,
       artifactKinds,
       workStepIds,
+      ...requestMetrics,
+      ...harnessMetrics,
       workSteps,
       totalTimingMs,
       hasHarnessRun: harnessRun !== undefined,
@@ -483,6 +663,14 @@ function evaluateAnswerTurnExpectations(input: {
   timingNames: readonly string[]
   artifactKinds: readonly string[]
   totalTimingMs: number
+  performancePath: AnswerEvalPerformancePath
+  requestToFirstProgressMs: number
+  requestToCompletionMs: number
+  modelRequestCount: number
+  toolRunCount: number
+  usage: AnswerEvalUsage
+  estimatedUsd?: number
+  costUnavailableReasons: readonly string[]
   snapshot: AnswerSnapshot | undefined
   workSteps: readonly AnswerWorkStep[]
   hasHarnessRun: boolean
@@ -498,6 +686,14 @@ function evaluateAnswerTurnExpectations(input: {
     timingNames,
     artifactKinds,
     totalTimingMs,
+    performancePath,
+    requestToFirstProgressMs,
+    requestToCompletionMs,
+    modelRequestCount,
+    toolRunCount,
+    usage,
+    estimatedUsd,
+    costUnavailableReasons,
     snapshot,
     workSteps,
     hasHarnessRun,
@@ -510,6 +706,30 @@ function evaluateAnswerTurnExpectations(input: {
   const timingNameSet = new Set(timingNames)
   const artifactKindSet = new Set(artifactKinds)
   const harnessPhaseSet = new Set(harnessPhases)
+
+  if (performancePath !== 'deterministic' && performancePath !== 'model') {
+    problems.push(`unknown performance path ${performancePath}`)
+  }
+  if (
+    !Number.isFinite(requestToFirstProgressMs) ||
+    requestToFirstProgressMs < 0 ||
+    !Number.isFinite(requestToCompletionMs) ||
+    requestToCompletionMs < 0
+  ) {
+    problems.push('request wall-clock timings must be finite and non-negative')
+  }
+  if (requestToFirstProgressMs > requestToCompletionMs) {
+    problems.push('first progress cannot occur after stream completion')
+  }
+  if (Object.values(usage).some((value) => !Number.isFinite(value) || value < 0)) {
+    problems.push('aggregate usage must be finite and non-negative')
+  }
+  if (estimatedUsd !== undefined && (!Number.isFinite(estimatedUsd) || estimatedUsd < 0)) {
+    problems.push('estimated cost must be finite and non-negative')
+  }
+  if (costUnavailableReasons.some((reason) => reason.length === 0)) {
+    problems.push('cost-unavailable reasons must be non-empty')
+  }
 
   if (status !== expected.status) {
     problems.push(`expected status ${expected.status}, got ${status}`)
@@ -545,6 +765,15 @@ function evaluateAnswerTurnExpectations(input: {
   }
   if (expected.maxTotalTimingMs !== undefined && totalTimingMs > expected.maxTotalTimingMs) {
     problems.push(`timing total ${totalTimingMs}ms exceeds ${expected.maxTotalTimingMs}ms`)
+  }
+  if (expected.expectedModelRequests !== undefined && modelRequestCount !== expected.expectedModelRequests) {
+    problems.push(`expected ${expected.expectedModelRequests} model requests, got ${modelRequestCount}`)
+  }
+  if (expected.maxModelRequests !== undefined && modelRequestCount > expected.maxModelRequests) {
+    problems.push(`model request count ${modelRequestCount} exceeds ${expected.maxModelRequests}`)
+  }
+  if (expected.maxToolRuns !== undefined && toolRunCount > expected.maxToolRuns) {
+    problems.push(`tool run count ${toolRunCount} exceeds ${expected.maxToolRuns}`)
   }
   if (expected.requireHarnessRun === true && !hasHarnessRun) {
     problems.push('missing persisted harnessRun')
@@ -604,9 +833,6 @@ function evaluateAnswerTurnExpectations(input: {
   return problems
 }
 
-function sameStringList(actual: readonly string[], expected: readonly string[]): boolean {
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index])
-}
 
 function evaluateWorkLogExpectations(input: {
   expected: AnswerTurnEvalCase['expected']
@@ -638,13 +864,6 @@ function evaluateWorkLogExpectations(input: {
   return problems
 }
 
-function parseStream(text: string): StreamFrame[] {
-  return text
-    .split('\n\n')
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.startsWith('data:'))
-    .map((frame) => JSON.parse(frame.slice('data:'.length).trim()) as StreamFrame)
-}
 
 function parseEvidence(value: string | undefined): FrozenTurnEvidence | undefined {
   if (value === undefined || value.trim().length === 0) {
@@ -669,7 +888,7 @@ function readToolQueries(evidence: FrozenTurnEvidence | undefined): string[] {
 }
 
 function readWorkSteps(
-  frames: readonly StreamFrame[],
+  frames: readonly AnswerTurnFrame[],
   evidence: FrozenTurnEvidence | undefined,
 ): AnswerWorkStep[] {
   const byId = new Map<string, AnswerWorkStep>()
@@ -700,23 +919,21 @@ function readWorkLogText(workSteps: readonly AnswerWorkStep[]): string {
 }
 
 function readArtifactKinds(
-  frames: readonly StreamFrame[],
+  frames: readonly AnswerTurnFrame[],
   snapshot: AnswerSnapshot | undefined,
 ): string[] {
-  return [
-    ...new Set([
-      ...frames.flatMap((frame) =>
-        frame.event.type === 'artifact' ? [frame.event.artifact.kind] : [],
-      ),
-      ...(snapshot === undefined
-        ? []
-        : buildArtifactsFromSnapshot(snapshot).map((artifact) => artifact.kind)),
-    ]),
-  ]
+  return stableUnique([
+    ...frames.flatMap((frame) =>
+      frame.event.type === 'artifact' ? [frame.event.artifact.kind] : [],
+    ),
+    ...(snapshot === undefined
+      ? []
+      : buildArtifactsFromSnapshot(snapshot).map((artifact) => artifact.kind)),
+  ])
 }
 
 function sumTimingMs(timings: NonNullable<FrozenTurnEvidence['timings']>): number {
-  return Math.round(timings.reduce((sum, timing) => sum + timing.durationMs, 0) * 100) / 100
+  return round2(timings.reduce((sum, timing) => sum + timing.durationMs, 0))
 }
 
 function findInternalPublicTerms(publicText: string): string[] {

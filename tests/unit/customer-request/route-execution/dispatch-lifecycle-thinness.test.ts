@@ -23,41 +23,25 @@ const problemPortsSource = readFileSync(
 )
 
 const hostDispatchMachines = [
-  'openLeasedDispatch',
-  'recoverExpiredDispatch',
   'markDispatched',
   'recordNotReleased',
-  'markAccepted',
 ] as const
 
 const dispatchMachineFiles = [
   'dispatch-lifecycle-ports.ts',
-  'current-leased-invocation.ts',
-  'open-leased-dispatch.ts',
-  'recover-expired-dispatch.ts',
   'mark-dispatched.ts',
   'record-not-released.ts',
-  'mark-accepted.ts',
-] as const
 
-const recoverJournalHelpers = [
-  'recoverDispatchAttemptAligned',
-  'recoverDispatchLeaseStillCurrent',
-  'recoverExpiredDispatchKind',
 ] as const
-
 describe('customer-request route-execution dispatch lifecycle thinness', () => {
   it('hosts dispatch lifecycle machines under machines/', () => {
     for (const file of dispatchMachineFiles) {
       expect(statSync(join(machinesRoot, file)).isFile()).toBe(true)
     }
     const index = readFileSync(join(machinesRoot, 'index.ts'), 'utf8')
-    expect(index).toContain('openLeasedDispatch')
-    expect(index).toContain('recoverExpiredDispatch')
-    expect(index).toContain('markDispatched')
-    expect(index).toContain('recordNotReleased')
-    expect(index).toContain('markAccepted')
-    expect(index).toContain('currentLeasedInvocation')
+    for (const symbol of ['markDispatched', 'recordNotReleased']) {
+      expect(index).toContain(symbol)
+    }
     expect(index).toContain('DispatchLifecyclePorts')
     expect(index).toContain('DispatchLifecycleOpenPorts')
   })
@@ -68,65 +52,21 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
     }
     expect(hostSource).toContain('dispatchLifecyclePorts(ctx)')
     expect(hostSource).toContain('dispatchLifecycleOpenPorts(ctx)')
-    expect(hostSource).toContain('openLeasedDispatchMachine')
-    expect(hostSource).toContain('recoverExpiredDispatchMachine')
     expect(hostSource).toContain('markDispatchedMachine')
     expect(hostSource).toContain('recordNotReleasedMachine')
-    expect(hostSource).toContain('markAcceptedMachine')
     expect(hostSource).toContain("from './customerRequestRouteExecutionDispatchPorts'")
-    expect(hostSource).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+currentLeasedInvocation\b/)
 
-    const openStart = hostSource.indexOf('export const openLeasedDispatch = internalQuery({')
-    const recoverStart = hostSource.indexOf(
-      'export const recoverExpiredDispatch = internalMutation({',
-    )
-    const markDispatchedStart = hostSource.indexOf(
-      'export const markDispatched = internalMutation({',
-    )
-    const notReleasedStart = hostSource.indexOf(
-      'export const recordNotReleased = internalMutation({',
-    )
-    const markAcceptedStart = hostSource.indexOf(
-      'export const markAccepted = internalMutation({',
-    )
-    for (const start of [
-      openStart, recoverStart, markDispatchedStart, notReleasedStart, markAcceptedStart,
-    ]) {
+    for (const symbol of hostDispatchMachines) {
+      const start = hostSource.indexOf(`export const ${symbol} =`)
       expect(start).toBeGreaterThanOrEqual(0)
       const end = hostSource.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = hostSource.slice(start, end)
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
-      expect(body).not.toContain("query('customerRequestRouteRuns')")
-      expect(body).not.toContain("query('customerRequestRouteDispatchOutbox')")
-      expect(body).not.toContain("query('customerRequestRouteStepAttempts')")
       expect(body).not.toContain('ctx.db.insert(')
       expect(body).not.toContain('ctx.db.patch(')
       expect(body).not.toContain('ctx.scheduler')
     }
-    expect(hostSource.slice(openStart, hostSource.indexOf('\n})', openStart)))
-      .toContain('dispatchLifecycleOpenPorts(ctx)')
-    expect(hostSource.slice(recoverStart, hostSource.indexOf('\n})', recoverStart)))
-      .toContain('dispatchLifecyclePorts(ctx)')
-    expect(hostSource.slice(markDispatchedStart, hostSource.indexOf('\n})', markDispatchedStart)))
-      .toContain('dispatchLifecyclePorts(ctx)')
-    expect(hostSource.slice(notReleasedStart, hostSource.indexOf('\n})', notReleasedStart)))
-      .toContain('dispatchLifecyclePorts(ctx)')
-    expect(hostSource.slice(markAcceptedStart, hostSource.indexOf('\n})', markAcceptedStart)))
-      .toContain('dispatchLifecyclePorts(ctx)')
-  })
-
-  it('keeps recover journal helpers in dispatch machines, not the host', () => {
-    for (const symbol of recoverJournalHelpers) {
-      expect(hostSource).not.toContain(symbol)
-    }
-    const recoverMachine = readFileSync(join(machinesRoot, 'recover-expired-dispatch.ts'), 'utf8')
-    expect(recoverMachine).toContain('recoverDispatchLeaseStillCurrent')
-    expect(recoverMachine).toContain('recoverDispatchAttemptAligned')
-    expect(recoverMachine).toContain('recoverExpiredDispatchKind')
-    expect(dispatchPortsSource).toContain('markUnknownOutcome')
-    expect(dispatchPortsSource).toContain('readRunProjection')
-    expect(dispatchPortsSource).toContain('customerRequestRouteTransportWorker.runNext')
   })
 
   it('does not invent Convex Dispatch/Recover/Mark sibling hosts', () => {
@@ -150,7 +90,6 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
       expect(source).not.toContain('commitDispatchRequeued')
       expect(source).not.toContain('commitMarkDispatched')
       expect(source).not.toContain('commitNotReleasedFailed')
-      expect(source).not.toContain('commitMarkAccepted')
       expect(source).not.toContain('commitDispatchOutcomeUnknown')
     }
   })
@@ -171,20 +110,13 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
       expect(source).not.toMatch(/\bwritePlan\b/)
       expect(source).not.toMatch(/\bintendedPatches\b/)
     }
-    const open = readFileSync(join(machinesRoot, 'open-leased-dispatch.ts'), 'utf8')
-    const recover = readFileSync(join(machinesRoot, 'recover-expired-dispatch.ts'), 'utf8')
     const markDispatched = readFileSync(join(machinesRoot, 'mark-dispatched.ts'), 'utf8')
     const notReleased = readFileSync(join(machinesRoot, 'record-not-released.ts'), 'utf8')
-    const markAccepted = readFileSync(join(machinesRoot, 'mark-accepted.ts'), 'utf8')
-    const leased = readFileSync(join(machinesRoot, 'current-leased-invocation.ts'), 'utf8')
-    expect(open).toContain('DispatchLifecycleOpenPorts')
-    expect(recover).toContain('DispatchLifecyclePorts')
     expect(markDispatched).toContain('DispatchLifecyclePorts')
     expect(notReleased).toContain('DispatchLifecyclePorts')
-    expect(markAccepted).toContain('DispatchLifecyclePorts')
-    expect(leased).toContain('DispatchLifecycleOpenPorts')
-    for (const source of [open, recover, markDispatched, notReleased, markAccepted, leased]) {
+    for (const source of [markDispatched, notReleased]) {
       expect(source).toContain('ports.')
     }
+    expect(dispatchPortsSource).toContain('openDispatchFromJournal')
   })
 })

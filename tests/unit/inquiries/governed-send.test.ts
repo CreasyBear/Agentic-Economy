@@ -11,16 +11,14 @@ import {
 
 const target = {
   businessId: brandNonEmpty('business:governed-send', 'BusinessId'),
-  serviceId: brandNonEmpty('service:governed-send', 'ServiceId'),
-  capabilityKind: 'phone_inquiry',
+  offeringRef: brandNonEmpty('offering:governed-send', 'OfferingRef'),
 } satisfies GovernedSendIntentInput['target']
 
 describe('buildGovernedSendIntent', () => {
   it('constructs payload keys in the declared canonical field order', () => {
     const expectedFieldOrder = [
       'businessId',
-      'serviceId',
-      'capabilityKind',
+      'offeringRef',
       'body',
       'contactName',
       'contactEmail',
@@ -55,8 +53,7 @@ describe('buildGovernedSendIntent', () => {
 
     expect(intent.payload).toEqual({
       businessId: 'business:governed-send',
-      serviceId: 'service:governed-send',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:governed-send',
       body: 'Please inspect the leaking isolation valve.',
       contactName: 'Alex Rivera',
       contactEmail: 'alex@example.com',
@@ -74,8 +71,7 @@ describe('buildGovernedSendIntent', () => {
 
     expect(intent.payload).toEqual({
       businessId: 'business:governed-send',
-      serviceId: 'service:governed-send',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:governed-send',
       body: 'Please inspect the leaking isolation valve.',
       contactName: null,
       contactEmail: null,

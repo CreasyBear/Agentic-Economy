@@ -29,9 +29,11 @@ vi.mock('@tanstack/react-router', () => ({
     }
   },
   useNavigate: () => routeState.navigate,
-  Link: ({ children, to, ...props }: { children: ReactNode; to: string }) => (
-    <a href={to} {...props}>{children}</a>
-  ),
+  linkOptions: <T,>(options: T): T => options,
+  Link: ({ children, to, search, ...props }: { children: ReactNode; to: string; search?: Record<string, string> }) => {
+    const query = new URLSearchParams(search ?? {}).toString()
+    return <a href={query.length === 0 ? to : `${to}?${query}`} {...props}>{children}</a>
+  },
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -78,7 +80,12 @@ describe('plan-first home', () => {
     const examples = screen.getByRole('navigation', { name: 'Example asks' })
     const exampleLinks = Array.from(examples.querySelectorAll('a'))
     expect(exampleLinks.length).toBe(HOME.exampleAsks.length)
-    expect(exampleLinks.map((link) => link.getAttribute('href'))).toContain(`/?q=${encodeURIComponent(HOME.exampleAsks[0]!)}`)
+    // The router serialises `search` with URLSearchParams (spaces as `+`), not encodeURIComponent.
+    // The value is pinned to the real copy; only the encoding is derived, since encoding is the
+    // router's job and this test is about the home page passing the ask through to the link.
+    const firstAsk = HOME.exampleAsks[0]!
+    expect(exampleLinks.map((link) => link.getAttribute('href')))
+      .toContain(`/?${new URLSearchParams({ q: firstAsk }).toString()}`)
     expect(screen.getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
     expect(screen.getAllByRole('link', { name: 'List your business' }).some((link) => link.getAttribute('href') === '/claim')).toBe(true)
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()

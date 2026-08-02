@@ -1,7 +1,6 @@
 import { routePlanGenerationMatchesRequest } from '@/modules/customer-request/route-plan-generation'
 import {
   aggregateIsInternallyConsistent,
-  legacyAggregateIsInternallyConsistent,
 } from '@/modules/customer-request/v2-write'
 
 import type { CustomerRequestV2ReadPorts } from './ports'
@@ -17,18 +16,6 @@ export async function getCurrentAggregate(
   const head = await ports.loadRequestHead(args.requestId)
   if (head !== null) {
     const revision = await ports.loadRevision(args.requestId, head.currentRevision)
-    if (revision !== null && 'routes' in revision.aggregate.plan) {
-      if (revision.aggregate.aggregateDigest !== head.currentAggregateDigest
-        || !legacyAggregateIsInternallyConsistent(revision.aggregate)) {
-        throw new Error('customer_request_v2_legacy_aggregate_integrity_failure')
-      }
-      return {
-        kind: 'needs_attention' as const,
-        requestId: args.requestId,
-        reason: 'historical_request_resubmit_required' as const,
-        resumable: false as const,
-      }
-    }
     if (revision === null || revision.aggregate.aggregateDigest !== head.currentAggregateDigest
       || !aggregateIsInternallyConsistent(
         revision.aggregate,
@@ -84,13 +71,5 @@ export async function getCurrentAggregate(
         : { currentDecisionCommandKey: currentDecision.commandKey }),
     }
   }
-  const historical = await ports.hasHistoricalRequest(args.requestId)
-  return historical
-    ? {
-        kind: 'needs_attention' as const,
-        requestId: args.requestId,
-        reason: 'historical_request_resubmit_required' as const,
-        resumable: false as const,
-      }
-    : { kind: 'not_found' as const }
+  return { kind: 'not_found' as const }
 }

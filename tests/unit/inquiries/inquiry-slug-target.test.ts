@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { submitPublicInquiryThroughSource } from '@/modules/inquiries/inquiry.functions'
 import {
   createLocalE2eRegistrySourceState,
-  getPublicBusinessCatalogBySlug,
+  getPublicBusinessOfferingSupplyBySlug,
   resolvePublishedInquiryTarget,
 } from '@/modules/registry/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
@@ -12,31 +12,27 @@ import type { SuppressionRuleRecord } from '@/modules/security/public'
 const expectedDigest = 'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 
 describe('inquiry.submit slug target resolution', () => {
-  it('resolves a published slug pair to source ids through the real local registry functions', () => {
+  it('resolves a published business slug and Offering reference to source ids through the real local registry functions', () => {
     const state = createLocalE2eRegistrySourceState()
-    const { businessSlug, serviceSlug } = publishedTarget(state)
+    const { businessSlug, offeringRef } = publishedTarget(state)
 
-    expect(resolvePublishedInquiryTarget(state, { businessSlug, serviceSlug })).toEqual({
+    expect(resolvePublishedInquiryTarget(state, { businessSlug, offeringRef })).toEqual({
       kind: 'resolved',
       businessId: 'business:plumbing-demo',
-      serviceId: 'service:business:plumbing-demo:diagnostic-plumbing',
+      offeringRef,
     })
   })
 
   it('returns inquiry_target_not_found for an unknown business slug through the explicit local source path', async () => {
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
 
     try {
       const result = await submitPublicInquiryThroughSource({
         target: {
           businessSlug: 'no-such-business',
-          serviceSlug: 'no-such-service',
-          capabilityKind: 'phone_inquiry',
+          offeringRef: 'offering:no-such-business:no-such-offering',
         },
         body: 'Testing an unknown target.',
         contact: { name: 'Casey' },
@@ -47,31 +43,25 @@ describe('inquiry.submit slug target resolution', () => {
         kind: 'error',
         code: 'inquiry_target_not_found',
         retryable: false,
-        reason: 'No published business is discoverable for this slug.',
+        reason: 'No published Offering is discoverable for this slug and reference.',
       })
     } finally {
-      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalRegistry)
-      restoreEnv('CONVEX_URL', previousConvexUrl)
-      restoreEnv('VITE_CONVEX_URL', previousPublicConvexUrl)
+      vi.unstubAllEnvs()
     }
   })
 
-  it('returns inquiry_target_not_found when the service slug is not on the published business', async () => {
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+  it('returns inquiry_target_not_found when the Offering reference is not on the published business', async () => {
+    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
 
     try {
       const result = await submitPublicInquiryThroughSource({
         target: {
           businessSlug: 'plumbing-demo',
-          serviceSlug: 'not-a-published-service',
-          capabilityKind: 'phone_inquiry',
+          offeringRef: 'offering:plumbing-demo:not-a-published-offering',
         },
-        body: 'Testing a service that is not published on this business.',
+        body: 'Testing an Offering that is not published on this business.',
         contact: { name: 'Casey' },
         expectedDigest,
       })
@@ -80,19 +70,17 @@ describe('inquiry.submit slug target resolution', () => {
         kind: 'error',
         code: 'inquiry_target_not_found',
         retryable: false,
-        reason: 'No published service is discoverable for this slug on the business.',
+        reason: 'No published Offering is discoverable for this slug and reference.',
       })
     } finally {
-      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalRegistry)
-      restoreEnv('CONVEX_URL', previousConvexUrl)
-      restoreEnv('VITE_CONVEX_URL', previousPublicConvexUrl)
+      vi.unstubAllEnvs()
     }
   })
 
-  it('never resolves a suppressed business, even for an otherwise published slug pair', () => {
+  it('never resolves a suppressed business, even for an otherwise published slug and Offering reference', () => {
     const state = createLocalE2eRegistrySourceState()
-    const { businessSlug, serviceSlug } = publishedTarget(state)
-    const resolved = resolvePublishedInquiryTarget(state, { businessSlug, serviceSlug })
+    const { businessSlug, offeringRef } = publishedTarget(state)
+    const resolved = resolvePublishedInquiryTarget(state, { businessSlug, offeringRef })
     expect(resolved.kind).toBe('resolved')
     if (resolved.kind !== 'resolved') {
       return
@@ -103,23 +91,23 @@ describe('inquiry.submit slug target resolution', () => {
       suppressionRules: [suppressionRuleFor(resolved.businessId)],
     }
 
-    expect(resolvePublishedInquiryTarget(suppressed, { businessSlug, serviceSlug })).toEqual({
+    expect(resolvePublishedInquiryTarget(suppressed, { businessSlug, offeringRef })).toEqual({
       kind: 'not_found',
-      reason: 'No published business is discoverable for this slug.',
+      reason: 'No published Offering is discoverable for this slug on the business.',
     })
   })
 })
 
-function publishedTarget(state: RegistrySourceState): { businessSlug: string; serviceSlug: string } {
-  const detail = getPublicBusinessCatalogBySlug(state, { slug: 'plumbing-demo' })
+function publishedTarget(state: RegistrySourceState): { businessSlug: string; offeringRef: string } {
+  const detail = getPublicBusinessOfferingSupplyBySlug(state, { slug: 'plumbing-demo' })
   if (detail.kind !== 'found') {
     throw new Error('Expected the seeded local e2e catalog to publish plumbing-demo.')
   }
-  const service = detail.business.services[0]
-  if (service === undefined) {
-    throw new Error('Expected the seeded local e2e catalog to publish at least one service.')
+  const offering = detail.business.offerings[0]
+  if (offering === undefined) {
+    throw new Error('Expected the seeded local e2e catalog to publish at least one Offering.')
   }
-  return { businessSlug: detail.business.slug, serviceSlug: service.slug }
+  return { businessSlug: detail.business.slug, offeringRef: offering.offeringRef }
 }
 
 function suppressionRuleFor(businessId: string): SuppressionRuleRecord {
@@ -136,10 +124,3 @@ function suppressionRuleFor(businessId: string): SuppressionRuleRecord {
   }
 }
 
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name]
-  } else {
-    process.env[name] = value
-  }
-}

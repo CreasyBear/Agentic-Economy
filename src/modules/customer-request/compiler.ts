@@ -10,7 +10,9 @@ import {
 import type { CapabilityCancellation } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
+import { exactContractRefKey } from './contract-ref-key'
 import {
   discoverRequestEvaluationCandidates,
   evaluateCustomerRequestSnapshot,
@@ -573,7 +575,7 @@ export function compileRoutePlans(input: Readonly<{
     const steps = input.actions.map((action, index) => {
       const candidate = combination[index]
       if (candidate === undefined) throw new Error('customer_request_route_candidate_missing')
-      const model = input.models.get(refKey(action.contractRef))
+      const model = input.models.get(exactContractRefKey(action.contractRef))
       if (model === undefined) throw new Error('customer_request_route_model_missing')
       const activeInputPointers = new Set([
         ...action.inputs.map(({ inputPointer }) => inputPointer),
@@ -815,7 +817,7 @@ export function composeRequestActions(
     }
     return Object.freeze({
       ...action,
-      dependsOn: Object.freeze([...new Set(mappings.map((mapping) => mapping.source.actionId))].sort()),
+      dependsOn: Object.freeze(uniqueSorted(mappings.map((mapping) => mapping.source.actionId))),
       inputMappings: Object.freeze(mappings.sort((left, right) => left.mappingId.localeCompare(right.mappingId))),
     })
   })
@@ -841,7 +843,7 @@ export function composeRequestActions(
 function exactModelRegistry(models: readonly CapabilityDecisionModel[]): Map<string, CapabilityDecisionModel> | undefined {
   const registry = new Map<string, CapabilityDecisionModel>()
   for (const model of models) {
-    const key = refKey(model.contractRef)
+    const key = exactContractRefKey(model.contractRef)
     if (registry.has(key)) return undefined
     registry.set(key, model)
   }
@@ -851,7 +853,7 @@ function exactModelRegistry(models: readonly CapabilityDecisionModel[]): Map<str
 function resolveExactModel(
   models: ReadonlyMap<string, CapabilityDecisionModel>, ref: CapabilityContractRef,
 ): CapabilityDecisionModel | undefined {
-  const model = models.get(refKey(ref))
+  const model = models.get(exactContractRefKey(ref))
   return model !== undefined && sameCapabilityContractRef(model.contractRef, ref) ? model : undefined
 }
 
@@ -901,6 +903,3 @@ function mergeFacts(prior: readonly RequestFact[], proposed: readonly RequestFac
   )))
 }
 
-function refKey(ref: CapabilityContractRef): string {
-  return `${ref.capabilityId}\u0000${ref.version}\u0000${ref.contractDigest}`
-}

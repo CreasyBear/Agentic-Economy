@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { BusinessSupplyProjection, OfferingPrice } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
-  adaptLegacyCatalogToOfferingApi,
   projectBusinessSupplyToPublicApi,
-  summarizeOfferingAccess,
 } from '@/modules/registry/public'
 
 describe('Offering-shaped public business API', () => {
@@ -98,46 +96,7 @@ describe('Offering-shaped public business API', () => {
     expect(dto.accessSummary.aeSupportedAction).toBe(false)
   })
 
-  it('summarizes only the first two Offering names for registry rows', () => {
-    const dto = projectBusinessSupplyToPublicApi(projection({
-      offerings: ['One', 'Two', 'Three'].map((name, index) => ({
-        offering: {
-          offeringRef: brandNonEmpty(`offering:meridian:${index}`, 'OfferingRef'),
-          revision: 1,
-          name,
-          category: 'Engineering',
-          summary: `${name} summary`,
-        },
-        accessPaths: [],
-        support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
-      })),
-    }))
 
-    expect(summarizeOfferingAccess(dto)).toEqual({
-      offeringNames: ['One', 'Two'],
-      access: dto.accessSummary,
-    })
-  })
-
-  it('makes the legacy path explicit and preserves profile-only visibility', () => {
-    const dto = adaptLegacyCatalogToOfferingApi({
-      slug: 'profile-only',
-      name: 'Profile Only',
-      category: 'Engineering',
-      suburb: 'Perth',
-      stateTerritory: 'WA',
-      publicUrl: '/profile-only',
-      trustTier: 'claimed',
-      updatedAt: 50,
-      services: [],
-    })
-
-    expect(dto).toMatchObject({
-      schemaVersion: 'public-business-catalog-api:v2',
-      offerings: [],
-      disposition: 'current',
-    })
-  })
 
   it.each([
     'Hours supplied by owner',
@@ -202,28 +161,6 @@ describe('Offering-shaped public business API', () => {
     expect(dto.schemaVersion).toBe('public-business-catalog-api:v2')
   })
 
-  it('drops the legacy hours sentinel on the v1 adapter and keeps published hours', () => {
-    const dto = adaptLegacyCatalogToOfferingApi({
-      slug: 'mixed-supply',
-      name: 'Mixed Supply',
-      category: 'Plumbing',
-      suburb: 'Perth',
-      stateTerritory: 'WA',
-      publicUrl: '/mixed-supply',
-      trustTier: 'claimed',
-      updatedAt: 50,
-      services: [
-        legacyService({ slug: 'unknown-hours', hoursOrUnknown: 'Hours supplied by owner' }),
-        legacyService({ slug: 'real-hours', hoursOrUnknown: 'Mon–Fri 8:30am–5pm' }),
-      ],
-    })
-
-    expect(dto.offerings[0]).not.toHaveProperty('availabilitySummary')
-    expect(dto.offerings[1]).toMatchObject({ availabilitySummary: 'Mon–Fri 8:30am–5pm' })
-    // v1 has no price column at all, so the adapter can never publish one.
-    expect(dto.offerings.every((offering) => offering.pricingSummary === undefined)).toBe(true)
-    for (const offering of dto.offerings) expect(offering).not.toHaveProperty('price')
-  })
 })
 
 function projection(
@@ -271,17 +208,3 @@ function supplyOffering(
   } as BusinessSupplyProjection['offerings'][number]
 }
 
-function legacyService(overrides: Readonly<{ slug: string; hoursOrUnknown: string }>) {
-  return {
-    name: 'Emergency pipe repair',
-    category: 'Emergency plumbing',
-    summary: 'Burst pipe triage.',
-    serviceArea: 'Perth and nearby suburbs',
-    firstRequest: {
-      mode: 'inquiry_available' as const,
-      publicDisclosure: 'Use the inquiry form for a first contact.',
-      publicChannel: 'ae_status_only' as const,
-    },
-    ...overrides,
-  }
-}

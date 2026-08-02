@@ -23,13 +23,14 @@ import {
   withoutSourceWrite,
 } from '../../helpers/source-write-admission'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction } from '@/modules/governed-action/public'
 import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
-type QueryRead = { tableName: string; indexName?: string; filters: EqFilter[] }
+type QueryRead = { tableName: string; operation: 'collect' | 'take'; indexName?: string; filters: EqFilter[]; limit?: number }
 
 type IndexBuilder = {
   eq: (field: string, value: unknown) => IndexBuilder
@@ -37,13 +38,16 @@ type IndexBuilder = {
 
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
+  order: (direction: 'asc' | 'desc') => Query
   collect: () => Promise<Row[]>
+  take: (limit: number) => Promise<Row[]>
   unique: () => Promise<Row | null>
   first: () => Promise<Row | null>
 }
 
 type Db = {
   query: (tableName: string) => Query
+  normalizeId: (tableName: string, value: string) => string | null
   get: (id: string) => Promise<Row | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
@@ -53,18 +57,17 @@ type Db = {
 type AuthCtx = {
   db: Db
   auth: { getUserIdentity: () => Promise<UserIdentity | null> }
+  runMutation: (_mutation: unknown, _args: unknown) => Promise<{ ok: true }>
 }
 
 type SubmitArgs = {
   target: {
     businessId: string
-    serviceId: string
-    capabilityKind: 'phone_inquiry'
+    offeringRef: string
   }
   body: string
   contact: { name?: string; email?: string; phone?: string }
   pseudonymousSessionId: string
-  abuseBucketKey: string
   operationKey: string
   expectedDigest: string
   correlationId: string
@@ -213,7 +216,8 @@ describe('Convex inquiry runtime bridge', () => {
         expect.objectContaining({ tableName: 'inquiryMessages', indexName: 'by_messageId' }),
         expect.objectContaining({ tableName: 'inquiryNotifications', indexName: 'by_notificationId' }),
         expect.objectContaining({ tableName: 'notificationDispatches', indexName: 'by_dispatchId' }),
-        expect.objectContaining({ tableName: 'funnelEvents', indexName: 'by_business_createdAt' }),
+        expect.objectContaining({ tableName: 'operationKeys', indexName: 'by_scope_key' }),
+        expect.objectContaining({ tableName: 'funnelEvents', indexName: 'by_eventType_business_correlation_createdAt' }),
       ])
     )
     expect(bareReadsFor(db, ['funnelEvents'])).toEqual([])
@@ -263,8 +267,7 @@ describe('Convex inquiry runtime bridge', () => {
     const db = seededInquiryDb()
     const admission = await publicTargetAdmissionHandler(authCtx(db, null), {
       businessId: 'businesses:1',
-      serviceId: 'businessServices:1',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:emergency-pipe-repair',
     })
 
     expect(admission).toEqual({
@@ -285,8 +288,7 @@ describe('Convex inquiry runtime bridge', () => {
     const db = seededInquiryDb()
     const target: SubmitArgs['target'] = {
       businessId: 'businesses:1',
-      serviceId: 'businessServices:1',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:emergency-pipe-repair',
     }
 
     await expect(targetAdmissionHandler(authCtx(db, sam()), target)).resolves.toEqual({
@@ -309,7 +311,7 @@ describe('Convex inquiry runtime bridge', () => {
     })
     await expect(targetAdmissionHandler(authCtx(db, sam()), {
       ...target,
-      serviceId: 'businessServices:unknown',
+      offeringRef: 'offering:unknown',
     })).resolves.toEqual({
       kind: 'error',
       code: 'inquiry_target_not_found',
@@ -732,22 +734,43 @@ class FakeQuery implements Query {
     private readonly rows: readonly Row[],
     private readonly reads: QueryRead[],
     private readonly filters: readonly EqFilter[] = [],
-    private readonly indexName?: string
+    private readonly indexName?: string,
+    private readonly direction: 'asc' | 'desc' = 'asc',
   ) {}
 
   withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
     const builder = new FakeIndexBuilder()
     callback(builder)
-    return new FakeQuery(this.tableName, this.rows, this.reads, [...this.filters, ...builder.filters], indexName)
+    return new FakeQuery(this.tableName, this.rows, this.reads, [...this.filters, ...builder.filters], indexName, this.direction)
+  }
+
+  order(direction: 'asc' | 'desc'): Query {
+    return new FakeQuery(this.tableName, this.rows, this.reads, this.filters, this.indexName, direction)
   }
 
   async collect(): Promise<Row[]> {
+    this.recordRead('collect')
+    return this.orderedRows()
+  }
+
+  async take(limit: number): Promise<Row[]> {
+    this.recordRead('take', limit)
+    return this.orderedRows().slice(0, limit)
+  }
+
+  private orderedRows(): Row[] {
+    const rows = this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
+    return this.direction === 'asc' ? rows : [...rows].reverse()
+  }
+
+  private recordRead(operation: QueryRead['operation'], limit?: number): void {
     this.reads.push({
       tableName: this.tableName,
+      operation,
       filters: this.filters.map((filter) => ({ ...filter })),
       ...(this.indexName === undefined ? {} : { indexName: this.indexName }),
+      ...(limit === undefined ? {} : { limit }),
     })
-    return this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
   }
 
   async unique(): Promise<Row | null> {
@@ -768,6 +791,9 @@ class FakeDb implements Db {
     return new FakeQuery(tableName, this.table(tableName), this.queryReads)
   }
 
+  normalizeId(tableName: string, value: string): string | null {
+    return value.startsWith(`${tableName}:`) ? value : null
+  }
   async get(id: string): Promise<Row | null> {
     return this.allRows().find((row) => row._id === id) ?? null
   }
@@ -831,7 +857,7 @@ class FakeDb implements Db {
 
 function bareReadsFor(db: FakeDb, tableNames: readonly string[]): QueryRead[] {
   const names = new Set(tableNames)
-  return db.reads().filter((read) => names.has(read.tableName) && read.indexName === undefined)
+  return db.reads().filter((read) => names.has(read.tableName) && read.indexName === undefined && read.operation === 'collect')
 }
 
 function seededInquiryDb(): FakeDb {
@@ -882,42 +908,52 @@ function seededInquiryDb(): FakeDb {
     createdAt: 4,
     updatedAt: 4,
   })
-  db.seed('businessServices', {
-    _id: 'businessServices:1',
+  db.seed('businessOfferings', {
+    _id: 'businessOfferings:1',
     _creationTime: 4,
+    offeringRef: 'offering:emergency-pipe-repair',
     businessId: 'businesses:1',
-    serviceSlug: 'emergency-pipe-repair',
-    name: 'Emergency pipe repair',
-    category: 'Emergency plumbing',
-    summary: 'Burst pipe triage and repair.',
-    serviceArea: 'Parramatta and nearby suburbs',
-    hoursOrUnknown: 'Owner supplied hours',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 0,
-    sourceHash: 'source:service:sam',
     createdAt: 4,
     updatedAt: 4,
   })
-  db.seed('serviceCapabilities', {
-    _id: 'serviceCapabilities:1',
-    _creationTime: 5,
+  db.seed('businessOfferingRevisions', {
+    _id: 'businessOfferingRevisions:1',
+    _creationTime: 4,
+    offeringRef: 'offering:emergency-pipe-repair',
     businessId: 'businesses:1',
-    serviceId: 'businessServices:1',
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-    publicChannel: 'public_business_contact',
-    callable: false,
-    paymentRequired: false,
-    sourceHash: 'source:capability:sam',
+    revision: 1,
+    name: 'Emergency pipe repair',
+    category: 'Emergency plumbing',
+    summary: 'Burst pipe triage and repair.',
+    serviceAreaSummary: 'Parramatta and nearby suburbs',
+    availabilitySummary: 'Owner supplied hours',
+    sourceHash: 'source:offering:sam',
+    createdAt: 4,
+  })
+  db.seed('offeringAccessPaths', {
+    _id: 'offeringAccessPaths:1',
+    _creationTime: 5,
+    accessPathRef: 'access:emergency-pipe-repair:inquiry',
+    businessId: 'businesses:1',
+    offeringRef: 'offering:emergency-pipe-repair',
+    offeringRevision: 1,
+    offeringSourceHash: 'source:offering:sam',
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the source-owned inquiry form for a first contact.',
+    },
+    sourceHash: 'source:access:sam',
     createdAt: 5,
     updatedAt: 5,
   })
   db.seed('capabilityLaunchSupportRecords', {
     _id: 'capabilityLaunchSupportRecords:1',
     _creationTime: 6,
-    supportRecordId: 'support:phase2:human-inquiry-owner-inbox',
+    supportRecordId: 'human_inquiry_owner_inbox',
     businessId: 'businesses:1',
     capability: 'human_inquiry_owner_inbox',
     status: 'open',
@@ -939,7 +975,7 @@ function seededInquiryDb(): FakeDb {
       privacyDeletes: 0,
     }),
     supportEscalationPath: 'Phase 2 owner inbox support queue.',
-    claimDisablePath: 'Set inquiries_enabled false or remove inquiry_available from the service capability.',
+    claimDisablePath: 'Set the Offering inquiry access path to withdrawn.',
     perChannelKillRulesJson: JSON.stringify([
       {
         channel: 'public_claim',
@@ -973,6 +1009,7 @@ function seedOwnerInquiryRow(
 ): void {
   const messageId = `${input.threadId}:message:first`
   const notificationId = `${input.threadId}:notification:owner`
+  const redactedPayload = { threadId: input.threadId, messageId, notificationStatus: 'queued' }
 
   db.seed('inquiryThreads', {
     _id: `inquiryThreads:${input.threadId}`,
@@ -980,11 +1017,10 @@ function seedOwnerInquiryRow(
     threadId: input.threadId,
     businessId: 'businesses:1',
     ownerId: 'owners:1',
-    serviceId: 'businessServices:1',
-    capabilityKind: 'phone_inquiry',
+    offeringRef: 'offering:emergency-pipe-repair',
     status: 'unread',
     firstMessageId: messageId,
-    sourceHash: `source:${input.threadId}`,
+    sourceHash: canonicalDigest(`source:${input.threadId}`),
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     version: 1,
@@ -996,8 +1032,8 @@ function seedOwnerInquiryRow(
     threadId: input.threadId,
     sender: 'customer',
     body: input.body,
-    bodyHash: `hash:${messageId}`,
-    contactHash: `contact:${messageId}`,
+    bodyHash: canonicalDigest(messageId),
+    contactHash: canonicalDigest(`contact:${messageId}`),
     createdAt: input.createdAt,
   })
   db.seed('inquiryNotifications', {
@@ -1008,6 +1044,7 @@ function seedOwnerInquiryRow(
     messageId,
     recipientRole: 'owner',
     status: 'queued',
+    redactedPayload: { json: JSON.stringify(redactedPayload), payloadHash: canonicalDigest(redactedPayload) },
     dispatchBindingsJson: '[]',
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
@@ -1021,13 +1058,11 @@ function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArg
   const args = {
     target: {
       businessId: 'businesses:1',
-      serviceId: 'businessServices:1',
-      capabilityKind: 'phone_inquiry' as const,
+      offeringRef: 'offering:emergency-pipe-repair',
     },
     body: 'Pipe burst under the sink. Please ask the owner to contact me.',
     contact: { name: 'Sam Customer', email: 'sam.customer@example.test' },
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: 'ip:127.0.0.1',
     csrfToken: 'csrf-inquiry',
     csrfCookie: 'csrf-inquiry',
     operationKey,
@@ -1037,8 +1072,7 @@ function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArg
   const encoded = encodeGovernedAction(buildGovernedSendIntent({
     target: {
       businessId: brandNonEmpty(args.target.businessId, 'BusinessId'),
-      serviceId: brandNonEmpty(args.target.serviceId, 'ServiceId'),
-      capabilityKind: args.target.capabilityKind,
+      offeringRef: brandNonEmpty(args.target.offeringRef, 'OfferingRef'),
     },
     body: args.body,
     contact: args.contact,
@@ -1105,6 +1139,7 @@ function authCtx(db: FakeDb, identity: UserIdentity | null): AuthCtx {
     auth: {
       getUserIdentity: async () => identity,
     },
+    runMutation: async () => ({ ok: true }),
   }
 }
 

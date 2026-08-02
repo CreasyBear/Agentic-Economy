@@ -80,12 +80,6 @@ export type StoredAggregateResult = Readonly<
       routeGenerationRef?: string
       currentDecisionCommandKey?: string
     }
-  | {
-      kind: 'needs_attention'
-      requestId: string
-      reason: 'historical_request_resubmit_required'
-      resumable: false
-    }
   | { kind: 'not_found' }
 >
 

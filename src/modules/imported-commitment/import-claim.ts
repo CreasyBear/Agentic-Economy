@@ -3,6 +3,7 @@ import { bytesToHex } from '@noble/hashes/utils'
 
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 import type {
   ImportedCommitmentActor,
@@ -151,7 +152,7 @@ function claimFromInput(input: ImportCommitmentInput): ImportedCommitmentClaim {
     observedAt: input.observedAt,
     ...(input.assertedAt === undefined ? {} : { assertedAt: input.assertedAt }),
     validity: input.validity,
-    evidenceRefs: [...new Set(input.evidenceRefs)].sort(),
+    evidenceRefs: uniqueSorted(input.evidenceRefs),
     verification: 'imported_unverified' as const,
     observationPosture: 'imported_claim_only' as const,
   }

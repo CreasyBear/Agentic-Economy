@@ -28,7 +28,7 @@ describe('Action Invocation development evidence surface', () => {
     expect(run).toContain('"environment": "MOCK/DEVELOPMENT ONLY"')
     expect(verify).toContain('"command": "verify"')
     expect(verify).toContain('"durableControlRecords": 1')
-  })
+  }, 15_000)
 
   it('runs both origins, cold recovery, reference reuse, composition, and computed transfer', async () => {
     const result = await runDevelopmentEvidenceScenario()

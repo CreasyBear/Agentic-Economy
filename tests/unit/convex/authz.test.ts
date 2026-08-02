@@ -20,10 +20,7 @@ type Db = {
   query: (tableName: string) => Query
 }
 
-type AuthCtx = {
-  db: Db
-  auth: { getUserIdentity: () => Promise<UserIdentity | null> }
-}
+type AuthCtx = Parameters<typeof resolveAdminAuthority>[0]
 
 describe('Convex authz helpers', () => {
   it('fails closed by naming the missing Clerk JWT issuer', async () => {
@@ -64,6 +61,7 @@ describe('Convex authz helpers', () => {
       _id: 'adminMemberships:owner',
       _creationTime: 1,
       clerkUserId: 'user_sam',
+      tokenIdentifier: 'clerk|user_sam',
       role: 'owner_admin',
       state: 'active',
       grantedBy: 'bootstrap:user_sam',
@@ -74,6 +72,7 @@ describe('Convex authz helpers', () => {
       _id: 'adminMemberships:support',
       _creationTime: 2,
       clerkUserId: 'user_support',
+      tokenIdentifier: 'clerk|user_support',
       role: 'support',
       state: 'active',
       grantedBy: 'user_sam',
@@ -84,6 +83,7 @@ describe('Convex authz helpers', () => {
       _id: 'adminMemberships:revoked',
       _creationTime: 3,
       clerkUserId: 'user_revoked',
+      tokenIdentifier: 'clerk|user_revoked',
       role: 'owner_admin',
       state: 'revoked',
       grantedBy: 'user_sam',
@@ -117,22 +117,23 @@ describe('Convex authz helpers', () => {
       kind: 'allowed',
       membership: {
         clerkUserId: 'user_sam',
+        tokenIdentifier: 'clerk|user_sam',
         role: 'owner_admin',
         state: 'active',
       },
     })
   })
 
-  it('accepts tokenIdentifier-keyed admin membership before subject fallback', async () => {
+  it('resolves only the canonical tokenIdentifier-keyed admin membership', async () => {
     const db = new FakeDb()
     db.seed('adminMemberships', {
       _id: 'adminMemberships:token',
       _creationTime: 1,
-      clerkUserId: 'legacy_subject',
+      clerkUserId: 'user_sam',
       tokenIdentifier: 'clerk|user_sam',
       role: 'owner_admin',
       state: 'active',
-      grantedBy: 'bootstrap:legacy_subject',
+      grantedBy: 'bootstrap:user_sam',
       grantedAt: 1,
     })
 
@@ -141,67 +142,36 @@ describe('Convex authz helpers', () => {
     expect(allowed).toMatchObject({
       kind: 'allowed',
       membership: {
-        clerkUserId: 'legacy_subject',
+        clerkUserId: 'user_sam',
         tokenIdentifier: 'clerk|user_sam',
         role: 'owner_admin',
       },
     })
   })
 
-  it('preserves subject dual-read for one deployed window', async () => {
-    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.example.test')
+  it('treats a missing canonical identity as unauthorized', async () => {
+    const db = new FakeDb()
+    db.seed('adminMemberships', {
+      _id: 'adminMemberships:token',
+      _creationTime: 1,
+      clerkUserId: 'user_sam',
+      tokenIdentifier: 'clerk|user_sam',
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'bootstrap:user_sam',
+      grantedAt: 1,
+    })
 
-    try {
-      const db = new FakeDb()
-      db.seed('adminMemberships', {
-        _id: 'adminMemberships:legacy',
-        _creationTime: 1,
-        clerkUserId: 'user_sam',
-        role: 'owner_admin',
-        state: 'active',
-        grantedBy: 'bootstrap:user_sam',
-        grantedAt: 1,
-      })
-
-      const allowed = await resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')
-
-      expect(allowed).toMatchObject({
-        kind: 'allowed',
-        membership: {
-          clerkUserId: 'user_sam',
-          role: 'owner_admin',
-        },
-      })
-    } finally {
-      vi.unstubAllEnvs()
-    }
+    const missingTokenIdentity = {
+      subject: 'user_sam',
+      issuer: 'https://clerk.example.test',
+    } as UserIdentity
+    await expect(resolveAdminAuthority(authCtx(db, missingTokenIdentity), 'set_operator_control')).resolves.toEqual({
+      kind: 'denied',
+      reason: 'missing_membership',
+    })
   })
 
-  it('rejects subject fallback when the issuer is not the pinned Clerk issuer', async () => {
-    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.example.test')
-
-    try {
-      const db = new FakeDb()
-      db.seed('adminMemberships', {
-        _id: 'adminMemberships:legacy',
-        _creationTime: 1,
-        clerkUserId: 'user_sam',
-        role: 'owner_admin',
-        state: 'active',
-        grantedBy: 'bootstrap:user_sam',
-        grantedAt: 1,
-      })
-
-      const denied = await resolveAdminAuthority(authCtx(db, wrongIssuerSam()), 'set_operator_control')
-
-      expect(denied).toEqual({
-        kind: 'denied',
-        reason: 'missing_membership',
-      })
-    } finally {
-      vi.unstubAllEnvs()
-    }
-  })
 })
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -253,7 +223,7 @@ class FakeDb implements Db {
 
 function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {
   return {
-    db,
+    db: db as unknown as AuthCtx['db'],
     auth: {
       getUserIdentity: async () => identity,
     },
@@ -270,13 +240,6 @@ function sam(): UserIdentity {
   }
 }
 
-function wrongIssuerSam(): UserIdentity {
-  return {
-    tokenIdentifier: 'https://evil.example.test|user_sam',
-    subject: 'user_sam',
-    issuer: 'https://evil.example.test',
-  }
-}
 
 function alex(): UserIdentity {
   return {

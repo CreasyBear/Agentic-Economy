@@ -1,20 +1,20 @@
-import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import slugify from '@sindresorhus/slugify'
+
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 import {
   categoryIllustrationPath,
   formatProviderTrustCue,
-  plainAvailabilityLabel,
   plainHoursLabel,
   plainNextStepLabel,
   plainResponseTimeLabel,
   plainTrustLabel,
 } from './status-presentation'
 
-export type ProviderPresentationCatalog = PublicBusinessCatalogApiDto | PublicRouteCatalogContract
-export type ProviderPresentationService = ProviderPresentationCatalog['services'][number]
+export type ProviderPresentationCatalog = PublicBusinessCatalogApiV2Dto
+export type ProviderPresentationOffering = ProviderPresentationCatalog['offerings'][number]
 
-export type ProviderServiceChipPresentation = {
+export type ProviderOfferingChipPresentation = {
   key: string
   label: string
 }
@@ -34,50 +34,49 @@ export type ProviderPresentation = {
   responseFallbackLabel: string
   trustCue: string
   nextStepLabel: string
-  primaryServiceName?: string
-  primaryServiceSummary?: string
+  primaryOfferingName?: string
+  primaryOfferingSummary?: string
   hoursLabel: string
   image: ProviderImagePresentation
-  serviceChips: readonly ProviderServiceChipPresentation[]
+  offeringChips: readonly ProviderOfferingChipPresentation[]
 }
 
 export type ProviderPresentationOptions = {
-  serviceChipLimit?: number
+  offeringChipLimit?: number
 }
 
 export function buildProviderPresentation(
   catalog: ProviderPresentationCatalog,
   options: ProviderPresentationOptions = {},
 ): ProviderPresentation {
-  const services = catalog.services ?? []
-  const primaryService = services[0]
+  const offerings = catalog.offerings
+  const primaryOffering = offerings[0]
   const locationLabel = formatProviderLocation(catalog)
-  const serviceArea = primaryService?.serviceArea.trim()
-  const firstRequestMode = primaryService?.firstRequest.mode ?? 'not_available_yet'
-  const availabilityLabel = plainAvailabilityLabel({
-    discoveryStatus: catalog.discoveryStatus,
-    firstRequestMode,
-  })
+  const serviceArea = primaryOffering?.serviceAreaSummary?.trim()
+  const firstRequestMode = primaryOffering !== undefined && hasInquiryPath(primaryOffering)
+    ? 'inquiry_available' as const
+    : 'not_available_yet' as const
+  const availabilityLabel = plainAvailabilityLabelForCatalog(catalog, firstRequestMode)
   const responseLabel = plainResponseTimeLabel(catalog.responseTimeMinutes)
   const trustLabel = plainTrustLabel(catalog.trustTier)
-  const ownerPhoto = catalog.photos?.find((entry) => !entry.url.startsWith('/images/illustration/'))
-  const serviceChips = readServiceChips(services, options.serviceChipLimit)
+  const ownerPhoto = catalog.photos.find((entry: ProviderPresentationCatalog['photos'][number]) => !entry.url.startsWith('/images/illustration/'))
+  const offeringChips = readOfferingChips(offerings, options.offeringChipLimit)
 
   return {
     locationLabel,
     serviceArea: serviceArea === undefined || serviceArea.length === 0 ? locationLabel : serviceArea,
     availabilityLabel,
-    availabilitySlug: availabilityLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    availabilitySlug: slugify(availabilityLabel),
     responseLabel,
     responseFallbackLabel: responseLabel.length > 0 ? responseLabel : 'Response not supplied yet',
     trustCue: formatProviderTrustCue({
       trustLabel,
       ...(catalog.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: catalog.responseTimeMinutes }),
     }),
-    nextStepLabel: firstRequestMode === 'inquiry_available' ? 'Send inquiry' : plainNextStepLabel(firstRequestMode),
-    ...(primaryService === undefined ? {} : { primaryServiceName: primaryService.name }),
-    ...(primaryService === undefined ? {} : { primaryServiceSummary: primaryService.summary }),
-    hoursLabel: plainHoursLabel(primaryService?.hoursOrUnknown),
+    nextStepLabel: plainNextStepLabel(firstRequestMode),
+    ...(primaryOffering === undefined ? {} : { primaryOfferingName: primaryOffering.name }),
+    ...(primaryOffering === undefined ? {} : { primaryOfferingSummary: primaryOffering.summary }),
+    hoursLabel: plainHoursLabel(primaryOffering?.availabilitySummary),
     image: ownerPhoto === undefined
       ? {
           kind: 'illustration',
@@ -89,8 +88,22 @@ export function buildProviderPresentation(
           url: ownerPhoto.url,
           alt: ownerPhoto.alt,
         },
-    serviceChips,
+    offeringChips,
   }
+}
+
+function plainAvailabilityLabelForCatalog(
+  catalog: ProviderPresentationCatalog,
+  firstRequestMode: 'inquiry_available' | 'not_available_yet',
+): string {
+  if (catalog.disposition === 'stale' || catalog.disposition === 'partial') {
+    return 'Needs confirmation'
+  }
+  return firstRequestMode === 'inquiry_available' ? 'Contact supplied' : 'No contact option yet'
+}
+
+function hasInquiryPath(offering: ProviderPresentationOffering): boolean {
+  return offering.accessPaths.some((path) => path.kind === 'human_request' && path.channel === 'ae_inquiry')
 }
 
 function formatProviderLocation(catalog: ProviderPresentationCatalog): string {
@@ -101,17 +114,16 @@ function formatProviderLocation(catalog: ProviderPresentationCatalog): string {
   return parts.join(', ')
 }
 
-function readServiceChips(
-  services: readonly ProviderPresentationService[],
+function readOfferingChips(
+  offerings: readonly ProviderPresentationOffering[],
   limit: number | undefined,
-): readonly ProviderServiceChipPresentation[] {
-  const visibleServices = limit === undefined ? services : services.slice(0, limit)
-  return visibleServices.map((service): ProviderServiceChipPresentation => ({
-    key: 'serviceSlug' in service ? service.serviceSlug : service.slug,
-    label: service.name,
+): readonly ProviderOfferingChipPresentation[] {
+  const visibleOfferings = limit === undefined ? offerings : offerings.slice(0, limit)
+  return visibleOfferings.map((offering): ProviderOfferingChipPresentation => ({
+    key: offering.offeringRef,
+    label: offering.name,
   }))
 }
-
 export type AeStatusPillTone = 'available' | 'closed' | 'appointment' | 'attention'
 
 /**

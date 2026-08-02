@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react'
-import { Outlet, createFileRoute, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { ArrowRightIcon } from 'lucide-react'
@@ -18,6 +18,7 @@ import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
 import { AeRadioCardGroup } from '@/components/ae/forms/AeRadioCardGroup'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { isRecord } from '@/modules/common/is-record'
 import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
 import {
@@ -119,7 +120,7 @@ function clearStoredClaimDraft() {
 }
 
 function normalizeStoredClaimInput(value: unknown): PublicOwnerClaimFlowInput {
-  const source = typeof value === 'object' && value !== null ? value as Partial<Record<PublicOwnerClaimField, unknown>> : {}
+  const source = isRecord(value) ? value as Partial<Record<PublicOwnerClaimField, unknown>> : {}
   const normalized: PublicOwnerClaimFlowInput = { ...emptyPublicOwnerClaimInput }
 
   for (const field of textClaimFields) {
@@ -378,7 +379,7 @@ function ClaimRoute() {
           </p>
         </div>
         <div className="grid max-w-md gap-1">
-          <Button asChild variant="default" className="min-h-11 w-full sm:w-auto"><a href={source === 'supply' ? '/claim/form?source=supply' : '/claim/form'}>List your business</a></Button>
+          <Button asChild variant="default" className="min-h-11 w-full sm:w-auto"><Link to="/claim/form" search={source === 'supply' ? { source: 'supply' } : {}}>List your business</Link></Button>
           <p className="block text-sm text-muted-foreground">
             Sign in first — then you’ll add your services and prices and publish your page.
           </p>

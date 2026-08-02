@@ -15,13 +15,11 @@ describe('buildDevSeedCatalogState', () => {
     expect(bundle.state.businesses).toHaveLength(DEV_SEED_BUSINESS_FIXTURES.length)
     expect(bundle.state.businesses).toHaveLength(100)
     expect(bundle.state.businesses.every((business) => business.publicStatus === 'published')).toBe(true)
+    expect(bundle.state.offerings.every((offering) => offering.status === 'published')).toBe(true)
     expect(bundle.state.businesses.filter((business) => business.name.startsWith('Sandbox Option'))).toMatchObject([
       { slug: 'sandbox-option-one', publicStatus: 'published', claimStatus: 'published' },
       { slug: 'sandbox-option-two', publicStatus: 'published', claimStatus: 'published' },
     ])
-    expect(
-      bundle.state.serviceCapabilities.every((capability) => capability.firstRequest.mode === 'inquiry_available')
-    ).toBe(true)
     expect(bundle.state.businesses).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slug: 'joondalup-rapid-plumbing',
@@ -35,14 +33,19 @@ describe('buildDevSeedCatalogState', () => {
     expect(
       bundle.state.businesses.find((business) => business.slug === 'plumbing-demo'),
     ).not.toHaveProperty('publishedPhone')
-    expect(bundle.state.businessServices).toEqual(expect.arrayContaining([
+    expect(bundle.state.revisions).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        serviceArea: 'Joondalup and nearby suburbs',
-        hoursOrUnknown: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
+        serviceAreaSummary: 'Joondalup and nearby suburbs',
+        availabilitySummary: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
       }),
       expect.objectContaining({
-        serviceArea: 'Fremantle and nearby suburbs',
-        hoursOrUnknown: 'Mon–Sat 8am–6pm',
+        serviceAreaSummary: 'Fremantle and nearby suburbs',
+        availabilitySummary: 'Mon–Sat 8am–6pm',
+      }),
+    ]))
+    expect(bundle.state.accessPaths).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        descriptor: expect.objectContaining({ kind: 'human_request', channel: 'phone' }),
       }),
     ]))
     expect(bundle.supportRecord.capability).toBe('human_inquiry_owner_inbox')
@@ -50,28 +53,29 @@ describe('buildDevSeedCatalogState', () => {
   })
 
   it('seeds both supplied and genuinely missing decision facts', () => {
-    const withHours = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => fixture.hoursOrUnknown !== 'Hours unknown')
-    const withoutHours = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => fixture.hoursOrUnknown === 'Hours unknown')
-    const withPrice = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => fixture.pricingSummary !== undefined)
+    const offerings = DEV_SEED_BUSINESS_FIXTURES.flatMap((fixture) => fixture.offerings)
+    const withHours = offerings.filter((offering) => offering.availabilitySummary !== 'Hours unknown')
+    const withoutHours = offerings.filter((offering) => offering.availabilitySummary === 'Hours unknown')
+    const withPrice = offerings.filter((offering) => offering.pricingSummary !== undefined)
 
     // A catalog that only demonstrates one state proves nothing about the other.
     expect(withHours.length).toBeGreaterThan(0)
     expect(withoutHours.length).toBeGreaterThan(0)
     expect(withPrice.length).toBeGreaterThan(0)
-    expect(withPrice.length).toBeLessThan(DEV_SEED_BUSINESS_FIXTURES.length)
+    expect(withPrice.length).toBeLessThan(offerings.length)
 
     // The sentinel the public projection drops must never be seeded as if it
     // were a published fact: it reads as "the owner told us", and nobody did.
-    expect(DEV_SEED_BUSINESS_FIXTURES.map((fixture) => fixture.hoursOrUnknown))
+    expect(offerings.map((offering) => offering.availabilitySummary))
       .not.toContain('Hours supplied by owner')
 
     // Price and hours are independent facts; at least one fixture publishes a
     // price without hours so no surface may assume they travel together.
-    expect(withoutHours.some((fixture) => fixture.pricingSummary !== undefined)).toBe(true)
+    expect(withoutHours.some((offering) => offering.pricingSummary !== undefined)).toBe(true)
 
     // A leaked development price must not read as a real market quote.
-    for (const fixture of withPrice) {
-      expect(fixture.pricingSummary).toMatch(/^Demo price — /)
+    for (const offering of withPrice) {
+      expect(offering.pricingSummary).toMatch(/^Demo price — /)
     }
   })
 })

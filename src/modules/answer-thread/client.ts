@@ -1,6 +1,17 @@
+import { z } from 'zod'
+
 import type { PublicThreadTurn } from './answer-thread.schema'
 import type { FollowUpChip } from './internal/follow-up-chips'
 
+const llmChipsEnabledResponseSchema = z.looseObject({
+  llmChipsEnabled: z.literal(true),
+})
+const followUpChipsResponseSchema = z.looseObject({
+  chips: z.array(z.looseObject({
+    label: z.string(),
+    submitQuery: z.string(),
+  })),
+})
 /** Load optional generated follow-ups while preserving deterministic chips on any failure. */
 export async function loadEnabledFollowUpChips(
   turn: PublicThreadTurn,
@@ -11,7 +22,7 @@ export async function loadEnabledFollowUpChips(
     if (!gateResponse.ok) return undefined
 
     const gateBody: unknown = await gateResponse.json()
-    if (!isLlmChipsEnabled(gateBody)) return undefined
+    if (!llmChipsEnabledResponseSchema.safeParse(gateBody).success) return undefined
 
     const response = await fetch('/api/answer/follow-up-chips', {
       method: 'POST',
@@ -22,27 +33,12 @@ export async function loadEnabledFollowUpChips(
     })
     if (!response.ok) return undefined
 
-    const body: unknown = await response.json()
-    if (!hasFollowUpChips(body) || body.chips.length === 0) return undefined
-    return body.chips
+    const body = followUpChipsResponseSchema.safeParse(await response.json())
+    if (!body.success || body.data.chips.length === 0) return undefined
+    return body.data.chips
   } catch {
     return undefined
   }
-}
-
-function isLlmChipsEnabled(value: unknown): value is { llmChipsEnabled: true } {
-  return typeof value === 'object' && value !== null
-    && 'llmChipsEnabled' in value && value.llmChipsEnabled === true
-}
-
-function hasFollowUpChips(value: unknown): value is { chips: FollowUpChip[] } {
-  return typeof value === 'object' && value !== null
-    && 'chips' in value && Array.isArray(value.chips)
-    && value.chips.every((chip) => (
-      typeof chip === 'object' && chip !== null
-      && 'label' in chip && typeof chip.label === 'string'
-      && 'submitQuery' in chip && typeof chip.submitQuery === 'string'
-    ))
 }
 
 function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {

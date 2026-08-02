@@ -1,7 +1,9 @@
-import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
-import { createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
+import { claimBusiness } from '@/modules/business/public'
+import { publishBusinessCatalog } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
+import { emptyDiscoverySourceState } from './source-state'
 
 export function createDurablePublishedDiscoveryState(input: {
   businessName: string
@@ -29,19 +31,12 @@ export function createDurablePublishedDiscoveryState(input: {
         {
           label: `${input.businessName} service card`,
           evidenceRef: `private:evidence:${input.requestedSlug}`,
-          sourceHash: brandNonEmpty(`hash:source:${input.requestedSlug}`, 'SourceHash'),
+          sourceHash: canonicalDigest(`source:${input.requestedSlug}`),
         },
       ],
     },
     security: {
       csrf: matchingCsrf('claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `discovery:${input.requestedSlug}`,
-        now: 10_000,
-        limit: 5,
-        windowMs: 60_000,
-      },
     },
     operationKey: operationKey(input.idPrefix, `claim:${input.requestedSlug}`),
     correlationId: correlationId(input.idPrefix, `claim:${input.requestedSlug}`),
@@ -87,21 +82,6 @@ export function createDurablePublishedDiscoveryState(input: {
   return state
 }
 
-export function emptyDiscoverySourceState(): DiscoverySourceState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-    discoveryManifests: [],
-    invalidationIntents: [],
-  }
-}
 
 export function matchingCsrf(key: string) {
   return {

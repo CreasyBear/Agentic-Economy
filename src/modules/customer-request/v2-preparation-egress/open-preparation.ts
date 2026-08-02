@@ -48,7 +48,7 @@ export async function openReadyPreparation(
     || action.selectionKey !== row.lineage.selectionKey || action.semanticDigest !== row.lineage.semanticDigest) {
     return { kind: 'needs_attention', reason: 'capability_graph_changed' }
   }
-  const live = await ports.listEligibleSupplies({
+  const live = await ports.listRouteableSupplies({
     networkId: aggregate.snapshot.networkId,
     limit: 64,
   })

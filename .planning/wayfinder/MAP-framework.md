@@ -118,6 +118,22 @@ and the current one-shot plan engine is retired. Cutover included. Saleable end-
   [T42](tickets/T42-durable-and-public-contract-swaps.md). Ran ahead of its T37 dependency, so every
   slice was proved against a pinned pre-existing-failure baseline rather than a green one — that
   substitution is the cost of not having committed yet.
+- [T42 — Durable/public contract swaps](tickets/T42-durable-and-public-contract-swaps.md) — **closed
+  2026-08-01**: workpool cutover (landed earlier same day), native `.paginate()` with dual-format
+  public cursors (`native:` prefix; legacy served for a deprecation window), slugify unified on
+  `@sindresorhus/slugify` under the founder's common-sense mandate (zero hosted URL holders; veto
+  cheap until first hosted publish), ES2024 lib bump with server-site `Object.groupBy`/`Map.groupBy`
+  (live-runtime probes) and one recorded browser adoption limit (no declared browser floor →
+  Chrome 111 Vite default). Every item has a rollback + data statement on the ticket.
+- [T39 — Threat model](tickets/T39-threat-model-security-program.md) — **closed 2026-08-01**:
+  [report](../research/2026-08-01-threat-model-spine-studies-commerce.md) with ranked findings and
+  the 10-gate T33 security checklist. P0s: spine identity/confused-deputy (T36 dependency) and the
+  54-key rotation (T37 incident). Same-day fixes: OAuth grant mutations now require the
+  source-write envelope (agent_identity scope), post-approval authority fields immutable, consent
+  POST gets Origin/CSRF + grant_ref binding; plan-store operationKey made retry-stable
+  (payload-digest, no `Date.now`); enginePlans rejects successful outcomes while steps are
+  non-terminal (`plan_outcome_steps_not_terminal`).
+
 
 ## Build checkpoints
 
@@ -187,6 +203,89 @@ and the current one-shot plan engine is retired. Cutover included. Saleable end-
   consciously rather than backing the import out. Verification: typecheck, lint, build and Convex
   codegen clean; 2723 focused tests with the same 7 pre-existing failures; `test:imports` failure set
   byte-identical to HEAD; integration 43/203, identical to pre-session.
+- GSD-stance audit + adoption wiring (2026-08-01, this session): five GSD subagent profiles
+  (code-reviewer deep, security-auditor L2, integration-checker, adopt-first ledger, assumptions
+  full_maturity) ran read-only against the repo, then three workers wired the verdicts in.
+  **Landed:** `@convex-dev/workpool` cut over the hand-rolled route-transport lease/requeue/recovery
+  engine (leaseNextDispatch/openLeasedDispatch/recoverExpiredDispatch deleted, journal stays truth,
+  maxParallelism 32 under the T38 budget); `@convex-dev/rate-limiter@0.3.2` installed+mounted with one
+  shared admission seam (`convex/lib/rateLimit.ts`, `src/lib/server/rate-limit.ts`) covering 6 public
+  routes, 2 previously unguarded public mutations, all OAuth issuance endpoints, and the deleted
+  hand-rolled `rateLimitClaim` (one sanctioned residual: the pure inquiry-ledger bucket projection is
+  domain logic and stays private in `inquiries/internal/ledger/commands.ts`); money hardening across
+  `convex/moneyLedger.ts` + pure ledger/topup/payout-policy — charge account kind/owner/distinctness
+  binding, authority-cap ceiling, server-derived fixed price, free-tier counter + usageRef idempotency,
+  double-refund and reversed→unknown resurrection guards, payout idempotency-first + authority +
+  policy re-derivation + evidence, Stripe-event digest binding on topup replay, owner-authed bounded
+  provider-earnings/payout reads, failed-refund reconciliation surfacing in the dynamic adapter.
+  Evidence (validated live, not mock): `tsc --noEmit` fully clean. Unit 2703/2705 (only the two
+  documented pre-existing failures). Integration 216/245 — every one of the 29 failures proven
+  byte-identical against a committed-HEAD worktree (pre-existing keyword_match interpretation drift
+  + known repeat-scope mismatch), zero attributable to the cutover. **Live local deployment
+  restored and exercised:** the Convex deploy had been failing at HEAD (Clerk-tainted barrel imports
+  in `convex/decisionMaps.ts`/`enginePlans.ts` pulled node builtins into the isolate bundle; fixed by
+  importing contract/kernel internals directly; owner-supply fetch actions split into "use node"
+  `convex/capabilitySupplyOwnerSupply.ts` with the DNS-guarded undici dispatcher, closing the SSRF
+  finding) — after the fix the push installs the rateLimiter component and new money indexes on the
+  real backend (node 24 required for node actions). Observed real behavior: `rateLimit:admit` refuses
+  call 6 of a 5/min bucket with decaying retryAfter; `/api/v1/services` hammered 130× with one
+  principal → exactly 128 admitted then 429 (token-bucket math exact); OAuth device-authorization
+  throttles brute force (5×401 then 429); seeded callable capability returns a live labelled quote
+  (`ae_sandbox_provider`, AUD 9500 minor) through route → admission → catalog → price resolution.
+  Claim ceiling: labelled local deployment; no hosted/provider/customer claim.
+  **Open findings not yet fixed** (routed, unowned):
+  unauthenticated public grant mutations in `convex/customerRequestAgentOAuth.ts` (insert/updateGrant/
+  insertClient), OAuth consent POST CSRF/Origin gap, enginePlans `recordPlanEvent` trusting caller
+  outcomes, plan-store operationKey derived from `Date.now`, decision-map replay report
+  non-determinism, per-turn budget reseeding in `answer-thread/turns/proposal.ts`, payout transfer
+  orchestration still absent (T12 production HITL). The capabilitySupply SSRF finding is CLOSED this
+  session (`ssrf-surface-drift` now green).
+
+- Build checkpoint (2026-08-02): T45 create/inspect landed through `convex/workTrees.ts`, `src/modules/work-tree/work-tree.functions.ts` and the WorkTree action descriptors; the kernel frontier fix (`fog` → `ready`, with `elaborate` leaving the target `ready`) is covered by `convex/workTrees.test.ts`. T52's counsel pack is recorded at [2026-08-01-compliance-first-dollar-counsel-pack.md](../research/2026-08-01-compliance-first-dollar-counsel-pack.md) with **LIVE MONEY: REFUSED**; credit top-up copy now says any fee and total charge are shown before payment, without the unaccepted 5% claim (`src/components/ae/console/AeCreditTopUpPanel.tsx`).
+- MAP Build checkpoint 2026-08-02 (T44–T53): the tracer program is landed and verified at the source + local-smoke evidence boundary. `npm run test:release:source` exited 0 in `output/release/final-gate.log` (re-run recorded in `output/release/final-gate-2.log`): unit 2,687, integration 244, deterministic eval 12/12 and production build; `output/release/unit-vitest.json` and `output/release/integration-vitest.json` carry the exact suite counts. The local no-mock-code WorkTree smoke is green against hub-managed Clerk-enabled `ae-dev-clerk` (`http://127.0.0.1:3026`) and local `convex-dev` (`http://127.0.0.1:3210`) with evidence class `local development deployment + labelled mock data`, sequence `outcome → create → elaborate → study → propose → inbox → lock → receipt → reload_readback`, recorded in `output/release/work-tree-smoke.json.log`. Convex env includes `AE_CONVEX_SERVER_FUNCTION_TOKEN` in `.env.local:62` (secret value omitted); generated discovery `/SKILL.md` carries WorkTree parity from `src/modules/discovery/internal/agent-skill.ts:105-108`; live money remains refused per `.planning/research/2026-08-01-compliance-first-dollar-counsel-pack.md:5,59`. Open work remains explicit: T45 claim rotation, T51 hosted setup seam + deployment/evidence, T52 counsel sign-offs, and T53 recruitment/external run. The hosted attempt is recorded in `.planning/research/2026-08-02-hosted-parity-attempt.md`: preview deployment `dpl_F83yP9wsudjvVqrLQjB6Z65iVbYp` was Ready but protected at HTTP 401, Convex cloud preflight had no hosted ID, the Vercel OIDC token was expired, and the mandated Playwright invocation stopped at `No tests found`; no hosted/external/customer claim is made.
+- Adopt-first rationalisation, wave 8 (2026-08-02, [T41 fifth pass](tickets/T41-handrolling-cutover-backlog.md)):
+  14 read-only ponytail-audit scouts over disjoint slices, then 13 parallel workers under the T41
+  contract. ~5,700 lines removed — dormant commands (`run-live-api-study` + 8 tools/dev entrypoints),
+  the async-durable facade, single-host inquiry/outbox port indirection, and duplicated Convex
+  row/projection mappers consolidated onto shared modules (`customerRequestRouteExecutionSnapshots`,
+  `businessSupplyProjectionSnapshot`, `capabilitySupplyRowMappers`, `common/json-pointer`,
+  `common/matching-csrf`). V2 write ports now compose the read ports. Refusals evidence-backed:
+  admission/runtime transport schemas proven divergent rule-by-rule, x402 mock runtimes
+  behaviour-distinct, dev-seed vs eval generators 68/100 slug overlap with 45 mode mismatches,
+  graphology de-adoption rejected, CLI seed mutations and shipping module retained. Main fixed one
+  parallel-pass regression (dispatch lookup key) and re-satisfied the private-import gate with
+  public-seam re-exports plus the isolate-safe `external-run/convex.ts`. Evidence: `npm run
+  test:all` exit 0 (typecheck, codegen, unit 2,687, integration 244, types, imports, standards,
+  seo, ui-contract, build).
+- Gold-standard AI-stack integration, wave 9 (2026-08-02, [T41 sixth pass](tickets/T41-handrolling-cutover-backlog.md)):
+  founder directive updated the eval-stack bet toward full library adoption. Three librarians +
+  five scouts fed six discrete workers. Landed: one `generateText` per answer turn (tools +
+  `Output.object`, deferred tool-less final step, ~21 lines cut), v7 canon (`isStepCount`,
+  `onStepEnd`, cacheWrite usage, failed-request accounting, unified harness seq), semantic
+  transport on `Output.object` + `timeout:` (~244 scoped lines) with a tolerance-preserving
+  `looseObject` wire schema, and entropy fixes A2/A4/A5/A7/A8/B2/B3/B6 (+C2). Blocked/refused
+  with evidence: `@convex-dev/agent@0.6.4` peers `ai ^6.0.35` (v7 = draft PRs #305-307);
+  workpool for one-shot cancel/readiness scheduler hops (native scheduler is at-most-once,
+  matching semantics); `projectSpine.ts` workflow usage audited canonical. New maintained
+  artifact: [.planning/codebase/PROMPT-DATA-FLOW.md](../codebase/PROMPT-DATA-FLOW.md) — three
+  cited end-to-end prompt/data-flow traces, adoption boundary, entropy ledger — linked from
+  ARCHITECTURE.md with an update rule. Evidence: `npm run test:all` exit 0 (typecheck clean
+  repo-wide, codegen, unit 2,703, integration 244, types, imports, standards, seo, ui-contract,
+  build).
+- **Security review + remediation addendum (2026-08-02):** the same-day security review and remediation wave landed at the source/local-smoke boundary. WorkTree caller precedence is now verified-first for `serviceAuth` (invalid or fake service assertions fail closed rather than falling through to Clerk); `readTreeByProject` is internal; and `apply` authorizes by the resolved caller (source-write admission was removed from this path). ([WorkTree Convex source](../../convex/workTrees.ts); [WorkTree Convex tests](../../convex/workTrees.test.ts))
+  - Guest assertions now reach Convex through the public source transport, while the agent HTTP seam rejects a supplied `guestAssertion` before creating service auth. ([source transport tests](../../tests/unit/work-tree/source-functions.test.ts); [agent parity tests](../../tests/unit/work-tree/agent-work-tree-parity.test.ts); [agent route](../../src/routes/api.v1.work-tree.$operation.ts))
+  - `decide` idempotency replays the existing receipt without inserting a duplicate row, and authentication failures are ephemeral refusals; the focused tests assert one receipt for a changed command and zero receipts for invalid service auth. ([WorkTree Convex source](../../convex/workTrees.ts); [WorkTree Convex tests](../../convex/workTrees.test.ts))
+  - Study result handling unwraps the source result, `getById` is owner-gated, and replay is checked before revision/generation fences. ([Study functions](../../src/modules/study/study.functions.ts); [Study Convex source](../../convex/studies.ts); [Study Convex tests](../../convex/studies.test.ts))
+  - External-run start retries replay the exact digest; finalization is digest/evidence-bound; provider evidence is bound to the admitted `providerRef`; and `independentProviderRefs` stay bound to the frozen manifest. ([external-run Convex source](../../convex/externalRuns.ts); [external-run contract](../../src/modules/external-run/internal/contract.ts); [external-run tests](../../convex/externalRuns.test.ts))
+  - Memo projection redacts credentials, permits only app-relative readback URLs, and derives recipient-specific operation keys. ([memo notification](../../src/modules/work-tree/internal/memo-notification.ts); [memo tests](../../tests/unit/work-tree/memo.test.tsx))
+  - Repeat permission is decision- and `ready`-gated and carries generation, Customer Request revision, WorkTree revision, and proposal-digest fences; the consumed-use ledger remains an open T49 item. ([repeat-permission module](../../src/modules/work-tree/internal/repeat-permission.ts); [decision policy](../../src/modules/work-tree/internal/decision-policy.ts); [T49](tickets/T49-shared-decision-receipts-and-memo.md))
+  - The adopt-first sweep uses `es-toolkit` median/percentile, consolidates `isRecord`, uses the shared base64url guest codec, and normalizes the parity signer before digesting. ([external-run gate](../../src/modules/external-run/internal/gate.ts); [isRecord helper](../../src/modules/common/is-record.ts); [base64 codec](../../src/modules/common/base64-codec.ts); [guest assertion](../../src/lib/server/browser-guest-assertion.ts); [parity signer](../../tools/release/work-tree-parity-release.ts); [T41](tickets/T41-handrolling-cutover-backlog.md))
+- **Post-fix evidence (2026-08-02):** `npm run typecheck` is clean in the completed gate output. ([final-gate-3.log](../../output/release/final-gate-3.log))
+  - The local no-mock-code smoke exits 0; its packet is recorded in the WorkTree smoke log lineage, and the latest packet records revision 7 with `lock` accepted and `reload` accepted. ([T44](tickets/T44-green-release-baseline.md); [work-tree-smoke.json.log](../../output/release/work-tree-smoke.json.log))
+  - The full gate completes exit 0 with suite counts `2703/244/4/50/1/29/1` (unit/integration/types/imports/ts-standards/SEO/UI) and answer evaluation `12/12`, average score `9.9`. ([final-gate-3.log](../../output/release/final-gate-3.log))
+- **Known accepted limitation (2026-08-02):** `approve_each` agents can self-submit `stepUp`; binding a human approval artifact to `stepUp` remains open on T49. ([T49](tickets/T49-shared-decision-receipts-and-memo.md))
+
+
 
 ## Not yet specified
 
@@ -219,6 +318,15 @@ and the current one-shot plan engine is retired. Cutover included. Saleable end-
 | [T35](tickets/T35-playbook-format-authorship.md) | grilling (HITL) | Playbook format + authorship pipeline | — |
 | [T36](tickets/T36-identity-and-continuity.md) | grilling (HITL) | Durable identity for durable projects | — |
 | [T37](tickets/T37-delivery-pipeline-and-repo-protocol.md) | task (AFK+HITL) | Delivery pipeline + multi-agent repo protocol | — |
-| [T39](tickets/T39-threat-model-security-program.md) | research (AFK) | Threat model: spine, studies, commerce | — |
 | [T40](tickets/T40-compliance-counsel-pack.md) | task (HITL) | Compliance counsel pack (AU) | — |
-| [T42](tickets/T42-durable-and-public-contract-swaps.md) | task (AFK + HITL) | The 4 adopt-first swaps that change a durable or public contract | T37 |
+| [T43](tickets/T43-human-agent-framework-parity-spec.md) | spec (locked) | Human + agent framework parity program and frozen BAS gate | — |
+| [T44](tickets/T44-green-release-baseline.md) | tracer (TDD) | Green release baseline | T37 |
+| [T45](tickets/T45-project-identity-and-source-initialization.md) | tracer (TDD) | Project identity + source initialization | T44 |
+| [T46](tickets/T46-human-root-worktree-loop.md) | tracer (TDD) | Human `/` WorkTree loop | T45 |
+| [T47](tickets/T47-agent-worktree-parity.md) | tracer (TDD) | Agent WorkTree parity | T45, T46 |
+| [T48](tickets/T48-durable-study-rfx-journal.md) | tracer (TDD) | Durable Study + RFx journal | T45 |
+| [T49](tickets/T49-shared-decision-receipts-and-memo.md) | tracer (TDD) | Shared decision receipts, trust ramp + memo | T46, T47, T48 |
+| [T50](tickets/T50-legacy-engine-clean-cutover.md) | tracer (TDD) | Legacy engine clean cutover | T46–T49 |
+| [T51](tickets/T51-hosted-parity-release-proof.md) | tracer (TDD) | Hosted human-agent parity proof | T44, T47, T49, T50 |
+| [T52](tickets/T52-compliance-and-first-dollar-gate.md) | tracer (TDD+HITL) | Compliance + first-dollar gate | T49 |
+| [T53](tickets/T53-bas-wedge-external-kill-gate.md) | tracer (TDD+external) | BAS wedge external PASS/FAIL/KILL gate | T51; payment by T52 |

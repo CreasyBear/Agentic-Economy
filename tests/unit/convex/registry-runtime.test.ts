@@ -1,376 +1,142 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  getPublicBusinessCatalogBySlug,
-  listPublicBusinessCatalog,
-  searchPublicBusinessCatalog,
+  getPublicBusinessOfferingSupplyBySlug,
+  listPublicBusinessOfferingSupply,
+  searchPublicBusinessOfferingSupply,
 } from '../../../convex/registry'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
-type Filter =
-  | { op: 'eq'; field: string; value: unknown }
-  | { op: 'gte'; field: string; value: unknown }
-  | { op: 'search'; field: string; value: string }
-type ReadTrace = {
-  tableName: string
-  indexName?: string
-  operation: 'collect' | 'first' | 'take' | 'unique'
-  limit?: number
-  filters: Filter[]
+type Filter = { op: 'eq' | 'search'; field: string; value: unknown }
+type ReadTrace = { tableName: string; indexName?: string; operation: 'first' | 'take' | 'unique' | 'paginate' | 'collect'; limit?: number; filters: Filter[] }
+type IndexBuilder = { eq: (field: string, value: unknown) => IndexBuilder; search: (field: string, value: string) => IndexBuilder }
+type PaginationOpts = { numItems: number; cursor: string | null }
+type QueryCtx = { db: FakeDb }
+
+type QueryResult = {
+  kind: 'ok'
+  page?: Array<{ slug: string }>
+  items?: Array<{ slug: string }>
+  pagination?: { total: number; hasMore: boolean }
 }
 
-type IndexBuilder = {
-  eq: (field: string, value: unknown) => IndexBuilder
-  gte: (field: string, value: unknown) => IndexBuilder
-  search: (field: string, value: string) => IndexBuilder
-}
-
-type Query = {
-  withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
-  withSearchIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
-  collect: () => Promise<Row[]>
-  first: () => Promise<Row | null>
-  take: (limit: number) => Promise<Row[]>
-  unique: () => Promise<Row | null>
-}
-
-type Db = {
-  query: (tableName: string) => Query
-  get: (id: string) => Promise<Row | null>
-}
-
-type QueryCtx = { db: Db }
-
-const listHandler = (listPublicBusinessCatalog as unknown as {
-  _handler: (ctx: QueryCtx, args: { cursor?: string; limit?: number }) => Promise<unknown>
-})._handler
-const searchHandler = (searchPublicBusinessCatalog as unknown as {
-  _handler: (
-    ctx: QueryCtx,
-    args: {
-      query: string
-      mode?: 'near_me' | 'whole_catalogue'
-      location?: string
-      cursor?: string
-      limit?: number
-    },
-  ) => Promise<unknown>
-})._handler
-const detailHandler = (getPublicBusinessCatalogBySlug as unknown as {
-  _handler: (ctx: QueryCtx, args: { slug: string }) => Promise<unknown>
-})._handler
+const listHandler = (listPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: { paginationOpts: PaginationOpts }) => Promise<QueryResult> })._handler
+const searchHandler = (searchPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: { query: string; location?: string; limit?: number }) => Promise<QueryResult> })._handler
+const detailHandler = (getPublicBusinessOfferingSupplyBySlug as unknown as { _handler: (ctx: QueryCtx, args: { slug: string }) => Promise<unknown> })._handler
 
 describe('Convex registry public read paths', () => {
-  it('lists public catalogs by paged published businesses and scoped hydration reads', async () => {
+  it('lists published businesses with one native page and bounded snapshot hydration', async () => {
     const db = new FakeDb()
-    seedCatalogs(db, 12)
+    seedBusinesses(db, 12)
 
-    const page = await listHandler({ db }, { limit: 2 })
+    const page = await listHandler({ db }, { paginationOpts: { cursor: null, numItems: 2 } })
 
     expect(page).toMatchObject({
       kind: 'ok',
-      items: [{ slug: 'business-001', businessId: 'businesses:001' }, { slug: 'business-002', businessId: 'businesses:002' }],
-      pagination: {
-        nextCursor: 'business-003',
-        limit: 2,
-        total: 12,
-        hasMore: true,
-      },
+      page: [{ slug: 'business-001' }, { slug: 'business-002' }],
+      isDone: false,
     })
-    expect(unscopedCollects(db.reads)).toEqual([])
-    expect(scopedCollects(db.reads, 'businessServices')).toHaveLength(3)
-    expect(scopedCollects(db.reads, 'serviceCapabilities')).toHaveLength(3)
+    expect(db.reads.some((read) => read.operation === 'paginate' && read.tableName === 'businesses')).toBe(true)
+    expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
+    expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots'].includes(read.tableName))).toBe(true)
   })
 
-  it('hydrates detail by slug without loading the public catalog table set', async () => {
+  it('point-reads detail by slug from the current Offering snapshot', async () => {
     const db = new FakeDb()
-    seedCatalogs(db, 20)
+    seedBusinesses(db, 20)
 
     const result = await detailHandler({ db }, { slug: 'business-010' })
 
     expect(result).toMatchObject({
       kind: 'found',
-      business: {
-        slug: 'business-010',
-        services: [{ slug: 'service-010', status: 'published' }],
-      },
+      business: { slug: 'business-010', offerings: [{ name: 'Emergency pipe repair' }] },
     })
-    expect(unscopedCollects(db.reads)).toEqual([])
-    expect(
-      db.reads.filter(
-        (read) =>
-          read.tableName === 'businesses' &&
-          read.indexName === 'by_publicStatus_slug',
-      ),
-    ).toEqual([])
+    expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
+    expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots'].includes(read.tableName))).toBe(true)
   })
 
-  it('searches through bounded registry search documents before hydrating matching slugs', async () => {
+  it('uses the bounded registry search index and hydrates canonical snapshots', async () => {
     const db = new FakeDb()
-    seedCatalogs(db, 20)
+    seedBusinesses(db, 20)
     db.seed('registrySearchDocuments', {
       _id: 'registrySearchDocuments:1',
       _creationTime: 100,
-      documentId: 'business-007__service-007',
-      schemaVersion: 'registry-search-document:v1',
       businessSlug: 'business-007',
-      serviceSlug: 'service-007',
+      documentId: 'business-007__emergency-pipe-repair',
+      schemaVersion: 'registry-search-document:v1',
+      offeringRef: 'offering:007:emergency-pipe-repair',
       businessName: 'Business 007',
-      serviceName: 'Emergency pipe repair',
-      serviceCategory: 'Emergency plumbing',
-      serviceCategoryKey: 'emergency plumbing',
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      categoryKey: 'emergency plumbing',
       suburb: 'Parramatta',
       stateTerritory: 'NSW',
-      publicStatus: 'published',
       trustTier: 'claimed',
-      firstRequestMode: 'inquiry_available',
+      firstRequestMode: 'not_available_yet',
+      keywords: ['emergency', 'plumber', 'plumbing'],
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+      generatedHash: 'hash:registry-search-007',
+      updatedAt: 100,
       placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
-      serviceKeywords: ['plumber', 'plumbers'],
       searchText: 'business 007 emergency pipe repair emergency plumbing plumber parramatta nsw',
-      serviceArea: 'Parramatta and nearby suburbs',
-      generatedHash: 'hash:search:007',
-      updatedAt: 7,
+      publicStatus: 'published',
     })
 
-    const page = await searchHandler(
-      { db },
-      { query: 'emergency plumber parramatta', limit: 5 },
-    )
+    const page = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 5 })
 
-    expect(page).toMatchObject({
-      kind: 'ok',
-      query: 'emergency plumber parramatta',
-      items: [{ slug: 'business-007' }],
-      pagination: { total: 1, hasMore: false },
-    })
-    expect(
-      db.reads.filter(
-        (read) =>
-          read.tableName === 'registrySearchDocuments' &&
-          read.indexName === 'search_searchText_by_publicStatus' &&
-          read.operation === 'take' &&
-          read.limit === 250,
-      ),
-    ).toHaveLength(1)
-    expect(
-      db.reads.filter(
-        (read) =>
-          read.tableName === 'businesses' &&
-          read.indexName === 'by_publicStatus_slug',
-      ),
-    ).toEqual([])
+    expect(page).toMatchObject({ kind: 'ok', query: 'emergency plumber parramatta', items: [{ slug: 'business-007' }], pagination: { total: 1, hasMore: false } })
+    expect(db.reads.some((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'search_searchText_by_publicStatus' && read.operation === 'take' && read.limit === 250)).toBe(true)
+    expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
+    expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots', 'registrySearchDocuments'].includes(read.tableName))).toBe(true)
   })
 })
 
 class FakeIndexBuilder implements IndexBuilder {
   readonly filters: Filter[] = []
-
-  eq(field: string, value: unknown): IndexBuilder {
-    this.filters.push({ op: 'eq', field, value })
-    return this
-  }
-
-  gte(field: string, value: unknown): IndexBuilder {
-    this.filters.push({ op: 'gte', field, value })
-    return this
-  }
-
-  search(field: string, value: string): IndexBuilder {
-    this.filters.push({ op: 'search', field, value })
-    return this
-  }
+  eq(field: string, value: unknown): IndexBuilder { this.filters.push({ op: 'eq', field, value }); return this }
+  search(field: string, value: string): IndexBuilder { this.filters.push({ op: 'search', field, value }); return this }
 }
 
-class FakeQuery implements Query {
-  constructor(
-    private readonly db: FakeDb,
-    private readonly tableName: string,
-    private readonly filters: readonly Filter[] = [],
-    private readonly indexName?: string,
-  ) {}
-
-  withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
-    const builder = new FakeIndexBuilder()
-    callback(builder)
-    return new FakeQuery(this.db, this.tableName, builder.filters, indexName)
+class FakeQuery {
+  constructor(private readonly db: FakeDb, private readonly tableName: string, private readonly filters: readonly Filter[] = [], private readonly indexName?: string) {}
+  withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): FakeQuery { const builder = new FakeIndexBuilder(); callback(builder); return new FakeQuery(this.db, this.tableName, builder.filters, indexName) }
+  withSearchIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): FakeQuery { const builder = new FakeIndexBuilder(); callback(builder); return new FakeQuery(this.db, this.tableName, builder.filters, indexName) }
+  async first(): Promise<Row | null> { this.db.trace(this.tableName, 'first', this.filters, this.indexName); return this.apply()[0] ?? null }
+  async unique(): Promise<Row | null> { this.db.trace(this.tableName, 'unique', this.filters, this.indexName); return this.apply()[0] ?? null }
+  async take(limit: number): Promise<Row[]> { this.db.trace(this.tableName, 'take', this.filters, this.indexName, limit); return this.apply().slice(0, limit) }
+  async paginate(options: PaginationOpts): Promise<{ page: Row[]; isDone: boolean; continueCursor: string }> {
+    this.db.trace(this.tableName, 'paginate', this.filters, this.indexName, options.numItems)
+    const rows = this.apply()
+    const start = options.cursor === null ? 0 : Number(options.cursor.replace('offset:', ''))
+    const end = Math.min(start + options.numItems, rows.length)
+    return { page: rows.slice(start, end), isDone: end >= rows.length, continueCursor: `offset:${end}` }
   }
-
-  withSearchIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
-    const builder = new FakeIndexBuilder()
-    callback(builder)
-    return new FakeQuery(this.db, this.tableName, builder.filters, indexName)
-  }
-
-  async collect(): Promise<Row[]> {
-    this.db.trace(this.tableName, 'collect', this.filters, this.indexName)
-    return this.apply()
-  }
-
-  async first(): Promise<Row | null> {
-    this.db.trace(this.tableName, 'first', this.filters, this.indexName)
-    return this.apply().at(0) ?? null
-  }
-
-  async take(limit: number): Promise<Row[]> {
-    this.db.trace(this.tableName, 'take', this.filters, this.indexName, limit)
-    return this.apply().slice(0, limit)
-  }
-
-  async unique(): Promise<Row | null> {
-    this.db.trace(this.tableName, 'unique', this.filters, this.indexName)
-    return this.apply().at(0) ?? null
-  }
-
-  private apply(): Row[] {
-    return this.db
-      .table(this.tableName)
-      .filter((row) => this.filters.every((filter) => matchesFilter(row, filter)))
-      .sort((left, right) => rowSort(left, right))
-  }
+  private apply(): Row[] { return this.db.table(this.tableName).filter((row) => this.filters.every((filter) => matchesFilter(row, filter))).sort((left, right) => String(left.slug ?? '').localeCompare(String(right.slug ?? ''))) }
 }
 
-class FakeDb implements Db {
+class FakeDb {
   readonly reads: ReadTrace[] = []
   private readonly tables: Record<string, Row[]> = {}
-
-  query(tableName: string): Query {
-    return new FakeQuery(this, tableName)
-  }
-
-  async get(id: string): Promise<Row | null> {
-    return Object.values(this.tables)
-      .flat()
-      .find((row) => row._id === id) ?? null
-  }
-
-  seed(tableName: string, row: Row): void {
-    this.table(tableName).push(row)
-  }
-
-  table(tableName: string): Row[] {
-    this.tables[tableName] ??= []
-    return this.tables[tableName]
-  }
-
-  trace(
-    tableName: string,
-    operation: ReadTrace['operation'],
-    filters: readonly Filter[],
-    indexName?: string,
-    limit?: number,
-  ): void {
-    this.reads.push({
-      tableName,
-      operation,
-      filters: [...filters],
-      ...(indexName === undefined ? {} : { indexName }),
-      ...(limit === undefined ? {} : { limit }),
-    })
-  }
+  query(tableName: string): FakeQuery { return new FakeQuery(this, tableName) }
+  normalizeId(tableName: string, value: string): string | null { return value.startsWith(`${tableName}:`) ? value : null }
+  async get(id: string): Promise<Row | null> { return Object.values(this.tables).flat().find((row) => row._id === id) ?? null }
+  seed(tableName: string, row: Row): void { (this.tables[tableName] ??= []).push(row) }
+  table(tableName: string): Row[] { return this.tables[tableName] ?? [] }
+  trace(tableName: string, operation: ReadTrace['operation'], filters: readonly Filter[], indexName?: string, limit?: number): void { this.reads.push({ tableName, operation, filters: [...filters], ...(indexName === undefined ? {} : { indexName }), ...(limit === undefined ? {} : { limit }) }) }
 }
 
-function seedCatalogs(db: FakeDb, count: number): void {
+function seedBusinesses(db: FakeDb, count: number): void {
   for (let index = 1; index <= count; index += 1) {
     const suffix = String(index).padStart(3, '0')
     const businessId = `businesses:${suffix}`
-    const serviceId = `businessServices:${suffix}`
     const slug = `business-${suffix}`
-
-    db.seed('businesses', {
-      _id: businessId,
-      _creationTime: index,
-      ownerId: `owners:${suffix}`,
-      slug,
-      name: `Business ${suffix}`,
-      normalizedName: `business ${suffix}`,
-      category: 'Emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
-      publicStatus: 'published',
-      trustTier: 'claimed',
-      claimStatus: 'published',
-      sourceHash: `hash:business:${suffix}`,
-      createdAt: index,
-      updatedAt: index,
-    })
-    db.seed('businessContexts', {
-      _id: `businessContexts:${suffix}`,
-      _creationTime: index,
-      businessId,
-      category: 'Emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
-      sourceRefs: [],
-      sourceHash: `hash:business:${suffix}`,
-      approvedAt: index,
-    })
-    db.seed('businessServices', {
-      _id: serviceId,
-      _creationTime: index,
-      businessId,
-      serviceSlug: `service-${suffix}`,
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
-      summary: 'Emergency plumbing help for urgent pipe repairs.',
-      serviceArea: 'Parramatta and nearby suburbs',
-      hoursOrUnknown: 'Owner supplied hours',
-      status: 'published',
-      sortOrder: 0,
-      sourceHash: `hash:service:${suffix}`,
-      createdAt: index,
-      updatedAt: index,
-    })
-    db.seed('serviceCapabilities', {
-      _id: `serviceCapabilities:${suffix}`,
-      _creationTime: index,
-      businessId,
-      serviceId,
-      kind: 'quote_request',
-      status: 'available',
-      firstRequestMode: 'inquiry_available',
-      publicDisclosure: 'Send a qualified inquiry for owner review.',
-      publicChannel: 'ae_status_only',
-      callable: false,
-      paymentRequired: false,
-      sourceHash: `hash:capability:${suffix}`,
-      createdAt: index,
-      updatedAt: index,
-    })
+    db.seed('businesses', { _id: businessId, _creationTime: index, ownerId: `owners:${suffix}`, slug, name: `Business ${suffix}`, normalizedName: `business ${suffix}`, category: 'Emergency plumbing', suburb: 'Parramatta', stateTerritory: 'NSW', publicStatus: 'published', trustTier: 'claimed', claimStatus: 'claimed', sourceHash: canonicalDigest(`business:${suffix}`), createdAt: index, updatedAt: index })
+    db.seed('businessSupplyProjectionSnapshots', { _id: `snapshots:${suffix}`, _creationTime: index, businessId, sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current', updatedAt: index, status: 'current', projection: { business: { businessId, slug, name: `Business ${suffix}`, category: 'Emergency plumbing', suburb: 'Parramatta', stateTerritory: 'NSW', publicUrl: `/${slug}`, trustTier: 'claimed' }, offerings: [{ offering: { offeringRef: `offering:${suffix}`, revision: 1, name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'Emergency plumbing help for urgent pipe repairs.', serviceAreaSummary: 'Parramatta and nearby suburbs' }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }], sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current' } })
   }
 }
 
 function matchesFilter(row: Row, filter: Filter): boolean {
-  if (filter.op === 'eq') {
-    return row[filter.field] === filter.value
-  }
-  if (filter.op === 'gte') {
-    return String(row[filter.field] ?? '') >= String(filter.value)
-  }
-
-  const haystack = String(row[filter.field] ?? '')
-  return filter.value
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((token) => haystack.includes(token))
-}
-
-function rowSort(left: Row, right: Row): number {
-  const leftSlug = typeof left.slug === 'string' ? left.slug : ''
-  const rightSlug = typeof right.slug === 'string' ? right.slug : ''
-  return leftSlug.localeCompare(rightSlug)
-}
-
-function unscopedCollects(reads: readonly ReadTrace[]): ReadTrace[] {
-  return reads.filter(
-    (read) => read.operation === 'collect' && read.filters.length === 0,
-  )
-}
-
-function scopedCollects(reads: readonly ReadTrace[], tableName: string): ReadTrace[] {
-  return reads.filter(
-    (read) =>
-      read.tableName === tableName &&
-      read.operation === 'collect' &&
-      read.filters.length > 0,
-  )
+  if (filter.op === 'eq') return row[filter.field] === filter.value
+  return String(filter.value).split(/\s+/).filter(Boolean).every((token) => String(row[filter.field] ?? '').split(/\s+/).includes(token))
 }

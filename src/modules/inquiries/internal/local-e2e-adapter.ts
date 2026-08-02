@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
+import { LOCAL_E2E_BUSINESS_FIXTURES, type LocalE2eBusinessFixture, type LocalE2eOfferingFixture } from '@/lib/dev/local-e2e-business-fixtures'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type { BusinessOfferingRecord, BusinessOfferingRevisionRecord, OfferingAccessPathRecord } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction } from '@/modules/governed-action/public'
 import {
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesLocal,
@@ -22,13 +23,19 @@ import {
   replyToInquiry as replyToInquiryLocal,
   submitInquiry as submitInquiryLocal,
   type CapabilityLaunchSupportRecord,
+  type InquiryNotificationStatus,
   type InquiryOperatorReconstructionFilter,
   type InquirySourceState,
   type InquiryTargetRef,
+  type InquiryThreadStatus,
   type PublicInquiryContactInput,
   type R1TargetAdmission,
 } from '@/modules/inquiries/public'
 import { buildGovernedSendIntent } from './governed-send'
+import {
+  buildSubmittedInquiryReceipt,
+  type SubmittedInquiryReceipt,
+} from './submitted-receipt'
 
 export type LocalE2eInquiryBackendKind = 'local-e2e'
 
@@ -44,31 +51,19 @@ type PublicInquirySubmitInput = {
 const publicInquirySubmitTargetSchema = z.union([
   z.object({
     businessId: z.string(),
-    serviceId: z.string(),
-    capabilityKind: z.enum([
-      'phone_inquiry',
-      'quote_request',
-      'emergency_callout_interest',
-      'ae_hosted_discovery',
-    ]),
+    offeringRef: z.string(),
   }).strict(),
   z.object({
     businessSlug: z.string(),
-    serviceSlug: z.string(),
-    capabilityKind: z.enum([
-      'phone_inquiry',
-      'quote_request',
-      'emergency_callout_interest',
-      'ae_hosted_discovery',
-    ]),
+    offeringRef: z.string(),
   }).strict(),
 ])
 
 type ResolvedTarget = {
   businessId: string
-  serviceId: string
-  capabilityKind: 'phone_inquiry' | 'quote_request' | 'emergency_callout_interest' | 'ae_hosted_discovery'
+  offeringRef: string
 }
+
 
 type ServerErrorResult = {
   kind: 'error'
@@ -83,16 +78,7 @@ type PublicInquirySubmitServerResult =
   | {
       kind: 'ok'
       code: 'inquiry_submitted' | 'inquiry_replayed'
-      receipt: {
-        threadId: string
-        businessId: string
-        serviceId: string
-        status: string
-        version: number
-        notificationId: string
-        notificationStatus: string
-        accessKey: string
-      }
+      receipt: SubmittedInquiryReceipt
     }
   | ServerErrorResult
 
@@ -123,7 +109,7 @@ type OwnerInquiryMutationServerResult =
       code: string
       thread: {
         threadId: string
-        status: string
+        status: InquiryThreadStatus
         version: number
         updatedAt: number
       }
@@ -134,7 +120,7 @@ type OwnerInquiryMutationServerResult =
       }
       notification?: {
         notificationId: string
-        status: string
+        status: InquiryNotificationStatus
         recipientRole: 'owner' | 'customer'
       }
     }
@@ -171,13 +157,11 @@ export type LocalE2eInquiryServerBackend = Readonly<{
   readCurrentOwnerInquiryThread: (threadId: string) => OwnerInquiryThreadServerResult
   readPublicTargetAdmission: (target: {
     businessId: string
-    serviceId: string
-    capabilityKind: ResolvedTarget['capabilityKind']
+    offeringRef: string
   }) => PublicTargetAdmissionReadResult
   readCurrentOwnerTargetAdmission: (target: {
     businessId: string
-    serviceId: string
-    capabilityKind: ResolvedTarget['capabilityKind']
+    offeringRef: string
   }) => OwnerTargetAdmissionReadResult
   markCurrentOwnerInquiryRead: (data: {
     threadId: string
@@ -231,8 +215,7 @@ export function createLocalE2eInquiryServerBackend(): LocalE2eInquiryServerBacke
     readPublicTargetAdmission: (target) => {
       const brandedTarget = {
         businessId: brandNonEmpty(target.businessId, 'BusinessId'),
-        serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
-        capabilityKind: target.capabilityKind,
+        offeringRef: brandNonEmpty(target.offeringRef, 'OfferingRef'),
       }
       return {
         kind: 'ok',
@@ -242,8 +225,7 @@ export function createLocalE2eInquiryServerBackend(): LocalE2eInquiryServerBacke
     readCurrentOwnerTargetAdmission: (target) => {
       const brandedTarget = {
         businessId: brandNonEmpty(target.businessId, 'BusinessId'),
-        serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
-        capabilityKind: target.capabilityKind,
+        offeringRef: brandNonEmpty(target.offeringRef, 'OfferingRef'),
       }
       return {
         kind: 'ok',
@@ -257,8 +239,7 @@ export function createLocalE2eInquiryServerBackend(): LocalE2eInquiryServerBacke
 }
 
 function normalizeOperationPart(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
-  return normalized.length === 0 ? 'inquiry' : normalized
+  return normalizeSlug(value) || 'inquiry'
 }
 
 function compactContact(input: PublicInquiryContactInput): PublicInquiryContactInput {
@@ -277,8 +258,7 @@ function submitLocalE2ePublicInquiry(
   const operationSuffix = data.operationKey ?? `${normalizeOperationPart(target.businessId)}:local-e2e:${now}`
   const localTarget: InquiryTargetRef = {
     businessId: brandNonEmpty(target.businessId, 'BusinessId'),
-    serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
-    capabilityKind: target.capabilityKind,
+    offeringRef: brandNonEmpty(target.offeringRef, 'OfferingRef'),
   }
   const result = submitInquiryLocal(createLocalPublicAdmissionState(localTarget), {
     target: localTarget,
@@ -289,7 +269,6 @@ function submitLocalE2ePublicInquiry(
     governedSendIntegrityKeyring: localE2eGovernedSendIntegrityKeyring,
     ...(data.inquiryOrigin === undefined ? {} : { origin: data.inquiryOrigin }),
     pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
-    abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
     operationKey: brandNonEmpty(data.operationKey ?? `inquiry:${operationSuffix}`, 'OperationKey'),
     correlationId: brandNonEmpty(`correlation:${normalizeOperationPart(operationSuffix)}`, 'CorrelationId'),
     now,
@@ -313,16 +292,11 @@ function submitLocalE2ePublicInquiry(
   return {
     kind: 'ok',
     code: result.code,
-    receipt: {
-      threadId: result.thread.threadId,
-      businessId: result.thread.businessId,
-      serviceId: result.thread.serviceId,
-      status: result.thread.status,
-      version: result.thread.version,
-      notificationId: result.notification.notificationId,
-      notificationStatus: result.notification.status,
+    receipt: buildSubmittedInquiryReceipt({
+      thread: result.thread,
+      notification: result.notification,
       accessKey: result.customerAccessKey,
-    },
+    }),
   }
 }
 
@@ -462,22 +436,33 @@ const localPublicAdmittedFixture = (() => {
   if (fixture === undefined) throw new Error('One admitted local public inquiry fixture is required.')
   return fixture
 })()
+const localPublicAdmittedOffering = requireLocalE2eOffering(localPublicAdmittedFixture)
+
 const localPublicAdmittedSlug = localPublicAdmittedFixture.requestedSlug
 const localPublicAdmittedBusinessId = brandNonEmpty(`business:${localPublicAdmittedSlug}`, 'BusinessId')
-const localPublicAdmittedServiceId = brandNonEmpty(
-  `service:${localPublicAdmittedBusinessId}:emergency-plumbing`,
-  'ServiceId',
+const localPublicAdmittedOfferingRef = brandNonEmpty(
+  `offering:${localPublicAdmittedSlug}:${normalizeSlug(localPublicAdmittedOffering.name)}`,
+  'OfferingRef',
 )
 const localPublicAdmittedOwnerId = brandNonEmpty(`owner:local-e2e:${localPublicAdmittedSlug}`, 'OwnerId')
 
+function requireLocalE2eOffering(fixture: LocalE2eBusinessFixture): LocalE2eOfferingFixture {
+  const offering = fixture.offerings[0]
+  if (offering === undefined) {
+    throw new Error(`The local E2E fixture must publish an offering: ${fixture.requestedSlug}`)
+  }
+  return offering
+}
+
+
 function createLocalPublicAdmissionState(target: InquiryTargetRef): InquirySourceState {
   if (target.businessId !== localPublicAdmittedBusinessId
-    || target.serviceId !== localPublicAdmittedServiceId
-    || target.capabilityKind !== 'phone_inquiry') {
+    || target.offeringRef !== localPublicAdmittedOfferingRef) {
     return createEmptyInquirySourceState()
   }
 
   const fixture = localPublicAdmittedFixture
+  const fixtureOffering = localPublicAdmittedOffering
 
   const business = {
     businessId: localPublicAdmittedBusinessId,
@@ -491,47 +476,54 @@ function createLocalPublicAdmissionState(target: InquiryTargetRef): InquirySourc
     publicStatus: 'published' as const,
     trustTier: 'contact_confirmed' as const,
     claimStatus: 'published' as const,
-    sourceHash: stableHash({ businessId: localPublicAdmittedBusinessId }),
+    sourceHash: canonicalDigest({ businessId: localPublicAdmittedBusinessId }),
     createdAt: localE2eNow,
     updatedAt: localE2eNow,
   } satisfies BusinessRecord
-  const service = {
-    serviceId: localPublicAdmittedServiceId,
-    serviceSlug: brandNonEmpty('emergency-plumbing', 'Slug'),
+  const revision = {
+    offeringRef: localPublicAdmittedOfferingRef,
     businessId: localPublicAdmittedBusinessId,
-    name: fixture.serviceName,
-    category: fixture.serviceCategory,
-    summary: fixture.serviceSummary,
-    serviceArea: fixture.serviceArea,
-    hoursOrUnknown: fixture.hoursOrUnknown,
+    revision: 1,
+    name: fixtureOffering.name,
+    category: fixtureOffering.category,
+    summary: fixtureOffering.summary,
+    serviceAreaSummary: fixtureOffering.serviceAreaSummary,
+    availabilitySummary: fixtureOffering.availabilitySummary,
+    ...(fixtureOffering.pricingSummary === undefined ? {} : { pricingSummary: fixtureOffering.pricingSummary }),
+    ...(fixtureOffering.price === undefined ? {} : { price: fixtureOffering.price }),
+    sourceHash: canonicalDigest({ offeringRef: localPublicAdmittedOfferingRef, revision: 1, name: fixtureOffering.name }),
+    createdAt: localE2eNow,
+  } satisfies BusinessOfferingRevisionRecord
+  const offering = {
+    offeringRef: localPublicAdmittedOfferingRef,
+    businessId: localPublicAdmittedBusinessId,
+    currentRevision: 1,
     status: 'published' as const,
-    sortOrder: 0,
-    sourceHash: stableHash({ serviceId: localPublicAdmittedServiceId }),
     createdAt: localE2eNow,
     updatedAt: localE2eNow,
-  } satisfies BusinessServiceRecord
-  const capability = {
+  } satisfies BusinessOfferingRecord
+  const accessPath = {
+    accessPathRef: brandNonEmpty(`${localPublicAdmittedOfferingRef}:inquiry`, 'AccessPathRef'),
     businessId: localPublicAdmittedBusinessId,
-    serviceId: localPublicAdmittedServiceId,
-    kind: 'phone_inquiry' as const,
-    status: 'available' as const,
-    firstRequest: {
-      mode: 'inquiry_available' as const,
-      publicChannel: 'public_business_contact' as const,
-      publicDisclosure: 'Use the inquiry form for a first contact.',
-      rawContactExcluded: true,
+    offeringRef: localPublicAdmittedOfferingRef,
+    offeringRevision: 1,
+    offeringSourceHash: revision.sourceHash,
+    status: 'published' as const,
+    descriptor: {
+      kind: 'human_request' as const,
+      channel: 'ae_inquiry' as const,
+      disclosure: 'Use the inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry', serviceId: localPublicAdmittedServiceId }),
+    sourceHash: canonicalDigest({ offeringRef: localPublicAdmittedOfferingRef, channel: 'ae_inquiry' }),
     createdAt: localE2eNow,
     updatedAt: localE2eNow,
-  } satisfies ServiceCapabilityRecord
+  } satisfies OfferingAccessPathRecord
 
   return createEmptyInquirySourceState({
     businesses: [business],
-    businessServices: [service],
-    serviceCapabilities: [capability],
+    businessOfferings: [offering],
+    businessOfferingRevisions: [revision],
+    offeringAccessPaths: [accessPath],
     owners: [{
       ownerId: localPublicAdmittedOwnerId,
       clerkUserId: `local-e2e:${localPublicAdmittedSlug}`,
@@ -544,13 +536,13 @@ function createLocalPublicAdmissionState(target: InquiryTargetRef): InquirySourc
       businessId: localPublicAdmittedBusinessId,
       slug: brandNonEmpty(localPublicAdmittedSlug, 'Slug'),
       status: 'published',
-      submittedFactsHash: stableHash({ businessId: localPublicAdmittedBusinessId, ownerId: localPublicAdmittedOwnerId }),
+      submittedFactsHash: canonicalDigest({ businessId: localPublicAdmittedBusinessId, ownerId: localPublicAdmittedOwnerId }),
       createdAt: localE2eNow,
       updatedAt: localE2eNow,
     }],
     resolvableOwnerRecipients: [{
       ownerId: localPublicAdmittedOwnerId,
-      recipientRef: `clerk-owner-email:${stableHash(`local-e2e:${localPublicAdmittedSlug}`)}`,
+      recipientRef: `clerk-owner-email:${canonicalDigest(`local-e2e:${localPublicAdmittedSlug}`)}`,
       resolvedAt: localE2eNow,
     }],
     capabilityLaunchSupportRecords: [localE2eSupportRecord()],
@@ -560,17 +552,21 @@ function createLocalPublicAdmissionState(target: InquiryTargetRef): InquirySourc
 const localE2eSubmittedStateByThreadId = new Map<string, InquirySourceState>()
 
 const localE2eBusinessId = brandNonEmpty('business:plumbing-demo', 'BusinessId')
-const localE2eServiceId = brandNonEmpty('service:business:plumbing-demo:diagnostic-plumbing', 'ServiceId')
-const localE2eTarget = {
-  businessId: localE2eBusinessId,
-  serviceId: localE2eServiceId,
-  capabilityKind: 'phone_inquiry' as const,
-}
 const localE2eBusinessFixture = (() => {
   const fixture = LOCAL_E2E_BUSINESS_FIXTURES.find((candidate) => candidate.requestedSlug === 'plumbing-demo')
   if (fixture === undefined) throw new Error('The plumbing-demo local E2E fixture is required.')
   return fixture
 })()
+const localE2eFixtureOffering = requireLocalE2eOffering(localE2eBusinessFixture)
+
+const localE2eOfferingRef = brandNonEmpty(
+  `offering:${localE2eBusinessFixture.requestedSlug}:${normalizeSlug(localE2eFixtureOffering.name)}`,
+  'OfferingRef',
+)
+const localE2eTarget = {
+  businessId: localE2eBusinessId,
+  offeringRef: localE2eOfferingRef,
+}
 
 const localE2eRecordBody = 'Water is leaking under the kitchen sink and I need a human owner to confirm next steps.'
 const localE2eRecordContact = { email: 'customer@example.test' } as const
@@ -594,7 +590,6 @@ function createLocalE2eInquirySourceState(): InquirySourceState {
     operationKey: brandNonEmpty('inquiry:local-e2e-submit', 'OperationKey'),
     correlationId: brandNonEmpty('correlation:local-e2e-submit', 'CorrelationId'),
     pseudonymousSessionId: 'public-inquiry:local-e2e',
-    abuseBucketKey: 'public-inquiry:local-e2e',
     expectedDigest: localE2eRecordDigest,
     now: localE2eNow,
     notificationStatus: 'failed',
@@ -632,7 +627,7 @@ function bindLocalE2eInquiryDispatches(state: InquirySourceState): InquirySource
           providerFamily,
           status,
           providerIdempotencyKey: `ae:${dispatchId}`,
-          payloadHash: stableHash({ dispatchId, notificationId: notification.notificationId, redacted: true }),
+          payloadHash: canonicalDigest({ dispatchId, notificationId: notification.notificationId, redacted: true }),
           operatorNextAction: status === 'provider_missing' ? 'retry_available' : 'none',
           updatedAt: notification.updatedAt + 1,
         },
@@ -649,7 +644,7 @@ function createLocalE2eInquiryBaseState(): InquirySourceState {
     owners: [{
       ownerId: localE2eOwnerId,
       clerkUserId: 'clerk:local-e2e-owner',
-      emailHash: stableHash('local-e2e-owner@example.test'),
+      emailHash: canonicalDigest('local-e2e-owner@example.test'),
       createdAt: localE2eNow,
       updatedAt: localE2eNow,
     } satisfies BusinessOwnerRecord],
@@ -659,22 +654,22 @@ function createLocalE2eInquiryBaseState(): InquirySourceState {
       businessId: localE2eBusinessId,
       slug: brandNonEmpty(localE2eBusinessFixture.requestedSlug, 'Slug'),
       status: 'published',
-      submittedFactsHash: stableHash({ businessId: localE2eBusinessId, ownerId: localE2eOwnerId }),
+      submittedFactsHash: canonicalDigest({ businessId: localE2eBusinessId, ownerId: localE2eOwnerId }),
       createdAt: localE2eNow,
       updatedAt: localE2eNow,
     } satisfies ClaimRecord],
     resolvableOwnerRecipients: [{
       ownerId: localE2eOwnerId,
-      recipientRef: `clerk-owner-email:${stableHash('local-e2e-owner@example.test')}`,
+      recipientRef: `clerk-owner-email:${canonicalDigest('local-e2e-owner@example.test')}`,
       resolvedAt: localE2eNow,
     }],
-    businessServices: [localE2eService()],
-    serviceCapabilities: [localE2eCapability()],
+    businessOfferings: [createLocalE2eOfferingRecord()],
+    businessOfferingRevisions: [localE2eOfferingRevision()],
+    offeringAccessPaths: [localE2eInquiryAccessPath()],
     capabilityLaunchSupportRecords: [localE2eSupportRecord()],
     suppressionRules: [],
   })
 }
-
 function localE2eBusiness(): BusinessRecord {
   return {
     businessId: localE2eBusinessId,
@@ -688,45 +683,55 @@ function localE2eBusiness(): BusinessRecord {
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
-    sourceHash: stableHash({ businessId: localE2eBusinessId }),
+    sourceHash: canonicalDigest({ businessId: localE2eBusinessId }),
     createdAt: localE2eNow,
     updatedAt: localE2eNow,
   }
 }
 
-function localE2eService(): BusinessServiceRecord {
+function createLocalE2eOfferingRecord(): BusinessOfferingRecord {
   return {
-    serviceId: localE2eServiceId,
-    serviceSlug: brandNonEmpty('diagnostic-plumbing', 'Slug'),
+    offeringRef: localE2eOfferingRef,
     businessId: localE2eBusinessId,
-    name: localE2eBusinessFixture.serviceName,
-    category: localE2eBusinessFixture.serviceCategory,
-    summary: localE2eBusinessFixture.serviceSummary,
-    serviceArea: localE2eBusinessFixture.serviceArea,
-    hoursOrUnknown: localE2eBusinessFixture.hoursOrUnknown,
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 1,
-    sourceHash: stableHash({ serviceId: localE2eServiceId }),
     createdAt: localE2eNow,
     updatedAt: localE2eNow,
   }
 }
 
-function localE2eCapability(): ServiceCapabilityRecord {
+function localE2eOfferingRevision(): BusinessOfferingRevisionRecord {
   return {
+    offeringRef: localE2eOfferingRef,
     businessId: localE2eBusinessId,
-    serviceId: localE2eServiceId,
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the inquiry form for a first contact.',
-      rawContactExcluded: true,
+    revision: 1,
+    name: localE2eFixtureOffering.name,
+    category: localE2eFixtureOffering.category,
+    summary: localE2eFixtureOffering.summary,
+    serviceAreaSummary: localE2eFixtureOffering.serviceAreaSummary,
+    availabilitySummary: localE2eFixtureOffering.availabilitySummary,
+    ...(localE2eFixtureOffering.pricingSummary === undefined ? {} : { pricingSummary: localE2eFixtureOffering.pricingSummary }),
+    ...(localE2eFixtureOffering.price === undefined ? {} : { price: localE2eFixtureOffering.price }),
+    sourceHash: canonicalDigest({ offeringRef: localE2eOfferingRef, revision: 1, name: localE2eFixtureOffering.name }),
+    createdAt: localE2eNow,
+  }
+}
+
+function localE2eInquiryAccessPath(): OfferingAccessPathRecord {
+  const offeringSourceHash = localE2eOfferingRevision().sourceHash
+  return {
+    accessPathRef: brandNonEmpty(`${localE2eOfferingRef}:inquiry`, 'AccessPathRef'),
+    businessId: localE2eBusinessId,
+    offeringRef: localE2eOfferingRef,
+    offeringRevision: 1,
+    offeringSourceHash,
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry' }),
+    sourceHash: canonicalDigest({ offeringRef: localE2eOfferingRef, channel: 'ae_inquiry' }),
     createdAt: localE2eNow,
     updatedAt: localE2eNow,
   }
@@ -754,7 +759,7 @@ function localE2eSupportRecord(): CapabilityLaunchSupportRecord {
       privacyDeletes: 0,
     },
     supportEscalationPath: 'Phase 2 operator readback queue, then founder support.',
-    claimDisablePath: 'Set inquiries_enabled false or remove inquiry_available from the published service capability.',
+    claimDisablePath: 'Set inquiries_enabled false or withdraw the published ae_inquiry access path from the Offering.',
     perChannelKillRules: [
       {
         channel: 'public_claim',
@@ -768,7 +773,7 @@ function localE2eSupportRecord(): CapabilityLaunchSupportRecord {
       },
     ],
     evidenceRefs: ['output/playwright/phase2-ui', '.planning/phases/02-human-inquiry-owner-inbox/02-EXECUTION-EVIDENCE.md'],
-    sourceHash: stableHash({ supportRecord: 'human_inquiry_owner_inbox', stage: 'manual_support' }),
+    sourceHash: canonicalDigest({ supportRecord: 'human_inquiry_owner_inbox', stage: 'manual_support' }),
     correlationId: brandNonEmpty('correlation:phase2-support-record:local-e2e', 'CorrelationId'),
     lastReviewedAt: localE2eNow + 60_000,
   }

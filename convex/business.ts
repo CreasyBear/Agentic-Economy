@@ -1,18 +1,44 @@
-import type { UserIdentity } from 'convex/server'
+import type { GenericDatabaseWriter, UserIdentity } from 'convex/server'
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { readActiveAdminMembership, resolveBusinessActor } from './authz'
+import { readCurrentActiveAdminMembership as readCurrentActiveMembership, resolveBusinessActor } from './authz'
+import { assertAdmission } from './lib/rateLimit'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
-import { loadPhaseOneSourceState, persistPhaseOneSourceState, runtimeDb, runtimeWriter } from './source_state'
-import type { RuntimeDocument, RuntimeWriter } from './source_state'
-import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash } from '../src/modules/common/stable-hash'
-import { suppressBusiness as suppressBusinessModule, unsuppressBusiness as unsuppressBusinessModule, validateOwnerPublishedPhone } from '../src/modules/business/public'
-import type { BusinessMutationActor, BusinessSuppressionState } from '../src/modules/business/public'
-import { recordAdminActionDenied, requireAdminAuthority, normalizeClaimFingerprint } from '../src/modules/security/public'
-import type { AdminAuthorityState, AdminDecisionAudit, AdminMembership } from '../src/modules/security/public'
-import type { AuditEventContract } from '../src/modules/observability/public'
+import {
+  brandNonEmpty,
+  type BusinessId,
+  type OwnerId,
+} from '../src/modules/common/ids'
+import { normalizeSlug } from '../src/modules/common/normalize-slug'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import {
+  ClaimStatusValues,
+  PublicStatusValues,
+  TrustTierValues,
+  VisibilityTargetTypeValues,
+  suppressBusiness as suppressBusinessModule,
+  unsuppressBusiness as unsuppressBusinessModule,
+  validateOwnerPublishedPhone,
+} from '../src/modules/business/public'
+import type { BusinessMutationActor, BusinessRecord, BusinessSuppressionState } from '../src/modules/business/public'
+import {
+  ActorKindValues,
+  AuditEventTypeValues,
+  AuditTargetTypeValues,
+} from '../src/modules/observability/public'
+import type { AuditEventContract, RedactedPayload } from '../src/modules/observability/public'
+import {
+  AdminMembershipAuditEventTypeValues,
+  SuppressionRuleStatusValues,
+  normalizeClaimFingerprint,
+  recordAdminActionDenied,
+  requireAdminAuthority,
+  type AdminAuthorityState,
+  type AdminDecisionAudit,
+  type SuppressionRuleRecord,
+} from '../src/modules/security/public'
+import type { DataModel, Doc, Id, TableNames } from './_generated/dataModel'
 
 const sourceRefArg = v.object({
   label: v.string(),
@@ -195,12 +221,15 @@ export const claimBusiness = mutationGeneric({
       return claimError('claim_unauthenticated', 'Authentication is required to claim a business.')
     }
 
-    const db = runtimeWriter(ctx.db)
-    const rateLimited = await incrementClaimRateLimit({ db }, actor.clerkUserId, Date.now())
-    if (rateLimited !== undefined) {
-      return rateLimited
+    const admission = await assertAdmission(ctx, {
+      name: 'public-mutation',
+      key: `owner:${actor.clerkUserId}`,
+    })
+    if (!admission.ok) {
+      return claimError('claim_rate_limited', `Retry after ${admission.retryAfter}.`, true)
     }
-    return claimBusinessCommand(db, {
+
+    return claimBusinessCommand(ctx.db, {
       actor,
       facts: args,
       operationKey: args.operationKey,
@@ -254,10 +283,23 @@ type VisibilityMutationArgs = {
 }
 
 type VisibilityMutationCtx = {
-  db: object
+  db: GenericDatabaseWriter<DataModel>
   auth: {
     getUserIdentity: () => Promise<UserIdentity | null>
   }
+}
+
+type BusinessVisibilitySourceState = {
+  businesses: Array<Doc<'businesses'> & { businessId: Id<'businesses'> }>
+  suppressionRules: Doc<'suppressionRules'>[]
+  auditEvents: Doc<'auditEvents'>[]
+  adminMembershipAuditEvents: Doc<'adminMembershipAuditEvents'>[]
+}
+type VisibilityPersistState = {
+  businesses: BusinessRecord[]
+  suppressionRules: SuppressionRuleRecord[]
+  auditEvents: AuditEventContract[]
+  adminMembershipAuditEvents: AdminDecisionAudit[]
 }
 
 async function runVisibilityChange(
@@ -275,25 +317,31 @@ async function runVisibilityChange(
     }
   }
 
-  const db = runtimeDb(ctx.db)
+  const businessId = businessIdFromValue(ctx.db, args.businessId)
+  const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
+  const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+  const auditEventId = `audit:business.${mode === 'suppress' ? 'suppressed' : 'unsuppressed'}:${businessId}:${operationKey}`
   const [source, adminMembership] = await Promise.all([
-    loadPhaseOneSourceState(db),
+    loadBusinessVisibilitySource(ctx.db, businessId, auditEventId),
     readCurrentActiveMembership(ctx),
   ])
+  const persisted = visibilityPersistStateFromSource(source, ctx.db)
+  const before = structuredClone(persisted)
+  const authorityState = adminAuthorityState(persisted)
   const authority = requireAdminAuthority(adminMembership, 'change_public_visibility')
   if (authority.kind === 'denied') {
-    const denied = recordAdminActionDenied(adminAuthorityState(source), {
+    const denied = recordAdminActionDenied(authorityState, {
       actorMembership: adminMembership,
       action: 'change_public_visibility',
       targetType: 'business',
-      targetRef: args.businessId,
+      targetRef: businessId,
       reasonCode: authority.reason,
       evidenceRefs: args.evidenceRefs,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
+      operationKey,
+      correlationId,
       now: Date.now(),
     })
-    await persistPhaseOneSourceState(db, source)
+    await persistVisibilitySourceState(ctx.db, persisted, before)
     return {
       kind: 'error' as const,
       code: mode === 'suppress' ? 'business_suppress_admin_denied' as const : 'business_unsuppress_admin_denied' as const,
@@ -303,19 +351,7 @@ async function runVisibilityChange(
     }
   }
 
-  const state = businessSuppressionState(source)
-  const activeSuppressionRule =
-    mode === 'unsuppress'
-      ? source.security.suppressionRules.find(
-          (rule) =>
-            stringRecordField(rule, 'targetType') === 'business' &&
-            stringRecordField(rule, 'targetRef') === args.businessId &&
-            stringRecordField(rule, 'status') === 'active'
-        )
-      : undefined
-  const businessId = brandNonEmpty(args.businessId, 'BusinessId')
-  const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
-  const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+  const state = businessSuppressionState(persisted)
   const command = {
     adminMembership,
     businessId,
@@ -333,42 +369,369 @@ async function runVisibilityChange(
       ? suppressBusinessModule(state, command)
       : unsuppressBusinessModule(state, command)
 
-  if (mode === 'unsuppress' && result.kind === 'ok' && activeSuppressionRule !== undefined) {
-    await patchLiftedSuppressionRule(db, activeSuppressionRule)
-    source.security.suppressionRules = source.security.suppressionRules.filter((rule) => rule !== activeSuppressionRule)
-  }
-  await persistPhaseOneSourceState(db, source)
+  await persistVisibilitySourceState(ctx.db, persisted, before)
   return summarizeVisibilityResult(result)
 }
 
-function businessSuppressionState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): BusinessSuppressionState {
+async function loadBusinessVisibilitySource(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  auditEventId: string,
+): Promise<BusinessVisibilitySourceState> {
+  const [business, suppressionRule, auditEvent] = await Promise.all([
+    db.get(businessId),
+    db.query('suppressionRules')
+      .withIndex('by_target_status', (builder) =>
+        builder.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active')
+      )
+      .unique(),
+    db.query('auditEvents').withIndex('by_eventId', (builder) => builder.eq('eventId', auditEventId)).unique(),
+  ])
   return {
-    owners: source.business.owners as BusinessSuppressionState['owners'],
-    businesses: source.business.businesses as BusinessSuppressionState['businesses'],
-    businessContexts: source.business.businessContexts as BusinessSuppressionState['businessContexts'],
-    claims: source.business.claims as BusinessSuppressionState['claims'],
-    claimFingerprints: source.business.claimFingerprints as BusinessSuppressionState['claimFingerprints'],
-    abuseRateLimitBuckets: source.business.abuseRateLimitBuckets as BusinessSuppressionState['abuseRateLimitBuckets'],
-    businessServices: source.catalog.businessServices as BusinessSuppressionState['businessServices'],
-    suppressionRules: source.security.suppressionRules as BusinessSuppressionState['suppressionRules'],
-    auditEvents: source.observability.auditEvents as AuditEventContract[],
+    businesses: business === null ? [] : [{ ...business, businessId: business._id }],
+    suppressionRules: suppressionRule === null ? [] : [suppressionRule],
+    auditEvents: auditEvent === null ? [] : [auditEvent],
+    adminMembershipAuditEvents: [],
+  }
+}
+
+async function persistVisibilitySourceState(
+  db: GenericDatabaseWriter<DataModel>,
+  source: VisibilityPersistState,
+  before: VisibilityPersistState,
+): Promise<void> {
+  for (const business of source.businesses) {
+    const beforeBusiness = before.businesses.find((candidate) => candidate.businessId === business.businessId)
+    if (beforeBusiness !== undefined && JSON.stringify(beforeBusiness) === JSON.stringify(business)) {
+      continue
+    }
+
+    const businessId = businessIdFromValue(db, business.businessId)
+    const { businessId: _businessId, ownerId, ...patch } = business
+    await db.patch(businessId, { ...patch, ownerId: ownerIdFromValue(db, ownerId) })
+  }
+
+  for (const rule of source.suppressionRules) {
+    const beforeRule = before.suppressionRules.find(
+      (candidate) => candidate.targetType === rule.targetType && candidate.targetRef === rule.targetRef
+    )
+    if (beforeRule !== undefined && JSON.stringify(beforeRule) === JSON.stringify(rule)) {
+      continue
+    }
+
+    const existing = await db
+      .query('suppressionRules')
+      .withIndex('by_target_status', (builder) =>
+        builder.eq('targetType', rule.targetType).eq('targetRef', rule.targetRef).eq('status', beforeRule?.status ?? rule.status)
+      )
+      .unique()
+    if (existing === null) {
+      await db.insert('suppressionRules', suppressionRuleDocument(rule))
+    } else {
+      await db.patch(existing._id, suppressionRuleDocument(rule))
+    }
+  }
+
+  for (const event of source.auditEvents) {
+    const beforeEvent = before.auditEvents.find((candidate) => candidate.eventId === event.eventId)
+    if (beforeEvent !== undefined && JSON.stringify(beforeEvent) === JSON.stringify(event)) {
+      continue
+    }
+
+    const existing = await db
+      .query('auditEvents')
+      .withIndex('by_eventId', (builder) => builder.eq('eventId', event.eventId))
+      .unique()
+    if (existing === null) {
+      await db.insert('auditEvents', auditEventDocument(event, db))
+    }
+  }
+
+  for (const membershipAudit of source.adminMembershipAuditEvents) {
+    const existing = await db
+      .query('adminMembershipAuditEvents')
+      .withIndex('by_auditEventId', (builder) => builder.eq('auditEventId', membershipAudit.auditEventId))
+      .unique()
+    if (existing === null) {
+      await db.insert('adminMembershipAuditEvents', adminMembershipAuditDocument(membershipAudit))
+    }
+  }
+}
+
+function businessSuppressionState(source: VisibilityPersistState): BusinessSuppressionState {
+  return {
+    owners: [],
+    businesses: source.businesses,
+    businessContexts: [],
+    claims: [],
+    claimFingerprints: [],
+    suppressionRules: source.suppressionRules,
+    auditEvents: source.auditEvents,
     invalidationIntents: [],
   }
 }
 
-function adminAuthorityState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): AdminAuthorityState {
+function adminAuthorityState(source: VisibilityPersistState): AdminAuthorityState {
   return {
-    adminMemberships: source.security.adminMemberships as AdminMembership[],
-    adminMembershipAuditEvents: source.security.adminMembershipAuditEvents as AdminDecisionAudit[],
-    auditEvents: source.observability.auditEvents as AuditEventContract[],
+    adminMemberships: [],
+    adminMembershipAuditEvents: source.adminMembershipAuditEvents,
+    auditEvents: source.auditEvents,
   }
 }
 
-async function readCurrentActiveMembership(ctx: VisibilityMutationCtx): Promise<AdminMembership | undefined> {
-  const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity)
+
+
+function visibilityPersistStateFromSource(
+  source: BusinessVisibilitySourceState,
+  db: GenericDatabaseWriter<DataModel>,
+): VisibilityPersistState {
+  return {
+    businesses: source.businesses.map((row) => businessRecordFromSource(row, db)),
+    suppressionRules: source.suppressionRules.map((row) => suppressionRuleFromSource(row)),
+    auditEvents: source.auditEvents.map((row) => auditEventFromSource(row, db)),
+    adminMembershipAuditEvents: source.adminMembershipAuditEvents.map((row) => adminMembershipAuditFromSource(row)),
+  }
 }
 
+function businessRecordFromSource(
+  row: BusinessVisibilitySourceState['businesses'][number],
+  db: GenericDatabaseWriter<DataModel>,
+): BusinessRecord {
+  const publishedPhone = readOptionalString(row.publishedPhone)
+  const suppressedAt = readOptionalNumber(row.suppressedAt)
+  return {
+    businessId: businessIdFromValue(db, row.businessId),
+    ownerId: ownerIdFromValue(db, row.ownerId),
+    slug: brandNonEmpty(readString(row.slug, 'business slug'), 'Slug'),
+    name: readString(row.name, 'business name'),
+    normalizedName: readString(row.normalizedName, 'business normalized name'),
+    category: readString(row.category, 'business category'),
+    suburb: readString(row.suburb, 'business suburb'),
+    stateTerritory: readString(row.stateTerritory, 'business state/territory'),
+    ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    publicStatus: readEnum(row.publicStatus, PublicStatusValues, 'business public status'),
+    trustTier: readEnum(row.trustTier, TrustTierValues, 'business trust tier'),
+    claimStatus: readEnum(row.claimStatus, ClaimStatusValues, 'business claim status'),
+    sourceHash: brandNonEmpty(readString(row.sourceHash, 'business source hash'), 'SourceHash'),
+    createdAt: readNumber(row.createdAt, 'business createdAt'),
+    updatedAt: readNumber(row.updatedAt, 'business updatedAt'),
+    ...(suppressedAt === undefined ? {} : { suppressedAt }),
+  }
+}
+
+function suppressionRuleFromSource(
+  row: BusinessVisibilitySourceState['suppressionRules'][number],
+): SuppressionRuleRecord {
+  const liftedByAdminRef = readOptionalString(row.liftedByAdminRef)
+  const liftedReasonCode = readOptionalString(row.liftedReasonCode)
+  const liftedEvidenceRefs = row.liftedEvidenceRefs === undefined
+    ? undefined
+    : readStringArray(row.liftedEvidenceRefs, 'lifted suppression evidence')
+  const liftedAt = readOptionalNumber(row.liftedAt)
+  return {
+    targetType: readEnum(row.targetType, VisibilityTargetTypeValues, 'suppression target type'),
+    targetRef: readString(row.targetRef, 'suppression target ref'),
+    status: readEnum(row.status, SuppressionRuleStatusValues, 'suppression status'),
+    reasonCode: readString(row.reasonCode, 'suppression reason'),
+    evidenceRefs: readStringArray(row.evidenceRefs, 'suppression evidence'),
+    createdByAdminRef: readString(row.createdByAdminRef, 'suppression creator'),
+    createdAt: readNumber(row.createdAt, 'suppression createdAt'),
+    beforePublicStatus: readEnum(row.beforePublicStatus, PublicStatusValues, 'suppression before public status'),
+    beforeClaimStatus: readEnum(row.beforeClaimStatus, ClaimStatusValues, 'suppression before claim status'),
+    ...(liftedByAdminRef === undefined ? {} : { liftedByAdminRef }),
+    ...(liftedEvidenceRefs === undefined ? {} : { liftedEvidenceRefs }),
+    ...(liftedAt === undefined ? {} : { liftedAt }),
+  }
+}
+
+function auditEventFromSource(
+  row: BusinessVisibilitySourceState['auditEvents'][number],
+  db: GenericDatabaseWriter<DataModel>,
+): AuditEventContract {
+  const businessId = row.businessId === undefined ? undefined : businessIdFromValue(db, row.businessId)
+  const beforeState = readOptionalString(row.beforeState)
+  const afterState = readOptionalString(row.afterState)
+  const reasonCode = readOptionalString(row.reasonCode)
+  const failureCode = readOptionalString(row.failureCode)
+  return {
+    eventId: brandNonEmpty(readString(row.eventId, 'audit event id'), 'AuditEventId'),
+    eventType: readEnum(row.eventType, AuditEventTypeValues, 'audit event type'),
+    actorKind: readEnum(row.actorKind, ActorKindValues, 'audit actor kind'),
+    actorRef: readString(row.actorRef, 'audit actor ref'),
+    targetType: readEnum(row.targetType, AuditTargetTypeValues, 'audit target type'),
+    targetRef: readString(row.targetRef, 'audit target ref'),
+    idempotencyKey: brandNonEmpty(readString(row.idempotencyKey, 'audit idempotency key'), 'OperationKey'),
+    correlationId: brandNonEmpty(readString(row.correlationId, 'audit correlation id'), 'CorrelationId'),
+    evidenceRefs: readStringArray(row.evidenceRefs, 'audit evidence'),
+    redactedPayload: redactedPayloadFromSource(JSON.parse(row.redactedPayloadJson)),
+    payloadHash: brandNonEmpty(readString(row.payloadHash, 'audit payload hash'), 'SourceHash'),
+    createdAt: readNumber(row.createdAt, 'audit createdAt'),
+    ...(businessId === undefined ? {} : { businessId }),
+    ...(beforeState === undefined ? {} : { beforeState }),
+    ...(afterState === undefined ? {} : { afterState }),
+    ...(reasonCode === undefined ? {} : { reasonCode }),
+    ...(failureCode === undefined ? {} : { failureCode }),
+  }
+}
+
+function adminMembershipAuditFromSource(
+  row: BusinessVisibilitySourceState['adminMembershipAuditEvents'][number],
+): AdminDecisionAudit {
+  return {
+    auditEventId: brandNonEmpty(readString(row.auditEventId, 'membership audit id'), 'AuditEventId'),
+    eventType: readEnum(row.eventType, AdminMembershipAuditEventTypeValues, 'membership audit event type'),
+    actorRef: readString(row.actorRef, 'membership audit actor ref'),
+    targetRef: readString(row.targetRef, 'membership audit target ref'),
+    reasonCode: readString(row.reasonCode, 'membership audit reason'),
+    evidenceRefs: readStringArray(row.evidenceRefs, 'membership audit evidence'),
+    operationKey: brandNonEmpty(readString(row.operationKey, 'membership audit operation key'), 'OperationKey'),
+    correlationId: brandNonEmpty(readString(row.correlationId, 'membership audit correlation id'), 'CorrelationId'),
+    createdAt: readNumber(row.createdAt, 'membership audit createdAt'),
+  }
+}
+function suppressionRuleDocument(rule: SuppressionRuleRecord): Omit<Doc<'suppressionRules'>, '_id' | '_creationTime'> {
+  return {
+    targetType: rule.targetType,
+    targetRef: rule.targetRef,
+    status: rule.status,
+    reasonCode: rule.reasonCode,
+    evidenceRefs: [...rule.evidenceRefs],
+    createdByAdminRef: rule.createdByAdminRef,
+    createdAt: rule.createdAt,
+    beforePublicStatus: rule.beforePublicStatus,
+    beforeClaimStatus: rule.beforeClaimStatus,
+    ...(rule.liftedByAdminRef === undefined ? {} : { liftedByAdminRef: rule.liftedByAdminRef }),
+    ...(rule.liftedReasonCode === undefined ? {} : { liftedReasonCode: rule.liftedReasonCode }),
+    ...(rule.liftedEvidenceRefs === undefined ? {} : { liftedEvidenceRefs: [...rule.liftedEvidenceRefs] }),
+    ...(rule.liftedAt === undefined ? {} : { liftedAt: rule.liftedAt }),
+  }
+}
+function auditEventDocument(
+  event: AuditEventContract,
+  db: GenericDatabaseWriter<DataModel>,
+): Omit<Doc<'auditEvents'>, '_id' | '_creationTime'> {
+  return {
+    eventId: event.eventId,
+    eventType: event.eventType,
+    actorKind: event.actorKind,
+    actorRef: event.actorRef,
+    targetType: event.targetType,
+    targetRef: event.targetRef,
+    idempotencyKey: event.idempotencyKey,
+    correlationId: event.correlationId,
+    evidenceRefs: [...event.evidenceRefs],
+    redactedPayloadJson: JSON.stringify(event.redactedPayload),
+    payloadHash: event.payloadHash,
+    createdAt: event.createdAt,
+    ...(event.businessId === undefined ? {} : { businessId: businessIdFromValue(db, event.businessId) }),
+    ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
+    ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+    ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
+    ...(event.failureCode === undefined ? {} : { failureCode: event.failureCode }),
+  }
+}
+
+function adminMembershipAuditDocument(
+  audit: AdminDecisionAudit,
+): Omit<Doc<'adminMembershipAuditEvents'>, '_id' | '_creationTime'> {
+  return {
+    auditEventId: audit.auditEventId,
+    eventType: audit.eventType,
+    actorRef: audit.actorRef,
+    targetRef: audit.targetRef,
+    reasonCode: audit.reasonCode,
+    evidenceRefs: [...audit.evidenceRefs],
+    operationKey: audit.operationKey,
+    correlationId: audit.correlationId,
+    createdAt: audit.createdAt,
+  }
+}
+
+function requireNativeId<TableName extends TableNames>(
+  db: GenericDatabaseWriter<DataModel>,
+  tableName: TableName,
+  value: unknown,
+  label: string,
+): Id<TableName> {
+  const id = db.normalizeId(tableName, readString(value, label))
+  if (id === null) {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return id
+}
+
+function businessIdFromValue(
+  db: GenericDatabaseWriter<DataModel>,
+  value: unknown,
+): Id<'businesses'> & BusinessId {
+  const id = requireNativeId(db, 'businesses', value, 'business id')
+  return brandNonEmpty<Id<'businesses'>, 'BusinessId'>(id, 'BusinessId')
+}
+
+function ownerIdFromValue(
+  db: GenericDatabaseWriter<DataModel>,
+  value: unknown,
+): Id<'owners'> & OwnerId {
+  const id = requireNativeId(db, 'owners', value, 'owner id')
+  return brandNonEmpty<Id<'owners'>, 'OwnerId'>(id, 'OwnerId')
+}
+
+function readString(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return value
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return value === undefined ? undefined : readString(value, 'optional string')
+}
+
+function readNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number') {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return value
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return value === undefined ? undefined : readNumber(value, 'optional number')
+}
+
+function readStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((candidate) => typeof candidate !== 'string')) {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return value
+}
+
+function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
+  return typeof value === 'string' && values.some((candidate) => candidate === value)
+}
+
+function readEnum<T extends string>(value: unknown, values: readonly T[], label: string): T {
+  if (!isOneOf(value, values)) {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return value
+}
+
+function redactedPayloadFromSource(value: unknown): RedactedPayload {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactedPayloadFromSource(item))
+  }
+  if (typeof value === 'object') {
+    const result: { [key: string]: RedactedPayload } = {}
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = redactedPayloadFromSource(item)
+    }
+    return result
+  }
+  return null
+}
 function summarizeVisibilityResult(
   result: ReturnType<typeof suppressBusinessModule> | ReturnType<typeof unsuppressBusinessModule>
 ) {
@@ -385,8 +748,11 @@ function summarizeVisibilityResult(
 }
 
 function summarizeSuppressionAudit(event: AuditEventContract) {
+  if (event.eventType !== 'business.suppressed' && event.eventType !== 'business.unsuppressed' && event.eventType !== 'admin.action_denied') {
+    throw new Error(`Unexpected business visibility audit event: ${event.eventType}`)
+  }
   return {
-    eventType: event.eventType as 'business.suppressed' | 'business.unsuppressed' | 'admin.action_denied',
+    eventType: event.eventType,
     actorRef: event.actorRef,
     targetRef: event.targetRef,
     ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
@@ -395,27 +761,7 @@ function summarizeSuppressionAudit(event: AuditEventContract) {
   }
 }
 
-async function patchLiftedSuppressionRule(db: ReturnType<typeof runtimeDb>, rule: Record<string, unknown>): Promise<void> {
-  const existing = await db
-    .query('suppressionRules')
-    .withIndex('by_target_status', (query) =>
-      query
-        .eq('targetType', stringRecordField(rule, 'targetType'))
-        .eq('targetRef', stringRecordField(rule, 'targetRef'))
-        .eq('status', 'active')
-    )
-    .unique()
-  if (existing === null) {
-    return
-  }
 
-  await db.patch(existing._id, { ...rule })
-}
-
-function stringRecordField(record: Record<string, unknown>, field: string): string {
-  const value = record[field]
-  return typeof value === 'string' ? value : ''
-}
 
 type ClaimBusinessArgs = {
   name: string
@@ -449,7 +795,7 @@ type NormalizedClaimFacts =
 type AuthenticatedOwnerActor = Extract<BusinessMutationActor, { kind: 'authenticated_owner' }>
 
 type OwnerContract = {
-  ownerId: string
+  ownerId: Id<'owners'>
   clerkUserId: string
   displayName?: string
   emailHash?: string
@@ -457,8 +803,12 @@ type OwnerContract = {
   updatedAt: number
 }
 
+type BusinessDocument = Omit<Doc<'businesses'>, '_id' | '_creationTime'>
+type ClaimDocument = Omit<Doc<'claims'>, '_id' | '_creationTime'>
+type ContextDocument = Omit<Doc<'businessContexts'>, '_id' | '_creationTime'>
+
 export async function claimBusinessCommand(
-  db: RuntimeWriter,
+  db: GenericDatabaseWriter<DataModel>,
   command: {
     actor: AuthenticatedOwnerActor
     facts: ClaimBusinessArgs
@@ -471,7 +821,7 @@ export async function claimBusinessCommand(
   if (normalized.kind === 'invalid') {
     return claimError('claim_invalid_facts', normalized.reason)
   }
-  const sourceHash = stableHash({
+  const sourceHash = canonicalDigest({
     category: normalized.category,
     name: normalized.name,
     slug: normalized.slug,
@@ -487,7 +837,7 @@ export async function claimBusinessCommand(
     .unique()
   if (existingOwner !== null) {
     const owner = ownerContractFromDocument(existingOwner)
-    const requestHash = stableHash({ actorRef: owner.ownerId, facts: normalized })
+    const requestHash = canonicalDigest({ actorRef: owner.ownerId, facts: normalized })
     const existingOperation = await db
       .query('operationKeys')
       .withIndex('by_actor_operation_key', (query) =>
@@ -495,14 +845,13 @@ export async function claimBusinessCommand(
       )
       .unique()
     if (existingOperation !== null) {
-      if (
-        documentString(existingOperation, 'requestHash') !== requestHash
-        || documentString(existingOperation, 'status') !== 'succeeded'
-      ) {
+      if (existingOperation.requestHash !== requestHash || existingOperation.status !== 'succeeded') {
         return claimError('claim_operation_conflict', 'Operation key is already reserved for a different claim request.')
       }
-      const [businessId, claimId] = documentStringArray(existingOperation, 'effectRefs')
-      if (businessId === undefined || claimId === undefined) {
+      const [businessIdRef, claimIdRef] = existingOperation.effectRefs
+      const businessId = businessIdRef === undefined ? undefined : db.normalizeId('businesses', businessIdRef)
+      const claimId = claimIdRef === undefined ? undefined : db.normalizeId('claims', claimIdRef)
+      if (businessId === undefined || businessId === null || claimId === undefined || claimId === null) {
         return claimError('claim_operation_conflict', 'Claim operation readback is incomplete.')
       }
       const [business, claim, context] = await Promise.all([
@@ -514,17 +863,17 @@ export async function claimBusinessCommand(
         business === null
         || claim === null
         || context === null
-        || documentString(business, 'ownerId') !== owner.ownerId
-        || documentString(business, 'slug') !== normalized.slug
-        || documentString(business, 'sourceHash') !== sourceHash
-        || documentString(claim, 'ownerId') !== owner.ownerId
-        || documentString(claim, 'businessId') !== businessId
-        || documentString(claim, 'slug') !== normalized.slug
-        || documentString(claim, 'submittedFactsHash') !== sourceHash
-        || documentString(context, 'businessId') !== businessId
-        || documentString(context, 'sourceHash') !== sourceHash
-        || documentString(existingOperation, 'sourceHash') !== sourceHash
-        || documentString(existingOperation, 'resultHash') !== claimReceiptHash(businessId, claimId, business, claim, context)
+        || business.ownerId !== owner.ownerId
+        || business.slug !== normalized.slug
+        || business.sourceHash !== sourceHash
+        || claim.ownerId !== owner.ownerId
+        || claim.businessId !== businessId
+        || claim.slug !== normalized.slug
+        || claim.submittedFactsHash !== sourceHash
+        || context.businessId !== businessId
+        || context.sourceHash !== sourceHash
+        || existingOperation.sourceHash !== sourceHash
+        || existingOperation.resultHash !== claimReceiptHash(businessId, claimId, business, claim, context)
       ) {
         return claimError('claim_operation_conflict', 'Claim operation readback is incomplete.')
       }
@@ -532,8 +881,8 @@ export async function claimBusinessCommand(
     }
   }
 
-  const owner = await findOrCreateOwner({ db }, command.actor, now)
-  const requestHash = stableHash({ actorRef: owner.ownerId, facts: normalized })
+  const owner = await findOrCreateOwner(db, command.actor, now)
+  const requestHash = canonicalDigest({ actorRef: owner.ownerId, facts: normalized })
 
   const existingBusiness = await db
     .query('businesses')
@@ -549,18 +898,17 @@ export async function claimBusinessCommand(
     suburb: normalized.suburb,
     stateTerritory: normalized.stateTerritory,
   })
-  const existingFingerprints = await db
+  const duplicate = await db
     .query('claimFingerprints')
     .withIndex('by_fingerprint_status', (query) => query.eq('fingerprint', fingerprint))
-    .collect()
-  const duplicate = existingFingerprints.at(0)
-  if (duplicate !== undefined) {
-    const duplicateOwnerRef = typeof duplicate.ownerRef === 'string' ? duplicate.ownerRef : undefined
+    .first()
+  if (duplicate !== null) {
+    const duplicateOwnerRef = duplicate.ownerRef
     if (duplicateOwnerRef === owner.ownerId) {
       return claimError('claim_duplicate_conflict', 'This owner already has a claim for the normalized business identity.')
     }
 
-    const contestedHash = stableHash({
+    const contestedHash = canonicalDigest({
       category: normalized.category,
       duplicate: 'duplicate_or_impersonation_review',
       name: normalized.name,
@@ -616,7 +964,7 @@ export async function claimBusinessCommand(
     createdAt: now,
     updatedAt: now,
   })
-  const businessDocument = {
+  const businessDocument: BusinessDocument = {
     ownerId: owner.ownerId,
     slug: normalized.slug,
     name: normalized.name,
@@ -633,20 +981,22 @@ export async function claimBusinessCommand(
     updatedAt: now,
   }
   const businessId = await db.insert('businesses', businessDocument)
-  const contextDocument = {
+  const contextDocument: ContextDocument = {
     businessId,
     category: normalized.category,
     suburb: normalized.suburb,
     stateTerritory: normalized.stateTerritory,
     ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
-    ...(normalized.photos === undefined || normalized.photos.length === 0 ? {} : { photos: normalized.photos }),
+    ...(normalized.photos === undefined || normalized.photos.length === 0
+      ? {}
+      : { photos: normalized.photos.map((photo) => ({ url: photo.url, alt: photo.alt })) }),
     ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
-    sourceRefs: normalized.sourceRefs,
+    sourceRefs: normalized.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
     sourceHash,
     approvedAt: now,
   }
   await db.insert('businessContexts', contextDocument)
-  const claimDocument = {
+  const claimDocument: ClaimDocument = {
     ownerId: owner.ownerId,
     businessId,
     slug: normalized.slug,
@@ -678,139 +1028,119 @@ export async function claimBusinessCommand(
 function claimCommandResult(
   code: 'claim_created' | 'claim_replayed',
   owner: OwnerContract,
-  businessId: string,
-  claimId: string,
-  business: Record<string, unknown>,
-  claim: Record<string, unknown>,
-  context: Record<string, unknown>,
+  businessId: Id<'businesses'>,
+  claimId: Id<'claims'>,
+  business: BusinessDocument,
+  claim: ClaimDocument,
+  context: ContextDocument,
 ) {
+  const publishedPhone = optionalNonEmptyString(business.publishedPhone)
+  const ownerMessage = optionalNonEmptyString(context.ownerMessage)
   return {
     kind: 'ok' as const,
     code,
     owner,
     business: {
       businessId,
-      ownerId: documentString(business, 'ownerId'),
-      slug: documentString(business, 'slug'),
-      name: documentString(business, 'name'),
-      normalizedName: documentString(business, 'normalizedName'),
-      category: documentString(business, 'category'),
-      suburb: documentString(business, 'suburb'),
-      stateTerritory: documentString(business, 'stateTerritory'),
-      ...(documentOptionalString(business, 'publishedPhone') === undefined ? {} : { publishedPhone: documentString(business, 'publishedPhone') }),
-      publicStatus: documentString(business, 'publicStatus') as 'unpublished' | 'published' | 'suppressed',
-      trustTier: documentString(business, 'trustTier') as 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified',
-      claimStatus: documentString(business, 'claimStatus') as 'draft' | 'authenticated' | 'published' | 'contested' | 'disputed' | 'suppressed',
-      sourceHash: documentString(business, 'sourceHash'),
-      createdAt: documentNumber(business, 'createdAt'),
-      updatedAt: documentNumber(business, 'updatedAt'),
+      ownerId: business.ownerId,
+      slug: business.slug,
+      name: business.name,
+      normalizedName: business.normalizedName,
+      category: business.category,
+      suburb: business.suburb,
+      stateTerritory: business.stateTerritory,
+      ...(publishedPhone === undefined ? {} : { publishedPhone }),
+      publicStatus: business.publicStatus,
+      trustTier: business.trustTier,
+      claimStatus: business.claimStatus,
+      sourceHash: business.sourceHash,
+      createdAt: business.createdAt,
+      updatedAt: business.updatedAt,
     },
     claim: {
       claimId,
-      ownerId: documentString(claim, 'ownerId'),
-      businessId,
-      slug: documentString(claim, 'slug'),
-      status: documentString(claim, 'status') as 'authenticated',
-      submittedFactsHash: documentString(claim, 'submittedFactsHash'),
-      createdAt: documentNumber(claim, 'createdAt'),
-      updatedAt: documentNumber(claim, 'updatedAt'),
+      ownerId: claim.ownerId,
+      ...(claim.businessId === undefined ? {} : { businessId: claim.businessId }),
+      slug: claim.slug,
+      status: claim.status,
+      submittedFactsHash: claim.submittedFactsHash,
+      createdAt: claim.createdAt,
+      updatedAt: claim.updatedAt,
     },
     context: {
       businessId,
-      category: documentString(context, 'category'),
-      suburb: documentString(context, 'suburb'),
-      stateTerritory: documentString(context, 'stateTerritory'),
-      ...(documentOptionalString(context, 'ownerMessage') === undefined ? {} : { ownerMessage: documentString(context, 'ownerMessage') }),
-      sourceRefs: Array.isArray(context.sourceRefs) ? context.sourceRefs : [],
-      sourceHash: documentString(context, 'sourceHash'),
-      approvedAt: documentNumber(context, 'approvedAt'),
+      category: context.category,
+      suburb: context.suburb,
+      stateTerritory: context.stateTerritory,
+      ...(ownerMessage === undefined ? {} : { ownerMessage }),
+      sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
+      sourceHash: context.sourceHash,
+      approvedAt: context.approvedAt,
     },
   }
 }
 
 function claimReceiptHash(
-  businessId: string,
-  claimId: string,
-  business: Record<string, unknown>,
-  claim: Record<string, unknown>,
-  context: Record<string, unknown>,
+  businessId: Id<'businesses'>,
+  claimId: Id<'claims'>,
+  business: BusinessDocument,
+  claim: ClaimDocument,
+  context: ContextDocument,
 ): string {
-  return stableHash({
+  return canonicalDigest({
     business: {
       businessId,
-      ownerId: documentString(business, 'ownerId'),
-      slug: documentString(business, 'slug'),
-      name: documentString(business, 'name'),
-      normalizedName: documentString(business, 'normalizedName'),
-      category: documentString(business, 'category'),
-      suburb: documentString(business, 'suburb'),
-      stateTerritory: documentString(business, 'stateTerritory'),
-      publishedPhone: documentOptionalString(business, 'publishedPhone') ?? '',
-      sourceHash: documentString(business, 'sourceHash'),
-      createdAt: documentNumber(business, 'createdAt'),
+      ownerId: business.ownerId,
+      slug: business.slug,
+      name: business.name,
+      normalizedName: business.normalizedName,
+      category: business.category,
+      suburb: business.suburb,
+      stateTerritory: business.stateTerritory,
+      publishedPhone: optionalNonEmptyString(business.publishedPhone) ?? '',
+      sourceHash: business.sourceHash,
+      createdAt: business.createdAt,
     },
     claim: {
       claimId,
-      ownerId: documentString(claim, 'ownerId'),
-      businessId: documentString(claim, 'businessId'),
-      slug: documentString(claim, 'slug'),
-      submittedFactsHash: documentString(claim, 'submittedFactsHash'),
-      createdAt: documentNumber(claim, 'createdAt'),
+      ownerId: claim.ownerId,
+      businessId: claim.businessId,
+      slug: claim.slug,
+      submittedFactsHash: claim.submittedFactsHash,
+      createdAt: claim.createdAt,
     },
     context: {
-      businessId: documentString(context, 'businessId'),
-      category: documentString(context, 'category'),
-      suburb: documentString(context, 'suburb'),
-      stateTerritory: documentString(context, 'stateTerritory'),
-      ownerMessage: documentOptionalString(context, 'ownerMessage') ?? '',
-      sourceRefs: documentSourceRefs(context),
-      sourceHash: documentString(context, 'sourceHash'),
-      approvedAt: documentNumber(context, 'approvedAt'),
+      businessId: context.businessId,
+      category: context.category,
+      suburb: context.suburb,
+      stateTerritory: context.stateTerritory,
+      ownerMessage: optionalNonEmptyString(context.ownerMessage) ?? '',
+      sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
+      sourceHash: context.sourceHash,
+      approvedAt: context.approvedAt,
     },
   })
 }
 
-function documentSourceRefs(document: Record<string, unknown>): { label: string; evidenceRef: string; sourceHash: string }[] {
-  return Array.isArray(document.sourceRefs)
-    ? document.sourceRefs.map((sourceRef) => {
-        const record = typeof sourceRef === 'object' && sourceRef !== null ? sourceRef as Record<string, unknown> : {}
-        return {
-          label: documentString(record, 'label'),
-          evidenceRef: documentString(record, 'evidenceRef'),
-          sourceHash: documentString(record, 'sourceHash'),
-        }
-      })
-    : []
-}
-
-function documentString(document: Record<string, unknown>, field: string): string {
-  return typeof document[field] === 'string' ? document[field] : ''
-}
-
-function ownerContractFromDocument(owner: RuntimeDocument): OwnerContract {
+function ownerContractFromDocument(owner: Doc<'owners'>): OwnerContract {
+  const displayName = optionalNonEmptyString(owner.displayName)
+  const emailHash = optionalNonEmptyString(owner.emailHash)
   return {
-    ownerId: String(owner._id),
-    clerkUserId: documentString(owner, 'clerkUserId'),
-    ...(documentOptionalString(owner, 'displayName') === undefined ? {} : { displayName: documentString(owner, 'displayName') }),
-    ...(documentOptionalString(owner, 'emailHash') === undefined ? {} : { emailHash: documentString(owner, 'emailHash') }),
-    createdAt: documentNumber(owner, 'createdAt'),
-    updatedAt: documentNumber(owner, 'updatedAt'),
+    ownerId: owner._id,
+    clerkUserId: owner.clerkUserId,
+    ...(displayName === undefined ? {} : { displayName }),
+    ...(emailHash === undefined ? {} : { emailHash }),
+    createdAt: owner.createdAt,
+    updatedAt: owner.updatedAt,
   }
 }
 
-function documentOptionalString(document: Record<string, unknown>, field: string): string | undefined {
-  const value = document[field]
-  return typeof value === 'string' && value.length > 0 ? value : undefined
+function optionalNonEmptyString(value: string | undefined): string | undefined {
+  return value === undefined || value.length === 0 ? undefined : value
 }
 
-function documentNumber(document: Record<string, unknown>, field: string): number {
-  return typeof document[field] === 'number' ? document[field] : 0
-}
 
-function documentStringArray(document: Record<string, unknown>, field: string): string[] {
-  const value = document[field]
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
-}
+
 
 function claimError(
   code:
@@ -841,7 +1171,7 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
     return {
       label,
       evidenceRef,
-      sourceHash: stableHash({ evidenceRef, label, suppliedHash: sourceRef.sourceHash ?? '' }),
+      sourceHash: canonicalDigest({ evidenceRef, label, suppliedHash: sourceRef.sourceHash ?? '' }),
     }
   })
 
@@ -876,12 +1206,11 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
   return ownerMessage === undefined ? base : { ...base, ownerMessage }
 }
 
-type RuntimeCtx = {
-  db: RuntimeWriter
-}
-
-async function findOrCreateOwner(ctx: RuntimeCtx, actor: AuthenticatedOwnerActor, now: number): Promise<OwnerContract> {
-  const db = ctx.db
+async function findOrCreateOwner(
+  db: GenericDatabaseWriter<DataModel>,
+  actor: AuthenticatedOwnerActor,
+  now: number,
+): Promise<OwnerContract> {
   const existing = await db
     .query('owners')
     .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
@@ -890,30 +1219,29 @@ async function findOrCreateOwner(ctx: RuntimeCtx, actor: AuthenticatedOwnerActor
   const emailHash = actor.emailHash
 
   if (existing !== null) {
-    const ownerId = String(existing._id)
+    const existingDisplayName = optionalNonEmptyString(existing.displayName)
+    const existingEmailHash = optionalNonEmptyString(existing.emailHash)
     const metadataPatch = {
-      ...(displayName === undefined || displayName === documentOptionalString(existing, 'displayName') ? {} : { displayName }),
-      ...(emailHash === undefined || emailHash === documentOptionalString(existing, 'emailHash') ? {} : { emailHash }),
+      ...(displayName === undefined || displayName === existingDisplayName ? {} : { displayName }),
+      ...(emailHash === undefined || emailHash === existingEmailHash ? {} : { emailHash }),
     }
     const metadataChanged = Object.keys(metadataPatch).length > 0
     if (metadataChanged) {
-      await db.patch(ownerId, { ...metadataPatch, updatedAt: now })
+      await db.patch(existing._id, { ...metadataPatch, updatedAt: now })
     }
+    const resolvedDisplayName = displayName ?? existingDisplayName
+    const resolvedEmailHash = emailHash ?? existingEmailHash
     return {
-      ownerId,
+      ownerId: existing._id,
       clerkUserId: actor.clerkUserId,
-      ...(documentOptionalString(existing, 'displayName') === undefined && displayName === undefined
-        ? {}
-        : { displayName: displayName ?? documentString(existing, 'displayName') }),
-      ...(documentOptionalString(existing, 'emailHash') === undefined && emailHash === undefined
-        ? {}
-        : { emailHash: emailHash ?? documentString(existing, 'emailHash') }),
-      createdAt: typeof existing.createdAt === 'number' ? existing.createdAt : now,
-      updatedAt: metadataChanged ? now : documentNumber(existing, 'updatedAt'),
+      ...(resolvedDisplayName === undefined ? {} : { displayName: resolvedDisplayName }),
+      ...(resolvedEmailHash === undefined ? {} : { emailHash: resolvedEmailHash }),
+      createdAt: existing.createdAt,
+      updatedAt: metadataChanged ? now : existing.updatedAt,
     }
   }
 
-  const ownerDoc = {
+  const ownerDoc: Omit<Doc<'owners'>, '_id' | '_creationTime'> = {
     clerkUserId: actor.clerkUserId,
     ...(displayName === undefined ? {} : { displayName }),
     ...(emailHash === undefined ? {} : { emailHash }),
@@ -924,42 +1252,6 @@ async function findOrCreateOwner(ctx: RuntimeCtx, actor: AuthenticatedOwnerActor
   return { ownerId, ...ownerDoc }
 }
 
-async function incrementClaimRateLimit(ctx: RuntimeCtx, clerkUserId: string, now: number) {
-  const db = ctx.db
-  const windowMs = 60_000
-  const limit = 5
-  const window = String(Math.floor(now / windowMs))
-  const key = `owner:${clerkUserId}`
-  const existing = await db
-    .query('abuseRateLimitBuckets')
-    .withIndex('by_scope_key_window', (query) => query.eq('scope', 'claim_submit').eq('key', key).eq('window', window))
-    .unique()
-
-  if (existing === null) {
-    await db.insert('abuseRateLimitBuckets', {
-      scope: 'claim_submit',
-      key,
-      window,
-      count: 1,
-      state: 'open',
-      resetAt: (Number(window) + 1) * windowMs,
-      updatedAt: now,
-    })
-    return undefined
-  }
-
-  const count = typeof existing.count === 'number' ? existing.count : 0
-  const resetAt = typeof existing.resetAt === 'number' ? existing.resetAt : (Number(window) + 1) * windowMs
-  const bucketId = String(existing._id)
-  if (count >= limit) {
-    await db.patch(bucketId, { state: 'limited', updatedAt: now })
-    return claimError('claim_rate_limited', `Retry after ${resetAt}.`, true)
-  }
-
-  const nextCount = count + 1
-  await db.patch(bucketId, { count: nextCount, state: nextCount >= limit ? 'limited' : 'open', updatedAt: now })
-  return undefined
-}
 
 function normalizePublicText(value: string): string {
   return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 240)
@@ -975,13 +1267,6 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
 }
 
 
-function normalizeSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72)
-}
 
 export type {
   BusinessIdentity,

@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const internalRoot = 'src/modules/capability-supply/internal'
@@ -45,15 +46,9 @@ describe('capability-supply convex host thinness', () => {
     }
   })
 
-  it('imports moved behaviors from capability-supply internals', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/offering'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/binding'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/eligibility'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/quarantine'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/publication'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/shared'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/graph'")
+  it('imports moved behaviors from capability-supply public seam', () => {
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     for (const symbol of [
       'publicationLifecycle',
       'bindingObservedRowDigest',
@@ -80,9 +75,9 @@ describe('capability-supply convex host thinness', () => {
 
   it('delegates eligible inventory reads via ports while keeping thin wrappers', () => {
     expect(convexHost).toContain('eligibleSupplyPorts')
-    expect(convexHost).toContain('listEligibleCapabilitySupplyFromModule')
+    expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule')
     expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule')
-    expect(convexHost).toMatch(/export async function listEligibleCapabilitySupply\s*\(/)
+    expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
     expect(convexHost).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
     expect(convexHost).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
     expect(convexHost).not.toMatch(/reason: 'supply_integrity_failure' as const/)
@@ -116,14 +111,4 @@ describe('capability-supply convex host thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

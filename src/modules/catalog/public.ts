@@ -1,26 +1,11 @@
 import { isPubliclyDiscoverable } from '@/modules/business/public'
-import {
-  buildPublicCatalogDto as buildPublicCatalogDtoImpl,
-  createEmptyCatalogSourceState as createEmptyCatalogSourceStateImpl,
-  validateServiceCatalogInput as validateServiceCatalogInputImpl,
-} from './internal/catalog-model'
+import { buildOfferingSupplyProjection } from './internal/catalog-model'
 import type {
-  BuildPublicCatalogResult,
   GetPublicBusinessCatalogInput,
-  PublicCatalogContract,
   PublicCatalogReadState,
 } from './internal/catalog-model'
-import {
-  buildPublicOwnerStatusReadback as buildPublicOwnerStatusReadbackImpl,
-  getDefaultPublicOwnerStatusReadback as getDefaultPublicOwnerStatusReadbackImpl,
-  getPublicBusinessPageReadback as getPublicBusinessPageReadbackImpl,
-  getPublicOwnerStatusReadbackBySlug as getPublicOwnerStatusReadbackBySlugImpl,
-  publicOwnerDefaultClaimInput as publicOwnerDefaultClaimInputImpl,
-  resetPublicOwnerRouteReadbacksForTest as resetPublicOwnerRouteReadbacksForTestImpl,
-  submitDurablePublicOwnerClaimFlow as submitDurablePublicOwnerClaimFlowImpl,
-  submitPublicOwnerClaimFlow as submitPublicOwnerClaimFlowImpl,
-  validatePublicOwnerClaimFlowInput as validatePublicOwnerClaimFlowInputImpl,
-} from './internal/owner-public-flow'
+import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type {
   PublicBusinessPageNotFoundReason,
   PublicBusinessPageReadbackResult,
@@ -32,7 +17,6 @@ import type {
   PublicOwnerStatusReadback,
   PublicOwnerUnavailableCapability,
 } from './internal/owner-public-flow'
-import { publishBusinessCatalog as publishBusinessCatalogImpl } from './internal/publish'
 import type { R1TargetAdmission } from '@/modules/inquiries/public'
 
 export type { PublicBusinessPhoto } from '@/modules/business/public'
@@ -86,13 +70,6 @@ export type {
   PublicSupportReason,
 } from './internal/offering-supply'
 
-export {
-  MAX_LEGACY_MIGRATION_BATCH,
-  decideCatalogSupplyCutover,
-  legacyOfferingParityMatches,
-  migrateLegacyServiceToOffering,
-  planLegacyOfferingMigrationBatch,
-} from './internal/offering-migration'
 
 export {
   MAX_ACCESS_PATHS_PER_OFFERING,
@@ -112,85 +89,53 @@ export type {
   OfferingSourceState,
 } from './internal/offering-source'
 
-export type {
-  CatalogSupplyCutoverDecision,
-  CatalogSupplyCutoverMode,
-  LegacyOfferingCrosswalk,
-  LegacyOfferingMigration,
-} from './internal/offering-migration'
+
 
 export {
-  BusinessServiceStatusValues,
-  CapabilityKindValues,
   FirstRequestModeValues,
   PublicFirstRequestChannelValues,
-  ServiceCapabilityStatusValues,
+  normalizeFirstRequestMode,
+  normalizePublicFirstRequestChannel,
 } from './internal/catalog-model'
 
 export type {
-  BuildPublicCatalogInput,
-  BuildPublicCatalogResult,
-  BusinessServiceRecord,
-  BusinessServiceStatus,
-  CapabilityKind,
   CatalogPublishSourceState,
   CatalogSourceState,
   FirstRequestDisclosureInput,
   FirstRequestMode,
   GetPublicBusinessCatalogInput,
-  PublicCatalogContract,
   PublicCatalogReadState,
   PublicFirstRequestChannel,
   PublicFirstRequestDisclosure,
-  PublicServiceContract,
   PublishBusinessCatalogCommand,
   PublishBusinessCatalogErrorCode,
   PublishBusinessCatalogResult,
   PublishBusinessCatalogState,
-  ServiceCapabilityContract,
-  ServiceCapabilityRecord,
-  ServiceCapabilityStatus,
   ServiceCatalogInput,
   ServiceCatalogValidationResult,
   ValidatedServiceCatalogInput,
 } from './internal/catalog-model'
 
 export {
-  catalogFromRows,
-  projectDiscoveryPublicCatalog,
-  projectRegistryCatalogApiItem,
-  type CatalogFromRowsCapability,
-  type CatalogFromRowsInput,
-  type CatalogFromRowsService,
-  type DiscoveryPublicCatalogProjection,
-  type RegistryCatalogApiItem,
-} from './internal/catalog-from-rows'
+  createEmptyCatalogSourceState,
+  validateServiceCatalogInput,
+} from './internal/catalog-model'
 
-export const buildPublicCatalogDto = buildPublicCatalogDtoImpl
+export { publishBusinessCatalog } from './internal/publish'
 
-export const createEmptyCatalogSourceState = createEmptyCatalogSourceStateImpl
 
-export const validateServiceCatalogInput = validateServiceCatalogInputImpl
-
-export const publishBusinessCatalog = publishBusinessCatalogImpl
-
-export const publicOwnerDefaultClaimInput = publicOwnerDefaultClaimInputImpl
-
-export const validatePublicOwnerClaimFlowInput = validatePublicOwnerClaimFlowInputImpl
-
-export const submitPublicOwnerClaimFlow = submitPublicOwnerClaimFlowImpl
-
-export const submitDurablePublicOwnerClaimFlow = submitDurablePublicOwnerClaimFlowImpl
-
-export const resetPublicOwnerRouteReadbacksForTest = resetPublicOwnerRouteReadbacksForTestImpl
-
-export const getDefaultPublicOwnerStatusReadback = getDefaultPublicOwnerStatusReadbackImpl
-
-export const getPublicOwnerStatusReadbackBySlug = getPublicOwnerStatusReadbackBySlugImpl
-
-export const getPublicBusinessPageReadback = getPublicBusinessPageReadbackImpl
-
-export const buildPublicOwnerStatusReadback = buildPublicOwnerStatusReadbackImpl
+export {
+  publicOwnerDefaultClaimInput,
+  toServiceCatalogInput,
+  validatePublicOwnerClaimFlowInput,
+  submitPublicOwnerClaimFlow,
+  submitDurablePublicOwnerClaimFlow,
+  resetPublicOwnerRouteReadbacksForTest,
+  getDefaultPublicOwnerStatusReadback,
+  getPublicOwnerStatusReadbackBySlug,
+  getPublicBusinessPageReadback,
+  buildPublicOwnerStatusReadback,
+} from './internal/owner-public-flow'
 
 export type {
   PublicBusinessPageNotFoundReason,
@@ -204,18 +149,8 @@ export type {
   PublicOwnerUnavailableCapability,
 }
 
-export type PublicRouteCapabilityContract = Omit<PublicCatalogContract['services'][number]['capabilities'][number], 'sourceHash'>
-
-export type PublicRouteServiceContract = Omit<PublicCatalogContract['services'][number], 'sourceHash' | 'capabilities'> & {
-  capabilities: readonly PublicRouteCapabilityContract[]
-}
-
-export type PublicRouteCatalogContract = Omit<PublicCatalogContract, 'sourceHash' | 'services'> & {
-  services: readonly PublicRouteServiceContract[]
-}
-
 export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'catalog'> & {
-  catalog: PublicRouteCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
   admission: R1TargetAdmission
 }
 
@@ -229,42 +164,38 @@ export type PublicOwnerClaimFlowRouteResult =
   | {
       kind: 'ok'
       code: 'claim_flow_published'
-      catalog: PublicRouteCatalogContract
+      catalog: PublicBusinessCatalogApiV2Dto
       readback: PublicOwnerStatusRouteReadback
     }
 
 export type PublicBusinessPageRouteReadbackResult =
-  | { kind: 'available'; catalog: PublicRouteCatalogContract }
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | Exclude<PublicBusinessPageReadbackResult, { kind: 'available' }>
 
-export function readPublicCatalogActivationRef(catalog: PublicRouteCatalogContract): string {
+export function readPublicCatalogActivationRef(catalog: PublicBusinessCatalogApiV2Dto): string {
   return catalog.businessId
 }
 
 export function getPublicBusinessCatalog(
   state: PublicCatalogReadState,
-  input: GetPublicBusinessCatalogInput
-): BuildPublicCatalogResult {
+  input: GetPublicBusinessCatalogInput,
+): { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto } | { kind: 'hidden'; reason: 'not_published' } {
   const business = state.businesses.find((candidate) => candidate.slug === input.slug)
-  if (business === undefined) {
+  if (business === undefined || !isPubliclyDiscoverable(business, state.suppressionRules)) {
     return { kind: 'hidden', reason: 'not_published' }
   }
-
-  if (!isPubliclyDiscoverable(business, state.suppressionRules)) {
-    return { kind: 'hidden', reason: 'not_published' }
-  }
-
   const context = state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
-  if (context === undefined) {
-    return { kind: 'hidden', reason: 'not_published' }
-  }
-
-  return buildPublicCatalogDtoImpl({
+  if (context === undefined) return { kind: 'hidden', reason: 'not_published' }
+  const projection = buildOfferingSupplyProjection({
     business,
     context,
-    services: state.businessServices.filter((service) => service.businessId === business.businessId),
-    capabilities: state.serviceCapabilities.filter((capability) => capability.businessId === business.businessId),
+    offerings: state.offerings.filter((offering) => offering.businessId === business.businessId),
+    revisions: state.revisions.filter((revision) => revision.businessId === business.businessId),
+    accessPaths: state.accessPaths.filter((path) => path.businessId === business.businessId),
     indexStatus: input.indexStatus,
     discoveryStatus: input.discoveryStatus,
   })
+  return projection === undefined
+    ? { kind: 'hidden', reason: 'not_published' }
+    : { kind: 'available', catalog: projectBusinessSupplyToPublicApi(projection) }
 }

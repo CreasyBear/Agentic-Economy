@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatClockTime } from '@/lib/ui/format-time';
 import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {
@@ -267,7 +268,7 @@ export const WebPreviewConsole = ({
                 key={`${log.timestamp.getTime()}-${log.level}-${log.message}`}
               >
                 <span className="text-muted-foreground">
-                  {log.timestamp.toLocaleTimeString()}
+                  {formatClockTime(log.timestamp)}
                 </span>{" "}
                 {log.message}
               </div>

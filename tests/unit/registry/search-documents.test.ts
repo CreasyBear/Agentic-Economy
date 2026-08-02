@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import {
   buildRegistrySearchDocumentsForCatalog,
   documentMatchesRegistryQuery,
@@ -8,17 +8,23 @@ import {
 } from '@/modules/registry/internal/search-documents'
 
 describe('registry search documents', () => {
-  it('builds one public search document per published service', () => {
+  it('builds one public search document per published Offering', () => {
     const docs = buildRegistrySearchDocumentsForCatalog(
       catalog({
-        services: [
-          service({ slug: 'emergency-pipe-repair', name: 'Emergency pipe repair' }),
-          service({ slug: 'blocked-drain', name: 'Blocked drain repair' }),
+        offerings: [
+          offering({ offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair', name: 'Emergency pipe repair' }),
+          offering({ offeringRef: 'offering:parramatta-emergency-plumbing:blocked-drain', name: 'Blocked drain repair' }),
         ],
       }),
     )
 
     expect(docs).toHaveLength(2)
+    expect(docs[0]).toMatchObject({
+      offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+    })
     expect(docs.map((doc) => doc.documentId)).toEqual([
       'parramatta-emergency-plumbing__emergency-pipe-repair',
       'parramatta-emergency-plumbing__blocked-drain',
@@ -65,7 +71,7 @@ describe('registry search documents', () => {
         name: 'Perth Emergency Plumbing',
         suburb: 'Perth',
         stateTerritory: 'WA',
-        serviceArea: 'Perth metro',
+        serviceAreaSummary: 'Perth metro',
       }),
     )
     if (parramatta === undefined || perth === undefined) {
@@ -100,9 +106,12 @@ describe('registry search documents', () => {
 })
 
 function catalog(
-  overrides: Partial<PublicBusinessCatalogApiDto> & { serviceArea?: string } = {},
-): PublicBusinessCatalogApiDto {
+  overrides: Partial<PublicBusinessCatalogApiV2Dto> & { serviceAreaSummary?: string } = {},
+): PublicBusinessCatalogApiV2Dto {
+  const { serviceAreaSummary = 'Parramatta and nearby suburbs', ...catalogOverrides } = overrides
   return {
+    schemaVersion: 'public-business-catalog-api:v2',
+    businessId: 'business:parramatta-emergency-plumbing',
     slug: 'parramatta-emergency-plumbing',
     name: 'Parramatta Emergency Plumbing',
     category: 'Emergency plumbing',
@@ -110,43 +119,32 @@ function catalog(
     stateTerritory: 'NSW',
     publicUrl: '/parramatta-emergency-plumbing',
     trustTier: 'claimed',
-    publicStatus: 'published',
-    indexStatus: 'indexed',
-    discoveryStatus: 'available',
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: 1_000,
+    observedAt: 1_000,
+    disposition: 'current',
     photos: [],
-    services: [
-      service({
-        serviceArea: overrides.serviceArea ?? 'Parramatta and nearby suburbs',
-      }),
-    ],
-    ...overrides,
+    offerings: [offering({ serviceAreaSummary })],
+    accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
+    ...catalogOverrides,
   }
 }
 
-function service(
-  overrides: Partial<PublicBusinessCatalogApiDto['services'][number]> = {},
-): PublicBusinessCatalogApiDto['services'][number] {
+function offering(
+  overrides: Partial<PublicBusinessCatalogApiV2Dto['offerings'][number]> = {},
+): PublicBusinessCatalogApiV2Dto['offerings'][number] {
   return {
-    slug: 'emergency-pipe-repair',
+    offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
+    revision: 1,
     name: 'Emergency pipe repair',
     category: 'Emergency plumbing',
     summary: 'Emergency plumbing help for urgent pipe repairs.',
-    serviceArea: 'Parramatta and nearby suburbs',
-    hoursOrUnknown: 'Hours supplied by owner',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicDisclosure: 'Send a qualified inquiry for owner review.',
-      publicChannel: 'ae_status_only',
-    },
-    status: 'published',
-    capabilities: [
-      {
-        kind: 'quote_request',
-        status: 'available',
-      },
-    ],
+    serviceAreaSummary: 'Parramatta and nearby suburbs',
+    accessPaths: [{
+      accessPathRef: 'access:parramatta-emergency-plumbing:emergency-pipe-repair:inquiry',
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Send a qualified inquiry for owner review.',
+    }],
+    support: { integrated: false, aeSupportedAction: false },
     ...overrides,
   }
 }

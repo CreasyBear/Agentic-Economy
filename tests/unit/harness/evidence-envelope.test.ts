@@ -15,6 +15,7 @@ import {
   projectPrivateToolEvidenceForReplay,
   type HarnessToolResult,
 } from '@/modules/harness/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('harness evidence envelope', () => {
   it('keeps raw tool evidence in private envelopes', () => {
@@ -23,7 +24,7 @@ describe('harness evidence envelope', () => {
       toolId: 'registry.search',
       inputJson: '{"query":"LEAK_PRIVATE_INPUT"}',
       summaryJson: '{"count":2,"slugs":["LEAK_PRIVATE_SLUG"]}',
-      resultHash: 'hash:LEAK_PRIVATE_HASH',
+      resultHash: canonicalDigest('LEAK_PRIVATE_HASH'),
       outputJson: '{"rows":["LEAK_PRIVATE_OUTPUT"]}',
       output: { rows: ['LEAK_PRIVATE_OUTPUT'] },
     })
@@ -37,7 +38,7 @@ describe('harness evidence envelope', () => {
     expect(serialized).toContain('registry.search')
     expect(serialized).toContain('LEAK_PRIVATE_INPUT')
     expect(serialized).toContain('LEAK_PRIVATE_OUTPUT')
-    expect(serialized).toContain('hash:LEAK_PRIVATE_HASH')
+    expect(serialized).toContain(canonicalDigest('LEAK_PRIVATE_HASH'))
   })
 
   it('projects private evidence to public counts without raw ids, payloads, or hashes', () => {
@@ -46,7 +47,7 @@ describe('harness evidence envelope', () => {
       toolId: 'registry.search',
       inputJson: '{"query":"LEAK_PUBLIC_INPUT"}',
       summaryJson: '{"count":3,"slugs":["LEAK_PUBLIC_SLUG"]}',
-      resultHash: 'hash:LEAK_PUBLIC_HASH',
+      resultHash: canonicalDigest('LEAK_PUBLIC_HASH'),
       outputJson: '{"rows":["LEAK_PUBLIC_OUTPUT"]}',
       output: { rows: ['LEAK_PUBLIC_OUTPUT'] },
       durationMs: 12.345,
@@ -72,7 +73,7 @@ describe('harness evidence envelope', () => {
     expect(serialized).not.toContain('LEAK_PUBLIC_INPUT')
     expect(serialized).not.toContain('LEAK_PUBLIC_SLUG')
     expect(serialized).not.toContain('LEAK_PUBLIC_OUTPUT')
-    expect(serialized).not.toContain('hash:LEAK_PUBLIC_HASH')
+    expect(serialized).not.toContain(canonicalDigest('LEAK_PUBLIC_HASH'))
     expect(serialized).not.toMatch(/toolCallId|toolId|inputJson|outputJson|resultHash|summaryJson/)
   })
 
@@ -162,7 +163,7 @@ describe('harness evidence envelope', () => {
       toolCallId: 'raw-call-search',
       toolId: 'registry.search',
       summaryJson: '{"count":1}',
-      resultHash: 'hash:old',
+      resultHash: canonicalDigest('old'),
     }))
     const projection = projectPrivateToolEvidenceForPublic(evidence)
     const metadata = createPublicProjectionMetadata({ evidence, publicProjection: projection })
@@ -181,7 +182,7 @@ describe('harness evidence envelope', () => {
       toolCallId: 'raw-call-search',
       toolId: 'registry.search',
       summaryJson: '{"count":2}',
-      resultHash: 'hash:new',
+      resultHash: canonicalDigest('new'),
     }))
     expect(detectStalePublicProjection({
       evidence: changedEvidence,
@@ -197,7 +198,7 @@ function toolResult(overrides: Partial<HarnessToolResult> = {}): HarnessToolResu
     status: 'ok',
     inputJson: '{}',
     summaryJson: '{"count":0}',
-    resultHash: 'hash:raw',
+    resultHash: canonicalDigest('raw'),
     durationMs: 1,
     createdAt: 1_000,
     ...overrides,

@@ -32,10 +32,10 @@ export async function readAgentAccessMoneyReadback(
     try {
       const [account, activity, usage] = await Promise.all([
         readCreditAccount({ port, query: { principalId, currency: 'USD' } }),
-        listCreditActivity({ port, query: { principalId, credentialId: key.keyId, currency: 'USD', limit: 50 } }),
-        readKeyUsage({ port, query: { principalId, credentialId: key.keyId, limit: 50 } }),
+        listCreditActivity({ port, query: { principalId, credentialId: key.keyId, currency: 'USD', paginationOpts: { numItems: 50, cursor: null } } }),
+        readKeyUsage({ port, query: { principalId, credentialId: key.keyId, currency: 'USD' } }),
       ])
-      return { key, principalId, account, activity: activity.items, ...(usage.items[0] === undefined ? {} : { usage: usage.items[0] }), dataState: 'source' as const }
+      return { key, principalId, account, activity: activity.page, usage, dataState: 'source' as const }
     } catch (error) {
       const dataState = error instanceof MoneyQueryError && error.code === 'billing_identity_missing' ? 'empty' as const : 'unavailable' as const
       return { key, principalId, activity: [], dataState }

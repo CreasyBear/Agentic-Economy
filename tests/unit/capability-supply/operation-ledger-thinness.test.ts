@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const moduleRoot = 'src/modules/capability-supply/internal/operation-ledger'
@@ -29,7 +30,8 @@ describe('capability-supply operation-ledger thinness', () => {
   })
 
   it('keeps thin (db, command, now) command re-exports via portsFor', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     expect(convexHost).toContain('capabilitySupplyOperationPorts')
     expect(convexHost).toContain('function portsFor')
     expect(convexHost).toMatch(/export async function registerCapabilityOfferingCommand\s*\(/)
@@ -42,13 +44,13 @@ describe('capability-supply operation-ledger thinness', () => {
     expect(convexHost).toContain('runQuarantineCommand(portsFor(db)')
   })
 
-  it('leaves thin writer wrappers in the host and delegates listEligible via ports', () => {
+  it('leaves thin writer wrappers in the host and delegates listIntegrated via ports', () => {
     expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
     expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
     expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
     expect(convexHost).toContain('capabilitySupplyWriterPorts')
-    expect(convexHost).toMatch(/export async function listEligibleCapabilitySupply\s*\(/)
-    expect(convexHost).toContain('listEligibleCapabilitySupplyFromModule(eligibleSupplyPorts(db)')
+    expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
+    expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule(eligibleSupplyPorts(db)')
     expect(convexHost).toMatch(/export const publishCapability\s*=/)
   })
 
@@ -85,14 +87,4 @@ describe('capability-supply operation-ledger thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

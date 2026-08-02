@@ -2,6 +2,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ChargeAuthorizationResult,
   EntryType,
+  KeyUsageView,
   MoneyAccount,
   MoneyAcceptedCharge,
   MoneyLedgerEntry,
@@ -11,13 +12,19 @@ import type {
   RakeConfig,
 } from '../public'
 export type { MoneyAccount } from '../public'
+import { validatePaymentBinding, type PaymentBinding } from './live-money-gate'
 import { computeRakeSplit } from './pricing-config'
+
+export type MoneyCredentialUsageSummary = Readonly<KeyUsageView & {
+  principalId: string
+}>
 
 export type LedgerState = Readonly<{
   accounts: ReadonlyMap<string, MoneyAccount>
   entries: readonly MoneyLedgerEntry[]
   transactions: readonly MoneyTransaction[]
   usageEvents: readonly MoneyUsageEvent[]
+  usageSummaries: ReadonlyMap<string, MoneyCredentialUsageSummary>
 }>
 
 export type LedgerOperationResult<T> = Readonly<{
@@ -66,6 +73,8 @@ export type PaidChargeInput = Readonly<{
   evidenceRefs: readonly string[]
   observedAt: number
   freeTier?: boolean
+  actionVersion?: string
+  paymentBinding?: Readonly<{ approved: PaymentBinding; requested: PaymentBinding }>
 }>
 
 export type RefundInput = Readonly<{
@@ -109,7 +118,10 @@ const emptyAccounts = new Map<string, MoneyAccount>()
 export function createLedgerState(accounts: readonly MoneyAccount[] = []): LedgerState {
   const nextAccounts = new Map(emptyAccounts)
   for (const account of accounts) nextAccounts.set(account.accountRef, account)
-  return { accounts: nextAccounts, entries: [], transactions: [], usageEvents: [] }
+  return { accounts: nextAccounts, entries: [], transactions: [], usageEvents: [], usageSummaries: new Map() }
+}
+export function usageSummaryKey(principalId: string, credentialId: string, currency: string): string {
+  return `${principalId}\u0000${credentialId}\u0000${currency}`
 }
 
 export function accountRefForOperator(principalId: string, currency: string): string {
@@ -122,6 +134,39 @@ export function accountRefForProvider(businessId: string, currency: string): str
 
 export function accountRefForRake(currency: string): string {
   return `ae:rake:${currency}`
+}
+export function validateChargeAccounts(input: Readonly<{
+  operator: MoneyAccount | undefined
+  provider: MoneyAccount | undefined
+  rake: MoneyAccount | undefined
+  operatorAccountRef: string
+  providerAccountRef: string
+  rakeAccountRef: string
+  principalId: string
+  businessId: string
+  currency: string
+}>): MoneyRefusal | undefined {
+  const { operator, provider, rake } = input
+  if (operator === undefined || provider === undefined || rake === undefined) return refusalResult('billing_identity_missing', false)
+  if (
+    operator.accountKind !== 'operator_credit'
+    || provider.accountKind !== 'provider_earnings'
+    || rake.accountKind !== 'ae_rake'
+    || operator.principalId !== input.principalId
+    || operator.businessId !== undefined
+    || provider.businessId !== input.businessId
+    || provider.principalId !== undefined
+    || rake.principalId !== undefined
+    || rake.businessId !== undefined
+    || operator.accountRef !== input.operatorAccountRef
+    || provider.accountRef !== input.providerAccountRef
+    || rake.accountRef !== input.rakeAccountRef
+    || input.operatorAccountRef === input.providerAccountRef
+    || input.operatorAccountRef === input.rakeAccountRef
+    || input.providerAccountRef === input.rakeAccountRef
+  ) return refusalResult('billing_identity_mismatch', false)
+  if (operator.currency !== input.currency || provider.currency !== input.currency || rake.currency !== input.currency) return refusalResult('currency_mismatch', false)
+  return undefined
 }
 
 export function buildChargeIdempotencyKey(input: Readonly<{ principalId: string; operationKey: string; attemptRef: string; effectGeneration: number }>): string {
@@ -136,7 +181,7 @@ export function buildChargeIdempotencyKey(input: Readonly<{ principalId: string;
 export function beginIdempotentTransaction(input: Readonly<{ state: LedgerState; transaction: BeginTransactionInput }>): LedgerOperationResult<Readonly<{ kind: 'new' } | { kind: 'replay'; transaction: MoneyTransaction } | { kind: 'refused'; refusal: MoneyRefusal }>> {
   const prior = input.state.transactions.find((transaction) => transaction.idempotencyKey === input.transaction.idempotencyKey)
   if (prior !== undefined) {
-    if (prior.inputDigest !== input.transaction.inputDigest || prior.principalId !== input.transaction.principalId) {
+    if (prior.inputDigest !== input.transaction.inputDigest || prior.principalId !== input.transaction.principalId || prior.kind !== input.transaction.kind) {
       return { state: input.state, result: { kind: 'refused', refusal: refusal('ledger_idempotency_conflict', false) } }
     }
     return { state: input.state, result: { kind: 'replay', transaction: prior } }
@@ -152,6 +197,7 @@ export function applyTopup(input: TopupInput & Readonly<{ state: LedgerState }>)
   if (account === undefined || account.accountKind !== 'operator_credit' || account.currency !== input.transaction.currency) {
     return { state: input.state, result: refusalResult('currency_mismatch', false) }
   }
+  if (account.principalId !== input.transaction.principalId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
   const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
   if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
   if (begun.result.kind === 'replay') return { state: input.state, result: acceptedTopup(input.transaction.currency, input.amountMinor, input.transaction.inputDigest, input.transaction.transactionRef) }
@@ -175,22 +221,48 @@ export function applyTopup(input: TopupInput & Readonly<{ state: LedgerState }>)
 }
 
 export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
-  if (input.freeTier === true || input.grossAmountMinor === 0) {
-    const usage = createUsage(input, 'free_tier', 0)
-    return { state: appendUsage(input.state, usage), result: { kind: 'accepted', chargeState: 'free_tier', currency: input.transaction.currency, amountMinor: 0, priceDigest: input.priceDigest } }
+  if (input.principalId !== input.transaction.principalId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
+  if (input.paymentBinding !== undefined) {
+    const requestedBinding: PaymentBinding = {
+      ...input.paymentBinding.requested,
+      amountMinor: input.grossAmountMinor,
+      currency: input.transaction.currency,
+      providerRef: input.providerAccountRef,
+      idempotencyKey: input.transaction.idempotencyKey,
+      ...(input.actionVersion === undefined ? {} : { actionVersion: input.actionVersion }),
+    }
+    const binding = validatePaymentBinding({ approved: input.paymentBinding.approved, requested: requestedBinding, now: input.observedAt })
+    if (binding.kind === 'refused') return { state: input.state, result: binding }
   }
-  if (!validAmount(input.grossAmountMinor)) return { state: input.state, result: refusalResult('price_unavailable', false) }
-  const split = computeRakeSplit(input.grossAmountMinor, input.rakeConfig)
-  if ('kind' in split) return { state: input.state, result: refusalResult(split.code, false) }
   const operator = input.state.accounts.get(input.operatorAccountRef)
   const provider = input.state.accounts.get(input.providerAccountRef)
   const rake = input.state.accounts.get(input.rakeAccountRef)
-  if (operator === undefined || provider === undefined || rake === undefined) return { state: input.state, result: refusalResult('billing_identity_missing', false) }
-  if (operator.currency !== input.transaction.currency || provider.currency !== input.transaction.currency || rake.currency !== input.transaction.currency) {
-    return { state: input.state, result: refusalResult('currency_mismatch', false) }
+  const accountRefusal = validateChargeAccounts({
+    operator,
+    provider,
+    rake,
+    operatorAccountRef: input.operatorAccountRef,
+    providerAccountRef: input.providerAccountRef,
+    rakeAccountRef: input.rakeAccountRef,
+    principalId: input.transaction.principalId,
+    businessId: input.businessId,
+    currency: input.transaction.currency,
+  })
+  if (accountRefusal !== undefined) return { state: input.state, result: accountRefusal }
+  if (operator === undefined || provider === undefined || rake === undefined) {
+    return { state: input.state, result: refusalResult('billing_identity_missing', false) }
   }
   const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
   if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
+  if (input.freeTier === true || input.grossAmountMinor === 0) {
+    if (begun.result.kind === 'replay') {
+      return { state: input.state, result: { kind: 'accepted', chargeState: 'paid', currency: input.transaction.currency, amountMinor: input.grossAmountMinor, priceDigest: input.priceDigest, transactionRef: begun.result.transaction.transactionRef } }
+    }
+    const usage = createUsage(input, 'free_tier', 0)
+    return { state: appendUsage(input.state, usage), result: { kind: 'accepted', chargeState: 'free_tier', currency: input.transaction.currency, amountMinor: 0, priceDigest: input.priceDigest } }
+  }
+  const split = computeRakeSplit(input.grossAmountMinor, input.rakeConfig)
+  if ('kind' in split) return { state: input.state, result: refusalResult(split.code, false) }
   if (begun.result.kind === 'replay') {
     return {
       state: input.state,
@@ -249,12 +321,12 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
 
 export function appendRefundReversal(input: RefundInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
   const original = input.state.transactions.find((transaction) => transaction.transactionRef === input.originalTransactionRef)
-  if (original === undefined || original.principalId !== input.principalId || original.kind !== 'charge') {
+  if (original === undefined || original.principalId !== input.principalId || original.kind !== 'charge' || (original.state !== 'applied' && original.state !== 'outcome_unknown')) {
     return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   }
   const priorReversal = input.state.transactions.find((transaction) => transaction.reversalOf === input.originalTransactionRef)
   if (priorReversal !== undefined) {
-    return { state: input.state, result: acceptedTopup(original.currency, 0, original.inputDigest, priorReversal.transactionRef) }
+    return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   }
   const originalEntries = input.state.entries.filter((entry) => entry.transactionRef === original.transactionRef)
   if (originalEntries.length !== 3) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
@@ -280,7 +352,7 @@ export function appendRefundReversal(input: RefundInput & Readonly<{ state: Ledg
 export function markOutcomeUnknown(input: OutcomeUnknownInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
   const transaction = input.state.transactions.find((entry) => entry.transactionRef === input.transactionRef)
   if (transaction === undefined || transaction.principalId !== input.principalId || transaction.kind !== 'charge') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  if (transaction.state === 'outcome_unknown') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  if (transaction.state !== 'applied' && transaction.state !== 'pending') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   const updated = { ...transaction, state: 'outcome_unknown' as const, updatedAt: input.updatedAt }
   return { state: replaceTransaction(input.state, updated), result: refusalResult('charge_reconciliation_required', false) }
 }
@@ -288,6 +360,7 @@ export function markOutcomeUnknown(input: OutcomeUnknownInput & Readonly<{ state
 export function reconcileCharge(input: ReconcileChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
   const transaction = input.state.transactions.find((entry) => entry.transactionRef === input.transactionRef)
   if (transaction === undefined || transaction.principalId !== input.principalId || transaction.kind !== 'charge') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  if (transaction.state === 'reversed') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   if (input.evidenceRefs.length === 0) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   if (input.evidence === 'reconciled_released') {
     const updated = transaction.state === 'outcome_unknown' ? { ...transaction, state: 'applied' as const, updatedAt: input.observedAt } : transaction
@@ -304,13 +377,17 @@ export function reconcileCharge(input: ReconcileChargeInput & Readonly<{ state: 
 }
 
 export function releasePayoutAccrual(input: ReleasePayoutInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
-  if (!validAmount(input.amountMinor) || input.amountMinor === 0) return { state: input.state, result: refusalResult('payout_not_ready', false) }
+  const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
+  if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
+  if (begun.result.kind === 'replay') {
+    const replayed = begun.result.transaction
+    const entry = input.state.entries.find((item) => item.transactionRef === replayed.transactionRef && item.entryType === 'payout_accrual' && item.direction === 'debit')
+    return { state: input.state, result: acceptedTopup(entry?.currency ?? input.currency, entry?.amountMinor ?? input.amountMinor, input.transaction.inputDigest, replayed.transactionRef) }
+  }
+  if (!validAmount(input.amountMinor) || input.amountMinor === 0 || input.evidenceRefs.length === 0) return { state: input.state, result: refusalResult('payout_not_ready', false) }
   const provider = input.state.accounts.get(input.providerAccountRef)
   if (provider === undefined || provider.currency !== input.currency || provider.accountKind !== 'provider_earnings' || provider.businessId !== input.businessId) return { state: input.state, result: refusalResult('currency_mismatch', false) }
   if (provider.balanceMinor < input.amountMinor) return { state: input.state, result: refusalResult('payout_below_threshold', false) }
-  const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
-  if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
-  if (begun.result.kind === 'replay') return { state: input.state, result: acceptedTopup(input.currency, input.amountMinor, input.transaction.inputDigest, begun.result.transaction.transactionRef) }
   const transaction = transactionFrom(input.transaction, 'payout_accrual', 'applied')
   const entry = createEntry({ accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'debit', amountMinor: input.amountMinor, currency: input.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.observedAt })
   const nextState = withChanges(input.state, updateBalance(provider, -input.amountMinor, input.observedAt), [entry], transaction)
@@ -391,7 +468,15 @@ function createUsageFromOriginal(state: LedgerState, input: RefundInput, origina
 
 function appendUsage(state: LedgerState, usage: MoneyUsageEvent): LedgerState {
   if (state.usageEvents.some((item) => item.usageRef === usage.usageRef)) return state
-  return { ...state, usageEvents: [...state.usageEvents, usage] }
+  const key = usageSummaryKey(usage.principalId, usage.credentialId, usage.currency)
+  const prior = state.usageSummaries.get(key)
+  const states = prior === undefined || prior.states.includes(usage.chargeState) ? prior?.states ?? [usage.chargeState] : [...prior.states, usage.chargeState]
+  const summary: MoneyCredentialUsageSummary = prior === undefined
+    ? { principalId: usage.principalId, credentialId: usage.credentialId, currency: usage.currency, callCount: 1, paidCallCount: usage.chargeState === 'paid' ? 1 : 0, freeCallCount: usage.chargeState === 'free_tier' ? 1 : 0, grossSpendMinor: usage.chargeState === 'paid' ? usage.amountMinor : 0, states }
+    : { ...prior, callCount: prior.callCount + 1, paidCallCount: prior.paidCallCount + (usage.chargeState === 'paid' ? 1 : 0), freeCallCount: prior.freeCallCount + (usage.chargeState === 'free_tier' ? 1 : 0), grossSpendMinor: prior.grossSpendMinor + (usage.chargeState === 'paid' ? usage.amountMinor : 0), states }
+  const usageSummaries = new Map(state.usageSummaries)
+  usageSummaries.set(key, summary)
+  return { ...state, usageEvents: [...state.usageEvents, usage], usageSummaries }
 }
 
 function replaceTransaction(state: LedgerState, transaction: MoneyTransaction): LedgerState {
@@ -402,10 +487,11 @@ function withChanges(state: LedgerState, primaryAccount: MoneyAccount, entries: 
   const accounts = new Map(state.accounts)
   accounts.set(primaryAccount.accountRef, primaryAccount)
   for (const account of extraAccounts) accounts.set(account.accountRef, account)
+  const usageState = usage === undefined ? state : appendUsage(state, usage)
   return {
+    ...usageState,
     accounts,
     entries: [...state.entries, ...entries],
     transactions: [...state.transactions, transaction],
-    usageEvents: usage === undefined ? state.usageEvents : appendUsage(state, usage).usageEvents,
   }
 }

@@ -10,6 +10,7 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   buildPublicOwnerStatusReadback,
@@ -18,23 +19,25 @@ import {
   getPublicOwnerStatusReadbackBySlug,
   submitDurablePublicOwnerClaimFlow,
   submitPublicOwnerClaimFlow,
+  toServiceCatalogInput,
 } from '@/modules/catalog/public'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { readCurrentOwnerTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
 import { selectOwnerAdmissionTarget } from '@/modules/inquiries/route-readbacks'
+import { unconfiguredR1TargetAdmission } from '@/modules/inquiries/public'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type {
   PublicBusinessPageNotFoundReason,
   PublicBusinessPageRouteReadbackResult,
   PublicBusinessPageReadbackResult,
-  PublicCatalogContract,
   PublicOwnerClaimFlowRouteResult,
   PublicOwnerClaimFlowInput,
-  PublicOwnerClaimFlowResult,
   PublicOwnerStatusRouteReadbackResult,
   PublicOwnerStatusRouteReadback,
   PublicOwnerStatusReadback,
-  PublicRouteCatalogContract,
+  ServiceCatalogInput,
 } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 const ownerClaimInputSchema = z.object({
   businessName: z.string(),
@@ -63,7 +66,7 @@ const ownerStatusInputSchema = z.object({
 })
 
 type ClaimSuccessPageResult =
-  | { kind: 'available'; catalog: PublicRouteCatalogContract }
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
@@ -101,25 +104,7 @@ type ClaimBusinessResult =
 
 type PublishCatalogArgs = {
   claimId: string
-  services: readonly {
-    name: string
-    category: string
-    summary: string
-    serviceArea: string
-    hoursOrUnknown: string
-    firstRequest:
-      | {
-          mode: 'inquiry_available' | 'quote_request_available'
-          publicDisclosure: string
-          publicChannel: 'public_business_contact' | 'ae_status_only'
-        }
-      | {
-          mode: 'not_available_yet'
-          publicDisclosure?: string
-          publicChannel: 'not_available'
-          noContactReason: string
-        }
-  }[]
+  services: readonly ServiceCatalogInput[]
   origin?: string
   sourceWrite?: SourceWriteAdmission
   operationKey: string
@@ -130,7 +115,7 @@ type PublishCatalogResult =
   | {
       kind: 'ok'
       code: 'catalog_published' | 'catalog_publish_replayed'
-      catalog: PublicCatalogContract
+      catalog: PublicBusinessCatalogApiV2Dto
     }
   | {
       kind: 'error'
@@ -140,10 +125,9 @@ type PublishCatalogResult =
     }
 
 type PublicCatalogReadResult =
-  | { kind: 'available'; catalog: PublicCatalogContract }
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
 
-type Env = Record<string, string | undefined>
 
 const claimBusinessMutation = sourceMutation<ClaimBusinessArgs, ClaimBusinessResult>('business:claimBusiness')
 const publishCatalogMutation = sourceMutation<PublishCatalogArgs, PublishCatalogResult>('catalog:publishBusinessCatalog')
@@ -171,11 +155,17 @@ async function submitOwnerClaimThroughSource(
   context?: unknown
 ): Promise<PublicOwnerClaimFlowRouteResult> {
   if (isLocalE2EAuthBypassEnabled()) {
-    return await redactOwnerClaimResult(submitDurablePublicOwnerClaimFlow(input))
+    const result = submitDurablePublicOwnerClaimFlow(input)
+    return result.kind === 'error'
+      ? result
+      : {
+          ...result,
+          readback: await buildOwnerStatusRouteReadback(result.readback),
+        }
   }
 
   try {
-    const origin = requestOrigin()
+    const origin = resolveCanonicalBaseUrl().baseUrl
     const operationSuffix = `${normalizeOperationPart(input.requestedSlug)}:${crypto.randomUUID()}`
     const claimOperationKey = `claim:${operationSuffix}`
     const claimCorrelationId = `claim:${operationSuffix}`
@@ -212,7 +202,7 @@ async function submitOwnerClaimThroughSource(
 
     const publish = await callSourceMutation(publishCatalogMutation, {
       claimId: claim.claim.claimId,
-      services: [toServiceCatalogArgs(input)],
+      services: [toServiceCatalogInput(input, { omitBlankDisclosure: true })],
       origin,
       sourceWrite: await sourceWriteAdmissionFromContext({
         context,
@@ -233,12 +223,11 @@ async function submitOwnerClaimThroughSource(
       }
     }
 
-    const publicCatalog = redactCatalogSourceHashes(publish.catalog)
 
     return {
       kind: 'ok',
       code: 'claim_flow_published',
-      catalog: publicCatalog,
+      catalog: publish.catalog,
       readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(publish.catalog)),
     }
   } catch (error) {
@@ -289,31 +278,24 @@ async function readLocalOwnerStatus(slug: string | undefined): Promise<PublicOwn
 
 async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {
   if (isLocalE2EAuthBypassEnabled()) {
-    return redactPublicBusinessPageReadback(getLocalE2ePublicBusinessPageReadback(slug))
+    return getLocalE2ePublicBusinessPageReadback(slug)
   }
 
   const result = await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
   return result.kind === 'available'
-    ? { kind: 'available', catalog: redactCatalogSourceHashes(result.catalog) }
+    ? { kind: 'available', catalog: result.catalog }
     : { kind: 'not_found', reason: result.reason }
 }
 
-async function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): Promise<PublicOwnerClaimFlowRouteResult> {
-  if (result.kind === 'error') {
-    return result
-  }
-
-  const catalog = redactCatalogSourceHashes(result.catalog)
-  return {
-    ...result,
-    catalog,
-    readback: await buildOwnerStatusRouteReadback(result.readback),
-  }
-}
 
 async function buildOwnerStatusRouteReadback(readback: PublicOwnerStatusReadback): Promise<PublicOwnerStatusRouteReadback> {
   const target = selectOwnerAdmissionTarget(readback.catalog)
-  if (target === undefined) throw new Error('No inquiry target exists for this business page.')
+  if (target === undefined) {
+    return {
+      ...readback,
+      admission: unconfiguredR1TargetAdmission(),
+    }
+  }
   const result = await readCurrentOwnerTargetAdmissionThroughSource(target)
   if (result.kind === 'error') {
     throw new Error(result.reason)
@@ -321,27 +303,36 @@ async function buildOwnerStatusRouteReadback(readback: PublicOwnerStatusReadback
 
   return {
     ...readback,
-    catalog: redactCatalogSourceHashes(readback.catalog),
     admission: result.admission,
   }
 }
 
 
-function redactPublicBusinessPageReadback(readback: PublicBusinessPageReadbackResult): PublicBusinessPageRouteReadbackResult {
-  return readback.kind === 'available' ? { ...readback, catalog: redactCatalogSourceHashes(readback.catalog) } : readback
-}
 
 function getLocalE2ePublicBusinessPageReadback(slug: string): PublicBusinessPageReadbackResult {
   const fixture = LOCAL_E2E_BUSINESS_FIXTURES.find((candidate) => candidate.requestedSlug === slug)
   if (fixture === undefined) {
     return getPublicBusinessPageReadback(slug)
   }
+  const offering = fixture.offerings[0]
+  if (offering === undefined) {
+    throw new Error(`Local e2e fixture has no offering: ${fixture.requestedSlug}`)
+  }
 
   const result = submitPublicOwnerClaimFlow({
-    ...fixture,
+    businessName: fixture.businessName,
+    category: fixture.category,
+    suburb: fixture.suburb,
+    stateTerritory: fixture.stateTerritory,
+    requestedSlug: fixture.requestedSlug,
     publishedPhone: fixture.publishedPhone ?? '',
     ownerMessage: 'Local e2e owner-supplied service facts.',
     sourceLabel: 'Local e2e service facts',
+    serviceName: offering.name,
+    serviceCategory: offering.category,
+    serviceSummary: offering.summary,
+    serviceArea: offering.serviceAreaSummary,
+    hoursOrUnknown: offering.availabilitySummary,
     photoUrl: '',
     responseTimeMinutes: fixture.responseTimeMinutes?.toString() ?? '',
     firstRequestMode: 'inquiry_available',
@@ -353,58 +344,9 @@ function getLocalE2ePublicBusinessPageReadback(slug: string): PublicBusinessPage
     : { kind: 'not_found', reason: 'not_public' }
 }
 
-function redactCatalogSourceHashes(catalog: PublicCatalogContract): PublicRouteCatalogContract {
-  const { sourceHash: _catalogSourceHash, services, ...catalogRest } = catalog
-  return {
-    ...catalogRest,
-    services: services.map((service) => {
-      const { sourceHash: _serviceSourceHash, capabilities, ...serviceRest } = service
-      return {
-        ...serviceRest,
-        capabilities: capabilities.map((capability) => {
-          const { sourceHash: _capabilitySourceHash, ...capabilityRest } = capability
-          return capabilityRest
-        }),
-      }
-    }),
-  }
-}
 
-function toServiceCatalogArgs(input: PublicOwnerClaimFlowInput): PublishCatalogArgs['services'][number] {
-  return {
-    name: input.serviceName,
-    category: input.serviceCategory,
-    summary: input.serviceSummary,
-    serviceArea: input.serviceArea,
-    hoursOrUnknown: input.hoursOrUnknown,
-    firstRequest:
-      input.firstRequestMode === 'not_available_yet'
-        ? {
-            mode: 'not_available_yet',
-            ...(input.publicDisclosure.trim().length === 0 ? {} : { publicDisclosure: input.publicDisclosure }),
-            publicChannel: 'not_available',
-            noContactReason: input.noContactReason,
-          }
-        : {
-            mode: input.firstRequestMode,
-            publicDisclosure: input.publicDisclosure,
-            publicChannel: input.firstRequestMode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact',
-          },
-  }
-}
 
-function requestOrigin(): string {
-  return readEnv(process.env, 'SITE_URL') ?? readEnv(process.env, 'VITE_SITE_URL') ?? 'https://ae.example'
-}
 
-function readEnv(env: Env, name: string): string | undefined {
-  const value = env[name]
-  if (value === undefined || value.trim().length === 0) {
-    return undefined
-  }
-
-  return value.trim()
-}
 
 function ownerClaimSourceWriteError(error: unknown): PublicOwnerClaimFlowRouteResult {
   if (error instanceof SourceWriteAdmissionError) {
@@ -425,6 +367,5 @@ function ownerClaimSourceWriteError(error: unknown): PublicOwnerClaimFlowRouteRe
 }
 
 function normalizeOperationPart(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
-  return normalized.length === 0 ? 'claim' : normalized
+  return normalizeSlug(value) || 'claim'
 }

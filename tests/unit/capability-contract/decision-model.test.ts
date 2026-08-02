@@ -8,7 +8,7 @@ import {
   sameCapabilityContractRef,
   samePointedSchema,
 } from '@/modules/capability-contract/public'
-import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
+import { capabilityContractV2, objectSchema } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('capability decision model', () => {
   it('projects immutable staged input and evidence semantics from the exact contract', () => {
@@ -448,15 +448,6 @@ function requiredInput(model: ReturnType<typeof modelWithCommitment>, annotation
   return input
 }
 
-function objectSchema(properties: Record<string, unknown>, required: string[]) {
-  return {
-    $schema: 'https://json-schema.org/draft/2020-12/schema',
-    type: 'object',
-    properties,
-    required,
-    additionalProperties: false,
-  }
-}
 
 function dataUse(effectId: string, inputPointer: string) {
   return {

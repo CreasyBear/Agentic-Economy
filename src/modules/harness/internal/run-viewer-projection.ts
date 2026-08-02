@@ -3,15 +3,22 @@ import type {
   AnswerTurnRecord,
 } from '@/modules/answer-thread/public'
 import {
-  buildAnswerRunReport,
-  buildHarnessRunReportForAnswer,
   buildPublicAnswerCheckSummary,
   type AnswerToolCallRecord,
   type FrozenTurnEvidence,
   type FrozenTurnProse,
 } from '@/modules/answer-thread/harness'
 import { buildPublicThreadProjection } from '@/modules/answer-thread/projection'
-import type { AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
+import { AeSearchContextSchema } from '@/modules/answer/search-context'
+import {
+  AnswerLayoutProfileValues,
+  type AnswerLayoutProfile,
+} from '@/modules/answer/public'
+import { isRecord } from '@/modules/common/is-record'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
+import { round2 } from '@/modules/common/round-2'
+import { sumToolDurationMs } from '@/modules/common/tool-duration'
+import { stableUnique } from '@/modules/common/stable-unique'
 import type {
   HarnessEventCounters,
   HarnessRunReport,
@@ -63,6 +70,15 @@ const forbiddenPublicProjectionMarkers = [
   'provider request ids',
   'internal trace names',
 ] as const
+
+const emptyPublicAnswerCheckSummary = {
+  catalogSearches: 0,
+  listingsRead: 0,
+  listedBusinesses: 0,
+  checksPassed: 0,
+  checksFailed: 0,
+  elapsedMs: 0,
+} as const
 
 export function buildHarnessRunViewerListResult(
   input: HarnessRunViewerListAccessInput,
@@ -125,7 +141,7 @@ function buildHarnessRunViewerListProjection(
   input: HarnessRunViewerListInput,
 ): HarnessRunViewerListAllowed {
   const filters = normalizeHarnessRunViewerFilters(input.filters)
-  const sortedTurns = [...input.turns].sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq)
+  const sortedTurns = input.turns.toSorted((a, b) => b.createdAt - a.createdAt || b.seq - a.seq)
   const rows: HarnessRunViewerListRow[] = []
   for (const turn of sortedTurns) {
     const row = buildHarnessRunViewerListRow(turn)
@@ -164,6 +180,20 @@ export function buildHarnessRunViewerDetailProjection(
     }
   }
 
+  const evidence = readFrozenEvidence(turn.evidenceJson)
+  if (evidence === undefined) {
+    return {
+      kind: 'not_found',
+      httpStatus: 404,
+      generatedAt: input.generatedAt ?? Date.now(),
+      filters,
+      turnId: input.turnId,
+      ...(input.source === undefined ? {} : { source: input.source }),
+      publicMessage: 'That answer turn has no current run evidence available.',
+      rows: [],
+    }
+  }
+
   const rows = input.turns.map((candidate) => buildHarnessRunViewerListRow(candidate))
   return {
     kind: 'allowed',
@@ -173,20 +203,16 @@ export function buildHarnessRunViewerDetailProjection(
     filters,
     ...(input.source === undefined ? {} : { source: input.source }),
     rows,
-    detail: buildHarnessRunViewerDetail(turn),
+    detail: buildHarnessRunViewerDetail(turn, evidence),
   }
 }
 
 function buildHarnessRunViewerListRow(turn: AnswerTurnRecord): HarnessRunViewerListRow {
   const evidence = readFrozenEvidence(turn.evidenceJson)
-  const run = resolveRunOverview(turn, evidence)
-  const answerRun = evidence.answerRun ?? buildAnswerRunReport({
-    intent: turn.intent,
-    status: turn.status,
-    snapshotHash: turn.snapshotHash,
-    evidence,
-  })
-  const publicChecks = buildPublicAnswerCheckSummary(answerRun)
+  const run = resolveRunOverview(evidence)
+  const publicChecks = evidence === undefined
+    ? emptyPublicAnswerCheckSummary
+    : buildPublicAnswerCheckSummary(evidence.answerRun)
 
   return {
     rowId: `run:${turn.turnId}`,
@@ -198,9 +224,9 @@ function buildHarnessRunViewerListRow(turn: AnswerTurnRecord): HarnessRunViewerL
     runStatus: run.status,
     runSource: run.source,
     hasRunEvidence: run.source !== 'missing',
-    hasAnswerRun: evidence.answerRun !== undefined,
-    providerCount: evidence.providers.length,
-    toolCallCount: evidence.toolCalls?.length ?? 0,
+    hasAnswerRun: evidence !== undefined,
+    providerCount: evidence?.providers.length ?? 0,
+    toolCallCount: evidence?.toolCalls.length ?? 0,
     catalogSearches: publicChecks.catalogSearches,
     listingsRead: publicChecks.listingsRead,
     checksPassed: publicChecks.checksPassed,
@@ -212,11 +238,10 @@ function buildHarnessRunViewerListRow(turn: AnswerTurnRecord): HarnessRunViewerL
   }
 }
 
-function buildHarnessRunViewerDetail(turn: AnswerTurnRecord): HarnessRunViewerDetail {
-  const evidence = readFrozenEvidence(turn.evidenceJson)
+function buildHarnessRunViewerDetail(turn: AnswerTurnRecord, evidence: FrozenTurnEvidence): HarnessRunViewerDetail {
   const prose = readFrozenProse(turn.proseJson)
   const artifactKinds = readStringArrayJson(turn.artifactKindsJson)
-  const run = resolveRunOverview(turn, evidence)
+  const run = resolveRunOverview(evidence)
 
   return {
     turn: {
@@ -258,46 +283,34 @@ export function normalizeHarnessRunViewerFilters(
 }
 
 function resolveRunOverview(
-  turn: AnswerTurnRecord,
-  evidence: FrozenTurnEvidence,
+  evidence: FrozenTurnEvidence | undefined,
 ): HarnessRunViewerRunOverview {
-  const harnessRun = isHarnessRunReport(evidence.harnessRun) ? evidence.harnessRun : undefined
-  const report = harnessRun ?? (hasLegacyEvidence(evidence)
-    ? buildHarnessRunReportForAnswer({
-        runId: `legacy:${turn.turnId}`,
-        intent: turn.intent,
-        status: turn.status,
-        snapshotHash: turn.snapshotHash,
-        evidence,
-      })
-    : undefined)
-  const source: HarnessRunViewerRunSource =
-    harnessRun !== undefined ? 'harnessRun' : report !== undefined ? 'legacyAnswerRun' : 'missing'
-  const runSummary = report?.summary.run
-
+  const harnessRun = evidence !== undefined && isHarnessRunReport(evidence.harnessRun)
+    ? evidence.harnessRun
+    : undefined
+  const runSummary = harnessRun?.summary.run
   return {
-    source,
+    source: harnessRun === undefined ? 'missing' : 'harnessRun',
     status: runSummary?.status ?? 'missing',
     hasHarnessRun: harnessRun !== undefined,
-    hasAnswerRun: evidence.answerRun !== undefined,
+    hasAnswerRun: evidence !== undefined,
     durationMs: runSummary?.durationMs ?? 0,
     ...(runSummary?.runId === undefined ? {} : { runId: runSummary.runId }),
     ...(runSummary?.sessionId === undefined ? {} : { sessionId: runSummary.sessionId }),
     ...(runSummary?.startedAt === undefined ? {} : { startedAt: runSummary.startedAt }),
     ...(runSummary?.endedAt === undefined ? {} : { endedAt: runSummary.endedAt }),
-    ...(report === undefined ? {} : { report }),
+    ...(harnessRun === undefined ? {} : { report: harnessRun }),
   }
 }
 
 function buildToolRows(
-  evidence: FrozenTurnEvidence,
+  evidence: FrozenTurnEvidence | undefined,
   report: HarnessRunReport | undefined,
 ): HarnessRunViewerToolRow[] {
-  const toolCalls = evidence.toolCalls ?? []
-  if (toolCalls.length > 0) {
+  const toolCalls = evidence?.toolCalls ?? []
+  if (toolCalls.length > 0 && evidence !== undefined) {
     return toolCalls
-      .slice()
-      .sort((a, b) => a.seq - b.seq)
+      .toSorted((a, b) => a.seq - b.seq)
       .map((call) => {
         const errorCode = readToolErrorCode(call)
         return {
@@ -305,7 +318,7 @@ function buildToolRows(
           toolId: call.toolId,
           status: call.status,
           count: 1,
-          durationMs: readToolDuration(call, evidence),
+          durationMs: round2(sumToolDurationMs(call, evidence.timings)),
           seq: call.seq,
           resultHash: call.resultHash,
           ...(errorCode === undefined ? {} : { errorCode }),
@@ -333,18 +346,18 @@ function buildPhaseRows(report: HarnessRunReport | undefined): HarnessRunViewerP
 }
 
 function buildEvidenceSummary(
-  evidence: FrozenTurnEvidence,
+  evidence: FrozenTurnEvidence | undefined,
   artifactKinds: readonly string[],
 ): HarnessRunViewerEvidenceSummary {
-  const resultHashes = (evidence.toolCalls ?? []).map((call) => call.resultHash)
+  const resultHashes = (evidence?.toolCalls ?? []).map((call) => call.resultHash)
   return {
-    providerCount: evidence.providers.length,
-    allowedSlugCount: evidence.allowedSlugs.length,
-    toolCallCount: evidence.toolCalls?.length ?? 0,
-    timingCount: evidence.timings?.length ?? 0,
-    workLogCount: evidence.workLog?.length ?? 0,
-    resultHashes: stableUnique(resultHashes),
-    ...(evidence.agentJsonUrl.trim().length === 0 ? {} : { agentJsonUrl: evidence.agentJsonUrl }),
+    providerCount: evidence?.providers.length ?? 0,
+    allowedSlugCount: evidence?.allowedSlugs.length ?? 0,
+    toolCallCount: evidence?.toolCalls.length ?? 0,
+    timingCount: evidence?.timings.length ?? 0,
+    workLogCount: evidence?.workLog.length ?? 0,
+    resultHashes: stableUnique(resultHashes).sort((a, b) => a.localeCompare(b)),
+    ...(evidence === undefined || evidence.agentJsonUrl.trim().length === 0 ? {} : { agentJsonUrl: evidence.agentJsonUrl }),
     artifactKinds,
   }
 }
@@ -399,7 +412,7 @@ function buildPublicProjectionDiff(
 
 function buildRawJson(turn: AnswerTurnRecord): HarnessRunViewerRawJson {
   return {
-    turnJson: stableStringify({
+    turnJson: JSON.stringify({
       turnId: turn.turnId,
       threadId: turn.threadId,
       seq: turn.seq,
@@ -454,7 +467,6 @@ function summarizeRows(rows: readonly HarnessRunViewerListRow[]) {
   return {
     turns: rows.length,
     withHarnessRun: rows.filter((row) => row.runSource === 'harnessRun').length,
-    legacyBackfilled: rows.filter((row) => row.runSource === 'legacyAnswerRun').length,
     missingRunEvidence: rows.filter((row) => row.runSource === 'missing').length,
     attention: rows.filter((row) =>
       row.runStatus === 'error' ||
@@ -466,66 +478,78 @@ function summarizeRows(rows: readonly HarnessRunViewerListRow[]) {
   }
 }
 
-function readFrozenEvidence(value: string): FrozenTurnEvidence {
-  const parsed = parseJson<Partial<FrozenTurnEvidence>>(value, {})
+function readFrozenEvidence(value: string): FrozenTurnEvidence | undefined {
+  const parsed = parseBoundedJson(value)
+  if (!isRecord(parsed) ||
+    !Array.isArray(parsed.providers) ||
+    !Array.isArray(parsed.allowedSlugs) ||
+    !parsed.allowedSlugs.every((slug): slug is string => typeof slug === 'string') ||
+    typeof parsed.agentJsonUrl !== 'string' ||
+    !Array.isArray(parsed.toolCalls) ||
+    !Array.isArray(parsed.timings) ||
+    !Array.isArray(parsed.workLog) ||
+    !isRecord(parsed.answerRun) ||
+    !isRecord(parsed.answerRun.summary) ||
+    !isRecord(parsed.answerRun.summary.tools) ||
+    !isRecord(parsed.answerRun.summary.evidence) ||
+    !isRecord(parsed.answerRun.summary.workLog) ||
+    !isRecord(parsed.answerRun.summary.timings) ||
+    !isRecord(parsed.answerRun.summary.gates) ||
+    !isRecord(parsed.answerRun.coverage)
+  ) {
+    return undefined
+  }
+  const searchContext = AeSearchContextSchema.safeParse(parsed.searchContext)
   return {
-    providers: Array.isArray(parsed.providers) ? parsed.providers : [],
-    allowedSlugs: Array.isArray(parsed.allowedSlugs)
-      ? parsed.allowedSlugs.filter((slug): slug is string => typeof slug === 'string')
-      : [],
-    agentJsonUrl: typeof parsed.agentJsonUrl === 'string' ? parsed.agentJsonUrl : '',
-    ...(parsed.searchContext === undefined ? {} : { searchContext: parsed.searchContext }),
-    ...(Array.isArray(parsed.toolCalls) ? { toolCalls: parsed.toolCalls } : {}),
-    ...(Array.isArray(parsed.timings) ? { timings: parsed.timings } : {}),
-    ...(Array.isArray(parsed.workLog) ? { workLog: parsed.workLog as readonly AnswerWorkStep[] } : {}),
-    ...(parsed.answerRun === undefined ? {} : { answerRun: parsed.answerRun }),
-    ...(parsed.harnessRun === undefined ? {} : { harnessRun: parsed.harnessRun }),
+    providers: parsed.providers as FrozenTurnEvidence['providers'],
+    allowedSlugs: parsed.allowedSlugs,
+    agentJsonUrl: parsed.agentJsonUrl,
+    toolCalls: parsed.toolCalls as FrozenTurnEvidence['toolCalls'],
+    timings: parsed.timings as FrozenTurnEvidence['timings'],
+    workLog: parsed.workLog as FrozenTurnEvidence['workLog'],
+    answerRun: parsed.answerRun as FrozenTurnEvidence['answerRun'],
+    ...(searchContext.success ? { searchContext: searchContext.data } : {}),
+    ...(parsed.harnessRun === undefined ? {} : { harnessRun: parsed.harnessRun as HarnessRunReport }),
   }
 }
 
 function readFrozenProse(value: string): FrozenTurnProse {
-  const parsed = parseJson<Partial<FrozenTurnProse>>(value, {})
+  const parsed = parseBoundedJson(value)
+  const record: Record<string, unknown> = isRecord(parsed) ? parsed : {}
+  const layoutProfile = readLayoutProfile(record.layoutProfile)
   return {
-    oneLine: typeof parsed.oneLine === 'string' ? parsed.oneLine : '',
-    summary: typeof parsed.summary === 'string' ? parsed.summary : '',
-    nextStep: typeof parsed.nextStep === 'string' ? parsed.nextStep : '',
-    ...(parsed.compactLayout === true ? { compactLayout: true } : {}),
-    ...(parsed.layoutProfile === undefined ? {} : { layoutProfile: parsed.layoutProfile }),
+    oneLine: typeof record.oneLine === 'string' ? record.oneLine : '',
+    summary: typeof record.summary === 'string' ? record.summary : '',
+    nextStep: typeof record.nextStep === 'string' ? record.nextStep : '',
+    ...(record.compactLayout === true ? { compactLayout: true } : {}),
+    ...(layoutProfile === undefined ? {} : { layoutProfile }),
   }
 }
 
+
+function readLayoutProfile(value: unknown): AnswerLayoutProfile | undefined {
+  for (const profile of AnswerLayoutProfileValues) {
+    if (profile === value) {
+      return profile
+    }
+  }
+  return undefined
+}
+
 function readStringArrayJson(value: string): readonly string[] {
-  const parsed = parseJson<unknown>(value, [])
+  const parsed = parseBoundedJson(value)
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
 }
 
-function hasLegacyEvidence(evidence: FrozenTurnEvidence): boolean {
-  return evidence.answerRun !== undefined ||
-    (evidence.toolCalls?.length ?? 0) > 0 ||
-    (evidence.timings?.length ?? 0) > 0 ||
-    (evidence.workLog?.length ?? 0) > 0
-}
 
 function isHarnessRunReport(value: unknown): value is HarnessRunReport {
   return isRecord(value) && isRecord(value.summary) && isRecord(value.coverage)
 }
 
-function readToolDuration(call: AnswerToolCallRecord, evidence: FrozenTurnEvidence): number {
-  let total = 0
-  for (const timing of evidence.timings ?? []) {
-    if (
-      timing.metadata?.toolId === call.toolId &&
-      (timing.metadata.toolSeq === undefined || timing.metadata.toolSeq === call.seq)
-    ) {
-      total += timing.durationMs
-    }
-  }
-  return roundDuration(total)
-}
 
 function readToolErrorCode(call: AnswerToolCallRecord): string | undefined {
-  const summary = parseJson<{ errorCode?: unknown }>(call.resultSummaryJson, {})
-  return typeof summary.errorCode === 'string' ? summary.errorCode : undefined
+  const summary = parseBoundedJson(call.resultSummaryJson)
+  return isRecord(summary) && typeof summary.errorCode === 'string' ? summary.errorCode : undefined
 }
 
 function dominantToolStatus(counters: HarnessToolCounters): HarnessToolStatus {
@@ -616,34 +640,11 @@ function includesFolded(value: string, query: string): boolean {
   return value.toLowerCase().includes(query.toLowerCase())
 }
 
-function parseJson<T>(value: string, fallback: T): T {
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
-  }
-}
 
 function formatJsonString(value: string): string {
-  try {
-    return stableStringify(JSON.parse(value) as unknown)
-  } catch {
-    return value
-  }
+  const parsed = parseBoundedJson(value)
+  return parsed === undefined ? value : JSON.stringify(parsed, null, 2) ?? value
 }
 
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, null, 2)
-}
 
-function stableUnique(values: readonly string[]): readonly string[] {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b))
-}
 
-function roundDuration(value: number): number {
-  return Math.round(value * 100) / 100
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

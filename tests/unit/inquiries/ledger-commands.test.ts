@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type {
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+} from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction, type GovernedActionEncoding } from '@/modules/governed-action/public'
 import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import {
@@ -24,7 +28,7 @@ import type {
 const ownerId = brandNonEmpty('owner:ledger-cmds', 'OwnerId')
 const claimId = brandNonEmpty('claim:ledger-cmds', 'ClaimId')
 const businessId = brandNonEmpty('business:ledger-cmds', 'BusinessId')
-const serviceId = brandNonEmpty('service:ledger-cmds', 'ServiceId')
+const offeringRef = brandNonEmpty('offering:ledger-cmds', 'OfferingRef')
 const now = 1_900_000_000_000
 const customerAccessKeyring = {
   keyId: 'test-inquiry-access-v1',
@@ -37,7 +41,7 @@ const governedSendIntegrityKeyring = {
     'test-governed-send-integrity-v1': 'test-governed-send-integrity-secret-0123456789abcdef',
   },
 } as const
-const target = { businessId, serviceId, capabilityKind: 'phone_inquiry' } as const
+const target = { businessId, offeringRef } as const
 
 describe('inquiry ledger commands', () => {
   it('submit appends receipt, operation, message, and notification facts', () => {
@@ -88,23 +92,6 @@ describe('inquiry ledger commands', () => {
     expect(replay.state.governedSendReceipts).toHaveLength(1)
   })
 
-  it('rate-limits submit after the operator abuse window fills', () => {
-    const limitedState = sourceState({
-      operatorControls: {
-        ...createEmptyInquirySourceState().operatorControls,
-        abuseMaxSubmissionsPerWindow: 1,
-        abuseWindowMs: 60_000,
-      },
-    })
-    const first = submitInquiry(limitedState, submitCommand('rate-first'))
-    expect(first.kind).toBe('ok')
-    if (first.kind !== 'ok') throw new Error(first.code)
-
-    const second = submitInquiry(first.state, submitCommand('rate-second', {
-      abuseBucketKey: 'ip:rate-first',
-    }))
-    expect(second).toMatchObject({ kind: 'error', code: 'inquiry_rate_limited' })
-  })
 
   it('markRead, reply, and close gate on expectedVersion and append facts before thread replace', () => {
     const submit = submitInquiry(sourceState(), submitCommand('version-gates'))
@@ -194,7 +181,7 @@ describe('inquiry ledger commands', () => {
           providerFamily: 'resend',
           status: 'sent',
           providerIdempotencyKey: 'ae:notification_dispatch:ledger-1',
-          payloadHash: stableHash({ dispatchId: 'dispatch:ledger-1', redacted: true }),
+          payloadHash: canonicalDigest({ dispatchId: 'dispatch:ledger-1', redacted: true }),
           operatorNextAction: 'terminal',
           updatedAt: now + 1,
         },
@@ -215,12 +202,11 @@ function submitCommand(
   const { expectedDigest, ...commandOverrides } = overrides
   const command = {
     target,
-    body: 'Can a human owner contact me about this service?',
+    body: 'Can a human owner contact me about this offering?',
     contact: { email: 'customer@example.test' },
     operationKey: operationKey(key),
     correlationId: correlationId(key),
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: `ip:${key}`,
     now,
     ...commandOverrides,
     customerAccessKeyring: commandOverrides.customerAccessKeyring ?? customerAccessKeyring,
@@ -250,8 +236,9 @@ function encodeCommand(
 function sourceState(overrides: Partial<InquirySourceState> = {}): InquirySourceState {
   return createEmptyInquirySourceState({
     businesses: [business()],
-    businessServices: [service()],
-    serviceCapabilities: [capability()],
+    businessOfferings: [offering()],
+    businessOfferingRevisions: [offeringRevision()],
+    offeringAccessPaths: [inquiryAccessPath()],
     capabilityLaunchSupportRecords: [supportRecord()],
     suppressionRules: [],
     owners: [owner()],
@@ -274,7 +261,7 @@ function business(): BusinessRecord {
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
-    sourceHash: stableHash({ businessId: 'business:ledger-cmds' }),
+    sourceHash: canonicalDigest({ businessId: 'business:ledger-cmds' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -297,7 +284,7 @@ function claim(): ClaimRecord {
     businessId,
     slug: brandNonEmpty('ledger-cmds', 'Slug'),
     status: 'published',
-    submittedFactsHash: stableHash({ claimId: 'claim:ledger-cmds' }),
+    submittedFactsHash: canonicalDigest({ claimId: 'claim:ledger-cmds' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -311,39 +298,45 @@ function resolvableOwnerRecipient(): ResolvableOwnerRecipient {
   }
 }
 
-function service(): BusinessServiceRecord {
+function offering(): BusinessOfferingRecord {
   return {
-    serviceId,
-    serviceSlug: brandNonEmpty('ledger-cmds', 'Slug'),
+    offeringRef,
     businessId,
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 1,
-    sourceHash: stableHash({ serviceId: 'service:ledger-cmds' }),
     createdAt: now,
     updatedAt: now,
   }
 }
 
-function capability(): ServiceCapabilityRecord {
+function offeringRevision(): BusinessOfferingRevisionRecord {
   return {
+    offeringRef,
     businessId,
-    serviceId,
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-      rawContactExcluded: true,
+    revision: 1,
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Human triage for urgent plumbing issues.',
+    sourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    createdAt: now,
+  }
+}
+
+function inquiryAccessPath(): OfferingAccessPathRecord {
+  const sourceHash = canonicalDigest({ offeringRef: String(offeringRef), path: 'ae_inquiry' })
+  return {
+    accessPathRef: brandNonEmpty('access:ledger-cmds:inquiry', 'AccessPathRef'),
+    businessId,
+    offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the source-owned inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry' }),
+    sourceHash,
     createdAt: now,
     updatedAt: now,
   }
@@ -371,7 +364,7 @@ function supportRecord(): CapabilityLaunchSupportRecord {
       },
     ],
     evidenceRefs: ['tests/unit/inquiries/ledger-commands.test.ts'],
-    sourceHash: stableHash({ supportRecord: 'human_inquiry_owner_inbox' }),
+    sourceHash: canonicalDigest({ supportRecord: 'human_inquiry_owner_inbox' }),
     correlationId: correlationId('support-record'),
     lastReviewedAt: now + 1_000,
   }

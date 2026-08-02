@@ -74,5 +74,21 @@ export const demandCaptureAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http'],
+  invocationContract: {
+    version: 'demand.capture:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['service', 'suburb', 'note', 'queryText'],
+    authorityRequirement: 'none',
+    retryClass: 'attributable_retry',
+    expectedEvidence: ['demand signal receipt with signalId and createdAt'],
+    safeContinuations: ['inspect the returned demand signal receipt'],
+    invalidationConditions: [
+      'action_contract_version_changed',
+      'service_changed',
+      'suburb_changed',
+      'note_changed',
+      'queryText_changed',
+    ],
+  },
   run: async ({ data }) => captureDemandSignalThroughSource(data),
 })

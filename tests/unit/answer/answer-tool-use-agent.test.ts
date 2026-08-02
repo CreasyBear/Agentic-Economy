@@ -1,16 +1,50 @@
 import { readFileSync } from 'node:fs'
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import type { AddressInfo } from 'node:net'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { generateText, isStepCount } from 'ai'
+import { MockLanguageModelV4 } from 'ai/test'
+import { z } from 'zod'
 
 import { runAnswerToolUseAgent } from '@/modules/answer/internal/answer-tool-use-agent'
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { actionToOpenRouterTool } from '@/modules/answer/internal/action-to-tool-spec'
 import { findAction } from '@/modules/actions'
 import { buildHarnessRunReport } from '@/modules/harness/public'
+import { buildToolUseAgentSystemPrompt } from '@/modules/answer/internal/answer-llm-prompts'
+import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
+import {
+  openRouterStructuredProseResponse,
+  openRouterToolResponse,
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+  type OpenRouterProsePlan,
+} from '../../helpers/openrouter-contract-server'
+
+const aiSdkTestState = vi.hoisted(() => ({
+  generateTextCalls: [] as Array<Record<string, unknown>>,
+}))
+type AiModuleForMock = {
+  readonly [key: string]: unknown
+  readonly generateText: typeof generateText
+}
+
+
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<AiModuleForMock>()
+  return {
+    ...actual,
+    generateText: new Proxy(actual.generateText, {
+      apply(target, thisArg, args) {
+        aiSdkTestState.generateTextCalls.push(args[0] as Record<string, unknown>)
+        return Reflect.apply(target, thisArg, args)
+      },
+    }),
+  }
+})
 
 afterEach(() => {
+  aiSdkTestState.generateTextCalls.length = 0
   delete process.env.OPENROUTER_API_KEY
   delete process.env.AE_OPENROUTER_API_BASE_URL
 })
@@ -40,12 +74,94 @@ describe('actionToOpenRouterTool', () => {
   })
 })
 
+describe('AI SDK v7 multi-step usage', () => {
+  it('aggregates result.usage while finalStep.usage stays last-step-only', async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: [
+        {
+          content: [{
+            type: 'tool-call',
+            toolCallId: 'call-usage-1',
+            toolName: 'lookup',
+            input: '{"value":"first"}',
+          }],
+          finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
+          usage: {
+            inputTokens: {
+              total: 11,
+              noCache: 11,
+              cacheRead: undefined,
+              cacheWrite: undefined,
+            },
+            outputTokens: {
+              total: 3,
+              text: 3,
+              reasoning: undefined,
+            },
+          },
+          warnings: [],
+        },
+        {
+          content: [{ type: 'text', text: 'done' }],
+          finishReason: { unified: 'stop', raw: undefined },
+          usage: {
+            inputTokens: {
+              total: 17,
+              noCache: 17,
+              cacheRead: undefined,
+              cacheWrite: undefined,
+            },
+            outputTokens: {
+              total: 5,
+              text: 5,
+              reasoning: undefined,
+            },
+          },
+          warnings: [],
+        },
+      ],
+    })
+
+    const result = await generateText({
+      model,
+      prompt: 'Use lookup, then answer.',
+      tools: {
+        lookup: {
+          inputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => value,
+        },
+      },
+      stopWhen: isStepCount(2),
+    })
+
+    expect(result.steps).toHaveLength(2)
+    expect(result.usage).toMatchObject({
+      inputTokens: 28,
+      outputTokens: 8,
+      totalTokens: 36,
+    })
+    expect(result.finalStep.usage).toMatchObject({
+      inputTokens: 17,
+      outputTokens: 5,
+      totalTokens: 22,
+    })
+  })
+})
+
 describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   it('feeds actual tool result JSON back to the model before final prose', async () => {
-    const server = await startOpenRouterServer([
+    const server = await startOpenRouterContractServer([
       {
-        id: 'chatcmpl-round-1',
-        model: 'test-model-resolved',
+        ...(openRouterToolResponse(
+          [
+            {
+              id: 'call-search-1',
+              toolId: 'registry.search',
+              input: { query: 'parramatta' },
+            },
+          ],
+          { id: 'chatcmpl-round-1', model: 'test-model-resolved' },
+        ) as Record<string, unknown>),
         usage: {
           prompt_tokens: 100,
           completion_tokens: 25,
@@ -53,56 +169,33 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           cost: 0.00000125,
           prompt_tokens_details: {
             cached_tokens: 10,
+            cache_write_tokens: 2,
           },
           completion_tokens_details: {
             reasoning_tokens: 3,
           },
         },
-        choices: [
-          {
-            finish_reason: 'tool_calls',
-            message: {
-              role: 'assistant',
-              content: '',
-              tool_calls: [
-                {
-                  id: 'call-search-1',
-                  type: 'function',
-                  function: {
-                    name: 'registry.search',
-                    arguments: JSON.stringify({ query: 'parramatta' }),
-                  },
-                },
-              ],
-            },
-          },
-        ],
       },
       {
-        id: 'chatcmpl-round-2',
-        model: 'test-model-resolved',
+        ...(openRouterStructuredProseResponse(
+          {
+            oneLine: 'One listed business matches this need.',
+            summary:
+              'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+            whatToDoNow:
+              'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          },
+          { id: 'chatcmpl-round-2', model: 'test-model-resolved' },
+        ) as Record<string, unknown>),
         usage: {
           prompt_tokens: 140,
           completion_tokens: 42,
           total_tokens: 182,
           cost: 0.00000182,
         },
-        choices: [
-          {
-            finish_reason: 'stop',
-            message: {
-              role: 'assistant',
-              content: JSON.stringify({
-                oneLine: 'One listed business matches this need.',
-                summary:
-                  'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
-                whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
-              }),
-            },
-          },
-        ],
       },
     ])
+    const restoreOpenRouter = server.installEnv()
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
@@ -114,7 +207,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
 
       expect(result.gate.ok).toBe(true)
@@ -133,6 +225,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           inputTokens: 100,
           outputTokens: 25,
           cachedInputTokens: 10,
+          cacheWriteTokens: 2,
           reasoningOutputTokens: 3,
           totalTokens: 125,
         },
@@ -166,14 +259,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       expect(harnessReport.summary.usage).toMatchObject({
         inputTokens: 240,
         outputTokens: 67,
+        cachedInputTokens: 10,
+        cacheWriteTokens: 2,
         totalTokens: 307,
       })
       expect(harnessReport.summary.cost).toEqual({
         estimatedUsd: 0.00000307,
         unavailableReasons: [],
       })
-      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(1)
-      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_final_prose')).toHaveLength(1)
+      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(2)
+      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_final_prose')).toHaveLength(0)
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -190,17 +285,21 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
 
     const requests = server.requests
     expect(requests).toHaveLength(2)
-    expect(requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
-      'registry.search',
-      'registry.detail',
-      'sandbox.checkup_quote',
-      'web.discover',
-    ])
+    expect(aiSdkTestState.generateTextCalls).toHaveLength(1)
+    for (const callOptions of aiSdkTestState.generateTextCalls) {
+      expect(callOptions.instructions).toBe(buildToolUseAgentSystemPrompt())
+      expect(callOptions).not.toHaveProperty('system')
+    }
+    expect(requests[0]?.response_format?.type).toBe('json_schema')
+    expect(buildToolUseAgentSystemPrompt()).toContain(
+      `You have read-only tools: ${ANSWER_READ_TOOL_IDS.join(', ')}`,
+    )
     expect(requests[0]?.tool_choice).toBe('auto')
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
       'inquiry.submit',
@@ -227,38 +326,19 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   it('fails closed if the model emits a tool call when tools are disabled', async () => {
     const modelRequests: unknown[] = []
 
-    const server = await startOpenRouterServer([
-      {
-        id: 'chatcmpl-disabled-tools',
-        model: 'test-model',
-        choices: [
-          {
-            finish_reason: 'tool_calls',
-            message: {
-              role: 'assistant',
-              content: '',
-              tool_calls: [
-                {
-                  id: 'call-search-disabled',
-                  type: 'function',
-                  function: {
-                    name: 'registry.search',
-                    arguments: JSON.stringify({ query: 'parramatta' }),
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
+    const server = await startOpenRouterContractServer([
+      openRouterToolResponse(
+        [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+        { id: 'chatcmpl-disabled-tools' },
+      ),
     ])
+    const restoreOpenRouter = server.installEnv()
 
     try {
       await expect(
         runAnswerToolUseAgent({
           query: 'compare the first two',
           disableTools: true,
-          config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
           onModelRequest: (record) => modelRequests.push(record),
         }),
       ).rejects.toMatchObject({ code: 'tool_unavailable' })
@@ -278,15 +358,17 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         }),
       ])
     } finally {
+      restoreOpenRouter()
       await server.close()
     }
   })
 
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: matchingProviderProse(),
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -297,7 +379,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers.map((provider) => provider.slug)).toContain(
         'parramatta-emergency-plumbing',
@@ -339,15 +420,17 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
   })
 
   it('records the chosen tool input as evidence, not the raw user query', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: matchingProviderProse(),
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -358,7 +441,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       const input = JSON.parse(result.toolCalls[0]!.inputJson)
       expect(input.query).toBe('parramatta')
@@ -380,18 +462,20 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
   })
 
   it('refuses over-budget tool calls from the same assistant message and requests final prose without tools', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [
         { id: 'call-search-allowed', toolId: 'registry.search', input: { query: 'parramatta' } },
         { id: 'call-detail-over-budget', toolId: 'registry.detail', input: { slug: 'parramatta-emergency-plumbing' } },
       ],
       prose: matchingProviderProse(),
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -403,7 +487,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
         maxToolCalls: 1,
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
 
       expect(result.providers.map((provider) => provider.slug)).toContain(
@@ -449,20 +532,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
 
     expect(server.requests).toHaveLength(2)
-    expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
-      'registry.search',
-      'registry.detail',
-      'sandbox.checkup_quote',
-      'web.discover',
-    ])
+    expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual(ANSWER_READ_TOOL_IDS)
     expect(server.requests[0]?.tool_choice).toBe('auto')
     expect(server.requests[1]?.tools).toBeUndefined()
     expect(server.requests[1]?.response_format?.type).toBe('json_schema')
-    expect(server.requests[1]?.messages.at(-1)?.content).toContain('Stop calling tools')
+    expect(server.requests[1]?.messages.at(-1)?.content).toBe('{"kind":"refused","code":"budget_exceeded"}')
 
     const toolMessages = server.requests[1]?.messages.filter((message) => message.role === 'tool') ?? []
     expect(toolMessages).toHaveLength(2)
@@ -477,7 +556,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   })
 
   it('persists active near-me context on location-free registry searches', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber' } }],
       prose: {
         oneLine: 'No listed businesses match this need yet.',
@@ -485,6 +564,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         whatToDoNow: 'Try a nearby suburb or browse services.',
       },
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -496,7 +576,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       const result = await runAnswerToolUseAgent({
         query: 'emergency plumber',
         searchContext: DEFAULT_AE_SEARCH_CONTEXT,
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       const input = JSON.parse(result.toolCalls[0]!.inputJson)
       expect(input).toMatchObject({
@@ -522,12 +601,13 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
   })
 
   it('keeps empty-provider prose structured when the model names a slug no tool returned', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'no-such-suburb' } }],
       prose: {
         oneLine: 'Fictional Plumbing is the best pick.',
@@ -536,6 +616,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         whatToDoNow: 'Contact fictional-plumbing directly.',
       },
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -546,7 +627,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'no-such-suburb',
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers).toEqual([])
       // The prose itself passed copy guards (no epistemic vocab), but the
@@ -570,12 +650,13 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
   })
 
   it('falls back to deterministic-style empty providers when the model calls no tools', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
         oneLine: 'No listed businesses match this need yet.',
         summary:
@@ -583,6 +664,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         whatToDoNow: 'Try a nearby suburb or a different trade word.',
       },
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -593,7 +675,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers).toEqual([])
       expect(result.toolCalls).toEqual([])
@@ -615,12 +696,13 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
   })
 
   it('uses frozen prior providers for a filter_known intent without calling a tool', async () => {
-    const server = await startOpenRouterServer(toolThenProseResponses({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
         oneLine: 'One listing matches the prior results.',
         summary:
@@ -628,6 +710,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
       },
     }))
+    const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
@@ -661,7 +744,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         priorAllowedSlugs: ['parramatta-emergency-plumbing'],
         followUpIntent: 'filter_known',
         disableTools: true,
-        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
@@ -686,6 +768,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
+      restoreOpenRouter()
       await server.close()
     }
   })
@@ -710,20 +793,6 @@ describe('hidden rewrite guard', () => {
 })
 
 
-type OpenRouterTestRequest = {
-  messages: { role: string; content: string; tool_call_id?: string }[]
-  tools?: { function: { name: string } }[]
-  tool_choice?: unknown
-  parallel_tool_calls?: unknown
-  response_format?: { type?: string; json_schema?: { strict?: boolean } }
-}
-
-type OpenRouterProsePlan = {
-  oneLine: string
-  summary: string
-  whatToDoNow: string
-}
-
 function matchingProviderProse(): OpenRouterProsePlan {
   return {
     oneLine: 'One listed business matches this need.',
@@ -733,92 +802,3 @@ function matchingProviderProse(): OpenRouterProsePlan {
   }
 }
 
-function toolThenProseResponses(input: {
-  toolCalls?: readonly { toolId: string; input: unknown; id?: string }[]
-  prose: OpenRouterProsePlan
-}): readonly unknown[] {
-  const toolCalls = input.toolCalls ?? []
-  if (toolCalls.length === 0) {
-    return [proseResponse(input.prose)]
-  }
-  return [toolResponse(toolCalls), proseResponse(input.prose)]
-}
-
-function toolResponse(toolCalls: readonly { toolId: string; input: unknown; id?: string }[]): unknown {
-  return {
-    id: 'chatcmpl-tool-turn',
-    model: 'test-model',
-    choices: [
-      {
-        finish_reason: 'tool_calls',
-        message: {
-          role: 'assistant',
-          content: '',
-          tool_calls: toolCalls.map((toolCall, index) => ({
-            id: toolCall.id ?? `call-${index + 1}`,
-            type: 'function',
-            function: {
-              name: toolCall.toolId,
-              arguments: JSON.stringify(toolCall.input),
-            },
-          })),
-        },
-      },
-    ],
-  }
-}
-
-function proseResponse(prose: OpenRouterProsePlan): unknown {
-  return {
-    id: 'chatcmpl-prose-turn',
-    model: 'test-model',
-    choices: [
-      {
-        finish_reason: 'stop',
-        message: {
-          role: 'assistant',
-          content: JSON.stringify(prose),
-        },
-      },
-    ],
-  }
-}
-
-async function startOpenRouterServer(responses: readonly unknown[]) {
-  const requests: OpenRouterTestRequest[] = []
-  const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
-    const body = JSON.parse(await readRequestBody(request)) as OpenRouterTestRequest
-    requests.push(body)
-    const payload = responses[requests.length - 1]
-    if (payload === undefined) {
-      response.writeHead(500, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ error: 'unexpected_openrouter_request' }))
-      return
-    }
-    response.writeHead(200, { 'content-type': 'application/json' })
-    response.end(JSON.stringify(payload))
-  })
-
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolve)
-  })
-
-  const address = server.address() as AddressInfo
-  return {
-    endpointUrl: `http://127.0.0.1:${address.port}/api/v1/chat/completions`,
-    baseUrl: `http://127.0.0.1:${address.port}/api/v1`,
-    requests,
-    close: () => new Promise<void>((resolve, reject) => {
-      server.close((error) => error === undefined ? resolve() : reject(error))
-    }),
-  }
-}
-
-async function readRequestBody(request: IncomingMessage): Promise<string> {
-  let raw = ''
-  for await (const chunk of request) {
-    raw += String(chunk)
-  }
-  return raw
-}

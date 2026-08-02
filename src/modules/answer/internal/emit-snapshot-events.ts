@@ -159,6 +159,7 @@ function buildProviderBudget(
   switch (mode) {
     case 'clarify':
     case 'boundary':
+    case 'unsupported':
     case 'error':
       return { searchLimit: 0, visibleLimit: 0 }
     case 'empty':
@@ -180,15 +181,7 @@ function progressivePause(pauseMs: number): Promise<void> {
     return Promise.resolve()
   }
 
-  const { promise, resolve } = (
-    Promise as PromiseConstructor & {
-      withResolvers: <T>() => {
-        promise: Promise<T>
-        resolve: (value: T | PromiseLike<T>) => void
-        reject: (reason?: unknown) => void
-      }
-    }
-  ).withResolvers<void>()
+  const { promise, resolve } = Promise.withResolvers<void>()
   setTimeout(resolve, pauseMs)
   return promise
 }

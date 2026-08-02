@@ -1,3 +1,4 @@
+import type { PaginationOptions, PaginationResult } from 'convex/server'
 import {
   callPublicSourceMutation,
   callPublicSourceQuery,
@@ -16,10 +17,7 @@ import type {
   FollowUpIntent,
   PublicThreadProjection,
 } from './answer-thread.schema'
-import {
-  appendAnswerToolCalls,
-  type AnswerToolCallInputRow,
-} from './internal/commands'
+import type { AnswerToolCallInputRow } from './internal/commands'
 import { buildPublicThreadProjection } from './internal/public-projection'
 
 type AnswerThreadSourceWriteRequestArgs = {
@@ -132,8 +130,11 @@ export type AnswerThreadWithTurnCount = AnswerThreadRecord & {
   turnCount: number
 }
 
-export type AnswerThreadWithTurns = AnswerThreadWithTurnCount & {
-  turns: readonly AnswerTurnRecord[]
+export type AnswerThreadPage<Item> = Readonly<Pick<PaginationResult<Item>, 'page' | 'isDone' | 'continueCursor'>>
+
+export type AnswerThreadWithTurns = {
+  thread: AnswerThreadWithTurnCount
+  turns: AnswerThreadPage<AnswerTurnRecord>
 }
 
 export type ListSessionThreadsResult = {
@@ -172,22 +173,33 @@ export const listSessionThreadsQuery = sourceQuery<
   ListSessionThreadsResult
 >('answerThreads:listSessionThreads')
 
-export const getAnswerThreadQuery = sourceQuery<{ threadId: string }, AnswerThreadWithTurnCount | null>(
-  'answerThreads:getAnswerThread',
-)
+export const getAnswerThreadQuery = sourceQuery<
+  { threadId: string; pseudonymousSessionId: string },
+  AnswerThreadWithTurnCount | null
+>('answerThreads:getAnswerThread')
 
-export const getAnswerThreadWithTurnsQuery = sourceQuery<{ threadId: string }, AnswerThreadWithTurns | null>(
-  'answerThreads:getAnswerThreadWithTurns',
-)
+export const getAnswerThreadWithTurnsQuery = sourceQuery<
+  {
+    threadId: string
+    pseudonymousSessionId: string
+    paginationOpts: PaginationOptions
+  },
+  AnswerThreadWithTurns | null
+>('answerThreads:getAnswerThreadWithTurns')
 
 export const getPublicThreadProjectionQuery = sourceQuery<
   { threadId: string },
   PublicThreadProjection | null
 >('answerThreads:getPublicThreadProjection')
 
-export const getThreadTurnsQuery = sourceQuery<{ threadId: string }, { turns: readonly AnswerTurnRecord[] }>(
-  'answerThreads:getThreadTurns',
-)
+export const getThreadTurnsQuery = sourceQuery<
+  {
+    threadId: string
+    pseudonymousSessionId: string
+    paginationOpts: PaginationOptions
+  },
+  AnswerThreadPage<AnswerTurnRecord>
+>('answerThreads:getThreadTurns')
 
 type AnswerThreadPort = {
   createThread(args: CreateAnswerThreadArgs): Promise<{ threadId: string }>
@@ -200,9 +212,13 @@ type AnswerThreadPort = {
   ): Promise<{ turnId: string; insertedToolCalls: number }>
   listSessionThreads(pseudonymousSessionId: string, limit?: number): Promise<ListSessionThreadsResult>
   getPublicThreadProjection(threadId: string): Promise<PublicThreadProjection | null>
-  getThreadTurns(threadId: string): Promise<{ turns: readonly AnswerTurnRecord[] }>
+  getThreadTurns(
+    threadId: string,
+    pseudonymousSessionId: string,
+    paginationOpts: PaginationOptions,
+  ): Promise<AnswerThreadPage<AnswerTurnRecord>>
   deleteThread?(args: DeleteAnswerThreadArgs): Promise<{ threadId: string }>
-  getAnswerThread?(threadId: string): Promise<AnswerThreadWithTurnCount | null>
+  getAnswerThread?(threadId: string, pseudonymousSessionId: string): Promise<AnswerThreadWithTurnCount | null>
   finalizeTurnHarnessRun?(args: FinalizeAnswerTurnHarnessRunArgs): Promise<AnswerHarnessFinalizationResult>
 }
 
@@ -251,31 +267,10 @@ export async function appendAnswerTurnWithToolCalls(
     const { turnId } = await port.appendTurn(args)
     return { turnId, insertedToolCalls: args.toolCalls.length }
   }
-  if (!missingConvexFunctions.has('answerThreads:appendAnswerTurnWithToolCalls')) {
-    try {
-      return await callPublicSourceMutation(
-        appendAnswerTurnWithToolCallsMutation,
-        await withAnswerThreadSourceWrite(args, `answer_thread:append_with_tool_calls:${args.turnId}`),
-      )
-    } catch (error) {
-      if (!isMissingConvexFunction(error, 'answerThreads:appendAnswerTurnWithToolCalls')) {
-        throw error
-      }
-      missingConvexFunctions.add('answerThreads:appendAnswerTurnWithToolCalls')
-    }
-  }
-
-  const { toolCalls, ...turnArgs } = args
-  const { turnId } = await appendAnswerTurn(turnArgs)
-  if (toolCalls.length === 0) {
-    return { turnId, insertedToolCalls: 0 }
-  }
-  const { inserted } = await appendAnswerToolCalls({
-    turnId,
-    toolCalls,
-    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
-  })
-  return { turnId, insertedToolCalls: inserted }
+  return callPublicSourceMutation(
+    appendAnswerTurnWithToolCallsMutation,
+    await withAnswerThreadSourceWrite(args, `answer_thread:append_with_tool_calls:${args.turnId}`),
+  )
 }
 
 export async function appendAnswerTurnWithThreadAndToolCalls(
@@ -300,26 +295,10 @@ export async function appendAnswerTurnWithThreadAndToolCalls(
     const { turnId } = await port.appendTurn(appendArgs)
     return { turnId, insertedToolCalls: args.toolCalls.length }
   }
-  if (!missingConvexFunctions.has('answerThreads:appendAnswerTurnWithThreadAndToolCalls')) {
-    try {
-      return await callPublicSourceMutation(
-        appendAnswerTurnWithThreadAndToolCallsMutation,
-        await withAnswerThreadSourceWrite(args, `answer_thread:append_with_thread:${args.turnId}`),
-      )
-    } catch (error) {
-      if (!isMissingConvexFunction(error, 'answerThreads:appendAnswerTurnWithThreadAndToolCalls')) {
-        throw error
-      }
-      markOptimizedAnswerThreadFunctionsMissing()
-    }
-  }
-  await createAnswerThread({
-    threadId: args.threadId,
-    pseudonymousSessionId: args.pseudonymousSessionId,
-    title,
-    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
-  })
-  return appendAnswerTurnWithToolCalls(appendArgs)
+  return callPublicSourceMutation(
+    appendAnswerTurnWithThreadAndToolCallsMutation,
+    await withAnswerThreadSourceWrite(args, `answer_thread:append_with_thread:${args.turnId}`),
+  )
 }
 
 export async function finalizeAnswerTurnHarnessRunFromRequest(
@@ -371,56 +350,68 @@ export async function listSessionThreads(
   pseudonymousSessionId: string,
   limit = 20,
 ): Promise<ListSessionThreadsResult> {
+  const normalizedLimit = normalizeSessionThreadLimit(limit)
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
-    return port.listSessionThreads(pseudonymousSessionId, limit)
+    return port.listSessionThreads(pseudonymousSessionId, normalizedLimit)
   }
-  return callPublicSourceQuery(listSessionThreadsQuery, { pseudonymousSessionId, limit })
+  return callPublicSourceQuery(listSessionThreadsQuery, {
+    pseudonymousSessionId,
+    limit: normalizedLimit,
+  })
 }
 
-export async function getAnswerThread(threadId: string): Promise<AnswerThreadWithTurnCount | null> {
+export async function getAnswerThread(
+  threadId: string,
+  pseudonymousSessionId: string,
+): Promise<AnswerThreadWithTurnCount | null> {
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
     if (port.getAnswerThread === undefined) {
       return null
     }
-    return port.getAnswerThread(threadId)
+    return port.getAnswerThread(threadId, pseudonymousSessionId)
   }
-  return callPublicSourceQuery(getAnswerThreadQuery, { threadId })
+  return callPublicSourceQuery(getAnswerThreadQuery, { threadId, pseudonymousSessionId })
 }
 
-export async function getAnswerThreadWithTurns(threadId: string): Promise<AnswerThreadWithTurns | null> {
+export async function getAnswerThreadWithTurns(
+  threadId: string,
+  pseudonymousSessionId: string,
+  paginationOpts: PaginationOptions,
+): Promise<AnswerThreadWithTurns | null> {
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
-    const thread = await (port.getAnswerThread?.(threadId) ?? Promise.resolve(null))
-    const turns = await port.getThreadTurns(threadId).catch(() => ({ turns: [] as readonly AnswerTurnRecord[] }))
-    return thread === null
-      ? null
-      : {
-          ...thread,
-          turns: turns.turns,
-          turnCount: turns.turns.length,
-        }
+    const thread = await (port.getAnswerThread?.(threadId, pseudonymousSessionId) ?? Promise.resolve(null))
+    if (thread === null) {
+      return null
+    }
+    return {
+      thread,
+      turns: await port.getThreadTurns(threadId, pseudonymousSessionId, paginationOpts),
+    }
   }
   if (!missingConvexFunctions.has('answerThreads:getAnswerThreadWithTurns')) {
     try {
-      return await callPublicSourceQuery(getAnswerThreadWithTurnsQuery, { threadId })
+      return await callPublicSourceQuery(getAnswerThreadWithTurnsQuery, {
+        threadId,
+        pseudonymousSessionId,
+        paginationOpts,
+      })
     } catch (error) {
       if (!isMissingConvexFunction(error, 'answerThreads:getAnswerThreadWithTurns')) {
         throw error
       }
-      markOptimizedAnswerThreadFunctionsMissing()
+      missingConvexFunctions.add('answerThreads:getAnswerThreadWithTurns')
     }
   }
-  const thread = await getAnswerThread(threadId)
+  const thread = await getAnswerThread(threadId, pseudonymousSessionId)
   if (thread === null) {
     return null
   }
-  const turns = await getThreadTurns(threadId)
   return {
-    ...thread,
-    turns: turns.turns,
-    turnCount: turns.turns.length,
+    thread,
+    turns: await getThreadTurns(threadId, pseudonymousSessionId, paginationOpts),
   }
 }
 
@@ -432,12 +423,16 @@ export async function getPublicThreadProjection(threadId: string): Promise<Publi
   return callPublicSourceQuery(getPublicThreadProjectionQuery, { threadId })
 }
 
-export async function getThreadTurns(threadId: string): Promise<{ turns: readonly AnswerTurnRecord[] }> {
+export async function getThreadTurns(
+  threadId: string,
+  pseudonymousSessionId: string,
+  paginationOpts: PaginationOptions,
+): Promise<AnswerThreadPage<AnswerTurnRecord>> {
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
-    return port.getThreadTurns(threadId)
+    return port.getThreadTurns(threadId, pseudonymousSessionId, paginationOpts)
   }
-  return callPublicSourceQuery(getThreadTurnsQuery, { threadId })
+  return callPublicSourceQuery(getThreadTurnsQuery, { threadId, pseudonymousSessionId, paginationOpts })
 }
 
 export async function deleteAnswerThread(args: DeleteAnswerThreadArgs): Promise<{ threadId: string }> {
@@ -562,7 +557,7 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
       threads: [...threads.values()]
         .filter((thread) => thread.pseudonymousSessionId === pseudonymousSessionId)
         .sort((left, right) => right.updatedAt - left.updatedAt)
-        .slice(0, limit),
+        .slice(0, normalizeSessionThreadLimit(limit)),
     }),
     getPublicThreadProjection: async (threadId) => {
       const thread = threads.get(threadId)
@@ -571,7 +566,16 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
       }
       return buildPublicThreadProjection(thread, turnsForThread(threadId))
     },
-    getThreadTurns: async (threadId) => ({ turns: turnsForThread(threadId) }),
+    getThreadTurns: async (threadId, _pseudonymousSessionId, paginationOpts) => {
+      const rows = turnsForThread(threadId)
+      const start = paginationOpts.cursor === null ? 0 : Number(paginationOpts.cursor)
+      const page = rows.slice(start, start + paginationOpts.numItems)
+      return {
+        page,
+        isDone: start + page.length >= rows.length,
+        continueCursor: String(start + page.length),
+      }
+    },
     getAnswerThread: async (threadId) => {
       const thread = threads.get(threadId)
       if (thread === undefined) {
@@ -619,16 +623,18 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
   }
 }
 
+function normalizeSessionThreadLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 20
+  }
+  return Math.min(Math.max(Math.trunc(limit), 1), 50)
+}
+
 function isMissingConvexFunction(error: unknown, functionName: string): boolean {
   const text = error instanceof Error ? `${error.message}\n${String(error.cause ?? '')}` : String(error)
   return text.includes('Could not find public function') && text.includes(functionName)
 }
 
-function markOptimizedAnswerThreadFunctionsMissing(): void {
-  missingConvexFunctions.add('answerThreads:appendAnswerTurnWithToolCalls')
-  missingConvexFunctions.add('answerThreads:appendAnswerTurnWithThreadAndToolCalls')
-  missingConvexFunctions.add('answerThreads:getAnswerThreadWithTurns')
-}
 
 function answerHarnessFinalizationOperationKey(args: Pick<
   FinalizeAnswerTurnHarnessRunArgs,

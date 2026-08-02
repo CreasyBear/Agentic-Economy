@@ -1,9 +1,10 @@
+import { z } from 'zod'
 import type {
   PublishedOperation,
   RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
+import { isRecord } from '@/modules/common/is-record'
 
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
 import type { ActionInvocationView } from './contracts'
@@ -15,156 +16,162 @@ import {
 import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
 
-export function assertDynamicPublishedSnapshotShape(value: unknown): asserts value is DynamicPublishedAdapterSnapshot {
-  if (!isRecord(value)
-    || value.format !== 'dynamic-published-action-invocation:development:v3'
-    || !Array.isArray(value.sourceRows)
-    || !Array.isArray(value.semanticClaims)
-    || !Array.isArray(value.controls)
-    || !Array.isArray(value.attempts)
-    || !Array.isArray(value.history)
-    || !Array.isArray(value.commands)
-    || !Array.isArray(value.paymentAttempts)
-    || !Array.isArray(value.paymentAuthorizationEvents)
-    || !exactKeys(value, [
-      'format', 'sourceRows', 'semanticClaims', 'controls', 'attempts', 'history', 'commands',
-      'paymentAttempts',
-      'paymentAuthorizationEvents',
-      ...(value.inputWork === undefined ? [] : ['inputWork']),
-      ...(value.inputHistory === undefined ? [] : ['inputHistory']),
-      ...(value.operations === undefined ? [] : ['operations']),
-    ])
-    || (value.inputWork !== undefined && !Array.isArray(value.inputWork))
-    || (value.inputHistory !== undefined && !Array.isArray(value.inputHistory))
-    || (value.operations !== undefined && !Array.isArray(value.operations))
-    || value.sourceRows.length !== 1
-    || value.semanticClaims.length > 1
-    || value.semanticClaims.some((claim) => !semanticClaimShapeValid(claim))
-    || value.controls.length !== 1
-    || value.attempts.length !== 1
-    || value.history.length !== 1
-    || !isRecord(value.sourceRows[0])
-    || typeof value.sourceRows[0].operationKey !== 'string'
-    || !isRecord(value.sourceRows[0].operation)
-    || !isRecord(value.sourceRows[0].input)
-    || !isRecord(value.controls[0])
-    || typeof value.controls[0].invocationRef !== 'string'
-    || !isRecord(value.controls[0].control)
-    || !isRecord(value.attempts[0])
-    || !Array.isArray(value.attempts[0].rows)
-    || !isRecord(value.history[0])
-    || !Array.isArray(value.history[0].rows)
-    || value.commands.some((command) => !isRecord(command)
-      || typeof command.commandId !== 'string'
-      || !isRecord(command.value))
-    || value.paymentAttempts.some((attempt) => !paymentAttemptShapeValid(attempt))
-    || value.paymentAuthorizationEvents.some((event) => !paymentAuthorizationEventShapeValid(event))) {
-    throw new Error('dynamic_published_snapshot_schema_invalid')
-  }
+const recordSchema = z.looseObject({})
+const nonEmptyStringSchema = z.string().min(1)
+const sensitiveStringPattern = /(private.?key|payment.?signature|credential)/i
+
+function optionalFieldsAreAbsent(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  const keys = Object.keys(value)
+  return fields.every((field) => !(keys.includes(field) && value[field] === undefined))
 }
 
-function paymentAuthorizationEventShapeValid(value: unknown): boolean {
-  return isRecord(value)
-    && typeof value.invocationRef === 'string'
-    && typeof value.attemptRef === 'string'
-    && Number.isSafeInteger(value.effectGeneration)
-    && (value.effectGeneration as number) >= 1
-    && typeof value.operationKey === 'string'
-    && value.queryRelease === 'released'
-    && ['not_created', 'created', 'unknown'].includes(String(value.authorization))
-    && Number.isSafeInteger(value.recordedAt)
-    && (value.challengeDigest === undefined || typeof value.challengeDigest === 'string')
-    && (value.authorizationDigest === undefined || typeof value.authorizationDigest === 'string')
-    && (value.authorization === 'created'
-      ? typeof value.challengeDigest === 'string'
-        && typeof value.authorizationDigest === 'string'
-      : value.authorizationDigest === undefined)
-    && exactKeys(value, [
-      'invocationRef', 'attemptRef', 'effectGeneration', 'operationKey', 'queryRelease',
-      'authorization', 'recordedAt',
-      ...(value.challengeDigest === undefined ? [] : ['challengeDigest']),
-      ...(value.authorizationDigest === undefined ? [] : ['authorizationDigest']),
-    ])
-}
+const sourceRowSchema = z.looseObject({
+  operationKey: z.string(),
+  operation: recordSchema,
+  input: recordSchema,
+})
 
-function paymentAttemptShapeValid(value: unknown): boolean {
-  if (!isRecord(value)
-    || ![
-      'prepared', 'possibly_submitted', 'observed', 'reconciliation_required',
-      'not_settled', 'settled',
-    ].includes(String(value.state))
-    || !Number.isSafeInteger(value.effectGeneration)
-    || (value.effectGeneration as number) < 1
-    || !Number.isSafeInteger(value.preparedAt)
-    || !Array.isArray(value.evidenceRefs)
-    || value.evidenceRefs.some((ref) => typeof ref !== 'string')
-    || Object.values(value).some((entry) =>
-      typeof entry === 'string' && /(private.?key|payment.?signature|credential)/i.test(entry))
-    || !exactKeys(value, [
-      'paymentIdentifier', 'invocationRef', 'attemptRef', 'effectGeneration', 'operationKey',
-      'challengeDigest', 'scheme', 'network', 'asset', 'payTo', 'amount', 'providerEndpoint',
-      'operationRevision', 'authorizationDigest', 'custodyRef', 'state', 'preparedAt',
-      ...(value.settledAmount === undefined ? [] : ['settledAmount']),
-      ...(value.submissionStartedAt === undefined ? [] : ['submissionStartedAt']),
-      ...(value.observedAt === undefined ? [] : ['observedAt']),
-      ...(value.reconciliationEvidenceRef === undefined ? [] : ['reconciliationEvidenceRef']),
-      ...(value.reconciliationEvidenceDigest === undefined ? [] : ['reconciliationEvidenceDigest']),
-      'evidenceRefs',
-    ])) return false
-  return [
-    'paymentIdentifier', 'invocationRef', 'attemptRef', 'operationKey', 'challengeDigest',
-    'scheme', 'network', 'asset', 'payTo', 'amount', 'providerEndpoint', 'operationRevision',
-    'authorizationDigest',
-  ].every((key) => typeof value[key] === 'string' && (value[key] as string).length > 0)
-    && typeof value.custodyRef === 'string'
-    && /^sha256:[0-9a-f]{64}$/.test(value.custodyRef)
-    && (value.settledAmount === undefined
-      || isRecord(value.settledAmount)
-        && typeof value.settledAmount.currency === 'string'
-        && value.settledAmount.currency.length > 0
-        && Number.isSafeInteger(value.settledAmount.amountMinor)
-        && (value.settledAmount.amountMinor as number) >= 0
-        && exactKeys(value.settledAmount, ['currency', 'amountMinor']))
-    && ((value.state === 'not_settled' || value.state === 'settled')
+const semanticResultIdentitySchema = z.strictObject({
+  sourceResultRef: z.string(),
+  resultDigest: z.string(),
+})
+
+const semanticOutcomeSchema = z.strictObject({
+  semanticIdentityDigest: z.string(),
+  ownerInvocationRef: z.string(),
+  observedResolution: recordSchema,
+  resultIdentity: semanticResultIdentitySchema.optional(),
+}).refine((value) => optionalFieldsAreAbsent(value, ['resultIdentity']))
+
+const semanticClaimSchema = z.strictObject({
+  semanticBaseKey: z.string(),
+  semanticIdentityDigest: z.string(),
+  principalRef: z.string(),
+  ownerInvocationRef: z.string(),
+  status: z.custom((value) => ['pending', 'completed', 'uncertain'].includes(String(value))),
+  outcome: semanticOutcomeSchema.optional(),
+}).refine((value) => optionalFieldsAreAbsent(value, ['outcome']))
+  .refine((value) => value.status === 'pending'
+    ? value.outcome === undefined
+    : value.outcome !== undefined)
+
+const settledAmountSchema = z.strictObject({
+  currency: nonEmptyStringSchema,
+  amountMinor: z.number().int().safe().min(0),
+})
+
+const paymentAttemptSchema = z.strictObject({
+  paymentIdentifier: nonEmptyStringSchema,
+  invocationRef: nonEmptyStringSchema,
+  attemptRef: nonEmptyStringSchema,
+  effectGeneration: z.number().int().safe().min(1),
+  operationKey: nonEmptyStringSchema,
+  challengeDigest: nonEmptyStringSchema,
+  scheme: nonEmptyStringSchema,
+  network: nonEmptyStringSchema,
+  asset: nonEmptyStringSchema,
+  payTo: nonEmptyStringSchema,
+  amount: nonEmptyStringSchema,
+  providerEndpoint: nonEmptyStringSchema,
+  operationRevision: nonEmptyStringSchema,
+  authorizationDigest: nonEmptyStringSchema,
+  custodyRef: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  state: z.custom((value) => [
+    'prepared',
+    'possibly_submitted',
+    'observed',
+    'reconciliation_required',
+    'not_settled',
+    'settled',
+  ].includes(String(value))),
+  preparedAt: z.number().int().safe(),
+  settledAmount: settledAmountSchema.optional(),
+  submissionStartedAt: z.unknown().optional(),
+  observedAt: z.unknown().optional(),
+  reconciliationEvidenceRef: z.unknown().optional(),
+  reconciliationEvidenceDigest: z.unknown().optional(),
+  evidenceRefs: z.array(z.string()),
+}).refine((value) => optionalFieldsAreAbsent(value, [
+  'settledAmount',
+  'submissionStartedAt',
+  'observedAt',
+  'reconciliationEvidenceRef',
+  'reconciliationEvidenceDigest',
+]))
+  .refine((value) => !Object.values(value).some((entry) =>
+    typeof entry === 'string' && sensitiveStringPattern.test(entry)))
+  .refine((value) => (
+    value.state === 'not_settled' || value.state === 'settled'
       ? typeof value.reconciliationEvidenceRef === 'string'
         && value.reconciliationEvidenceRef.length > 0
         && typeof value.reconciliationEvidenceDigest === 'string'
         && /^sha256:[0-9a-f]{64}$/.test(value.reconciliationEvidenceDigest)
       : value.reconciliationEvidenceRef === undefined
-        && value.reconciliationEvidenceDigest === undefined)
+        && value.reconciliationEvidenceDigest === undefined
+  ))
+
+const paymentAuthorizationEventSchema = z.strictObject({
+  invocationRef: z.string(),
+  attemptRef: z.string(),
+  effectGeneration: z.number().int().safe().min(1),
+  operationKey: z.string(),
+  queryRelease: z.literal('released'),
+  authorization: z.custom((value) => ['not_created', 'created', 'unknown'].includes(String(value))),
+  recordedAt: z.number().int().safe(),
+  challengeDigest: z.string().optional(),
+  authorizationDigest: z.string().optional(),
+}).refine((value) => optionalFieldsAreAbsent(value, ['challengeDigest', 'authorizationDigest']))
+  .refine((value) => value.authorization === 'created'
+    ? typeof value.challengeDigest === 'string'
+      && typeof value.authorizationDigest === 'string'
+    : value.authorizationDigest === undefined)
+
+const controlSchema = z.looseObject({})
+const sourceGroupSchema = z.looseObject({
+  invocationRef: z.string(),
+  control: controlSchema,
+})
+const attemptGroupSchema = z.looseObject({
+  invocationRef: z.string(),
+  rows: z.array(z.unknown()),
+})
+const historyGroupSchema = z.looseObject({
+  invocationRef: z.string(),
+  rows: z.array(z.unknown()),
+})
+const commandSchema = z.looseObject({
+  commandId: z.string(),
+  value: recordSchema,
+})
+
+const dynamicPublishedSnapshotShapeSchema = z.strictObject({
+  format: z.literal('dynamic-published-action-invocation:development:v3'),
+  sourceRows: z.array(sourceRowSchema),
+  semanticClaims: z.array(semanticClaimSchema).max(1),
+  controls: z.array(sourceGroupSchema),
+  attempts: z.array(attemptGroupSchema),
+  history: z.array(historyGroupSchema),
+  commands: z.array(commandSchema),
+  paymentAttempts: z.array(paymentAttemptSchema),
+  paymentAuthorizationEvents: z.array(paymentAuthorizationEventSchema),
+  inputWork: z.array(z.unknown()).optional(),
+  inputHistory: z.array(z.unknown()).optional(),
+  operations: z.array(z.unknown()).optional(),
+}).refine((value) => optionalFieldsAreAbsent(value, ['inputWork', 'inputHistory', 'operations']))
+
+export function assertDynamicPublishedSnapshotShape(value: unknown): asserts value is DynamicPublishedAdapterSnapshot {
+  const parsed = dynamicPublishedSnapshotShapeSchema.safeParse(value)
+  if (!parsed.success) {
+    throw new Error('dynamic_published_snapshot_schema_invalid')
+  }
 }
 
-function semanticClaimShapeValid(value: unknown): boolean {
-  if (!isRecord(value)
-    || typeof value.semanticBaseKey !== 'string'
-    || typeof value.semanticIdentityDigest !== 'string'
-    || typeof value.principalRef !== 'string'
-    || typeof value.ownerInvocationRef !== 'string'
-    || !['pending', 'completed', 'uncertain'].includes(String(value.status))
-    || !exactKeys(value, [
-      'semanticBaseKey',
-      'semanticIdentityDigest',
-      'principalRef',
-      'ownerInvocationRef',
-      'status',
-      ...(value.outcome === undefined ? [] : ['outcome']),
-    ])) return false
-  if (value.status === 'pending') return value.outcome === undefined
-  if (!isRecord(value.outcome)
-    || typeof value.outcome.semanticIdentityDigest !== 'string'
-    || typeof value.outcome.ownerInvocationRef !== 'string'
-    || !isRecord(value.outcome.observedResolution)
-    || !exactKeys(value.outcome, [
-      'semanticIdentityDigest',
-      'ownerInvocationRef',
-      'observedResolution',
-      ...(value.outcome.resultIdentity === undefined ? [] : ['resultIdentity']),
-    ])) return false
-  return value.outcome.resultIdentity === undefined
-    || (isRecord(value.outcome.resultIdentity)
-      && typeof value.outcome.resultIdentity.sourceResultRef === 'string'
-      && typeof value.outcome.resultIdentity.resultDigest === 'string'
-      && exactKeys(value.outcome.resultIdentity, ['sourceResultRef', 'resultDigest']))
+export function copyDynamicPublishedSnapshot(
+  value: DynamicPublishedAdapterSnapshot,
+): DynamicPublishedAdapterSnapshot {
+  const cloned = structuredClone(value)
+  assertDynamicPublishedSnapshotShape(cloned)
+  return cloned
 }
 
 export type DynamicPublishedSnapshotAnchors = Readonly<{
@@ -189,7 +196,7 @@ export type DynamicPublishedSnapshotAnchors = Readonly<{
 export function verifyDynamicPublishedSnapshot(input: Readonly<{
   snapshot: unknown
   anchors: DynamicPublishedSnapshotAnchors
-}>): void {
+}>): DynamicPublishedAdapterSnapshot {
   assertDynamicPublishedSnapshotShape(input.snapshot)
   const snapshot = input.snapshot
   const {
@@ -199,11 +206,19 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     origin,
     issuedAuthority,
   } = input.anchors
-  const source = snapshot.sourceRows[0]!
+  const source = snapshot.sourceRows[0]
   const semanticClaim = snapshot.semanticClaims[0]
-  const control = snapshot.controls[0]!
-  const attemptGroup = snapshot.attempts[0]!
-  const historyGroup = snapshot.history[0]!
+  const control = snapshot.controls[0]
+  const attemptGroup = snapshot.attempts[0]
+  const historyGroup = snapshot.history[0]
+  if (
+    source === undefined
+    || control === undefined
+    || attemptGroup === undefined
+    || historyGroup === undefined
+  ) {
+    throw new Error('dynamic_published_snapshot_schema_invalid')
+  }
   const recomputedInput = buildDynamicPublishedInput({
     operation,
     descriptor,
@@ -222,8 +237,8 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     preparedMaterialDigest: issuedAuthority.materialInputDigest,
   })
   if (
-    canonicalDigest(source.operation as unknown as StableHashValue)
-      !== canonicalDigest(operation as unknown as StableHashValue)
+    canonicalDigest(source.operation)
+      !== canonicalDigest(operation)
     || source.input.operationKey !== recomputedInput.operationKey
     || source.input.inputDigest !== recomputedInput.inputDigest
     || source.input.sourceSnapshotDigest !== dynamicPublishedSourceDigest(operation, descriptor)
@@ -242,22 +257,22 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     )
     || source.invocationRef !== control.invocationRef
     || (source.owner !== undefined
-      && canonicalDigest(source.owner as unknown as StableHashValue)
-        !== canonicalDigest(actor as unknown as StableHashValue))
+      && canonicalDigest(source.owner)
+        !== canonicalDigest(actor))
     || (source.origin !== undefined
-      && canonicalDigest(source.origin as unknown as StableHashValue)
-        !== canonicalDigest(origin as unknown as StableHashValue))
+      && canonicalDigest(source.origin)
+        !== canonicalDigest(origin))
     || control.sourceRef !== control.invocationRef
     || control.control.owner.callerRef !== actor.callerRef
     || control.control.owner.principalRef !== actor.principalRef
-    || canonicalDigest(control.control.origin as unknown as StableHashValue)
-      !== canonicalDigest(origin as unknown as StableHashValue)
+    || canonicalDigest(control.control.origin)
+      !== canonicalDigest(origin)
     || control.control.action.id !== operation.operationId
     || control.control.action.contractVersion !== descriptor.version
     || control.authorityBinding?.actor.callerRef !== actor.callerRef
     || control.authorityBinding.actor.principalRef !== actor.principalRef
-    || canonicalDigest(control.authorityBinding.origin as unknown as StableHashValue)
-      !== canonicalDigest(origin as unknown as StableHashValue)
+    || canonicalDigest(control.authorityBinding.origin)
+      !== canonicalDigest(origin)
     || control.authorityBinding.actionId !== operation.operationId
     || control.authorityBinding.contractVersion !== descriptor.version
     || control.control.authority?.reference !== issuedAuthority.reference
@@ -270,12 +285,12 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     || control.preparedTargetDigest !== canonicalDigest(recomputedInput.target)
     || control.authorityBinding.targetDigest !== canonicalDigest(recomputedInput.target)
     || control.authorityBinding.limits.amountMinor !== price.amountMinor
-    || canonicalDigest(control.control.acceptedAuthority as unknown as StableHashValue)
-      !== canonicalDigest(issuedAuthority.accepted as unknown as StableHashValue)
-    || canonicalDigest(control.authorityBinding.acceptedBasis as unknown as StableHashValue)
-      !== canonicalDigest(issuedAuthority.accepted as unknown as StableHashValue)
-    || canonicalDigest(control.control.acceptedAuthority as unknown as StableHashValue)
-      !== canonicalDigest(control.authorityBinding.acceptedBasis as unknown as StableHashValue)
+    || canonicalDigest(control.control.acceptedAuthority)
+      !== canonicalDigest(issuedAuthority.accepted)
+    || canonicalDigest(control.authorityBinding.acceptedBasis)
+      !== canonicalDigest(issuedAuthority.accepted)
+    || canonicalDigest(control.control.acceptedAuthority)
+      !== canonicalDigest(control.authorityBinding.acceptedBasis)
     || !acceptedAuthorityGenerationValid(control.control.acceptedAuthority)
     || attemptGroup.invocationRef !== control.invocationRef
     || historyGroup.invocationRef !== control.invocationRef
@@ -321,6 +336,7 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
       }`,
     )
   ) throw new Error('dynamic_published_snapshot_semantics_invalid')
+  return snapshot
 }
 
 function paymentAttemptsValid(
@@ -365,7 +381,6 @@ function paymentAttemptsValid(
       && paymentAttempt.challengeDigest === expectedChallengeDigest
       && durableAttempts.has(key)
   })
-  if (!paymentRowsValid) return false
   const paymentAttemptsByKey = new Map(paymentAttempts.map((attempt) => [
     `${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
     attempt,
@@ -388,7 +403,8 @@ function paymentAttemptsValid(
           && event.authorizationDigest === paymentAttempt.authorizationDigest
         : paymentAttempt === undefined)
   })
-  return eventsValid
+  return paymentRowsValid
+    && eventsValid
     && eventKeys.size === expectedReleasedKeys.size
     && [...expectedReleasedKeys].every((key) => eventKeys.has(key))
 }
@@ -474,13 +490,13 @@ function semanticClaimValid(
         && claim.outcome?.observedResolution.state === 'returned'
         && observedResolution.state === 'returned'
         && canonicalDigest(
-          claim.outcome.observedResolution.result as unknown as StableHashValue,
-        ) === canonicalDigest(observedResolution.result as unknown as StableHashValue)
+          claim.outcome.observedResolution.result,
+        ) === canonicalDigest(observedResolution.result)
       || claim.status === 'uncertain'
         && claim.outcome?.observedResolution.state !== 'returned'
         && observedResolution.state !== 'returned')
-    && canonicalDigest((claim.outcome?.resultIdentity ?? null) as unknown as StableHashValue)
-      === canonicalDigest((resultIdentity ?? null) as unknown as StableHashValue)
+    && canonicalDigest(claim.outcome?.resultIdentity ?? null)
+      === canonicalDigest(resultIdentity ?? null)
 }
 
 function historyValid(
@@ -530,11 +546,12 @@ function historyValid(
   }
   if (attempts.length !== 1) return false
   const transition = history.at(-1)?.attemptTransition
-  const attempt = attempts[0]!
+  const attempt = attempts[0]
+  if (attempt === undefined) return false
   if (transition === undefined
     || transition.attemptRef !== attempt.attemptRef
     || transition.effectGeneration !== attempt.effectGeneration
-    || transition.nextDigest !== canonicalDigest(attempt as unknown as StableHashValue)
+    || transition.nextDigest !== canonicalDigest(attempt)
     || transition.nextReleaseState !== attempt.release.state
     || transition.nextOutcomeState !== attempt.outcome.state
     || transition.priorReleaseState !== 'not_released'
@@ -544,7 +561,7 @@ function historyValid(
     release: { state: 'not_released' as const },
     outcome: { state: 'running' as const },
   }
-  return transition.priorDigest === canonicalDigest(priorAttempt as unknown as StableHashValue)
+  return transition.priorDigest === canonicalDigest(priorAttempt)
 }
 
 function commandsValid(
@@ -614,14 +631,15 @@ function inputStateValid(
   const history = snapshot.inputHistory?.filter((row) => row.invocationRef === invocationRef) ?? []
   if (work.length > 1) return false
   if (work.length === 0) return history.length === 0
-  const current = work[0]!
+  const current = work[0]
+  if (current === undefined) return false
   if (current.invocationVersion > currentVersion
-    || canonicalDigest(current.owner as unknown as StableHashValue)
-      !== canonicalDigest(actor as unknown as StableHashValue)
-    || canonicalDigest(current.origin as unknown as StableHashValue)
-      !== canonicalDigest(origin as unknown as StableHashValue)
-    || canonicalDigest(current.knownInput as unknown as StableHashValue)
-      !== canonicalDigest(source.input.input as unknown as StableHashValue)
+    || canonicalDigest(current.owner)
+      !== canonicalDigest(actor)
+    || canonicalDigest(current.origin)
+      !== canonicalDigest(origin)
+    || canonicalDigest(current.knownInput)
+      !== canonicalDigest(source.input.input)
     || current.missingFields.some((field) => !current.requiredFields.includes(field))
     || current.askedFields.some((field) => !current.requiredFields.includes(field))) return false
   let priorVersion = 0
@@ -648,16 +666,9 @@ function resultIdentityValid(
     && identity.sourceResultRef === control.sourceResultRef
     && identity.sourceResultRef === expectedSourceResultRef
     && identity.resultDigest === control.sourceResultDigest
-    && identity.resultDigest
-      === canonicalDigest(source.observedResolution.result as unknown as StableHashValue)
+    && identity.resultDigest === canonicalDigest(source.observedResolution.result)
     && (expectedChallengeDigest === undefined
       || source.observedResolution.result.paymentChallengeDigest === expectedChallengeDigest)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => key in value)
-}

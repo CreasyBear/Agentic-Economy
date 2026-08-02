@@ -1,6 +1,5 @@
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import {
   admitRegisteredTransport,
@@ -12,6 +11,7 @@ import {
 import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
+  type RuntimePublishedOperationDescriptor,
 } from './published-operation'
 import type { SuppliedCandidateQualification } from './server'
 
@@ -27,7 +27,12 @@ const expectedPayment = {
 const claimCeiling =
   'Fixture and labelled local development evidence only; no execution or host parity, no hosted route, independent provider, settlement, fulfilment, production safety, or customer value.'
 
-export const developmentPublishedEndpointCards = [
+function requirePublishedFixture<T>(value: T | undefined, errorCode: string): T {
+  if (value === undefined) throw new Error(errorCode)
+  return value
+}
+
+const developmentPublishedEndpointCards = [
   { method: 'GET', path: endpointPath, summary: 'Latest cryptocurrency quotes' },
   { method: 'GET', path: '/x402/v3/cryptocurrency/map', summary: 'Cryptocurrency identifiers' },
   { method: 'GET', path: '/x402/v3/fiat/map', summary: 'Fiat currency identifiers' },
@@ -215,12 +220,16 @@ export function buildDevelopmentPublishedOperationEvidence() {
       },
     ],
   }
+  const publicationSource = requirePublishedFixture(
+    qualification.sources[0],
+    'published_operation_source_missing',
+  )
   const operation = materializePublishedOperation({
     publication: {
       publicationRef: qualification.candidate.publicationRef,
       revision: qualification.candidate.revision,
       businessId: qualification.candidate.businessId,
-      sourceDigest: qualification.sources[0]!.digest,
+      sourceDigest: publicationSource.digest,
       readinessObservedAt: observedAt,
       readinessValidUntil: validUntil,
       readinessEvidenceRefs: ['mock:evidence:fresh-402'],
@@ -249,7 +258,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
         publicationRef: qualification.candidate.publicationRef,
         revision: qualification.candidate.revision,
         businessId: qualification.candidate.businessId,
-        sourceDigest: qualification.sources[0]!.digest,
+        sourceDigest: publicationSource.digest,
         readinessObservedAt: observedAt,
         readinessValidUntil: validUntil,
         readinessEvidenceRefs: ['mock:evidence:fresh-402'],
@@ -268,6 +277,18 @@ export function buildDevelopmentPublishedOperationEvidence() {
     claimCeiling,
   }
 }
+export function projectDevelopmentPublishedOperationEvidence<
+  T extends { readonly descriptor: RuntimePublishedOperationDescriptor },
+>(fixture: T) {
+  const { descriptor, ...material } = fixture
+  const {
+    validateInput: _validateInput,
+    validateOutput: _validateOutput,
+    ...serializableDescriptor
+  } = descriptor
+  return { ...material, descriptor: serializableDescriptor }
+}
+
 
 export function verifyDevelopmentPublishedOperationEvidence(
   packet: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>,
@@ -281,8 +302,8 @@ export function verifyDevelopmentPublishedOperationEvidence(
   const descriptor = materializeRuntimePublishedOperation(rebuilt)
   const expectedDiscoveryDigest = canonicalDigest(developmentPublishedEndpointCards)
   const actualDiscoveryDigest = canonicalDigest(packet.discovery)
-  const operationDigest = canonicalDigest(packet.operation as unknown as StableHashValue)
-  const rebuiltDigest = canonicalDigest(rebuilt as unknown as StableHashValue)
+  const operationDigest = canonicalDigest(packet.operation)
+  const rebuiltDigest = canonicalDigest(rebuilt)
   const descriptorDigest = runtimeDescriptorDigest(packet.descriptor)
   const rebuiltDescriptorDigest = runtimeDescriptorDigest(descriptor)
   if (packet.discovery.length !== 5
@@ -300,7 +321,7 @@ export function verifyDevelopmentPublishedOperationEvidence(
     || packet.operation.identity.payment.payTo !== expectedPayment.payTo
     || packet.operation.identity.payment.currency !== expectedPayment.currency
     || packet.operation.transport.configDigest
-      !== canonicalDigest(JSON.parse(packet.operation.transport.configJson) as StableHashValue)
+      !== canonicalDigest(JSON.parse(packet.operation.transport.configJson))
     || packet.readinessObservation.status !== 402
     || packet.readinessObservation.observedAt !== observedAt
     || packet.readinessObservation.validUntil !== validUntil
@@ -342,5 +363,5 @@ function runtimeDescriptorDigest(
     safeContinuations: descriptor.safeContinuations,
     price: descriptor.price,
     target: descriptor.target,
-  } as StableHashValue)
+  })
 }

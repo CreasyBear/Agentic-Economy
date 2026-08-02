@@ -56,7 +56,10 @@ export {
   type AnswerMessagePart,
   type AnswerMessagePartsResult,
 } from './internal/build-message-parts'
-export { buildCompactFollowUpProse } from './internal/follow-up-compact-prose'
+export {
+  buildCompactFollowUpProse,
+  buildProviderDecisionOneLine,
+} from './internal/follow-up-compact-prose'
 export {
   validateCatalogGrounding,
   collectAllowedSlugsFromToolResults,
@@ -122,11 +125,8 @@ export {
   buildAgentJsonUrl,
   buildDetailUrl,
   type AnswerEvent,
-  type EnginePlanStreamEvent,
-  type DecisionMapStreamEvent,
   type AnswerSnapshot,
   type AnswerSource,
-  type AnswerSynthesizer,
   type AnswerSynthesizerInput,
   type AnswerWorkStep,
   type AnswerWorkStepDetailRow,
@@ -134,4 +134,12 @@ export {
   type AnswerWorkStepStatus,
 } from './answer-synthesizer'
 
-export { encodeAnswerId, decodeAnswerId } from './answer-id'
+export {
+  ANSWER_TURN_DATA_PART,
+  isAbortError,
+  readAnswerTurnFrames,
+  type AnswerTurnDataParts,
+  type AnswerTurnFrame,
+  type AnswerTurnUIMessage,
+} from './answer-ui-stream'
+

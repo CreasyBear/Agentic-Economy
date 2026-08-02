@@ -2,15 +2,19 @@ import { claimBusiness, createEmptyBusinessSourceState, validateOwnerPublishedPh
 import type { BusinessMutationActor } from '@/modules/business/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { CorrelationId, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
-import { buildPublicCatalogDto, createEmptyCatalogSourceState } from './catalog-model'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { matchingCsrf } from '@/modules/common/matching-csrf'
+import { buildOfferingSupplyProjection, createEmptyCatalogSourceState } from './catalog-model'
 import { publishBusinessCatalog } from './publish'
 import type {
   FirstRequestMode,
-  PublicCatalogContract,
   PublicFirstRequestChannel,
   PublishBusinessCatalogState,
   ServiceCatalogInput,
 } from './catalog-model'
+import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 const PublicOwnerClaimFieldValues = [
   'businessName',
@@ -73,7 +77,7 @@ export type PublicOwnerUnavailableCapability = {
 export type PublicOwnerStatusReadback = {
   publicUrl: string
   noindex: true
-  catalog: PublicCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
   unavailableCapabilities: readonly PublicOwnerUnavailableCapability[]
   nextAction: string
 }
@@ -82,7 +86,7 @@ export type PublicOwnerClaimFlowResult =
   | {
       kind: 'ok'
       code: 'claim_flow_published'
-      catalog: PublicCatalogContract
+      catalog: PublicBusinessCatalogApiV2Dto
       readback: PublicOwnerStatusReadback
     }
   | {
@@ -96,7 +100,7 @@ export type PublicOwnerClaimFlowResult =
 export type PublicBusinessPageNotFoundReason = 'not_public' | 'no_such_business'
 
 export type PublicBusinessPageReadbackResult =
-  | { kind: 'available'; catalog: PublicCatalogContract }
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
 
 export const publicOwnerDefaultClaimInput = {
@@ -251,13 +255,6 @@ function submitPublicOwnerClaimFlowWithState(
     },
     security: {
       csrf: matchingCsrf('claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `owner-ui:${validation.input.requestedSlug}`,
-        now: 1_000,
-        limit: 5,
-        windowMs: 60_000,
-      },
     },
     operationKey: operationKey(`claim:${slug}`),
     correlationId: correlationId(`claim:${slug}`),
@@ -323,7 +320,7 @@ export function getPublicBusinessPageReadback(slug: string): PublicBusinessPageR
   return { kind: 'available', catalog: readback.catalog }
 }
 
-export function buildPublicOwnerStatusReadback(catalog: PublicCatalogContract): PublicOwnerStatusReadback {
+export function buildPublicOwnerStatusReadback(catalog: PublicBusinessCatalogApiV2Dto): PublicOwnerStatusReadback {
   return {
     publicUrl: `/${catalog.slug}`,
     noindex: true,
@@ -357,7 +354,7 @@ function createPublicOwnerFlowState(): PublishBusinessCatalogState {
   }
 }
 
-function readPublicOwnerRouteCatalogBySlug(slug: string): PublicCatalogContract | undefined {
+function readPublicOwnerRouteCatalogBySlug(slug: string): PublicBusinessCatalogApiV2Dto | undefined {
   const normalizedSlug = normalizeSlug(slug)
   const business = publicOwnerRouteState.businesses.find(
     (candidate) => candidate.slug === normalizedSlug && candidate.publicStatus === 'published'
@@ -371,19 +368,22 @@ function readPublicOwnerRouteCatalogBySlug(slug: string): PublicCatalogContract 
     return undefined
   }
 
-  const catalog = buildPublicCatalogDto({
+  const projection = buildOfferingSupplyProjection({
     business,
     context,
-    services: publicOwnerRouteState.businessServices.filter((service) => service.businessId === business.businessId),
-    capabilities: publicOwnerRouteState.serviceCapabilities.filter((capability) => capability.businessId === business.businessId),
+    offerings: publicOwnerRouteState.offerings.filter((offering) => offering.businessId === business.businessId),
+    revisions: publicOwnerRouteState.revisions.filter((revision) => revision.businessId === business.businessId),
+    accessPaths: publicOwnerRouteState.accessPaths.filter((path) => path.businessId === business.businessId),
     indexStatus: 'queued',
     discoveryStatus: 'degraded',
   })
-
-  return catalog.kind === 'available' ? catalog.catalog : undefined
+  return projection === undefined ? undefined : projectBusinessSupplyToPublicApi(projection)
 }
 
-function toServiceCatalogInput(input: PublicOwnerClaimFlowInput): ServiceCatalogInput {
+export function toServiceCatalogInput(
+  input: PublicOwnerClaimFlowInput,
+  options: Readonly<{ omitBlankDisclosure?: boolean }> = {},
+): ServiceCatalogInput {
   return {
     name: input.serviceName,
     category: input.serviceCategory,
@@ -395,7 +395,9 @@ function toServiceCatalogInput(input: PublicOwnerClaimFlowInput): ServiceCatalog
         ? {
             mode: input.firstRequestMode,
             publicChannel: 'not_available',
-            publicDisclosure: input.publicDisclosure,
+            ...(options.omitBlankDisclosure === true && input.publicDisclosure.trim().length === 0
+              ? {}
+              : { publicDisclosure: input.publicDisclosure }),
             noContactReason: input.noContactReason,
           }
         : {
@@ -413,12 +415,12 @@ function publicChannelFor(mode: Exclude<FirstRequestMode, 'not_available_yet'>):
   return mode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact'
 }
 
-function ownerNextAction(catalog: PublicCatalogContract): string {
-  if (catalog.indexStatus === 'failed' || catalog.indexStatus === 'stale') {
+function ownerNextAction(catalog: PublicBusinessCatalogApiV2Dto): string {
+  if (catalog.disposition === 'stale') {
     return 'Review search status before sharing widely.'
   }
 
-  if (catalog.discoveryStatus === 'degraded' || catalog.discoveryStatus === 'stale') {
+  if (catalog.disposition === 'partial') {
     return 'Share the public page while assistant-ready data catches up.'
   }
 
@@ -452,17 +454,10 @@ function cleanText(value: string): string {
   return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 280)
 }
 
-function normalizeSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72)
-}
 
 
 function sourceHash(value: string): SourceHash {
-  return brandNonEmpty(`hash:${value}`, 'SourceHash')
+  return canonicalDigest(value)
 }
 
 function operationKey(value: string): OperationKey {
@@ -473,13 +468,6 @@ function correlationId(value: string): CorrelationId {
   return brandNonEmpty(`corr:owner-ui:${value}`, 'CorrelationId')
 }
 
-function matchingCsrf(key: string) {
-  void key
-  return {
-    origin: 'https://ae.example',
-    allowedOrigins: ['https://ae.example'],
-  }
-}
 
 function parseClaimPhotos(photoUrl: string, businessName: string) {
   const url = photoUrl.trim()

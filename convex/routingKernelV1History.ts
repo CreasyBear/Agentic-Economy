@@ -117,7 +117,7 @@ export const read = query({
   returns: result,
   handler: async (ctx, args) => {
     const authority = await resolveAdminAuthority(
-      { db: ctx.db as never, auth: ctx.auth },
+      { db: ctx.db, auth: ctx.auth },
       'read_admin_readbacks',
     )
     if (authority.kind !== 'allowed') return { kind: 'authorization_denied' as const }

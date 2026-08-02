@@ -11,10 +11,11 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import type { CapabilityKind } from '@/modules/catalog/public'
 import type { ActionAgentIdentity, ActionSourceWriteRequest } from '@/modules/common/action'
 import { isRecord } from '@/modules/common/is-record'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import { resolvePublicRegistryInquiryTarget } from '@/modules/registry/registry.functions'
 import {
@@ -34,25 +35,21 @@ import {
   createLocalE2eInquiryServerBackend,
   type LocalE2eInquiryServerBackend,
 } from './internal/local-e2e-adapter'
+import {
+  buildSubmittedInquiryReceipt,
+  type SubmittedInquiryReceipt,
+} from './internal/submitted-receipt'
 
-const inquiryCapabilityKindSchema = z.enum([
-  'phone_inquiry',
-  'quote_request',
-  'emergency_callout_interest',
-  'ae_hosted_discovery',
-])
 
 export const publicInquirySubmitSchema = z.object({
   target: z.union([
     z.object({
       businessId: z.string(),
-      serviceId: z.string(),
-      capabilityKind: inquiryCapabilityKindSchema,
+      offeringRef: z.string(),
     }).strict(),
     z.object({
       businessSlug: z.string(),
-      serviceSlug: z.string(),
-      capabilityKind: inquiryCapabilityKindSchema,
+      offeringRef: z.string(),
     }).strict(),
   ]),
   body: z.string(),
@@ -80,8 +77,7 @@ const customerRecordSchema = z.object({
 
 export const ownerTargetAdmissionSchema = z.object({
   businessId: z.string().trim().min(1),
-  serviceId: z.string().trim().min(1),
-  capabilityKind: inquiryCapabilityKindSchema,
+  offeringRef: z.string().trim().min(1),
 }).strict()
 
 export const publicTargetAdmissionSchema = ownerTargetAdmissionSchema
@@ -107,14 +103,12 @@ const ownerVersionedSchema = ownerThreadSchema.extend({
 type PublicInquirySubmitArgs = {
   target: {
     businessId: string
-    serviceId: string
-    capabilityKind: CapabilityKind
+    offeringRef: string
   }
   body: string
   contact: PublicInquiryContactInput
   expectedDigest: string
   pseudonymousSessionId: string
-  abuseBucketKey: string
   operationKey: string
   correlationId: string
   inquiryOrigin?: {
@@ -150,7 +144,7 @@ type ConvexPublicInquirySubmitResult =
       thread: {
         threadId: string
         businessId: string
-        serviceId: string
+        offeringRef: string
         status: InquiryThreadStatus
         version: number
         customerAccessKey: string
@@ -165,17 +159,7 @@ type ConvexPublicInquirySubmitResult =
 export type PublicInquirySubmitServerResult =
   | {
       kind: 'ok'
-      code: 'inquiry_submitted' | 'inquiry_replayed'
-      receipt: {
-        threadId: string
-        businessId: string
-        serviceId: string
-        status: InquiryThreadStatus
-        version: number
-        notificationId: string
-        notificationStatus: InquiryNotificationStatus
-        accessKey: string
-      }
+      receipt: SubmittedInquiryReceipt
     }
   | ServerErrorResult
 
@@ -460,7 +444,6 @@ function createSourceInquiryServerBackend(): InquiryServerBackend {
           expectedDigest: data.expectedDigest,
           ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
           pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
-          abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
           ...(await browserMutationAdmission(context, 'public_inquiry', operationKey, correlationId)),
         })
 
@@ -471,16 +454,11 @@ function createSourceInquiryServerBackend(): InquiryServerBackend {
         return {
           kind: 'ok',
           code: result.code,
-          receipt: {
-            threadId: result.thread.threadId,
-            businessId: result.thread.businessId,
-            serviceId: result.thread.serviceId,
-            status: result.thread.status,
-            version: result.thread.version,
-            notificationId: result.notification.notificationId,
-            notificationStatus: result.notification.status,
+          receipt: buildSubmittedInquiryReceipt({
+            thread: result.thread,
+            notification: result.notification,
             accessKey: result.thread.customerAccessKey,
-          },
+          }),
         }
       } catch (error) {
         return inquirySourceError(error)
@@ -699,15 +677,14 @@ async function resolvePublicInquiryTarget(
       kind: 'ok',
       target: {
         businessId: target.businessId,
-        serviceId: target.serviceId,
-        capabilityKind: target.capabilityKind,
+        offeringRef: target.offeringRef,
       },
     }
   }
 
   const resolution = await resolvePublicRegistryInquiryTarget({
     businessSlug: target.businessSlug,
-    serviceSlug: target.serviceSlug,
+    offeringRef: target.offeringRef,
   })
   if (resolution.kind === 'not_found') {
     return {
@@ -722,8 +699,7 @@ async function resolvePublicInquiryTarget(
     kind: 'ok',
     target: {
       businessId: resolution.businessId,
-      serviceId: resolution.serviceId,
-      capabilityKind: target.capabilityKind,
+      offeringRef: resolution.offeringRef,
     },
   }
 }
@@ -832,7 +808,7 @@ function resolvePublicInquiryOperationSuffix(
 
   return [
     normalizeOperationPart(target.businessId),
-    normalizeOperationPart(target.serviceId),
+    normalizeOperationPart(target.offeringRef),
     'agent',
     normalizeOperationPart(agentIdentity.signatureAgent),
     normalizeOperationPart(agentIdentity.keyid),
@@ -879,8 +855,7 @@ function actionSourceWriteRequestFromContext(context: unknown): ActionSourceWrit
 
 
 function normalizeOperationPart(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
-  return normalized.length === 0 ? 'inquiry' : normalized
+  return normalizeSlug(value) || 'inquiry'
 }
 
 
@@ -899,7 +874,7 @@ async function browserMutationAdmission(
   correlationId: string
 ) {
   return {
-    origin: requestOrigin(),
+    origin: resolveCanonicalBaseUrl().baseUrl,
     sourceWrite: await sourceWriteAdmissionFromContext({
       context,
       scope,
@@ -911,11 +886,4 @@ async function browserMutationAdmission(
   }
 }
 
-function requestOrigin(): string {
-  return readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL') ?? 'https://ae.example'
-}
 
-function readEnv(name: string): string | undefined {
-  const value = process.env[name]
-  return value === undefined || value.trim().length === 0 ? undefined : value.trim()
-}

@@ -9,7 +9,7 @@ export const Route = createFileRoute('/for-providers')({
   head: () => ({
     meta: [
       { title: 'Get your service in front of AI assistants | Agentic Economy' },
-      { name: 'description', content: 'Publish what you do once, set your price, test it, go live, and earn when agents bring you work.' },
+      { name: 'description', content: 'Publish what you do once, set the terms assistants can review, test it, go live, and prepare for paid work when agents bring you work after payment support is enabled.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),

@@ -3,7 +3,7 @@ import type { CustomerCriterion } from '@/modules/customer-request/customer-proj
 
 /**
  * Structural aggregate for projections — accepts domain aggregates and Convex
- * Infer aggregates without `as unknown as` at each call site.
+ * Call sites infer aggregate shapes through this shared structural contract.
  */
 export type ProjectableCustomerRequestAggregate = Readonly<{
   snapshot: Readonly<{

@@ -1,6 +1,7 @@
 import type { CapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 import type { CapabilityBindingRow } from '../binding'
 import { bindingIntegrityIsValid } from '../binding'
@@ -117,7 +118,7 @@ export async function queryCapabilityGraph(
   }
   const now = args.now ?? Date.now()
   const nodes: CapabilityGraphNode[] = []
-  for (const publication of [...publications].sort((left, right) => (
+  for (const publication of publications.toSorted((left, right) => (
     left.publicationRef.localeCompare(right.publicationRef)
   ))) {
     const offering = await ports.loadOfferingByOfferingId(publication.offeringId)
@@ -219,12 +220,12 @@ function projectGraphNode(input: Readonly<{
         && publication.readinessValidUntil < now,
     },
     routability: { eligible: lifecycle.state === 'active', reasons: lifecycle.reasons },
-    evidenceRefs: [...new Set([
+    evidenceRefs: uniqueSorted([
       ...publication.registrationEvidenceRefs,
       ...publication.readinessEvidenceRefs,
       ...offering.registrationEvidenceRefs,
       ...binding.registrationEvidenceRefs,
-    ])].sort(),
+    ]),
   }
 }
 

@@ -17,7 +17,6 @@ import {
   type StructuredInvocationTaskProjection,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   attachCompletedTaskReference,
   type AttachCompletedTaskReferencePorts,
@@ -35,8 +34,28 @@ import {
   developmentSuccessRuntime,
   type DevelopmentEffectCounts,
 } from './development-host-scenario-runtime'
+import type { RouteTransportRuntime } from './route-transport-runtime'
 
 type Fixture = ReturnType<typeof buildDevelopmentPublishedOperationEvidence>
+function requireFirst<T>(values: readonly T[], error: string): T {
+  const value = values[0]
+  if (value === undefined) throw new Error(error)
+  return value
+}
+
+function requireDefined<T>(value: T | undefined, error: string): T {
+  if (value === undefined) throw new Error(error)
+  return value
+}
+
+type HostAuthority = Readonly<{ reference: string; expiresAt: string }>
+
+function requireAuthority(view: Readonly<{ authority?: HostAuthority }>): HostAuthority {
+  const authority = view.authority
+  if (authority === undefined) throw new Error('host_authority_missing')
+  return authority
+}
+
 
 export type DevelopmentHostScenarioRecord = Readonly<{
   host: DevelopmentHostKind
@@ -185,7 +204,7 @@ function clarificationScenario(
   const gathering = context.host.begin({ symbol: 'BTC' })
   const rich = context.host.projectRich(gathering.invocationRef, gathering.invocationVersion)
   const structured = context.host.projectStructured(gathering.invocationRef, gathering.invocationVersion)
-  const gatheringSnapshot = JSON.parse(JSON.stringify(context.host.exportSnapshot()))
+  const gatheringSnapshot = context.host.exportSnapshot()
   const prepared = context.host.answer(
     gathering.invocationRef,
     { convert: 'USD' },
@@ -215,10 +234,11 @@ async function correctionScenario(
   const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
   const accepted = context.host.decide(prepared.invocationRef, true)
   if (accepted.kind !== 'accepted') throw new Error(`correction_initial_decision:${accepted.code}`)
-  const presentationBefore = canonicalDigest(context.host.exportSnapshot() as unknown as StableHashValue)
+  const preparedAuthority = requireAuthority(prepared)
+  const presentationBefore = canonicalDigest(context.host.exportSnapshot())
   const presentationPreference = { density: 'compact' }
   void presentationPreference
-  const presentationAfter = canonicalDigest(context.host.exportSnapshot() as unknown as StableHashValue)
+  const presentationAfter = canonicalDigest(context.host.exportSnapshot())
   const corrected = context.host.correct(
     prepared.invocationRef,
     { symbol: 'BTC' },
@@ -231,7 +251,7 @@ async function correctionScenario(
   const staleDecision = context.adapter.decide({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: accepted.view.invocationVersion,
-    authorityRef: prepared.authority!.reference,
+    authorityRef: preparedAuthority.reference,
     actor: context.actor,
     origin: context.host.origin,
     accept: true,
@@ -239,7 +259,7 @@ async function correctionScenario(
   const staleExecution = context.adapter.acquire({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: accepted.view.invocationVersion,
-    authorityRef: prepared.authority!.reference,
+    authorityRef: preparedAuthority.reference,
     actor: context.actor,
     origin: context.host.origin,
     leaseOwner: 'attacker:stale',
@@ -259,12 +279,12 @@ async function correctionScenario(
     corrected.view.invocationRef,
     corrected.view.invocationVersion,
   )
-  const projectionSnapshot = JSON.parse(JSON.stringify(context.host.exportSnapshot()))
+  const projectionSnapshot = context.host.exportSnapshot()
   const fresh = context.host.decide(corrected.view.invocationRef, true)
   if (fresh.kind !== 'accepted') throw new Error(`correction_fresh_decision:${fresh.code}`)
   const completed = await context.host.continue(corrected.view.invocationRef)
   if (completed.kind !== 'completed') throw new Error(`correction_execution:${continuationCode(completed)}`)
-  const source = context.host.exportSnapshot().sourceRows[0]!
+  const source = requireFirst(context.host.exportSnapshot().sourceRows, 'correction_source_missing')
   const terminalCorrection = context.host.correct(
     corrected.view.invocationRef,
     { symbol: 'SOL' },
@@ -300,8 +320,8 @@ async function correctionScenario(
     invocationRef: corrected.view.invocationRef,
     oldVersion: accepted.view.invocationVersion,
     newVersion: corrected.view.invocationVersion,
-    oldAuthorityRef: prepared.authority!.reference,
-    newAuthorityRef: corrected.view.authority.reference,
+    oldAuthorityRef: preparedAuthority.reference,
+    newAuthorityRef: requireAuthority(corrected.view).reference,
     staleAuthorityDecision: staleDecision.kind === 'refused' ? staleDecision.code : staleDecision.kind,
     staleExecution: staleExecution.kind === 'refused' ? staleExecution.code : staleExecution.kind,
     staleProjection,
@@ -314,19 +334,19 @@ async function correctionScenario(
     releasedCorrection: {
       state: released.view.control.state,
       refusal: releasedRefusal.kind === 'refused' ? releasedRefusal.code : releasedRefusal.kind,
-      snapshotUnchanged: canonicalDigest(releasedBefore as unknown as StableHashValue)
-        === canonicalDigest(releasedAfter as unknown as StableHashValue),
+      snapshotUnchanged: canonicalDigest(releasedBefore)
+        === canonicalDigest(releasedAfter),
       authorityUnchanged: canonicalDigest(
-        releasedBefore.controls[0]?.authorityBinding as unknown as StableHashValue,
+        releasedBefore.controls[0]?.authorityBinding,
       ) === canonicalDigest(
-        releasedAfter.controls[0]?.authorityBinding as unknown as StableHashValue,
+        releasedAfter.controls[0]?.authorityBinding,
       ),
       historyUnchanged: canonicalDigest(
-        releasedBefore.history as unknown as StableHashValue,
-      ) === canonicalDigest(releasedAfter.history as unknown as StableHashValue),
+        releasedBefore.history,
+      ) === canonicalDigest(releasedAfter.history),
       effectsUnchanged: canonicalDigest(
-        releasedEffectsBefore as unknown as StableHashValue,
-      ) === canonicalDigest(releasedContext.effects as unknown as StableHashValue),
+        releasedEffectsBefore,
+      ) === canonicalDigest(releasedContext.effects),
     },
     effects: { ...context.effects },
     rich,
@@ -358,7 +378,7 @@ async function timeoutScenario(
   const retry = await context.host.continue(prepared.invocationRef)
   const attempt = timedOut.view.attempts.at(-1)
   return {
-    ...outcome(prepared.invocationRef, prepared.authority!.reference, timedOut.view, context),
+    ...outcome(prepared.invocationRef, requireAuthority(prepared).reference, timedOut.view, context),
     retryBeforeReconcile: retry.kind === 'refused' ? retry.code : retry.kind,
     releaseClassification: attempt?.release.state ?? 'missing',
   }
@@ -383,7 +403,7 @@ async function releasedRefusalScenario(
   }
   const retry = await context.host.continue(prepared.invocationRef)
   return {
-    ...outcome(prepared.invocationRef, prepared.authority!.reference, refused.view, context),
+    ...outcome(prepared.invocationRef, requireAuthority(prepared).reference, refused.view, context),
     retryPosture: retry.kind === 'refused' ? retry.code : retry.kind,
   }
 }
@@ -427,7 +447,7 @@ async function successScenario(fixture: Fixture, hostKind: DevelopmentHostKind) 
   const cancellation = context.host.requestCancellation(prepared.invocationRef)
   return {
     context,
-    outcome: outcome(prepared.invocationRef, prepared.authority!.reference, completed.view, context),
+    outcome: outcome(prepared.invocationRef, requireAuthority(prepared).reference, completed.view, context),
     staleFences: {
       duplicate: duplicate.kind === 'refused' ? duplicate.code : duplicate.kind,
       staleVersion: staleVersionCode,
@@ -463,7 +483,7 @@ async function refusalScenario(
   }
   const result = await context.host.continue(prepared.invocationRef)
   if (result.kind !== 'completed') throw new Error(`host_refusal_execute:${continuationCode(result)}`)
-  return outcome(prepared.invocationRef, prepared.authority!.reference, result.view, context)
+  return outcome(prepared.invocationRef, requireAuthority(prepared).reference, result.view, context)
 }
 
 async function uncertaintyScenario(
@@ -481,7 +501,7 @@ async function uncertaintyScenario(
   const reconciled = context.host.recover(prepared.invocationRef)
   if (reconciled.kind !== 'reconciled') throw new Error(`host_reconcile:${continuationCode(reconciled)}`)
   return {
-    ...outcome(prepared.invocationRef, prepared.authority!.reference, uncertain.view, context),
+    ...outcome(prepared.invocationRef, requireAuthority(prepared).reference, uncertain.view, context),
     snapshot: uncertainSnapshot,
     retryBeforeReconcile: retry.kind === 'refused' ? retry.code : retry.kind,
     reconciledState: reconciled.view.control.state,
@@ -515,13 +535,16 @@ async function coldResumeScenario(
     if (!(error instanceof Error)
       || error.message !== 'development_process_interrupted_after_lease') throw error
   }
-  const interrupted = context.host.inspect(prepared.invocationRef)!
-  const snapshot = JSON.parse(JSON.stringify(context.host.exportSnapshot()))
+  const interrupted = requireDefined(
+    context.host.inspect(prepared.invocationRef),
+    'host_interrupted_view_missing',
+  )
+  const snapshot = context.host.exportSnapshot()
   const loaded = loadDynamicPublishedAdapterSnapshot(snapshot, anchors(
     fixture,
     context.actor,
     context.host.origin,
-    prepared.authority!.reference,
+    requireAuthority(prepared).reference,
     prepared.invocationRef,
     1,
   ))
@@ -552,7 +575,7 @@ async function coldResumeScenario(
   const resumed = await coldHost.continue(prepared.invocationRef)
   if (resumed.kind !== 'completed') throw new Error(`host_cold_resume:${continuationCode(resumed)}`)
   return {
-    ...outcome(prepared.invocationRef, prepared.authority!.reference, resumed.view, {
+    ...outcome(prepared.invocationRef, requireAuthority(prepared).reference, resumed.view, {
       ...context,
       host: coldHost,
     }),
@@ -614,8 +637,8 @@ function completedResultReuse(
       && replayed.kind === 'replayed' && replayed.noEffect,
     referencePayloadAuthorityFree: referencePayload !== undefined
       && !/authority|attempt|lease|mandate|generation/iu.test(JSON.stringify(referencePayload)),
-    controlSnapshotUnchanged: canonicalDigest(controlBefore as unknown as StableHashValue)
-      === canonicalDigest(controlAfter as unknown as StableHashValue),
+    controlSnapshotUnchanged: canonicalDigest(controlBefore)
+      === canonicalDigest(controlAfter),
     authorityRecordCountBefore: controlBefore.controls.filter(
       (row) => row.authorityBinding !== undefined,
     ).length,
@@ -635,7 +658,7 @@ function createScenario(
   runtime: (
     endpoint: string,
     effects: DevelopmentEffectCounts,
-  ) => ReturnType<typeof developmentSuccessRuntime>,
+  ) => RouteTransportRuntime,
   beforeExecute?: DevelopmentHostSourceCommands['beforeExecute'],
   developmentTimeoutSignal?: ReturnType<typeof createDevelopmentTimeoutSignal>['signal'],
 ) {
@@ -699,9 +722,10 @@ function sourceCommands(
         source: `published-operation:${fixture.operation.operationId}`,
         invocationRef: view.invocationRef,
         attemptRef,
-        effectGeneration: view.attempts.find(
-          (attempt) => attempt.attemptRef === attemptRef,
-        )!.effectGeneration,
+        effectGeneration: requireDefined(
+          view.attempts.find((attempt) => attempt.attemptRef === attemptRef),
+          'host_reconciliation_attempt_missing',
+        ).effectGeneration,
         resolution: 'released' as const,
         observedAt: new Date(now).toISOString(),
       }

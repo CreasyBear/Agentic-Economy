@@ -56,5 +56,20 @@ export const updateOwnerNotificationPreferencesAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http'],
+  invocationContract: {
+    version: 'settings.updateNotificationPreferences:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['newInquiryEmailEnabled'],
+    authorityRequirement: 'owner',
+    retryClass: 'reconcile_before_retry',
+    expectedEvidence: ['owner notification preference update result'],
+    safeContinuations: ['inspect the returned owner preference state'],
+    invalidationConditions: [
+      'notification preference value changes',
+      'owner identity or authority changes',
+      'action contract version changes',
+    ],
+    developmentAttemptTimeoutMs: 30_000,
+  },
   run: async ({ data }) => updateOwnerNotificationPreferencesThroughSource(data),
 })

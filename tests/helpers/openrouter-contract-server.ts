@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { json } from 'node:stream/consumers'
 
 export type OpenRouterContractRequest = {
   messages: { role: string; content: string; tool_call_id?: string }[]
@@ -38,7 +39,7 @@ export async function startOpenRouterContractServer(
   const responseSource = responses
   const requests: OpenRouterContractRequest[] = []
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
-    const body = JSON.parse(await readRequestBody(request)) as OpenRouterContractRequest
+    const body = await json(request) as OpenRouterContractRequest
     requests.push(body)
     const responseIndex = requests.length - 1
     const payload = typeof responseSource === 'function'
@@ -127,19 +128,49 @@ export function openRouterProseResponse(
   }
 }
 
+/** A schema-valid final response for an AI SDK `Output.object` request. */
+export function openRouterStructuredProseResponse(
+  prose: OpenRouterProsePlan,
+  options: { id?: string; model?: string } = {},
+): unknown {
+  return openRouterProseResponse(prose, options)
+}
+
 export function openRouterToolThenProseResponses(input: {
   toolCalls?: readonly OpenRouterToolCallPlan[]
   prose: OpenRouterProsePlan
-}): readonly unknown[] {
+}): OpenRouterContractResponseSource {
   const toolCalls = input.toolCalls ?? []
-  if (toolCalls.length === 0) {
-    return [openRouterProseResponse(input.prose)]
+  return (request) => {
+    // Route on request SHAPE, never call index: multi-turn tests reuse one
+    // server and turns interleave discovery, tool, and structured requests.
+    if (request.response_format?.type !== 'json_schema') {
+      if (request.tools === undefined) {
+        // Tool-less, schema-less requests are web-discovery imports.
+        return {
+          id: 'chatcmpl-discovery-empty',
+          model: 'test-model',
+          choices: [{
+            finish_reason: 'stop',
+            message: { role: 'assistant', content: JSON.stringify({ businesses: [] }) },
+          }],
+        }
+      }
+      // An agent call carrying tools must also carry Output.object json_schema.
+      throw new Error('expected_structured_output_request')
+    }
+    if (request.tools !== undefined && toolCalls.length > 0) {
+      // Tool round: tools exposed, planned calls unserved on this step chain.
+      const hasToolResults = request.messages.some((message) => message.role === 'tool')
+      if (!hasToolResults) {
+        return openRouterToolResponse(toolCalls)
+      }
+      throw new Error('expected_tools_withheld_on_structured_round')
+    }
+    return openRouterStructuredProseResponse(input.prose)
   }
-  return [
-    openRouterToolResponse(toolCalls),
-    openRouterProseResponse(input.prose),
-  ]
 }
+
 
 function restoreEnv(name: string, previous: string | undefined): void {
   if (previous === undefined) {
@@ -149,10 +180,3 @@ function restoreEnv(name: string, previous: string | undefined): void {
   }
 }
 
-async function readRequestBody(request: IncomingMessage): Promise<string> {
-  let body = ''
-  for await (const chunk of request) {
-    body += String(chunk)
-  }
-  return body
-}

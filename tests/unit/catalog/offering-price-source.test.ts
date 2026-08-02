@@ -10,7 +10,6 @@ import {
 } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
-import { withoutNativeOnlyFacts } from '../../../convex/catalog'
 import { DEV_SEED_PRICE_BY_SLUG } from '../../../convex/devSeed'
 
 const businessId = brandNonEmpty('business:meridian', 'BusinessId')
@@ -121,25 +120,11 @@ describe('Offering facts cleaning', () => {
   })
 })
 
-describe('withoutNativeOnlyFacts', () => {
-  it('strips the price the retained v1 service row cannot hold', () => {
-    const revision = createdRevision({ kind: 'fixed', currency: 'AUD', amountMinor: 18_000, unit: 'visit', taxTreatment: 'inclusive' })
-
-    const legacyExpressible = withoutNativeOnlyFacts(revision)
-
-    // Comparing a native-only fact during cutover would demote the business to
-    // `compare`, where the legacy projection serves and the price disappears.
-    expect(legacyExpressible).not.toHaveProperty('price')
-    expect(legacyExpressible).not.toHaveProperty('pricingSummary')
-    expect(legacyExpressible.name).toBe('Burst pipe repair')
-    expect(legacyExpressible.sourceHash).toBe(revision.sourceHash)
-  })
-})
 
 describe('Dev seed prices', () => {
   it('publishes a structured twin for every seeded pricing sentence', () => {
     const pricedSlugs = DEV_SEED_BUSINESS_FIXTURES
-      .filter((fixture) => fixture.pricingSummary !== undefined)
+      .filter((fixture) => fixture.offerings.some((offering) => offering.pricingSummary !== undefined))
       .map((fixture) => fixture.requestedSlug)
 
     expect(pricedSlugs.length).toBeGreaterThan(0)

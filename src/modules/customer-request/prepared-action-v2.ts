@@ -12,6 +12,7 @@ import type {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { deepFreeze } from '@/modules/common/deep-freeze'
+import { readJsonPointer } from '@/modules/common/json-pointer'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { ActionPreparationLineage } from './action-preparation'
@@ -399,7 +400,7 @@ function compileLowestMaximumPrice(input: Readonly<{
   if (currency === undefined || prepared.some((option) => option.price.currency !== currency)) {
     return { kind: 'not_prepared', reason: 'comparison_unavailable' }
   }
-  const ordered = [...prepared].sort((left, right) => (
+  const ordered = prepared.toSorted((left, right) => (
     left.price.maximumAmountMinor - right.price.maximumAmountMinor
       || left.providerAssertion.assertionRef.localeCompare(right.providerAssertion.assertionRef)
   ))
@@ -561,26 +562,6 @@ function registeredPrice(candidate: PreparedActionOptionCandidate['offering']): 
   })
 }
 
-function readJsonPointer(document: JsonValue, pointer: string): JsonValue | undefined {
-  if (pointer === '') return document
-  if (!pointer.startsWith('/')) return undefined
-  let current: JsonValue = document
-  for (const raw of pointer.slice(1).split('/')) {
-    if (/(?:~[^01])|~$/u.test(raw)) return undefined
-    const token = raw.replace(/~1/gu, '/').replace(/~0/gu, '~')
-    if (Array.isArray(current)) {
-      if (!/^(?:0|[1-9][0-9]*)$/u.test(token)) return undefined
-      const next = current[Number(token)]
-      if (next === undefined) return undefined
-      current = next
-      continue
-    }
-    if (current === null || typeof current !== 'object') return undefined
-    if (!Object.prototype.hasOwnProperty.call(current, token)) return undefined
-    current = (current as Readonly<Record<string, JsonValue>>)[token] as JsonValue
-  }
-  return current
-}
 
 function sameLineage(left: ActionPreparationLineage, right: ActionPreparationLineage): boolean {
   return canonicalDigest(left as StableHashValue) === canonicalDigest(right as StableHashValue)

@@ -5,12 +5,7 @@ import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'),
-  load,
-]))
+import { convexModules as modules, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 describe('capability publication security', () => {
   it('refuses anonymous publication without persisting any publication state', async () => {
@@ -103,37 +98,6 @@ function publicationArgs(businessId: Id<'businesses'>, suffix: string) {
     reasonCode: 'business_capability_publication',
     evidenceRefs: ['test:capability-publication-security'],
   }
-}
-
-async function publishedBusinessOwner(backend: ReturnType<typeof convexTest>, slug: string) {
-  const identity = {
-    subject: `user_${slug}`,
-    issuer: 'https://identity.example',
-    tokenIdentifier: `token_${slug}`,
-  }
-  const businessId = await backend.run(async (ctx) => {
-    const ownerId = await ctx.db.insert('owners', {
-      clerkUserId: identity.subject,
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    return await ctx.db.insert('businesses', {
-      ownerId,
-      slug,
-      name: slug,
-      normalizedName: slug,
-      category: 'professional services',
-      suburb: 'Perth',
-      stateTerritory: 'WA',
-      publicStatus: 'published',
-      trustTier: 'listed',
-      claimStatus: 'published',
-      sourceHash: `source:${slug}`,
-      createdAt: 1,
-      updatedAt: 1,
-    })
-  }) as Id<'businesses'>
-  return { businessId, owner: backend.withIdentity(identity) }
 }
 
 async function publicationRows(backend: ReturnType<typeof convexTest>) {

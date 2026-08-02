@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
 
 describe('claimBusiness', () => {
@@ -53,7 +54,6 @@ describe('claimBusiness', () => {
     expect(state.businesses).toHaveLength(1)
     expect(state.claims).toHaveLength(1)
     expect(state.claimFingerprints).toHaveLength(1)
-    expect(state.abuseRateLimitBuckets).toHaveLength(1)
   })
 
   it.each(['(02) 1234 5678', '1300 123 456', '1800 123 456', '13 12 34'])(
@@ -95,7 +95,6 @@ describe('claimBusiness', () => {
       facts: validFacts(),
       security: {
         csrf: { allowedOrigins: ['https://ae.example'] },
-        rateLimit: rateLimit('csrf-missing'),
       },
       operationKey: brandNonEmpty('op:claim:csrf-missing', 'OperationKey'),
       correlationId: brandNonEmpty('corr:csrf-missing', 'CorrelationId'),
@@ -108,7 +107,6 @@ describe('claimBusiness', () => {
       facts: validFacts(),
       security: {
         csrf: { origin: 'https://evil.example', allowedOrigins: ['https://ae.example'] },
-        rateLimit: rateLimit('csrf-foreign'),
       },
       operationKey: brandNonEmpty('op:claim:csrf-foreign', 'OperationKey'),
       correlationId: brandNonEmpty('corr:csrf-foreign', 'CorrelationId'),
@@ -121,36 +119,6 @@ describe('claimBusiness', () => {
     expect(foreignState.businesses).toEqual([])
   })
 
-  it('accepts same-site origin and rate-limits repeated claim attempts through source state', () => {
-    const state = createEmptyBusinessSourceState()
-    const first = claimBusiness(state, {
-      actor: { kind: 'authenticated_owner', clerkUserId: 'user_limit' },
-      facts: validFacts(),
-      security: {
-        csrf: { origin: 'https://ae.example', allowedOrigins: ['https://ae.example'] },
-        rateLimit: { ...rateLimit('same-bucket'), limit: 1 },
-      },
-      operationKey: brandNonEmpty('op:claim:limited-first', 'OperationKey'),
-      correlationId: brandNonEmpty('corr:limited-first', 'CorrelationId'),
-      now: 10,
-    })
-
-    const second = claimBusiness(state, {
-      actor: { kind: 'authenticated_owner', clerkUserId: 'user_limit_2' },
-      facts: { ...validFacts(), name: 'Different Emergency Plumbing', requestedSlug: 'different-emergency-plumbing' },
-      security: {
-        csrf: { origin: 'https://ae.example', allowedOrigins: ['https://ae.example'] },
-        rateLimit: { ...rateLimit('same-bucket'), limit: 1 },
-      },
-      operationKey: brandNonEmpty('op:claim:limited-second', 'OperationKey'),
-      correlationId: brandNonEmpty('corr:limited-second', 'CorrelationId'),
-      now: 20,
-    })
-
-    expect(first).toMatchObject({ kind: 'ok', code: 'claim_created' })
-    expect(second).toMatchObject({ kind: 'error', code: 'claim_rate_limited', retryable: true })
-    expect(state.abuseRateLimitBuckets).toMatchObject([{ key: 'same-bucket', state: 'limited' }])
-  })
 
   it('allocates deterministic slug suffixes for non-duplicate slug collisions', () => {
     const state = createEmptyBusinessSourceState()
@@ -233,7 +201,7 @@ function validFacts() {
       {
         label: 'Owner supplied',
         evidenceRef: 'private:evidence:1',
-        sourceHash: brandNonEmpty('hash:source:1', 'SourceHash'),
+        sourceHash: canonicalDigest('source:1'),
       },
     ],
   }
@@ -246,16 +214,6 @@ function validSecurity(key: string) {
       csrfCookie: `csrf-${key}`,
       allowedOrigins: ['https://ae.example'],
     },
-    rateLimit: rateLimit(key),
   }
 }
 
-function rateLimit(key: string) {
-  return {
-    scope: 'claim_submit' as const,
-    key,
-    now: 1_000,
-    limit: 5,
-    windowMs: 60_000,
-  }
-}

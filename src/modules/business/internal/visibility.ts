@@ -1,4 +1,4 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { assertCsrf, requireAdminAuthority } from '@/modules/security/public'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
 import { recordInvalidationIntent, validateAuditEvent } from '@/modules/observability/public'
@@ -91,12 +91,6 @@ export function suppressBusiness(
     business.claimStatus = 'suppressed'
     business.suppressedAt = command.now
     business.updatedAt = command.now
-    for (const service of state.businessServices) {
-      if (service.businessId === business.businessId) {
-        service.status = 'suppressed'
-        service.updatedAt = command.now
-      }
-    }
   }
 
   const suppressionRule = ensureSuppressionRule(state, business, authority.membership.clerkUserId, reasonCode, {
@@ -208,12 +202,6 @@ export function unsuppressBusiness(
     business.updatedAt = command.now
     delete business.suppressedAt
 
-    for (const service of state.businessServices) {
-      if (service.businessId === business.businessId) {
-        service.status = activeRule.beforePublicStatus === 'published' ? 'published' : 'draft'
-        service.updatedAt = command.now
-      }
-    }
   }
 
   const auditEvent =
@@ -300,7 +288,7 @@ function createSuppressionAuditEvent(
     reasonCode,
     evidenceRefs: command.evidenceRefs,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: command.now,
   })
 
@@ -340,7 +328,7 @@ function createUnsuppressionAuditEvent(
     reasonCode,
     evidenceRefs: command.evidenceRefs,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: command.now,
   })
 

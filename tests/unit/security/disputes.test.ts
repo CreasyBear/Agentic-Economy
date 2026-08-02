@@ -73,34 +73,18 @@ describe('openRemovalDispute', () => {
     expect(state.auditEvents.map((event) => event.eventType)).toEqual(['dispute.opened', 'dispute.updated'])
   })
 
-  it('rejects missing CSRF, repeated abuse bucket attempts, missing contact, and invalid evidence', () => {
+  it('rejects missing CSRF, missing contact, and invalid evidence', () => {
     expect(
       openRemovalDispute(
         createEmptyDisputeSourceState(),
         validCommand({
           security: {
             csrf: { allowedOrigins: ['https://ae.example'] },
-            rateLimit: rateLimit('csrf'),
           },
         })
       )
     ).toMatchObject({ kind: 'error', code: 'dispute_csrf_rejected' })
 
-    const limitedState = createEmptyDisputeSourceState()
-    const first = openRemovalDispute(
-      limitedState,
-      validCommand({ security: { csrf: csrf('limit').csrf, rateLimit: { ...rateLimit('same-contact'), limit: 1 } } })
-    )
-    const second = openRemovalDispute(
-      limitedState,
-      validCommand({
-        operationKey: brandNonEmpty('op:dispute:limited:2', 'OperationKey'),
-        security: { csrf: csrf('limit').csrf, rateLimit: { ...rateLimit('same-contact'), limit: 1 } },
-      })
-    )
-
-    expect(first).toMatchObject({ kind: 'ok' })
-    expect(second).toMatchObject({ kind: 'error', code: 'dispute_rate_limited' })
 
     expect(openRemovalDispute(createEmptyDisputeSourceState(), validCommand({ contact: {} }))).toMatchObject({
       kind: 'error',
@@ -160,16 +144,6 @@ function csrf(key: string) {
       csrfCookie: `csrf-${key}`,
       allowedOrigins: ['https://ae.example'],
     },
-    rateLimit: rateLimit(key),
   }
 }
 
-function rateLimit(key: string) {
-  return {
-    scope: 'dispute_open' as const,
-    key,
-    now: 1_000,
-    limit: 5,
-    windowMs: 60_000,
-  }
-}

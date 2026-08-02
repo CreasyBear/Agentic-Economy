@@ -233,8 +233,6 @@ function adapterFixture() {
         text: async () => JSON.stringify({ ok: true }),
       }),
       resolveCredential: () => undefined,
-      x402PaymentSigningAvailable: () => false,
-      createX402PaymentSignature: async () => undefined,
     },
     now: () => fixture.operation.readiness.observedAt + 1_000,
     nextInvocationRef: () => `invocation:paid-service:${Math.random()}`,

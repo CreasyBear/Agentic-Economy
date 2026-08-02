@@ -14,7 +14,38 @@ code. Includes generation/revision fencing alignment with the frozen spine exit 
 
 ## Resolution
 
-(pending)
+**Locked 2026-08-01** under the founder's "keep moving forward" directive (2026-08-01) — decided by
+Main from the settled inputs below, executed immediately; founder veto is cheap until T33 cutover.
+
+Contract: `src/modules/work-tree/internal/contract.ts` (`ae.work-node:v1`, `ae.work-tree:v1`).
+
+- **Node**: `nodeId`, `kind: package|decision|task|study`, title/description, `parentId`
+  (Bundle-under-Customer-Request), directional `dependsOn` (Linear `blocks`), priority 0-4 (Linear
+  scale), `evidenceRefs`, `authorityRef`, optional `quote` {observedAt, expiresAt, revision,
+  evidenceClass} — freshness/evidence-class is the sanctioned hand-roll.
+- **Status**: `fog | queued | ready | studying | locked | done | cancelled` with an explicit
+  transition table (`WORK_NODE_STATUS_TRANSITIONS`). `done`/`cancelled` terminals added beyond the
+  ticket's five (execution needs terminals; Linear completed/canceled is the donor precedent).
+- **Five dimensions** (all optional on fog nodes; non-fog non-decision nodes require timing):
+  timing {certainty fixed|window|fog, date, window, leadTimeDays}; cost {currency, estimateMinor,
+  committedMinor, envelopeMinor — estimate and committed never merge; envelope is the authority
+  ceiling}; resource {owner agent|human|business, ownerRef, exclusive half-open interval};
+  effort {humanMinutes — attention budget, never complexity points}; scope {acceptance
+  binary|criteria|judgement, criteria with per-criterion accepted}.
+- **Fog/elaboration**: fog is first-class; elaboration only at the frontier (`isElaborationFrontier`:
+  all ancestors non-fog, parent locked/ready); bounds MAX_CHILDREN_PER_ELABORATION=8,
+  MAX_TREE_DEPTH=5, MAX_NODES_PER_TREE=128.
+- **Fencing**: tree carries generation+revision; every verb mutation compares
+  expectedGeneration/expectedRevision + proposalDigest server-side (aligned with the frozen spine
+  exit contract).
+- **Rollup algebra** (kernel code, T26 implementation dispatched with T28/T29/T30): timing = ported
+  CPM (ES/EF/LS/LF/slack) over dependsOn with date-fns v4 business days, fog-bounded envelopes;
+  cost = per-currency estimate/committed sums + envelope-breach flags; resources = interval-tree
+  conflicts per ownerRef; effort = minutes vs attention budget; scope = criteria coverage with fog
+  denominator flag.
+
+Adoptions installed to manifest same day (ledger rule): `date-fns@4`, `@flatten-js/interval-tree`,
+`xstate@5`, `@react-email/components`, `@react-email/render`, `react-arborist`.
 
 ## Input assets
 

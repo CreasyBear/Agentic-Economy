@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT,
-  ANSWER_TURN_RATE_LIMIT,
-  resetAnswerTurnGuardForTests,
-} from '@/modules/answer-thread/testing'
+import { resetAnswerTurnGuardForTests } from '@/modules/answer-thread/testing'
 import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { sessionCookieHeader } from '../helpers/answer-thread-test-port'
+
+const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const ANSWER_TURN_RATE_LIMIT = 30
+const ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT = 60
 
 describe('answer HTTP rate limits', () => {
   afterEach(() => {
@@ -15,7 +15,7 @@ describe('answer HTTP rate limits', () => {
   })
 
   it('dedupes turn submit rate limit for the same client turn key', async () => {
-    const session = 'turn-idempotency-session'
+    const session = `turn-idempotency-session-${runId}`
     const headers = {
       'Content-Type': 'application/json',
       cookie: sessionCookieHeader(session),
@@ -35,7 +35,7 @@ describe('answer HTTP rate limits', () => {
   })
 
   it('returns 429 after turn submit limit', async () => {
-    const session = 'turn-rate-limit-session'
+    const session = `turn-rate-limit-session-${runId}`
 
     for (let index = 0; index < ANSWER_TURN_RATE_LIMIT; index += 1) {
       const response = await handleAnswerTurnRequest(
@@ -67,7 +67,7 @@ describe('answer HTTP rate limits', () => {
   })
 
   it('returns 429 after follow-up chips limit', async () => {
-    const session = 'follow-up-chips-rate-limit-session'
+    const session = `follow-up-chips-rate-limit-session-${runId}`
     const body = JSON.stringify({
       query: 'emergency plumber parramatta',
       providers: [],

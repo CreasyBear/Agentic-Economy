@@ -1,11 +1,13 @@
 import {
   openCapabilityDecisionModel,
+  rehydrateCapabilityInputKey,
+  rehydrateCapabilitySelectionKey,
+  rehydratePointedSchemaIdentity,
   sameCapabilityContractRef,
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import type {
   ActionPreparationApprovalEvidence,
@@ -31,14 +33,29 @@ import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { listRouteableCapabilitySupply } from './capabilitySupply'
+import { registeredEvaluationBindingsFromRouteableSupply } from './customerRequestEvaluationBindings'
 
 type Aggregate = Infer<typeof customerRequestV2AggregateValue>
+type StoredFact = Aggregate['snapshot']['facts'][number]
 type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
 type StoredLineage = StoredPreparation['lineage']
 type StoredReview = StoredPreparation['disclosureReview']
 type StoredReservation = NonNullable<
   Extract<StoredPreparation, { kind: 'ready_for_routing' }>['authorityReservation']
 >
+type StoredMissingTarget = Extract<
+  NonNullable<Aggregate['evaluation']['nextRequirement']>,
+  { kind: 'contract_fact' }
+>['targets'][number]
+type StoredMissingInput = Extract<
+  Aggregate['evaluation']['candidates'][number]['viability'],
+  { kind: 'blocked_on_information' }
+>['inputs'][number]
+type StoredCompletionRequirement = Aggregate['evaluation']['completionRequirements'][number]
+type StoredInputMapping = Aggregate['plan']['actions'][number]['inputMappings'][number]
+type StoredNextRequirement = NonNullable<Aggregate['evaluation']['nextRequirement']>
+type StoredPreparationDisclosure = NonNullable<Aggregate['evaluation']['preparationDisclosure']>
+type StoredDisclosureCategory = StoredPreparationDisclosure['categories'][number]
 type DbCtx = MutationCtx | QueryCtx
 type MutationDb = MutationCtx['db']
 
@@ -58,8 +75,8 @@ export function customerRequestV2PreparationPorts(
     verifyPreparationCommandReplay: async (command) => {
       if (command.result.preparationDigest !== command.preparationDigest
         || command.result.preparationRef !== command.preparationRef
-        || canonicalDigest(command.lineage as StableHashValue)
-          !== canonicalDigest(command.result.lineage as StableHashValue)
+        || canonicalDigest(command.lineage)
+          !== canonicalDigest(command.result.lineage)
         || !preparationIntegrityValid(command.result)) {
         throw new Error('customer_request_v2_preparation_replay_integrity_failure')
       }
@@ -69,17 +86,7 @@ export function customerRequestV2PreparationPorts(
     loadCurrentAggregate: async (requestId) => {
       const head = await db.query('customerRequestV2Heads')
         .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-      if (head === null) {
-        const historicalHead = await db.query('customerRequestHeads')
-          .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-        const historicalRequest = historicalHead === null
-          ? await db.query('customerRequests')
-            .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-          : null
-        return historicalHead !== null || historicalRequest !== null
-          ? { kind: 'historical' as const }
-          : { kind: 'not_found' as const }
-      }
+      if (head === null) return { kind: 'not_found' as const }
       const revision = await db.query('customerRequestV2Revisions')
         .withIndex('by_requestId_and_requestRevision', (query) => query
           .eq('requestId', requestId).eq('requestRevision', head.currentRevision)).unique()
@@ -282,27 +289,7 @@ async function loadCurrentActionModel(
     limit: 64,
   })
   if (supply.kind !== 'available') return undefined
-  const bindings = supply.supplies.map(({ offering, binding }) => ({
-    businessId: String(offering.businessId),
-    offeringId: offering.offeringId,
-    bindingId: binding.bindingId,
-    contractRef: {
-      capabilityId: binding.capabilityId,
-      version: binding.version,
-      contractDigest: binding.contractDigest,
-    },
-    offeringRegistrationHash: offering.registrationHash,
-    bindingRegistrationHash: binding.registrationHash,
-    price: offering.presentation.price,
-    commercialRelationship: {
-      ...offering.presentation.commercialRelationship,
-      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
-    },
-    cancellation: {
-      ...binding.cancellation,
-      evidenceRefs: [...binding.cancellation.evidenceRefs],
-    },
-  }))
+  const bindings = registeredEvaluationBindingsFromRouteableSupply(supply)
   if (requestRegistrySnapshotDigest(bindings) !== aggregate.evaluation.registrySnapshotDigest
     || !bindings.some((binding) => sameCapabilityContractRef(binding.contractRef, action.contractRef))) {
     return undefined
@@ -351,8 +338,135 @@ function toPreparationCommandRow(
   }
 }
 
+function asDomainFact(value: StoredFact) {
+  return {
+    ...value,
+    selectionKey: rehydrateCapabilitySelectionKey(value.selectionKey),
+    inputKey: rehydrateCapabilityInputKey(value.inputKey),
+    schemaIdentity: rehydratePointedSchemaIdentity(value.schemaIdentity),
+  }
+}
+
+function asDomainCandidateCancellation(
+  value: Aggregate['evaluation']['candidates'][number]['cancellation'],
+) {
+  if (value === undefined) {
+    throw new Error('customer_request_v2_preparation_candidate_cancellation_incompatible_revision')
+  }
+  return {
+    ...value,
+    evidenceRefs: [...value.evidenceRefs],
+  }
+}
+
+function asDomainMissingTarget(value: StoredMissingTarget) {
+  return {
+    ...value,
+    selectionKey: rehydrateCapabilitySelectionKey(value.selectionKey),
+    inputKey: rehydrateCapabilityInputKey(value.inputKey),
+    schemaIdentity: rehydratePointedSchemaIdentity(value.schemaIdentity),
+  }
+}
+
+function asDomainMissingInput(value: StoredMissingInput) {
+  return {
+    ...value,
+    selectionKey: rehydrateCapabilitySelectionKey(value.selectionKey),
+    inputKey: rehydrateCapabilityInputKey(value.inputKey),
+    schemaIdentity: rehydratePointedSchemaIdentity(value.schemaIdentity),
+  }
+}
+
+function asDomainCompletionRequirement(value: StoredCompletionRequirement) {
+  return {
+    ...value,
+    schemaIdentity: rehydratePointedSchemaIdentity(value.schemaIdentity),
+  }
+}
+
+function asDomainInputMapping(value: StoredInputMapping) {
+  return {
+    ...value,
+    target: {
+      ...value.target,
+      inputKey: rehydrateCapabilityInputKey(value.target.inputKey),
+    },
+    schemaIdentity: rehydratePointedSchemaIdentity(value.schemaIdentity),
+  }
+}
+
+function asDomainNextRequirement(value: StoredNextRequirement) {
+  return value.kind === 'contract_fact'
+    ? { ...value, targets: value.targets.map(asDomainMissingTarget) }
+    : value
+}
+
+function asDomainDisclosureCategory(value: StoredDisclosureCategory) {
+  return {
+    ...value,
+    inputKey: rehydrateCapabilityInputKey(value.inputKey),
+  }
+}
+
+function asDomainPreparationDisclosure(value: StoredPreparationDisclosure) {
+  return {
+    ...value,
+    categories: value.categories.map(asDomainDisclosureCategory),
+  }
+}
+
 function domainAggregate(aggregate: Aggregate): CustomerRequestV2Aggregate {
-  return structuredClone(aggregate) as unknown as CustomerRequestV2Aggregate
+  const stored = structuredClone(aggregate)
+  const {
+    decisionPreference,
+    preparationDisclosure,
+    nextRequirement,
+    ...storedEvaluation
+  } = stored.evaluation
+  return {
+    ...stored,
+    snapshot: {
+      ...stored.snapshot,
+      facts: stored.snapshot.facts.map(asDomainFact),
+    },
+    evaluation: {
+      ...storedEvaluation,
+      facts: stored.evaluation.facts.map(asDomainFact),
+      criteria: stored.evaluation.criteria.map((criterion) => ({
+        ...criterion,
+        inputKey: rehydrateCapabilityInputKey(criterion.inputKey),
+      })),
+      candidates: stored.evaluation.candidates.map((candidate) => ({
+        ...candidate,
+        selectionKey: rehydrateCapabilitySelectionKey(candidate.selectionKey),
+        cancellation: asDomainCandidateCancellation(candidate.cancellation),
+        viability: candidate.viability.kind === 'blocked_on_information'
+          ? {
+              ...candidate.viability,
+              inputs: candidate.viability.inputs.map(asDomainMissingInput),
+            }
+          : candidate.viability,
+      })),
+      completionRequirements: stored.evaluation.completionRequirements.map(asDomainCompletionRequirement),
+      ...(decisionPreference === undefined ? {} : { decisionPreference: { ...decisionPreference } }),
+      ...(preparationDisclosure === undefined
+        ? {}
+        : { preparationDisclosure: asDomainPreparationDisclosure(preparationDisclosure) }),
+      ...(nextRequirement === undefined
+        ? {}
+        : { nextRequirement: asDomainNextRequirement(nextRequirement) }),
+    },
+    plan: {
+      ...stored.plan,
+      actions: stored.plan.actions.map((action) => ({
+        ...action,
+        selectionKey: rehydrateCapabilitySelectionKey(action.selectionKey),
+        inputs: action.inputs.map(asDomainFact),
+        inputMappings: action.inputMappings.map(asDomainInputMapping),
+      })),
+      completionRequirements: stored.plan.completionRequirements.map(asDomainCompletionRequirement),
+    },
+  }
 }
 
 function asDomainPreparation(value: StoredPreparation): DurableActionPreparation {

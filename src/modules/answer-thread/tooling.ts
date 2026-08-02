@@ -6,6 +6,7 @@ export type {
   AnswerToolId,
   AnswerTurnTimingEntry,
   FrozenTurnEvidence,
+  FrozenTurnEvidenceDraft,
   FrozenTurnProse,
 } from './answer-thread.schema'
 

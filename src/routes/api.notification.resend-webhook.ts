@@ -1,10 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import {
   callPublicSourceMutation,
-  ConvexSourceError,
   sourceMutation,
 } from '@/lib/server/convex-source'
+import { notificationErrorResponse } from '@/lib/server/notification-dispatch'
+import type { NotificationRuntimeErrorResult } from '@/lib/server/notification-dispatch'
+import { response as notificationWebhookJsonResponse } from '@/lib/server/no-store-response'
 import {
   NotificationProviderError,
   readNotificationOutboxSystemKey,
@@ -12,6 +15,8 @@ import {
   verifyResendWebhook,
 } from '@/lib/server/notification-provider'
 import type { ResendVerifiedWebhook } from '@/lib/server/notification-provider'
+
+const MAX_RESEND_WEBHOOK_BODY_BYTES = 256 * 1024
 
 export const Route = createFileRoute('/api/notification/resend-webhook')({
   server: {
@@ -39,12 +44,7 @@ type NotificationWebhookIngestResult =
         | 'notification_webhook_rejected'
         | 'notification_webhook_held'
     }
-  | {
-      kind: 'error'
-      code: string
-      retryable: boolean
-      reason: string
-    }
+  | NotificationRuntimeErrorResult
 
 type ResendWebhookHandlerOptions = {
   env?: Env
@@ -62,8 +62,16 @@ export async function handleResendWebhookRequest(
 ): Promise<Response> {
   try {
     const env = options.env ?? process.env
+    const boundedBody = await readBoundedRequestText(request, MAX_RESEND_WEBHOOK_BODY_BYTES)
+    if (!boundedBody.ok) {
+      throw new NotificationProviderError(
+        'invalid_resend_webhook_payload',
+        'Resend webhook payload is too large.',
+        413,
+      )
+    }
     const verified = await verifyResendWebhook({
-      rawBody: await request.text(),
+      rawBody: boundedBody.text,
       headers: request.headers,
       secret: readResendWebhookSecret(env),
       ...(options.now === undefined ? {} : { now: options.now }),
@@ -77,17 +85,10 @@ export async function handleResendWebhookRequest(
     }
     const result = await (options.ingestWebhook ?? defaultIngestWebhook)(ingestArgs)
 
-    return notificationWebhookJsonResponse(result, {
-      status: result.kind === 'ok' ? 200 : 500,
-    })
+    return notificationWebhookJsonResponse(result, result.kind === 'ok' ? 200 : 500)
   } catch (error) {
-    if (error instanceof NotificationProviderError || error instanceof ConvexSourceError) {
-      return notificationWebhookJsonResponse(
-        { kind: 'error', code: error.code, retryable: false, reason: error.message },
-        { status: error.status }
-      )
-    }
-
+    const normalizedError = notificationErrorResponse(error)
+    if (normalizedError !== undefined) return normalizedError
     throw error
   }
 }
@@ -96,12 +97,3 @@ async function defaultIngestWebhook(args: NotificationWebhookIngestArgs): Promis
   return await callPublicSourceMutation(ingestNotificationWebhookEvent, args)
 }
 
-function notificationWebhookJsonResponse(body: unknown, init: ResponseInit = {}): Response {
-  return Response.json(body, {
-    ...init,
-    headers: {
-      'Cache-Control': 'no-store',
-      ...init.headers,
-    },
-  })
-}

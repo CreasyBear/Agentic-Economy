@@ -7,11 +7,7 @@ import { readPublicOfferingRegistrySearchPage } from '@/modules/registry/registr
 import type { OfferingPrice } from '@/modules/catalog/public'
 import { resolveCheckupQuote } from '@/modules/sandbox-supply/public'
 
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'),
-  load,
-]))
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -166,6 +162,6 @@ describe('canonical Adelaide dental seed', () => {
           .take(10)).length,
       }
     })
-    expect(counts).toEqual({ businesses: 1, offerings: 1, revisions: 1, accessPaths: 1 })
+    expect(counts).toEqual({ businesses: 1, offerings: 1, revisions: 2, accessPaths: 1 })
   }, 300_000)
 })

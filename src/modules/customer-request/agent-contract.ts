@@ -9,6 +9,27 @@ export const CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES = ['inspect_only', 'approve_
 export type CustomerRequestAuthorityMode = typeof CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES[number]
 export const CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE = 'customer_requests:standing_authority' as const
 
+export const WORK_TREE_AGENT_SCOPE_VALUES = [
+  'work_trees:create',
+  'work_trees:inspect',
+  'work_trees:apply',
+  'work_trees:decide',
+  'work_trees:repeat_reserve',
+  'work_trees:repeat_finalize',
+  'work_trees:repeat_reconcile',
+  'work_trees:repeat_inspect',
+] as const
+export type WorkTreeAgentScope = typeof WORK_TREE_AGENT_SCOPE_VALUES[number]
+
+export function isWorkTreeAgentScope(value: string): value is WorkTreeAgentScope {
+  return WORK_TREE_AGENT_SCOPE_VALUES.includes(value as WorkTreeAgentScope)
+}
+
+export function workTreeScopeAllowedForMode(scope: string, mode: CustomerRequestAuthorityMode): boolean {
+  if (!isWorkTreeAgentScope(scope)) return false
+  return mode !== 'inspect_only' || scope === 'work_trees:inspect' || scope === 'work_trees:repeat_inspect'
+}
+
 const CUSTOMER_REQUEST_AUTHORITY_MODE_RANK: Readonly<Record<CustomerRequestAuthorityMode, number>> = {
   inspect_only: 0,
   approve_each: 1,
@@ -25,7 +46,8 @@ const CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES: Readonly<Record<CustomerRequestAut
 
 export function customerRequestAuthorityModeForScopes(scopes: readonly string[]): CustomerRequestAuthorityMode | undefined {
   const modes = CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.filter((mode) => scopes.includes(CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES[mode]))
-  const unknownModeScope = scopes.some((scope) => scope.startsWith('customer_requests:') && scope !== CUSTOMER_REQUEST_AGENT_SCOPE
+  const unknownModeScope = scopes.some((scope) => scope.startsWith('customer_requests:')
+    && scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE
     && !CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.some((mode) => scope === CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES[mode]))
   if (unknownModeScope || modes.length > 1) return undefined
   return modes[0] ?? (scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE) ? 'inspect_only' : undefined)
@@ -832,7 +854,7 @@ export const customerRequestRefusalSchema = z.object({
   kind: z.literal('refused'),
   reason: z.enum([
     'authentication_required', 'request_not_found', 'interpreter_unavailable', 'capabilities_unavailable',
-    'evidence_not_found', 'invalid_amendment',
+    'evidence_not_found', 'invalid_amendment', 'rate_limited',
   ]),
 }).strict()
 

@@ -1,30 +1,24 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 
-import {
-  claimBusiness,
-  createEmptyBusinessSourceState,
-} from '@/modules/business/public'
-import {
-  createEmptyCatalogSourceState,
-  publishBusinessCatalog,
-} from '@/modules/catalog/public'
+import { claimBusiness } from '@/modules/business/public'
+import { emptyRegistrySourceState } from '../fixtures/source-state'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   readPublicOfferingRegistryBusinessDetail,
   readPublicOfferingRegistryPage,
   resolvePublicRegistryInquiryTarget,
-  setCatalogSearchBackendForTests,
 } from '@/modules/registry/registry.functions'
 import {
   createDefaultRegistrySourceState,
-  getPublicBusinessCatalogBySlug,
-  listPublicBusinessCatalog,
-  searchPublicBusinessCatalog,
+  getPublicBusinessOfferingSupplyBySlug,
+  listPublicBusinessOfferingSupply,
+  searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
 import type {
-  PublicBusinessCatalogApiPage,
+  PublicBusinessCatalogApiV2Page,
   RegistrySourceState,
 } from '@/modules/registry/public'
 import { readPublicTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
@@ -44,38 +38,45 @@ const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
 if (admittedLocalE2eBusiness === undefined) {
   throw new Error('An admitted local E2E business fixture is required.')
 }
+const admittedLocalE2eOffering = admittedLocalE2eBusiness.offerings[0]
+
+if (admittedLocalE2eOffering === undefined) {
+  throw new Error('An admitted local E2E Offering fixture is required.')
+}
 
 describe('registry public API routes', () => {
   it('reads one non-default durable catalog through registry, search, API list, and API detail', async () => {
     const state = createDurablePublishedRegistryState({
       businessName: 'Fremantle Heat Pump Repairs',
       requestedSlug: 'fremantle-heat-pump-repairs',
-      serviceName: 'Heat pump diagnostics',
-      serviceQuery: 'heat pump fremantle',
+      offeringName: 'Heat pump diagnostics',
+      offeringQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
     })
 
-    const registry = listPublicBusinessCatalog(state, { limit: 10 })
-    const search = searchPublicBusinessCatalog(state, {
+    const registry = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 10 },
+    })
+    const search = searchPublicBusinessOfferingSupply(state, {
       query: 'heat pump fremantle',
       limit: 10,
     })
-    const detail = getPublicBusinessCatalogBySlug(state, {
+    const detail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
 
-    expect(registry.items.map((item) => item.slug)).toEqual([
+    expect(registry.page.map((item) => item.slug)).toEqual([
       'fremantle-heat-pump-repairs',
     ])
     expect(registry).toMatchObject({
       kind: 'ok',
-      items: [
+      page: [
         {
           slug: 'fremantle-heat-pump-repairs',
           name: 'Fremantle Heat Pump Repairs',
         },
       ],
-      pagination: { total: 1, hasMore: false },
+      isDone: true,
     })
     expect(search).toMatchObject({
       kind: 'ok',
@@ -89,8 +90,8 @@ describe('registry public API routes', () => {
         slug: 'fremantle-heat-pump-repairs',
         name: 'Fremantle Heat Pump Repairs',
         suburb: 'Fremantle',
-        services: [
-          { slug: 'heat-pump-diagnostics', name: 'Heat pump diagnostics' },
+        offerings: [
+          { name: 'Heat pump diagnostics' },
         ],
       },
     })
@@ -103,25 +104,26 @@ describe('registry public API routes', () => {
     const state = createDurablePublishedRegistryState({
       businessName: 'Fremantle Heat Pump Repairs',
       requestedSlug: 'fremantle-heat-pump-repairs',
-      serviceName: 'Heat pump diagnostics',
-      serviceQuery: 'heat pump fremantle',
+      offeringName: 'Heat pump diagnostics',
+      offeringQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
     })
     suppressFirstBusiness(state)
-
-    const registry = listPublicBusinessCatalog(state, { limit: 10 })
-    const search = searchPublicBusinessCatalog(state, {
+    const registry = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 10 },
+    })
+    const search = searchPublicBusinessOfferingSupply(state, {
       query: 'heat pump fremantle',
       limit: 10,
     })
-    const detail = getPublicBusinessCatalogBySlug(state, {
+    const detail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
 
     expect(registry).toMatchObject({
       kind: 'ok',
-      items: [],
-      pagination: { total: 0, hasMore: false },
+      page: [],
+      isDone: true,
     })
     expect(search).toMatchObject({
       kind: 'ok',
@@ -137,18 +139,13 @@ describe('registry public API routes', () => {
   })
 
   it('keeps the shared admitted local fixture continuous across registry search, listing detail, and inquiry admission without contaminating the default fallback', async () => {
-    const previousLocalE2eFlag = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousRegistrySeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
-    const restoreCatalogSearchBackend = setCatalogSearchBackendForTests('convex')
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+    vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', undefined)
+    vi.stubEnv('CONVEX_URL', undefined)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
 
     try {
-      const searchQuery = `${admittedLocalE2eBusiness.serviceName} ${admittedLocalE2eBusiness.suburb}`
+      const searchQuery = `${admittedLocalE2eOffering.name} ${admittedLocalE2eBusiness.suburb}`
       const registry = await loadServicesRouteReadback({ q: searchQuery })
       const listing = await readPublicOfferingRegistryBusinessDetail({
         slug: admittedLocalE2eBusiness.requestedSlug,
@@ -159,12 +156,11 @@ describe('registry public API routes', () => {
       }
 
       const inquiryOffering = listing.business.offerings.find(
-        (offering) => offering.name === admittedLocalE2eBusiness.serviceName,
+        (offering) => offering.name === admittedLocalE2eOffering.name,
       )
       if (inquiryOffering === undefined) {
         throw new Error('Expected the admitted local E2E fixture listing to expose its shared Offering.')
       }
-
       const inquiryAccessPath = inquiryOffering.accessPaths.find(
         (path) => path.kind === 'human_request' && path.channel === 'ae_inquiry',
       )
@@ -174,7 +170,7 @@ describe('registry public API routes', () => {
 
       const inquiryTarget = await resolvePublicRegistryInquiryTarget({
         businessSlug: listing.business.slug,
-        serviceSlug: inquiryOffering.offeringRef.split(':').at(-1) ?? '',
+        offeringRef: inquiryOffering.offeringRef,
       })
       if (inquiryTarget.kind !== 'resolved') {
         throw new Error('Expected the admitted local E2E fixture listing to resolve an inquiry target.')
@@ -182,8 +178,7 @@ describe('registry public API routes', () => {
 
       const admission = await readPublicTargetAdmissionThroughSource({
         businessId: inquiryTarget.businessId,
-        serviceId: inquiryTarget.serviceId,
-        capabilityKind: 'phone_inquiry',
+        offeringRef: inquiryTarget.offeringRef,
       })
 
       expect(registry).toMatchObject({
@@ -196,7 +191,7 @@ describe('registry public API routes', () => {
               name: admittedLocalE2eBusiness.businessName,
               suburb: admittedLocalE2eBusiness.suburb,
             },
-            name: admittedLocalE2eBusiness.serviceName,
+            name: admittedLocalE2eOffering.name,
           },
         ],
       })
@@ -209,11 +204,11 @@ describe('registry public API routes', () => {
         publishedPhone: admittedLocalE2eBusiness.publishedPhone,
         offerings: [
           {
-            name: admittedLocalE2eBusiness.serviceName,
-            category: admittedLocalE2eBusiness.serviceCategory,
-            summary: admittedLocalE2eBusiness.serviceSummary,
-            serviceAreaSummary: admittedLocalE2eBusiness.serviceArea,
-            availabilitySummary: admittedLocalE2eBusiness.hoursOrUnknown,
+            name: admittedLocalE2eOffering.name,
+            category: admittedLocalE2eOffering.category,
+            summary: admittedLocalE2eOffering.summary,
+            serviceAreaSummary: admittedLocalE2eOffering.serviceAreaSummary,
+            availabilitySummary: admittedLocalE2eOffering.availabilitySummary,
           },
         ],
       })
@@ -226,30 +221,36 @@ describe('registry public API routes', () => {
         },
       })
 
-      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'false'
-      delete process.env.CONVEX_URL
-      delete process.env.VITE_CONVEX_URL
+      vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'false')
+      vi.stubEnv('CONVEX_URL', undefined)
+      vi.stubEnv('VITE_CONVEX_URL', undefined)
 
       await expect(loadServicesRouteReadback({ q: searchQuery })).rejects.toThrow(
-        'registry_source_query_failed',
+        'CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.',
       )
-      await expect(readPublicOfferingRegistryPage({ limit: 50 })).rejects.toThrow(
-        'registry_source_query_failed',
+      await expect(readPublicOfferingRegistryPage({
+        paginationOpts: { cursor: null, numItems: 50 },
+      })).rejects.toThrow(
+        'CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.',
       )
       await expect(readPublicOfferingRegistryBusinessDetail({
         slug: admittedLocalE2eBusiness.requestedSlug,
-      })).rejects.toThrow('registry_source_query_failed')
+      })).rejects.toThrow(
+        'CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.',
+      )
       const defaultState = createDefaultRegistrySourceState()
-      const defaultCatalog = listPublicBusinessCatalog(defaultState, { limit: 50 })
-      const defaultSearch = searchPublicBusinessCatalog(defaultState, {
+      const defaultCatalog = listPublicBusinessOfferingSupply(defaultState, {
+        paginationOpts: { cursor: null, numItems: 50 },
+      })
+      const defaultSearch = searchPublicBusinessOfferingSupply(defaultState, {
         query: searchQuery,
         limit: 50,
       })
-      const defaultDetail = getPublicBusinessCatalogBySlug(defaultState, {
+      const defaultDetail = getPublicBusinessOfferingSupplyBySlug(defaultState, {
         slug: admittedLocalE2eBusiness.requestedSlug,
       })
 
-      expect(defaultCatalog.items.map((item) => item.slug)).not.toContain(
+      expect(defaultCatalog.page.map((item) => item.slug)).not.toContain(
         admittedLocalE2eBusiness.requestedSlug,
       )
       expect(defaultSearch.items.map((item) => item.slug)).not.toContain(
@@ -261,27 +262,7 @@ describe('registry public API routes', () => {
         reason: 'No public business catalog exists for this slug.',
       })
     } finally {
-      if (previousLocalE2eFlag === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalE2eFlag
-      }
-      if (previousRegistrySeed === undefined) {
-        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-      } else {
-        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousRegistrySeed
-      }
-      if (previousConvexUrl === undefined) {
-        delete process.env.CONVEX_URL
-      } else {
-        process.env.CONVEX_URL = previousConvexUrl
-      }
-      if (previousPublicConvexUrl === undefined) {
-        delete process.env.VITE_CONVEX_URL
-      } else {
-        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
-      }
-      restoreCatalogSearchBackend()
+      vi.unstubAllEnvs()
     }
   })
 
@@ -289,26 +270,28 @@ describe('registry public API routes', () => {
     const state = createDurablePublishedRegistryState({
       businessName: 'Fremantle Heat Pump Repairs',
       requestedSlug: 'fremantle-heat-pump-repairs',
-      serviceName: 'Heat pump diagnostics',
-      serviceQuery: 'heat pump fremantle',
+      offeringName: 'Heat pump diagnostics',
+      offeringQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
       publishedPhone: '1300 123 456',
     })
 
-    const registry = listPublicBusinessCatalog(state, { limit: 10 })
-    const search = searchPublicBusinessCatalog(state, {
+    const registry = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 10 },
+    })
+    const search = searchPublicBusinessOfferingSupply(state, {
       query: 'heat pump',
       limit: 10,
     })
-    const detail = getPublicBusinessCatalogBySlug(state, {
+    const detail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
     const serialized = JSON.stringify({ registry, search, detail })
 
     expect(serialized).not.toMatch(
-      /businessId|serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|apiKey|"callable"\s*:\s*true|"paymentRequired"\s*:\s*true/i,
+      /ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|apiKey|"callable"\s*:\s*true|"paymentRequired"\s*:\s*true/i,
     )
-    expect(serialized).toContain('not_available_yet')
+    expect(serialized).not.toContain('not_available_yet')
     expect(serialized).toContain('1300 123 456')
     expect(serialized).not.toMatch(
       /booking available|payment available|callable endpoint/i,
@@ -320,25 +303,15 @@ describe('registry public API routes', () => {
     // Offering seam. Pin that seam to the same in-memory default catalog the
     // v1 handlers used, and take the Convex URL away so neither the registry
     // read nor the inquiry-admission overlay can reach a live deployment.
-    const previousEnv = {
-      localE2e: process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E,
-      seed: process.env.AE_ANSWER_EVAL_REGISTRY_SEED,
-      convexUrl: process.env.CONVEX_URL,
-      publicConvexUrl: process.env.VITE_CONVEX_URL,
-    }
-
     beforeEach(() => {
-      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-      process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
-      delete process.env.CONVEX_URL
-      delete process.env.VITE_CONVEX_URL
+      vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+      vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', 'default')
+      vi.stubEnv('CONVEX_URL', undefined)
+      vi.stubEnv('VITE_CONVEX_URL', undefined)
     })
 
     afterEach(() => {
-      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousEnv.localE2e)
-      restoreEnv('AE_ANSWER_EVAL_REGISTRY_SEED', previousEnv.seed)
-      restoreEnv('CONVEX_URL', previousEnv.convexUrl)
-      restoreEnv('VITE_CONVEX_URL', previousEnv.publicConvexUrl)
+      vi.unstubAllEnvs()
     })
 
     it('lists eligible public business supply without private fields', async () => {
@@ -352,7 +325,7 @@ describe('registry public API routes', () => {
       expect(body).toMatchObject({
         kind: 'ok',
         schemaVersion: 'public-business-catalog-api:v2',
-        items: [
+        page: [
           {
             slug: 'parramatta-emergency-plumbing',
             publicUrl: '/parramatta-emergency-plumbing',
@@ -360,17 +333,18 @@ describe('registry public API routes', () => {
             disposition: 'current',
             photos: [],
             offerings: [
-              { offeringRef: 'legacy-offering:parramatta-emergency-plumbing:emergency-pipe-repair' },
+              { offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair' },
             ],
           },
         ],
-        pagination: { limit: 1, total: 1, hasMore: false },
+        isDone: false,
+        continueCursor: '1',
       })
-      expect(typeof body.items[0].observedAt).toBe('number')
-      // v2 publishes a business identifier by contract; the v1 DTO had none.
-      expect(body.items[0].businessId).toBe('legacy-business:parramatta-emergency-plumbing')
+      expect(typeof body.page[0].observedAt).toBe('number')
+      // v2 publishes a business identifier by contract.
+      expect(body.page[0].businessId).toBe('business:parramatta-emergency-plumbing')
       expect(JSON.stringify(body)).not.toMatch(
-        /serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|callable|paymentRequired|MCP|OpenAPI/,
+        /ownerId|clerk|sourceHash|rawContact|admin|private:evidence|callable|paymentRequired|MCP|OpenAPI/,
       )
     })
 
@@ -387,8 +361,11 @@ describe('registry public API routes', () => {
         kind: 'ok',
         schemaVersion: 'public-business-catalog-api:v2',
         query: 'emergency plumber parramatta',
-        items: [{ slug: 'parramatta-emergency-plumbing' }],
-        pagination: { total: 1, hasMore: false },
+        items: [
+          { slug: 'parramatta-emergency-plumbing' },
+          { slug: 'plumbing-demo' },
+        ],
+        pagination: { total: 2, hasMore: false },
       })
     })
 
@@ -415,8 +392,11 @@ describe('registry public API routes', () => {
       expect(parramattaBody).toMatchObject({
         kind: 'ok',
         query: 'emergency plumber',
-        items: [{ slug: 'parramatta-emergency-plumbing' }],
-        pagination: { total: 1, hasMore: false },
+        items: [
+          { slug: 'parramatta-emergency-plumbing' },
+          { slug: 'plumbing-demo' },
+        ],
+        pagination: { total: 2, hasMore: false },
       })
     })
 
@@ -465,7 +445,7 @@ describe('registry public API routes', () => {
       // The local-e2e seed publishes plumbing-demo with an inquiry-only first
       // request and no phone, which is the one shape that becomes an
       // ae_inquiry access path.
-      delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+      vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', undefined)
       const seam = await readPublicOfferingRegistryBusinessDetail({ slug: 'plumbing-demo' })
       if (seam.kind !== 'found') {
         throw new Error('Expected the local e2e seed to publish plumbing-demo.')
@@ -543,10 +523,14 @@ describe('registry public API routes', () => {
     suppressed.claimStatus = 'suppressed'
     suppressed.suppressedAt = 3_000
 
-    expect(listPublicBusinessCatalog(unpublishedState).items).toEqual([])
-    expect(listPublicBusinessCatalog(publicState).items).toEqual([])
+    expect(listPublicBusinessOfferingSupply(unpublishedState, {
+      paginationOpts: { cursor: null, numItems: 20 },
+    }).page).toEqual([])
+    expect(listPublicBusinessOfferingSupply(publicState, {
+      paginationOpts: { cursor: null, numItems: 20 },
+    }).page).toEqual([])
     expect(
-      searchPublicBusinessCatalog(publicState, {
+      searchPublicBusinessOfferingSupply(publicState, {
         query: 'emergency plumber parramatta',
       }).items,
     ).toEqual([])
@@ -563,48 +547,34 @@ describe('registry public API routes', () => {
       slug: 'zebra-plumbing',
     })
 
-    const first = listPublicBusinessCatalog(state, { limit: 1 })
-    if (first.pagination.nextCursor === undefined) {
+    const first = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 1 },
+    })
+    if (first.isDone) {
       throw new Error('Expected a second registry page.')
     }
 
-    const second = listPublicBusinessCatalog(state, {
-      limit: 1,
-      cursor: first.pagination.nextCursor,
+    const second = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: first.continueCursor, numItems: 1 },
     })
-    if (second.pagination.nextCursor === undefined) {
+    if (second.isDone) {
       throw new Error('Expected a third registry page.')
     }
 
-    const third = listPublicBusinessCatalog(state, {
-      limit: 1,
-      cursor: second.pagination.nextCursor,
+    const third = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: second.continueCursor, numItems: 1 },
     })
 
-    expect(first.items.map((item) => item.slug)).toEqual(['aardvark-plumbing'])
-    expect(first.pagination.nextCursor).toBe('parramatta-emergency-plumbing')
-    expect(second.items.map((item) => item.slug)).toEqual([
+    expect(first.page.map((item) => item.slug)).toEqual(['aardvark-plumbing'])
+    expect(first.continueCursor).toBe('1')
+    expect(second.page.map((item) => item.slug)).toEqual([
       'parramatta-emergency-plumbing',
     ])
-    expect(second.pagination.nextCursor).toBe('zebra-plumbing')
-    expect(third.items.map((item) => item.slug)).toEqual(['zebra-plumbing'])
-    expect(third.pagination.hasMore).toBe(false)
+    expect(second.continueCursor).toBe('2')
+    expect(third.page.map((item) => item.slug)).toEqual(['zebra-plumbing'])
+    expect(third.isDone).toBe(true)
   })
 })
-
-function emptyRegistrySourceState(): RegistrySourceState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-  }
-}
 
 function addPublishedCatalogClone(
   state: RegistrySourceState,
@@ -612,22 +582,32 @@ function addPublishedCatalogClone(
 ): void {
   const business = state.businesses.at(0)
   const context = state.businessContexts.at(0)
-  const service = state.businessServices.at(0)
-  const capabilities = state.serviceCapabilities.filter(
-    (candidate) => candidate.serviceId === service?.serviceId,
-  )
+  const offering = state.offerings.at(0)
+  const revision = offering === undefined
+    ? undefined
+    : state.revisions.find(
+        (candidate) =>
+          candidate.offeringRef === offering.offeringRef &&
+          candidate.revision === offering.currentRevision,
+      )
 
-  if (
-    business === undefined ||
-    context === undefined ||
-    service === undefined
-  ) {
+  if (business === undefined || context === undefined || offering === undefined || revision === undefined) {
     throw new Error('Expected default registry source state.')
   }
 
   const businessId = brandNonEmpty(`business:${input.slug}`, 'BusinessId')
-  const serviceId = brandNonEmpty(`service:${input.slug}`, 'ServiceId')
-  const sourceHash = brandNonEmpty(`hash:source:${input.slug}`, 'SourceHash')
+  const offeringRef = brandNonEmpty(`offering:${businessId}:offering`, 'OfferingRef')
+  const sourceHash = canonicalDigest(`source:${input.slug}`)
+  const offeringSourceHash = canonicalDigest({
+    businessId,
+    offeringRef,
+    revision: 1,
+    name: input.name,
+    category: revision.category,
+    summary: revision.summary,
+    serviceAreaSummary: revision.serviceAreaSummary ?? '',
+    availabilitySummary: revision.availabilitySummary ?? '',
+  })
 
   state.businesses.push({
     ...business,
@@ -645,38 +625,35 @@ function addPublishedCatalogClone(
     sourceHash,
     approvedAt: context.approvedAt + state.businessContexts.length,
   })
-  state.businessServices.push({
-    ...service,
+  state.offerings.push({
+    ...offering,
+    offeringRef,
     businessId,
-    serviceId,
-    serviceSlug: brandNonEmpty(`${input.slug}-service`, 'Slug'),
-    sourceHash,
-    createdAt: service.createdAt + state.businessServices.length,
-    updatedAt: service.updatedAt + state.businessServices.length,
+    currentRevision: 1,
+    createdAt: offering.createdAt + state.offerings.length,
+    updatedAt: offering.updatedAt + state.offerings.length,
   })
-  for (const capability of capabilities) {
-    state.serviceCapabilities.push({
-      ...capability,
-      businessId,
-      serviceId,
-      sourceHash,
-      createdAt: capability.createdAt + state.serviceCapabilities.length,
-      updatedAt: capability.updatedAt + state.serviceCapabilities.length,
-    })
-  }
+  state.revisions.push({
+    ...revision,
+    offeringRef,
+    businessId,
+    revision: 1,
+    sourceHash: offeringSourceHash,
+    createdAt: revision.createdAt + state.revisions.length,
+  })
 }
 
 async function jsonBody(
   response: Promise<Response>,
-): Promise<PublicBusinessCatalogApiPage> {
-  return (await response).json() as Promise<PublicBusinessCatalogApiPage>
+): Promise<PublicBusinessCatalogApiV2Page> {
+  return (await response).json() as Promise<PublicBusinessCatalogApiV2Page>
 }
 
 function createDurablePublishedRegistryState(input: {
   businessName: string
   requestedSlug: string
-  serviceName: string
-  serviceQuery: string
+  offeringName: string
+  offeringQuery: string
   suburb: string
   publishedPhone?: string
 }): RegistrySourceState {
@@ -697,24 +674,14 @@ function createDurablePublishedRegistryState(input: {
       ownerMessage: 'Owner supplied durable source facts.',
       sourceRefs: [
         {
-          label: `${input.businessName} service card`,
+          label: `${input.businessName} Offering card`,
           evidenceRef: `private:evidence:${input.requestedSlug}`,
-          sourceHash: brandNonEmpty(
-            `hash:source:${input.requestedSlug}`,
-            'SourceHash',
-          ),
+          sourceHash: canonicalDigest(`source:${input.requestedSlug}`),
         },
       ],
     },
     security: {
       csrf: matchingCsrf('claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `registry:${input.requestedSlug}`,
-        now: 10_000,
-        limit: 5,
-        windowMs: 60_000,
-      },
     },
     operationKey: operationKey(`claim:${input.requestedSlug}`),
     correlationId: correlationId(`claim:${input.requestedSlug}`),
@@ -722,45 +689,48 @@ function createDurablePublishedRegistryState(input: {
   })
 
   if (claim.kind === 'error') {
-    throw new Error(
-      `Expected durable claim fixture to publish: ${claim.reason}`,
-    )
+    throw new Error(`Expected durable claim fixture to publish: ${claim.reason}`)
   }
 
-  const publish = publishBusinessCatalog(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: `owner:${input.requestedSlug}`,
-      displayName: input.businessName,
-    },
-    claimId: claim.claim.claimId,
-    services: [
-      {
-        name: input.serviceName,
-        category: 'Heat pump repair',
-        summary: `${input.serviceName} for ${input.suburb} homes.`,
-        serviceArea: `${input.serviceQuery} and nearby suburbs`,
-        hoursOrUnknown: 'Weekdays by appointment',
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicChannel: 'not_available',
-          publicDisclosure: 'This business has not published a request path.',
-          noContactReason:
-            'Owner has not supplied public contact instructions.',
-        },
-      },
-    ],
-    security: { csrf: matchingCsrf('publish') },
-    operationKey: operationKey(`publish:${input.requestedSlug}`),
-    correlationId: correlationId(`publish:${input.requestedSlug}`),
-    now: 11_000,
+  claim.business.publicStatus = 'published'
+  claim.business.claimStatus = 'published'
+  claim.business.updatedAt = 11_000
+  claim.claim.status = 'published'
+  claim.claim.updatedAt = 11_000
+
+  const offeringRef = brandNonEmpty(
+    `offering:${claim.business.businessId}:${input.offeringName.toLowerCase().replaceAll(' ', '-')}`,
+    'OfferingRef',
+  )
+  const facts = {
+    name: input.offeringName,
+    category: 'Heat pump repair',
+    summary: `${input.offeringName} for ${input.suburb} homes.`,
+    serviceAreaSummary: `${input.offeringQuery} and nearby suburbs`,
+    availabilitySummary: 'Weekdays by appointment',
+  }
+  const sourceHash = canonicalDigest({
+    businessId: claim.business.businessId,
+    offeringRef,
+    revision: 1,
+    ...facts,
   })
-
-  if (publish.kind === 'error') {
-    throw new Error(
-      `Expected durable publish fixture to publish: ${publish.reason}`,
-    )
-  }
+  state.offerings.push({
+    offeringRef,
+    businessId: claim.business.businessId,
+    currentRevision: 1,
+    status: 'published',
+    createdAt: 11_000,
+    updatedAt: 11_000,
+  })
+  state.revisions.push({
+    offeringRef,
+    businessId: claim.business.businessId,
+    revision: 1,
+    ...facts,
+    sourceHash,
+    createdAt: 11_000,
+  })
 
   return state
 }
@@ -800,10 +770,3 @@ function correlationId(value: string) {
   return brandNonEmpty(`corr:registry-durable-test:${value}`, 'CorrelationId')
 }
 
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name]
-    return
-  }
-  process.env[name] = value
-}

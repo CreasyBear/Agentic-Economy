@@ -1,5 +1,6 @@
 import {
   defineCapabilityContract,
+  parseCapabilityContractJson,
   sameCapabilityContractRef,
   type CapabilityContract,
   type CapabilityContractDocument,
@@ -39,16 +40,8 @@ export function encodeCapabilityContractDocument(input: unknown): EncodedCapabil
 }
 
 export function encodeCapabilityContractDocumentJson(input: string): EncodedCapabilityContractDocument {
-  if (encoder.encode(input).byteLength > MAX_CONTRACT_DOCUMENT_BYTES) {
-    throw new Error('capability_contract_too_large')
-  }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(input)
-  } catch {
-    throw new Error('capability_contract_invalid')
-  }
-  return encodeCapabilityContractDocument(parsed)
+  const { ref: _ref, ...document } = parseCapabilityContractJson(input)
+  return encodeCapabilityContractDocument(document)
 }
 
 export function decodeDurableCapabilityContract(record: DurableCapabilityContract): ExactCapabilityContractResult {

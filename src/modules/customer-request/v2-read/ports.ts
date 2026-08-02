@@ -36,7 +36,6 @@ export type CustomerRequestV2ReadPorts = Readonly<{
     command: GenerationCommandRow,
   ) => Promise<GenerationRefreshResult>
 
-  hasHistoricalRequest: (requestId: string) => Promise<boolean>
 }>
 
 export type { CustomerRequestRoutePlanGeneration }

@@ -35,8 +35,8 @@ export type OwnerOfferingSupplyReadResult =
         revision?: BusinessOfferingRevisionRecord
         accessPaths: readonly OfferingAccessPathRecord[]
       }>[]
-      cutover: Readonly<{ mode: string; lastCheckStatus: string; postCutoverNativeChanges: boolean }>
-      projection: Readonly<{ status: string; observedAt?: number; disposition?: string; lastErrorCode?: string }>
+      cutover: Readonly<{ mode: 'legacy' | 'compare' | 'offering'; lastCheckStatus: 'not_run' | 'matched' | 'mismatch'; postCutoverNativeChanges: boolean }>
+      projection: Readonly<{ status: 'current' | 'projection_pending'; observedAt?: number; disposition?: 'current' | 'partial' | 'stale'; lastErrorCode?: string }>
     }>
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{ kind: 'error'; code: 'unauthenticated' | 'source_unavailable'; reason?: string }>

@@ -1,42 +1,24 @@
-import type { BusinessId, CorrelationId, OperationKey, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
+import type { BusinessId, CorrelationId, OfferingRef, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
 import type { ConsumerSupplyOption } from '@/modules/customer-request/application/public'
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
-import type { FirstRequestMode } from '@/modules/catalog/public'
-import type { PublicCatalogContract, PublicCatalogReadState } from '@/modules/catalog/public'
+import type { FirstRequestMode, PublicCatalogReadState } from '@/modules/catalog/public'
 import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
 import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
-import {
-  getIndexStatus as getIndexStatusImpl,
-  readCatalogHealth as readCatalogHealthImpl,
-  retryRegistryProjection as retryRegistryProjectionImpl,
-  syncCatalogProjection as syncCatalogProjectionImpl,
-} from './internal/projection-attempts'
-import {
-  createDefaultRegistrySourceState as createDefaultRegistrySourceStateImpl,
-  createLocalE2eRegistrySourceState as createLocalE2eRegistrySourceStateImpl,
-  getPublicBusinessCatalogBySlug as getPublicBusinessCatalogBySlugImpl,
-  listPublicBusinessCatalog as listPublicBusinessCatalogImpl,
-  resolvePublishedInquiryTarget as resolvePublishedInquiryTargetImpl,
-  searchPublicBusinessCatalog as searchPublicBusinessCatalogImpl,
-} from './internal/search'
 import type {
-  PublicBusinessCatalogApiDto,
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
   PublishedInquiryTargetResolution,
 } from './internal/search'
+import type { PublicBusinessCatalogApiV2Dto } from './internal/offering-api-projection'
 import type { ServiceDto } from './internal/services-api-projection'
 export {
   PublicBusinessCatalogApiSchemaVersion,
-  adaptLegacyCatalogToOfferingApi,
   projectBusinessSupplyToPublicApi,
-  summarizeOfferingAccess,
 } from './internal/offering-api-projection'
 export type {
   PublicBusinessCatalogApiV2Dto,
   PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
   PublicOfferingAccessPathDto,
   PublicOfferingDto,
@@ -44,10 +26,12 @@ export type {
 export {
   PublicServicesApiSchemaVersion,
   projectPublicServicesPage,
+  projectPublicServicesSearchPage,
 } from './internal/services-api-projection'
 export type {
   EndpointDto,
   PublicServicesApiPage,
+  PublicServicesSearchPage,
   ServiceDto,
 } from './internal/services-api-projection'
 
@@ -96,10 +80,10 @@ export type IndexStatus = (typeof IndexStatusValues)[number]
 export const RegistryProjectionStatusValues = ['queued', 'succeeded', 'failed', 'stale'] as const
 export type RegistryProjectionStatus = (typeof RegistryProjectionStatusValues)[number]
 
-export const RegistryProjectionKindValues = ['business_catalog', 'service_catalog'] as const
+export const RegistryProjectionKindValues = ['business_catalog', 'offering_catalog'] as const
 export type RegistryProjectionKind = (typeof RegistryProjectionKindValues)[number]
 
-export const IndexTargetTypeValues = ['business', 'service', 'capability'] as const
+export const IndexTargetTypeValues = ['business', 'offering'] as const
 export type IndexTargetType = (typeof IndexTargetTypeValues)[number]
 
 export const RegistryProjectionSourceVersion = 'public-catalog:v1' as const
@@ -114,11 +98,6 @@ export type RegistryRepairResult = (typeof RegistryRepairResultValues)[number]
 export const RegistrySearchDocumentSourceVersion = 'registry-search-document:v1' as const
 export type RegistrySearchDocumentSourceVersion = typeof RegistrySearchDocumentSourceVersion
 
-export const RegistrySearchSyncStatusValues = ['queued', 'succeeded', 'failed', 'stale'] as const
-export type RegistrySearchSyncStatus = (typeof RegistrySearchSyncStatusValues)[number]
-
-export const RegistrySearchSyncOperationValues = ['upsert', 'delete', 'suppress'] as const
-export type RegistrySearchSyncOperation = (typeof RegistrySearchSyncOperationValues)[number]
 
 export type RegistryProjectionReadback = {
   businessId: BusinessId
@@ -127,9 +106,8 @@ export type RegistryProjectionReadback = {
   sourceVersion: RegistryProjectionSourceVersion
   sourceHash: SourceHash
   generatedHash?: SourceHash
-  serviceCount: number
+  offeringCount: number
   publicSurfaces: readonly [
-    '/registry',
     '/api/businesses',
     '/api/businesses/search',
     '/api/businesses/{slug}',
@@ -139,7 +117,7 @@ export type RegistryProjectionReadback = {
 
 export type RegistryProjectionItemContract = {
   businessId: BusinessId
-  serviceId?: ServiceId
+  offeringRef?: OfferingRef
   logicalKey: string
   projectionKind: RegistryProjectionKind
   publicStatus: Extract<PublicStatus, 'published'>
@@ -147,13 +125,13 @@ export type RegistryProjectionItemContract = {
   sourceVersion: RegistryProjectionSourceVersion
   generatedHash: SourceHash
   publicUrl: string
-  serviceCount: number
+  offeringCount: number
   updatedAt: number
 }
 
 export type RegistryProjectionAttemptContract = {
   businessId: BusinessId
-  serviceId?: ServiceId
+  offeringRef?: OfferingRef
   logicalKey: string
   projectionKind: RegistryProjectionKind
   sourceHash: SourceHash
@@ -175,7 +153,7 @@ export type IndexStatusContract = {
   targetType: IndexTargetType
   targetRef: string
   businessId?: BusinessId
-  serviceId?: ServiceId
+  offeringRef?: OfferingRef
   status: IndexStatus
   lastAttemptAt: number
   sourceHash: SourceHash
@@ -187,11 +165,11 @@ export type RegistrySearchDocumentContract = {
   documentId: string
   schemaVersion: RegistrySearchDocumentSourceVersion
   businessSlug: string
-  serviceSlug: string
+  offeringRef: OfferingRef
   businessName: string
-  serviceName: string
-  serviceCategory: string
-  serviceCategoryKey: string
+  name: string
+  category: string
+  categoryKey: string
   suburb: string
   stateTerritory: string
   postcode?: string
@@ -199,31 +177,12 @@ export type RegistrySearchDocumentContract = {
   trustTier: TrustTier
   firstRequestMode: FirstRequestMode
   placeKeys: readonly string[]
-  serviceKeywords: readonly string[]
+  keywords: readonly string[]
   searchText: string
-  serviceArea: string
+  serviceAreaSummary: string
   sourceHash?: SourceHash
   generatedHash: SourceHash
   updatedAt: number
-}
-
-export type RegistrySearchSyncAttemptContract = {
-  attemptId: string
-  documentId: string
-  businessSlug: string
-  serviceSlug: string
-  operation: RegistrySearchSyncOperation
-  status: RegistrySearchSyncStatus
-  meiliTaskUid?: string
-  sourceHash?: SourceHash
-  generatedHash?: SourceHash
-  retryCount: number
-  retryAfter?: number
-  lastErrorCode?: string
-  lastErrorRedacted?: string
-  staleReason?: string
-  startedAt: number
-  finishedAt?: number
 }
 
 export type RegistrySourceState = PublicCatalogReadState & {
@@ -231,18 +190,18 @@ export type RegistrySourceState = PublicCatalogReadState & {
   registryProjectionItems: RegistryProjectionItemContract[]
   registryProjectionAttempts: RegistryProjectionAttemptContract[]
   registrySearchDocuments?: RegistrySearchDocumentContract[]
-  registrySearchSyncAttempts?: RegistrySearchSyncAttemptContract[]
   discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
   indexStatus: IndexStatusContract[]
   auditEvents: AuditEventContract[]
 }
+
 
 export type RegistryProjectionAdapterResult =
   | { kind: 'ok'; generatedHash: SourceHash }
   | { kind: 'error'; code: string; redactedMessage: string }
 
 export type RegistryProjectionAdapter = {
-  writeProjection: (catalog: PublicCatalogContract) => RegistryProjectionAdapterResult
+  writeProjection: (catalog: PublicBusinessCatalogApiV2Dto) => RegistryProjectionAdapterResult
 }
 
 export type SyncCatalogProjectionInput = {
@@ -263,7 +222,7 @@ export type SyncCatalogProjectionResult =
   | {
       kind: 'ok'
       code: 'registry_projection_indexed' | 'registry_projection_replayed'
-      catalog: PublicCatalogContract
+      catalog: PublicBusinessCatalogApiV2Dto
       projectionItems: readonly RegistryProjectionItemContract[]
       attempt: RegistryProjectionAttemptContract
       indexStatuses: readonly IndexStatusContract[]
@@ -297,9 +256,6 @@ export type CatalogHealthReadback = {
 }
 
 export type {
-  PublicBusinessCatalogApiDto,
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
   PublishedInquiryTargetResolution,
@@ -311,21 +267,20 @@ export {
   type TradeVocabularyEntry,
 } from './internal/trade-vocabulary'
 
-export const createDefaultRegistrySourceState = createDefaultRegistrySourceStateImpl
-export const createLocalE2eRegistrySourceState = createLocalE2eRegistrySourceStateImpl
-
-export const syncCatalogProjection = syncCatalogProjectionImpl
-
-export const retryRegistryProjection = retryRegistryProjectionImpl
-
-export const listPublicBusinessCatalog = listPublicBusinessCatalogImpl
-
-export const searchPublicBusinessCatalog = searchPublicBusinessCatalogImpl
-
-export const getPublicBusinessCatalogBySlug = getPublicBusinessCatalogBySlugImpl
-
-export const resolvePublishedInquiryTarget = resolvePublishedInquiryTargetImpl
-
-export const getIndexStatus = getIndexStatusImpl
-
-export const readCatalogHealth = readCatalogHealthImpl
+export {
+  createDefaultRegistrySourceState,
+  createLocalE2eRegistrySourceState,
+  listPublicBusinessOfferingSupply,
+  searchPublicBusinessOfferingSupply,
+  getPublicBusinessOfferingSupplyBySlug,
+  resolvePublishedInquiryTarget,
+} from './internal/search'
+export {
+  buildRegistrySearchDocumentsForCatalog,
+} from './internal/search-documents'
+export {
+  syncCatalogProjection,
+  retryRegistryProjection,
+  getIndexStatus,
+  readCatalogHealth,
+} from './internal/projection-attempts'

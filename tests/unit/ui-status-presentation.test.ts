@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import {
   aeStatusPresentation,
   aeStatusValues,
-  discoveryStatusToAeStatus,
+  dispositionToAeStatus,
   getStatusPresentation,
+  offeringAccessToAeStatus,
+  offeringSupportToAeStatus,
   statusPresentation,
 } from '@/lib/ui/status-presentation'
 
@@ -56,13 +58,19 @@ describe('getStatusPresentation', () => {
     })
   })
 
-  it('routes discovery status enums through P3-specific presentation entries instead of raw provider copy', () => {
-    expect(discoveryStatusToAeStatus('stale')).toBe('discovery_stale')
-    expect(discoveryStatusToAeStatus('degraded')).toBe('discovery_degraded')
-    expect(discoveryStatusToAeStatus('unavailable')).toBe('discovery_unavailable')
-    expect(getStatusPresentation(discoveryStatusToAeStatus('available'))).toMatchObject({
-      label: 'Available',
-      compactLabel: 'Available',
-    })
+  it('routes V2 disposition and Offering support/access fields through explicit presentation entries', () => {
+    expect(dispositionToAeStatus('stale')).toBe('stale')
+    expect(dispositionToAeStatus('partial')).toBe('degraded')
+    expect(dispositionToAeStatus('current')).toBe('available')
+    expect(offeringSupportToAeStatus({ integrated: true, aeSupportedAction: false })).toBe('guarded')
+    expect(offeringSupportToAeStatus({ integrated: false, aeSupportedAction: false })).toBe('not_live')
+    expect(offeringSupportToAeStatus({ integrated: true, aeSupportedAction: true })).toBe('available')
+    expect(offeringAccessToAeStatus([])).toBe('not_queued')
+    expect(offeringAccessToAeStatus([{
+      accessPathRef: 'access:status',
+      kind: 'human_request',
+      channel: 'website',
+      disclosure: 'Use the website.',
+    }])).toBe('listed')
   })
 })

@@ -1,3 +1,5 @@
+import type { GenericDatabaseWriter } from 'convex/server'
+
 import { brandNonEmpty } from '../src/modules/common/ids'
 import {
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesModule,
@@ -7,36 +9,37 @@ import type {
   InquiryNotificationRecord,
   InquirySourceState,
 } from '../src/modules/inquiries/public'
-import {
-  createEmptyNotificationOutboxSourceState,
-  enqueueInquiryNotification as enqueueInquiryNotificationModule,
-} from '../src/modules/notification-outbox/public'
+import { enqueueInquiryNotification as enqueueInquiryNotificationModule } from '../src/modules/notification-outbox/public'
 import type {
   NotificationDispatchRecord,
   NotificationDispatchStatus,
-  NotificationOutboxSourceState,
   NotificationProviderFamily,
 } from '../src/modules/notification-outbox/public'
-import type { RuntimeDb } from './source_state'
-import { collect } from './inquiryRuntimeDbHelpers'
+import type { DataModel } from './_generated/dataModel'
 import {
-  toDispatchRecord,
-  upsertNotificationDispatch,
-  upsertNotificationDispatchEnqueueReconstruction,
-} from './notificationOutboxPersistence'
+  loadNotificationOutboxSourceStateForThread,
+  persistNotificationOutboxSourceState,
+} from './notificationOutboxSourceState'
+import { persistNotificationDispatchEnqueueReconstruction } from './notificationOutboxPersistence'
 
 export async function enqueueInquiryNotificationDispatches(
-  db: RuntimeDb,
+  db: GenericDatabaseWriter<DataModel>,
   state: InquirySourceState,
   notification: InquiryNotificationRecord,
   businessId: string,
   correlationId: string,
 ): Promise<{ state: InquirySourceState; notification: InquiryNotificationRecord }> {
   const now = Date.now()
-  let outboxState = await loadNotificationDispatchBindingState(db)
+  const providerFamilies = notificationProviderFamilies()
+  const operationKeys = providerFamilies.map((providerFamily) =>
+    `notification:enqueue:${notification.notificationId}:${providerFamily}`
+  )
+  const before = await loadNotificationOutboxSourceStateForThread(db, notification.threadId, operationKeys)
+  let outboxState = before
   const bindings: InquiryNotificationDispatchBinding[] = []
+  const persistedDispatches: NotificationDispatchRecord[] = []
 
-  for (const providerFamily of notificationProviderFamilies()) {
+  for (const providerFamily of providerFamilies) {
     const result = enqueueInquiryNotificationModule(outboxState, {
       businessId: brandNonEmpty(businessId, 'BusinessId'),
       inquiryThreadId: notification.threadId,
@@ -62,9 +65,11 @@ export async function enqueueInquiryNotificationDispatches(
 
     outboxState = result.state
     bindings.push(dispatchBindingFromDispatch(result.dispatch))
+    persistedDispatches.push(result.dispatch)
   }
 
-  await persistNotificationDispatchBindingState(db, outboxState)
+  await persistNotificationOutboxSourceState(db, before, outboxState)
+  await Promise.all(persistedDispatches.map((dispatch) => persistNotificationDispatchEnqueueReconstruction(db, dispatch)))
   const bound = bindInquiryNotificationDispatchesModule(state, {
     notificationId: notification.notificationId,
     dispatchBindings: bindings,
@@ -105,19 +110,3 @@ function notificationOperatorNextAction(
   return 'none'
 }
 
-async function loadNotificationDispatchBindingState(db: RuntimeDb): Promise<NotificationOutboxSourceState> {
-  const dispatches = await collect(db, 'notificationDispatches')
-  return createEmptyNotificationOutboxSourceState({
-    dispatches: dispatches.map(toDispatchRecord),
-  })
-}
-
-async function persistNotificationDispatchBindingState(
-  db: RuntimeDb,
-  state: NotificationOutboxSourceState,
-): Promise<void> {
-  for (const dispatch of state.dispatches) {
-    await upsertNotificationDispatch(db, dispatch)
-    await upsertNotificationDispatchEnqueueReconstruction(db, dispatch)
-  }
-}

@@ -2,15 +2,19 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactElement } from 'react'
 import type * as ReactStartModule from '@tanstack/react-start'
 import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
   isRedirect,
   RouterContextProvider,
   type AnyRedirect,
-  type AnyRouter,
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import { AeCustomerRecord } from '@/components/ae/inquiries/AeCustomerRecord'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -42,8 +46,20 @@ afterEach(() => {
   cleanup()
   submitInquiryMock.mockReset()
   vi.restoreAllMocks()
-  vi.unstubAllGlobals()
 })
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/claim' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/privacy' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/terms' }),
+  ])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+}
 
 describe('GovernedSendReviewRows', () => {
   it('renders every canonical label and distinct value in the declared field order', () => {
@@ -96,17 +112,11 @@ describe('/$slug/inquiry governed-send review', () => {
       reason: 'Try the exact reviewed request again.',
     }
     submitInquiryMock.mockResolvedValue(retryableFailure)
-    vi.stubGlobal('ResizeObserver', TestResizeObserver)
-    vi.stubGlobal('matchMedia', createMatchMedia)
     vi.spyOn(PublicInquiryRoute, 'useLoaderData').mockReturnValue(availableInquiryReadback())
     vi.spyOn(PublicInquiryRoute, 'useSearch').mockReturnValue({})
     const Component = PublicInquiryRoute.options.component as ComponentType
 
-    render(
-      <RouterContextProvider router={{ options: {} } as AnyRouter}>
-        <Component />
-      </RouterContextProvider>,
-    )
+    renderWithRouter(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Confirm what will be sent' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Review what will be sent' })).toBeTruthy()
@@ -150,23 +160,17 @@ describe('/$slug/inquiry governed-send review', () => {
 
 describe('customer inquiry record proof boundary', () => {
   it('states exactly what the record proves and does not prove', () => {
-    vi.stubGlobal('matchMedia', createMatchMedia)
-    vi.spyOn(customerRecordClient, 'isCustomerInquiryRecordClientAvailable').mockReturnValue(true)
-    vi.stubGlobal('ResizeObserver', TestResizeObserver)
     vi.spyOn(customerRecordClient, 'useCustomerInquiryRecord').mockReturnValue(customerRecordResult())
 
-    render(<AeCustomerRecord threadId="inquiry_thread:review" accessKey="private-record-key" />)
+    renderWithRouter(<AeCustomerRecord threadId="inquiry_thread:review" accessKey="private-record-key" />)
 
     expect(screen.getByText('This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.')).toBeTruthy()
   })
 
   it('renders the governed record fields in supplied order without exposing its digest', () => {
-    vi.stubGlobal('matchMedia', createMatchMedia)
-    vi.spyOn(customerRecordClient, 'isCustomerInquiryRecordClientAvailable').mockReturnValue(true)
-    vi.stubGlobal('ResizeObserver', TestResizeObserver)
     vi.spyOn(customerRecordClient, 'useCustomerInquiryRecord').mockReturnValue(customerRecordResult())
 
-    const { container } = render(
+    const { container } = renderWithRouter(
       <AeCustomerRecord threadId="inquiry_thread:review" accessKey="private-record-key" />,
     )
     const summary = screen.getByRole('heading', { name: 'What you sent' }).closest('section')
@@ -178,8 +182,7 @@ describe('customer inquiry record proof boundary', () => {
 
     expect(rows).toEqual([
       { label: 'Business', value: 'business:exact-record' },
-      { label: 'Service', value: 'service:exact-leak-repair' },
-      { label: 'Request type', value: 'quote_request' },
+      { label: 'Offering', value: 'offering:exact-leak-repair' },
       { label: 'Request', value: 'Replace the isolation valve at exactly 8:30 am.' },
       { label: 'Name', value: 'Alex Exact' },
       { label: 'Email', value: 'alex.exact@example.test' },
@@ -221,36 +224,18 @@ describe('/i/$threadId legacy redirect', () => {
   })
 })
 
-class TestResizeObserver implements ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
 
-function createMatchMedia(): MediaQueryList {
-  return {
-    matches: false,
-    media: '',
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  }
-}
 
 function availableInquiryReadback(): Extract<PublicInquiryRouteReadback, { kind: 'available' }> {
   return {
     kind: 'available',
     slug: 'demo-plumbing',
     businessName: 'Demo Plumbing',
-    serviceName: 'Emergency plumbing',
+    offeringName: 'Emergency plumbing',
     disclosure: 'Shared with Demo Plumbing only.',
     target: {
       businessId: brandNonEmpty('business:review', 'BusinessId'),
-      serviceId: brandNonEmpty('service:review', 'ServiceId'),
-      capabilityKind: 'phone_inquiry',
+      offeringRef: brandNonEmpty('offering:review', 'OfferingRef'),
     },
     maxBodyLength: 1_000,
   }
@@ -273,8 +258,7 @@ function customerRecordResult(): CustomerInquiryRecordServerResult {
         digest: 'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         fields: [
           { key: 'businessId', label: 'Business', value: 'business:exact-record' },
-          { key: 'serviceId', label: 'Service', value: 'service:exact-leak-repair' },
-          { key: 'capabilityKind', label: 'Request type', value: 'quote_request' },
+          { key: 'offeringRef', label: 'Offering', value: 'offering:exact-leak-repair' },
           { key: 'body', label: 'Request', value: 'Replace the isolation valve at exactly 8:30 am.' },
           { key: 'contactName', label: 'Name', value: 'Alex Exact' },
           { key: 'contactEmail', label: 'Email', value: 'alex.exact@example.test' },

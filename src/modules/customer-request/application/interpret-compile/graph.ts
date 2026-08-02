@@ -1,13 +1,14 @@
 import {
   openCapabilityDecisionModel,
+  parseCapabilityContractJson,
   projectCapabilityInputValueSchemas,
   sameCapabilityContractRef,
   type CapabilityContractRef,
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
-import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
-import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
+import { exactContractRefKey } from '@/modules/customer-request/contract-ref-key'
 import { bindCustomerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
+import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
 
 import type {
   EligibleSupply,
@@ -17,12 +18,8 @@ import type {
   RequestGraphUnavailable,
 } from './types'
 
-export function exactRefKey(ref: CapabilityContractRef): string {
-  return `${ref.capabilityId}\u0000${ref.version}\u0000${ref.contractDigest}`
-}
-
 export type LoadRequestGraphPorts = Readonly<{
-  listEligible: (networkId: string) => Promise<EligibleSupplyResult>
+  listRouteable: (networkId: string) => Promise<EligibleSupplyResult>
   getActiveExact: (ref: CapabilityContractRef) => Promise<ExactContractResult>
 }>
 
@@ -36,7 +33,7 @@ export async function loadRequestGraph(
   ports: LoadRequestGraphPorts,
   limits: RequestGraphLimits,
 ): Promise<RequestGraph | RequestGraphUnavailable> {
-  const supply = await ports.listEligible(networkId)
+  const supply = await ports.listRouteable(networkId)
   if (supply.kind !== 'available') return { kind: 'unavailable', reason: 'graph_unreadable' }
   if (supply.supplies.length === 0) return { kind: 'unavailable', reason: 'no_routeable_supply' }
   return assembleRequestGraph(supply.supplies, ports.getActiveExact, limits)
@@ -57,25 +54,25 @@ export async function assembleRequestGraph(
       version: item.binding.version,
       contractDigest: item.binding.contractDigest,
     }
-    const key = exactRefKey(contractRef)
+    const key = exactContractRefKey(contractRef)
     let model = modelsByRef.get(key)
     if (model === undefined) {
       const stored = await getActiveExact(contractRef)
       if (stored.kind !== 'found') return { kind: 'unavailable', reason: 'graph_unreadable' }
-      const decoded = encodeCapabilityContractDocumentJson(stored.documentJson)
-      if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable', reason: 'graph_unreadable' }
-      model = openCapabilityDecisionModel(decoded.contract)
+      const contract = parseCapabilityContractJson(stored.documentJson)
+      if (!sameCapabilityContractRef(contract.ref, contractRef)) return { kind: 'unavailable', reason: 'graph_unreadable' }
+      model = openCapabilityDecisionModel(contract)
       modelsByRef.set(key, model)
       let descriptor: ReturnType<typeof bindCustomerCapabilityDescriptor>
       try {
         descriptor = bindCustomerCapabilityDescriptor({
           contractRef: model.contractRef,
           selectionKey: model.selectionKey,
-          name: decoded.contract.name,
-          description: decoded.contract.description,
+          name: contract.name,
+          description: contract.description,
           inputs: model.inputs,
           valueSchemas: projectCapabilityInputValueSchemas(
-            decoded.contract.inputSchema,
+            contract.inputSchema,
             model.inputs,
             limits.maximumContractProjectedInputSchemaBytes,
           ),

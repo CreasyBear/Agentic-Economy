@@ -75,9 +75,9 @@ export async function startOrResume(
       || priorAttempt.state === 'outcome_unknown') {
       return { kind: 'refused', reason: 'route_unavailable' }
     }
-    if (priorAttempt.state === 'queued' || priorAttempt.state === 'leased') {
+    if (priorAttempt.state === 'queued') {
       const priorOutbox = await ports.loadDispatchByAttemptRef(priorAttempt.attemptRef)
-      if (priorOutbox === null || (priorOutbox.state !== 'pending' && priorOutbox.state !== 'leased')) {
+      if (priorOutbox === null || priorOutbox.state !== 'pending') {
         throw new Error('customer_request_route_dispatch_integrity_failure')
       }
       await ports.cancelPriorUnreleasedRun({

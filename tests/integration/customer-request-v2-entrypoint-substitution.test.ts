@@ -1,4 +1,3 @@
-import { convexTest } from 'convex-test'
 import { Response as UndiciResponse } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,17 +13,12 @@ import {
 } from '../../convex/capabilitySupply'
 import { publishBusinessCatalogCommand } from '../../convex/catalog'
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
-import { runtimeDb, runtimeWriter } from '../../convex/source_state'
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
-const createBackend = () => convexTest(schema, modules)
-type Backend = ReturnType<typeof createBackend>
+import { convexTestWithWorkers } from '../helpers/convex-fixtures'
+type Backend = ReturnType<typeof convexTestWithWorkers>
 const identity = { subject: 'customer-substitution', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
 
@@ -48,7 +42,7 @@ describe('V2 Request registration-only business substitution', () => {
       dataFields: [],
       disclosures: ['Sandbox readiness probe only.'],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    const backend = createBackend()
+    const backend = await convexTestWithWorkers()
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await observeAllPublishedSupplyReady(backend)
 
@@ -95,7 +89,7 @@ describe('V2 Request registration-only business substitution', () => {
       dataFields: [],
       disclosures: ['Sandbox readiness probe only.'],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    const backend = createBackend()
+    const backend = await convexTestWithWorkers()
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const third = await registerThirdSandboxBusiness(backend)
     await observeAllPublishedSupplyReady(backend)
@@ -158,7 +152,7 @@ async function registerThirdSandboxBusiness(backend: Backend) {
       clerkUserId: 'test-registration-owner',
       displayName: 'Registration Test Owner',
     }
-    const claim = await claimBusinessCommand(runtimeWriter(ctx.db), {
+    const claim = await claimBusinessCommand(ctx.db, {
       actor,
       facts: {
         name: 'Sandbox Option Three',
@@ -176,7 +170,7 @@ async function registerThirdSandboxBusiness(backend: Backend) {
       correlationId: 'test:substitution:claim:three',
     }, now)
     if (claim.kind !== 'ok') throw new Error(`third business claim failed: ${claim.code}`)
-    const published = await publishBusinessCatalogCommand(runtimeDb(ctx.db), {
+    const published = await publishBusinessCatalogCommand(ctx.db, {
       actor,
       claimId: claim.claim.claimId,
       operationKey: 'test:substitution:catalog:three',
@@ -297,13 +291,13 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
   const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
   if (input === undefined) throw new Error('sandbox request input missing')
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    choices: [{ message: { content: JSON.stringify({
+    choices: [{ message: { role: 'assistant', content: JSON.stringify({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
         facts: [{ inputKey: input.key, value: 'Find the cheapest labelled sandbox option' }],
       }],
-    }) } }],
+    }) }, finish_reason: 'stop' }],
   }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
   vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
   const customer = backend.withIdentity(identity)
@@ -314,14 +308,14 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
     customerJob: 'Find the cheapest labelled sandbox option',
     routing: { networkId: 'ae:public' },
   })
-  if (submitted.kind !== 'request') throw new Error(`request submission failed: ${submitted.kind}`)
+  if (submitted.kind !== 'request') throw new Error(`request submission failed: ${JSON.stringify(submitted)}`)
   const answered = submitted
   const decision = await customer.action(api.customerRequestApplication.compare, {
     requestRef: answered.requestRef,
     revision: answered.revision,
     idempotencyKey: `compare:${requestId}`,
   })
-  if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error('route decision missing')
+  if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error(`route decision missing: submitted=${JSON.stringify(submitted)} decision=${JSON.stringify(decision)}`)
   const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, { requestId })
   if (aggregate.kind !== 'current' || aggregate.aggregate.plan.actions[0] === undefined) throw new Error('request aggregate missing')
   const historical = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
@@ -425,7 +419,7 @@ async function observeAllPublishedSupplyReady(backend: Backend) {
     })
     if (observed.kind !== 'observed') throw new Error(`published supply readiness failed: ${observed.reason}`)
   }
-  const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 16 })
+  const supply = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 16 })
   if (supply.kind !== 'available') throw new Error(`published supply unavailable: ${supply.reason}`)
   if (supply.supplies.some((item) => item.publication === undefined)) {
     throw new Error(`published supply not active: ${JSON.stringify(supply.supplies.map((item) => item.binding.bindingId))}`)

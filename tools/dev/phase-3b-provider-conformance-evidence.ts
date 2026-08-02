@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { writeFile } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
+import { parseArgs } from '../ae/lib/args'
 
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
@@ -233,7 +234,8 @@ export async function writePhase3bProviderConformanceEvidence(path: string, requ
 }
 
 if (basename(process.argv[1] ?? '') === 'phase-3b-provider-conformance-evidence.ts') {
-  const [subcommand, path, revision] = process.argv.slice(2)
+  const { command: subcommand, positionals } = parseArgs(process.argv.slice(2))
+  const [path, revision] = positionals
   if (subcommand !== 'run' || !path || !revision) {
     throw new Error('usage: phase-3b-provider-conformance-evidence.ts run <path> <revision-or-HEAD>')
   }

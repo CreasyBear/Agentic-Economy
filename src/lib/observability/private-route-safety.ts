@@ -1,14 +1,14 @@
-const privateAccessParameterNames: Readonly<Record<string, true>> = Object.freeze({
-  k: true,
-  access: true,
-  accesskey: true,
-  accesstoken: true,
-  token: true,
-  secret: true,
-  password: true,
-  email: true,
-  phone: true,
-})
+const privateAccessParameterNames = new Set([
+  'k',
+  'access',
+  'accesskey',
+  'accesstoken',
+  'token',
+  'secret',
+  'password',
+  'email',
+  'phone',
+])
 
 const accessKeysByThreadId = new Map<string, string>()
 const privateRecordAccessStoragePrefix = 'ae.privateRecordAccess.'
@@ -55,7 +55,7 @@ export function securePrivateRecordLocation(
 
   privateRecordTelemetryBlocked = true
   for (const key of [...search.keys()]) {
-    if (privateAccessParameterNames[key.toLowerCase()] === true) search.delete(key)
+    if (privateAccessParameterNames.has(key.toLowerCase())) search.delete(key)
   }
   const safeSearch = search.toString()
   const safeUrl = `${location.pathname}${safeSearch.length === 0 ? '' : `?${safeSearch}`}#record`
@@ -96,7 +96,7 @@ export function safeTelemetryPath(location: Readonly<{ pathname: string }>): str
 }
 
 export function sanitizeTelemetryValue(value: unknown, key?: string): unknown {
-  if (key !== undefined && privateAccessParameterNames[key.toLowerCase()] === true) return '[Filtered]'
+  if (key !== undefined && privateAccessParameterNames.has(key.toLowerCase())) return '[Filtered]'
   if (typeof value === 'string') return sanitizeTelemetryString(value)
   if (Array.isArray(value)) return value.map((item) => sanitizeTelemetryValue(item))
   if (value === null || typeof value !== 'object') return value
@@ -116,7 +116,7 @@ export function sanitizeTelemetryEvent<T>(event: T): T | null {
 
 function firstPrivateAccessValue(parameters: URLSearchParams): string | undefined {
   for (const [key, value] of parameters.entries()) {
-    if (privateAccessParameterNames[key.toLowerCase()] === true && value.trim().length > 0) return value.trim()
+    if (privateAccessParameterNames.has(key.toLowerCase()) && value.trim().length > 0) return value.trim()
   }
   return undefined
 }

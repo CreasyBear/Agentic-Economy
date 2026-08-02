@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import {
@@ -104,6 +104,7 @@ describe('harness run loop', () => {
         retrieval: async ({ loop, state }) => {
           const outcome = await loop.runTool({
             tool,
+            mode: 'public-read',
             input: { q: 'plumber' },
             surface: 'answerThread',
           })
@@ -131,9 +132,9 @@ describe('harness run loop', () => {
 
   it('schedules tool batches with OMP-style shared and exclusive ordering', async () => {
     const log: string[] = []
-    const first = createDeferred<void>()
-    const second = createDeferred<void>()
-    const third = createDeferred<void>()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const third = Promise.withResolvers<void>()
     const loop = new HarnessRunLoop({
       runId: 'run-tool-batch',
       sessionId: 'session-tool-batch',
@@ -143,16 +144,19 @@ describe('harness run loop', () => {
     const batch = loop.runToolBatch([
       {
         tool: createBatchTool('tool.first', 'shared', 'first', first.promise, log),
+        mode: 'public-read',
         input: {},
         surface: 'answerThread',
       },
       {
         tool: createBatchTool('tool.second', 'exclusive', 'second', second.promise, log),
+        mode: 'public-read',
         input: {},
         surface: 'answerThread',
       },
       {
         tool: createBatchTool('tool.third', 'shared', 'third', third.promise, log),
+        mode: 'public-read',
         input: {},
         surface: 'answerThread',
       },
@@ -201,6 +205,7 @@ describe('harness run loop', () => {
       phases: {
         retrieval: async ({ loop }) => {
           await loop.runTool({
+            mode: 'public-read',
             tool,
             input: { q: 42 } as unknown as { q: string },
             surface: 'answerThread',
@@ -438,24 +443,9 @@ function createBatchTool(
   }
 }
 
-function createDeferred<T>(): {
-  promise: Promise<T>
-  resolve: (value: T) => void
-} {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((innerResolve) => {
-    resolve = innerResolve
-  })
-  return { promise, resolve }
-}
 
 async function waitForLog(log: readonly string[], expected: readonly string[]): Promise<void> {
-  for (let index = 0; index < 20; index += 1) {
-    if (JSON.stringify(log) === JSON.stringify(expected)) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  }
+  await vi.waitFor(() => expect(log).toEqual(expected))
 }
 
 function createClock(start = 1_000): {

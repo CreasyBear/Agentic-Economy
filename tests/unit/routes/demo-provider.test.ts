@@ -44,6 +44,18 @@ describe('AE Demo Services quote endpoint', () => {
     await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'invalid_request' })
   })
 
+  it('rejects oversized JSON before parsing a quote', async () => {
+    const response = await handleDemoProviderQuoteRequest(new Request('https://ae.example/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service: 'remote-tech-check', padding: 'x'.repeat(8 * 1024) }),
+    }))
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'request_too_large' })
+  })
+
+
 
   it('refuses unsupported services without inventing a quote', async () => {
     const response = await handleDemoProviderQuoteRequest(new Request('https://ae.example/quote', {

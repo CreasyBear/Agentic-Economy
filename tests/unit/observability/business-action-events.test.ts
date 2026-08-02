@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   AuditEventTypeValues,
   AuditTargetTypeValues,
@@ -187,12 +188,12 @@ describe('business action observability contracts', () => {
         noRepairMarked: true,
         auditEventType: 'business_action.no_repair_marked',
         auditTargetType: 'business_action_no_repair',
-        requestHash: 'hash:request',
+        requestHash: canonicalDigest('request'),
         receiptReconstructionStatus: 'proof_gap',
-        noRepairHash: 'hash:no-repair',
+        noRepairHash: canonicalDigest('no-repair'),
         evidenceRefs: ['support:no-repair'],
-        providerEvidenceBefore: ['hash:provider:evt_1'],
-        providerEvidenceAfter: ['hash:provider:evt_1'],
+        providerEvidenceBefore: [canonicalDigest('provider:evt_1')],
+        providerEvidenceAfter: [canonicalDigest('provider:evt_1')],
       })
     ).toEqual({
       valid: true,
@@ -207,12 +208,12 @@ describe('business action observability contracts', () => {
         noRepairMarked: true,
         auditEventType: 'business_action.no_repair_marked',
         auditTargetType: 'business_action_no_repair',
-        requestHash: 'hash:request',
+        requestHash: canonicalDigest('request'),
         receiptReconstructionStatus: 'proof_gap',
-        noRepairHash: 'hash:no-repair',
+        noRepairHash: canonicalDigest('no-repair'),
         evidenceRefs: ['support:no-repair'],
-        providerEvidenceBefore: ['hash:provider:evt_1'],
-        providerEvidenceAfter: ['hash:provider:evt_2'],
+        providerEvidenceBefore: [canonicalDigest('provider:evt_1')],
+        providerEvidenceAfter: [canonicalDigest('provider:evt_2')],
       })
     ).toEqual({ valid: false, reason: 'provider_evidence_rewritten' })
   })
@@ -236,7 +237,7 @@ describe('business action observability contracts', () => {
           privatePayloadRef: undefined,
           redactedAt: 30,
           deletedAt: 30,
-          tombstoneHash: 'hash:tombstone',
+          tombstoneHash: canonicalDigest('tombstone'),
         })
       )
     ).toMatchObject({
@@ -290,7 +291,7 @@ describe('business action observability contracts', () => {
       requestRef: 'business-action-request:paid-intake',
       retentionClass: 'business_action_private_evidence',
       accessPolicy: 'owner_admin_operator_only',
-      payloadHash: 'hash:private-payload',
+      payloadHash: canonicalDigest('private-payload'),
       ttlExpiresAt: 100,
       redactedAt: undefined,
       tombstoned: false,
@@ -337,6 +338,7 @@ function operatorControlCommand(overrides: Partial<SetOperatorControlCommand> = 
 function activeMembership(role: AdminMembership['role']): AdminMembership {
   return {
     clerkUserId: `admin_${role}`,
+    tokenIdentifier: `clerk|admin_${role}`,
     role,
     state: 'active',
     grantedBy: 'bootstrap',
@@ -372,7 +374,7 @@ function privateEvidenceInput(
     requestRef: 'business-action-request:paid-intake',
     retentionClass: 'business_action_private_evidence',
     accessPolicy: 'owner_admin_operator_only',
-    payloadHash: 'hash:private-payload',
+    payloadHash: canonicalDigest('private-payload'),
     privatePayloadRef: 'private-endpoint://trace/paid-intake',
     ttlExpiresAt: 100,
     now: 30,

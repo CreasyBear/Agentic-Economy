@@ -9,13 +9,15 @@ import validationMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/validat
 import rootMetaSchema from 'ajv/dist/refs/json-schema-2020-12/schema.json'
 import { z } from 'zod'
 
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 export const CAPABILITY_CONTRACT_FORMAT = 'ae.capability-contract:v2' as const
-export const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema' as const
+const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema' as const
 
+const MAX_CONTRACT_JSON_BYTES = 300_000
 const MAX_SCHEMA_BYTES = 131_072
 const MAX_SCHEMA_DEPTH = 64
 const MAX_VALIDATION_ISSUES = 32
@@ -24,6 +26,7 @@ const MAX_COMPILED_CONTRACTS = 32
 const MAX_COMPILED_POINTED_SCHEMAS = 128
 const MAX_VALIDATED_VALUE_NODES = 10_000
 const MAX_VALIDATED_VALUE_DEPTH = 64
+const contractJsonEncoder = new TextEncoder()
 
 type ValidationError = Readonly<{ instancePath?: string; keyword?: string; params?: Readonly<Record<string, unknown>> }>
 type SchemaValidator = ((value: unknown) => boolean) & { errors?: readonly ValidationError[] | null }
@@ -44,8 +47,8 @@ const supportedSchemaKeywords = new Set([
 
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | Readonly<{ [key: string]: JsonValue }>
 
-const identifier = z.string().trim().min(1).max(200)
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
+export const identifier = z.string().trim().min(1).max(200)
+export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
   z.null(), z.boolean(), z.number().finite(), z.string(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema),
 ]))
 const jsonSchema = z.record(z.string(), jsonValueSchema).superRefine((schema, context) => {
@@ -129,6 +132,22 @@ export type CapabilitySelectionKey = string & Readonly<{ [capabilitySelectionKey
 export type CapabilityInputKey = string & Readonly<{ [capabilityInputKeyBrand]: true }>
 export type PointedSchemaIdentity = string & Readonly<{ [pointedSchemaIdentityBrand]: true }>
 export type CapabilityDataUseDeclarationKey = string & Readonly<{ [capabilityDataUseDeclarationKeyBrand]: true }>
+
+export function rehydrateCapabilitySelectionKey(value: string): CapabilitySelectionKey {
+  if (value.trim().length === 0) throw new Error('capability_selection_key_invalid')
+  return value as CapabilitySelectionKey
+}
+
+export function rehydrateCapabilityInputKey(value: string): CapabilityInputKey {
+  if (value.trim().length === 0) throw new Error('capability_input_key_invalid')
+  return value as CapabilityInputKey
+}
+
+export function rehydratePointedSchemaIdentity(value: string): PointedSchemaIdentity {
+  if (!isCanonicalDigest(value)) throw new Error('pointed_schema_identity_invalid')
+  return value as PointedSchemaIdentity
+}
+
 export type CapabilityInputStage = 'option_selection' | 'commitment'
 export type CapabilityInputSemantic = Readonly<{
   key: CapabilityInputKey
@@ -312,6 +331,19 @@ export function defineCapabilityContract(input: unknown): CapabilityContract {
   return contract
 }
 
+export function parseCapabilityContractJson(input: string): CapabilityContract {
+  if (contractJsonEncoder.encode(input).byteLength > MAX_CONTRACT_JSON_BYTES) {
+    throw new Error('capability_contract_too_large')
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input)
+  } catch {
+    throw new Error('capability_contract_invalid')
+  }
+  return defineCapabilityContract(parsed)
+}
+
 export function sameCapabilityContractRef(left: CapabilityContractRef, right: CapabilityContractRef): boolean {
   return left.capabilityId === right.capabilityId
     && left.version === right.version
@@ -327,8 +359,10 @@ export function projectCapabilityInputValueSchema(
   input: CapabilityInputSemantic,
 ): Readonly<Record<string, JsonValue>> {
   const pointedSchema = resolvePointedSchema(inputSchema, input.inputPointer)
-  if (pointedSchema === undefined
-    || canonicalDigest(pointedSchema as StableHashValue) !== input.schemaIdentity) {
+  const pointedSchemaIdentity = pointedSchema === undefined
+    ? undefined
+    : rehydratePointedSchemaIdentity(canonicalDigest(pointedSchema as StableHashValue))
+  if (pointedSchema === undefined || pointedSchemaIdentity !== input.schemaIdentity) {
     throw new Error('capability_input_schema_projection_mismatch')
   }
   return pointedSchema
@@ -369,7 +403,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     }
     exactContract = verifiedContract
   }
-  const selectionKey = `ae_selection:${canonicalDigest(exactContract.ref as StableHashValue)}` as CapabilitySelectionKey
+  const selectionKey = rehydrateCapabilitySelectionKey(`ae_selection:${canonicalDigest(exactContract.ref as StableHashValue)}`)
   const inputAnnotations = exactContract.customerAnnotations
     .filter((annotation) => annotation.document === 'input')
     .sort((left, right) => left.pointer.localeCompare(right.pointer))
@@ -377,7 +411,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     const pointedSchema = resolvePointedSchema(exactContract.inputSchema, annotation.pointer)
     if (pointedSchema === undefined) throw new Error('capability_semantic_projection_failed')
     return {
-      key: `ae_input:${canonicalDigest({ ref: exactContract.ref, inputPointer: annotation.pointer } as StableHashValue)}` as CapabilityInputKey,
+      key: rehydrateCapabilityInputKey(`ae_input:${canonicalDigest({ ref: exactContract.ref, inputPointer: annotation.pointer } as StableHashValue)}`),
       annotationId: annotation.annotationId,
       ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
       inputPointer: annotation.pointer,
@@ -387,7 +421,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       inference: annotation.inference ?? 'allowed',
       stage: annotation.role === 'commitment' ? 'commitment' : 'option_selection',
       required: instancePointerStatus(exactContract.inputSchema, annotation.pointer).guaranteed,
-      schemaIdentity: canonicalDigest(pointedSchema as StableHashValue) as PointedSchemaIdentity,
+      schemaIdentity: rehydratePointedSchemaIdentity(canonicalDigest(pointedSchema as StableHashValue)),
       dataUse: exactContract.dataUse.filter((declaration) => pointerCovers(declaration.inputPointer, annotation.pointer)),
     }
   })
@@ -406,7 +440,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       label: annotation.label,
       role: annotation.role as CapabilityEvidenceSemantic['role'],
       guaranteed: instancePointerStatus(exactContract.outputSchema, requirement.outputPointer).guaranteed,
-      schemaIdentity: canonicalDigest(pointedSchema as StableHashValue) as PointedSchemaIdentity,
+      schemaIdentity: rehydratePointedSchemaIdentity(canonicalDigest(pointedSchema as StableHashValue)),
     }
   }).sort((left, right) => left.outputPointer.localeCompare(right.outputPointer))
   const inputValidator = compiledValidator(exactContract, 'input')
@@ -437,7 +471,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       } as StableHashValue)}` as CapabilityDataUseDeclarationKey,
       effectId: declaration.effectId,
       inputPointer: declaration.inputPointer,
-      schemaIdentity: canonicalDigest(schema as StableHashValue) as PointedSchemaIdentity,
+      schemaIdentity: rehydratePointedSchemaIdentity(canonicalDigest(schema as StableHashValue)),
       classification: declaration.classification,
       phase: declaration.phase,
       recipient: declaration.recipient,
@@ -912,7 +946,7 @@ function materializeInputFacts(
 }
 
 function setJsonPointer(root: Record<string, JsonValue>, pointer: string, value: JsonValue): void {
-  const segments = pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+  const segments = decodeJsonPointerSegments(pointer)
   let current: Record<string, JsonValue> | JsonValue[] = root
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index]
@@ -1058,7 +1092,7 @@ function resolveInstanceSchema(
   root: Readonly<Record<string, JsonValue>>,
   pointer: string,
 ): Readonly<Record<string, JsonValue>> | undefined {
-  const segments = pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+  const segments = decodeJsonPointerSegments(pointer)
   return resolveInstanceSchemaSegments(root, segments, root, new Set())
 }
 
@@ -1160,7 +1194,7 @@ function resolveInstanceSchemaSegments(
 }
 
 function instancePointerStatus(schema: Readonly<Record<string, JsonValue>>, pointer: string): Readonly<{ declared: boolean; guaranteed: boolean }> {
-  const segments = pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+  const segments = decodeJsonPointerSegments(pointer)
   return schemaPathStatus(schema, segments, schema, new Set())
 }
 
@@ -1309,6 +1343,10 @@ function escapePointerSegment(value: string): string {
 function pointerCovers(parent: string, child: string): boolean {
   return parent === child || child.startsWith(`${parent}/`)
 }
+function decodeJsonPointerSegments(pointer: string): string[] {
+  return pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+}
+
 
 function pointersOverlap(left: string, right: string): boolean {
   return pointerCovers(left, right) || pointerCovers(right, left)
@@ -1316,7 +1354,7 @@ function pointersOverlap(left: string, right: string): boolean {
 
 function resolveSchemaReference(root: Readonly<Record<string, JsonValue>>, reference: string): Readonly<Record<string, JsonValue>> | undefined {
   let current: JsonValue = root
-  for (const segment of reference.slice(2).split('/').map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'))) {
+  for (const segment of decodeJsonPointerSegments(reference.slice(1))) {
     if (!isJsonRecord(current)) return undefined
     const next: JsonValue | undefined = current[segment]
     if (next === undefined) return undefined
@@ -1326,6 +1364,6 @@ function resolveSchemaReference(root: Readonly<Record<string, JsonValue>>, refer
 }
 
 function isJsonRecord(value: JsonValue | undefined): value is Readonly<Record<string, JsonValue>> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  return isRecord(value)
 }
 

@@ -1,19 +1,19 @@
-import type { UserIdentity } from 'convex/server'
+import type { GenericDatabaseReader, GenericDatabaseWriter } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import { TableAggregate } from '@convex-dev/aggregate'
+import { components } from './_generated/api'
+import type { DataModel, Doc, Id } from './_generated/dataModel'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 
-import { readActiveAdminMembership } from './authz'
+import { admissionKey, assertAdmission } from './lib/rateLimit'
+
+import { readCurrentActiveAdminMembership as readCurrentActiveMembership } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import {
-  loadPhaseOneSourceState,
-  persistPhaseOneSourceState,
-  runtimeDb,
-  type RuntimeDb,
-  type RuntimeDocument,
-  type RuntimeQuery,
-} from './source_state'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import {
+  ActivationStageValues,
+  OperatorControlKeyValues,
   parseOwnerActivationStateRow,
   readOperatorControls as readOperatorControlsModule,
   recordFunnelEvent,
@@ -25,16 +25,27 @@ import {
   type OperatorControlReadback,
   type OperatorControlRecord,
   type OperatorControlSourceState,
+  type SetOperatorControlResult,
 } from '../src/modules/observability/public'
 import {
   recordAdminActionDenied,
   requireAdminAuthority,
 } from '../src/modules/security/public'
 import type {
-  AdminAuthorityState,
   AdminDecisionAudit,
   AdminMembership,
 } from '../src/modules/security/public'
+
+
+const ownerActivationByStage = new TableAggregate<{
+  Key: OwnerActivationState['stage']
+  DataModel: DataModel
+  TableName: 'ownerActivationState'
+}>(components.ownerActivationByStage, {
+  sortKey: (document) => document.stage,
+})
+
+export const OPERATOR_CONTROL_KEY_COUNT = OperatorControlKeyValues.length
 
 const operatorControlKey = v.union(
   v.literal('claims_enabled'),
@@ -213,12 +224,6 @@ const ownerActivationSummaryRow = v.object({
   count: v.number(),
 })
 
-type RuntimeCtx = {
-  db: object
-  auth: {
-    getUserIdentity: () => Promise<UserIdentity | null>
-  }
-}
 
 export const setOperatorControl = mutationGeneric({
   args: {
@@ -246,25 +251,30 @@ export const setOperatorControl = mutationGeneric({
       }
     }
 
-    const db = runtimeDb(ctx.db)
-    const [source, adminMembership] = await Promise.all([
-      loadPhaseOneSourceState(db),
+    const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
+    const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+    const auditEventId = `audit:operator_control.changed:${args.key}:${operationKey}`
+    const [operatorSource, adminMembership] = await Promise.all([
+      loadOperatorControlSource(ctx.db, args.key, auditEventId),
       readCurrentActiveMembership(ctx),
     ])
     const authority = requireAdminAuthority(adminMembership, 'set_operator_control')
     if (authority.kind === 'denied') {
-      const denied = recordAdminActionDenied(adminAuthorityState(source), {
-        actorMembership: adminMembership,
-        action: 'set_operator_control',
-        targetType: 'operator_control',
-        targetRef: args.key,
-        reasonCode: authority.reason,
-        evidenceRefs: args.evidenceRefs,
-        operationKey: args.operationKey,
-        correlationId: args.correlationId,
-        now: Date.now(),
-      })
-      await persistPhaseOneSourceState(db, source)
+      const denied = recordAdminActionDenied(
+        { adminMemberships: [], adminMembershipAuditEvents: [], auditEvents: [] },
+        {
+          actorMembership: adminMembership,
+          action: 'set_operator_control',
+          targetType: 'operator_control',
+          targetRef: args.key,
+          reasonCode: authority.reason,
+          evidenceRefs: args.evidenceRefs,
+          operationKey,
+          correlationId,
+          now: Date.now(),
+        }
+      )
+      await persistAdminAuthorityMutation(ctx.db, denied)
       return {
         kind: 'error' as const,
         code: 'operator_control_admin_denied' as const,
@@ -275,7 +285,7 @@ export const setOperatorControl = mutationGeneric({
       }
     }
 
-    const state = operatorControlState(source)
+    const state = operatorControlState(operatorSource)
     const result = setOperatorControlModule(state, {
       adminMembership,
       key: args.key,
@@ -286,12 +296,12 @@ export const setOperatorControl = mutationGeneric({
       security: {
         csrf: sourceWrite.csrf,
       },
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
+      operationKey,
+      correlationId,
       now: Date.now(),
     })
 
-    await persistPhaseOneSourceState(db, source)
+    await persistOperatorControlMutation(ctx.db, result)
     return summarizeSetOperatorControl(result)
   },
 })
@@ -299,12 +309,8 @@ export const setOperatorControl = mutationGeneric({
 export const readOperatorControls = queryGeneric({
   args: {},
   returns: readOperatorControlsResult,
-  handler: async (ctx) => {
-    const db = runtimeDb(ctx.db)
-    const [source, adminMembership] = await Promise.all([
-      loadPhaseOneSourceState(db),
-      readCurrentActiveMembership(ctx),
-    ])
+  handler: async (ctx: QueryCtx) => {
+    const adminMembership = await readCurrentActiveMembership(ctx)
     const authority = requireAdminAuthority(adminMembership, 'set_operator_control')
     if (authority.kind === 'denied') {
       return {
@@ -314,9 +320,13 @@ export const readOperatorControls = queryGeneric({
       }
     }
 
+    const operatorControls = await ctx.db.query('operatorControls').take(OPERATOR_CONTROL_KEY_COUNT)
     return {
       kind: 'allowed' as const,
-      controls: readOperatorControlsModule(operatorControlState(source), Date.now())
+      controls: readOperatorControlsModule({
+        operatorControls: operatorControls.map(operatorControlFromDocument),
+        auditEvents: [],
+      }, Date.now())
         .map(summarizeOperatorReadback),
     }
   },
@@ -339,13 +349,18 @@ export const recordOwnerActivationEvent = mutationGeneric({
     payload: v.optional(v.record(v.string(), v.union(v.string(), v.number(), v.boolean(), v.null()))),
   },
   returns: v.object({ ok: v.literal(true) }),
-  handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
+  handler: async (ctx: MutationCtx, args) => {
+    const admission = await assertAdmission(ctx, {
+      name: 'public-mutation',
+      key: await admissionKey(ctx, `owner-activation:${args.pseudonymousSessionId}`),
+    })
+    if (!admission.ok) throw new Error(`rate_limited:${admission.retryAfter}`)
+
     const now = Date.now()
     const ownerActivationByBusiness =
       args.businessId === undefined
         ? new Map<string, OwnerActivationState>()
-        : await readOwnerActivationByBusiness(db, brandNonEmpty(args.businessId, 'BusinessId'))
+        : await readOwnerActivationByBusiness(ctx.db, brandNonEmpty(args.businessId, 'BusinessId'))
 
     const input: RecordFunnelEventInput = {
       eventType: args.eventType,
@@ -365,10 +380,10 @@ export const recordOwnerActivationEvent = mutationGeneric({
     }
 
     const result = recordFunnelEvent(input, ownerActivationByBusiness)
-    await upsertFunnelEventRow(db, result.event)
+    await upsertFunnelEventRow(ctx.db, result.event)
 
     if (result.ownerActivation !== undefined) {
-      await upsertOwnerActivationStateRow(db, result.ownerActivation)
+      await upsertOwnerActivationStateRow(ctx, result.ownerActivation)
     }
 
     return { ok: true as const }
@@ -376,115 +391,358 @@ export const recordOwnerActivationEvent = mutationGeneric({
 })
 
 async function readOwnerActivationByBusiness(
-  db: RuntimeDb,
+  db: GenericDatabaseReader<DataModel>,
   businessId: OwnerActivationState['businessId']
 ): Promise<Map<string, OwnerActivationState>> {
   const existing = await db
     .query('ownerActivationState')
-    .withIndex('by_business', (builder) => builder.eq('businessId', businessId))
+    .withIndex('by_business', (builder) =>
+      builder.eq('businessId', businessIdFromValue(db, businessId))
+    )
     .unique()
   if (existing === null) {
     return new Map()
   }
 
-  return new Map([[String(businessId), parseOwnerActivationStateRow(existing)]])
+  return new Map([[businessId, parseOwnerActivationStateRow(existing)]])
 }
 
-async function upsertFunnelEventRow(db: RuntimeDb, event: FunnelEventPersistenceRow): Promise<void> {
+async function upsertFunnelEventRow(
+  db: GenericDatabaseWriter<DataModel>,
+  event: FunnelEventPersistenceRow,
+): Promise<void> {
   const existing = await readFirstFunnelEventByCorrelationId(db, event.correlationId)
+  const businessId = event.businessId === undefined
+    ? undefined
+    : businessIdFromValue(db, event.businessId)
+  const row: Omit<Doc<'funnelEvents'>, '_id' | '_creationTime'> = {
+    eventId: event.eventId,
+    eventType: event.eventType,
+    source: event.source,
+    stage: event.stage,
+    pseudonymousSessionId: event.pseudonymousSessionId,
+    correlationId: event.correlationId,
+    consentFlag: event.consentFlag,
+    redactedPayloadJson: event.redactedPayloadJson,
+    createdAt: event.createdAt,
+    ...(event.referrer === undefined ? {} : { referrer: event.referrer }),
+    ...(event.utmSource === undefined ? {} : { utmSource: event.utmSource }),
+    ...(event.utmCampaign === undefined ? {} : { utmCampaign: event.utmCampaign }),
+    ...(event.actorRef === undefined ? {} : { actorRef: event.actorRef }),
+    ...(businessId === undefined ? {} : { businessId }),
+    ...(event.claimId === undefined
+      ? {}
+      : { claimId: claimIdFromValue(db, event.claimId) }),
+  }
+
   if (existing === null) {
-    await db.insert('funnelEvents', event)
+    await db.insert('funnelEvents', row)
     return
   }
 
-  await db.patch(existing._id, event)
+  await db.patch(existing._id, row)
 }
 
 async function readFirstFunnelEventByCorrelationId(
-  db: RuntimeDb,
-  correlationId: FunnelEventPersistenceRow['correlationId']
-): Promise<RuntimeDocument | null> {
-  const query = db
-    .query('funnelEvents')
-    .withIndex('by_correlationId', (builder) => builder.eq('correlationId', correlationId))
-
-  if (query.take !== undefined) {
-    return (await query.take(1))[0] ?? null
-  }
-
-  if (query.first !== undefined) {
-    return query.first()
-  }
-
-  return (await query.collect()).at(0) ?? null
+  db: GenericDatabaseReader<DataModel>,
+  correlationId: FunnelEventPersistenceRow['correlationId'],
+): Promise<Doc<'funnelEvents'> | null> {
+  return (
+    await db
+      .query('funnelEvents')
+      .withIndex('by_correlationId', (builder) => builder.eq('correlationId', correlationId))
+      .take(1)
+  )[0] ?? null
 }
 
-async function upsertOwnerActivationStateRow(db: RuntimeDb, state: OwnerActivationState): Promise<void> {
-  const existing = await db
+async function upsertOwnerActivationStateRow(
+  ctx: MutationCtx,
+  state: OwnerActivationState,
+): Promise<void> {
+  const businessId = businessIdFromValue(ctx.db, state.businessId)
+  const existing = await ctx.db
     .query('ownerActivationState')
-    .withIndex('by_business', (builder) => builder.eq('businessId', state.businessId))
+    .withIndex('by_business', (builder) => builder.eq('businessId', businessId))
     .unique()
+  const row: Omit<Doc<'ownerActivationState'>, '_id' | '_creationTime'> = {
+    businessId,
+    stage: state.stage,
+    publishSeen: state.publishSeen,
+    statusSeen: state.statusSeen,
+    capabilityHealthSeen: state.capabilityHealthSeen,
+    sharedOrInterestSubmitted: state.sharedOrInterestSubmitted,
+    attributionRecorded: state.attributionRecorded,
+    ...(state.frictionCode === undefined ? {} : { frictionCode: state.frictionCode }),
+    ...(state.failureCode === undefined ? {} : { failureCode: state.failureCode }),
+    lastEventAt: state.lastEventAt,
+  }
+
   if (existing === null) {
-    await db.insert('ownerActivationState', state)
+    const id = await ctx.db.insert('ownerActivationState', row)
+    const inserted = await ctx.db.get(id)
+    if (inserted === null) {
+      throw new Error('owner_activation_state_insert_missing')
+    }
+    await ownerActivationByStage.insert(ctx, inserted)
     return
   }
 
-  await db.patch(existing._id, state)
+  await ctx.db.patch(existing._id, row)
+  const updated = await ctx.db.get(existing._id)
+  if (updated === null) {
+    throw new Error('owner_activation_state_patch_missing')
+  }
+  await ownerActivationByStage.replace(ctx, existing, updated)
 }
-
 export const readAdminOwnerActivationSummary = queryGeneric({
   args: {},
   returns: v.object({
     byStage: v.array(ownerActivationSummaryRow),
     totalTracked: v.number(),
   }),
-  handler: async (ctx) => {
-    const db = runtimeDb(ctx.db)
+  handler: async (ctx: QueryCtx) => {
     const adminMembership = await readCurrentActiveMembership(ctx)
     const authority = requireAdminAuthority(adminMembership, 'set_operator_control')
     if (authority.kind === 'denied') {
       return { byStage: [], totalTracked: 0 }
     }
 
-    const rows = await collect(db, 'ownerActivationState')
-    const counts = new Map<string, number>()
-    for (const row of rows) {
-      const stage = String(row.stage)
-      counts.set(stage, (counts.get(stage) ?? 0) + 1)
-    }
-
-    const byStage = [...counts.entries()]
-      .map(([stage, count]) => ({ stage, count }))
+    const stageCounts = await Promise.all(
+      ActivationStageValues.map(async (stage) => ({
+        stage,
+        count: await ownerActivationByStage.count(ctx, { bounds: { eq: stage } }),
+      }))
+    )
+    const totalTracked = await ownerActivationByStage.count(ctx)
+    const byStage = stageCounts
+      .filter(({ count }) => count > 0)
       .sort((left, right) => right.count - left.count)
 
     return {
       byStage,
-      totalTracked: rows.length,
+      totalTracked,
     }
   },
 })
 
-function operatorControlState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): OperatorControlSourceState {
-  return {
-    operatorControls: source.observability.operatorControls as OperatorControlSourceState['operatorControls'],
-    auditEvents: source.observability.auditEvents as AuditEventContract[],
+function businessIdFromValue(
+  db: GenericDatabaseReader<DataModel>,
+  value: string,
+): Id<'businesses'> {
+  const id = db.normalizeId('businesses', value)
+  if (id === null) {
+    throw new Error('invalid_business_id')
+  }
+  return id
+}
+
+function claimIdFromValue(
+  db: GenericDatabaseReader<DataModel>,
+  value: string,
+): Id<'claims'> {
+  const id = db.normalizeId('claims', value)
+  if (id === null) {
+    throw new Error('invalid_claim_id')
+  }
+  return id
+}
+
+
+
+type PersistedAdminMembership = AdminMembership & { _sourceDocumentId?: string }
+
+type AdminAuthorityWriteResult = {
+  membership?: AdminMembership
+  auditEvent?: AuditEventContract
+  membershipAuditEvent?: AdminDecisionAudit
+}
+
+async function persistAdminAuthorityMutation(
+  db: GenericDatabaseWriter<DataModel>,
+  result: AdminAuthorityWriteResult,
+): Promise<void> {
+  if (result.membership !== undefined) {
+    const membership = result.membership as PersistedAdminMembership
+    const { _sourceDocumentId: sourceDocumentId } = membership
+    const document: Omit<Doc<'adminMemberships'>, '_id' | '_creationTime'> = {
+      clerkUserId: membership.clerkUserId,
+      tokenIdentifier: membership.tokenIdentifier,
+      role: membership.role,
+      state: membership.state,
+      grantedBy: membership.grantedBy,
+      grantedAt: membership.grantedAt,
+      ...(membership.revokedBy === undefined ? {} : { revokedBy: membership.revokedBy }),
+      ...(membership.revokedAt === undefined ? {} : { revokedAt: membership.revokedAt }),
+      ...(membership.evidenceRef === undefined ? {} : { evidenceRef: membership.evidenceRef }),
+    }
+    if (sourceDocumentId === undefined) {
+      await db.insert('adminMemberships', document)
+    } else {
+      await db.patch(sourceDocumentId as Id<'adminMemberships'>, document)
+    }
+  }
+
+  if (result.auditEvent !== undefined) {
+    await persistAuditEvent(db, result.auditEvent)
+  }
+
+  if (result.membershipAuditEvent !== undefined) {
+    const membershipAuditEvent = result.membershipAuditEvent
+    const existing = await db
+      .query('adminMembershipAuditEvents')
+      .withIndex('by_auditEventId', (builder) =>
+        builder.eq('auditEventId', membershipAuditEvent.auditEventId)
+      )
+      .unique()
+    if (existing === null) {
+      await db.insert('adminMembershipAuditEvents', {
+        ...membershipAuditEvent,
+        evidenceRefs: [...membershipAuditEvent.evidenceRefs],
+      })
+    }
   }
 }
 
-function adminAuthorityState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): AdminAuthorityState {
+type OperatorControlReadSource = {
+  operatorControls: Doc<'operatorControls'>[]
+  auditEvents: Doc<'auditEvents'>[]
+}
+
+async function loadOperatorControlSource(
+  db: GenericDatabaseReader<DataModel>,
+  key: OperatorControlRecord['key'],
+  auditEventId: string,
+): Promise<OperatorControlReadSource> {
+  const [control, auditEvent] = await Promise.all([
+    db.query('operatorControls').withIndex('by_key', (query) => query.eq('key', key)).unique(),
+    db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', auditEventId)).unique(),
+  ])
   return {
-    adminMemberships: source.security.adminMemberships as AdminMembership[],
-    adminMembershipAuditEvents: source.security.adminMembershipAuditEvents as AdminDecisionAudit[],
-    auditEvents: source.observability.auditEvents as AuditEventContract[],
+    operatorControls: control === null ? [] : [control],
+    auditEvents: auditEvent === null ? [] : [auditEvent],
   }
 }
 
-async function readCurrentActiveMembership(ctx: RuntimeCtx): Promise<AdminMembership | undefined> {
-  const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity)
+type PersistedOperatorControl = OperatorControlRecord & { _sourceDocumentId?: string }
+
+function operatorControlFromDocument(document: Doc<'operatorControls'>): PersistedOperatorControl {
+  return {
+    key: document.key,
+    enabled: document.enabled,
+    changedByAdminRef: document.changedByAdminRef,
+    reasonCode: document.reasonCode,
+    evidenceRefs: [...document.evidenceRefs],
+    correlationId: brandNonEmpty(document.correlationId, 'CorrelationId'),
+    operationKey: brandNonEmpty(document.operationKey, 'OperationKey'),
+    ...(document.expiresAt === undefined ? {} : { expiresAt: document.expiresAt }),
+    updatedAt: document.updatedAt,
+    _sourceDocumentId: document._id,
+  }
 }
 
-function summarizeSetOperatorControl(result: ReturnType<typeof setOperatorControlModule>) {
+
+async function persistOperatorControlMutation(
+  db: GenericDatabaseWriter<DataModel>,
+  result: SetOperatorControlResult,
+): Promise<void> {
+  if (result.kind === 'error' || result.code === 'operator_control_replayed') {
+    return
+  }
+
+  const control = result.control as PersistedOperatorControl
+  const { _sourceDocumentId: sourceDocumentId, ...document } = control
+  if (sourceDocumentId === undefined) {
+    await db.insert('operatorControls', document)
+  } else {
+    await db.patch(sourceDocumentId as Id<'operatorControls'>, document)
+  }
+
+  await persistAuditEvent(db, result.auditEvent)
+}
+
+async function persistAuditEvent(
+  db: GenericDatabaseWriter<DataModel>,
+  event: AuditEventContract,
+): Promise<void> {
+  const existing = await db
+    .query('auditEvents')
+    .withIndex('by_eventId', (builder) => builder.eq('eventId', event.eventId))
+    .unique()
+  if (existing !== null) {
+    return
+  }
+
+  const redactedPayloadJson = JSON.stringify(event.redactedPayload)
+  if (redactedPayloadJson === undefined) {
+    throw new Error('audit_event_payload_serialization_failed')
+  }
+  const businessId = event.businessId === undefined
+    ? undefined
+    : businessIdFromValue(db, event.businessId)
+  const row: Omit<Doc<'auditEvents'>, '_id' | '_creationTime'> = {
+    eventId: event.eventId,
+    eventType: event.eventType,
+    actorKind: event.actorKind,
+    actorRef: event.actorRef,
+    targetType: event.targetType,
+    targetRef: event.targetRef,
+    ...(businessId === undefined ? {} : { businessId }),
+    idempotencyKey: event.idempotencyKey,
+    correlationId: event.correlationId,
+    ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
+    ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+    ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
+    evidenceRefs: [...event.evidenceRefs],
+    redactedPayloadJson,
+    payloadHash: event.payloadHash,
+    ...(event.failureCode === undefined ? {} : { failureCode: event.failureCode }),
+    createdAt: event.createdAt,
+  }
+  await db.insert('auditEvents', row)
+}
+
+function operatorControlState(source: OperatorControlReadSource): OperatorControlSourceState {
+  return {
+    operatorControls: source.operatorControls.map(operatorControlFromDocument),
+    auditEvents: source.auditEvents.map(auditEventFromDocument),
+  }
+}
+
+function auditEventFromDocument(row: Doc<'auditEvents'>): AuditEventContract {
+  let redactedPayload: AuditEventContract['redactedPayload'] = null
+  try {
+    redactedPayload = JSON.parse(row.redactedPayloadJson) as AuditEventContract['redactedPayload']
+  } catch {
+    redactedPayload = null
+  }
+  return {
+    eventId: brandNonEmpty(row.eventId, 'AuditEventId'),
+    eventType: row.eventType,
+    actorKind: row.actorKind,
+    actorRef: row.actorRef,
+    targetType: row.targetType,
+    targetRef: row.targetRef,
+    ...(row.authSessionRef === undefined ? {} : { authSessionRef: row.authSessionRef }),
+    ...(row.orgRef === undefined ? {} : { orgRef: row.orgRef }),
+    ...(row.businessId === undefined ? {} : { businessId: brandNonEmpty(String(row.businessId), 'BusinessId') }),
+    ...(row.slug === undefined ? {} : { slug: row.slug }),
+    ...(row.beforeState === undefined ? {} : { beforeState: row.beforeState }),
+    ...(row.afterState === undefined ? {} : { afterState: row.afterState }),
+    idempotencyKey: brandNonEmpty(row.idempotencyKey, 'OperationKey'),
+    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
+    ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
+    evidenceRefs: [...row.evidenceRefs],
+    redactedPayload,
+    payloadHash: brandNonEmpty(row.payloadHash, 'SourceHash'),
+    ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+    createdAt: row.createdAt,
+  }
+}
+
+
+
+
+function summarizeSetOperatorControl(result: SetOperatorControlResult) {
   if (result.kind === 'error') {
     return result
   }
@@ -549,9 +807,6 @@ function summarizeMembershipAudit(event: AdminDecisionAudit) {
   }
 }
 
-async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {
-  return db.query(tableName).collect()
-}
 
 
 export type {

@@ -17,19 +17,22 @@ import {
 } from '../../convex/capabilitySupply'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
   registerSandboxV2SupplyRegistrations,
+  seedSandboxCapabilityPublication,
 } from '../../convex/devSeed'
-import { runtimeDb } from '../../convex/source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 const identity = { subject: 'customer-v2', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
+
+function modelResponse(content: unknown): Response {
+  return new Response(JSON.stringify({
+    choices: [{ message: { role: 'assistant', content: JSON.stringify(content) }, finish_reason: 'stop' }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
 
 describe('current V2 Customer Request application path', () => {
   beforeEach(() => vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer))
@@ -40,22 +43,15 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('preserves the unsupported Request data disposition through the durable application projection', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.run(async (ctx) => {
-      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
-        fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
-      ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
-      const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, 2_000)
-      await admitSandboxV2Supply(ctx.db, registrations, 2_500)
-    })
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         prompt: '',
         selections: [],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -101,20 +97,19 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('uses eligible V2 supply, opaque interpretation and one durable exact aggregate', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
     const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -266,15 +261,11 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('does not return an unchanged option after the customer reports that exact option cannot work', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    const modelResponse = (content: unknown) => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(content) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     const selected = {
       kind: 'capability_candidates',
       selections: [{
@@ -441,10 +432,10 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('asks once for a registered procurement specification and continues the same Request after the answer', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = await convexTestWithWorkers()
     await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     await observeSandboxPublications(backend, true)
-    const currentSupply = await backend.query(internal.capabilitySupply.listEligible, {
+    const currentSupply = await backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public',
       limit: 64,
     })
@@ -465,13 +456,13 @@ describe('current V2 Customer Request application path', () => {
     }
     const customerJob = 'Source 500 food-safe custom cartons within 21 days under AUD 4,000.'
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, value: customerJob }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -535,20 +526,19 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('starts a customer-confirmed route from the normally seeded registered supply', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('sandbox request input missing')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, value: 'Compare labelled sandbox options' }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -581,7 +571,7 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('replays the exact submit view when registered preparation disclosure requires customer authority', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = await convexTestWithWorkers()
     const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const businessId = seeded.businessIdsBySlug['sandbox-option-one']
     if (businessId === undefined) throw new Error('disclosure business missing')
@@ -598,13 +588,13 @@ describe('current V2 Customer Request application path', () => {
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('disclosure request input missing')
     const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, value: 'Compare a private request safely' }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -632,20 +622,17 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('discards an invalid model shape and preserves the literal customer request without restatement', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('sandbox request input missing')
-    const modelResponse = (value: unknown) => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: requestInput.key, value }] }],
-      }) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     const generate = vi.fn().mockImplementation(async () => modelResponse({
-      criteria: 'cheapest labelled sandbox',
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: requestInput.key, value: { criteria: 'cheapest labelled sandbox' } }],
+      }],
     }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -674,15 +661,11 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('lets an external agent prepare but never promotes its API signature into customer authority', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    const modelResponse = (content: unknown) => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(content) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(modelResponse({
         kind: 'capability_candidates',
@@ -822,20 +805,19 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('fails closed when registered supply drifts after disclosure review', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: input.key, value: 'Find an option' }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -896,17 +878,16 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('allocates before release, cannot reset cumulative limits, and never retries an interrupted dispatch', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Protected request' }] }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -1104,9 +1085,8 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('retries the complete semantic proposal after bounded transient provider exhaustion', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
@@ -1114,13 +1094,13 @@ describe('current V2 Customer Request application path', () => {
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: JSON.stringify({
           kind: 'capability_candidates',
           selections: [{
             selectionKey: model.selectionKey,
             facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
           }],
-        }) } }],
+        }) }, finish_reason: 'stop' }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1142,20 +1122,19 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('preserves prepared option readback without creating legacy approval authority', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: input.key, value: 'Find the cheapest sandbox option' }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const serviceKey = 'external-agent-readback-key-that-is-long-enough'
@@ -1267,14 +1246,10 @@ describe('current V2 Customer Request application path', () => {
 
 
   it('preserves accepted exact facts across a natural-language refinement', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
-    const modelResponse = (content: unknown) => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(content) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(modelResponse(response))
       .mockResolvedValueOnce(modelResponse({
@@ -1321,14 +1296,10 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('stores one canonical current Request when an amendment supersedes a material assertion', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
-    const modelResponse = (content: unknown) => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(content) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     const generate = vi.fn()
       .mockResolvedValueOnce(modelResponse(response))
       .mockResolvedValueOnce(modelResponse({
@@ -1394,31 +1365,30 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('replays an exact committed refinement before rejecting its stale expected revision', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('sandbox request input missing')
     const generate = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: JSON.stringify({
           kind: 'capability_candidates',
           selections: [{
             selectionKey: model.selectionKey,
             facts: [{ inputKey: requestInput.key, value: 'Find an option' }],
           }],
-        }) } }],
+        }) }, finish_reason: 'stop' }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: JSON.stringify({
           kind: 'unsupported_request',
           reason: 'requested_result_not_available',
           canonicalStatements: [
             { source: 'prior', quote: 'Find an option' },
             { source: 'amendment', quote: 'Tighten the hard total budget to AUD 1.' },
           ],
-        }) } }],
+        }) }, finish_reason: 'stop' }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1459,13 +1429,12 @@ describe('current V2 Customer Request application path', () => {
   })
 
   it('treats an exact replacement as a no-op instead of compiling a new revision', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
     const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(response) } }],
+      choices: [{ message: { role: 'assistant', content: JSON.stringify(response) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1533,9 +1502,8 @@ describe('durable Customer Request submission recovery', () => {
   })
 
   it('answers without a provider account, replays the command, and still reaches comparison with a model', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    await admitSandboxSupply(backend)
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
     const customer = backend.withIdentity(identity)
     const command = {
       compilationKey: 'submit:v2:interpreter-recovery',
@@ -1581,13 +1549,13 @@ describe('durable Customer Request submission recovery', () => {
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: input.key, value: command.customerJob }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
 
@@ -1697,34 +1665,31 @@ async function registerDisclosureSupply(
       conformanceEvidenceRefs: ['test:disclosure-binding-reviewed'],
     }, 3_003)
     if (eligibility.kind !== 'eligible') throw new Error(`disclosure eligibility failed: ${eligibility.kind === 'refused' ? eligibility.reason : eligibility.kind}`)
+    await seedSandboxCapabilityPublication(ctx, {
+      slug: 'sandbox-option-one',
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: contract.ref,
+      offeringRegistrationHash: offering.registrationHash,
+      bindingRegistrationHash: binding.registrationHash,
+    }, 3_004)
   })
+  await observeSandboxPublications(backend)
 }
 
-async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
-  await backend.finishInProgressScheduledFunctions()
+async function seedSandboxV2Supply(backend: ReturnType<typeof convexTest>) {
   await backend.run(async (ctx) => {
-    const offerings = await ctx.db.query('capabilityOfferings').collect()
-    const bindings = await ctx.db.query('capabilityTransportBindings').collect()
-    for (const binding of bindings) {
-      const offering = offerings.find((candidate) => candidate.offeringId === binding.offeringId)
-      if (offering === undefined) throw new Error('sandbox offering missing')
-      const result = await setCapabilitySupplyEligibility(ctx.db, {
-        offeringId: offering.offeringId,
-        bindingId: binding.bindingId,
-        contractRef: {
-          capabilityId: binding.capabilityId,
-          version: binding.version,
-          contractDigest: binding.contractDigest,
-        },
-        decision: 'admit',
-        expectedOfferingRegistrationHash: offering.registrationHash,
-        expectedBindingRegistrationHash: binding.registrationHash,
-        admissionEvidenceRefs: ['test:business-and-contract-reviewed'],
-        conformanceEvidenceRefs: ['test:adapter-contract-reviewed'],
-      }, 2_000)
-      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
-    }
+    const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+      fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+    ))
+    await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
+    const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, 2_000)
+    await admitSandboxV2Supply(ctx.db, registrations, 2_500)
+    await Promise.all(registrations.map((registration, index) => (
+      seedSandboxCapabilityPublication(ctx, registration, 2_750 + index)
+    )))
   })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
   await observeSandboxPublications(backend, true)
 }

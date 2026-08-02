@@ -55,7 +55,6 @@ export const run = internalAction({
           {
             send,
             resolveCredential: credentialFromEnvironment,
-            createX402PaymentSignature: async () => undefined,
           },
         )
     try {

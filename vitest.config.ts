@@ -10,6 +10,7 @@ export default defineConfig({
     setupFiles: [
       './tests/setup/web-storage.ts',
       './tests/setup/no-search-gap-writes.ts',
+      './tests/setup/resize-observer.ts',
     ],
     globals: false,
     watch: false,

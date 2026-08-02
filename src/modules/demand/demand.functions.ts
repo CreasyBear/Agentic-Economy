@@ -8,6 +8,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
 import {
   evaluateSearchGaps,
 } from './public'
@@ -59,21 +60,16 @@ export const recordSearchGaps: SearchGapRecorder = async (input) => {
   }
 
   const evaluation = evaluateSearchGaps(input)
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    await Promise.race([
-      callPublicSourceMutation(recordSearchGapsMutation, {
-        queryText: input.queryText,
-        surface: input.surface,
-        ...evaluation,
-      }).catch(() => undefined),
-      new Promise<void>((resolve) => {
-        timeout = setTimeout(resolve, 400)
-      }),
-    ])
-  } finally {
-    clearTimeout(timeout)
-  }
+  await runWithAbortAndTimeout({
+    timeoutMs: 400,
+    timeoutError: () => new Error('search_gap_record_timeout'),
+    useControllerSignal: false,
+    run: () => callPublicSourceMutation(recordSearchGapsMutation, {
+      queryText: input.queryText,
+      surface: input.surface,
+      ...evaluation,
+    }),
+  }).catch(() => undefined)
 }
 
 export type SearchGapFactCount = Readonly<{ fact: SearchGapFact; searches: number }>

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
+import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 type AeCopyPublicUrlButtonVariant = 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'
 type AeCopyPublicUrlButtonSize = 'default' | 'sm' | 'lg' | 'icon'
 
@@ -42,20 +43,17 @@ export function AeCopyPublicUrlButton({
 }: AeCopyPublicUrlButtonProps) {
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
+  const [publicUrl, setPublicUrl] = useState<string>()
   const [copyNotice, setCopyNotice] = useState<string>()
   const publicPath = `/${slug}`
-  const origin = typeof window === 'undefined' ? 'https://ae.example' : window.location.origin
-  const publicUrl = `${origin}${publicPath}`
   const label = copied ? 'Copied public URL' : 'Copy public URL'
   const copyStatusId = `${slug}-copy-status`
 
   async function handleCopy() {
+    const actionPublicUrl = `${window.location.origin}${publicPath}`
+    setPublicUrl(actionPublicUrl)
     try {
-      if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
-        throw new Error('Clipboard unavailable')
-      }
-
-      await navigator.clipboard.writeText(publicUrl)
+      await copyTextToClipboard(actionPublicUrl)
       setCopied(true)
       setCopyFailed(false)
       setCopyNotice('Public URL copied.')
@@ -95,7 +93,7 @@ export function AeCopyPublicUrlButton({
         <Input
           aria-label="Public page URL"
           aria-describedby={copyNotice === undefined ? undefined : copyStatusId}
-          value={publicUrl}
+          value={publicUrl ?? publicPath}
           readOnly
           onFocus={(event) => event.currentTarget.select()}
           onClick={(event) => event.currentTarget.select()}

@@ -1,22 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
+import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
 import type { AnswerEvent } from '@/modules/answer/public'
-import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
 
-type StreamFrame = { seq: number; event: AnswerEvent }
-
-function parseStream(text: string): StreamFrame[] {
-  return text
-    .split('\n\n')
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.startsWith('data:'))
-    .map((frame) => JSON.parse(frame.slice('data:'.length).trim()) as StreamFrame)
-}
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 const PARRAMATTA_PROVIDER = {
   citationIndex: 1,
@@ -37,13 +31,25 @@ const PARRAMATTA_PROVIDER = {
   services: [{ name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'x' }],
 }
 
-const FROZEN_EVIDENCE = {
+const FROZEN_EVIDENCE_DRAFT: FrozenTurnEvidenceDraft = {
   providers: [PARRAMATTA_PROVIDER],
   allowedSlugs: ['parramatta-emergency-plumbing'],
   agentJsonUrl: '/api/businesses/search?q=parramatta',
+  toolCalls: [],
+  timings: [],
+  workLog: [],
 }
 
-const FIXED_SESSION_ID = 'session-routing-test'
+const FROZEN_EVIDENCE = {
+  ...FROZEN_EVIDENCE_DRAFT,
+  answerRun: buildAnswerRunReport({
+    intent: 'refine_search',
+    status: 'complete',
+    snapshotHash: 'hash-prior',
+    evidence: FROZEN_EVIDENCE_DRAFT,
+  }),
+}
+const FIXED_SESSION_ID = `session-routing-test-${crypto.randomUUID()}`
 const PRIOR_THREAD_ID = 'thread-prior'
 
 function priorThreadPort(): void {
@@ -53,7 +59,7 @@ function priorThreadPort(): void {
     listSessionThreads: async () => ({ threads: [] }),
     getPublicThreadProjection: async () => null,
     getThreadTurns: async () => ({
-      turns: [
+      page: [
         {
           turnId: 'prior-1',
           threadId: PRIOR_THREAD_ID,
@@ -68,6 +74,8 @@ function priorThreadPort(): void {
           createdAt: 1_000,
         },
       ],
+      isDone: true,
+      continueCursor: '',
     }),
     getAnswerThread: async (threadId) => {
       if (threadId !== PRIOR_THREAD_ID) {
@@ -133,7 +141,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         }),
       )
 
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       expect(server.requests).toHaveLength(2)
@@ -169,7 +177,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     try {
       const response = await handleAnswerTurnRequest(turnRequest('which ones accept inquiries'))
 
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -202,7 +210,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     try {
       const response = await handleAnswerTurnRequest(turnRequest('message the first one'))
 
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       expect(server.requests).toEqual([])
@@ -265,7 +273,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     try {
       const response = await handleAnswerTurnRequest(turnRequest('what can agentic economy do'))
 
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       expect(server.requests).toEqual([])
@@ -307,7 +315,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         }),
       )
 
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(server.requests).toEqual([])
       if (complete?.type !== 'complete') {
@@ -338,7 +346,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     try {
       const response = await handleAnswerTurnRequest(turnRequest('book now and pay today'))
 
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       expect(server.requests).toEqual([])

@@ -1,11 +1,13 @@
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
+import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
+import { handleCustomerRequestPostBoundary } from '@/lib/server/customer-request-route-action-api'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
-import { customerRequestAgentResultSchema, customerRequestMessageInputSchema } from '@/modules/customer-request/agent-contract'
+import {
+  customerRequestAgentResultSchema,
+  customerRequestMessageInputSchema,
+  type CustomerRequestAgentResult,
+} from '@/modules/customer-request/agent-contract'
 import { sensitiveCustomerRequestRefusal } from '@/modules/customer-request/sensitive-input-admission'
 import { response } from '@/lib/server/no-store-response'
-
-const bodySchema = customerRequestMessageInputSchema
 
 export type MessageResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
   kind: 'refused'
@@ -21,36 +23,32 @@ export async function handleCustomerRequestMessagePost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  if (requestRef.trim().length === 0 || requestRef.length > 200) return response({ error: 'invalid_request_ref' }, 400)
-  const bounded = await readBoundedRequestText(request, 32 * 1024)
-  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
-  let body: unknown
-  try { body = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
-  const parsed = bodySchema.safeParse(body)
-  if (!parsed.success) return response({ error: 'invalid_request' }, 400)
-  const sensitiveRefusal = sensitiveCustomerRequestRefusal(parsed.data.message)
-  if (sensitiveRefusal !== undefined) return response(sensitiveRefusal, 422)
-  try {
-    const result = customerRequestAgentResultSchema.parse(
-      await (options.refine ?? (async (args) => await callSourceAction(refineAction, args)))({
-        requestRef, ...parsed.data,
-      }),
-    )
-    if (result.kind === 'refused') {
-      const status = result.reason === 'authentication_required'
-        ? 401
-        : result.reason === 'request_not_found'
-          ? 404
-          : result.reason === 'invalid_amendment'
-            ? 400
-            : 503
-      return response(result, status)
-    }
-    if (result.kind === 'conflict') return response(result, 409)
-    return response(result, 200)
-  } catch (error) {
-    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-    return response({ error: 'request_unavailable' }, 503)
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 32 * 1024,
+    inputSchema: customerRequestMessageInputSchema,
+    resultSchema: customerRequestAgentResultSchema,
+    domainAdmission: (input) => {
+      const sensitiveRefusal = sensitiveCustomerRequestRefusal(input.message)
+      return sensitiveRefusal === undefined ? undefined : response(sensitiveRefusal, 422)
+    },
+    run: options.refine ?? (async (args) => await callSourceAction(refineAction, args)),
+    unavailableError: 'request_unavailable',
+    resultToStatus: messageResultStatus,
+  })
 }
 
+function messageResultStatus(result: CustomerRequestAgentResult): number {
+  if (result.kind === 'refused') {
+    return result.reason === 'authentication_required'
+      ? 401
+      : result.reason === 'request_not_found'
+        ? 404
+        : result.reason === 'invalid_amendment'
+          ? 400
+          : 503
+  }
+  if (result.kind === 'conflict') return 409
+  return 200
+}

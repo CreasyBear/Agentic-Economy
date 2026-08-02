@@ -3,14 +3,22 @@ import {
   sourceMutation,
   sourceQuery,
 } from './convex-source'
+import { sourceWriteAdmissionFromRequest } from './source-write-admission'
 import type {
   CustomerRequestAgentOAuthClient,
   CustomerRequestAgentOAuthGrant,
   CustomerRequestAgentOAuthGrantStatus,
   CustomerRequestAgentOAuthStore,
 } from '@/modules/customer-request/oauth-state'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
-type GrantArgs = {
+type SourceWriteArgs = {
+  operationKey: string
+  correlationId: string
+  sourceWrite: SourceWriteAdmission
+}
+
+type GrantArgs = SourceWriteArgs & {
   grant: {
     grantRef: string
     flow: 'device_code' | 'authorization_code'
@@ -37,8 +45,8 @@ type GrantArgs = {
 }
 
 type GrantReadArgs = { kind: 'device' | 'user' | 'authorization'; hash: string }
-type GrantRefArgs = { grantRef: string }
-type GrantUpdateArgs = {
+type GrantRefArgs = SourceWriteArgs & { grantRef: string }
+type GrantUpdateArgs = SourceWriteArgs & {
   grantRef: string
   expectedStatus: CustomerRequestAgentOAuthGrantStatus
   patch: {
@@ -62,7 +70,7 @@ type GrantUpdateArgs = {
     denialReason?: 'access_denied'
   }
 }
-type ClientArgs = { client: {
+type ClientArgs = SourceWriteArgs & { client: {
   clientId: string
   clientName: string
   redirectUris: string[]
@@ -80,21 +88,41 @@ const updateGrant = sourceMutation<GrantUpdateArgs, CustomerRequestAgentOAuthGra
 const insertClient = sourceMutation<ClientArgs, null>('customerRequestAgentOAuth:insertClient')
 const getClient = sourceQuery<ClientReadArgs, CustomerRequestAgentOAuthClient | null>('customerRequestAgentOAuth:getClient')
 
-export function createConvexCustomerRequestAgentOAuthStore(): CustomerRequestAgentOAuthStore {
+export function createConvexCustomerRequestAgentOAuthStore(request: Request): CustomerRequestAgentOAuthStore {
   const transport = createPublicSourceTransport()
+  const sourceWriteFor = async (operationKey: string): Promise<SourceWriteArgs> => {
+    const correlationId = operationKey
+    return {
+      operationKey,
+      correlationId,
+      sourceWrite: await sourceWriteAdmissionFromRequest({
+        request,
+        scope: 'agent_identity',
+        operationKey,
+        correlationId,
+      }),
+    }
+  }
   return {
     insertGrant: async (grant) => {
-      const args: GrantArgs = { grant: grantForConvex(grant) }
+      const operationKey = `oauth:grant:${grant.grantRef}:insert`
+      const args: GrantArgs = { grant: grantForConvex(grant), ...await sourceWriteFor(operationKey) }
       await transport.mutation(insertGrant, args)
     },
     getGrantByHash: async (kind, hash) => await transport.query(getGrantByHash, { kind, hash }),
-    getGrantByRef: async (grantRef) => await transport.query(getGrantByRef, { grantRef }),
+    getGrantByRef: async (grantRef) => {
+      const operationKey = `oauth:grant:${grantRef}:read`
+      const args: GrantRefArgs = { grantRef, ...await sourceWriteFor(operationKey) }
+      return await transport.query(getGrantByRef, args)
+    },
     updateGrant: async (grantRef, expectedStatus, patch) => {
-      const args: GrantUpdateArgs = { grantRef, expectedStatus, patch: patchForConvex(patch) }
+      const operationKey = `oauth:grant:${grantRef}:update:${expectedStatus}:${patch.status ?? 'fields'}`
+      const args: GrantUpdateArgs = { grantRef, expectedStatus, patch: patchForConvex(patch), ...await sourceWriteFor(operationKey) }
       return await transport.mutation(updateGrant, args)
     },
     insertClient: async (client) => {
-      const args: ClientArgs = { client: clientForConvex(client) }
+      const operationKey = `oauth:client:${client.clientId}:insert`
+      const args: ClientArgs = { client: clientForConvex(client), ...await sourceWriteFor(operationKey) }
       await transport.mutation(insertClient, args)
     },
     getClient: async (clientId) => await transport.query(getClient, { clientId }),

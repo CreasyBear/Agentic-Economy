@@ -1,19 +1,15 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
+import { defineCapabilityContract, type CapabilityContract, type CapabilityContractDocument } from '@/modules/capability-contract/public'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'),
-  load,
-]))
+import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
 
 describe('capability publication', () => {
-  it('rebuilds exact catalog-origin support after publish and withdrawal', async () => {
+  it('rebuilds capability-owned support after publication and eligibility transitions', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-origin-one')
     await backend.run(async (ctx) => {
@@ -49,13 +45,37 @@ describe('capability publication', () => {
       routeable: false,
     })
 
-    const observer = await adminObserver(backend)
+    const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
     const validUntil = Date.now() + 60_000
-    await backend.run(async (ctx) => {
-      const revision = (await ctx.db.query('businessOfferingRevisions').collect())
-        .find((candidate) => candidate.offeringRef === 'catalog-offering:catalog-origin-one')
-      if (revision === undefined) throw new Error('catalog_revision_missing')
-      await ctx.db.patch(revision._id, { sourceHash: 'catalog-source:changed' })
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: published.publicationRef,
+      expectedRevision: 1,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil,
+      ...operationContext('observe-capability-origin'),
+    })
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: false,
+      routeable: false,
+    })
+    await admitPublication(backend, observer, published, 'capability-origin')
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: true,
+      routeable: true,
+      validUntil,
+    })
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: published.publicationRef,
+      expectedRevision: 1,
+      credentialState: 'ready',
+      healthState: 'unhealthy',
+      validUntil,
+      ...operationContext('observe-capability-origin-unhealthy'),
+    })
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: true,
+      routeable: false,
     })
     await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
       publicationRef: published.publicationRef,
@@ -63,19 +83,8 @@ describe('capability publication', () => {
       credentialState: 'ready',
       healthState: 'healthy',
       validUntil,
-      ...operationContext('observe-catalog-origin'),
+      ...operationContext('observe-capability-origin-recovered'),
     })
-    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
-      integrated: false,
-      routeable: false,
-    })
-    await backend.run(async (ctx) => {
-      const revision = (await ctx.db.query('businessOfferingRevisions').collect())
-        .find((candidate) => candidate.offeringRef === 'catalog-offering:catalog-origin-one')
-      if (revision === undefined) throw new Error('catalog_revision_missing')
-      await ctx.db.patch(revision._id, { sourceHash: 'catalog-source:v1' })
-    })
-    await admitPublication(backend, observer, published, 'catalog-origin-one')
     await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
       integrated: true,
       routeable: true,
@@ -212,7 +221,7 @@ describe('capability publication', () => {
   it('fails closed across readiness, stale health, and withdrawal transitions', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'lifecycle-one')
-    const observer = await adminObserver(backend)
+    const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
     const input = capabilityPublicationInput(businessId, 'lifecycle-one')
     const published = await owner.mutation(api.capabilitySupply.publishCapability, input)
     if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
@@ -259,7 +268,7 @@ describe('capability publication', () => {
     const backend = convexTest(schema, modules)
     const first = await publishedBusinessOwner(backend, 'graph-one')
     const second = await publishedBusinessOwner(backend, 'graph-two')
-    const observer = await adminObserver(backend)
+    const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
     const firstPublished = await first.owner.mutation(
       api.capabilitySupply.publishCapability, capabilityPublicationInput(first.businessId, 'graph-one'),
     )
@@ -317,10 +326,11 @@ describe('capability publication', () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'openapi-one')
     const direct = capabilityPublicationInput(businessId, 'openapi-one')
-    const contractDocument = capabilityContractV2({
+    const contractDocument = defineCapabilityContract(capabilityContractV2({
       capabilityId: 'independent.openapi.lookup', name: 'OpenAPI lookup',
-    })
-    const { contractFormat: _format, inputSchema, outputSchema, ...contract } = contractDocument
+    }))
+    const { inputSchema, outputSchema } = contractDocument
+    const contract = contractMetadata(contractDocument)
     const published = await owner.mutation(api.capabilitySupply.publishCapability, {
       businessId,
       source: {
@@ -355,8 +365,9 @@ describe('capability publication', () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, `${kind}-one`)
     const direct = capabilityPublicationInput(businessId, `${kind}-one`)
-    const document = capabilityContractV2({ capabilityId: `independent.${kind}.lookup`, name: `${kind} lookup` })
-    const { contractFormat: _format, inputSchema, outputSchema, ...contract } = document
+    const document = defineCapabilityContract(capabilityContractV2({ capabilityId: `independent.${kind}.lookup`, name: `${kind} lookup` }))
+    const { inputSchema, outputSchema } = document
+    const contract = contractMetadata(document)
     const commercial = {
       offering: direct.offering, bindingId: direct.binding.bindingId,
       credentialRef: direct.binding.credentialRef,
@@ -407,7 +418,7 @@ describe('capability publication', () => {
       api.capabilitySupply.publishCapability, capabilityPublicationInput(businessId, 'refresh-one'),
     )
     if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
-    const observer = await adminObserver(backend)
+    const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
     await admitPublication(backend, observer, published, 'refresh-one')
     await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
       publicationRef: published.publicationRef, expectedRevision: 1,
@@ -457,7 +468,7 @@ describe('capability publication', () => {
       networkId: 'ae:public', includeInactive: false, limit: 10,
     })
     expect(graph).toMatchObject({ kind: 'available', nodes: [] })
-    await expect(backend.query(internal.capabilitySupply.listEligible, {
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public', limit: 10,
     })).resolves.toMatchObject({ kind: 'available', supplies: [] })
   })
@@ -496,6 +507,64 @@ describe('capability publication', () => {
   })
 })
 
+type CapabilityContractAnnotation = Omit<
+  CapabilityContractDocument['customerAnnotations'][number],
+  'semanticIdentity' | 'prompt' | 'inference'
+> & {
+  semanticIdentity?: string
+  prompt?: string
+  inference?: 'allowed' | 'customer_required'
+}
+
+type CapabilityContractMetadata = Omit<
+  CapabilityContractDocument,
+  'contractFormat' | 'inputSchema' | 'outputSchema' | 'customerAnnotations'
+> & {
+  customerAnnotations: CapabilityContractAnnotation[]
+}
+
+function contractMetadata(document: CapabilityContract): CapabilityContractMetadata {
+  return {
+    capabilityId: document.capabilityId,
+    version: document.version,
+    name: document.name,
+    description: document.description,
+    customerAnnotations: document.customerAnnotations.map((annotation): CapabilityContractAnnotation => ({
+      annotationId: annotation.annotationId,
+      document: annotation.document,
+      pointer: annotation.pointer,
+      label: annotation.label,
+      role: annotation.role,
+      ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
+      ...(annotation.prompt === undefined ? {} : { prompt: annotation.prompt }),
+      ...(annotation.inference === undefined ? {} : { inference: annotation.inference }),
+    })),
+    dataUse: document.dataUse.map((declaration) => ({
+      effectId: declaration.effectId,
+      inputPointer: declaration.inputPointer,
+      classification: declaration.classification,
+      phase: declaration.phase,
+      recipient: declaration.recipient,
+      purposes: declaration.purposes,
+    })),
+    effects: document.effects.map((effect) => ({
+      effectId: effect.effectId,
+      class: effect.class,
+      authority: effect.authority,
+      reversibility: effect.reversibility,
+    })),
+    evidence: document.evidence.map((item) => ({
+      evidenceId: item.evidenceId,
+      outputPointer: item.outputPointer,
+      purpose: item.purpose,
+    })),
+    lifecycle: {
+      idempotency: document.lifecycle.idempotency,
+      recovery: document.lifecycle.recovery,
+    },
+  }
+}
+
 function operationContext(suffix: string) {
   return {
     operationKey: `op:capability-publication:${suffix}`,
@@ -505,46 +574,12 @@ function operationContext(suffix: string) {
   }
 }
 
-async function publishedBusinessOwner(backend: ReturnType<typeof convexTest>, slug: string) {
-  const identity = {
-    subject: `user_${slug}`,
-    issuer: 'https://identity.example',
-    tokenIdentifier: `token_${slug}`,
-  }
-  const businessId = await backend.run(async (ctx) => {
-    const ownerId = await ctx.db.insert('owners', {
-      clerkUserId: identity.subject,
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    return await ctx.db.insert('businesses', {
-      ownerId,
-      slug,
-      name: slug,
-      normalizedName: slug,
-      category: 'professional services',
-      suburb: 'Perth',
-      stateTerritory: 'WA',
-      publicStatus: 'published',
-      trustTier: 'listed',
-      claimStatus: 'published',
-      sourceHash: `source:${slug}`,
-      createdAt: 1,
-      updatedAt: 1,
-    })
-  }) as Id<'businesses'>
-  return { businessId, owner: backend.withIdentity(identity) }
-}
-
 async function readProjectedSupport(backend: ReturnType<typeof convexTest>, businessId: Id<'businesses'>) {
   return backend.run(async (ctx) => {
     const snapshot = (await ctx.db.query('businessSupplyProjectionSnapshots').collect())
       .find((candidate) => candidate.businessId === businessId) ?? null
     if (snapshot === null) throw new Error('projection_snapshot_missing')
-    const projection = JSON.parse(snapshot.projectionJson) as {
-      offerings: { support: { integrated: boolean; routeable: boolean; reasons: string[] } }[]
-    }
-    const support = projection.offerings[0]?.support
+    const support = snapshot.projection.offerings[0]?.support
     if (support === undefined) throw new Error('projected_offering_missing')
     return support
   })
@@ -587,25 +622,10 @@ function capabilityPublicationInput(businessId: Id<'businesses'>, suffix: string
   }
 }
 
-async function adminObserver(backend: ReturnType<typeof convexTest>) {
-  const identity = {
-    subject: 'user_capability_publication_observer',
-    issuer: 'https://identity.example',
-    tokenIdentifier: 'token_capability_publication_observer',
-  }
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('adminMemberships', {
-      clerkUserId: identity.subject,
-      tokenIdentifier: identity.tokenIdentifier,
-      role: 'owner_admin', state: 'active', grantedBy: 'test_bootstrap', grantedAt: 1,
-    })
-  })
-  return backend.withIdentity(identity)
-}
 
 async function admitPublication(
   backend: ReturnType<typeof convexTest>,
-  admin: Awaited<ReturnType<typeof adminObserver>>,
+  admin: ConvexFixtureAdmin,
   publication: Readonly<{ offeringId: string; bindingId: string; contractRef: {
     capabilityId: string; version: number; contractDigest: string
   } }>,

@@ -13,6 +13,7 @@ import {
   readBusinessProblemServer,
   recordBusinessProblemStatementServer,
   type BusinessProblem,
+  type BusinessProblemStatement,
   type BusinessProblemStatementInput,
 } from '@/modules/customer-request/problem-business.functions'
 
@@ -64,7 +65,7 @@ export function BusinessProblemPanel({
   onRecord,
 }: {
   problem: AllowedBusinessProblem
-  onRecord: (input: BusinessProblemStatementInput) => Promise<unknown> | unknown
+  onRecord: (input: BusinessProblemStatementInput) => Promise<BusinessProblemStatement>
 }) {
   const [position, setPosition] = useState<'supports' | 'disputes' | 'uncertain'>('uncertain')
   const [statement, setStatement] = useState('')

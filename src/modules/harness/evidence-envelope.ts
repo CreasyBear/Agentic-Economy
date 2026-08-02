@@ -1,4 +1,5 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
 
 import type {
   HarnessToolResult,
@@ -132,7 +133,7 @@ export function projectPrivateToolEvidenceForPublic(
     } else if (isFailingStatus(result.status)) {
       projection.checksFailed += 1
     }
-    projection.elapsedMs = roundDuration(projection.elapsedMs + result.durationMs)
+    projection.elapsedMs = roundNonNegative2(projection.elapsedMs + result.durationMs)
   }
 
   return projection
@@ -190,7 +191,7 @@ export function createPublicProjectionMetadata(input: {
 }): HarnessPublicProjectionMetadata {
   return {
     sourceEvidenceHash: buildPrivateEvidenceHash(input.evidence),
-    publicProjectionHash: stableHash({
+    publicProjectionHash: canonicalDigest({
       schemaVersion: input.publicProjection.schemaVersion,
       kind: input.publicProjection.kind,
       toolRuns: input.publicProjection.toolRuns,
@@ -223,7 +224,7 @@ export function buildPrivateEvidenceHash(
   evidence: HarnessPrivateToolEvidence | readonly HarnessPrivateToolEvidence[],
 ): string {
   const evidenceList = Array.isArray(evidence) ? evidence : [evidence]
-  return stableHash({
+  return canonicalDigest({
     schemaVersion: 1,
     kind: 'privateToolEvidenceSet',
     evidenceHashes: evidenceList.map((item) => item.evidenceHash),
@@ -231,7 +232,7 @@ export function buildPrivateEvidenceHash(
 }
 
 function buildToolEvidenceHash(result: HarnessToolResult<unknown>): string {
-  return stableHash({
+  return canonicalDigest({
     schemaVersion: 1,
     kind: 'toolResult',
     toolCallId: result.toolCallId,
@@ -271,6 +272,4 @@ function isFailingStatus(status: HarnessToolStatus): boolean {
     status === 'aborted'
 }
 
-function roundDuration(value: number): number {
-  return Math.max(0, Math.round(value * 100) / 100)
-}
+

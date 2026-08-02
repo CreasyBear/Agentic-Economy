@@ -3,15 +3,10 @@ import { describe, expect, it } from 'vitest'
 
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'),
-  load,
-]))
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 describe('durable llms Offering parity', () => {
-  it('uses Offering cutover truth, retains profile-only businesses, and excludes legacy and private detail', async () => {
+  it('uses Offering projection truth, retains profile-only businesses, and excludes private detail', async () => {
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
       const ownerId = await ctx.db.insert('owners', {
@@ -23,25 +18,14 @@ describe('durable llms Offering parity', () => {
         publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
         sourceHash: 'business:offering-engineering', createdAt: 1, updatedAt: 1,
       })
-      await ctx.db.insert('businessServices', {
-        businessId: offeringBusinessId, serviceSlug: 'retired-legacy-drilling',
-        name: 'Retired Legacy Drilling', category: 'Engineering',
-        summary: 'Must not return after Offering cutover.', serviceArea: 'WA',
-        hoursOrUnknown: 'Retired', status: 'published', sortOrder: 0,
-        sourceHash: 'legacy:retired', createdAt: 1, updatedAt: 1,
-      })
-      await ctx.db.insert('catalogSupplyCutovers', {
-        businessId: offeringBusinessId, mode: 'offering', lastCheckStatus: 'matched',
-        postCutoverNativeChanges: false, updatedAt: 2,
-      })
       await ctx.db.insert('businessSupplyProjectionSnapshots', {
         businessId: offeringBusinessId, sourceRevision: 2, sourceDigest: 'projection:engineering',
         observedAt: 2, disposition: 'current', status: 'current', updatedAt: 2,
-        projectionJson: JSON.stringify({
+        projection: {
           business: {
             businessId: offeringBusinessId, slug: 'offering-engineering', name: 'Offering Engineering',
             category: 'Engineering', suburb: 'Perth', stateTerritory: 'WA',
-            publicUrl: '/offering-engineering',
+            publicUrl: '/offering-engineering', trustTier: 'listed',
           },
           offerings: [{
             offering: {
@@ -49,7 +33,7 @@ describe('durable llms Offering parity', () => {
               category: 'Engineering', summary: 'Current public Offering.',
             },
             accessPaths: [{
-              accessPathRef: 'path:design', credentialRef: 'secret:must-not-leak',
+              accessPathRef: 'path:design',
               descriptor: {
                 kind: 'external_operation', name: 'Design API', summary: 'Declared access.',
                 url: 'https://engineering.example/api', provenance: 'business_declared',
@@ -59,7 +43,7 @@ describe('durable llms Offering parity', () => {
           }],
           sourceRevision: 2, sourceDigest: 'projection:engineering', observedAt: 2,
           disposition: 'current',
-        }),
+        },
       })
 
       const profileBusinessId = await ctx.db.insert('businesses', {
@@ -68,22 +52,18 @@ describe('durable llms Offering parity', () => {
         publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
         sourceHash: 'business:profile-only', createdAt: 1, updatedAt: 1,
       })
-      await ctx.db.insert('catalogSupplyCutovers', {
-        businessId: profileBusinessId, mode: 'offering', lastCheckStatus: 'matched',
-        postCutoverNativeChanges: false, updatedAt: 2,
-      })
       await ctx.db.insert('businessSupplyProjectionSnapshots', {
         businessId: profileBusinessId, sourceRevision: 1, sourceDigest: 'projection:profile',
         observedAt: 2, disposition: 'current', status: 'current', updatedAt: 2,
-        projectionJson: JSON.stringify({
+        projection: {
           business: {
             businessId: profileBusinessId, slug: 'profile-only-consulting', name: 'Profile Only Consulting',
             category: 'Consulting', suburb: 'Fremantle', stateTerritory: 'WA',
-            publicUrl: '/profile-only-consulting',
+            publicUrl: '/profile-only-consulting', trustTier: 'listed',
           },
           offerings: [], sourceRevision: 1, sourceDigest: 'projection:profile', observedAt: 2,
           disposition: 'current',
-        }),
+        },
       })
     })
 
@@ -97,15 +77,17 @@ describe('durable llms Offering parity', () => {
     expect(result.body).not.toContain('secret:must-not-leak')
     expect(result.body).not.toContain('credentialRef')
 
-    // The index no longer inlines Offering names, so the cutover contract is
+    // The index no longer inlines Offering names, so the projection contract is
     // asserted where Offering names are actually published.
-    const supply = await backend.query(api.registry.listPublicBusinessOfferingSupply, {})
-    const offeringNames = supply.items.flatMap(
+    const supply = await backend.query(api.registry.listPublicBusinessOfferingSupply, {
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    const offeringNames = supply.page.flatMap(
       (item: { slug: string; offerings: readonly { name: string }[] }) => item.offerings.map((offering) => offering.name)
     )
     expect(offeringNames).toContain('Current Design Review')
     expect(offeringNames).not.toContain('Retired Legacy Drilling')
-    expect(supply.items.find((item: { slug: string }) => item.slug === 'profile-only-consulting')?.offerings).toEqual([])
+    expect(supply.page.find((item: { slug: string }) => item.slug === 'profile-only-consulting')?.offerings).toEqual([])
     expect(JSON.stringify(supply)).not.toContain('secret:must-not-leak')
   })
 })

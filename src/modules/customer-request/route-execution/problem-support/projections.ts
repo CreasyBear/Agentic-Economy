@@ -1,3 +1,5 @@
+import { formatCurrencyAmount } from '@/modules/customer-request/format-currency-amount'
+
 import type {
   BusinessCausalityPosition,
   ProblemCategory,
@@ -146,9 +148,8 @@ export function projectSupportProblemList(input: Readonly<{
 }
 
 function supportAttemptState(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
+  state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
 ): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled' {
-  if (state === 'leased') return 'ready_to_contact'
   if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
   if (state === 'succeeded') return 'completed'
@@ -156,16 +157,13 @@ function supportAttemptState(
 }
 
 function supportAttemptWasReleased(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+  state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     | undefined,
 ): boolean {
   return state === 'dispatched' || state === 'accepted' || state === 'succeeded'
     || state === 'failed' || state === 'outcome_unknown'
 }
 
-function formatSupportMoney(value: Readonly<{ currency: string; amountMinor: number }>): string {
-  return `${value.currency} ${(value.amountMinor / 100).toFixed(2)}`
-}
 
 function customerLabel(value: string): string {
   const words = value.replaceAll(/[-_]+/gu, ' ')
@@ -213,7 +211,7 @@ function supportProblemReconstruction(input: Readonly<{
   reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
   attempts: readonly Readonly<{
     position: number
-    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     attemptRef: string
     evidence?: readonly AttemptEvidenceItem[]
   }>[]
@@ -252,7 +250,7 @@ function supportProblemReconstruction(input: Readonly<{
         input.mandate.route.steps.length === 1
           ? 'The registered business can provide the requested result.'
           : `All ${input.mandate.route.steps.length} registered steps can provide the requested result.`,
-        `The confirmed option stays within ${formatSupportMoney(maximum)}.`,
+        `The confirmed option stays within ${formatCurrencyAmount(maximum.currency, maximum.amountMinor)}.`,
       ],
       confirmedAt: input.mandate.issuedAt,
       validUntil: input.mandate.expiresAt,
@@ -295,14 +293,17 @@ function supportProblemReconstruction(input: Readonly<{
         : 'mixed_or_not_applicable' as const,
       steps: input.mandate.route.steps.map((step) => {
         const attempt = attempts.get(step.position)
+        const evidence = attempt === undefined
+          ? []
+          : (attempt.evidence ?? []).map((item) => ({
+              receiptRef: evidenceReceiptRef(attempt.attemptRef, item),
+              label: customerLabel(item.evidenceId),
+            }))
         return {
           step: step.position,
           business: businesses.get(step.businessId) ?? 'Registered business',
           state: attempt === undefined ? 'blocked' as const : supportAttemptState(attempt.state),
-          evidence: (attempt?.evidence ?? []).map((item) => ({
-            receiptRef: evidenceReceiptRef(attempt!.attemptRef, item),
-            label: customerLabel(item.evidenceId),
-          })),
+          evidence,
         }
       }),
     },
@@ -376,7 +377,7 @@ export type SupportProblemExportMaterial = Readonly<{
   reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
   attempts: readonly Readonly<{
     position: number
-    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     attemptRef: string
     evidence?: readonly AttemptEvidenceItem[]
   }>[]
@@ -417,6 +418,11 @@ export function projectSupportProblemExport(input: SupportProblemExportProjectio
   const evidenceByReceipt = attempt === null
     ? new Map<string, string>()
     : buildAttemptEvidenceLabelMap(attempt.attemptRef, attempt.evidence)
+  const evidenceLabel = (receiptRef: string): string => {
+    const label = evidenceByReceipt.get(receiptRef)
+    if (label === undefined) throw new Error('customer_request_route_problem_evidence_integrity_failure')
+    return label
+  }
   if ((problem.evidenceReceiptRefs ?? []).some((receiptRef) => !evidenceByReceipt.has(receiptRef))) {
     throw new Error('customer_request_route_problem_evidence_integrity_failure')
   }
@@ -444,7 +450,7 @@ export function projectSupportProblemExport(input: SupportProblemExportProjectio
     visibility: problem.visibility ?? 'customer_and_ae_only',
     evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
       receiptRef,
-      label: evidenceByReceipt.get(receiptRef)!,
+      label: evidenceLabel(receiptRef),
     })),
     reportedAt: problem.createdAt,
     affected: {
@@ -458,7 +464,7 @@ export function projectSupportProblemExport(input: SupportProblemExportProjectio
         statement: problem.summary,
         evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
           receiptRef,
-          label: evidenceByReceipt.get(receiptRef)!,
+          label: evidenceLabel(receiptRef),
         })),
         recordedAt: problem.createdAt,
       },
@@ -469,7 +475,7 @@ export function projectSupportProblemExport(input: SupportProblemExportProjectio
         business: businessReport.businessName,
         evidence: businessReport.evidenceReceiptRefs.map((receiptRef) => ({
           receiptRef,
-          label: evidenceByReceipt.get(receiptRef)!,
+          label: evidenceLabel(receiptRef),
         })),
         recordedAt: businessReport.createdAt,
       })),

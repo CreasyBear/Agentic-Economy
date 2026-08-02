@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../../helpers/source-files'
 
 const convexHost = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 const journalPortsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
@@ -17,11 +18,6 @@ const problemPortsSource = readFileSync(
 const moduleRoot = 'src/modules/customer-request/route-execution/journal'
 const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 
-const recoverJournalHelpers = [
-  'recoverDispatchAttemptAligned',
-  'recoverDispatchLeaseStillCurrent',
-  'recoverExpiredDispatchKind',
-] as const
 
 const hostStillUsesJournal = [
   'routeAttemptIntegrityValid',
@@ -40,7 +36,6 @@ const cancelJournalHelpers = [
 
 const hostMachines = [
   'startOrResume',
-  'leaseNextDispatch',
   'recordOutcome',
 ] as const
 
@@ -49,23 +44,20 @@ const hostCancelMachines = [
   'openCancellationAttempt',
   'resolveCancellationAttempt',
 ] as const
-
 const hostDispatchMachines = [
-  'openLeasedDispatch',
-  'recoverExpiredDispatch',
+  'openDispatch',
   'markDispatched',
   'recordNotReleased',
-  'markAccepted',
 ] as const
 
+
 describe('customer-request route-execution journal thinness', () => {
-  it('keeps host start/lease/outcome exports as thin ports-wired shells', () => {
+  it('keeps host start/outcome exports as thin ports-wired shells', () => {
     for (const symbol of hostMachines) {
       expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
     expect(convexHost).toContain('journalMutationPorts(ctx)')
     expect(convexHost).toContain('startOrResumeMachine')
-    expect(convexHost).toContain('leaseNextDispatchMachine')
     expect(convexHost).toContain('recordOutcomeMachine')
     expect(convexHost).toContain("from './customerRequestRouteExecutionJournalPorts'")
     expect(convexHost).toContain("from '@/modules/customer-request/route-execution/machines'")
@@ -128,30 +120,20 @@ describe('customer-request route-execution journal thinness', () => {
     }
     expect(convexHost).toContain('dispatchLifecyclePorts(ctx)')
     expect(convexHost).toContain('dispatchLifecycleOpenPorts(ctx)')
-    expect(convexHost).toContain('openLeasedDispatchMachine')
-    expect(convexHost).toContain('recoverExpiredDispatchMachine')
+    expect(convexHost).toContain('openDispatchFromJournal')
     expect(convexHost).toContain('markDispatchedMachine')
     expect(convexHost).toContain('recordNotReleasedMachine')
-    expect(convexHost).toContain('markAcceptedMachine')
     expect(convexHost).toContain("from './customerRequestRouteExecutionDispatchPorts'")
-    expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+currentLeasedInvocation\b/)
+    expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+currentDispatchInvocation\b/)
 
-    const openStart = convexHost.indexOf('export const openLeasedDispatch = internalQuery({')
-    const recoverStart = convexHost.indexOf(
-      'export const recoverExpiredDispatch = internalMutation({',
-    )
+    const openStart = convexHost.indexOf('export const openDispatch = internalQuery({')
     const markDispatchedStart = convexHost.indexOf(
       'export const markDispatched = internalMutation({',
     )
     const notReleasedStart = convexHost.indexOf(
       'export const recordNotReleased = internalMutation({',
     )
-    const markAcceptedStart = convexHost.indexOf(
-      'export const markAccepted = internalMutation({',
-    )
-    for (const start of [
-      openStart, recoverStart, markDispatchedStart, notReleasedStart, markAcceptedStart,
-    ]) {
+    for (const start of [openStart, markDispatchedStart, notReleasedStart]) {
       expect(start).toBeGreaterThanOrEqual(0)
       const end = convexHost.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
@@ -165,8 +147,6 @@ describe('customer-request route-execution journal thinness', () => {
     }
     expect(convexHost.slice(openStart, convexHost.indexOf('\n})', openStart)))
       .toContain('dispatchLifecycleOpenPorts(ctx)')
-    expect(convexHost.slice(recoverStart, convexHost.indexOf('\n})', recoverStart)))
-      .toContain('dispatchLifecyclePorts(ctx)')
   })
 
   it('does not invent Convex Start/Lease/Outcome/Cancel/Problem/Dispatch sibling hosts', () => {
@@ -188,15 +168,12 @@ describe('customer-request route-execution journal thinness', () => {
     }
   })
 
-  it('keeps recover helpers in dispatch machines; cancel helpers in machines; host still uses routeAttemptIntegrityValid', () => {
+  it('keeps cancel helpers in machines; host still uses routeAttemptIntegrityValid', () => {
     expect(convexHost).toContain("from '@/modules/customer-request/route-execution/journal'")
     for (const symbol of hostStillUsesJournal) {
       expect(convexHost).toContain(symbol)
       expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
       expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
-    }
-    for (const symbol of recoverJournalHelpers) {
-      expect(convexHost).not.toContain(symbol)
     }
     expect(convexHost).not.toContain('routeDispatchIntegrityValid')
     for (const symbol of cancelJournalHelpers) {
@@ -208,9 +185,6 @@ describe('customer-request route-execution journal thinness', () => {
     expect(cancelCurrentMachine).toContain('cancelDisposition')
     expect(cancelPortsAdapter).toContain('cancelReplayKind')
     expect(cancelPortsAdapter).toContain('patchPendingCancelCommandResult')
-    const recoverMachine = readFileSync(join(machinesRoot, 'recover-expired-dispatch.ts'), 'utf8')
-    expect(recoverMachine).toContain('recoverExpiredDispatchKind')
-    expect(recoverMachine).toContain('recoverDispatchLeaseStillCurrent')
     expect(dispatchPortsSource).toContain('markUnknownOutcome')
     expect(dispatchPortsSource).toContain('readRunProjection')
   })
@@ -237,8 +211,7 @@ describe('customer-request route-execution journal thinness', () => {
     }
   })
 
-  it('keeps host parseBoundedJson and exportedStepState', () => {
-    expect(convexHost).toMatch(/(?:^|\n)function\s+parseBoundedJson\b/)
+  it('keeps the exportedStepState validator host-owned', () => {
     expect(convexHost).toContain('const exportedStepState = v.union(')
   })
 
@@ -292,14 +265,4 @@ describe('customer-request route-execution journal thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

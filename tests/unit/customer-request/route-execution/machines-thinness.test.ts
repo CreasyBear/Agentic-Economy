@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../../helpers/source-files'
 
 const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 const journalRoot = 'src/modules/customer-request/route-execution/journal'
@@ -19,19 +20,14 @@ const hostSource = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8
 
 const machineFiles = [
   'start-or-resume.ts',
-  'lease-next-dispatch.ts',
   'record-outcome.ts',
   'cancel-current.ts',
   'cancel-open-attempt.ts',
   'cancel-resolve-attempt.ts',
   'cancel-ports.ts',
   'dispatch-lifecycle-ports.ts',
-  'current-leased-invocation.ts',
-  'open-leased-dispatch.ts',
-  'recover-expired-dispatch.ts',
   'mark-dispatched.ts',
   'record-not-released.ts',
-  'mark-accepted.ts',
   'problem-report.ts',
   'problem-business-report.ts',
   'problem-update-status.ts',
@@ -43,22 +39,18 @@ const machineFiles = [
 ] as const
 
 describe('customer-request route-execution machines thinness', () => {
-  it('hosts start/lease/outcome/cancel/dispatch machines under machines/', () => {
+  it('hosts start/outcome/cancel/dispatch machines under machines/', () => {
     for (const file of machineFiles) {
       expect(statSync(join(machinesRoot, file)).isFile()).toBe(true)
     }
     const index = readFileSync(join(machinesRoot, 'index.ts'), 'utf8')
     expect(index).toContain('startOrResume')
-    expect(index).toContain('leaseNextDispatch')
     expect(index).toContain('recordOutcome')
     expect(index).toContain('cancelCurrent')
     expect(index).toContain('openCancellationAttempt')
     expect(index).toContain('resolveCancellationAttempt')
-    expect(index).toContain('openLeasedDispatch')
-    expect(index).toContain('recoverExpiredDispatch')
     expect(index).toContain('markDispatched')
     expect(index).toContain('recordNotReleased')
-    expect(index).toContain('markAccepted')
     expect(index).toContain('JournalMutationPorts')
     expect(index).toContain('CancelMutationPorts')
     expect(index).toContain('DispatchLifecyclePorts')
@@ -83,9 +75,8 @@ describe('customer-request route-execution machines thinness', () => {
       expect(source).not.toMatch(/\bctx\.scheduler\b/)
     }
     const start = readFileSync(join(machinesRoot, 'start-or-resume.ts'), 'utf8')
-    const lease = readFileSync(join(machinesRoot, 'lease-next-dispatch.ts'), 'utf8')
     const outcome = readFileSync(join(machinesRoot, 'record-outcome.ts'), 'utf8')
-    for (const source of [start, lease, outcome]) {
+    for (const source of [start, outcome]) {
       expect(source).toContain('JournalMutationPorts')
       expect(source).toContain('ports.')
     }
@@ -98,17 +89,11 @@ describe('customer-request route-execution machines thinness', () => {
     for (const source of [cancelCurrent, cancelOpen, cancelResolve]) {
       expect(source).toContain('ports.')
     }
-    const openLeased = readFileSync(join(machinesRoot, 'open-leased-dispatch.ts'), 'utf8')
-    const recover = readFileSync(join(machinesRoot, 'recover-expired-dispatch.ts'), 'utf8')
     const markDispatched = readFileSync(join(machinesRoot, 'mark-dispatched.ts'), 'utf8')
     const notReleased = readFileSync(join(machinesRoot, 'record-not-released.ts'), 'utf8')
-    const markAccepted = readFileSync(join(machinesRoot, 'mark-accepted.ts'), 'utf8')
-    expect(openLeased).toContain('DispatchLifecycleOpenPorts')
-    expect(recover).toContain('DispatchLifecyclePorts')
     expect(markDispatched).toContain('DispatchLifecyclePorts')
     expect(notReleased).toContain('DispatchLifecyclePorts')
-    expect(markAccepted).toContain('DispatchLifecyclePorts')
-    for (const source of [openLeased, recover, markDispatched, notReleased, markAccepted]) {
+    for (const source of [markDispatched, notReleased]) {
       expect(source).toContain('ports.')
     }
     const problemReport = readFileSync(join(machinesRoot, 'problem-report.ts'), 'utf8')
@@ -186,14 +171,4 @@ describe('customer-request route-execution machines thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

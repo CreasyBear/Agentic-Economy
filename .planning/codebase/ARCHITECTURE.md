@@ -87,7 +87,7 @@ Domain modules are organized by bounded context under `src/modules/`. Public ent
 | Capability supply | `src/modules/capability-supply/public.ts`, `src/modules/capability-supply/published-operation.ts`, `src/modules/capability-supply/route-transport-runtime.ts` | Imports/admitted transports, publishes operations, models offerings/bindings, performs readiness/liquidity observation, and supplies routeable capability graph data (`src/modules/capability-supply/public.ts:7-51`). |
 | Customer request | `src/modules/customer-request/public.ts`, `src/modules/customer-request/application/public.ts`, `src/modules/customer-request/compiler.ts` | Compiles intent and facts into a bounded request aggregate, evaluates eligible supply, creates route-plan generations, prepares actions, confirms mandates, and exposes application workflows through explicit ports (`src/modules/customer-request/public.ts:1-81`, `src/modules/customer-request/application/public.ts:46-138`). |
 | Action invocation | `src/modules/action-invocation/index.ts`, `src/modules/action-invocation/application-service.ts` | Provides durable/in-memory invocation tracing, standing mandates, dynamic published-operation adapters, paid-operation semantics, recovery/reconciliation, and host projections (`src/modules/action-invocation/index.ts:30-90`, `src/modules/action-invocation/application-service.ts:40-74`). |
-| Registry/catalog | `src/modules/registry/public.ts`, `src/modules/registry/registry.functions.ts`, `src/modules/catalog/public.ts` | Projects published business/offering supply into public catalog and service APIs; the source port selects Convex or bounded legacy/local paths and optionally hydrates external search results (`src/modules/registry/registry.functions.ts:51-72`, `src/modules/registry/registry.functions.ts:120-219`). |
+| Registry/catalog | `src/modules/registry/public.ts`, `src/modules/registry/registry.functions.ts`, `src/modules/catalog/public.ts` | Projects the Offering-owned source graph into public business catalog and compatibility service APIs; the source port selects durable Convex supply or the labelled local fixture and optionally hydrates external search results (`src/modules/registry/registry.functions.ts:51-72`, `src/modules/registry/registry.functions.ts:120-219`). |
 | Answer and thread | `src/modules/answer/public.ts`, `src/modules/answer-thread/public.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts` | Validates structured answer snapshots/artifacts, grounds provider facts, builds public thread projections, and runs retrieval/clarification/boundary/inquiry/agent turn paths (`src/modules/answer/public.ts:11-64`, `src/modules/answer-thread/public.ts:19-52`, `src/modules/answer-thread/internal/turn-orchestrator.ts:126-224`). |
 | Harness | `src/modules/harness/public.ts`, `src/modules/harness/run-loop.ts`, `src/modules/harness/tool-contract.ts` | Runs bounded model/tool phases, applies approval and strict-schema gates, records run/session/evidence projections, and supports replay/evaluation (`src/modules/harness/public.ts:58-75`, `src/modules/harness/public.ts:130-158`). |
 | Plan proposal | `src/modules/plan-proposal/public.ts`, `src/modules/plan-proposal/internal/plan-store.ts` | Validates model proposals against action menus and active plan state, applies budgets, and persists plan events/revisions (`src/modules/plan-proposal/public.ts:43-219`, `src/modules/plan-proposal/public.ts:272-313`). |
@@ -99,6 +99,13 @@ Domain modules are organized by bounded context under `src/modules/`. Public ent
 The public files are the intended dependency seams. For example, the customer-request Convex application imports the application public API and separately injects `authorizePreparationPorts`, `compareResumePorts`, `confirmRoutePorts`, problem, facts, refine, and standing-route ports (`convex/customerRequestApplication.ts:21-66`).
 
 ## Primary data flows
+
+> **Maintained companion:** [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md) traces the three
+> prompt/model flows end-to-end (answer turn, customer-request V2, eval/harness/study) with
+> per-stage input/processing/output cites, the library-adoption boundary (AI SDK v7,
+> @convex-dev/workflow/workpool, blocked @convex-dev/agent), and the entropy ledger. Any PR
+> touching a prompt-assembly site, gate, model call, stream frame, journal, or scheduler hop
+> MUST update it.
 
 ### Public discovery and catalog search
 
@@ -130,7 +137,7 @@ The public files are the intended dependency seams. For example, the customer-re
 
 1. Owner pages are file routes under `src/routes/_operator/owner.*` and render supply/catalog feature components under `src/components/ae/supply/`, `src/components/ae/status/`, and `src/components/ae/offerings/`.
 2. Capability publication and lifecycle mutations are exposed by `convex/capabilitySupply.ts`, including `publishCapability`, `withdrawCapability`, `refreshCapability`, graph reads, offering/binding registration, eligibility, quarantine, and owner funnel actions (`convex/capabilitySupply.ts:374-410`, `convex/capabilitySupply.ts:575-783`, `convex/capabilitySupply.ts:925-1138`).
-3. Catalog writes use `convex/catalog.ts` to publish business catalog, create/revise offerings, change status, manage access paths, retry projections, and handle legacy-to-offering cutover (`convex/catalog.ts:270-589`).
+3. Catalog writes use `convex/catalog.ts` to publish business catalogs, create or revise Offerings, change Offering status, manage access paths, and rebuild projections; no BusinessService persistence path remains (`convex/catalog.ts:270-589`).
 4. Registry reads consume public catalog/offering projections (`convex/registry.ts:243-395`), while discovery manifests are regenerated or invalidated by `convex/discovery.ts:234-413`.
 5. Route transport and dynamic published operations remain behind `src/modules/capability-supply/route-transport-runtime.ts` and `src/modules/action-invocation/dynamic-published-adapter.ts`; a provider-specific contract is isolated in `src/modules/provider-integrations/shipping/public.ts:7-50`.
 
@@ -160,7 +167,7 @@ The public files are the intended dependency seams. For example, the customer-re
 
 - Authentication: Clerk TanStack Start middleware/provider (`src/start.ts:66-76`, `src/routes/__root.tsx:79-108`) and Convex issuer config (`convex/auth.config.ts`).
 - Model transport: OpenRouter/TanStack AI gateway (`src/modules/model-gateway/public.ts:1-10`, `src/modules/answer-thread/internal/turn-orchestrator.ts:1-8`); Convex declares model-related environment keys in `convex/convex.config.ts:7-15`.
-- Search: registry source reads may select Convex or Meilisearch and hydrate facts back from the Offering projection (`src/modules/registry/registry.functions.ts:120-219`); deployment values are declared in `.env.example:96-102`.
+- Search: registry reads use the native Convex search index and hydrate current Offering projections (`convex/registry.ts`, `src/modules/registry/registry.functions.ts`).
 - Billing/payment: money module and Stripe/Autumn route/provider surfaces (`src/modules/money/public.ts`, `src/routes/api.stripe.webhook.ts`, `.env.example:57-68`); action invocation includes x402/payment reconciliation seams (`src/modules/action-invocation/index.ts:17-24`, `src/modules/action-invocation/paid-operation-semantics.ts`).
 - Notifications: Resend/Novu dispatch and webhook handlers under `src/routes/api.notification.*`, backed by the Convex outbox (`convex/notificationOutbox.ts:311-567`, `.env.example:70-83`).
 - Observability: client boot/error boundary (`src/routes/__root.tsx:10-13`, `src/routes/__root.tsx:91-100`) and server middleware (`src/start.ts:11-37`) feed Sentry/PostHog modules under `src/lib/observability/` and `src/modules/observability/`.

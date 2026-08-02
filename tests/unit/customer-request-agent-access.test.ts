@@ -44,6 +44,40 @@ describe('customer request agent access', () => {
     })
     expect(getSecret).toHaveBeenCalledWith('key_123')
   })
+  it('binds a fresh Clerk key to the owner principal and rolls it back when source registration fails', async () => {
+    const revoke = vi.fn().mockResolvedValue(undefined)
+    const create = vi.fn().mockResolvedValue({ id: 'key_fresh', secret: 'secret_fresh' })
+    const registerPrincipal = vi.fn()
+      .mockResolvedValueOnce({ kind: 'recorded' })
+      .mockResolvedValueOnce({ kind: 'unavailable' })
+    const api = {
+      create,
+      getSecret: vi.fn().mockResolvedValue({ secret: 'secret_fresh' }),
+      list: vi.fn().mockResolvedValue({ data: [] }),
+      revoke,
+    }
+    const first = await issueCustomerRequestAgentKey({
+      principal: { userId: 'owner_fresh' },
+      input: { name: 'Fresh assistant', idempotencyKey: 'fresh-12345678' },
+      api,
+      registerPrincipal,
+    })
+    expect(first).toMatchObject({ kind: 'created', keyId: 'key_fresh' })
+    expect(registerPrincipal).toHaveBeenCalledWith({
+      principalId: 'clerk_api_key:key_fresh',
+      credentialId: 'key_fresh',
+      scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
+      seenAt: expect.any(Number),
+    })
+    const second = await issueCustomerRequestAgentKey({
+      principal: { userId: 'owner_fresh' },
+      input: { name: 'Fresh assistant', idempotencyKey: 'fresh-12345678' },
+      api,
+      registerPrincipal,
+    })
+    expect(second).toMatchObject({ kind: 'error', code: 'issuance_unavailable', retryable: true })
+    expect(revoke).toHaveBeenCalledWith({ apiKeyId: 'key_fresh', revocationReason: 'Source principal binding failed.' })
+  })
 
   it('fails closed without an authenticated user', async () => {
     const result = await issueCustomerRequestAgentKey({

@@ -8,6 +8,7 @@ import { projectCustomerRequestDecisionRecords } from '@/modules/customer-reques
 import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { DIALOG_WELCOME } from '@/content/brand-copy'
 import { cn } from '@/lib/utils'
+import { isRecord } from '@/modules/common/is-record'
 import {
   resolveReplacementCommandKey,
   type ReplacementCommandIdentity,
@@ -15,7 +16,7 @@ import {
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import { AeDecisionTrail } from '../plan/AeDecisionTrail'
 import { RequestResult } from './panels'
-import { customerClarificationPrompt } from './panels/shared'
+import { customerFacingAeTurn } from './panels/shared'
 import type {
   CustomerRequestProjection,
   CustomerRequestView,
@@ -85,7 +86,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       setNeed(result.summary)
       setTurns(result.clarification === undefined
         ? []
-        : [{ speaker: 'ae', text: customerClarificationPrompt(result.clarification) }])
+        : [{ speaker: 'ae', text: customerFacingAeTurn(result.clarification.prompt) }])
       setState({ kind: 'request', projection: result })
     } catch {
       setState({
@@ -138,7 +139,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       setTurns([
         { speaker: 'customer', text: need.trim() },
         ...(result.clarification === undefined ? [] : [{
-          speaker: 'ae' as const, text: customerClarificationPrompt(result.clarification),
+          speaker: 'ae' as const, text: customerFacingAeTurn(result.clarification.prompt),
         }]),
       ])
       rememberRequestIdentity(result.requestRef, result.summary)
@@ -248,7 +249,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       }
       const nextClarification = result.clarification
       if (nextClarification !== undefined) setTurns((current) => [
-        ...current, { speaker: 'ae', text: customerClarificationPrompt(nextClarification) },
+        ...current, { speaker: 'ae', text: customerFacingAeTurn(nextClarification.prompt) },
       ])
       setState({ kind: 'request', projection: result })
     } catch {
@@ -510,8 +511,5 @@ function forgetStoredRequestIdentity(): void {
 }
 function boundedIdentityPart(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 200
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 

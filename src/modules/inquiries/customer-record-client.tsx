@@ -1,18 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
 import {
   readCustomerRecordServer,
   type CustomerInquiryRecordServerResult,
 } from '@/modules/inquiries/inquiry.functions'
-
-export function isCustomerInquiryRecordClientAvailable(): boolean {
-  return true
-}
-
-export function CustomerInquiryRecordProvider({ children }: { children: ReactNode }) {
-  return <>{children}</>
-}
 
 export function useCustomerInquiryRecord(input: {
   threadId: string

@@ -1,6 +1,7 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 import type { CustomerRoute } from '../../workspace-types'
 import {
@@ -16,25 +17,33 @@ export function RouteDisclosure({ trigger, children, defaultIsOpen = true }: Rea
   children: ReactNode
   defaultIsOpen?: boolean
 }>) {
-  const [isOpen, setIsOpen] = useState(defaultIsOpen)
-  const contentId = `route-disclosure-${useId().replaceAll(':', '')}`
+  // This Radix build leaves `aria-controls` off the trigger, so the disclosure
+  // relationship is still named here; open state belongs to the primitive.
+  const contentId = useId()
   return (
-    <div>
-      <Button
-        type="button"
-        variant="ghost"
-        aria-expanded={isOpen}
-        aria-controls={contentId}
-        onClick={() => setIsOpen((current) => !current)}
-        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-2 text-left font-semibold"
+    <Collapsible defaultOpen={defaultIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="group flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-2 text-left font-semibold"
+          aria-controls={contentId}
+        >
+          <span>{trigger}</span>
+          <span aria-hidden="true" className="group-data-[state=open]:hidden">+</span>
+          <span aria-hidden="true" className="hidden group-data-[state=open]:inline">−</span>
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        forceMount
+        id={contentId}
+        className="grid grid-rows-[0fr] transition-[grid-template-rows] data-[state=open]:grid-rows-[1fr]"
       >
-        <span>{trigger}</span>
-        <span aria-hidden="true">{isOpen ? '−' : '+'}</span>
-      </Button>
-      <div id={contentId} className="pt-1">
-        {children}
-      </div>
-    </div>
+        <div className="min-h-0 overflow-hidden pt-1">
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 

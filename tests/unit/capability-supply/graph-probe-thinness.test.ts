@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const moduleRoot = 'src/modules/capability-supply/internal/graph'
@@ -17,7 +18,8 @@ describe('capability-supply graph/probe thinness', () => {
   })
 
   it('delegates probe/graph via capabilitySupplyGraphPorts while keeping thin wrappers', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/graph'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     expect(convexHost).toContain('capabilitySupplyGraphPorts')
     expect(convexHost).toContain('readCapabilityProbeTargetFromModule')
     expect(convexHost).toContain('recordCapabilityProbeResultFromModule')
@@ -63,14 +65,4 @@ describe('capability-supply graph/probe thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

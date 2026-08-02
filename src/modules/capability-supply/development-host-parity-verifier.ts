@@ -3,7 +3,6 @@ import {
   verifyDevelopmentHostReadReceipt,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { verifyDevelopmentPublishedOperationEvidence } from './development-published-operation-evidence'
 import {
@@ -15,6 +14,7 @@ import {
   compareHostSemantics,
   developmentHostParityClaimCeiling,
   developmentHostParitySourceBaseCommit,
+  digestDevelopmentHostParityMaterial,
   evaluateHostMatrix,
   verifyHostSnapshots,
   type DevelopmentHostParityEvidence,
@@ -29,7 +29,7 @@ export function verifyDevelopmentHostParityEvidence(
   }>,
 ): void {
   const { packetDigest, ...material } = packet
-  if (canonicalDigest(material as unknown as StableHashValue) !== packetDigest) {
+  if (digestDevelopmentHostParityMaterial(material) !== packetDigest) {
     throw new Error('host_parity_packet_digest_invalid')
   }
   assertHostParityProvenance(packet.provenance)
@@ -77,18 +77,16 @@ export function verifyDevelopmentHostParityEvidence(
   })
   packet.hostReads.forEach(verifyDevelopmentHostReadReceipt)
   if (packet.hostReads[0].readRef === packet.hostReads[1].readRef
-    || canonicalDigest(rebuiltReads as unknown as StableHashValue)
-      !== canonicalDigest(packet.hostReads as unknown as StableHashValue)) {
+    || canonicalDigest(rebuiltReads) !== canonicalDigest(packet.hostReads)) {
     throw new Error('host_read_not_reconstructed_from_independent_records')
   }
-  if (canonicalDigest(compareHostSemantics(packet.hostReads, packet.hosts) as unknown as StableHashValue)
-    !== canonicalDigest(packet.parity as unknown as StableHashValue)) {
+  if (canonicalDigest(compareHostSemantics(packet.hostReads, packet.hosts))
+    !== canonicalDigest(packet.parity)) {
     throw new Error('host_semantic_parity_invalid')
   }
   const evaluated = evaluateHostMatrix(packet.hosts)
   if (evaluated.some((entry) => !entry.passed)
-    || canonicalDigest(evaluated as unknown as StableHashValue)
-      !== canonicalDigest(packet.evals as unknown as StableHashValue)) {
+    || canonicalDigest(evaluated) !== canonicalDigest(packet.evals)) {
     throw new Error('host_matrix_evidence_invalid')
   }
 }

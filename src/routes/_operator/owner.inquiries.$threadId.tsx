@@ -18,6 +18,7 @@ import { AeInquiryOriginCard } from '@/components/ae/inquiries/AeInquiryOriginCa
 import { AeOwnerReplyComposer } from '@/components/ae/inquiries/AeOwnerReplyComposer'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { notificationVariant } from '@/lib/ui/inquiry-notification'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import type { OwnerId } from '@/modules/common/ids'
 import {
@@ -253,7 +254,7 @@ function OwnerInquiryThreadRoute() {
     <AeOperatorShell
       operatorRole="owner"
       eyebrow={readback.detail.inquiry.businessName}
-      title={readback.detail.inquiry.serviceName}
+      title={readback.detail.inquiry.offeringName}
       description="Review the customer message, reply through the saved contact path, then close the thread when follow-up is done."
       currentPath={detailPath}
     >
@@ -316,7 +317,7 @@ function ThreadMessages({ detail }: { detail: OwnerInquiryDetailReadback }) {
       <div className="grid gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={detail.inquiry.bucket === 'resolved' ? 'secondary' : 'outline'}>{detail.inquiry.bucket.replace('_', ' ')}</Badge>
-          <Badge variant={notificationVariant(detail.inquiry.notificationStatus)}>{detail.inquiry.notificationLabel}</Badge>
+          <Badge variant={notificationVariant(detail.inquiry.notificationStatus, { held: 'destructive' })}>{detail.inquiry.notificationLabel}</Badge>
         </div>
         <h2 className="text-lg font-semibold text-foreground">Thread messages</h2>
         <p className="text-sm text-muted-foreground">{detail.inquiry.preview}</p>
@@ -501,7 +502,7 @@ function DeliveryReadback({ notifications }: { notifications: readonly OwnerInbo
           notifications.map((notification) => (
             <div key={notification.notificationId} className="grid gap-2 rounded-lg bg-muted/40 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={notificationVariant(notification.status)}>{notification.label}</Badge>
+                <Badge variant={notificationVariant(notification.status, { held: 'destructive' })}>{notification.label}</Badge>
                 <span className="text-xs text-muted-foreground">{notification.recipientRole}</span>
               </div>
               <AeOperatorFactGrid
@@ -547,17 +548,6 @@ function nextStepCopy(detail: OwnerInquiryDetailReadback): string {
   }
 }
 
-function notificationVariant(status: InquiryNotificationStatus): 'outline' | 'secondary' | 'destructive' {
-  switch (status) {
-    case 'queued':
-      return 'outline'
-    case 'sent':
-      return 'secondary'
-    case 'failed':
-    case 'held':
-      return 'destructive'
-  }
-}
 
 function usesLocalE2eBrowser(): boolean {
   return import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'

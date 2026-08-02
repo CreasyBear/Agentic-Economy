@@ -182,8 +182,9 @@ describe('configured customer request interpretation', () => {
   it('attributes a model answer to the model, never to the fallback', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'unsupported_request', reason: 'requested_result_not_available',
-      }) } }],
+        kind: 'unsupported_request', reason: 'requested_result_not_available', prompt: '',
+        canonicalStatements: [], supersededStatements: [], selections: [],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200 })))
 
     try {

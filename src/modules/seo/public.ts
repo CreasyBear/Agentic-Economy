@@ -1,6 +1,4 @@
-import type { Slug } from '@/modules/common/ids'
-import type { PublicCatalogContract } from '@/modules/catalog/public'
-import { buildPublicBusinessSeo as buildPublicBusinessSeoImpl } from './internal/public-business-seo'
+import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
 import type { JsonLdObject } from './internal/json-ld'
 export { serializeJsonLd } from './internal/json-ld'
 
@@ -8,7 +6,7 @@ export const SeoIndexDirectiveValues = ['index', 'noindex'] as const
 export type SeoIndexDirective = (typeof SeoIndexDirectiveValues)[number]
 
 export type PublicBusinessSeoContract = {
-  slug: Slug
+  slug: string
   title: string
   description: string
   h1: string
@@ -21,21 +19,23 @@ export type BuildPublicBusinessSeoOptions = {
   canonicalBaseUrl?: string
 }
 
-export type PublicBusinessSeoService = Pick<PublicCatalogContract['services'][number], 'serviceSlug' | 'name' | 'category' | 'summary' | 'serviceArea'>
+export type PublicBusinessSeoOffering = Pick<
+  PublicOfferingDto,
+  'offeringRef' | 'name' | 'category' | 'summary' | 'serviceAreaSummary'
+>
 
 export type PublicBusinessSeoCatalog = Pick<
-  PublicCatalogContract,
+  PublicBusinessCatalogApiV2Dto,
   'slug' | 'name' | 'category' | 'suburb' | 'stateTerritory'
 > & {
-  services: readonly PublicBusinessSeoService[]
+  offerings: readonly PublicBusinessSeoOffering[]
 }
 
 export type BuildPublicBusinessSeoInput = {
   catalog: PublicBusinessSeoCatalog
   options?: BuildPublicBusinessSeoOptions
 }
-
-export const buildPublicBusinessSeo = buildPublicBusinessSeoImpl
+export { buildPublicBusinessSeo } from './internal/public-business-seo'
 
 export type PublicThreadSeoContract = {
   threadId: string

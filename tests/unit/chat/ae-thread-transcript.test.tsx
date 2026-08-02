@@ -10,7 +10,8 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import type { ReactElement } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-dialog'
 
 import { AeThreadTranscript } from '@/components/ae/chat/AeThreadTranscript'
 import type { AnswerSource } from '@/modules/answer/public'
@@ -27,38 +28,10 @@ function render(ui: ReactElement) {
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/$slug' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/registry' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return rtlRender(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }
-
-let showModalDescriptor: PropertyDescriptor | undefined
-let closeDescriptor: PropertyDescriptor | undefined
-
-beforeEach(() => {
-  showModalDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
-  closeDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-    configurable: true,
-    writable: true,
-    value(this: HTMLDialogElement) {
-      this.setAttribute('open', '')
-    },
-  })
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
-    configurable: true,
-    writable: true,
-    value(this: HTMLDialogElement) {
-      this.removeAttribute('open')
-    },
-  })
-})
-
-afterEach(() => {
-  restoreDialogMethod('showModal', showModalDescriptor)
-  restoreDialogMethod('close', closeDescriptor)
-})
 
 describe('AeThreadTranscript', () => {
   afterEach(() => {
@@ -454,10 +427,3 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   }
 }
 
-function restoreDialogMethod(name: 'showModal' | 'close', descriptor: PropertyDescriptor | undefined) {
-  if (descriptor === undefined) {
-    Reflect.deleteProperty(HTMLDialogElement.prototype, name)
-    return
-  }
-  Object.defineProperty(HTMLDialogElement.prototype, name, descriptor)
-}

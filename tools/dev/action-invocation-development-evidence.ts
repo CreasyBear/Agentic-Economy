@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { parseArgs } from '../ae/lib/args'
 
 import { runDevelopmentEvidenceScenario } from '../../src/modules/capability-supply/development-evidence-scenario'
 import {
@@ -12,7 +13,8 @@ function revision() {
 }
 
 async function main() {
-  const [command, rawPath] = process.argv.slice(2)
+  const { command, positionals } = parseArgs(process.argv.slice(2))
+  const [rawPath] = positionals
   if ((command !== 'run' && command !== 'verify') || rawPath === undefined) {
     throw new Error('usage: npm run evidence:action-invocation:development -- <run|verify> <output-path>')
   }

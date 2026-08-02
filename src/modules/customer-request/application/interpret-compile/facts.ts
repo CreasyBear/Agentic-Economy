@@ -4,7 +4,8 @@ import {
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { RequestFact, RequestFactSource } from '@/modules/customer-request/evaluation'
+import type { ProposedRequestAction, RequestFact, RequestFactSource } from '@/modules/customer-request/evaluation'
+import type { ResolvedCapabilitySelection } from '@/modules/customer-request/semantic-interpreter'
 
 /** Convex Infer snapshots use plain strings; rebound facts restore branded keys. */
 export type StoredFactLike = Readonly<{
@@ -92,4 +93,26 @@ export function rebindStoredFacts(
       source: fact.source,
     }]
   })
+}
+
+export function rebindPlanSelections(
+  actions: readonly Pick<ProposedRequestAction, 'contractRef' | 'selectionKey' | 'semanticDigest'>[],
+  facts: readonly RequestFact[],
+  models: readonly CapabilityDecisionModel[],
+): readonly ResolvedCapabilitySelection[] | undefined {
+  const selections = actions.flatMap((action) => {
+    const model = models.find((candidate) => (
+      sameCapabilityContractRef(candidate.contractRef, action.contractRef)
+      && candidate.selectionKey === action.selectionKey
+      && candidate.semanticDigest === action.semanticDigest
+    ))
+    if (model === undefined) return []
+    return [{
+      selectionKey: model.selectionKey,
+      contractRef: model.contractRef,
+      facts: facts.filter((fact) => fact.selectionKey === model.selectionKey
+        && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
+    }]
+  })
+  return selections.length === actions.length ? selections : undefined
 }

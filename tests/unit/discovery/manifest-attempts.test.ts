@@ -25,7 +25,7 @@ describe('discovery manifest attempts', () => {
       code: 'discovery_manifest_generated',
       manifest: {
         slug: 'parramatta-emergency-plumbing',
-        status: 'available',
+        disposition: 'current',
         pathKind: 'ae_hosted_fallback',
       },
       attempt: {
@@ -136,14 +136,8 @@ describe('discovery manifest attempts', () => {
       kind: 'ok',
       code: 'discovery_manifest_invalidated',
       attempts: [{ status: 'stale', repairAction: 'invalidate_manifest' }],
-      manifests: [{ status: 'stale', suppressedAt: 5_100 }],
+      manifests: [{ disposition: 'stale', suppressedAt: 5_100 }],
     })
-    expect(state.invalidationIntents).toEqual([
-      expect.objectContaining({
-        status: 'applied',
-        surfaces: expect.arrayContaining(['discovery_manifest']),
-      }),
-    ])
     expect(regenerated).toMatchObject({
       kind: 'error',
       code: 'discovery_manifest_not_public',
@@ -178,6 +172,7 @@ function firstBusiness(state: DiscoverySourceState) {
 function activeOwnerAdmin(): AdminMembership {
   return {
     clerkUserId: 'admin_1',
+    tokenIdentifier: 'clerk|admin_1',
     role: 'owner_admin',
     state: 'active',
     grantedBy: 'bootstrap',

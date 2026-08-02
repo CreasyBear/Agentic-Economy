@@ -54,6 +54,7 @@ describe('AE harness approval policy', () => {
 
     const outcome = await runHarnessTool({
       tool: promptedRead,
+      mode: 'public-read',
       input: {},
       surface: 'answerThread',
       toolCallId: 'tc-public-prompt',

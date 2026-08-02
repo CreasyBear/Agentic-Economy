@@ -63,6 +63,7 @@ function control(
     sourceResultRef,
     sourceResultDigest: resultDigest,
     terminalBusinessOutcome: 'completed',
+    terminalResultReferenceable: true,
     control: {
       invocationRef: 'invocation:development:one',
       invocationVersion: 4,
@@ -172,6 +173,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
     }), {}, 'invocation_not_terminal'],
     ['disallowed outcome', control({
       terminalBusinessOutcome: 'refused',
+      terminalResultReferenceable: false,
     }), {}, 'outcome_not_referenceable'],
   ])('refuses %s identity', (_label, row, overrides, reason) => {
     const candidate = input()

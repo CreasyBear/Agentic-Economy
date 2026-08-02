@@ -1,51 +1,65 @@
+import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
-import { ensureGreenfieldOfferingCutover, persistOfferingSourceState } from '../../../convex/catalog'
-import type { RuntimeDb, RuntimeDocument } from '../../../convex/source_state'
+import { persistOfferingSourceState } from '../../../convex/catalog'
 import type { OfferingSourceState } from '@/modules/catalog/public'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import schema from '../../../convex/schema'
+import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 
 const empty: OfferingSourceState = { offerings: [], revisions: [], accessPaths: [], operations: [] }
 
 describe('Offering persistence tenancy', () => {
   it('refuses an Offering ref owned by another business before any write', async () => {
-    const db = new CollisionDb({ businessOfferings: [{ _id: 'existing', offeringRef: 'offering:shared', businessId: 'business:other' }] })
-    const result = await persistOfferingSourceState(db as unknown as RuntimeDb, 'business:mine', empty, {
+    const backend = convexTest(schema, modules)
+    const mine = await publishedBusinessOwner(backend, 'offering-tenant-mine')
+    const other = await publishedBusinessOwner(backend, 'offering-tenant-other')
+    await backend.run((ctx) => ctx.db.insert('businessOfferings', {
+      offeringRef: 'offering:shared', businessId: other.businessId, currentRevision: 1, status: 'draft', createdAt: 1, updatedAt: 1,
+    }))
+
+    const result = await backend.run((ctx) => persistOfferingSourceState(ctx.db, mine.businessId, empty, {
       ...empty,
-      offerings: [{ offeringRef: 'offering:shared' as never, businessId: 'business:mine' as never, currentRevision: 1, status: 'draft', createdAt: 1, updatedAt: 1 }],
-    })
+      offerings: [{
+        offeringRef: brandNonEmpty('offering:shared', 'OfferingRef'),
+        businessId: brandNonEmpty(mine.businessId, 'BusinessId'),
+        currentRevision: 1,
+        status: 'draft',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }))
     expect(result).toMatchObject({ kind: 'error', code: 'operation_conflict' })
-    expect(db.writes).toBe(0)
+    await expect(backend.run((ctx) => ctx.db.query('businessOfferings').collect())).resolves.toHaveLength(1)
   })
 
   it('refuses an access-path ref owned by another business before any write', async () => {
-    const db = new CollisionDb({ offeringAccessPaths: [{ _id: 'existing', accessPathRef: 'access:shared', businessId: 'business:other' }] })
-    const result = await persistOfferingSourceState(db as unknown as RuntimeDb, 'business:mine', empty, {
+    const backend = convexTest(schema, modules)
+    const mine = await publishedBusinessOwner(backend, 'access-tenant-mine')
+    const other = await publishedBusinessOwner(backend, 'access-tenant-other')
+    await backend.run((ctx) => ctx.db.insert('offeringAccessPaths', {
+      accessPathRef: 'access:shared', businessId: other.businessId, offeringRef: 'offering:other', offeringRevision: 1,
+      offeringSourceHash: canonicalDigest('other-offering'), status: 'draft',
+      descriptor: { kind: 'human_request', channel: 'phone', disclosure: 'Call' },
+      sourceHash: canonicalDigest('other-access'), createdAt: 1, updatedAt: 1,
+    }))
+
+    const result = await backend.run((ctx) => persistOfferingSourceState(ctx.db, mine.businessId, empty, {
       ...empty,
-      accessPaths: [{ accessPathRef: 'access:shared' as never, businessId: 'business:mine' as never, offeringRef: 'offering:mine' as never, offeringRevision: 1, offeringSourceHash: 'hash:o' as never, status: 'draft', descriptor: { kind: 'human_request', channel: 'phone', disclosure: 'Call' }, sourceHash: 'hash:a' as never, createdAt: 1, updatedAt: 1 }],
-    })
+      accessPaths: [{
+        accessPathRef: brandNonEmpty('access:shared', 'AccessPathRef'),
+        businessId: brandNonEmpty(mine.businessId, 'BusinessId'),
+        offeringRef: brandNonEmpty('offering:mine', 'OfferingRef'),
+        offeringRevision: 1,
+        offeringSourceHash: canonicalDigest('o'),
+        status: 'draft',
+        descriptor: { kind: 'human_request', channel: 'phone', disclosure: 'Call' },
+        sourceHash: canonicalDigest('a'),
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    }))
     expect(result).toMatchObject({ kind: 'error', code: 'operation_conflict' })
-    expect(db.writes).toBe(0)
-  })
-
-  it('boots a no-legacy business into Offering mode and preserves a legacy business', async () => {
-    const greenfield = new CollisionDb({ catalogSupplyCutovers: [], businessServices: [] })
-    expect(await ensureGreenfieldOfferingCutover(greenfield as unknown as RuntimeDb, 'business:new', 10)).toBe('created')
-    expect(greenfield.tables.catalogSupplyCutovers).toContainEqual(expect.objectContaining({ businessId: 'business:new', mode: 'offering' }))
-
-    const legacy = new CollisionDb({ catalogSupplyCutovers: [], businessServices: [{ _id: 'service:1', businessId: 'business:legacy' }] })
-    expect(await ensureGreenfieldOfferingCutover(legacy as unknown as RuntimeDb, 'business:legacy', 10)).toBe('legacy_preserved')
-    expect(legacy.tables.catalogSupplyCutovers).toEqual([])
+    await expect(backend.run((ctx) => ctx.db.query('offeringAccessPaths').collect())).resolves.toHaveLength(1)
   })
 })
-
-class CollisionDb {
-  writes = 0
-  constructor(readonly tables: Record<string, RuntimeDocument[]>) {}
-  query(table: string) {
-    let rows = [...(this.tables[table] ?? [])]
-    const query = { withIndex: (_: string, select: (builder: any) => unknown) => { const builder = { eq: (field: string, value: unknown) => { rows = rows.filter((row) => row[field] === value); return builder } }; select(builder); return query }, unique: async () => rows.length === 1 ? rows[0]! : null, collect: async () => rows }
-    return query
-  }
-  async insert(table: string, value: Record<string, unknown>) { this.writes++; (this.tables[table] ??= []).push({ _id: `${table}:new`, ...value }); return `${table}:new` }
-  async patch() { this.writes++ }
-  async get() { return null }
-}

@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -6,7 +7,7 @@ import type { ServiceDto } from '@/modules/registry/public'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'Publish what you do once. Set your price. Test it, go live, and earn when agents bring you work.'
+export const SUPPLY_OFFER_SENTENCE = 'Publish what you do once. Set the terms assistants can review. Test it, go live, and prepare for paid work when agents bring you work after payment support is enabled.'
 
 export function AeSupplyLanding({
   tools,
@@ -22,33 +23,33 @@ export function AeSupplyLanding({
           <p className="block text-sm font-semibold text-muted-foreground">FOR BUSINESSES</p>
           <h1 className="text-4xl leading-none font-semibold tracking-tight text-foreground sm:text-5xl md:text-7xl">Let AI assistants bring your business more work.</h1>
           <p className="block max-w-3xl text-lg text-muted-foreground">
-            Publish what you do once. Set your price. Test it, go live, and earn when agents bring you work.
+            {SUPPLY_OFFER_SENTENCE}
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild variant="default" className="min-h-11">
-              <a href="/claim?source=supply">Start publishing your service</a>
+              <Link to="/claim" search={{ source: 'supply' }}>Start publishing your service</Link>
             </Button>
-            <a href="/owner/supply" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">Manage your service</a>
+            <Link to="/owner/supply" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">Manage your service</Link>
           </div>
         </div>
       </header>
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pb-16 sm:px-6">
         <Card className="border-0 bg-brand text-on-brand">
           <CardContent className="grid gap-3 p-6">
-            <p className="block text-sm font-semibold text-on-brand">YOUR PATH TO PAID WORK</p>
-            <p className="block max-w-3xl text-on-brand/85">Publish once, then earn when agents bring paid work.</p>
-            <p className="block max-w-3xl text-on-brand/85">Check your service before it goes live, then let assistants find it.</p>
+            <p className="block text-sm font-semibold text-on-brand">YOUR PATH TO PAID WORK WHEN ENABLED</p>
+            <p className="block max-w-3xl text-on-brand/85">Publish once, then prepare for paid work when payment support is enabled.</p>
+            <p className="block max-w-3xl text-on-brand/85">Setup and test calls do not create AE-settled earnings or payouts.</p>
           </CardContent>
         </Card>
         <section aria-labelledby="supply-payment-flow" className="grid gap-4">
           <div className="grid gap-1">
-            <h2 id="supply-payment-flow" className="text-xl font-semibold text-foreground">Set a clear price</h2>
-            <p className="block max-w-3xl text-muted-foreground">Choose what agents pay for each call. Review the fee and what your business receives before you publish.</p>
+            <h2 id="supply-payment-flow" className="text-xl font-semibold text-foreground">Set terms assistants can review</h2>
+            <p className="block max-w-3xl text-muted-foreground">Choose the price for each call. Any fee and total charge are shown before approval; no fixed fee or provider proceeds are promised until payment support is enabled.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <FlowCard label="Your price" detail="The amount you choose for each call." />
-            <FlowCard label="AE fee" detail="Shown clearly before you publish." />
-            <FlowCard label="Your share" detail="The amount your business receives." />
+            <FlowCard label="Payment terms" detail="Any fee and total charge are shown before approval." />
+            <FlowCard label="Earnings" detail="AE-settled earnings and payouts are unavailable until payment support is enabled." />
           </div>
         </section>
         <AeSupplyAgentProof tools={tools} services={services} />

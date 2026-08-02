@@ -1,32 +1,10 @@
 // Historical V1 Request grammar. Current Request authority is exported from public.ts.
 import { z } from 'zod'
+import { DirectedGraph } from 'graphology'
+import { hasCycle } from 'graphology-dag'
 
 import { deepFreeze } from '@/modules/common/deep-freeze'
 
-export const CUSTOMER_REQUEST_STATES = [
-  'needs_information',
-  'planning',
-  'finding_options',
-  'review_required',
-  'changes_need_approval',
-  'authorized',
-  'dispatch_pending',
-  'provider_pending',
-  'outcome_unknown',
-  'partially_completed',
-  'completed_evidence_received',
-  'definitely_failed',
-  'cancellation_requested',
-  'cancelled',
-  'cancellation_rejected',
-  'cancellation_unknown',
-  'issue_reported',
-  'under_review',
-  'resolved',
-  'unresolved_terminal',
-] as const
-
-export type CustomerRequestState = (typeof CUSTOMER_REQUEST_STATES)[number]
 export type CapabilityValueType = 'string' | 'integer' | 'boolean' | 'url' | 'money_minor' | 'provider_offer_ref'
 export type DataClassification = 'public' | 'personal' | 'sensitive' | 'credential'
 
@@ -229,18 +207,6 @@ export type CustomerRequestActivityEvent = Readonly<{
   actor: Readonly<{ kind: 'principal' | 'agent' | 'kernel' | 'provider' | 'operator'; actorId: string }>
   type: 'request_created' | 'plan_proposed' | 'action_prepared' | 'approval_granted' | 'approval_declined' | 'attempt_started' | 'provider_pending' | 'outcome_unknown' | 'effect_reported' | 'action_failed' | 'cancellation_requested' | 'cancellation_resolved' | 'issue_reported' | 'issue_resolved'
   evidenceRef?: string
-}>
-
-export type CustomerRequestProjection = Readonly<{
-  requestId: string
-  requestRevision: number
-  state: CustomerRequestState
-  title: string
-  summary: string
-  nextAction: Readonly<{ kind: 'none' | 'provide_information' | 'review' | 'wait' | 'inspect' | 'resolve_issue'; label: string }>
-  preparedActions: readonly PreparedAction[]
-  attempts: readonly ActionAttempt[]
-  activity: readonly CustomerRequestActivityEvent[]
 }>
 
 const identifier = z.string().trim().min(1).max(200)
@@ -448,19 +414,15 @@ function validateDependencyGraph(
   actions: readonly z.infer<typeof planActionSchema>[],
   byActionId: ReadonlyMap<string, z.infer<typeof planActionSchema>>,
 ): void {
-  const visited = new Set<string>()
-  const visiting = new Set<string>()
-  const visit = (actionId: string): void => {
-    if (visiting.has(actionId)) throw new Error('plan_action_dependency_cycle')
-    if (visited.has(actionId)) return
-    const action = byActionId.get(actionId)
-    if (action === undefined) throw new Error('plan_action_dependency_not_found')
-    visiting.add(actionId)
-    for (const dependency of action.dependsOn) visit(dependency)
-    visiting.delete(actionId)
-    visited.add(actionId)
+  const graph = new DirectedGraph()
+  for (const action of actions) graph.mergeNode(action.actionId)
+  for (const action of actions) {
+    for (const dependency of action.dependsOn) {
+      if (!byActionId.has(dependency)) throw new Error('plan_action_dependency_not_found')
+      graph.mergeDirectedEdge(dependency, action.actionId)
+    }
   }
-  for (const action of actions) visit(action.actionId)
+  if (hasCycle(graph)) throw new Error('plan_action_dependency_cycle')
 }
 
 function validateActionInput(

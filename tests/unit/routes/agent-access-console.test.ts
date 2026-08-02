@@ -51,7 +51,7 @@ const usage: MoneyUsageEvent = {
 
 describe('agent access money seam', () => {
   it('reads exact key balance, bounded activity, and per-key spend from the public query port', async () => {
-    const ledger = { ...createLedgerState([account]), usageEvents: [usage] }
+    const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, currency: usage.currency, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpendMinor: 500, states: ['paid'] as const }]]) }
     const [result] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({ ledger }))
 
     expect(result).toMatchObject({

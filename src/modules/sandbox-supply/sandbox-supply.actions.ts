@@ -70,7 +70,21 @@ export const sandboxCheckupQuoteAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'mcp', 'answerThread'],
+  surfaces: ['http', 'agentJson', 'answerThread', 'mcp'],
+  invocationContract: {
+    version: 'sandbox.checkup_quote:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['slug'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['sandbox quote with provenance and validity window'],
+    safeContinuations: ['inspect the quoted price and validity window'],
+    invalidationConditions: [
+      'slug changes',
+      'quote validity window expires',
+      'action contract version changes',
+    ],
+  },
   run: async ({ data, context }): Promise<SandboxCheckupQuoteResult> => {
     const detail = await registryDetailAction.run({
       data: { slug: data.slug.trim() },

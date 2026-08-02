@@ -46,7 +46,7 @@ let providerCache: { key: ProviderCacheKey; provider: OpenRouterProvider } | und
  * is enough. Rebuilding per call re-reads env and re-allocates on every turn.
  * A caller-supplied `fetch` is a test seam and is never cached.
  */
-export function openRouterProvider(
+function openRouterProvider(
   config: OpenRouterGatewayConfig,
   fetchImpl?: typeof fetch,
 ): OpenRouterProvider {
@@ -71,8 +71,6 @@ export function openRouterProvider(
 export type OpenRouterModelOptions = Readonly<{
   /** Ask OpenRouter for strict JSON-schema structured outputs. */
   structuredOutputs?: boolean
-  /** Require the routed upstream provider to support the requested parameters. */
-  requireParameters?: boolean
   /** Disable reasoning tokens for latency-sensitive deterministic roles. */
   excludeReasoning?: boolean
   /**
@@ -118,7 +116,7 @@ export function openRouterModel(
   return openRouterProvider(config, options.fetch)(modelId, {
     provider: {
       allow_fallbacks: true,
-      require_parameters: options.requireParameters ?? options.structuredOutputs ?? false,
+      require_parameters: options.structuredOutputs ?? false,
     },
     ...(options.structuredOutputs === true ? { structuredOutputs: { strict: true } } : {}),
     ...(Object.keys(extraBody).length === 0 ? {} : { extraBody }),

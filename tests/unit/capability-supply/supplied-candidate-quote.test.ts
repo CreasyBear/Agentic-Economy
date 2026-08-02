@@ -14,6 +14,7 @@ vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
 }))
 
 import { listActions } from '@/modules/actions'
+import { createDevelopmentEvidenceVerifier } from '@/modules/capability-supply/development-evidence-fixture'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
 import type {
@@ -55,7 +56,6 @@ import {
   type ActionInvocationView,
   type InvocationActor,
   type PreparedInvocation,
-  type ReconciliationEvidence,
   type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
 import {
@@ -75,29 +75,6 @@ const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
 const nowIso = () => new Date(nowMs).toISOString()
 const actor: InvocationActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
 
-function createDevelopmentEvidenceSource() {
-  const issued = new Set<string>()
-  return {
-    issue(material: ReconciliationEvidenceMaterial): ReconciliationEvidence {
-      const exact: ReconciliationEvidenceMaterial = {
-        kind: material.kind,
-        version: material.version,
-        evidenceRef: material.evidenceRef,
-        source: material.source,
-        invocationRef: material.invocationRef,
-        attemptRef: material.attemptRef,
-        effectGeneration: material.effectGeneration,
-        resolution: material.resolution,
-        observedAt: material.observedAt,
-      }
-      const evidence = { ...exact, digest: canonicalDigest(exact as never) }
-      issued.add(canonicalDigest(evidence as never))
-      return evidence
-    },
-    verify: (evidence: ReconciliationEvidence) =>
-      issued.has(canonicalDigest(evidence as never)),
-  }
-}
 const contract = defineCapabilityContract(capabilityContractV2({
   capabilityId: 'sandbox.route.service.quote',
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
@@ -1167,7 +1144,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     origin,
     resolution,
   }) => {
-    const evidenceSource = createDevelopmentEvidenceSource()
+    const evidenceSource = createDevelopmentEvidenceVerifier()
     const ports = qualificationPorts()
     const quoteInput = await quoteInputFor(ports)
     const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()

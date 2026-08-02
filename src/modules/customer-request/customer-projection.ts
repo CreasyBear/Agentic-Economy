@@ -1,6 +1,8 @@
 import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { stableStringify } from '@/modules/common/stable-hash'
+import { isRecord } from '@/modules/common/is-record'
+import { formatCurrencyAmount } from './format-currency-amount'
 import {
   CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY,
   CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY,
@@ -81,12 +83,6 @@ export type CustomerRequestProjection =
       kind: 'conflict'; requestRef: string
       reason: 'revision_changed' | 'options_changed' | 'identity_changed' | 'idempotency_key_reused'
     }>
-
-/** @deprecated Use CustomerRequestView. Kept as a source-compatible migration alias. */
-export type CustomerOptionsProjection =
-  | CustomerRequestView
-  | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'request_not_ready' }>
-  | Readonly<{ kind: 'refused'; reason: 'authentication_required' }>
 
 type RequestEvaluationProjectionInput = Readonly<{
   criteria: readonly Readonly<{
@@ -235,7 +231,7 @@ export function projectRequestEvaluation(input: Readonly<{
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
-    summary: `No current option stays within your ${formatCustomerMoney(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
+    summary: `No current option stays within your ${formatCurrencyAmount(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
@@ -323,7 +319,7 @@ function customerMaximumTotalCost(
   criteria: RequestEvaluationProjectionInput['criteria'],
 ): Readonly<{ currency: string; amountMinor: number }> | undefined {
   const value = criteria.find((criterion) => criterion.label === 'Maximum total cost')?.value
-  if (!isJsonRecord(value)) return undefined
+  if (!isRecord(value)) return undefined
   const currency = value.currency
   const amountMinor = value.amountMinor
   return typeof currency === 'string' && currency.length === 3
@@ -336,7 +332,7 @@ function customerMaximumResponseTimeMs(
   criteria: RequestEvaluationProjectionInput['criteria'],
 ): number | undefined {
   const criterion = criteria.find((candidate) => candidate.inputKey === CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY)
-  if (!isJsonRecord(criterion?.value)) return undefined
+  if (!isRecord(criterion?.value)) return undefined
   const amount = criterion.value.amount
   const unit = criterion.value.unit
   return typeof amount === 'number' && Number.isSafeInteger(amount) && amount >= 0 && unit === 'milliseconds'
@@ -344,13 +340,7 @@ function customerMaximumResponseTimeMs(
     : undefined
 }
 
-function isJsonRecord(value: JsonValue | undefined): value is Readonly<Record<string, JsonValue>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
-function formatCustomerMoney(currency: string, amountMinor: number): string {
-  return `${currency} ${(amountMinor / 100).toFixed(2)}`
-}
 
 function customerPurposeLabel(value: string): string {
   const words = value.replace(/[_-]+/g, ' ').trim()

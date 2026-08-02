@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { parseHttpsUrl, resolvePath } from '../helpers/deployed-smoke'
 
 type Phase2SupportSmokeConfig = {
   baseUrl: URL
@@ -64,29 +65,9 @@ function readPhase2SupportSmokeConfig(): Phase2SupportSmokeConfig {
   }
 
   return {
-    baseUrl: parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string),
+    baseUrl: parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string, 'deployed support-record smoke'),
     businessSlug,
   }
-}
-
-function parseHttpsUrl(name: string, rawValue: string): URL {
-  let parsed: URL
-
-  try {
-    parsed = new URL(rawValue)
-  } catch {
-    throw new Error(`${name} must be a valid HTTPS URL.`)
-  }
-
-  if (parsed.protocol !== 'https:') {
-    throw new Error(`${name} must use https:// for deployed support-record smoke.`)
-  }
-
-  if (/^(localhost|127\.0\.0\.1)$/.test(parsed.hostname) || parsed.hostname.endsWith('.local')) {
-    throw new Error(`${name} must point at a deployed environment, not localhost.`)
-  }
-
-  return parsed
 }
 
 function requirePhase2SupportSmokeConfig(): Phase2SupportSmokeConfig {
@@ -97,6 +78,3 @@ function requirePhase2SupportSmokeConfig(): Phase2SupportSmokeConfig {
   return config
 }
 
-function resolvePath(path: string, baseUrl: URL): string {
-  return new URL(path, baseUrl).toString()
-}

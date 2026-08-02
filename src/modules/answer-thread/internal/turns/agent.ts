@@ -5,6 +5,7 @@ import {
 } from '@/modules/answer/public'
 
 import type { AnswerToolCallRecord } from '../../answer-thread.schema'
+import type { AnswerToolPolicy } from '../answer-response-planner'
 import { answerRunGateFromAnswerGate, finalizeAnswerTurnSnapshot } from '../answer-turn-safety'
 import { toolCallRecordsToGateInput } from '../tool-runner'
 import { safeWorkLogUserText } from '../public-worklog'
@@ -26,10 +27,23 @@ export const agentTurnPath: TurnPath<[
   AgentInput,
   readonly AnswerToolCallRecord[],
   StreamPlanMode | undefined,
+  AnswerToolPolicy | undefined,
 ]> = {
   id: 'agent',
-  async run(ctx, agentInput, seedToolCalls = [], planMode) {
-    return streamAgentTurn(ctx, agentInput, seedToolCalls, planMode)
+  async run(ctx, agentInput, seedToolCalls = [], planMode, toolPolicy) {
+    return streamAgentTurn(
+      ctx,
+      toolPolicy === undefined
+        ? agentInput
+        : {
+            ...agentInput,
+            maxToolCalls: toolPolicy.kind === 'registry.search' || toolPolicy.kind === 'registry.detail'
+              ? toolPolicy.maxCalls
+              : 0,
+          },
+      seedToolCalls,
+      planMode,
+    )
   },
 }
 
@@ -167,6 +181,7 @@ function resequenceToolCalls(
     seq: startSeq + index,
   }))
 }
+
 
 function buildRecoveryWorkStepDetailRows(
   toolCalls: readonly AnswerToolCallRecord[],

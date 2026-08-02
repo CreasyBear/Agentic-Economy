@@ -2,9 +2,10 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactElement } from 'react'
 import { isNotFound, RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import type { PublicBusinessRouteDataResult } from '@/modules/catalog/public-route.functions'
 
@@ -18,30 +19,10 @@ vi.mock('@/modules/catalog/public-route.functions', () => ({
 
 import { PublicBusinessNotFound, Route } from '@/routes/$slug'
 
-beforeEach(() => {
-  // The public shell mounts browser-facing UI; provide globals its dependencies
-  // may query while rendering under jsdom.
-  vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-  vi.stubGlobal('matchMedia', (): MediaQueryList => ({
-    matches: false,
-    media: '',
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  }))
-})
 
 afterEach(() => {
   cleanup()
   readPublicBusinessRouteMock.mockReset()
-  vi.unstubAllGlobals()
 })
 
 async function loadSlug(slug: string): Promise<unknown> {
@@ -49,6 +30,27 @@ async function loadSlug(slug: string): Promise<unknown> {
   return loader({ params: { slug } }).then(
     (value) => value,
     (error: unknown) => error,
+  )
+}
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/claim' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/privacy' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/terms' }),
+  ])
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  })
+  return render(
+    <RouterContextProvider router={router}>
+      {ui}
+    </RouterContextProvider>,
   )
 }
 
@@ -82,7 +84,7 @@ describe('/$slug not-found reason', () => {
 
 describe('PublicBusinessNotFound copy', () => {
   it('does not assert that a business exists when no record was found', () => {
-    render(<PublicBusinessNotFound data={{ reason: 'no_such_business' }} isNotFound routeId="/$slug" />)
+    renderWithRouter(<PublicBusinessNotFound data={{ reason: 'no_such_business' }} isNotFound routeId="/$slug" />)
 
     expect(screen.getByText('No business page at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
@@ -90,7 +92,7 @@ describe('PublicBusinessNotFound copy', () => {
   })
 
   it('keeps the claim framing only when a real business page is withheld from the public', () => {
-    render(<PublicBusinessNotFound data={{ reason: 'not_public' }} isNotFound routeId="/$slug" />)
+    renderWithRouter(<PublicBusinessNotFound data={{ reason: 'not_public' }} isNotFound routeId="/$slug" />)
 
     expect(screen.getByText('Business page unavailable')).toBeTruthy()
     expect(
@@ -100,7 +102,7 @@ describe('PublicBusinessNotFound copy', () => {
   })
 
   it('falls back to the no-such-business copy when the boundary carries no reason', () => {
-    render(<PublicBusinessNotFound isNotFound routeId="/$slug" />)
+    renderWithRouter(<PublicBusinessNotFound isNotFound routeId="/$slug" />)
 
     expect(screen.getByText('No business page at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
@@ -109,18 +111,8 @@ describe('PublicBusinessNotFound copy', () => {
 
 describe('ProviderListingError copy', () => {
   it('returns to services without internal terminology and keeps recovery links at 44px', () => {
-    const rootRoute = createRootRoute()
-    const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' })
-    const router = createRouter({
-      routeTree: rootRoute.addChildren([indexRoute]),
-      history: createMemoryHistory({ initialEntries: ['/'] }),
-    })
     const ErrorComponent = Route.options.errorComponent as ComponentType
-    render(
-      <RouterContextProvider router={router}>
-        <ErrorComponent />
-      </RouterContextProvider>,
-    )
+    renderWithRouter(<ErrorComponent />)
 
     expect(screen.getByText("This listing didn't load")).toBeTruthy()
     expect(screen.queryByText(/registry/i)).toBeNull()

@@ -40,7 +40,7 @@ export function AeCreditTopUpPanel({ port = setupPendingPort }: AeCreditTopUpPan
     <Card className="border border-border bg-card">
       <CardHeader>
         <CardTitle>Add credit for paid calls</CardTitle>
-        <CardDescription>Paid calls use this credit. A 5% fee will be shown before payment.</CardDescription>
+        <CardDescription>Paid calls use this credit. Any fee and the total charge are shown before payment.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {result?.code === 'stripe_setup_required' ? (

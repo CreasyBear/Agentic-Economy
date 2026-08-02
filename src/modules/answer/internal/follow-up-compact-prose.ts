@@ -88,7 +88,7 @@ function buildDefaultOneLine(count: number, query: string, providers: readonly A
   return `${count} listed businesses match.`
 }
 
-function buildProviderDecisionOneLine(provider: AnswerSource): string {
+export function buildProviderDecisionOneLine(provider: AnswerSource): string {
   const suburb = provider.suburb.trim()
   const price = provider.pricingSummary?.trim()
   const availability = provider.availabilitySummary?.trim()

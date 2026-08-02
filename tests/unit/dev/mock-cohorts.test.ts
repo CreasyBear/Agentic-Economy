@@ -4,7 +4,7 @@ import {
   DEV_SEED_BUSINESS_FIXTURES,
   buildDevSeedCatalogState,
 } from '@/modules/dev/public'
-import { searchPublicBusinessCatalog } from '@/modules/registry/internal/search'
+import { searchPublicBusinessOfferingSupply } from '@/modules/registry/internal/search'
 import {
   resolveCheckupQuote,
   sandboxCheckupQuotePathForSlug,
@@ -33,7 +33,7 @@ describe('development mock supply cohorts', () => {
       slugs: ['adelaide-cbd-dentist', 'perfect-smile-adelaide', 'fixed-dental-adelaide'],
     },
   ])('registry.search returns the $label cohort', ({ query, mode, slugs }) => {
-    const result = searchPublicBusinessCatalog(bundle.state, { query, mode, limit: 50 })
+    const result = searchPublicBusinessOfferingSupply(bundle.state, { query, mode, limit: 50 })
     const returnedSlugs = new Set(result.items.map((item) => item.slug))
 
     expect(result.kind).toBe('ok')
@@ -45,7 +45,8 @@ describe('development mock supply cohorts', () => {
     const fixture = DEV_SEED_BUSINESS_FIXTURES.find(
       (candidate) => candidate.requestedSlug === 'adelaide-cbd-dentist',
     )
-    if (fixture === undefined || fixture.pricingSummary === undefined) {
+    const offering = fixture?.offerings[0]
+    if (fixture === undefined || offering === undefined || offering.pricingSummary === undefined) {
       throw new Error('The priced Adelaide dental cohort fixture is required.')
     }
 
@@ -55,7 +56,7 @@ describe('development mock supply cohorts', () => {
       requestedAt: Date.parse('2026-08-01T09:00:00.000Z'),
       offerings: [
         {
-          name: fixture.serviceName,
+          name: offering.name,
           price: {
             kind: 'fixed',
             currency: 'AUD',
@@ -64,6 +65,7 @@ describe('development mock supply cohorts', () => {
             taxTreatment: 'inclusive',
           },
           accessPaths: [
+            ...offering.accessPaths,
             {
               kind: 'external_operation',
               url: `https://agentic.example${sandboxCheckupQuotePathForSlug(slug)}`,

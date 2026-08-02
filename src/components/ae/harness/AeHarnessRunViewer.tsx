@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
@@ -172,7 +173,7 @@ function DeniedRows({
         facts={[
           { label: 'Decision', value: result.reason.replaceAll('_', ' ') },
           { label: 'Private rows returned', value: result.rows.length },
-          { label: 'Generated', value: new Date(result.generatedAt).toISOString() },
+          { label: 'Generated', value: formatTimestamp(result.generatedAt) },
         ]}
       />
     </Card>
@@ -191,10 +192,9 @@ function AllowedList({ result }: { result: HarnessRunViewerListAllowed }) {
           facts={[
             { label: 'Turns', value: result.summary.turns },
             { label: 'Harness runs', value: result.summary.withHarnessRun },
-            { label: 'Legacy backfills', value: result.summary.legacyBackfilled },
             { label: 'Missing evidence', value: result.summary.missingRunEvidence },
             { label: 'Needs attention', value: result.summary.attention },
-            { label: 'Generated', value: new Date(result.generatedAt).toISOString() },
+            { label: 'Generated', value: formatTimestamp(result.generatedAt) },
           ]}
         />
       </Card>
@@ -293,8 +293,8 @@ function OverviewTab({ detail }: { detail: HarnessRunViewerDetail }) {
           { label: 'Run ID', value: detail.run.runId ?? 'not recorded' },
           { label: 'Session ID', value: detail.run.sessionId ?? 'not recorded' },
           { label: 'Snapshot hash', value: detail.turn.snapshotHash },
-          { label: 'Started', value: detail.run.startedAt === undefined ? 'not recorded' : new Date(detail.run.startedAt).toISOString() },
-          { label: 'Ended', value: detail.run.endedAt === undefined ? 'not recorded' : new Date(detail.run.endedAt).toISOString() },
+          { label: 'Started', value: detail.run.startedAt === undefined ? 'not recorded' : formatTimestamp(detail.run.startedAt) },
+          { label: 'Ended', value: detail.run.endedAt === undefined ? 'not recorded' : formatTimestamp(detail.run.endedAt) },
           { label: 'Errors', value: detail.run.report?.summary.errors.count ?? 0 },
         ]}
       />
@@ -500,7 +500,7 @@ function listRowFacts(row: HarnessRunViewerListRow): readonly { label: string; v
     { label: 'Providers', value: String(row.providerCount) },
     { label: 'Tools', value: String(row.toolCallCount) },
     { label: 'Checks', value: `${row.checksPassed} passed / ${row.checksFailed} failed` },
-    { label: 'Created', value: new Date(row.createdAt).toISOString() },
+    { label: 'Created', value: formatTimestamp(row.createdAt) },
   ]
 }
 

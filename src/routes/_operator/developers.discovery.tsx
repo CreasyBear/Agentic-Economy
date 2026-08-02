@@ -110,12 +110,12 @@ function DevelopersDiscoveryRoute() {
                           <p>{fact.category} in {fact.suburb}, {fact.stateTerritory}</p>
                           <dl className="grid gap-2 text-xs sm:grid-cols-2">
                             <div>
-                              <dt className="font-medium text-muted-foreground">Discovery</dt>
-                              <dd>{fact.discoveryStatus}</dd>
+                              <dt className="font-medium text-muted-foreground">Disposition</dt>
+                              <dd>{fact.disposition}</dd>
                             </div>
                             <div>
-                              <dt className="font-medium text-muted-foreground">Services</dt>
-                              <dd data-numeric>{fact.serviceCount}</dd>
+                              <dt className="font-medium text-muted-foreground">Offerings</dt>
+                              <dd data-numeric>{fact.offeringCount}</dd>
                             </div>
                           </dl>
                         </div>

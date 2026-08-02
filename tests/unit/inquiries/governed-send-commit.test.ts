@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type {
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+} from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   encodeGovernedAction,
   verifyGovernedActionBytes,
@@ -22,8 +26,7 @@ import type { SuppressionRuleRecord } from '@/modules/security/public'
 const ownerId = brandNonEmpty('owner:governed-send', 'OwnerId')
 const claimId = brandNonEmpty('claim:governed-send', 'ClaimId')
 const businessId = brandNonEmpty('business:governed-send', 'BusinessId')
-const serviceId = brandNonEmpty('service:governed-send', 'ServiceId')
-const serviceSlug = brandNonEmpty('governed-send', 'Slug')
+const offeringRef = brandNonEmpty('offering:governed-send', 'OfferingRef')
 const now = 1_900_000_000_000
 const customerAccessKeyring = {
   keyId: 'test-inquiry-access-v1',
@@ -37,8 +40,7 @@ const governedSendIntegrityKeyring = {
 
 const target = {
   businessId,
-  serviceId,
-  capabilityKind: 'phone_inquiry',
+  offeringRef,
 } as const
 
 describe('submitInquiry governed send commit', () => {
@@ -228,12 +230,11 @@ function submitCommand(key: string, overrides: Partial<SubmitInquiryCommand> = {
   const { expectedDigest, ...commandOverrides } = overrides
   const command = {
     target,
-    body: 'Can a human owner contact me about this service?',
+    body: 'Can a human owner contact me about this offering?',
     contact: { email: 'customer@example.test' },
     operationKey: operationKey(key),
     correlationId: correlationId(key),
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: `ip:${key}`,
     now,
     ...commandOverrides,
     customerAccessKeyring: commandOverrides.customerAccessKeyring ?? customerAccessKeyring,
@@ -249,8 +250,9 @@ function submitCommand(key: string, overrides: Partial<SubmitInquiryCommand> = {
 function sourceState(overrides: Partial<InquirySourceState> = {}): InquirySourceState {
   return inquiries.createEmptyInquirySourceState({
     businesses: [business()],
-    businessServices: [service()],
-    serviceCapabilities: [capability()],
+    businessOfferings: [offering()],
+    businessOfferingRevisions: [offeringRevision()],
+    offeringAccessPaths: [inquiryAccessPath()],
     capabilityLaunchSupportRecords: [supportRecord()],
     suppressionRules: [],
     owners: [owner()],
@@ -273,7 +275,7 @@ function business(): BusinessRecord {
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
-    sourceHash: stableHash({ businessId: 'business:governed-send' }),
+    sourceHash: canonicalDigest({ businessId: 'business:governed-send' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -296,7 +298,7 @@ function claim(): ClaimRecord {
     businessId,
     slug: brandNonEmpty('governed-send', 'Slug'),
     status: 'published',
-    submittedFactsHash: stableHash({ claimId: 'claim:governed-send' }),
+    submittedFactsHash: canonicalDigest({ claimId: 'claim:governed-send' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -310,39 +312,45 @@ function resolvableOwnerRecipient(): ResolvableOwnerRecipient {
   }
 }
 
-function service(): BusinessServiceRecord {
+function offering(): BusinessOfferingRecord {
   return {
-    serviceId,
-    serviceSlug,
+    offeringRef,
     businessId,
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 1,
-    sourceHash: stableHash({ serviceId: 'service:governed-send' }),
     createdAt: now,
     updatedAt: now,
   }
 }
 
-function capability(): ServiceCapabilityRecord {
+function offeringRevision(): BusinessOfferingRevisionRecord {
   return {
+    offeringRef,
     businessId,
-    serviceId,
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-      rawContactExcluded: true,
+    revision: 1,
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Human triage for urgent plumbing issues.',
+    sourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    createdAt: now,
+  }
+}
+
+function inquiryAccessPath(): OfferingAccessPathRecord {
+  const sourceHash = canonicalDigest({ offeringRef: String(offeringRef), path: 'ae_inquiry' })
+  return {
+    accessPathRef: brandNonEmpty('access:governed-send:inquiry', 'AccessPathRef'),
+    businessId,
+    offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the source-owned inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry' }),
+    sourceHash,
     createdAt: now,
     updatedAt: now,
   }
@@ -384,7 +392,7 @@ function supportRecord(): CapabilityLaunchSupportRecord {
       },
     ],
     evidenceRefs: ['tests/unit/inquiries/governed-send-commit.test.ts'],
-    sourceHash: stableHash({ supportRecord: 'governed-send' }),
+    sourceHash: canonicalDigest({ supportRecord: 'governed-send' }),
     correlationId: correlationId('support-record'),
     lastReviewedAt: now + 1_000,
   }

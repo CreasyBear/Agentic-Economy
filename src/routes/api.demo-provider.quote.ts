@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 
 import { jsonResponse } from './api.businesses'
 
 const ADELAIDE_TIME_ZONE = 'Australia/Adelaide'
 const QUOTE_VALIDITY_MS = 30 * 60_000
+const MAX_DEMO_PROVIDER_QUOTE_BODY_BYTES = 4 * 1024
 const adelaideDateTime = new Intl.DateTimeFormat('en-AU', {
   timeZone: ADELAIDE_TIME_ZONE,
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -33,13 +35,13 @@ export async function handleDemoProviderQuoteRequest(
   request: Request,
   now: Date = new Date(),
 ): Promise<Response> {
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return jsonResponse({ kind: 'refused', reason: 'invalid_request' }, { status: 400 })
+  const body = await readBoundedRequestJson(request, MAX_DEMO_PROVIDER_QUOTE_BODY_BYTES)
+  if (!body.ok) {
+    return body.code === 'payload_too_large'
+      ? jsonResponse({ kind: 'refused', reason: 'request_too_large' }, { status: 413 })
+      : jsonResponse({ kind: 'refused', reason: 'invalid_request' }, { status: 400 })
   }
-  const input = quoteInputSchema.safeParse(body)
+  const input = quoteInputSchema.safeParse(body.value)
   if (!input.success) {
     return jsonResponse({ kind: 'refused', reason: 'invalid_request' }, { status: 400 })
   }

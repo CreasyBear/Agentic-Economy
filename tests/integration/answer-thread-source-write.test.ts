@@ -7,11 +7,9 @@ import {
   createSourceWriteAdmission,
   sourceWriteBodyDigest,
 } from '@/modules/security/source-write-admission'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(
-  Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]),
-)
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
+import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 const SOURCE_WRITE_SECRET = 'answer-thread-local-source-write-secret'
 const SOURCE_REQUEST = {
@@ -20,6 +18,26 @@ const SOURCE_REQUEST = {
   pathname: '/api/answer/turn',
   bodyDigest: sourceWriteBodyDigest(undefined),
 }
+function currentEvidenceJson(snapshotHash: string): string {
+  const draft: FrozenTurnEvidenceDraft = {
+    providers: [],
+    allowedSlugs: [],
+    agentJsonUrl: '',
+    toolCalls: [],
+    timings: [],
+    workLog: [],
+  }
+  return JSON.stringify({
+    ...draft,
+    answerRun: buildAnswerRunReport({
+      intent: 'refine_search',
+      status: 'complete',
+      snapshotHash,
+      evidence: draft,
+    }),
+  })
+}
+
 
 describe('answer thread source-write admission', () => {
   const previousSecret = process.env.AE_SOURCE_WRITE_SECRET
@@ -72,12 +90,20 @@ describe('answer thread source-write admission', () => {
     })
     expect(firstTurn).toEqual({ turnId: 'turn-local-source-write-1' })
 
-    const resumed = await backend.query(api.answerThreads.getAnswerThreadWithTurns, { threadId: input.threadId })
-    expect(resumed).toMatchObject({
+    const resumed = await backend.query(api.answerThreads.getAnswerThreadWithTurns, {
       threadId: input.threadId,
       pseudonymousSessionId: input.sessionId,
-      turnCount: 1,
-      turns: [{ turnId: 'turn-local-source-write-1', seq: 1, status: 'complete' }],
+      paginationOpts: { cursor: null, numItems: 25 },
+    })
+    expect(resumed).toMatchObject({
+      thread: {
+        threadId: input.threadId,
+        pseudonymousSessionId: input.sessionId,
+        turnCount: 1,
+      },
+      turns: {
+        page: [{ turnId: 'turn-local-source-write-1', seq: 1, status: 'complete' }],
+      },
     })
 
     const secondTurn = await appendTurn(backend, {
@@ -90,13 +116,102 @@ describe('answer thread source-write admission', () => {
     })
     expect(secondTurn).toEqual({ turnId: 'turn-local-source-write-2' })
 
-    await expect(backend.query(api.answerThreads.getThreadTurns, { threadId: input.threadId })).resolves.toMatchObject({
-      turns: [
+    await expect(backend.query(api.answerThreads.getThreadTurns, {
+      threadId: input.threadId,
+      pseudonymousSessionId: input.sessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toMatchObject({
+      page: [
         { turnId: 'turn-local-source-write-1', seq: 1 },
         { turnId: 'turn-local-source-write-2', seq: 2 },
       ],
     })
   }
+  it('denies foreign sessions across raw thread, turn, and tool-call reads', async () => {
+    const backend = convexTest(schema, modules)
+    const threadId = 'thread-raw-read-ownership'
+    const turnId = 'turn-raw-read-ownership'
+    const ownerSessionId = 'session-raw-read-owner'
+    const foreignSessionId = 'session-raw-read-foreign'
+
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const createOperationKey = `answer_thread:create:${threadId}`
+    await expect(backend.mutation(api.answerThreads.createAnswerThread, {
+      threadId,
+      pseudonymousSessionId: ownerSessionId,
+      title: 'raw read ownership',
+      operationKey: createOperationKey,
+      correlationId: createOperationKey,
+      sourceWrite: createAdmission(createOperationKey, createOperationKey, 'nonce-raw-read-create'),
+    })).resolves.toEqual({ threadId })
+
+    await appendTurn(backend, {
+      threadId,
+      sessionId: ownerSessionId,
+      turnId,
+      seq: 1,
+      operationKey: `answer_thread:append:${turnId}`,
+      nonce: 'nonce-raw-read-append',
+    })
+
+    const toolCallOperationKey = `answer_thread:append_tool_calls:${turnId}`
+    await expect(backend.mutation(api.answerThreads.appendAnswerToolCalls, {
+      turnId,
+      toolCalls: [{
+        toolCallId: 'tool-call-raw-read-ownership',
+        seq: 1,
+        toolId: 'registry.search',
+        inputJson: '{"query":"raw read ownership"}',
+        resultSummaryJson: '{"count":1}',
+        resultJson: '{"items":["raw-read-ownership"]}',
+        resultHash: 'hash-tool-call-raw-read-ownership',
+        status: 'complete',
+      }],
+      operationKey: toolCallOperationKey,
+      correlationId: toolCallOperationKey,
+      sourceWrite: createAdmission(toolCallOperationKey, toolCallOperationKey, 'nonce-raw-read-tool-call'),
+    })).resolves.toEqual({ inserted: 1 })
+    await expect(backend.query(api.answerThreads.getAnswerThread, {
+      threadId,
+      pseudonymousSessionId: ownerSessionId,
+    })).resolves.toMatchObject({ threadId, turnCount: 1 })
+    await expect(backend.query(api.answerThreads.getAnswerThreadWithTurns, {
+      threadId,
+      pseudonymousSessionId: ownerSessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toMatchObject({ thread: { threadId }, turns: { page: [{ turnId }] } })
+    await expect(backend.query(api.answerThreads.getThreadTurns, {
+      threadId,
+      pseudonymousSessionId: ownerSessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toMatchObject({ page: [{ turnId }] })
+    await expect(backend.query(api.answerThreads.readTurnToolCalls, {
+      turnId,
+      pseudonymousSessionId: ownerSessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toMatchObject({ page: [{ toolCallId: 'tool-call-raw-read-ownership' }] })
+
+    await expect(backend.query(api.answerThreads.getAnswerThread, {
+      threadId,
+      pseudonymousSessionId: foreignSessionId,
+    })).resolves.toBeNull()
+    await expect(backend.query(api.answerThreads.getAnswerThreadWithTurns, {
+      threadId,
+      pseudonymousSessionId: foreignSessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toBeNull()
+    await expect(backend.query(api.answerThreads.getThreadTurns, {
+      threadId,
+      pseudonymousSessionId: foreignSessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toEqual({ page: [], isDone: true, continueCursor: '' })
+    await expect(backend.query(api.answerThreads.readTurnToolCalls, {
+      turnId,
+      pseudonymousSessionId: foreignSessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).resolves.toEqual({ page: [], isDone: true, continueCursor: '' })
+
+  })
 })
 
 async function appendTurn(
@@ -117,7 +232,7 @@ async function appendTurn(
     seq: input.seq,
     query: `local source-write query ${input.seq}`,
     intent: 'refine_search',
-    evidenceJson: '{}',
+    evidenceJson: currentEvidenceJson(`snapshot-${input.seq}`),
     snapshotHash: `snapshot-${input.seq}`,
     proseJson: '{}',
     artifactKindsJson: '[]',

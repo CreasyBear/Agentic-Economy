@@ -43,16 +43,13 @@ describe('durable public owner claim route readbacks', () => {
         category: 'Emergency electrical',
         suburb: 'Fremantle',
         stateTerritory: 'WA',
-        services: [
+        offerings: [
           {
             name: 'After-hours switchboard repair',
             category: 'Emergency electrical',
-            serviceArea: 'Fremantle, South Fremantle, and Beaconsfield',
-            firstRequest: {
-              mode: 'not_available_yet',
-              noContactReason: 'Owner has not supplied a public contact path yet.',
-            },
-            capabilities: [{ status: 'unavailable' }],
+            serviceAreaSummary: 'Fremantle, South Fremantle, and Beaconsfield',
+            accessPaths: [],
+            support: { integrated: false, aeSupportedAction: false },
           },
         ],
       },
@@ -63,7 +60,7 @@ describe('durable public owner claim route readbacks', () => {
       catalog: {
         slug: 'fremantle-priority-electrical',
         name: 'Fremantle Priority Electrical',
-        services: [{ summary: 'Urgent switchboard fault triage for Fremantle homes and shops.' }],
+        offerings: [{ summary: 'Urgent switchboard fault triage for Fremantle homes and shops.' }],
       },
     })
     expect(status?.catalog.name).not.toBe(publicOwnerDefaultClaimInput.businessName)
@@ -73,7 +70,7 @@ describe('durable public owner claim route readbacks', () => {
       kind: 'available',
       catalog: {
         name: 'Fremantle Priority Electrical',
-        services: [{ category: 'Emergency electrical' }],
+        offerings: [{ category: 'Emergency electrical' }],
       },
     })
   })

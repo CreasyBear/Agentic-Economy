@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/internal/offering-api-projection'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/internal/search'
 import {
   addFactObservations,
   detectRequiredFacts,
   evaluateSearchGaps,
   mergeFactCounts,
   rankFactCounts,
-  toSearchGapCandidateV1,
   toSearchGapCandidateV2,
 } from '@/modules/demand/public'
 import type {
@@ -62,38 +60,6 @@ const v2Dto = (availabilitySummary?: string): PublicBusinessCatalogApiV2Dto => (
   },
 })
 
-const v1Dto = (
-  publicChannel: PublicBusinessCatalogApiDto['services'][number]['firstRequest']['publicChannel'] = 'public_business_contact',
-): PublicBusinessCatalogApiDto => ({
-  slug: 'adelaide-dental',
-  name: 'Adelaide Dental',
-  category: 'Dentist',
-  suburb: 'Adelaide',
-  stateTerritory: 'SA',
-  publicUrl: '/business/adelaide-dental',
-  trustTier: 'claimed',
-  publicStatus: 'published',
-  indexStatus: 'indexed',
-  discoveryStatus: 'available',
-  schemaVersion: 'public-business-catalog-api:v1',
-  updatedAt: 1,
-  photos: [],
-  services: [{
-    slug: 'checkup',
-    name: 'Dental checkup',
-    category: 'Dentist',
-    summary: 'Routine dental checkup',
-    serviceArea: 'Adelaide',
-    hoursOrUnknown: 'Weekdays',
-    firstRequest: {
-      mode: publicChannel === 'not_available' ? 'not_available_yet' : 'inquiry_available',
-      publicDisclosure: 'Call the practice',
-      publicChannel,
-    },
-    status: 'published',
-    capabilities: [],
-  }],
-})
 
 describe('search gap fact detection', () => {
   it('detects price language and the base service-detail requirement', () => {
@@ -121,13 +87,6 @@ describe('search gap candidate projections', () => {
     expect(toSearchGapCandidateV2(v2Dto('Hours supplied by owner')).facts.availability).toBe('absent')
   })
 
-  it('marks price as unobservable in the V1 projection', () => {
-    expect(toSearchGapCandidateV1(v1Dto()).facts.price).toBe('unobservable')
-  })
-
-  it('marks an unavailable V1 request channel as absent contact', () => {
-    expect(toSearchGapCandidateV1(v1Dto('not_available')).facts.contact).toBe('absent')
-  })
 })
 
 describe('search gap evaluation', () => {

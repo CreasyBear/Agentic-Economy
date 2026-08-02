@@ -4,6 +4,7 @@ import type {
 } from '@/modules/capability-supply/server'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 import type { ImportedCommitmentClaim } from './contracts'
 
@@ -115,7 +116,7 @@ export async function observeImportedCommitmentAsCurrent(
     source: observed.source,
     observedAt: observed.observedAt,
     validUntil: observed.validUntil,
-    evidenceRefs: sorted(observed.evidenceRefs),
+    evidenceRefs: uniqueSorted(observed.evidenceRefs),
     providerAdmission: 'admitted' as const,
     authority: 'none' as const,
     effect: 'none' as const,
@@ -187,7 +188,7 @@ function validObservation(observation: ImportedCommitmentProviderObservation): b
       source: observation.source,
       observedAt: observation.observedAt,
       validUntil: observation.validUntil,
-      evidenceRefs: sorted(observation.evidenceRefs),
+      evidenceRefs: uniqueSorted(observation.evidenceRefs),
     } as StableHashValue)
 }
 
@@ -208,6 +209,3 @@ function observationMatches(
       === canonicalDigest(claim.source as StableHashValue)
 }
 
-function sorted(values: readonly string[]): string[] {
-  return [...new Set(values)].sort()
-}

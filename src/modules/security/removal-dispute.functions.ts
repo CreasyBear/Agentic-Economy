@@ -5,13 +5,15 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   getDefaultPublicOwnerStatusReadback,
   getPublicOwnerStatusReadbackBySlug,
 } from '@/modules/catalog/public'
-import type { PublicCatalogContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import {
   createEmptyDisputeSourceState,
@@ -28,8 +30,8 @@ export type RemovalDisputeInput = {
   evidenceSummary: string
 }
 
-type PublicCatalogReadResult =
-  | { kind: 'available'; catalog: PublicCatalogContract }
+type PublicBusinessCatalogReadResult =
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'not_found'; reason: 'not_public' }
 
 type OpenRemovalDisputeArgs = {
@@ -51,7 +53,7 @@ type OpenRemovalDisputeArgs = {
   correlationId: string
 }
 
-const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicCatalogReadResult>(
+const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogReadResult>(
   'catalog:getPublicBusinessCatalogBySlug'
 )
 const openRemovalDisputeMutation = sourceMutation<OpenRemovalDisputeArgs, DisputeOpenResult>(
@@ -93,7 +95,7 @@ export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput,
         },
       ],
       publicMessage: slug,
-      origin: requestOrigin(),
+      origin: resolveCanonicalBaseUrl().baseUrl,
       sourceWrite: await sourceWriteAdmissionFromContext({
         context,
         scope: 'removal_dispute',
@@ -127,7 +129,7 @@ function openRemovalDisputeLocal(data: RemovalDisputeInput): DisputeOpenResult {
 
   const state = createEmptyDisputeSourceState()
   return openRemovalDisputeModule(state, {
-    businessId: readback.catalog.businessId,
+    businessId: brandNonEmpty(readback.catalog.businessId, 'BusinessId'),
     targetType: 'business',
     targetRef: readback.catalog.businessId,
     reasonCode: data.reasonCode,
@@ -145,13 +147,6 @@ function openRemovalDisputeLocal(data: RemovalDisputeInput): DisputeOpenResult {
       csrf: {
         origin: 'https://ae.example',
         allowedOrigins: ['https://ae.example'],
-      },
-      rateLimit: {
-        scope: 'dispute_open',
-        key: `removal:${normalizeOperationPart(slug)}`,
-        now: 1_000,
-        limit: 3,
-        windowMs: 60_000,
       },
     },
     operationKey: brandNonEmpty(`op:removal:${normalizeOperationPart(slug)}`, 'OperationKey'),
@@ -171,20 +166,8 @@ function invalidRemovalTarget(retryable: boolean): DisputeOpenResult {
   }
 }
 
-function requestOrigin(): string {
-  return readEnv(process.env, 'SITE_URL') ?? readEnv(process.env, 'VITE_SITE_URL') ?? 'https://ae.example'
-}
 
-function readEnv(env: Env, name: string): string | undefined {
-  const value = env[name]
-  if (value === undefined || value.trim().length === 0) {
-    return undefined
-  }
-
-  return value.trim()
-}
 
 function normalizeOperationPart(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
-  return normalized.length === 0 ? 'removal' : normalized
+  return normalizeSlug(value) || 'removal'
 }

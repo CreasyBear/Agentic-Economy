@@ -1,4 +1,5 @@
 import { distance as levenshteinDistance } from 'fastest-levenshtein'
+import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 
 import type { AnswerSource } from '../answer-synthesizer'
 import {
@@ -173,7 +174,7 @@ function resolveRequestedLocation(input: {
     return { location: userLocation, locationSource: 'user' }
   }
 
-  if (normalizeComparable(userLocation) === normalizeComparable(toolLocation)) {
+  if (normalizeSearchText(userLocation) === normalizeSearchText(toolLocation)) {
     return { location: toolLocation, locationSource: 'tool' }
   }
 
@@ -228,7 +229,7 @@ function trimServiceWords(tokens: readonly string[]): readonly string[] {
 }
 
 function providerMatchesLocation(provider: AnswerSource, location: string): boolean {
-  const needle = normalizeComparable(location)
+  const needle = normalizeSearchText(location)
   if (needle.length === 0) {
     return false
   }
@@ -236,7 +237,7 @@ function providerMatchesLocation(provider: AnswerSource, location: string): bool
   const haystacks = [
     provider.suburb,
     provider.serviceArea,
-  ].map(normalizeComparable)
+  ].map(normalizeSearchText)
 
   return haystacks.some((haystack) => containsTokenPhrase(haystack, needle))
 }
@@ -250,16 +251,9 @@ function containsTokenPhrase(haystack: string, needle: string): boolean {
   )
 }
 
-function normalizeComparable(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ')
-}
 
 function normalizeEditKey(value: string): string {
-  return normalizeComparable(value).replace(/\s+/g, '')
+  return normalizeSearchText(value).replace(/\s+/g, '')
 }
 
 function isLikelyModelCorrection(userLocation: string, toolLocation: string): boolean {

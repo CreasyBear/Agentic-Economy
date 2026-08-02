@@ -1,3 +1,5 @@
+import { NoObjectGeneratedError } from 'ai'
+import type { FlexibleSchema } from 'ai'
 import { z } from 'zod'
 
 import {
@@ -10,6 +12,7 @@ import {
   type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord as isPlainObject } from '@/modules/common/is-record'
 
 import {
   CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY,
@@ -17,6 +20,7 @@ import {
   type RequestFact,
   type UnderstoodCriterion,
 } from './evaluation'
+import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
 
 export type CustomerInputDescriptor = Readonly<{
   inputKey: CapabilityInputKey
@@ -121,13 +125,43 @@ export type CustomerRequestSemanticProposal =
   | CustomerRequestIntentDirectionProposal
   | CustomerRequestUnsupportedProposal
 
+/**
+ * Wire schema for the structured-output transport. Deliberately tolerant: the
+ * model may omit arrays, add unknown keys, or send `value`/`valueJson` facts —
+ * exactly what the pre-structured-output JSON.parse path accepted. Strict
+ * domain validation stays in `normalizeSemanticProposal` + `proposalSchema`
+ * below so failure taxonomy and accepted shapes are unchanged.
+ */
+const SEMANTIC_RESPONSE_SCHEMA = z.looseObject({
+  kind: z.enum(['needs_intent_direction', 'unsupported_request', 'capability_candidates']),
+  reason: z.string().optional(),
+  prompt: z.string().optional(),
+  canonicalStatements: z.array(z.looseObject({
+    source: z.enum(['prior', 'amendment']),
+    quote: z.string(),
+  })).optional(),
+  supersededStatements: z.array(z.looseObject({
+    priorQuote: z.string(),
+    amendmentQuote: z.string(),
+  })).optional(),
+  selections: z.array(z.looseObject({
+    selectionKey: z.string(),
+    facts: z.array(z.looseObject({
+      inputKey: z.string(),
+      valueJson: z.string().optional(),
+    })).default([]),
+  })).optional(),
+})
+
+export type CustomerRequestSemanticModelProposal = z.infer<typeof SEMANTIC_RESPONSE_SCHEMA>
+
 export type CustomerRequestSemanticInterpretationTransport = Readonly<{
   generateJson: (input: Readonly<{
     systemInstruction: string
     payload: CustomerRequestSemanticInterpreterPayload
     signal: AbortSignal
-    responseSchema?: Readonly<Record<string, unknown>>
-  }>) => Promise<Readonly<{ content: string }>>
+    responseSchema: FlexibleSchema<CustomerRequestSemanticModelProposal>
+  }>) => Promise<CustomerRequestSemanticModelProposal>
 }>
 
 export type CustomerRequestSemanticInterpreter = Readonly<{
@@ -205,90 +239,6 @@ const EXPLICIT_MAXIMUM_TOTAL_COST_VERSION = 'customer-request-maximum-total-cost
 const EXPLICIT_PROVIDER_DATA_SHARING_VERSION = 'customer-request-provider-data-sharing:v1'
 const EXPLICIT_MAXIMUM_RESPONSE_TIME_VERSION = 'customer-request-maximum-response-time:v1'
 const MATERIAL_CONSTRAINT_EXTRACTION_VERSION = 'customer-request-material-constraint:v1'
-const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
-  name: 'customer_request_semantic_proposal',
-  strict: true,
-  schema: {
-    type: 'object', additionalProperties: false,
-    properties: {
-      kind: { type: 'string', enum: ['needs_intent_direction', 'unsupported_request', 'capability_candidates'] },
-      reason: { type: 'string', enum: ['', 'requested_result_not_available'] },
-      prompt: { type: 'string', maxLength: 240 },
-      canonicalStatements: {
-        type: 'array', maxItems: 64,
-        items: {
-          type: 'object', additionalProperties: false,
-          properties: {
-            source: { type: 'string', enum: ['prior', 'amendment'] },
-            quote: { type: 'string', minLength: 1, maxLength: 2_000 },
-          },
-          required: ['source', 'quote'],
-        },
-      },
-      supersededStatements: {
-        type: 'array', maxItems: 64,
-        items: {
-          type: 'object', additionalProperties: false,
-          properties: {
-            priorQuote: { type: 'string', minLength: 1, maxLength: 2_000 },
-            amendmentQuote: { type: 'string', minLength: 1, maxLength: 2_000 },
-          },
-          required: ['priorQuote', 'amendmentQuote'],
-        },
-      },
-      selections: {
-        type: 'array', maxItems: 64,
-        items: {
-          type: 'object', additionalProperties: false,
-          properties: {
-            selectionKey: { type: 'string', minLength: 1, maxLength: 300 },
-            facts: {
-              type: 'array', maxItems: 128,
-              items: {
-                type: 'object', additionalProperties: false,
-                properties: {
-                  inputKey: { type: 'string', minLength: 1, maxLength: 300 },
-                  valueJson: { type: 'string', maxLength: 8_000 },
-                },
-                required: ['inputKey', 'valueJson'],
-              },
-            },
-          },
-          required: ['selectionKey', 'facts'],
-        },
-      },
-    },
-    required: ['kind', 'reason', 'prompt', 'canonicalStatements', 'supersededStatements', 'selections'],
-  },
-})
-
-/**
- * Value-constraint keywords are enforced by the post-parse validation below, never on the
- * wire. Several providers (Gemini in particular) reject them inside nested objects with a
- * hard HTTP 400, which would lock this interpreter to a single vendor. Keeping the wire
- * schema structural keeps the contract portable while validation stays authoritative.
- */
-const NON_STRUCTURAL_SCHEMA_KEYWORDS: Record<string, true> = {
-  minLength: true, maxLength: true, minItems: true, maxItems: true,
-  minimum: true, maximum: true, multipleOf: true, uniqueItems: true,
-  pattern: true, format: true,
-}
-
-function toPortableJsonSchema(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(toPortableJsonSchema)
-  if (!isPlainObject(node)) return node
-  return Object.fromEntries(
-    Object.entries(node)
-      .filter(([key]) => NON_STRUCTURAL_SCHEMA_KEYWORDS[key] !== true)
-      .map(([key, value]) => [key, toPortableJsonSchema(value)]),
-  )
-}
-
-const SEMANTIC_RESPONSE_WIRE_SCHEMA = Object.freeze({
-  ...SEMANTIC_RESPONSE_SCHEMA,
-  schema: toPortableJsonSchema(SEMANTIC_RESPONSE_SCHEMA.schema),
-})
-
 export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
   interpreterId: string
   transport: CustomerRequestSemanticInterpretationTransport
@@ -304,46 +254,52 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
   return Object.freeze({
     interpreterId: input.interpreterId,
     propose: async (payload) => {
-      const controller = new AbortController()
-      let timeout: ReturnType<typeof setTimeout> | undefined
+      const publicPayload: CustomerRequestSemanticInterpreterPayload = {
+        customerJob: payload.customerJob,
+        ...(payload.amendment === undefined ? {} : {
+          amendment: {
+            priorCustomerJob: payload.amendment.priorCustomerJob,
+            message: payload.amendment.message,
+            ...(payload.amendment.replacesPriorStatement === undefined ? {} : {
+              replacesPriorStatement: payload.amendment.replacesPriorStatement,
+            }),
+          },
+        }),
+        capabilities: payload.capabilities.map(publicDescriptor),
+      }
+      if (new TextEncoder().encode(JSON.stringify(publicPayload)).byteLength > input.maximumPayloadBytes) {
+        throw new Error('customer_request_semantic_interpretation_payload_too_large')
+      }
+      let response: CustomerRequestSemanticModelProposal
       try {
-        const publicPayload: CustomerRequestSemanticInterpreterPayload = {
-          customerJob: payload.customerJob,
-          ...(payload.amendment === undefined ? {} : {
-            amendment: {
-              priorCustomerJob: payload.amendment.priorCustomerJob,
-              message: payload.amendment.message,
-              ...(payload.amendment.replacesPriorStatement === undefined ? {} : {
-                replacesPriorStatement: payload.amendment.replacesPriorStatement,
-              }),
-            },
-          }),
-          capabilities: payload.capabilities.map(publicDescriptor),
-        }
-        if (new TextEncoder().encode(JSON.stringify(publicPayload)).byteLength > input.maximumPayloadBytes) {
-          throw new Error('customer_request_semantic_interpretation_payload_too_large')
-        }
-        const generated = input.transport.generateJson({
-          systemInstruction: SYSTEM_INSTRUCTION, payload: publicPayload,
-          signal: controller.signal, responseSchema: SEMANTIC_RESPONSE_WIRE_SCHEMA,
+        response = await runWithAbortAndTimeout({
+          timeoutMs: input.timeoutMs,
+          timeoutError: () => new Error('customer_request_semantic_interpretation_timeout'),
+          run: (signal) => {
+            if (signal === undefined) throw new Error('customer_request_semantic_interpretation_abort_signal_missing')
+            return input.transport.generateJson({
+              systemInstruction: SYSTEM_INSTRUCTION, payload: publicPayload,
+              signal, responseSchema: SEMANTIC_RESPONSE_SCHEMA,
+            })
+          },
         })
-        const deadline = new Promise<never>((_resolve, reject) => {
-          timeout = setTimeout(() => {
-            controller.abort()
-            reject(new Error('customer_request_semantic_interpretation_timeout'))
-          }, input.timeoutMs)
-        })
-        const response = await Promise.race([generated, deadline])
-        if (new TextEncoder().encode(response.content).byteLength > input.maximumResponseBytes) {
-          throw new Error('customer_request_semantic_interpretation_too_large')
+      } catch (error) {
+        if (NoObjectGeneratedError.isInstance(error) && error.text !== undefined && error.text.length > 0) {
+          let unknownValue: unknown
+          try { unknownValue = JSON.parse(error.text) } catch {
+            throw new Error('customer_request_semantic_interpretation_invalid_json')
+          }
+          throw new Error(semanticProposalFailureCode(normalizeSemanticProposal(unknownValue)))
         }
-        let unknownValue: unknown
-        try { unknownValue = JSON.parse(response.content) } catch {
-          throw new Error('customer_request_semantic_interpretation_invalid_json')
-        }
-        const normalizedValue = normalizeSemanticProposal(unknownValue)
-        const parsed = proposalSchema.safeParse(normalizedValue)
-        if (!parsed.success) throw new Error(semanticProposalFailureCode(normalizedValue))
+        throw error
+      }
+      const serializedResponse = JSON.stringify(response) ?? ''
+      if (new TextEncoder().encode(serializedResponse).byteLength > input.maximumResponseBytes) {
+        throw new Error('customer_request_semantic_interpretation_too_large')
+      }
+      const normalizedValue = normalizeSemanticProposal(response)
+      const parsed = proposalSchema.safeParse(normalizedValue)
+      if (!parsed.success) throw new Error(semanticProposalFailureCode(normalizedValue))
         const interpretationEvidence = Object.freeze({
           kind: 'model_output' as const,
           systemInstructionVersion: SYSTEM_INSTRUCTION_VERSION,
@@ -428,9 +384,6 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           interpretationEvidence,
           ...(decisionPreference === undefined ? {} : { decisionPreference }),
         })
-      } finally {
-        if (timeout !== undefined) clearTimeout(timeout)
-      }
     },
   })
 }
@@ -626,9 +579,6 @@ function semanticProposalFailureCode(value: unknown): string {
     : 'customer_request_semantic_interpretation_invalid_kind'
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 export type ServerCapabilityDescriptor = CustomerCapabilityDescriptor & Readonly<{
   contractRef: CapabilityContractRef
@@ -781,8 +731,9 @@ export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): Cu
     if (!/\b(?:under|below|less\s+than|at\s+most|no\s+more\s+than|not\s+exceed|maximum|max|cap|budget)\b[^.!?\n]{0,56}$/u.test(before)) continue
     const [wholeText, fractionalText = ''] = amount.split('.')
     const amountMinor = Number(wholeText) * 100 + Number(fractionalText.padEnd(2, '0'))
-    if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) continue
-    latest = { currency: match[1]!.toLocaleUpperCase('en'), amountMinor }
+    const currency = match[1]
+    if (currency === undefined) throw new Error('customer_request_maximum_total_cost_currency_missing')
+    latest = { currency: currency.toLocaleUpperCase('en'), amountMinor }
   }
   if (latest === undefined) return undefined
   const inputKey = 'customer:maximum-total-cost' as CapabilityInputKey
@@ -799,10 +750,20 @@ export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): Cu
   })
 }
 
+const OPTIONAL_QUANTITY_WORD = 'a[n]y'
+const PROHIBITED_PROVIDER_DATA_SHARING_PATTERN = new RegExp(
+  String.raw`\b(?:do\s+not|don't|never)\s+(?:share|send|disclose)\s+(?:${OPTIONAL_QUANTITY_WORD}\s+)?(?:data|information|details)\s+(?:with|to)\s+(?:a\s+|${OPTIONAL_QUANTITY_WORD}\s+|the\s+)?(?:business|businesses|provider|providers)\b`,
+  'u',
+)
+const WITHOUT_PROVIDER_DATA_SHARING_PATTERN = new RegExp(
+  String.raw`\bwithout\s+(?:sharing|sending|disclosing)\s+(?:${OPTIONAL_QUANTITY_WORD}\s+)?(?:data|information|details)\s+(?:with|to)\s+(?:a\s+|${OPTIONAL_QUANTITY_WORD}\s+|the\s+)?(?:business|businesses|provider|providers)\b`,
+  'u',
+)
+
 export function deriveCustomerProviderDataSharingCriterion(customerJob: string): UnderstoodCriterion | undefined {
   const normalized = customerJob.normalize('NFKC').toLocaleLowerCase('en')
-  const prohibited = /\b(?:do\s+not|don't|never)\s+(?:share|send|disclose)\s+(?:any\s+)?(?:data|information|details)\s+(?:with|to)\s+(?:a\s+|any\s+|the\s+)?(?:business|businesses|provider|providers)\b/u.test(normalized)
-    || /\bwithout\s+(?:sharing|sending|disclosing)\s+(?:any\s+)?(?:data|information|details)\s+(?:with|to)\s+(?:a\s+|any\s+|the\s+)?(?:business|businesses|provider|providers)\b/u.test(normalized)
+  const prohibited = PROHIBITED_PROVIDER_DATA_SHARING_PATTERN.test(normalized)
+    || WITHOUT_PROVIDER_DATA_SHARING_PATTERN.test(normalized)
   if (!prohibited) return undefined
   const inputKey = CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY
   const inputPointer = '/customerConstraints/providerDataSharingAllowed'

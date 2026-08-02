@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
@@ -426,7 +427,6 @@ export function AeOwnerOfferingEditor({
 function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly OwnerAccessPathEditorValue[]; disabled: boolean; onChange: (paths: readonly OwnerAccessPathEditorValue[]) => void }) {
   const [selectedKind, setSelectedKind] = useState<'phone' | 'website' | 'ae_inquiry' | 'external_operation'>('phone')
   const [technicalExpanded, setTechnicalExpanded] = useState(false)
-  const technicalId = useId()
   const [draftDetail, setDraftDetail] = useState('')
   const [endpoint, setEndpoint] = useState(emptyOwnerEndpointDraft)
   const [websiteUrl, setWebsiteUrl] = useState('')
@@ -471,12 +471,14 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           />
         ) : null}
         {selectedKind === 'external_operation' ? (
-          <FieldGroup className="gap-3">
-            <button type="button" className="min-h-11 justify-self-start text-sm font-semibold underline underline-offset-4" aria-expanded={technicalExpanded} aria-controls={technicalId} onClick={() => setTechnicalExpanded((current) => !current)}>
-              {technicalExpanded ? 'Hide request details' : 'Add request details'}
-            </button>
-            {technicalExpanded ? (
-              <FieldGroup id={technicalId} className="gap-4">
+          <Collapsible open={technicalExpanded} onOpenChange={setTechnicalExpanded} className="grid gap-3">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="link" className="h-auto min-h-11 justify-self-start px-0 font-semibold text-foreground underline">
+                {technicalExpanded ? 'Hide request details' : 'Add request details'}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <FieldGroup className="gap-4">
                 <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an assistant should call this. Left blank, it publishes as “Assistant request”." />
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
@@ -505,8 +507,8 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 <TextInput label="Authentication" value={endpoint.authenticationSummary} onChange={(authenticationSummary) => setEndpoint((current) => ({ ...current, authenticationSummary }))} disabled={disabled} description="Optional. Explain how a caller signs in, in your own words." />
                 <TextInput label="Request price note" value={endpoint.pricingSummary} onChange={(pricingSummary) => setEndpoint((current) => ({ ...current, pricingSummary }))} disabled={disabled} description="Optional. Published exactly as written." />
               </FieldGroup>
-            ) : null}
-          </FieldGroup>
+            </CollapsibleContent>
+          </Collapsible>
         ) : null}
         <Button
           type="button"
@@ -606,7 +608,7 @@ function TextInput({
   describedBy?: string
   error?: string
 }) {
-  const id = `offering-${label.toLowerCase().replaceAll(' ', '-')}`
+  const id = useId()
   const hint = description ?? (optional ? 'Optional' : undefined)
   const invalid = ariaInvalid === true || error !== undefined
   const describedByValue = [describedBy, error === undefined ? undefined : `${id}-error`]
@@ -649,7 +651,7 @@ function TextAreaInput({
   describedBy?: string
   error?: string
 }) {
-  const id = `offering-${label.toLowerCase().replaceAll(' ', '-')}`
+  const id = useId()
   const invalid = ariaInvalid === true || error !== undefined
   const describedByValue = [describedBy, error === undefined ? undefined : `${id}-error`]
     .filter((value): value is string => value !== undefined)

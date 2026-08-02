@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { parseHttpsUrl, parseJsonObject, readRequiredString, resolvePath } from '../helpers/deployed-smoke'
 
 type ResendDispatchSmokeConfig = {
   baseUrl: URL
@@ -67,30 +68,10 @@ function readResendDispatchSmokeConfig(): ResendDispatchSmokeConfig {
   }
 
   return {
-    baseUrl: parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string),
+    baseUrl: parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string, 'deployed provider smoke'),
     outboxSecret: (required.AE_NOTIFICATION_OUTBOX_SECRET as string).trim(),
     dispatchId: (required.SMOKE_NOTIFICATION_DISPATCH_ID as string).trim(),
   }
-}
-
-function parseHttpsUrl(name: string, rawValue: string): URL {
-  let parsed: URL
-
-  try {
-    parsed = new URL(rawValue)
-  } catch {
-    throw new Error(`${name} must be a valid HTTPS URL.`)
-  }
-
-  if (parsed.protocol !== 'https:') {
-    throw new Error(`${name} must use https:// for deployed provider smoke.`)
-  }
-
-  if (/^(localhost|127\.0\.0\.1)$/.test(parsed.hostname) || parsed.hostname.endsWith('.local')) {
-    throw new Error(`${name} must point at a deployed environment, not localhost.`)
-  }
-
-  return parsed
 }
 
 function requireResendDispatchSmokeConfig(): ResendDispatchSmokeConfig {
@@ -101,29 +82,3 @@ function requireResendDispatchSmokeConfig(): ResendDispatchSmokeConfig {
   return config
 }
 
-function resolvePath(path: string, baseUrl: URL): string {
-  return new URL(path, baseUrl).toString()
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
-    }
-  } catch {
-    // Handled below.
-  }
-
-  throw new Error(`Expected JSON object response, received: ${value.slice(0, 200)}`)
-}
-
-function readRequiredString(record: Record<string, unknown>, key: string): string {
-  const value = record[key]
-
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`Expected response field ${key} to be a non-empty string.`)
-  }
-
-  return value
-}

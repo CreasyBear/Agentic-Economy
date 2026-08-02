@@ -1,6 +1,5 @@
 export {
   aggregateIsInternallyConsistent,
-  legacyAggregateIsInternallyConsistent,
 } from './aggregate-consistency'
 
 export {

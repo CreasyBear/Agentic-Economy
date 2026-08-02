@@ -1,18 +1,18 @@
-import type { BusinessRecord } from '@/modules/business/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type {
   PublicAccessPath,
   PublicBusinessPageRouteReadbackResult,
   PublicOfferingSupplyProjection,
-  PublicRouteCapabilityContract,
-  PublicRouteCatalogContract,
-  PublicRouteServiceContract,
 } from '@/modules/catalog/public'
-import type { OperationKey, CorrelationId } from '@/modules/common/ids'
+import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
+import type { BusinessId, OperationKey, CorrelationId, OfferingRef } from '@/modules/common/ids'
+import { brandNonEmpty } from '@/modules/common/ids'
 import {
   PUBLIC_INQUIRY_UNAVAILABLE_REASON,
   PUBLIC_PHONE_CHANNEL_DISCLOSURE,
   PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
 } from '@/modules/inquiries/public-copy'
+import { normalizeInquiryWhitespace } from './internal/normalize-text'
 import {
   createEmptyInquirySourceState,
   evaluateR1TargetAdmission,
@@ -53,7 +53,7 @@ export type PublicInquiryAffordance =
       label: 'Send inquiry'
       href: string
       businessName: string
-      serviceName: string
+      offeringName: string
       disclosure: string
       target: PublicInquiryTarget
     }
@@ -63,7 +63,7 @@ export type PublicInquiryAffordance =
       reason: string
       blockers?: readonly AdmissionBlocker[]
       businessName: string
-      serviceName?: string
+      offeringName?: string
     }
 
 export type PublicInquiryRouteReadback =
@@ -71,7 +71,7 @@ export type PublicInquiryRouteReadback =
       kind: 'available'
       slug: string
       businessName: string
-      serviceName: string
+      offeringName: string
       disclosure: string
       target: PublicInquiryTarget
       maxBodyLength: number
@@ -83,13 +83,13 @@ export type PublicInquiryRouteReadback =
       reason: string
       blockers?: readonly AdmissionBlocker[]
       businessName?: string
-      serviceName?: string
+      offeringName?: string
     }
 
 export type PublicInquirySubmittedReceipt = {
   threadId: string
   businessName: string
-  serviceName: string
+  offeringName: string
   status: 'unread' | 'read' | 'replied' | 'closed'
   notificationStatus: InquiryNotificationStatus
   deliveryLabel: string
@@ -101,7 +101,7 @@ export type PublicInquiryRouteInput = {
   page?: PublicBusinessPageRouteReadbackResult
   state?: InquirySourceState
   admission?: R1TargetAdmission
-  preferredServiceSlug?: string
+  preferredOfferingRef?: OfferingRef
 }
 
 export type PublicInquiryRouteSubmitInput = PublicInquiryFormInput & {
@@ -110,7 +110,7 @@ export type PublicInquiryRouteSubmitInput = PublicInquiryFormInput & {
   operationKey: OperationKey
   correlationId: CorrelationId
   pseudonymousSessionId: string
-  abuseBucketKey: string
+  abuseBucketKey?: string
   now: number
   expectedDigest: string
   inquiryOrigin?: InquiryOriginRef
@@ -142,7 +142,7 @@ export type PublicInquiryRouteSubmitResult =
 const defaultBodyLength = createEmptyInquirySourceState().operatorControls.maxBodyLength
 
 export function validatePublicInquiryFormInput(input: PublicInquiryFormInput): PublicInquiryValidationResult {
-  const body = normalizeText(input.body)
+  const body = normalizeInquiryWhitespace(input.body)
   const contact = normalizeContact(input.contact)
   const errors: PublicInquiryValidationError[] = []
 
@@ -180,26 +180,22 @@ export function validatePublicInquiryFormInput(input: PublicInquiryFormInput): P
 }
 
 export function buildPublicInquiryAffordance(
-  catalog: PublicRouteCatalogContract,
-  preferredServiceSlug?: string,
+  catalog: PublicBusinessCatalogApiV2Dto,
+  preferredOfferingRef?: OfferingRef,
   admissionOrState?: R1TargetAdmission | InquirySourceState,
 ): PublicInquiryAffordance {
-  const match = firstInquiryCapability(catalog, preferredServiceSlug)
+  const match = firstInquiryOffering(catalog, preferredOfferingRef)
   if (match === undefined) {
-    const serviceName = catalog.services[0]?.name
     return {
       kind: 'unavailable',
       label: 'Inquiry unavailable',
-      reason: 'This service has not published a human inquiry path yet.',
+      reason: 'This business has not published a human inquiry path yet.',
       businessName: catalog.name,
-      ...(serviceName === undefined ? {} : { serviceName }),
     }
   }
-
   const target = {
-    businessId: catalog.businessId,
-    serviceId: match.service.serviceId,
-    capabilityKind: match.capability.kind,
+    businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
+    offeringRef: brandNonEmpty(match.offering.offeringRef, 'OfferingRef'),
   } satisfies InquiryTargetRef
   const admission = admissionOrState === undefined
     ? undefined
@@ -212,7 +208,7 @@ export function buildPublicInquiryAffordance(
       label: 'Inquiry unavailable',
       reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
       businessName: catalog.name,
-      serviceName: match.service.name,
+      offeringName: match.offering.name,
       ...(admission === undefined ? {} : { blockers: admission.blockers }),
     }
   }
@@ -222,8 +218,8 @@ export function buildPublicInquiryAffordance(
     label: 'Send inquiry',
     href: `/${catalog.slug}/inquiry`,
     businessName: catalog.name,
-    serviceName: match.service.name,
-    disclosure: match.capability.firstRequest.publicDisclosure,
+    offeringName: match.offering.name,
+    disclosure: match.path.disclosure,
     target,
   }
 }
@@ -234,14 +230,13 @@ export function readPublicInquiryRouteReadback(input: PublicInquiryRouteInput): 
     return {
       kind: 'unavailable',
       slug: input.slug,
-      reason: 'This service page is not public.',
+      reason: 'This business page is not public.',
     }
   }
 
-
   const affordance = buildPublicInquiryAffordance(
     page.catalog,
-    input.preferredServiceSlug,
+    input.preferredOfferingRef,
     input.admission ?? input.state,
   )
   if (affordance.kind === 'unavailable') {
@@ -251,7 +246,7 @@ export function readPublicInquiryRouteReadback(input: PublicInquiryRouteInput): 
       reason: affordance.reason,
       ...(affordance.blockers === undefined ? {} : { blockers: affordance.blockers }),
       businessName: affordance.businessName,
-      ...(affordance.serviceName === undefined ? {} : { serviceName: affordance.serviceName }),
+      ...(affordance.offeringName === undefined ? {} : { offeringName: affordance.offeringName }),
     }
   }
 
@@ -259,7 +254,7 @@ export function readPublicInquiryRouteReadback(input: PublicInquiryRouteInput): 
     kind: 'available',
     slug: input.slug,
     businessName: affordance.businessName,
-    serviceName: affordance.serviceName,
+    offeringName: affordance.offeringName,
     disclosure: affordance.disclosure,
     target: affordance.target,
     maxBodyLength: input.state?.operatorControls.maxBodyLength ?? defaultBodyLength,
@@ -298,8 +293,8 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
     governedSendIntegrityKeyring: input.governedSendIntegrityKeyring,
     operationKey: input.operationKey,
     correlationId: input.correlationId,
+    ...(input.abuseBucketKey === undefined ? {} : { abuseBucketKey: input.abuseBucketKey }),
     pseudonymousSessionId: input.pseudonymousSessionId,
-    abuseBucketKey: input.abuseBucketKey,
     now: input.now,
     expectedDigest: input.expectedDigest,
     ...(input.inquiryOrigin === undefined ? {} : { origin: input.inquiryOrigin }),
@@ -323,7 +318,7 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
   const receipt = {
     threadId: result.thread.threadId,
     businessName: readback.businessName,
-    serviceName: readback.serviceName,
+    offeringName: readback.offeringName,
     status: result.thread.status,
     notificationStatus: result.notification.status,
     deliveryLabel: deliveryLabel(result.notification.status),
@@ -355,134 +350,103 @@ function publicPageFromInquirySourceState(
     return { kind: 'not_found', reason: 'not_public' }
   }
 
-  const services = state.businessServices
-    .filter((service) => service.businessId === business.businessId && service.status === 'published')
-    .sort((left, right) => left.sortOrder - right.sortOrder || String(left.serviceId).localeCompare(String(right.serviceId)))
-    .map((service) => routeServiceFromState(state, service))
+  const offerings: PublicOfferingSupplyProjection[] = state.businessOfferings
+    .filter((offering) => offering.businessId === business.businessId && offering.status === 'published')
+    .flatMap((offering) => {
+      const revision = state.businessOfferingRevisions.find((candidate) => (
+        candidate.businessId === offering.businessId
+        && candidate.offeringRef === offering.offeringRef
+        && candidate.revision === offering.currentRevision
+      ))
+      if (revision === undefined) return []
+      const accessPaths = state.offeringAccessPaths
+        .filter((path) => (
+          path.businessId === offering.businessId
+          && path.offeringRef === offering.offeringRef
+          && path.offeringRevision === revision.revision
+          && path.offeringSourceHash === revision.sourceHash
+          && path.status === 'published'
+        ))
+        .map((path) => ({
+          accessPathRef: path.accessPathRef,
+          descriptor: path.descriptor,
+        }))
+      return [{
+        offering: {
+          offeringRef: revision.offeringRef,
+          revision: revision.revision,
+          name: revision.name,
+          category: revision.category,
+          summary: revision.summary,
+          ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
+          ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
+          ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
+          ...(revision.price === undefined ? {} : { price: revision.price }),
+        },
+        accessPaths,
+        support: {
+          integrated: false,
+          routeable: false,
+          reasons: [],
+        },
+      } satisfies PublicOfferingSupplyProjection]
+    })
 
-  if (services.length === 0) {
+  if (offerings.length === 0) {
     return { kind: 'not_found', reason: 'not_public' }
   }
 
+  const sourceProjection = {
+    business: {
+      businessId: business.businessId,
+      slug: business.slug,
+      name: business.name,
+      category: business.category,
+      suburb: business.suburb,
+      stateTerritory: business.stateTerritory,
+      ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
+      publicUrl: `/${business.slug}`,
+      trustTier: business.trustTier,
+      photos: [],
+    },
+    offerings,
+    sourceRevision: 0,
+    sourceDigest: business.sourceHash,
+    observedAt: business.updatedAt,
+    disposition: 'current' as const,
+  }
   return {
     kind: 'available',
-    catalog: routeCatalogFromBusiness(business, services),
+    catalog: projectBusinessSupplyToPublicApi(sourceProjection),
   }
-}
-
-function routeCatalogFromBusiness(
-  business: BusinessRecord,
-  services: readonly PublicRouteServiceContract[]
-): PublicRouteCatalogContract {
-  return {
-    businessId: business.businessId,
-    slug: business.slug,
-    name: business.name,
-    category: business.category,
-    suburb: business.suburb,
-    stateTerritory: business.stateTerritory,
-    publicUrl: `/${business.slug}`,
-    publicStatus: 'published',
-    trustTier: business.trustTier,
-    indexStatus: 'queued',
-    discoveryStatus: 'degraded',
-    photos: [],
-    services,
-    schemaVersion: 'public-catalog:v1',
-    updatedAt: business.updatedAt,
-  }
-}
-
-function routeServiceFromState(
-  state: InquirySourceState,
-  service: InquirySourceState['businessServices'][number]
-): PublicRouteServiceContract {
-  const capabilities: PublicRouteCapabilityContract[] = []
-  for (const capability of state.serviceCapabilities) {
-    if (capability.businessId !== service.businessId || capability.serviceId !== service.serviceId) {
-      continue
-    }
-    capabilities.push({
-      serviceId: capability.serviceId,
-      kind: capability.kind,
-      status: capability.status,
-      firstRequest: capability.firstRequest,
-      callable: capability.callable,
-      paymentRequired: capability.paymentRequired,
-      ...(capability.reason === undefined ? {} : { reason: capability.reason }),
-    })
-  }
-
-  return {
-    serviceId: service.serviceId,
-    serviceSlug: service.serviceSlug,
-    businessId: service.businessId,
-    name: service.name,
-    category: service.category,
-    summary: service.summary,
-    serviceArea: service.serviceArea,
-    hoursOrUnknown: service.hoursOrUnknown,
-    firstRequest: firstRequestForService(state, service),
-    status: 'published',
-    capabilities,
-  }
-}
-
-function firstRequestForService(
-  state: InquirySourceState,
-  service: InquirySourceState['businessServices'][number]
-): PublicRouteServiceContract['firstRequest'] {
-  return (
-    state.serviceCapabilities.find((capability) => capability.businessId === service.businessId && capability.serviceId === service.serviceId)
-      ?.firstRequest ?? {
-      mode: 'not_available_yet',
-      publicDisclosure: 'This business has not published a request path.',
-      publicChannel: 'not_available',
-      noContactReason: 'No first request path has been published.',
-      rawContactExcluded: true,
-    }
-  )
 }
 
 export function selectPublicInquiryTarget(
-  catalog: PublicRouteCatalogContract,
-  preferredServiceSlug?: string,
+  catalog: PublicBusinessCatalogApiV2Dto,
+  preferredOfferingRef?: OfferingRef,
 ): InquiryTargetRef | undefined {
-  const match = firstInquiryCapability(catalog, preferredServiceSlug)
+  const match = firstInquiryOffering(catalog, preferredOfferingRef)
   return match === undefined
     ? undefined
     : {
-        businessId: catalog.businessId,
-        serviceId: match.service.serviceId,
-        capabilityKind: match.capability.kind,
+        businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
+        offeringRef: brandNonEmpty(match.offering.offeringRef, 'OfferingRef'),
       }
 }
 
 export function projectPublicInquiryAvailability(
-  catalog: PublicRouteCatalogContract,
+  catalog: PublicBusinessCatalogApiV2Dto,
   admission: R1TargetAdmission | undefined,
-): PublicRouteCatalogContract {
-  const sourceConsistentCatalog = projectSourceConsistentInquiryAvailability(catalog)
-  if (admission?.admitted === true) return sourceConsistentCatalog
-  if (selectPublicInquiryTarget(sourceConsistentCatalog) === undefined) return sourceConsistentCatalog
-
-  // No admitted target means the inquiry route refuses this business outright.
-  // Withdrawing only the one target the page happened to select would leave a
-  // second service still telling the reader to send a first request.
+): PublicBusinessCatalogApiV2Dto {
+  if (admission?.admitted === true) return catalog
   return {
-    ...sourceConsistentCatalog,
-    services: sourceConsistentCatalog.services.map((service) => ({
-      ...service,
-      ...(describesFirstContact(service.firstRequest) ? { firstRequest: unavailablePublicFirstRequest() } : {}),
-      capabilities: service.capabilities.map((capability) =>
-        describesFirstContact(capability.firstRequest)
-          ? {
-              ...capability,
-              status: 'unavailable' as const,
-              reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-              firstRequest: unavailablePublicFirstRequest(),
-            }
-          : capability),
+    ...catalog,
+    offerings: catalog.offerings.map((offering) => ({
+      ...offering,
+      accessPaths: offering.accessPaths.filter((path) => {
+        if (path.kind !== 'human_request') return true
+        return path.channel !== 'ae_inquiry'
+      }),
     })),
   }
 }
@@ -523,101 +487,31 @@ export function projectPublicInquiryOfferingSupply(
   }))
 }
 
-function describesFirstContact(firstRequest: PublicRouteServiceContract['firstRequest']): boolean {
-  return firstRequest.mode !== 'not_available_yet' && firstRequest.publicChannel === 'public_business_contact'
-}
-
-function projectSourceConsistentInquiryAvailability(
-  catalog: PublicRouteCatalogContract,
-): PublicRouteCatalogContract {
-  return {
-    ...catalog,
-    services: catalog.services.map((service) => {
-      const servicePublishesRequestPath = describesFirstContact(service.firstRequest)
-      const capabilities = service.capabilities.map((capability) => {
-        const capabilityPublishesRequestPath = describesFirstContact(capability.firstRequest)
-        if (capability.status !== 'available' || (servicePublishesRequestPath && capabilityPublishesRequestPath)) {
-          return capability
-        }
-        return {
-          ...capability,
-          status: 'unavailable' as const,
-          reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-          firstRequest: unavailablePublicFirstRequest(),
-        }
-      })
-      const hasAvailableCapability = capabilities.some((capability) => (
-        capability.status === 'available' && describesFirstContact(capability.firstRequest)
-      ))
-      return {
-        ...service,
-        ...(!servicePublishesRequestPath || hasAvailableCapability
-          ? {}
-          : { firstRequest: unavailablePublicFirstRequest() }),
-        capabilities,
-      }
-    }),
-  }
-}
-
-function unavailablePublicFirstRequest(): PublicRouteServiceContract['firstRequest'] {
-  return {
-    mode: 'not_available_yet',
-    publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-    publicChannel: 'not_available',
-    noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-    rawContactExcluded: true,
-  }
-}
-
 export function selectOwnerAdmissionTarget(
-  catalog: PublicRouteCatalogContract,
+  catalog: PublicBusinessCatalogApiV2Dto,
 ): InquiryTargetRef | undefined {
-  for (const service of catalog.services) {
-    const capability = service.capabilities[0]
-    if (capability !== undefined) {
-      return {
-        businessId: catalog.businessId,
-        serviceId: service.serviceId,
-        capabilityKind: capability.kind,
-      }
-    }
-  }
-
-  return undefined
+  return selectPublicInquiryTarget(catalog)
 }
 
-function firstInquiryCapability(
-  catalog: PublicRouteCatalogContract,
-  preferredServiceSlug?: string,
-):
-  | {
-      service: PublicRouteServiceContract
-      capability: PublicRouteCapabilityContract
-    }
-  | undefined {
-  const services =
-    preferredServiceSlug === undefined
-      ? catalog.services
-      : [
-          ...catalog.services.filter((service) => String(service.serviceSlug) === preferredServiceSlug),
-          ...catalog.services.filter((service) => String(service.serviceSlug) !== preferredServiceSlug),
-        ]
+function firstInquiryOffering(
+  catalog: PublicBusinessCatalogApiV2Dto,
+  preferredOfferingRef?: OfferingRef,
+) {
+  const offerings = preferredOfferingRef === undefined
+    ? catalog.offerings
+    : [
+        ...catalog.offerings.filter((offering) => offering.offeringRef === preferredOfferingRef),
+        ...catalog.offerings.filter((offering) => offering.offeringRef !== preferredOfferingRef),
+      ]
 
-  for (const service of services) {
-    const capability = service.capabilities.find(
-      (candidate) =>
-        candidate.kind === 'phone_inquiry' &&
-        candidate.status === 'available' &&
-        candidate.firstRequest.mode === 'inquiry_available' &&
-        candidate.firstRequest.publicChannel === 'public_business_contact' &&
-        !candidate.callable &&
-        !candidate.paymentRequired
+  for (const offering of offerings) {
+    const path = offering.accessPaths.find(
+      (candidate) => candidate.kind === 'human_request' && candidate.channel === 'ae_inquiry',
     )
-
-    if (capability !== undefined) {
-      return { service, capability }
-    }
+    if (path === undefined) continue
+    if (path.kind !== 'human_request') continue
+    if (path.channel !== 'ae_inquiry') continue
+    return { offering, path }
   }
 
   return undefined
@@ -638,12 +532,9 @@ function deliveryLabel(status: InquiryNotificationStatus): string {
 
 function normalizeContact(input: PublicInquiryContactInput): { name: string; email: string; phone: string } {
   return {
-    name: normalizeText(input.name ?? ''),
-    email: normalizeText(input.email ?? '').toLowerCase(),
-    phone: normalizeText(input.phone ?? ''),
+    name: normalizeInquiryWhitespace(input.name ?? ''),
+    email: normalizeInquiryWhitespace(input.email ?? '').toLowerCase(),
+    phone: normalizeInquiryWhitespace(input.phone ?? ''),
   }
 }
 
-function normalizeText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim()
-}

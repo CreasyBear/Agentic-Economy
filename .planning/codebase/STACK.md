@@ -101,7 +101,7 @@ The active application is in `src/` and `convex/`. `src/routeTree.gen.ts` and `c
 ## Configuration surface
 
 - The documented environment contract is `.env.example`; local values are in `.env.local` and are server/client-scoped by naming (`VITE_*` is browser-exposed, unprefixed secrets remain server-side).
-- Auth/config groups include Clerk (`VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`), Convex (`VITE_CONVEX_URL`), source-write keyrings, canonical URL/CSP, agent/WBA admission, provider billing/notifications, OpenRouter answer controls, Meilisearch, Sentry/PostHog, and Google Maps (`.env.example`).
+- Auth/config groups include Clerk (`VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`), Convex (`VITE_CONVEX_URL`), source-write keyrings, canonical URL/CSP, agent/WBA admission, provider billing/notifications, OpenRouter answer controls, Sentry/PostHog, and Google Maps (`.env.example`).
 - `vite.config.ts`, `tsconfig.json`, `vitest.config.ts`, `playwright.config.ts`, `components.json`, `doctor.config.ts`, `.oxlintrc.json`, and `.github/workflows/kernel-release-gate.yml` are the primary runtime/build/tooling configuration files.
 
 ## Analysis completion

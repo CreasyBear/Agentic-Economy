@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import { createHmac } from 'node:crypto'
 
@@ -17,6 +17,10 @@ import {
   sourceQuery,
   sourceAction,
 } from '@/lib/server/convex-source'
+import {
+  notificationErrorResponse,
+  statusForNotificationRuntimeError,
+} from '@/lib/server/notification-dispatch'
 import {
   readRequiredSourceWriteSecret,
   sourceWriteAdmissionFromContext,
@@ -54,6 +58,10 @@ import { handleResendWebhookRequest } from '@/routes/api.notification.resend-web
 
 const convexUrl = 'https://happy-animal-123.convex.cloud'
 const publicEnvPrefix = 'VI' + 'TE_'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('server Convex source seam', () => {
   it('requires a Convex URL from server env', () => {
@@ -351,7 +359,7 @@ describe('server Convex source seam', () => {
       const firstInquiry = inbox.inbox.inquiries[0]
       expect(firstInquiry).toMatchObject({
         businessName: 'Demo Plumbing',
-        serviceName: 'Diagnostic plumbing',
+        offeringName: 'Diagnostic plumbing',
         status: 'replied',
       })
 
@@ -474,6 +482,36 @@ describe('server notification provider seam', () => {
     expect(() => readNotificationOutboxSystemKey({})).toThrow(NotificationProviderError)
     expect(() => readNotificationOutboxSystemKey({})).toThrow(expect.objectContaining({ code: 'missing_notification_outbox_secret', status: 500 }))
   })
+  it('normalizes provider and Convex source errors through one no-store response seam', async () => {
+    const providerResponse = notificationErrorResponse(
+      new NotificationProviderError('invalid_resend_signature', 'Signature rejected.', 401)
+    )
+    const sourceResponse = notificationErrorResponse(
+      new ConvexSourceError('missing_auth', 'Authentication required.', 401)
+    )
+
+    await expect(providerResponse?.json()).resolves.toEqual({
+      kind: 'error',
+      code: 'invalid_resend_signature',
+      retryable: false,
+      reason: 'Signature rejected.',
+    })
+    await expect(sourceResponse?.json()).resolves.toEqual({
+      kind: 'error',
+      code: 'missing_auth',
+      retryable: false,
+      reason: 'Authentication required.',
+    })
+    expect(providerResponse?.status).toBe(401)
+    expect(sourceResponse?.status).toBe(401)
+    expect(providerResponse?.headers.get('Cache-Control')).toBe('no-store')
+    expect(sourceResponse?.headers.get('Cache-Control')).toBe('no-store')
+    expect(notificationErrorResponse(new Error('unexpected'))).toBeUndefined()
+    expect(statusForNotificationRuntimeError('notification_not_found')).toBe(404)
+    expect(statusForNotificationRuntimeError('notification_system_denied')).toBe(403)
+    expect(statusForNotificationRuntimeError('notification_terminal')).toBe(409)
+    expect(statusForNotificationRuntimeError('unexpected')).toBe(500)
+  })
 
   it('reads only server-side Clerk, Resend, and Novu delivery config', () => {
     expect(
@@ -573,7 +611,7 @@ describe('server notification provider seam', () => {
         inquiryThreadId: 'inquiry_thread:abc',
         businessName: 'Sam Plumbing',
         businessSlug: 'sam-plumbing',
-        serviceName: 'Emergency plumbing',
+        offeringName: 'Emergency plumbing',
         customerMessageFirstLine: 'Burst pipe under the kitchen sink.',
         isFirstInquiryForBusiness: true,
       },
@@ -821,6 +859,7 @@ describe('server notification provider seam', () => {
   })
 
   it('runs the guarded Novu dispatch bridge with authenticated readback and redacted provider refs', async () => {
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.agentic.test/')
     const calls: { read: unknown[]; trigger: unknown[]; readback: unknown[]; record: unknown[] } = {
       read: [],
       trigger: [],
@@ -829,7 +868,7 @@ describe('server notification provider seam', () => {
     }
 
     const response = await handleNovuDispatchRequest(
-      new Request('https://agentic.test/api/notification/novu-dispatch', {
+      new Request('https://spoofed.agentic.test/api/notification/novu-dispatch', {
         method: 'POST',
         body: JSON.stringify({ dispatchId: 'notification_dispatch:123' }),
         headers: {
@@ -941,7 +980,7 @@ describe('server notification provider seam', () => {
         inquiryThreadId: 'inquiry_thread:abc',
         businessName: 'Sam Plumbing',
       },
-      appBaseUrl: 'https://agentic.test',
+      appBaseUrl: 'https://canonical.agentic.test',
     })
     expect(calls.readback).toEqual([
       {
@@ -1320,6 +1359,7 @@ describe('server notification provider seam', () => {
   })
 
   it('runs the guarded Resend dispatch bridge without leaking owner email in the response or writeback', async () => {
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.agentic.test/')
     const calls: { read: unknown[]; resolve: unknown[]; send: unknown[]; record: unknown[] } = {
       read: [],
       resolve: [],
@@ -1328,7 +1368,7 @@ describe('server notification provider seam', () => {
     }
 
     const response = await handleResendDispatchRequest(
-      new Request('https://agentic.test/api/notification/resend-dispatch', {
+      new Request('https://spoofed.agentic.test/api/notification/resend-dispatch', {
         method: 'POST',
         body: JSON.stringify({ dispatchId: 'notification_dispatch:123' }),
         headers: {
@@ -1405,11 +1445,11 @@ describe('server notification provider seam', () => {
         providerIdempotencyKey: 'ae:notification_dispatch:123',
         inquiryThreadId: 'inquiry_thread:abc',
         businessName: 'Sam Plumbing',
-        serviceName: 'Emergency plumbing',
+        offeringName: 'Emergency plumbing',
         customerMessageFirstLine: 'Burst pipe under the kitchen sink.',
         isFirstInquiryForBusiness: true,
       },
-      appBaseUrl: 'https://agentic.test',
+      appBaseUrl: 'https://canonical.agentic.test',
     })
     expect(calls.record[0]).toMatchObject({
       dispatchId: 'notification_dispatch:123',
@@ -1556,6 +1596,40 @@ describe('server notification provider seam', () => {
     ).rejects.toMatchObject({ code: 'invalid_resend_signature', status: 401 })
   })
 
+  it('rejects oversized Resend webhook bodies before signature verification', async () => {
+    const oversizedBody = JSON.stringify({
+      type: 'email.delivered',
+      data: { email_id: 'resend_email_oversized', padding: 'x'.repeat(300 * 1024) },
+    })
+    const calls: unknown[] = []
+    const response = await handleResendWebhookRequest(
+      new Request('https://agentic.test/api/notification/resend-webhook', {
+        method: 'POST',
+        body: oversizedBody,
+        headers: signedResendHeaders(secret, oversizedBody, svixId, svixTimestamp),
+      }),
+      {
+        env: {
+          RESEND_WEBHOOK_SECRET: secret,
+          AE_NOTIFICATION_OUTBOX_SECRET: 'outbox-secret',
+        },
+        now,
+        ingestWebhook: async (args) => {
+          calls.push(args)
+          throw new Error('should not ingest an oversized webhook')
+        },
+      }
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'invalid_resend_webhook_payload',
+    })
+    expect(response.status).toBe(413)
+    expect(calls).toHaveLength(0)
+  })
+
+
   it('verifies the Resend route before forwarding redacted metadata to Convex', async () => {
     const calls: unknown[] = []
     const response = await handleResendWebhookRequest(
@@ -1658,7 +1732,7 @@ function dispatchSendReadback() {
         name: 'Sam Plumbing',
       },
       inquiry: {
-        serviceName: 'Emergency plumbing',
+        offeringName: 'Emergency plumbing',
         customerMessageFirstLine: 'Burst pipe under the kitchen sink.',
         isFirstInquiryForBusiness: true,
       },

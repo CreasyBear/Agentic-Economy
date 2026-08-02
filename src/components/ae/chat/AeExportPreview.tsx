@@ -13,6 +13,7 @@ import {
   emitWave1JourneyEvent,
   getOrCreatePseudonymousJourneyId,
 } from '@/lib/ui/journey-events'
+import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 import {
   createShortlistExportPreview,
   isShortlistExportPreviewCurrent,
@@ -85,8 +86,7 @@ export function AeExportPreview({
   async function copySummary() {
     if (!current || preview === null) return
     try {
-      if (typeof navigator.clipboard?.writeText !== 'function') throw new Error('Clipboard unavailable')
-      await navigator.clipboard.writeText(preview.text)
+      await copyTextToClipboard(preview.text)
       emitExportEvent(threadId, 'copy')
       setArtifactStatus('copied')
     } catch {
@@ -104,15 +104,13 @@ export function AeExportPreview({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
         id="ae-shortlist-export-preview"
-        role="dialog"
-        aria-labelledby="ae-export-preview-heading"
         className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-y-auto print:static print:max-h-none print:w-full print:shadow-none"
         showCloseButton={false}
         onPointerDownOutside={(event) => event.preventDefault()}
       >
       <div className="grid gap-5" data-export-preview="">
         <div className="grid gap-1 print:hidden">
-          <DialogTitle id="ae-export-preview-heading" className="text-xl font-semibold">
+          <DialogTitle className="text-xl font-semibold">
             Export preview
           </DialogTitle>
           <DialogDescription>Review and select every field before anything is copied or printed.</DialogDescription>

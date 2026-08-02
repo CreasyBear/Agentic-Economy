@@ -26,6 +26,7 @@ import type {
   RouteTransportRuntime,
   X402PaymentAuthorizationIdentity,
   X402PaymentSignatureRequest,
+  X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -61,19 +62,18 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     const durable = createInMemoryX402PaymentAttemptPort()
     let authorizations = 0
     let paidSends = 0
-    const custodyRuntime: RouteTransportRuntime = {
+    const custodyRuntime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('direct_provider_send_must_not_run') },
       resolveCredential: () => 'mock:credential',
-      createX402PaymentSignature: async () => { throw new Error('direct_signer_must_not_run') },
       prepareX402PaymentAuthorization: async () => {
         authorizations += 1
         return {
-          custodyRef: 'custody:durable-cut',
-          authorizationDigest: 'sha256:durable-cut',
-          paymentSignature: 'raw:authorization:in-custody',
+          custodyRef: `sha256:${'1'.repeat(64)}`,
+          authorizationDigest: `sha256:${'2'.repeat(64)}`,
         }
       },
       readX402PaymentAuthorization: async () => 'raw:authorization:in-custody',
+      readX402PaymentAuthorizationByDigest: async () => 'raw:authorization:in-custody',
     }
 
     const first = createPaymentAttemptRuntime(
@@ -124,10 +124,9 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       paymentSignature: string
     }>>()
     let signaturesCreated = 0
-    const custodyRuntime: RouteTransportRuntime = {
+    const custodyRuntime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('provider_send_must_not_run') },
       resolveCredential: () => 'mock:credential',
-      createX402PaymentSignature: async () => { throw new Error('direct_signer_must_not_run') },
       prepareX402PaymentAuthorization: async (request) => {
         const identity = canonicalDigest({
           paymentIdentifier: request.paymentIdentifier,
@@ -136,18 +135,26 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           effectGeneration: request.effectGeneration,
         })
         const existing = custody.get(identity)
-        if (existing !== undefined) return existing
+        if (existing !== undefined) {
+          return {
+            custodyRef: existing.custodyRef,
+            authorizationDigest: existing.authorizationDigest,
+          }
+        }
         signaturesCreated += 1
         const paymentSignature = 'raw:authorization:must-remain-in-custody'
         const authorization = {
-          custodyRef: `custody:${identity}`,
+          custodyRef: canonicalDigest({ kind: 'test-x402-custody:v1', identity }),
           authorizationDigest: canonicalDigest(paymentSignature),
-          paymentSignature,
         }
-        custody.set(identity, authorization)
+        custody.set(identity, { ...authorization, paymentSignature })
         return authorization
       },
       readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
+        [...custody.values()].find((candidate) =>
+          candidate.custodyRef === custodyRef
+          && candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
+      readX402PaymentAuthorizationByDigest: async ({ custodyRef, authorizationDigest }) =>
         [...custody.values()].find((candidate) =>
           candidate.custodyRef === custodyRef
           && candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
@@ -187,10 +194,9 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     const durable = paymentAttemptFixture(prepared, request)
     let prepares = 0
     let reads = 0
-    const runtime: RouteTransportRuntime = {
+    const runtime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('provider_send_must_not_run') },
       resolveCredential: () => 'mock:credential',
-      createX402PaymentSignature: async () => { throw new Error('direct_signer_must_not_run') },
       prepareX402PaymentAuthorization: async () => {
         prepares += 1
         throw new Error('custody_prepare_must_not_repeat')
@@ -1899,7 +1905,7 @@ function paymentAttemptFixture(
     providerEndpoint: request.challenge.resource.url,
     operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
     authorizationDigest: canonicalDigest('raw:authorization:from-custody'),
-    custodyRef: 'custody:stable',
+    custodyRef: `sha256:${'3'.repeat(64)}`,
     state: 'prepared',
     preparedAt: 1,
     evidenceRefs: [],
@@ -1941,7 +1947,7 @@ function runtime(
   endpoint: string,
   effects: { payment: number; provider: number },
   output: string,
-): RouteTransportRuntime {
+): X402RouteTransportRuntime {
   const custody = new Map<string, Readonly<{
     custodyRef: string
     authorizationDigest: string
@@ -1971,10 +1977,6 @@ function runtime(
     send,
     resolveCredential: () => 'mock:credential',
     x402PaymentSigningAvailable: () => true,
-    createX402PaymentSignature: async () => {
-      effects.payment += 1
-      return 'mock:signature'
-    },
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,
@@ -1983,15 +1985,19 @@ function runtime(
         effectGeneration: request.effectGeneration,
       })
       const existing = custody.get(identity)
-      if (existing !== undefined) return existing
+      if (existing !== undefined) {
+        return {
+          custodyRef: existing.custodyRef,
+          authorizationDigest: existing.authorizationDigest,
+        }
+      }
       effects.payment += 1
       const paymentSignature = 'mock:signature'
       const prepared = {
-        custodyRef: `development-custody:${identity}`,
+        custodyRef: canonicalDigest({ kind: 'development-x402-custody:v1', identity }),
         authorizationDigest: canonicalDigest(paymentSignature),
-        paymentSignature,
       }
-      custody.set(identity, prepared)
+      custody.set(identity, { ...prepared, paymentSignature })
       return prepared
     },
     readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
@@ -2025,7 +2031,6 @@ function preReleaseRuntime(
   return {
     resolveCredential: () => mode === 'credential_unavailable' ? undefined : 'mock:credential',
     x402PaymentSigningAvailable: () => mode !== 'signing_unavailable',
-    createX402PaymentSignature: async () => mode === 'signing_unavailable' ? undefined : 'mock:signature',
     send: async () => mode === 'endpoint_refusal'
       ? response(503, JSON.stringify({ reason: 'unavailable' }), {})
       : response(402, '', {

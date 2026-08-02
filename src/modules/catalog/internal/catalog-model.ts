@@ -4,16 +4,21 @@ import type {
   BusinessRecord,
   BusinessSourceState,
   ClaimRecord,
-  PublicBusinessPhoto,
-  PublicStatus,
-  TrustTier,
 } from '@/modules/business/public'
-import type { BusinessId, CorrelationId, OperationKey, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
-import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
-import type { DiscoveryStatus } from '@/modules/discovery/public'
-import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
+import type { AuditEventContract } from '@/modules/common/audit-events'
+import type { CorrelationId, OperationKey, Slug } from '@/modules/common/ids'
+import {
+  buildBusinessSupplyProjection,
+  type BusinessOfferingRecord,
+  type BusinessOfferingRevisionRecord,
+  type BusinessSupplyProjection,
+  type OfferingAccessPathRecord,
+} from './offering-supply'
+import type { DiscoveryManifestAttemptContract, DiscoveryStatus } from '@/modules/discovery/public'
+import type { OperationKeyRecord } from '@/modules/observability/public'
 import type { IndexStatus, RegistryProjectionAttemptContract } from '@/modules/registry/public'
 import type { CsrfCheckInput, SuppressionRuleRecord } from '@/modules/security/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 export const FirstRequestModeValues = ['inquiry_available', 'quote_request_available', 'not_available_yet'] as const
 export type FirstRequestMode = (typeof FirstRequestModeValues)[number]
@@ -25,19 +30,19 @@ export const PublicFirstRequestChannelValues = [
 ] as const
 export type PublicFirstRequestChannel = (typeof PublicFirstRequestChannelValues)[number]
 
-export const ServiceCapabilityStatusValues = ['available', 'degraded', 'unavailable', 'stale'] as const
-export type ServiceCapabilityStatus = (typeof ServiceCapabilityStatusValues)[number]
 
-export const CapabilityKindValues = [
-  'phone_inquiry',
-  'quote_request',
-  'emergency_callout_interest',
-  'ae_hosted_discovery',
-] as const
-export type CapabilityKind = (typeof CapabilityKindValues)[number]
+export function normalizeFirstRequestMode(value: unknown): FirstRequestMode {
+  return value === 'inquiry_available' || value === 'quote_request_available'
+    ? value
+    : 'not_available_yet'
+}
 
-export const BusinessServiceStatusValues = ['draft', 'published', 'suppressed'] as const
-export type BusinessServiceStatus = (typeof BusinessServiceStatusValues)[number]
+export function normalizePublicFirstRequestChannel(value: unknown): PublicFirstRequestChannel {
+  return value === 'public_business_contact' || value === 'ae_status_only'
+    ? value
+    : 'not_available'
+}
+
 
 export type PublicFirstRequestDisclosure = {
   mode: FirstRequestMode
@@ -83,39 +88,11 @@ export type ServiceCatalogValidationResult =
   | { kind: 'valid'; services: readonly ValidatedServiceCatalogInput[] }
   | { kind: 'invalid'; reason: 'empty_services' | 'invalid_service' | 'invalid_first_request' }
 
-export type BusinessServiceRecord = {
-  serviceId: ServiceId
-  serviceSlug: Slug
-  businessId: BusinessId
-  name: string
-  category: string
-  summary: string
-  serviceArea: string
-  hoursOrUnknown: string
-  status: BusinessServiceStatus
-  sortOrder: number
-  sourceHash: SourceHash
-  createdAt: number
-  updatedAt: number
-}
-
-export type ServiceCapabilityRecord = {
-  businessId: BusinessId
-  serviceId: ServiceId
-  kind: CapabilityKind
-  status: ServiceCapabilityStatus
-  firstRequest: PublicFirstRequestDisclosure
-  callable: boolean
-  paymentRequired: boolean
-  reason?: string
-  sourceHash: SourceHash
-  createdAt: number
-  updatedAt: number
-}
 
 export type CatalogSourceState = {
-  businessServices: BusinessServiceRecord[]
-  serviceCapabilities: ServiceCapabilityRecord[]
+  offerings: BusinessOfferingRecord[]
+  revisions: BusinessOfferingRevisionRecord[]
+  accessPaths: OfferingAccessPathRecord[]
 }
 
 export type CatalogPublishSourceState = CatalogSourceState & {
@@ -124,67 +101,6 @@ export type CatalogPublishSourceState = CatalogSourceState & {
   registryProjectionAttempts: RegistryProjectionAttemptContract[]
   discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
 }
-
-export type ServiceCapabilityContract = {
-  serviceId: ServiceId
-  kind: CapabilityKind
-  status: ServiceCapabilityStatus
-  firstRequest: PublicFirstRequestDisclosure
-  callable: boolean
-  paymentRequired: boolean
-  reason?: string
-  sourceHash: SourceHash
-}
-
-export type PublicServiceContract = {
-  serviceId: ServiceId
-  serviceSlug: Slug
-  businessId: BusinessId
-  name: string
-  category: string
-  summary: string
-  serviceArea: string
-  hoursOrUnknown: string
-  firstRequest: PublicFirstRequestDisclosure
-  status: Extract<BusinessServiceStatus, 'published'>
-  capabilities: readonly ServiceCapabilityContract[]
-  sourceHash: SourceHash
-}
-
-export type PublicCatalogContract = {
-  businessId: BusinessId
-  slug: Slug
-  name: string
-  category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
-  postcode?: string
-  publicUrl: string
-  publicStatus: Extract<PublicStatus, 'published'>
-  trustTier: TrustTier
-  indexStatus: IndexStatus
-  discoveryStatus: DiscoveryStatus
-  photos: readonly PublicBusinessPhoto[]
-  responseTimeMinutes?: number
-  services: readonly PublicServiceContract[]
-  sourceHash: SourceHash
-  schemaVersion: 'public-catalog:v1'
-  updatedAt: number
-}
-
-export type BuildPublicCatalogInput = {
-  business: BusinessRecord
-  context: BusinessContextRecord
-  services: readonly BusinessServiceRecord[]
-  capabilities: readonly ServiceCapabilityRecord[]
-  indexStatus: IndexStatus
-  discoveryStatus: DiscoveryStatus
-}
-
-export type BuildPublicCatalogResult =
-  | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'hidden'; reason: 'not_published' }
 
 export type PublicCatalogReadState = BusinessSourceState &
   CatalogSourceState & {
@@ -224,7 +140,7 @@ export type PublishBusinessCatalogResult =
       code: 'catalog_published' | 'catalog_publish_replayed'
       business: BusinessRecord
       claim: ClaimRecord
-      catalog: PublicCatalogContract
+      catalog: PublicBusinessCatalogApiV2Dto
       auditEvent: AuditEventContract
       registryProjectionAttempts: readonly RegistryProjectionAttemptContract[]
       discoveryManifestAttempts: readonly DiscoveryManifestAttemptContract[]
@@ -240,10 +156,12 @@ export type PublishBusinessCatalogState = BusinessSourceState & CatalogPublishSo
 
 export function createEmptyCatalogSourceState(): CatalogSourceState {
   return {
-    businessServices: [],
-    serviceCapabilities: [],
+    offerings: [],
+    revisions: [],
+    accessPaths: [],
   }
 }
+
 
 export function validateServiceCatalogInput(
   services: readonly ServiceCatalogInput[]
@@ -284,81 +202,6 @@ export function validateServiceCatalogInput(
   return { kind: 'valid', services: validatedServices }
 }
 
-export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPublicCatalogResult {
-  if (input.business.publicStatus !== 'published') {
-    return { kind: 'hidden', reason: 'not_published' }
-  }
-
-  const services = input.services
-    .filter((service) => service.status === 'published')
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .map((service): PublicServiceContract => {
-      const capabilities: ServiceCapabilityContract[] = []
-      for (const capability of input.capabilities) {
-        if (capability.serviceId !== service.serviceId) {
-          continue
-        }
-        const base = {
-          serviceId: capability.serviceId,
-          kind: capability.kind,
-          status: capability.status,
-          firstRequest: capability.firstRequest,
-          callable: false as const,
-          paymentRequired: false as const,
-          sourceHash: capability.sourceHash,
-        }
-        capabilities.push(capability.reason === undefined ? base : { ...base, reason: capability.reason })
-      }
-
-      const firstCapability = capabilities.at(0)
-      const firstRequest = firstCapability?.firstRequest
-
-      if (firstRequest === undefined) {
-        throw new Error('Published services require first-request disclosure.')
-      }
-
-      return {
-        serviceId: service.serviceId,
-        serviceSlug: service.serviceSlug,
-        businessId: service.businessId,
-        name: service.name,
-        category: service.category,
-        summary: service.summary,
-        serviceArea: service.serviceArea,
-        hoursOrUnknown: service.hoursOrUnknown,
-        firstRequest,
-        status: 'published',
-        capabilities,
-        sourceHash: service.sourceHash,
-      }
-    })
-
-  const catalog: PublicCatalogContract = {
-    businessId: input.business.businessId,
-    slug: input.business.slug,
-    name: input.business.name,
-    category: input.context.category,
-    suburb: input.context.suburb,
-    stateTerritory: input.context.stateTerritory,
-    ...(input.business.publishedPhone === undefined ? {} : { publishedPhone: input.business.publishedPhone }),
-    ...(input.context.postcode === undefined ? {} : { postcode: input.context.postcode }),
-    publicUrl: `/${input.business.slug}`,
-    publicStatus: 'published',
-    trustTier: input.business.trustTier,
-    indexStatus: input.indexStatus,
-    discoveryStatus: input.discoveryStatus,
-    photos: input.context.photos ?? [],
-    ...(input.context.responseTimeMinutes === undefined
-      ? {}
-      : { responseTimeMinutes: input.context.responseTimeMinutes }),
-    services,
-    sourceHash: input.business.sourceHash,
-    schemaVersion: 'public-catalog:v1',
-    updatedAt: input.business.updatedAt,
-  }
-
-  return { kind: 'available', catalog }
-}
 
 function buildFirstRequestDisclosure(input: FirstRequestDisclosureInput): PublicFirstRequestDisclosure | undefined {
   if (input.mode === 'not_available_yet') {
@@ -393,4 +236,63 @@ function buildFirstRequestDisclosure(input: FirstRequestDisclosureInput): Public
 
 function cleanText(value: string): string {
   return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 280)
+}
+export function buildOfferingSupplyProjection(input: Readonly<{
+  business: BusinessRecord
+  context: BusinessContextRecord
+  offerings: readonly BusinessOfferingRecord[]
+  revisions: readonly BusinessOfferingRevisionRecord[]
+  accessPaths: readonly OfferingAccessPathRecord[]
+  indexStatus: IndexStatus
+  discoveryStatus: DiscoveryStatus
+  observedAt?: number
+}>): BusinessSupplyProjection | undefined {
+  if (input.business.publicStatus !== 'published') return undefined
+  const publishedOfferings = input.offerings.filter((offering) => offering.status === 'published')
+  if (publishedOfferings.length === 0) return undefined
+  const sourceRevision = Math.max(
+    input.business.updatedAt,
+    ...publishedOfferings.map((offering) => offering.updatedAt),
+    ...input.revisions.map((revision) => revision.createdAt),
+  )
+  const offeringInputs = publishedOfferings.flatMap((offering) => {
+    const revision = input.revisions.find((candidate) => candidate.offeringRef === offering.offeringRef && candidate.revision === offering.currentRevision)
+    if (revision === undefined) return []
+    return [{
+      offering,
+      revision,
+      accessPaths: input.accessPaths.filter((path) => path.offeringRef === offering.offeringRef && path.status === 'published'),
+      support: { integrated: false, routeable: false, reasons: ['not_integrated'] as const },
+    }]
+  })
+  if (offeringInputs.length === 0) return undefined
+  const result = buildBusinessSupplyProjection({
+    business: {
+      businessId: input.business.businessId,
+      slug: input.business.slug,
+      name: input.business.name,
+      category: input.context.category,
+      suburb: input.context.suburb,
+      stateTerritory: input.context.stateTerritory,
+      ...(input.business.publishedPhone === undefined ? {} : { publishedPhone: input.business.publishedPhone }),
+      ...(input.context.postcode === undefined ? {} : { postcode: input.context.postcode }),
+      publicUrl: `/${input.business.slug}`,
+      trustTier: input.business.trustTier,
+      ...(input.context.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: input.context.responseTimeMinutes }),
+      photos: input.context.photos ?? [],
+    },
+    businessIsPublic: true,
+    offerings: offeringInputs,
+    sourceRevision,
+    observedAt: input.observedAt ?? sourceRevision,
+    disposition:
+      input.indexStatus === 'failed'
+      || input.indexStatus === 'stale'
+      || input.discoveryStatus === 'stale'
+        ? 'stale'
+        : input.discoveryStatus === 'degraded'
+          ? 'partial'
+          : 'current',
+  })
+  return result.kind === 'available' ? result.projection : undefined
 }

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 
 import { recordOwnerActivationThroughSource, recordFunnelEventSchema } from '@/modules/observability/funnel.functions'
 import { shouldDropPublicFunnelSourceSync } from '@/modules/observability/source-sync-gate'
@@ -19,29 +19,25 @@ export async function handleRecordOwnerActivationEvent(request: Request): Promis
     return jsonResponse({ ok: false, reason: 'invalid_content_type' }, 415)
   }
 
-  const boundedBody = await readBoundedRequestText(request, MAX_PUBLIC_FUNNEL_BODY_BYTES)
+  const boundedBody = await readBoundedRequestJson(request, MAX_PUBLIC_FUNNEL_BODY_BYTES)
   if (!boundedBody.ok) {
-    return jsonResponse({ ok: false, reason: 'payload_too_large' }, 413)
-  }
-
-  let body: unknown
-  try {
-    body = JSON.parse(boundedBody.text) as unknown
-  } catch {
-    return jsonResponse({ ok: false, reason: 'invalid_json' }, 400)
+    return jsonResponse(
+      { ok: false, reason: boundedBody.code },
+      boundedBody.code === 'payload_too_large' ? 413 : 400,
+    )
   }
 
   if (isPublicFunnelSourceSyncDisabled()) {
     return jsonResponse({ ok: true })
   }
 
-  const eventType = readStringField(body, 'eventType')
+  const eventType = readStringField(boundedBody.value, 'eventType')
   if (eventType !== undefined && shouldDropPublicFunnelSourceSync(eventType)) {
     return jsonResponse({ ok: true })
   }
 
   try {
-    const parsed = recordFunnelEventSchema.parse(body)
+    const parsed = recordFunnelEventSchema.parse(boundedBody.value)
 
     await recordOwnerActivationThroughSource(parsed)
     return jsonResponse({ ok: true })

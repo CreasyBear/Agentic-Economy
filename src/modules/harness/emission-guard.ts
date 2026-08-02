@@ -1,4 +1,4 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export const HarnessEmissionSeverityValues = [
   'info',
@@ -195,9 +195,7 @@ export class HarnessEmissionGuard {
   private readonly historyCapacity: number
   private readonly suppressedCapacity: number
   private readonly acceptedByHash = new Map<string, AcceptedNoteState>()
-  private readonly acceptedOrder: string[] = []
   private readonly suppressedByHash = new Map<string, MutableSuppressedCounter>()
-  private readonly suppressedOrder: string[] = []
   private cycle = 0
   private acceptedThisCycle = 0
 
@@ -210,9 +208,7 @@ export class HarnessEmissionGuard {
 
   reset(): void {
     this.acceptedByHash.clear()
-    this.acceptedOrder.length = 0
     this.suppressedByHash.clear()
-    this.suppressedOrder.length = 0
     this.cycle = 0
     this.acceptedThisCycle = 0
   }
@@ -305,7 +301,6 @@ export class HarnessEmissionGuard {
 
     if (prior === undefined) {
       this.acceptedByHash.set(noteHash, { noteHash, highestSeverity: severity })
-      this.acceptedOrder.push(noteHash)
       this.evictAcceptedHistory()
       return
     }
@@ -335,7 +330,6 @@ export class HarnessEmissionGuard {
         lastReason: reason,
       }
       this.suppressedByHash.set(noteHash, next)
-      this.suppressedOrder.push(noteHash)
       this.evictSuppressedHistory()
       return {
         accepted: false,
@@ -362,8 +356,8 @@ export class HarnessEmissionGuard {
   }
 
   private evictAcceptedHistory(): void {
-    while (this.acceptedOrder.length > this.historyCapacity) {
-      const stale = this.acceptedOrder.shift()
+    while (this.acceptedByHash.size > this.historyCapacity) {
+      const stale = this.acceptedByHash.keys().next().value
       if (stale !== undefined) {
         this.acceptedByHash.delete(stale)
       }
@@ -371,8 +365,8 @@ export class HarnessEmissionGuard {
   }
 
   private evictSuppressedHistory(): void {
-    while (this.suppressedOrder.length > this.suppressedCapacity) {
-      const stale = this.suppressedOrder.shift()
+    while (this.suppressedByHash.size > this.suppressedCapacity) {
+      const stale = this.suppressedByHash.keys().next().value
       if (stale !== undefined) {
         this.suppressedByHash.delete(stale)
       }
@@ -410,7 +404,7 @@ function copySuppressedCounter(counter: MutableSuppressedCounter): HarnessSuppre
 }
 
 function hashNormalizedEmissionText(normalizedText: string): string {
-  return stableHash({
+  return canonicalDigest({
     schemaVersion: 1,
     kind: 'harnessEmissionNote',
     normalizedText,

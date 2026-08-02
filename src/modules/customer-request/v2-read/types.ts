@@ -20,12 +20,6 @@ export type GetCurrentAggregateResult =
     routeGenerationRef?: string
     currentDecisionCommandKey?: string
   }>
-  | Readonly<{
-    kind: 'needs_attention'
-    requestId: string
-    reason: 'historical_request_resubmit_required'
-    resumable: false
-  }>
   | Readonly<{ kind: 'not_found' }>
 
 export type GetRoutePlanGenerationArgs = Readonly<{

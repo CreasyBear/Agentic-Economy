@@ -1,5 +1,6 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   PUBLIC_PHONE_CHANNEL_DISCLOSURE,
   PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
@@ -10,7 +11,7 @@ import type {
 } from '@/modules/registry/public'
 import type { BusinessToolDescriptor } from '@/modules/business-tools/public'
 
-import { safePublicText } from './ucp-manifest'
+import { projectManifestCatalog, safePublicText } from './manifest-projection'
 
 export const OfferingDiscoveryManifestSchemaVersion = 'ae-ucp-fallback:v2' as const
 
@@ -81,38 +82,28 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
 
   const business = input.business
   const inquiryAdmitted = input.inquiryAdmitted === true
-  const baseUrl = input.canonicalBaseUrl.replace(/\/+$/u, '')
-  const publicUrl = `${baseUrl}/${encodeURIComponent(business.slug)}`
+  const projection = projectManifestCatalog(business, (offering, projectedOffering) => ({
+    ...projectedOffering,
+    ...(projectedOffering.price === undefined ? {} : { price: safeManifestPrice(projectedOffering.price) }),
+    accessPaths: projectManifestAccessPaths(offering.accessPaths, inquiryAdmitted),
+    support: offering.support,
+  }))
+  const baseUrl = trimTrailingSlashes(input.canonicalBaseUrl)
+  const publicUrl = `${baseUrl}/${encodeURIComponent(projection.slug)}`
   const body = {
     schemaVersion: OfferingDiscoveryManifestSchemaVersion,
     businessCatalogSchemaVersion: business.schemaVersion,
-    businessId: business.businessId,
-    slug: business.slug,
-    businessName: safePublicText(business.name),
-    category: safePublicText(business.category),
-    location: {
-      suburb: safePublicText(business.suburb),
-      stateTerritory: safePublicText(business.stateTerritory),
-      ...(business.postcode === undefined ? {} : { postcode: safePublicText(business.postcode) }),
-    },
+    businessId: projection.businessId,
+    slug: projection.slug,
+    businessName: projection.businessName,
+    category: projection.category,
+    location: projection.location,
     publicUrl,
     manifestUrl: `${publicUrl}/ucp`,
     disposition: business.disposition,
     observedAt: business.observedAt,
     generatedAt: input.now,
-    offerings: business.offerings.map((offering) => ({
-      offeringRef: offering.offeringRef,
-      revision: offering.revision,
-      name: safePublicText(offering.name),
-      category: safePublicText(offering.category),
-      summary: safePublicText(offering.summary),
-      ...(offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: safePublicText(offering.serviceAreaSummary) }),
-      ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: safePublicText(offering.availabilitySummary) }),
-      ...(offering.pricingSummary === undefined ? {} : { pricingSummary: safePublicText(offering.pricingSummary) }),
-      ...(offering.price === undefined ? {} : { price: safeManifestPrice(offering.price) }),
-      accessPaths: projectManifestAccessPaths(offering.accessPaths, inquiryAdmitted),
-      support: offering.support,
-    })),
+    offerings: projection.offerings,
   }
 
   // `generatedHash` identifies the business projection. Tool descriptors are
@@ -122,7 +113,7 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
     kind: 'available',
     manifest: {
       ...body,
-      generatedHash: stableHash(body),
+      generatedHash: canonicalDigest(body),
       tools: inquiryAdmitted ? (input.tools ?? []) : [],
     },
   }

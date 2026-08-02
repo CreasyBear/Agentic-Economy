@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-dialog'
 
 import { AeExportPreview } from '@/components/ae/chat/AeExportPreview'
 import { AeShortlistTerminal } from '@/components/ae/chat/AeShortlistTerminal'
@@ -10,33 +11,6 @@ import type { AnswerSource } from '@/modules/answer/public'
 
 const PROOF_BOUNDARY =
   'This artifact proves what was sent, when, to whom, and their reply. It does not prove acceptance, availability, booking, or confirmation.'
-
-let showModalDescriptor: PropertyDescriptor | undefined
-let closeDescriptor: PropertyDescriptor | undefined
-
-beforeEach(() => {
-  showModalDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
-  closeDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-    configurable: true,
-    writable: true,
-    value(this: HTMLDialogElement) {
-      this.setAttribute('open', '')
-    },
-  })
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
-    configurable: true,
-    writable: true,
-    value(this: HTMLDialogElement) {
-      this.removeAttribute('open')
-    },
-  })
-})
-
-afterEach(() => {
-  restoreDialogMethod('showModal', showModalDescriptor)
-  restoreDialogMethod('close', closeDescriptor)
-})
 
 describe('shortlist export interaction', () => {
   afterEach(() => {
@@ -154,10 +128,3 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   }
 }
 
-function restoreDialogMethod(name: 'showModal' | 'close', descriptor: PropertyDescriptor | undefined) {
-  if (descriptor === undefined) {
-    Reflect.deleteProperty(HTMLDialogElement.prototype, name)
-    return
-  }
-  Object.defineProperty(HTMLDialogElement.prototype, name, descriptor)
-}

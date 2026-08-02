@@ -1,0 +1,59 @@
+import type {
+  CapabilityCancellation,
+  CapabilityOfferingRegistration,
+} from '@/modules/capability-supply/public'
+import type { RegisteredEvaluationBinding } from '@/modules/customer-request/evaluation'
+
+type AvailableRouteableSupply = Readonly<{
+  kind: 'available'
+  supplies: ReadonlyArray<Readonly<{
+    offering: Readonly<{
+      businessId: string
+      offeringId: string
+      registrationHash: string
+      presentation: CapabilityOfferingRegistration['presentation']
+    }>
+    binding: Readonly<{
+      bindingId: string
+      capabilityId: string
+      version: number
+      contractDigest: string
+      registrationHash: string
+      cancellation: CapabilityCancellation
+    }>
+    publication?: Readonly<{
+      publicationRef: string
+      revision: number
+      readinessValidUntil: number
+    }>
+  }>>
+}>
+
+export function registeredEvaluationBindingsFromRouteableSupply(
+  supply: AvailableRouteableSupply,
+  options: Readonly<{ includePublication?: boolean }> = {},
+): RegisteredEvaluationBinding[] {
+  return supply.supplies.map(({ offering, binding, publication }) => ({
+    businessId: String(offering.businessId),
+    offeringId: offering.offeringId,
+    bindingId: binding.bindingId,
+    contractRef: {
+      capabilityId: binding.capabilityId,
+      version: binding.version,
+      contractDigest: binding.contractDigest,
+    },
+    offeringRegistrationHash: offering.registrationHash,
+    bindingRegistrationHash: binding.registrationHash,
+    price: offering.presentation.price,
+    commercialRelationship: {
+      ...offering.presentation.commercialRelationship,
+      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
+    },
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
+    ...(options.includePublication === true && publication !== undefined ? {
+      publicationRef: publication.publicationRef,
+      publicationRevision: publication.revision,
+      readinessValidUntil: publication.readinessValidUntil,
+    } : {}),
+  }))
+}

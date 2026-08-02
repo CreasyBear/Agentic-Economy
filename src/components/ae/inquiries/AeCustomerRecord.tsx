@@ -4,25 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import {
-  CustomerInquiryRecordProvider,
-  isCustomerInquiryRecordClientAvailable,
-  useCustomerInquiryRecord,
-} from '@/modules/inquiries/customer-record-client'
+import { useCustomerInquiryRecord } from '@/modules/inquiries/customer-record-client'
 import { cn } from '@/lib/utils'
+import { formatRecordTimestamp } from '@/lib/ui/format-time'
 
 const PROOF_BOUNDARY = 'This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.'
 
 export function AeCustomerRecord({ threadId, accessKey }: { threadId: string; accessKey: string | undefined }) {
-  if (!isCustomerInquiryRecordClientAvailable()) {
-    return <CustomerRecordNotFound />
-  }
-
-  return (
-    <CustomerInquiryRecordProvider>
-      <CustomerRecordContent threadId={threadId} accessKey={accessKey} />
-    </CustomerInquiryRecordProvider>
-  )
+  return <CustomerRecordContent threadId={threadId} accessKey={accessKey} />
 }
 
 function CustomerRecordContent({ threadId, accessKey }: { threadId: string; accessKey: string | undefined }) {
@@ -71,7 +60,7 @@ function CustomerRecordContent({ threadId, accessKey }: { threadId: string; acce
                 <Badge variant={record.delivery.state === 'failed' || record.delivery.state === 'held' ? 'secondary' : 'outline'}>
                   {record.delivery.label}
                 </Badge>
-                <span className="block text-sm text-muted-foreground">Updated {formatTimestamp(record.updatedAt)}</span>
+                <span className="block text-sm text-muted-foreground">Updated {formatRecordTimestamp(record.updatedAt)}</span>
               </div>
             </div>
           </CardHeader>
@@ -99,7 +88,7 @@ function CustomerRecordContent({ threadId, accessKey }: { threadId: string; acce
                   ))}
                 </dl>
               )}
-              <p className="text-sm text-muted-foreground">Sent {formatTimestamp(record.submitted.submittedAt)}.</p>
+              <p className="text-sm text-muted-foreground">Sent {formatRecordTimestamp(record.submitted.submittedAt)}.</p>
             </section>
 
             <p className="rounded-md border border-border bg-card p-4 text-muted-foreground">{PROOF_BOUNDARY}</p>
@@ -113,7 +102,7 @@ function CustomerRecordContent({ threadId, accessKey }: { threadId: string; acce
                 <p className="rounded-md border border-border bg-card p-4 text-muted-foreground">No business reply</p>
               ) : (
                 <div className="grid gap-2 rounded-md border border-border bg-card p-4">
-                  <p className="text-sm text-muted-foreground">Reply received from {record.business.name}, {formatTimestamp(reply.createdAt)}</p>
+                  <p className="text-sm text-muted-foreground">Reply received from {record.business.name}, {formatRecordTimestamp(reply.createdAt)}</p>
                   <p className="whitespace-pre-wrap text-lg text-foreground">{reply.body}</p>
                 </div>
               )}
@@ -143,7 +132,7 @@ function CustomerRecordContent({ threadId, accessKey }: { threadId: string; acce
                         <span className="text-sm font-medium text-foreground">{step.label}</span>
                         <Badge variant="outline">{statusLabel(step.status)}</Badge>
                       </span>
-                      {step.timestamp === undefined ? null : <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatTimestamp(step.timestamp)}</span>}
+                      {step.timestamp === undefined ? null : <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatRecordTimestamp(step.timestamp)}</span>}
                       <span className="text-sm text-muted-foreground">{step.detail}</span>
                     </span>
                   </li>
@@ -193,8 +182,3 @@ function statusLabel(status: 'complete' | 'current' | 'pending'): string {
   }
 }
 
-function formatTimestamp(value: number): string {
-  return new Intl.DateTimeFormat('en-AU', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  }).format(new Date(value))
-}

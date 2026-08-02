@@ -18,7 +18,6 @@ describe('money metering at the published invocation seam', () => {
     const runtime: RouteTransportRuntime = {
       send: async (...args) => { sends(...args); return new Response('{}', { status: 200 }) },
       resolveCredential: () => 'mock:credential',
-      createX402PaymentSignature: async () => 'mock:signature',
       x402PaymentSigningAvailable: () => true,
     }
     const authorizeInvocationCharge = vi.fn(async () => ({ kind: 'refused' as const, code: 'insufficient_credit' as const, retryable: false, nextAction: 'credit_topup_required' as const, currency: 'USD', requiredAmountMinor: 1, availableAmountMinor: 0 }))

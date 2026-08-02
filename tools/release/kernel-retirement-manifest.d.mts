@@ -14,6 +14,7 @@ export const kernelRetirementManifest: Readonly<{
     jobs: readonly string[]
     environmentKeys: readonly string[]
     importTokens: readonly string[]
+    dataVerification: string
   }>
   retainedNonAuthority: readonly Readonly<{ domain: string; roots: readonly string[] }>[]
 }>

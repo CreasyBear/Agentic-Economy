@@ -8,6 +8,7 @@ export type {
   AnswerRunWorkLogCounters,
   AnswerToolCallRecord,
   FrozenTurnEvidence,
+  FrozenTurnEvidenceDraft,
   FrozenTurnProse,
 } from './answer-thread.schema'
 

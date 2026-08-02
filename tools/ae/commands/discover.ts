@@ -1,5 +1,6 @@
 import type { CliOptions } from '../lib/args'
-import { callJson, heading, isRecord, line, printJson, table } from '../lib/output'
+import { isRecord } from '@/modules/common/is-record'
+import { callJson, heading, line, printJson, table } from '../lib/output'
 
 /**
  * What a cold agent can learn about AE without a human. Each probe reports

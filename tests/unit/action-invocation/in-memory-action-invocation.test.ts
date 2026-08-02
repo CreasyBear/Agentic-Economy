@@ -11,6 +11,7 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 }))
 
 import { findAction } from '@/modules/actions'
+import { createDevelopmentEvidenceVerifier } from '@/modules/capability-supply/development-evidence-fixture'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   createDevelopmentReleaseSignal,
@@ -19,7 +20,6 @@ import {
   roundTripControlSnapshot,
   type ActionInvocationOrigin,
   type InvocationActor,
-  type ReconciliationEvidence,
   type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
 
@@ -49,30 +49,6 @@ const inquiryInput = {
   contact: { email: 'joel@example.test' },
   expectedDigest: `sha256:${'a'.repeat(64)}`,
   operationKey: 'mock:operation:inquiry:0001',
-}
-
-function createDevelopmentEvidenceSource() {
-  const issued = new Set<string>()
-  return {
-    issue(material: ReconciliationEvidenceMaterial): ReconciliationEvidence {
-      const exact: ReconciliationEvidenceMaterial = {
-        kind: material.kind,
-        version: material.version,
-        evidenceRef: material.evidenceRef,
-        source: material.source,
-        invocationRef: material.invocationRef,
-        attemptRef: material.attemptRef,
-        effectGeneration: material.effectGeneration,
-        resolution: material.resolution,
-        observedAt: material.observedAt,
-      }
-      const evidence = { ...exact, digest: canonicalDigest(exact as never) }
-      issued.add(canonicalDigest(evidence as never))
-      return evidence
-    },
-    verify: (evidence: ReconciliationEvidence) =>
-      issued.has(canonicalDigest(evidence as never)),
-  }
 }
 
 describe('in-memory Action Invocation tracer', () => {
@@ -276,7 +252,7 @@ describe('in-memory Action Invocation tracer', () => {
     ['Request-owned', requestOrigin],
     ['standalone', standaloneOrigin],
   ])('records attributable pre-release retry and post-release uncertainty for %s origin', async (_label, origin) => {
-    const evidenceSource = createDevelopmentEvidenceSource()
+    const evidenceSource = createDevelopmentEvidenceVerifier()
     const action = findAction('inquiry.submit')!
     const release = createDevelopmentReleaseSignal()
     const developmentAdapter = vi.fn()
@@ -450,7 +426,7 @@ describe('in-memory Action Invocation tracer', () => {
   })
 
   it('fails closed when no release observer can prove a runner throw happened before release', async () => {
-    const evidenceSource = createDevelopmentEvidenceSource()
+    const evidenceSource = createDevelopmentEvidenceVerifier()
     const action = findAction('inquiry.submit')!
     const developmentAdapter = vi.fn().mockRejectedValue(new Error('MOCK unobserved interruption'))
     const tracer = createInMemoryActionInvocationTracer({

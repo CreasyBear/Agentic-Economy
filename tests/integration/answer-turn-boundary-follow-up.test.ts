@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AnswerEvent } from '@/modules/answer/public'
+vi.mock('@/lib/server/rate-limit', () => ({
+  assertHttpAdmission: async () => ({ ok: true as const }),
+  requestAdmissionKey: () => 'test-admission-key',
+}))
+
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import {
@@ -12,16 +16,7 @@ import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
-
-type StreamFrame = { seq: number; event: AnswerEvent }
-
-function parseStream(text: string): StreamFrame[] {
-  return text
-    .split('\n\n')
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.startsWith('data:'))
-    .map((frame) => JSON.parse(frame.slice('data:'.length).trim()) as StreamFrame)
-}
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 const SESSION_COOKIE = sessionCookieHeader('session-boundary')
 
@@ -72,7 +67,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -118,7 +113,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
         }),
       )
-      const firstFrames = parseStream(await first.text())
+      const firstFrames = await readAnswerTurnStream(first)
       const threadEvent = firstFrames.find((frame) => frame.event.type === 'thread')?.event
       if (threadEvent?.type !== 'thread') {
         throw new Error('expected thread event')
@@ -140,7 +135,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       )
 
       expect(followUp.ok).toBe(true)
-      const frames = parseStream(await followUp.text())
+      const frames = await readAnswerTurnStream(followUp)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -187,7 +182,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           body: JSON.stringify({ query: 'plumber parramatta' }),
         }),
       )
-      const firstFrames = parseStream(await first.text())
+      const firstFrames = await readAnswerTurnStream(first)
       const firstComplete = firstFrames.at(-1)?.event
       if (firstComplete?.type !== 'complete') {
         throw new Error('expected first complete event')
@@ -215,7 +210,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       )
 
       expect(followUp.ok).toBe(true)
-      const frames = parseStream(await followUp.text())
+      const frames = await readAnswerTurnStream(followUp)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -265,7 +260,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           body: JSON.stringify({ query: 'My tooth hurts and I need a dentist near Adelaide this week' }),
         }),
       )
-      const firstFrames = parseStream(await first.text())
+      const firstFrames = await readAnswerTurnStream(first)
       const firstComplete = firstFrames.at(-1)?.event
       if (firstComplete?.type !== 'complete') throw new Error('expected first complete event')
       expect(firstComplete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
@@ -281,7 +276,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           body: JSON.stringify({ threadId, query: 'Only show options near Adelaide' }),
         }),
       )
-      const followUpFrames = parseStream(await followUp.text())
+      const followUpFrames = await readAnswerTurnStream(followUp)
       const complete = followUpFrames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') throw new Error('expected follow-up complete event')

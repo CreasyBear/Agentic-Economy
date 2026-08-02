@@ -1,6 +1,8 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import {
+  buildOfferingLlmsUrlsFromSlugs,
+  buildSitemapXmlFromSlugs,
   readFixtureCatalogDiscoveryManifest,
   readFixtureLlmsTxt,
   readFixtureSitemapXml,
@@ -15,9 +17,10 @@ import type {
 import { buildOfferingDiscoveryManifest } from '@/modules/discovery/public'
 import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
+import type { InquiryTargetRef } from '@/modules/inquiries/public'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
-import { buildBusinessToolDescriptors } from '@/modules/business-tools/internal/descriptors'
+import { buildBusinessToolDescriptor } from '@/modules/business-tools/discovery'
 
 export type PublicDiscoverySourcePort = {
   manifest: (input: ReadCatalogDiscoveryManifestInput) => Promise<ReadCatalogDiscoveryManifestResult>
@@ -25,14 +28,32 @@ export type PublicDiscoverySourcePort = {
   sitemap: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
 }
 
+type DiscoveryBusinessSlugPageArgs = {
+  surface: 'llms' | 'sitemap'
+  paginationOpts: {
+    cursor: string | null
+    numItems: number
+  }
+}
+
+type DiscoveryBusinessSlugPage = {
+  page: string[]
+  isDone: boolean
+  continueCursor: string
+}
+
 const readCatalogDiscoveryManifestQuery = sourceQuery<
   ReadCatalogDiscoveryManifestInput,
   ReadCatalogDiscoveryManifestResult
 >('discovery:readCatalogDiscoveryManifest')
-const readLlmsTxtQuery = sourceQuery<BuildDiscoveryFileOptions, DiscoveryFileBuildResult>('discovery:readLlmsTxt')
-const readSitemapXmlQuery = sourceQuery<BuildDiscoveryFileOptions, DiscoveryFileBuildResult>(
-  'discovery:readSitemapXml'
-)
+const readLlmsTxtQuery = sourceQuery<
+  BuildDiscoveryFileOptions & { totalBusinesses?: number },
+  DiscoveryFileBuildResult
+>('discovery:readLlmsTxt')
+const readDiscoveryBusinessSlugPageQuery = sourceQuery<
+  DiscoveryBusinessSlugPageArgs,
+  DiscoveryBusinessSlugPage
+>('discovery:readDiscoveryBusinessSlugPage')
 
 
 export async function readPublicCatalogDiscoveryManifest(
@@ -53,15 +74,15 @@ export async function readPublicOfferingDiscoveryManifest(
     inquiryAdmitted: invocable !== undefined,
     tools: invocable === undefined
       ? []
-      : buildBusinessToolDescriptors({
+      : [buildBusinessToolDescriptor({
           businessSlug: input.slug,
-          capabilityKind: invocable.capabilityKind,
+          offeringRef: invocable.target.offeringRef,
           baseUrl: input.canonicalBaseUrl,
-        }),
+        })],
   })
 }
 
-export type InvocableInquiry = Readonly<{ capabilityKind: string }>
+export type InvocableInquiry = Readonly<{ target: InquiryTargetRef }>
 
 /**
  * The same admission read the human business page performs, so both surfaces
@@ -75,7 +96,7 @@ async function readInvocableInquiry(slug: string): Promise<InvocableInquiry | un
   if (target === undefined) return undefined
   const admission = await readPublicTargetAdmissionServer({ data: target })
   if (admission.kind !== 'ok' || !admission.admission.admitted) return undefined
-  return { capabilityKind: target.capabilityKind }
+  return { target }
 }
 
 export async function readPublicLlmsTxt(options: BuildDiscoveryFileOptions): Promise<DiscoveryFileBuildResult> {
@@ -84,6 +105,24 @@ export async function readPublicLlmsTxt(options: BuildDiscoveryFileOptions): Pro
 
 export async function readPublicSitemapXml(options: BuildDiscoveryFileOptions): Promise<DiscoveryFileBuildResult> {
   return getPublicDiscoverySourcePort().sitemap(options)
+}
+
+const DISCOVERY_SOURCE_PAGE_SIZE = 50
+
+async function readAllDiscoveryBusinessSlugs(surface: DiscoveryBusinessSlugPageArgs['surface']): Promise<string[]> {
+  const slugs: string[] = []
+  let cursor: string | null = null
+  while (true) {
+    const page: DiscoveryBusinessSlugPage = await callPublicSourceQuery(readDiscoveryBusinessSlugPageQuery, {
+      surface,
+      paginationOpts: { cursor, numItems: DISCOVERY_SOURCE_PAGE_SIZE },
+    })
+    slugs.push(...page.page)
+    if (page.isDone) {
+      return slugs
+    }
+    cursor = page.continueCursor
+  }
 }
 
 function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
@@ -98,7 +137,20 @@ function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
 
   return {
     manifest: (input) => callPublicSourceQuery(readCatalogDiscoveryManifestQuery, input),
-    llms: (options) => callPublicSourceQuery(readLlmsTxtQuery, options),
-    sitemap: (options) => callPublicSourceQuery(readSitemapXmlQuery, options),
+    llms: async (options) => {
+      const slugs = await readAllDiscoveryBusinessSlugs('llms')
+      const result = await callPublicSourceQuery(readLlmsTxtQuery, {
+        ...options,
+        totalBusinesses: slugs.length,
+      })
+      return {
+        body: result.body,
+        urls: [...buildOfferingLlmsUrlsFromSlugs(slugs, options)],
+      }
+    },
+    sitemap: async (options) => {
+      const slugs = await readAllDiscoveryBusinessSlugs('sitemap')
+      return buildSitemapXmlFromSlugs(slugs, options)
+    },
   }
 }

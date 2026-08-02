@@ -44,7 +44,7 @@ const EVAL_INDUSTRIES: readonly EvalIndustryTemplate[] = [
     category: 'Emergency plumbing',
     serviceName: 'Emergency pipe repair',
     serviceCategory: 'Emergency plumbing',
-    serviceSummary: 'Burst pipe and blocked drain triage for urgent local plumbing jobs.',
+    serviceSummary: 'Local emergency plumber for burst pipe and blocked drain triage.',
     hoursOrUnknown: 'Hours supplied by owner',
   },
   {
@@ -137,6 +137,16 @@ export const BROAD_ANSWER_EVAL_BUSINESS_FIXTURES: readonly DevSeedBusinessFixtur
     ),
   )
 
+export function requireFirstOffering(
+  fixture: DevSeedBusinessFixture,
+): DevSeedBusinessFixture['offerings'][number] {
+  const offering = fixture.offerings[0]
+  if (offering === undefined) {
+    throw new Error(`Expected a seeded Offering for ${fixture.requestedSlug}.`)
+  }
+  return offering
+}
+
 function buildFixture(
   locale: EvalLocale,
   industry: EvalIndustryTemplate,
@@ -155,25 +165,40 @@ function buildFixture(
     stateTerritory: locale.stateTerritory,
     ownerMessage: 'Owner supplied service facts for answer reliability evaluation.',
     sourceLabel: 'Owner supplied service facts',
-    serviceName: industry.serviceName,
-    serviceCategory: industry.serviceCategory,
-    serviceSummary: industry.serviceSummary,
-    serviceArea: `${locale.suburb} and nearby suburbs`,
-    hoursOrUnknown: industry.hoursOrUnknown,
+    offerings: [{
+      name: industry.serviceName,
+      category: industry.serviceCategory,
+      summary: industry.serviceSummary,
+      serviceAreaSummary: `${locale.suburb} and nearby suburbs`,
+      availabilitySummary: industry.hoursOrUnknown,
+      accessPaths: mode === 'inquiry_available'
+        ? [{
+            kind: 'human_request' as const,
+            channel: 'phone' as const,
+            disclosure: disclosureFor(mode),
+          }]
+        : mode === 'quote_request_available'
+          ? [{
+              kind: 'human_request' as const,
+              channel: 'ae_inquiry' as const,
+              disclosure: disclosureFor(mode),
+            }]
+          : [],
+      firstRequestMode: mode,
+      publicDisclosure: disclosureFor(mode),
+      noContactReason: mode === 'not_available_yet'
+        ? 'The business has not published first-request instructions yet.'
+        : '',
+    }],
     photoUrl: '/images/illustration/cat-plumbing.png',
     responseTimeMinutes: 15 + ((localeIndex + industryIndex) % 8) * 5,
-    firstRequestMode: mode,
-    publicDisclosure: disclosureFor(mode),
-    noContactReason: mode === 'not_available_yet'
-      ? 'The business has not published first-request instructions yet.'
-      : '',
   }
 }
 
 function firstRequestModeFor(
   localeIndex: number,
   industryIndex: number,
-): DevSeedBusinessFixture['firstRequestMode'] {
+): DevSeedBusinessFixture['offerings'][number]['firstRequestMode'] {
   const value = (localeIndex + industryIndex) % 3
   if (value === 0) {
     return 'inquiry_available'
@@ -184,7 +209,7 @@ function firstRequestModeFor(
   return 'not_available_yet'
 }
 
-function disclosureFor(mode: DevSeedBusinessFixture['firstRequestMode']): string {
+function disclosureFor(mode: DevSeedBusinessFixture['offerings'][number]['firstRequestMode']): string {
   if (mode === 'inquiry_available') {
     return 'Use the inquiry form for a first contact.'
   }

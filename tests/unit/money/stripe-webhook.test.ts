@@ -19,4 +19,26 @@ describe('money Stripe webhook adapter', () => {
     expect(await response.json()).toEqual({ kind: 'accepted', appliedRef: 'evt_1' })
     expect(applied).toEqual(['evt_1'])
   })
+
+  it('rejects oversized webhook bodies before signature verification', async () => {
+    let verified = false
+    const verifier = {
+      verify: async () => {
+        verified = true
+        throw new Error('should not verify an oversized webhook')
+      },
+    }
+    const response = await handleStripeWebhookRequest(
+      new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        body: JSON.stringify({ id: 'evt_oversized', padding: 'x'.repeat(300 * 1024) }),
+        headers: { 'stripe-signature': 'sig' },
+      }),
+      { verifier },
+    )
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toEqual({ kind: 'refused', code: 'request_too_large' })
+    expect(verified).toBe(false)
+  })
 })

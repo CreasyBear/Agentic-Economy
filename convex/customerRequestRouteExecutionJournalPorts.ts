@@ -1,40 +1,133 @@
+import type { Infer } from 'convex/values'
+import { Workpool } from '@convex-dev/workpool'
+import { routeStepGrantValue } from '@/modules/customer-request/runtime'
+
 import {
   isBoundedJsonValue,
   openCapabilityDecisionModel,
   sameCapabilityContractRef,
   type CapabilityInputKey,
   type JsonValue,
+  type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
+import { readJsonPointer } from '@/modules/common/json-pointer'
+import { stableUnique } from '@/modules/common/stable-unique'
 import {
-  MAX_PENDING_DISPATCH_SCAN,
-  type AttemptRecordSnapshot,
-  type DispatchRecordSnapshot,
   type JournalMutationPorts,
-  type LeaseResult,
   type OutcomeResult,
   type RunProjection,
-  type RunRecordSnapshot,
-  type StepAdmissionResult,
 } from '@/modules/customer-request/route-execution/machines'
-import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
 import {
   routeAttemptIntegrityValid,
   routeRunIdentityDigest,
   decideSucceededOutcomeBranch,
 } from '@/modules/customer-request/route-execution/journal'
 
+import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
+import { components, internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
-import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { admitRouteStep } from './customerRequestRouteMandateAdmission'
 import { readCurrentRouteMandateStateForPrincipal } from './customerRequestRouteMandate'
+import {
+  requireAttempt,
+  requireRun,
+  toAttemptRecord,
+  toDispatchRecord,
+  toRunRecord,
+} from './customerRequestRouteExecutionSnapshots'
 
-export const PRE_RELEASE_CANCELLATION_WINDOW_MS = 1_000
+type StoredRouteStepGrant = Infer<typeof routeStepGrantValue>
+
+function toStoredRouteStepGrant(value: RouteStepGrant | StoredRouteStepGrant): StoredRouteStepGrant {
+  return {
+    ...value,
+    request: { ...value.request },
+    route: { ...value.route },
+    step: {
+      ...value.step,
+      contractRef: { ...value.step.contractRef },
+      dataScope: value.step.dataScope.map((scope) => ({
+        ...scope,
+        recipient: { ...scope.recipient },
+        purposes: [...scope.purposes],
+      })),
+      effects: value.step.effects.map((effect) => ({ ...effect })),
+      evidence: value.step.evidence.map((evidence) => ({ ...evidence })),
+      cancellation: {
+        ...value.step.cancellation,
+        evidenceRefs: [...value.step.cancellation.evidenceRefs],
+      },
+      recovery: { ...value.step.recovery },
+    },
+    fallbackUse: { ...value.fallbackUse },
+    admission: { ...value.admission },
+  } satisfies StoredRouteStepGrant
+}
+
+function toRouteStepGrantSnapshot(value: unknown): RouteStepGrant {
+  const stored = value as StoredRouteStepGrant
+  return {
+    ...stored,
+    request: { ...stored.request },
+    route: { ...stored.route },
+    step: {
+      ...stored.step,
+      contractRef: { ...stored.step.contractRef },
+      dataScope: stored.step.dataScope.map((scope) => ({
+        ...scope,
+        recipient: { ...scope.recipient },
+        purposes: [...scope.purposes],
+      })),
+      effects: stored.step.effects.map((effect) => ({ ...effect })),
+      evidence: stored.step.evidence.map((evidence) => ({
+        ...evidence,
+        schemaIdentity: rehydratePointedSchemaIdentity(evidence.schemaIdentity),
+      })),
+      cancellation: {
+        ...stored.step.cancellation,
+        evidenceRefs: [...stored.step.cancellation.evidenceRefs],
+      },
+      recovery: { ...stored.step.recovery },
+    },
+    fallbackUse: { ...stored.fallbackUse },
+    admission: { ...stored.admission },
+  }
+}
+
+function rehydratePointedSchemaIdentity(value: string): PointedSchemaIdentity {
+  return value as PointedSchemaIdentity
+}
 
 type DbCtx = MutationCtx | QueryCtx
+const PRE_RELEASE_CANCELLATION_WINDOW_MS = 5_000
+
+const routeTransportPool = new Workpool(components.workpool, {
+  // T38 reserves the 100 global Convex slots across all pools; route transport owns 32.
+  maxParallelism: 32,
+  retryActionsByDefault: true,
+  defaultRetryBehavior: { maxAttempts: 3, initialBackoffMs: 1_000, base: 2 },
+})
+
+async function enqueueRouteTransport(
+  ctx: MutationCtx,
+  dispatchRef: string,
+  runAfter: number,
+): Promise<void> {
+  await routeTransportPool.enqueueAction(
+    ctx,
+    internal.customerRequestRouteTransportWorker.run,
+    { dispatchRef },
+    {
+      runAfter,
+      retry: true,
+    },
+  )
+}
 
 export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
   return {
@@ -91,13 +184,13 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
         .withIndex('by_runRef_and_position', (query) => (
           query.eq('runRef', runRef).eq('position', position)
         )).unique()
-      return attempt === null ? null : toAttemptRecord(attempt)
+      return attempt === null ? null : toAttemptRecord(attempt, toRouteStepGrantSnapshot)
     },
 
     loadAttemptByRef: async (attemptRef) => {
       const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
         .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attemptRef)).unique()
-      return attempt === null ? null : toAttemptRecord(attempt)
+      return attempt === null ? null : toAttemptRecord(attempt, toRouteStepGrantSnapshot)
     },
 
     loadDispatchByAttemptRef: async (attemptRef) => {
@@ -110,20 +203,25 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
 
     materializeStepInput: async (request) => await materializeStepInput(ctx, request),
 
-    admitRouteStep: async (input) => await admitRouteStep(ctx, {
-      requestId: input.requestId,
-      mandateRef: input.mandateRef,
-      expectedMandateDigest: input.expectedMandateDigest,
-      expectedGenerationRef: input.expectedGenerationRef,
-      expectedRoutePlanId: input.expectedRoutePlanId,
-      expectedRouteDigest: input.expectedRouteDigest,
-      stepPosition: input.stepPosition,
-      expectedActionId: input.expectedActionId,
-      expectedCapabilityId: input.expectedCapabilityId,
-      expectedCapabilityVersion: input.expectedCapabilityVersion,
-      expectedCapabilityContractDigest: input.expectedCapabilityContractDigest,
-      idempotencyKey: input.idempotencyKey,
-    }, input.principalId) as unknown as Promise<StepAdmissionResult>,
+    admitRouteStep: async (input) => {
+      const result = await admitRouteStep(ctx, {
+        requestId: input.requestId,
+        mandateRef: input.mandateRef,
+        expectedMandateDigest: input.expectedMandateDigest,
+        expectedGenerationRef: input.expectedGenerationRef,
+        expectedRoutePlanId: input.expectedRoutePlanId,
+        expectedRouteDigest: input.expectedRouteDigest,
+        stepPosition: input.stepPosition,
+        expectedActionId: input.expectedActionId,
+        expectedCapabilityId: input.expectedCapabilityId,
+        expectedCapabilityVersion: input.expectedCapabilityVersion,
+        expectedCapabilityContractDigest: input.expectedCapabilityContractDigest,
+        idempotencyKey: input.idempotencyKey,
+      }, input.principalId)
+      return 'grant' in result
+        ? { ...result, grant: toRouteStepGrantSnapshot(result.grant) }
+        : result
+    },
 
     commitCommandReplay: async (runRef) => {
       const replayed = await readRunProjection(ctx, runRef)
@@ -204,7 +302,7 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
         actionId: input.actionId,
         position: input.position,
         operationKeyDigest: input.grant.operationKeyDigest,
-        grant: input.grant as unknown as Doc<'customerRequestRouteStepAttempts'>['grant'],
+        grant: toStoredRouteStepGrant(input.grant),
         inputJson: JSON.stringify(input.input),
         inputDigest: input.inputDigest,
         state: 'queued',
@@ -230,75 +328,16 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
         runRef: input.runRef,
         committedAt: input.now,
       })
-      await ctx.scheduler.runAfter(
+      await enqueueRouteTransport(
+        ctx,
+        input.dispatchRef,
         PRE_RELEASE_CANCELLATION_WINDOW_MS,
-        internal.customerRequestRouteTransportWorker.runNext,
-        { workerId: `route-worker:${input.dispatchRef}` },
       )
       const run = await readRunProjection(ctx, input.runRef)
       if (run === null) throw new Error('customer_request_route_run_write_integrity_failure')
       return { kind: 'started', run }
     },
 
-    scanPendingDispatches: async (now) => {
-      const pending = await ctx.db.query('customerRequestRouteDispatchOutbox')
-        .withIndex('by_state_and_availableAt', (query) => (
-          query.eq('state', 'pending').lte('availableAt', now)
-        )).take(MAX_PENDING_DISPATCH_SCAN)
-      return pending.map(toDispatchRecord)
-    },
-
-    failExpiredUnreleasedAttempt: async (input) => {
-      const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
-        .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', input.dispatchRef)).unique()
-      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', input.attemptRef)).unique()
-      if (dispatch === null || attempt === null) {
-        throw new Error('customer_request_route_dispatch_integrity_failure')
-      }
-      await failExpiredUnreleasedAttempt(ctx, dispatch, attempt, input.now)
-    },
-
-    grantDispatchLease: async (input) => {
-      const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
-        .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', input.dispatchRef)).unique()
-      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', input.attemptRef)).unique()
-      if (dispatch === null || attempt === null) {
-        throw new Error('customer_request_route_dispatch_integrity_failure')
-      }
-      await ctx.db.patch(dispatch._id, {
-        state: 'leased',
-        leaseOwner: input.workerId,
-        leaseExpiresAt: input.leaseExpiresAt,
-        updatedAt: input.now,
-      })
-      await ctx.db.patch(attempt._id, { state: 'leased', updatedAt: input.now })
-      await ctx.scheduler.runAfter(
-        input.leaseDurationMs,
-        internal.customerRequestRouteExecution.recoverExpiredDispatch,
-        { dispatchRef: dispatch.dispatchRef },
-      )
-      return {
-        kind: 'leased' as const,
-        dispatch: {
-          dispatchRef: dispatch.dispatchRef,
-          attemptRef: attempt.attemptRef,
-          runRef: attempt.runRef,
-          position: attempt.position,
-          operationKeyDigest: attempt.operationKeyDigest,
-          inputJson: attempt.inputJson,
-          grant: attempt.grant as unknown as RouteStepGrant,
-          leaseExpiresAt: input.leaseExpiresAt,
-        },
-      } as LeaseResult
-    },
-
-    scheduleExpiredDispatchCleanup: async (now) => {
-      await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-        workerId: `route-worker:expired-dispatch-cleanup:${now}`,
-      })
-    },
 
     validateAttemptOutput: async (attemptRef, output) => {
       const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
@@ -527,7 +566,7 @@ export async function readRunProjection(
     currentPosition: run.currentPosition,
     currentState: current.state,
     ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
-    ...((current.state === 'queued' || current.state === 'leased')
+    ...(current.state === 'queued'
       ? { cancellationReleaseMayStartAt: current.createdAt + PRE_RELEASE_CANCELLATION_WINDOW_MS }
       : {}),
     ...(cancellation?.result === 'too_late' || cancellation?.result === 'rejected'
@@ -688,7 +727,7 @@ export async function queueNextStep(
     actionId: mandateStep.actionId,
     position,
     operationKeyDigest: admission.grant.operationKeyDigest,
-    grant: admission.grant as unknown as Doc<'customerRequestRouteStepAttempts'>['grant'],
+    grant: toStoredRouteStepGrant(admission.grant),
     inputJson: JSON.stringify(input),
     inputDigest,
     state: 'queued',
@@ -706,10 +745,10 @@ export async function queueNextStep(
     createdAt: now,
     updatedAt: now,
   })
-  await ctx.scheduler.runAfter(
+  await enqueueRouteTransport(
+    ctx,
+    `route-dispatch:v1:${dispatchDigest}`,
     PRE_RELEASE_CANCELLATION_WINDOW_MS,
-    internal.customerRequestRouteTransportWorker.runNext,
-    { workerId: `route-worker:${run.runRef}:${position}` },
   )
   await ctx.db.patch(run._id, {
     state: 'running', completedSteps: position - 1, currentPosition: position, updatedAt: now,
@@ -717,29 +756,6 @@ export async function queueNextStep(
   return true
 }
 
-async function failExpiredUnreleasedAttempt(
-  ctx: MutationCtx,
-  dispatch: Doc<'customerRequestRouteDispatchOutbox'>,
-  attempt: Doc<'customerRequestRouteStepAttempts'>,
-  now: number,
-): Promise<void> {
-  const run = await ctx.db.query('customerRequestRouteRuns')
-    .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
-  if (run === null || run.mandateRef !== attempt.mandateRef
-    || run.currentPosition !== attempt.position
-    || (run.state !== 'queued' && run.state !== 'running')) {
-    throw new Error('customer_request_route_run_integrity_failure')
-  }
-  const failure: JsonValue = { reason: 'authority_expired_before_release' }
-  await ctx.db.patch(dispatch._id, { state: 'failed', updatedAt: now })
-  await ctx.db.patch(attempt._id, { state: 'failed', updatedAt: now })
-  await ctx.db.patch(run._id, {
-    state: 'failed',
-    resultJson: JSON.stringify(failure),
-    resultDigest: canonicalDigest(failure),
-    updatedAt: now,
-  })
-}
 
 async function materializeStepInput(
   ctx: MutationCtx,
@@ -850,7 +866,7 @@ async function snapshotRouteBusinesses(
   ctx: MutationCtx,
   steps: readonly Readonly<{ businessId: string }>[],
 ): Promise<Array<{ businessRef: string; name: string }> | undefined> {
-  const businessIds = [...new Set(steps.map(({ businessId }) => businessId))]
+  const businessIds = stableUnique(steps.map(({ businessId }) => businessId))
   const businesses = []
   for (const businessId of businessIds) {
     const business = await ctx.db.get(businessId as Id<'businesses'>)
@@ -864,118 +880,4 @@ async function snapshotRouteBusinesses(
   return businesses
 }
 
-async function requireAttempt(
-  ctx: MutationCtx,
-  attemptRef: string,
-): Promise<Doc<'customerRequestRouteStepAttempts'>> {
-  const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-    .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attemptRef)).unique()
-  if (attempt === null) throw new Error('customer_request_route_run_attempt_integrity_failure')
-  return attempt
-}
 
-async function requireRun(
-  ctx: MutationCtx,
-  runRef: string,
-): Promise<Doc<'customerRequestRouteRuns'>> {
-  const run = await ctx.db.query('customerRequestRouteRuns')
-    .withIndex('by_runRef', (query) => query.eq('runRef', runRef)).unique()
-  if (run === null) throw new Error('customer_request_route_run_integrity_failure')
-  return run
-}
-
-function toRunRecord(run: Doc<'customerRequestRouteRuns'>): RunRecordSnapshot {
-  return {
-    runRef: run.runRef,
-    principalId: run.principalId,
-    requestId: run.requestId,
-    requestRevision: run.requestRevision,
-    mandateRef: run.mandateRef,
-    mandateDigest: run.mandateDigest,
-    generationRef: run.generationRef,
-    routePlanId: run.routePlanId,
-    routeDigest: run.routeDigest,
-    ...(run.businesses === undefined ? {} : {
-      businesses: run.businesses.map((business) => ({ ...business })),
-    }),
-    state: run.state,
-    totalSteps: run.totalSteps,
-    completedSteps: run.completedSteps,
-    currentPosition: run.currentPosition,
-    createdAt: run.createdAt,
-    updatedAt: run.updatedAt,
-  }
-}
-
-function toAttemptRecord(
-  attempt: Doc<'customerRequestRouteStepAttempts'>,
-): AttemptRecordSnapshot {
-  return {
-    attemptRef: attempt.attemptRef,
-    attemptDigest: attempt.attemptDigest,
-    runRef: attempt.runRef,
-    requestId: attempt.requestId,
-    mandateRef: attempt.mandateRef,
-    actionId: attempt.actionId,
-    position: attempt.position,
-    operationKeyDigest: attempt.operationKeyDigest,
-    grant: attempt.grant as unknown as RouteStepGrant,
-    inputJson: attempt.inputJson,
-    inputDigest: attempt.inputDigest,
-    state: attempt.state,
-    ...(attempt.outputJson === undefined ? {} : { outputJson: attempt.outputJson }),
-    ...(attempt.outputDigest === undefined ? {} : { outputDigest: attempt.outputDigest }),
-    ...(attempt.transportObservationJson === undefined
-      ? {}
-      : { transportObservationJson: attempt.transportObservationJson }),
-    ...(attempt.transportObservationDigest === undefined
-      ? {}
-      : { transportObservationDigest: attempt.transportObservationDigest }),
-    createdAt: attempt.createdAt,
-    updatedAt: attempt.updatedAt,
-  }
-}
-
-function toDispatchRecord(
-  dispatch: Doc<'customerRequestRouteDispatchOutbox'>,
-): DispatchRecordSnapshot {
-  return {
-    dispatchRef: dispatch.dispatchRef,
-    dispatchDigest: dispatch.dispatchDigest,
-    runRef: dispatch.runRef,
-    attemptRef: dispatch.attemptRef,
-    operationKeyDigest: dispatch.operationKeyDigest,
-    state: dispatch.state,
-    availableAt: dispatch.availableAt,
-    createdAt: dispatch.createdAt,
-    ...(dispatch.leaseOwner === undefined ? {} : { leaseOwner: dispatch.leaseOwner }),
-    ...(dispatch.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: dispatch.leaseExpiresAt }),
-  }
-}
-
-function readJsonPointer(value: JsonValue, pointer: string): JsonValue | undefined {
-  if (!pointer.startsWith('/') || pointer.length < 2) return undefined
-  let current: JsonValue | undefined = value
-  for (const encoded of pointer.slice(1).split('/')) {
-    const segment = encoded.replaceAll('~1', '/').replaceAll('~0', '~')
-    if (Array.isArray(current)) {
-      if (!/^(?:0|[1-9]\d*)$/.test(segment)) return undefined
-      current = current[Number(segment)]
-    } else if (current !== null && typeof current === 'object') {
-      const object = current as Readonly<Record<string, JsonValue>>
-      current = Object.prototype.hasOwnProperty.call(object, segment)
-        ? object[segment]
-        : undefined
-    } else return undefined
-  }
-  return current
-}
-
-function parseBoundedJson(value: string): JsonValue | undefined {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}

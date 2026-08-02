@@ -42,6 +42,18 @@ describe('canonical base URL resolution', () => {
       expect(result.baseUrl).not.toBe('https://ae.example')
     })
   })
+
+  it('uses the localhost fallback outside production when no canonical config exists', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'development' }, () => {
+      expect(resolveCanonicalBaseUrl()).toEqual({ kind: 'fallback', baseUrl: 'http://localhost:3000' })
+    })
+  })
+
+  it('fails closed in production when no canonical config or allowlisted request exists', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'production' }, () => {
+      expect(() => resolveCanonicalBaseUrl()).toThrow('canonical_base_url_configuration_required')
+    })
+  })
 })
 
 describe('canonical base URL route outputs', () => {
@@ -54,7 +66,7 @@ describe('canonical base URL route outputs', () => {
       async () => {
         const serialized = await readSerializedPublicOutputs('https://untrusted.agentic.test')
 
-        expect(serialized).toContain('https://canonical.agentic.test/registry')
+        expect(serialized).toContain('https://canonical.agentic.test/')
         expect(serialized).toContain('<loc>https://canonical.agentic.test/parramatta-emergency-plumbing</loc>')
         expect(serialized).toContain('Sitemap: https://canonical.agentic.test/sitemap.xml')
         expect(serialized).toContain('https://canonical.agentic.test/parramatta-emergency-plumbing/ucp')
@@ -70,7 +82,7 @@ describe('canonical base URL route outputs', () => {
     await withCanonicalEnv({ AE_CANONICAL_HOST_ALLOWLIST: 'public.agentic.test' }, async () => {
       const serialized = await readSerializedPublicOutputs('https://public.agentic.test')
 
-      expect(serialized).toContain('https://public.agentic.test/registry')
+      expect(serialized).toContain('https://public.agentic.test/')
       expect(serialized).toContain('<loc>https://public.agentic.test/parramatta-emergency-plumbing</loc>')
       expect(serialized).toContain('Sitemap: https://public.agentic.test/sitemap.xml')
       expect(serialized).toContain('https://public.agentic.test/parramatta-emergency-plumbing/ucp')
@@ -119,19 +131,23 @@ async function readSerializedPublicOutputs(origin: string): Promise<string> {
 type CanonicalEnv = {
   AE_CANONICAL_BASE_URL?: string
   AE_CANONICAL_HOST_ALLOWLIST?: string
+  NODE_ENV?: string
 }
 
 async function withCanonicalEnv<T>(env: CanonicalEnv, run: () => T | Promise<T>): Promise<T> {
   const previousBaseUrl = process.env.AE_CANONICAL_BASE_URL
   const previousAllowlist = process.env.AE_CANONICAL_HOST_ALLOWLIST
+  const previousNodeEnv = process.env.NODE_ENV
   setOptionalEnv('AE_CANONICAL_BASE_URL', env.AE_CANONICAL_BASE_URL)
   setOptionalEnv('AE_CANONICAL_HOST_ALLOWLIST', env.AE_CANONICAL_HOST_ALLOWLIST)
+  setOptionalEnv('NODE_ENV', env.NODE_ENV ?? previousNodeEnv)
 
   try {
     return await run()
   } finally {
     setOptionalEnv('AE_CANONICAL_BASE_URL', previousBaseUrl)
     setOptionalEnv('AE_CANONICAL_HOST_ALLOWLIST', previousAllowlist)
+    setOptionalEnv('NODE_ENV', previousNodeEnv)
   }
 }
 

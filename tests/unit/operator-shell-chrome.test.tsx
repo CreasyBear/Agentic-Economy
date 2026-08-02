@@ -2,30 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import '../setup/jsdom-platform'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 
-beforeAll(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    value: vi.fn((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  })
-})
 
 describe('operator shell nested chrome', () => {
   it('replaces actions, breadcrumbs, and badges when nested route chrome changes', async () => {

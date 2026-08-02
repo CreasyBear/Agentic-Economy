@@ -1,13 +1,23 @@
-import { APICallError, generateText, NoContentGeneratedError, RetryError } from 'ai'
+import {
+  APICallError,
+  generateText,
+  NoContentGeneratedError,
+  NoObjectGeneratedError,
+  Output,
+  RetryError,
+} from 'ai'
+import type { FlexibleSchema } from 'ai'
 
 import {
   openRouterModel,
-  openRouterProvider,
   type OpenRouterGatewayConfig,
 } from '@/modules/model-gateway/public'
 
-import type { CustomerRequestInterpretationTransport } from './interpreter'
-import type { CustomerRequestSemanticInterpretationTransport } from './semantic-interpreter'
+import type {
+  CustomerRequestSemanticInterpretationTransport,
+  CustomerRequestSemanticInterpreterPayload,
+  CustomerRequestSemanticModelProposal,
+} from './semantic-interpreter'
 
 type OpenRouterConfiguration = Readonly<{
   apiKey: string
@@ -21,22 +31,20 @@ type OpenRouterConfiguration = Readonly<{
 const MAX_OPENROUTER_REQUEST_BYTES = 1_000_000
 const DEFAULT_PROVIDER_ATTEMPT_TIMEOUT_MS = 20_000
 
-export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
-  return createOpenRouterJsonTransport(config)
-}
-
 export function createOpenRouterCustomerRequestSemanticTransport(config: OpenRouterConfiguration): CustomerRequestSemanticInterpretationTransport {
   return createOpenRouterJsonTransport(config)
 }
 
-function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration): Readonly<{
-  generateJson: (input: Readonly<{
+export type OpenRouterJsonTransport = Readonly<{
+  generateJson: <TPayload, TOutput>(input: Readonly<{
     systemInstruction: string
     payload: TPayload
     signal: AbortSignal
-    responseSchema?: Readonly<Record<string, unknown>>
-  }>) => Promise<Readonly<{ content: string }>>
-}> {
+    responseSchema: FlexibleSchema<TOutput>
+  }>) => Promise<TOutput>
+}>
+
+export function createOpenRouterJsonTransport(config: OpenRouterConfiguration): OpenRouterJsonTransport {
   if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
   if (config.attemptTimeoutMs !== undefined
     && (!Number.isSafeInteger(config.attemptTimeoutMs) || config.attemptTimeoutMs <= 0)) {
@@ -59,12 +67,8 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
       if (new TextEncoder().encode(serializedInput).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {
         throw new Error('customer_request_interpretation_request_too_large')
       }
-      const attemptTimeoutSignal = AbortSignal.timeout(attemptTimeoutMs)
-      const abortSignal = AbortSignal.any([signal, attemptTimeoutSignal])
       const model = openRouterModel(gatewayConfig, config.model, {
-        ...(responseSchema === undefined
-          ? { jsonObjectResponse: true }
-          : { jsonSchemaResponse: responseSchema }),
+        structuredOutputs: true,
         ...(config.reasoningEffort === undefined ? {} : { reasoningEffort: config.reasoningEffort }),
       })
       const result = await generateText({
@@ -74,13 +78,14 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
         maxRetries: 1,
         model,
         ...(config.reasoningEffort === undefined ? { temperature: 0 } : {}),
-        system: systemInstruction,
+        instructions: systemInstruction,
         prompt: serializedPayload,
-        abortSignal,
+        output: Output.object({ schema: responseSchema, name: 'customer_request_semantic_proposal' }),
+        timeout: attemptTimeoutMs,
+        abortSignal: signal,
       }).catch((error: unknown) => {
         if (signal.aborted) throw error
-        if (attemptTimeoutSignal.aborted
-          || (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))) {
+        if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
           throw new Error('customer_request_interpretation_provider_timeout')
         }
         const providerError = APICallError.isInstance(error)
@@ -92,20 +97,23 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
         // not a transport failure, so it joins the empty-completion path.
         if (
           NoContentGeneratedError.isInstance(error)
+          || (NoObjectGeneratedError.isInstance(error)
+            && (error.text === undefined || error.text.length === 0))
           || (RetryError.isInstance(error) && NoContentGeneratedError.isInstance(error.lastError))
           || providerError?.statusCode === 200
         ) {
           throw invalidProviderResponse(config.model, undefined)
         }
+        if (NoObjectGeneratedError.isInstance(error)) throw error
         if (providerError?.statusCode !== undefined) {
           throw new Error(`customer_request_interpretation_provider_${providerError.statusCode}`)
         }
         throw new Error('customer_request_interpretation_provider_unavailable')
       })
-      if (result.text.length === 0) {
+      if (result.text.length === 0 || result.finishReason !== 'stop') {
         throw invalidProviderResponse(config.model, result.finishReason)
       }
-      return { content: result.text }
+      return result.output
     },
   })
 }

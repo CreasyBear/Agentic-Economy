@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import { AeAgentOperatorConsole, type AgentOperatorKeyReadback } from '@/components/ae/console/AeAgentOperatorConsole'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
@@ -38,18 +39,6 @@ const keyReadback: AgentOperatorKeyReadback = {
   dataState: 'source',
 }
 
-beforeEach(() => {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia
-})
 
 afterEach(() => {
   cleanup()
@@ -65,9 +54,18 @@ describe('assistant access components', () => {
     expect(screen.getByText(/claude mcp add --transport http agentic-economy https:\/\/ae\.example\/mcp/u)).toBeTruthy()
     expect(screen.getByText(/codex mcp add agentic-economy --url https:\/\/ae\.example\/mcp/u)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Claude command' }))
+    const claudeCopyButton = screen.getByRole('button', { name: 'Copy Claude command' })
+    const codexCopyButton = screen.getByRole('button', { name: 'Copy Codex command' })
+
+    fireEvent.click(claudeCopyButton)
     expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http agentic-economy https://ae.example/mcp')
-    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
+    const claudeStatus = await screen.findByText('Claude command copied.')
+    expect(claudeStatus.getAttribute('role')).toBe('status')
+
+    fireEvent.click(codexCopyButton)
+    expect(writeText).toHaveBeenCalledWith('codex mcp add agentic-economy --url https://ae.example/mcp')
+    const codexStatus = await screen.findByText('Codex command copied.')
+    expect(codexStatus.getAttribute('role')).toBe('status')
   })
 
   it('keeps unavailable top-up from starting payment or changing credit', async () => {

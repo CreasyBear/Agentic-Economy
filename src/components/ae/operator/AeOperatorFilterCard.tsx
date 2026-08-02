@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { SearchIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -65,7 +65,6 @@ export function AeOperatorFilterCard({
 }
 
 function OperatorFilterTextField({ field }: { field: AeOperatorFilterField }) {
-  const [value, setValue] = useState(field.defaultValue ?? '')
   const descriptionId = `${field.id}-description`
 
   return (
@@ -74,8 +73,7 @@ function OperatorFilterTextField({ field }: { field: AeOperatorFilterField }) {
       <Input
         id={field.id}
         name={field.name}
-        value={value}
-        onChange={(event) => setValue(event.currentTarget.value)}
+        defaultValue={field.defaultValue}
         {...(field.description === undefined ? {} : { 'aria-describedby': descriptionId })}
       />
       {field.description === undefined ? null : (

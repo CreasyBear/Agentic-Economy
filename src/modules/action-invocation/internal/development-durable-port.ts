@@ -33,6 +33,9 @@ export function createDevelopmentDurableState<Result extends ActionResult>(): De
 
 export function createDevelopmentDurablePort<Result extends ActionResult>(
   state = createDevelopmentDurableState<Result>(),
+  options: Readonly<{
+    readHistoryCommand?: (invocationRef: string, commandId: string) => DurableHistoryRow | undefined
+  }> = {},
 ): DurableActionInvocationPort<Result> {
   const { controls, attempts, history, commands, commandMaterials } = state
 
@@ -87,8 +90,8 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
     readHistory: (ref, afterVersion, limit) => (history.get(ref) ?? [])
       .filter((row) => row.invocationVersion > afterVersion)
       .slice(0, Math.max(0, limit)),
-    readHistoryCommand: (ref, commandId) =>
-      (history.get(ref) ?? []).find((row) => row.commandId === commandId),
+    readHistoryCommand: options.readHistoryCommand ?? ((ref, commandId) =>
+      (history.get(ref) ?? []).find((row) => row.commandId === commandId)),
     recordLateObservation(input) {
       const digest = canonicalDigest({
         invocationRef: input.invocationRef,

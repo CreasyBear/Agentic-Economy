@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+
 export type CanonicalBaseUrlResolution =
   | { kind: 'configured'; baseUrl: string }
   | { kind: 'allowlisted-origin'; baseUrl: string }
@@ -5,7 +7,7 @@ export type CanonicalBaseUrlResolution =
 
 const fallbackCanonicalBaseUrl = 'http://localhost:3000'
 
-export function resolveCanonicalBaseUrl(request: Request): CanonicalBaseUrlResolution {
+export function resolveCanonicalBaseUrl(request?: Request): CanonicalBaseUrlResolution {
   const configuredBaseUrl = readConfiguredCanonicalBaseUrl(process.env.AE_CANONICAL_BASE_URL)
   if (configuredBaseUrl !== undefined) {
     return { kind: 'configured', baseUrl: configuredBaseUrl }
@@ -17,6 +19,10 @@ export function resolveCanonicalBaseUrl(request: Request): CanonicalBaseUrlResol
     return { kind: 'allowlisted-origin', baseUrl: requestUrl.origin }
   }
 
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('canonical_base_url_configuration_required')
+  }
+
   return { kind: 'fallback', baseUrl: fallbackCanonicalBaseUrl }
 }
 
@@ -26,7 +32,7 @@ function readConfiguredCanonicalBaseUrl(value: string | undefined): string | und
     return undefined
   }
 
-  return parsed.href.replace(/\/+$/u, '')
+  return trimTrailingSlashes(parsed.href)
 }
 
 function readCanonicalHostAllowlist(value: string | undefined): ReadonlySet<string> {
@@ -56,7 +62,11 @@ function readAllowlistedHost(value: string): string | undefined {
   return trimmed.toLowerCase()
 }
 
-function readRequestUrl(request: Request): URL | undefined {
+function readRequestUrl(request?: Request): URL | undefined {
+  if (request === undefined) {
+    return undefined
+  }
+
   try {
     return new URL(request.url)
   } catch {

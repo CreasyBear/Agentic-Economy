@@ -4,6 +4,7 @@ import { isOpenSandboxEndpoint, sandboxCheckupQuotePathForSlug } from '@/modules
 
 import type {
   PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
   PublicOfferingAccessPathDto,
   PublicOfferingDto,
 } from './offering-api-projection'
@@ -47,15 +48,35 @@ export type ServiceDto = Readonly<{
 export type PublicServicesApiPage = Readonly<{
   kind: 'ok'
   schemaVersion: typeof PublicServicesApiSchemaVersion
+  services: readonly ServiceDto[]
+  isDone: boolean
+  continueCursor: string
+}>
+
+export type PublicServicesSearchPage = Readonly<{
+  kind: 'ok'
+  schemaVersion: typeof PublicServicesApiSchemaVersion
   query?: string
   services: readonly ServiceDto[]
-  pagination: PublicBusinessCatalogApiV2Page['pagination']
+  pagination: PublicBusinessCatalogApiV2SearchPage['pagination']
 }>
 
 /** Flatten one published Offering into one cold-agent service entry. */
 export function projectPublicServicesPage(
   page: PublicBusinessCatalogApiV2Page,
 ): PublicServicesApiPage {
+  return {
+    kind: 'ok',
+    schemaVersion: PublicServicesApiSchemaVersion,
+    services: page.page.flatMap((business) => business.offerings.map((offering) => projectService(business, offering))),
+    isDone: page.isDone,
+    continueCursor: page.continueCursor,
+  }
+}
+
+export function projectPublicServicesSearchPage(
+  page: PublicBusinessCatalogApiV2SearchPage,
+): PublicServicesSearchPage {
   return {
     kind: 'ok',
     schemaVersion: PublicServicesApiSchemaVersion,
@@ -66,7 +87,7 @@ export function projectPublicServicesPage(
 }
 
 function projectService(
-  business: PublicBusinessCatalogApiV2Page['items'][number],
+  business: PublicBusinessCatalogApiV2Page['page'][number],
   offering: PublicOfferingDto,
 ): ServiceDto {
   const suburb = optionalText(business.suburb)

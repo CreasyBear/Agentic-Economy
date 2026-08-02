@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,6 +10,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { CheckIcon, CodeIcon } from 'lucide-react'
+import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
+import { isRecord } from '@/modules/common/is-record'
 
 export type AeAgentJsonAffordanceProps = {
   agentJsonUrl: string
@@ -23,9 +25,6 @@ type PreviewState =
   | { status: 'error' }
 
 export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAffordanceProps) {
-  const previewId = useId()
-  const headingId = `${previewId}-heading`
-  const triggerId = `${previewId}-trigger`
   const [previewOpen, setPreviewOpen] = useState(false)
   const [preview, setPreview] = useState<PreviewState>({ status: 'idle' })
   const [copied, setCopied] = useState(false)
@@ -52,39 +51,26 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
   async function confirmCopy() {
     if (preview.status !== 'ready') return
     try {
-      await navigator.clipboard.writeText(preview.text)
+      await copyTextToClipboard(preview.text)
       setCopied(true)
     } catch {
       setCopied(false)
     }
   }
-  function handlePreviewOpenChange(open: boolean) {
-    setPreviewOpen(open)
-    if (!open) {
-      globalThis.setTimeout(() => document.getElementById(triggerId)?.focus(), 0)
-    }
-  }
 
   return (
-      <Dialog open={previewOpen} onOpenChange={handlePreviewOpenChange}>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogTrigger asChild>
-      <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()} id={triggerId}>
+      <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()}>
         <CodeIcon aria-hidden="true" />
         Data for AI assistants
       </Button>
         </DialogTrigger>
         <DialogContent
-          id={previewId}
           className="max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"
-          role="dialog"
-          aria-labelledby={headingId}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            document.getElementById(triggerId)?.focus()
-          }}
         >
           <DialogHeader>
-            <DialogTitle id={headingId}>Data for AI assistants</DialogTitle>
+            <DialogTitle>Data for AI assistants</DialogTitle>
             <DialogDescription>Check the fields and values before you copy them.</DialogDescription>
           </DialogHeader>
           {preview.status === 'loading' ? <p role="status" className="text-muted-foreground">Loading data preview...</p> : null}
@@ -98,7 +84,7 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
             </>
           ) : null}
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" className="min-h-11" onClick={() => handlePreviewOpenChange(false)}>
+            <Button type="button" variant="ghost" className="min-h-11" onClick={() => setPreviewOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -121,10 +107,10 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
 }
 
 function alignPayloadQuery(payload: unknown, query: string): unknown {
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload) || !('query' in payload)) return payload
+  if (!isRecord(payload) || !('query' in payload)) return payload
   return { ...payload, query }
 }
 
 function topLevelFields(payload: unknown): readonly string[] {
-  return typeof payload === 'object' && payload !== null && !Array.isArray(payload) ? Object.keys(payload) : []
+  return isRecord(payload) ? Object.keys(payload) : []
 }

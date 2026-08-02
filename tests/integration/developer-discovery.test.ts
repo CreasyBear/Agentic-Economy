@@ -10,7 +10,10 @@ import type {
   DeveloperDiscoveryFixtureBundleArtifact,
   DeveloperDiscoverySchemaArtifact,
 } from '@/modules/discovery/developer-discovery'
-import type { PublicBusinessCatalogApiPage } from '@/modules/registry/public'
+import type {
+  PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
+} from '@/modules/registry/public'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
 import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.search'
@@ -122,12 +125,12 @@ describe('developer discovery route handlers', () => {
     try {
       const list = (await (
         await handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses'))
-      ).json()) as PublicBusinessCatalogApiPage
+      ).json()) as PublicBusinessCatalogApiV2Page
       const search = (await (
         await handleDurableSearchBusinessesRequest(
           new Request('https://ae.example/api/businesses/search?q=emergency%20plumber%20parramatta')
         )
-      ).json()) as PublicBusinessCatalogApiPage
+      ).json()) as PublicBusinessCatalogApiV2SearchPage
       const detail = await (await handleDurableBusinessDetailRequest('parramatta-emergency-plumbing')).json()
       const schemaResponse = await handleDeveloperDiscoverySchemaRequest(
         new Request('https://ae.example/api/discovery/schema'),
@@ -148,46 +151,58 @@ describe('developer discovery route handlers', () => {
       const examples = (await examplesResponse.json()) as DeveloperDiscoveryExamplesArtifact
       const fixtures = (await fixturesResponse.json()) as DeveloperDiscoveryFixtureBundleArtifact
       const serialized = JSON.stringify({ schema, examples, fixtures })
+      const firstListedBusiness = list.page.at(0)
 
-      expect(list.items).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ slug: 'parramatta-emergency-plumbing' }),
-        ])
-      )
-      expect(search.items).toEqual([
-        expect.objectContaining({ slug: 'plumbing-demo' }),
-        expect.objectContaining({ slug: 'parramatta-emergency-plumbing' }),
+      if (firstListedBusiness === undefined) {
+        throw new Error('Expected the explicit local public catalog route to return a business.')
+      }
+
+      const expectedExampleSlugs = list.page
+        .map((item) => item.slug)
+        .sort((left, right) => left.localeCompare(right))
+
+      expect(list.page.map((item) => item.slug)).toEqual([
+        'parramatta-emergency-plumbing',
+        'plumbing-demo',
+        'joondalup-rapid-plumbing',
+        'fremantle-coastal-electrical',
+        'adelaide-dental-clinic',
       ])
+      expect(search).toMatchObject({
+        kind: 'ok',
+        schemaVersion: 'public-business-catalog-api:v2',
+        query: 'emergency plumber parramatta',
+      })
+      expect(search.items.map((item) => item.slug)).toEqual([
+        'parramatta-emergency-plumbing',
+        'plumbing-demo',
+      ])
+      expect(search.items.every((item) => list.page.some((listed) => listed.slug === item.slug))).toBe(true)
       expect(detail).toMatchObject({ kind: 'found', business: { slug: 'parramatta-emergency-plumbing' } })
       expect(schema).toMatchObject({
         state: 'degraded',
         parityStatus: 'matched',
         pagination: { listRoutes: ['/api/businesses', '/api/businesses/search'] },
       })
-      expect(examples.examples).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ slug: 'parramatta-emergency-plumbing' }),
-        ])
-      )
+      expect(examples.examples.map((item) => item.slug)).toEqual(expectedExampleSlugs)
       expect(fixtures.routeHealth).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             route: 'http://localhost:3000/api/businesses',
             status: 'available',
             httpStatus: 200,
-            schemaVersion: 'public-business-catalog-api:v1',
+            schemaVersion: 'public-business-catalog-api:v2',
           }),
           expect.objectContaining({
-            route: 'http://localhost:3000/api/businesses/plumbing-demo',
+            route: `http://localhost:3000/api/businesses/${firstListedBusiness.slug}`,
             status: 'available',
             httpStatus: 200,
-            schemaVersion: 'public-business-catalog-api:v1',
+            schemaVersion: 'public-business-catalog-api:v2',
           }),
           expect.objectContaining({
-            route: 'http://localhost:3000/plumbing-demo/ucp',
+            route: `http://localhost:3000/${firstListedBusiness.slug}/ucp`,
             status: 'unavailable',
-            httpStatus: 404,
-            errorCode: 'not_found',
+            errorCode: 'route_outage',
           }),
         ])
       )

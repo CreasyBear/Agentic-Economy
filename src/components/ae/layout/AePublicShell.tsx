@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 import { cva } from 'class-variance-authority'
 import { MenuIcon, XIcon } from 'lucide-react'
 
@@ -25,8 +26,6 @@ type AePublicShellProps = {
   children: ReactNode
   immersive?: boolean
 }
-
-const defaultServicesHref = '/'
 
 function AeSkipFocusBridge() {
   useEffect(() => {
@@ -88,9 +87,9 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
 function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Public navigation" className="grid gap-2 p-4">
-      <a href={defaultServicesHref} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Home</a>
-      <a href="/claim" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List your business</a>
-      <a href="/sign-in" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</a>
+      <Link to="/" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Home</Link>
+      <Link to="/claim" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List your business</Link>
+      <Link to="/sign-in/$" params={{ _splat: '' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
     </nav>
   )
 }
@@ -102,23 +101,16 @@ function PublicNavActions({
   mobileNavOpen: boolean
   onMobileNavOpenChange: (open: boolean) => void
 }) {
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const handleMobileNavOpenChange = (open: boolean) => {
-    onMobileNavOpenChange(open)
-    if (!open) {
-      window.setTimeout(() => triggerRef.current?.focus(), 350)
-    }
-  }
   return (
-    <Sheet open={mobileNavOpen} onOpenChange={handleMobileNavOpenChange}>
-      <a href="/claim" className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-semibold text-brand hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
+    <Sheet open={mobileNavOpen} onOpenChange={onMobileNavOpenChange}>
+      <Link to="/claim" className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-semibold text-brand hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
         List your business
-      </a>
-      <a href="/sign-in" className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex">
+      </Link>
+      <Link to="/sign-in/$" params={{ _splat: '' }} className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex">
         Sign in
-      </a>
+      </Link>
       <SheetTrigger asChild>
-        <Button ref={triggerRef} type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
+        <Button type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
           <MenuIcon data-icon="inline-start" aria-hidden="true" />
           <span className="hidden sm:inline">Menu</span>
         </Button>
@@ -128,13 +120,13 @@ function PublicNavActions({
         <SheetHeader className="border-b border-border">
           <div className="flex items-center justify-between gap-3">
             <SheetTitle>Public navigation</SheetTitle>
-            <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Close public menu" onClick={() => handleMobileNavOpenChange(false)}>
+            <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Close public menu" onClick={() => onMobileNavOpenChange(false)}>
               <XIcon data-icon="inline-start" aria-hidden="true" />
             </Button>
           </div>
           <SheetDescription className="sr-only">Choose where to go on Agentic Economy.</SheetDescription>
         </SheetHeader>
-        <PublicMobileNav onNavigate={() => handleMobileNavOpenChange(false)} />
+        <PublicMobileNav onNavigate={() => onMobileNavOpenChange(false)} />
       </SheetContent>
       ) : null}
     </Sheet>
@@ -143,12 +135,12 @@ function PublicNavActions({
 
 function PublicBrandLink() {
   return (
-    <a href="/" aria-label="Agentic Economy home" className="flex min-h-11 min-w-11 items-center gap-3 no-underline">
+    <Link to="/" aria-label="Agentic Economy home" className="flex min-h-11 min-w-11 items-center gap-3 no-underline">
       <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand font-mono text-sm font-semibold text-on-brand">AE</span>
       <span className="hidden min-w-0 sm:block">
         <span className="font-semibold text-foreground">Agentic Economy</span>
       </span>
-    </a>
+    </Link>
   )
 }
 
@@ -174,9 +166,9 @@ function PublicFooter({ immersive }: { immersive: boolean }) {
     <footer className={publicFooter({ immersive })}>
       <div className={publicFooterInner({ immersive })}>
         <nav aria-label="Footer" className="flex flex-wrap justify-center gap-x-3 gap-y-1 md:gap-x-4">
-          <a href="/for-agents" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For agents</a>
-          <a href="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</a>
-          <a href="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</a>
+          <Link to="/for-agents" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For agents</Link>
+          <Link to="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</Link>
+          <Link to="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</Link>
         </nav>
       </div>
     </footer>

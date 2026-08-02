@@ -155,7 +155,6 @@ function createAdapter(
     runtime: {
       send: async () => { throw new Error('not_used') },
       resolveCredential: () => undefined,
-      createX402PaymentSignature: async () => undefined,
     },
     now: () => now,
     nextInvocationRef: () => 'invocation:not-used',

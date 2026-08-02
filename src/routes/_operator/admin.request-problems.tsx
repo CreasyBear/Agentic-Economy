@@ -1,8 +1,12 @@
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { timestampIso } from '@/lib/ui/format-time'
+import { formatCurrencyAmount } from '@/modules/customer-request/format-currency-amount'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -115,26 +119,35 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
         </div>
         <p className="text-sm text-muted-foreground">Version {problem.version}</p>
       </div>
-      <label htmlFor={`problem-state-${problem.reportRef}`} className="text-sm font-semibold">Next status</label>
-      <select
-        id={`problem-state-${problem.reportRef}`}
-        value={state}
-        onChange={(event) => setState(event.target.value as typeof state)}
-        className="min-h-11 rounded-md border border-border bg-card px-3"
-      >
-        <option value="investigating">AE is investigating</option>
-        <option value="waiting_for_customer">Customer information needed</option>
-        <option value="closed">Close without adjudication</option>
-      </select>
-      <label htmlFor={`problem-message-${problem.reportRef}`} className="text-sm font-semibold">Customer-visible update</label>
-      <textarea
-        id={`problem-message-${problem.reportRef}`}
-        value={message}
-        onChange={(event) => setMessage(event.target.value)}
-        maxLength={1_000}
-        required
-        className="min-h-24 rounded-md border border-border bg-card p-3"
-      />
+      <Field>
+        <FieldLabel htmlFor={`problem-state-${problem.reportRef}`}>Next status</FieldLabel>
+        <Select
+          value={state}
+          onValueChange={(value) => {
+            if (value === 'investigating' || value === 'waiting_for_customer' || value === 'closed') setState(value)
+          }}
+        >
+          <SelectTrigger id={`problem-state-${problem.reportRef}`} className="min-h-11 w-full bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="investigating">AE is investigating</SelectItem>
+            <SelectItem value="waiting_for_customer">Customer information needed</SelectItem>
+            <SelectItem value="closed">Close without adjudication</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={`problem-message-${problem.reportRef}`}>Customer-visible update</FieldLabel>
+        <Textarea
+          id={`problem-message-${problem.reportRef}`}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          maxLength={1_000}
+          required
+          className="min-h-24 bg-card"
+        />
+      </Field>
       <p className="text-sm text-muted-foreground">
         This records progress only. It does not assign fault, approve compensation, or authorize another business action.
       </p>
@@ -215,8 +228,8 @@ export function SupportProblemReconstruction({
       <div>
         <dt className="font-semibold">Customer-confirmed limits · {reconstruction.authority.state}</dt>
         <dd className="text-muted-foreground">
-          {formatMoney(reconstruction.authority.spend.limit)} maximum ·{' '}
-          {formatMoney(reconstruction.authority.spend.admitted)} admitted so far
+          {formatCurrencyAmount(reconstruction.authority.spend.limit.currency, reconstruction.authority.spend.limit.amountMinor)} maximum ·{' '}
+          {formatCurrencyAmount(reconstruction.authority.spend.admitted.currency, reconstruction.authority.spend.admitted.amountMinor)} admitted so far
         </dd>
         <dd className="text-muted-foreground">
           Confirmed {timestampIso(reconstruction.choice.confirmedAt)} · valid until{' '}
@@ -277,9 +290,6 @@ export function SupportProblemReconstruction({
   </section>
 }
 
-function formatMoney(value: Readonly<{ currency: string; amountMinor: number }>): string {
-  return `${value.currency} ${(value.amountMinor / 100).toFixed(2)}`
-}
 
 function customerLabel(value: string): string {
   const words = value.replaceAll(/[-_]+/gu, ' ')

@@ -9,6 +9,7 @@ import {
   type SourceWriteAdmissionRequest,
   type SourceWriteAdmissionScope,
 } from '@/modules/security/source-write-admission'
+import { isRecord } from '@/modules/common/is-record'
 
 type Env = Record<string, string | undefined>
 
@@ -134,6 +135,3 @@ function refererOrigin(referer: string | null): string | undefined {
 }
 
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}

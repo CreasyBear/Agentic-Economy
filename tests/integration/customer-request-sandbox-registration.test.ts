@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 describe('V2-only sandbox supply registration', () => {
   it('replays the test capability publication against the seeded exact supply', async () => {

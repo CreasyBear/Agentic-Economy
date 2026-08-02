@@ -21,22 +21,14 @@ describe('public owner claim flow', () => {
       catalog: {
         slug: 'parramatta-emergency-plumbing',
         stateTerritory: 'NSW',
-        publicStatus: 'published',
-        indexStatus: 'queued',
-        discoveryStatus: 'degraded',
-        services: [
+        offerings: [
           {
-            firstRequest: {
-              mode: 'not_available_yet',
-              rawContactExcluded: true,
-            },
-            capabilities: [
-              {
-                status: 'unavailable',
-                callable: false,
-                paymentRequired: false,
-              },
-            ],
+            name: 'Emergency pipe repair',
+            category: 'Emergency plumbing',
+            summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
+            serviceAreaSummary: 'Parramatta and nearby suburbs',
+            accessPaths: [],
+            support: { integrated: false, aeSupportedAction: false },
           },
         ],
       },
@@ -121,19 +113,20 @@ describe('public owner claim flow', () => {
       kind: 'ok',
       catalog: {
         slug: 'northside-plumbing',
-        publicStatus: 'published',
-        services: [
+        offerings: [
           {
             name: 'Hot water repairs',
-            firstRequest: {
-              mode: 'not_available_yet',
-              publicDisclosure: 'First request instructions are not available yet.',
-            },
+            category: 'Plumbing',
+            summary: 'Hot water repairs for local homes.',
+            serviceAreaSummary: 'Preston and nearby suburbs',
+            accessPaths: [],
+            support: { integrated: false, aeSupportedAction: false },
           },
         ],
       },
     })
   })
+
 
   it('serves the default public page by slug and reports unknown slugs as no such business', () => {
     expect(getDefaultPublicOwnerStatusReadback().catalog.name).toBe('Parramatta Emergency Plumbing')

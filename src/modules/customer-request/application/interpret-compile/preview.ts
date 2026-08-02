@@ -1,5 +1,6 @@
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import type { CustomerRequestAmendment } from '@/modules/customer-request/semantic-interpreter'
+import { stableUnique } from '@/modules/common/stable-unique'
 
 import { createConfiguredRequestInterpreter, type InterpreterEnvironment } from './interpreter'
 import { proposeThenCompile } from './interpret'
@@ -41,7 +42,7 @@ export type PreviewCustomerRequestResult = Readonly<
     }>
   | Readonly<{
       kind: 'unavailable'
-      reason: 'no_current_supply' | 'preview_unavailable' | 'options_changed'
+      reason: 'no_current_supply' | 'preview_unavailable' | 'options_changed' | 'rate_limited'
       destination: Readonly<{ label: string; request: string }>
     }>
 >
@@ -114,7 +115,7 @@ export async function previewCustomerRequest(
     const routeStep = routeByAction.get(action.actionId)
     const matchingBindings = graph.bindings.filter((binding) => sameCapabilityContractRef(binding.contractRef, action.contractRef))
     const routeOfferingRefs = routeStep === undefined ? [] : [routeStep.offeringId]
-    const offeringRefs = [...new Set([...routeOfferingRefs, ...matchingBindings.map((binding) => binding.offeringId)])]
+    const offeringRefs = stableUnique([...routeOfferingRefs, ...matchingBindings.map((binding) => binding.offeringId)])
       .slice(0, MAX_PREVIEW_OPTIONS)
     return {
       step: index + 1,

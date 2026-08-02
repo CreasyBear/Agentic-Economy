@@ -113,7 +113,7 @@ describe('AeChat route promotion', () => {
   })
 
   it('keeps the active answer shell mounted while promoting a new home turn to its thread route', async () => {
-    testState.navigateResult = createDeferred<void>().promise
+    testState.navigateResult = Promise.withResolvers<void>().promise
 
     render(<AeChat />)
 
@@ -414,6 +414,9 @@ async function submitQuery(query: string, placeholder = 'What do you need done?'
   })
   fireEvent.change(input, { target: { value: query } })
   fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
+  await waitFor(() => {
+    expect(testState.latestTranscriptProps?.liveTurn).not.toBeNull()
+  })
 }
 
 function expectComposerCopy(placeholder: string, loopHint: string) {
@@ -497,12 +500,3 @@ function providerWithoutInquiry(
   return source
 }
 
-function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (reason?: unknown) => void } {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}

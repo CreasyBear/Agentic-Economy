@@ -44,18 +44,11 @@ export {
 } from './reference-composition'
 
 export {
-  assembleRequestGraph,
-  bindRequirementAnswer,
   compileCommit,
-  compileProposal,
   createConfiguredRequestInterpreter,
   durableSubmissionShellView,
-  exactRefKey,
   interpretCompileCommit,
-  interpreterFailureCode,
   loadRequestGraph,
-  proposeThenCompile,
-  rebindStoredFacts,
   replayCommittedCommand,
   retryableCompileAdmissionFailure,
   type CommitResult,

@@ -18,7 +18,11 @@ import type {
   ReadDeveloperDiscoveryRouteOptions,
 } from '@/modules/discovery/developer-discovery'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import type { PublicBusinessCatalogApiV2Page, PublicBusinessCatalogV2DetailResult } from '@/modules/registry/public'
+import type {
+  PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
+  PublicBusinessCatalogV2DetailResult,
+} from '@/modules/registry/public'
 import { handleDurableBusinessDetailRequest } from './api.businesses.$slug'
 import { handleDurableListBusinessesRequest } from './api.businesses'
 import { handleDurableSearchBusinessesRequest } from './api.businesses.search'
@@ -107,10 +111,12 @@ export async function buildDeveloperDiscoveryRouteSnapshot(
     expectedSchemaVersion: 'public-business-catalog-api:v2',
     run: () => handleDurableListBusinessesRequest(new Request(listRoute)),
   })
-  const firstCatalog = list.body?.kind === 'ok' ? list.body.items.at(0) : undefined
+  const firstCatalog = list.body?.kind === 'ok' && Array.isArray(list.body.page)
+    ? list.body.page[0]
+    : undefined
   const searchQuery = firstCatalog?.category ?? firstCatalog?.name ?? ''
   const searchRoute = `${origin}/api/businesses/search?q=${encodeURIComponent(searchQuery)}`
-  const search = await executeJsonRoute<PublicBusinessCatalogApiV2Page>({
+  const search = await executeJsonRoute<PublicBusinessCatalogApiV2SearchPage>({
     route: searchRoute,
     label: 'Public catalog search JSON',
     checkedAt,

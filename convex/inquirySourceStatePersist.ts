@@ -1,3 +1,5 @@
+import type { GenericDatabaseWriter } from 'convex/server'
+import type { DataModel } from './_generated/dataModel'
 import {
   encryptGovernedSendReceipt,
   resolveInquiryReceiptKeyring,
@@ -11,44 +13,44 @@ import type {
   InquiryOperationRecord,
   InquirySourceState,
 } from '../src/modules/inquiries/public'
+import type { InquirySourceDocument } from './inquirySourceStateMappers'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash, stableStringify } from '../src/modules/common/stable-hash'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
-import {
-  numberField,
-  optionalNumberFromUnknown,
-  stringArrayField,
-  stringField,
-  takeRuntimeRows,
-  upsertByFields,
-} from './inquiryRuntimeDbHelpers'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { stableStringify } from '../src/modules/common/stable-hash'
 import {
   operationNameForResult,
   redactedJson,
+  requiredNumber,
+  requiredString,
+  requiredStringArray,
   toGovernedSendErasureLineageRecord,
   toGovernedSendIntegrityCommitmentRecord,
   toGovernedSendReceiptRecord,
 } from './inquirySourceStateMappers'
 
-export async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceState): Promise<void> {
+export async function persistInquirySourceState(db: GenericDatabaseWriter<DataModel>, state: InquirySourceState): Promise<void> {
   for (const bucket of state.abuseRateLimitBuckets.filter((candidate) => candidate.scope === 'inquiry_submit')) {
-    await upsertByFields(db, 'inquiryAbuseBuckets', ['key', 'window'], {
+    const patch = {
       key: bucket.key,
       window: bucket.window,
       count: bucket.count,
-      state: bucket.state,
+      state: bucket.state === 'blocked' ? 'limited' as const : bucket.state,
       resetAt: bucket.resetAt,
       updatedAt: bucket.updatedAt,
-    })
+    }
+    const existing = await db.query('inquiryAbuseBuckets')
+      .withIndex('by_key_window', (query) => query.eq('key', patch.key).eq('window', patch.window))
+      .unique()
+    if (existing === null) await db.insert('inquiryAbuseBuckets', patch)
+    else await db.patch(existing._id, patch)
   }
 
   for (const thread of state.threads) {
-    await upsertByFields(db, 'inquiryThreads', ['threadId'], {
+    const patch = {
       threadId: thread.threadId,
-      businessId: thread.businessId,
-      ownerId: thread.ownerId,
-      serviceId: thread.serviceId,
-      capabilityKind: thread.capabilityKind,
+      businessId: requireBusinessId(db, thread.businessId),
+      ownerId: requireOwnerId(db, thread.ownerId),
+      offeringRef: thread.offeringRef,
       status: thread.status,
       firstMessageId: thread.firstMessageId,
       sourceHash: thread.sourceHash,
@@ -59,15 +61,15 @@ export async function persistInquirySourceState(db: RuntimeDb, state: InquirySou
       ...(thread.readAt === undefined ? {} : { readAt: thread.readAt }),
       ...(thread.repliedAt === undefined ? {} : { repliedAt: thread.repliedAt }),
       ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
-      ...(thread.origin === undefined ? {} : {
-        originKind: thread.origin.kind,
-        originThreadId: thread.origin.threadId,
-      }),
-    })
+      ...(thread.origin === undefined ? {} : { originKind: thread.origin.kind, originThreadId: thread.origin.threadId }),
+    }
+    const existing = await db.query('inquiryThreads').withIndex('by_threadId', (query) => query.eq('threadId', patch.threadId)).unique()
+    if (existing === null) await db.insert('inquiryThreads', patch)
+    else await db.patch(existing._id, patch)
   }
 
   for (const grant of state.customerAccessGrants) {
-    await upsertByFields(db, 'inquiryCustomerAccessGrants', ['accessId'], {
+    const patch = {
       accessId: grant.accessId,
       threadId: grant.threadId,
       scope: grant.scope,
@@ -78,11 +80,14 @@ export async function persistInquirySourceState(db: RuntimeDb, state: InquirySou
       createdAt: grant.createdAt,
       expiresAt: grant.expiresAt,
       ...(grant.revokedAt === undefined ? {} : { revokedAt: grant.revokedAt }),
-    })
+    }
+    const existing = await db.query('inquiryCustomerAccessGrants').withIndex('by_accessId', (query) => query.eq('accessId', patch.accessId)).unique()
+    if (existing === null) await db.insert('inquiryCustomerAccessGrants', patch)
+    else await db.patch(existing._id, patch)
   }
 
   for (const message of state.messages) {
-    await upsertByFields(db, 'inquiryMessages', ['messageId'], {
+    const patch = {
       messageId: message.messageId,
       threadId: message.threadId,
       sender: message.sender,
@@ -92,11 +97,14 @@ export async function persistInquirySourceState(db: RuntimeDb, state: InquirySou
       ...(message.redactedContact === undefined ? {} : { redactedContact: redactedJson(message.redactedContact) }),
       ...(message.privateDeletedAt === undefined ? {} : { privateDeletedAt: message.privateDeletedAt }),
       createdAt: message.createdAt,
-    })
+    }
+    const existing = await db.query('inquiryMessages').withIndex('by_messageId', (query) => query.eq('messageId', patch.messageId)).unique()
+    if (existing === null) await db.insert('inquiryMessages', patch)
+    else await db.patch(existing._id, patch)
   }
 
   for (const notification of state.notifications) {
-    await upsertByFields(db, 'inquiryNotifications', ['notificationId'], {
+    const patch = {
       notificationId: notification.notificationId,
       threadId: notification.threadId,
       messageId: notification.messageId,
@@ -110,13 +118,16 @@ export async function persistInquirySourceState(db: RuntimeDb, state: InquirySou
       dispatchStatuses: notification.dispatchBindings.map((binding) => binding.status),
       createdAt: notification.createdAt,
       updatedAt: notification.updatedAt,
-    })
+    }
+    const existing = await db.query('inquiryNotifications').withIndex('by_notificationId', (query) => query.eq('notificationId', patch.notificationId)).unique()
+    if (existing === null) await db.insert('inquiryNotifications', patch)
+    else await db.patch(existing._id, patch)
   }
 
   for (const tombstone of state.privacyTombstones) {
-    await upsertByFields(db, 'inquiryPrivacyTombstones', ['threadId', 'operationKey'], {
+    const patch = {
       threadId: tombstone.threadId,
-      businessId: tombstone.businessId,
+      businessId: requireBusinessId(db, tombstone.businessId),
       reasonCode: tombstone.reasonCode,
       status: tombstone.status,
       operationKey: tombstone.operationKey,
@@ -125,56 +136,37 @@ export async function persistInquirySourceState(db: RuntimeDb, state: InquirySou
       ...(tombstone.appliedAt === undefined ? {} : { appliedAt: tombstone.appliedAt }),
       receiptErasureCount: tombstone.receiptErasureCount,
       erasureEventIds: [...tombstone.erasureEventIds],
-    })
+    }
+    const existing = await db.query('inquiryPrivacyTombstones')
+      .withIndex('by_thread_operationKey', (query) => query.eq('threadId', patch.threadId).eq('operationKey', patch.operationKey))
+      .unique()
+    if (existing === null) await db.insert('inquiryPrivacyTombstones', patch)
+    else await db.patch(existing._id, patch)
   }
 
   for (const receipt of state.governedSendReceipts) {
-    const lineage = state.governedSendErasureLineage.find(
-      (candidate) => candidate.receiptOperationKey === receipt.operationKey,
-    )
+    const lineage = state.governedSendErasureLineage.find((candidate) => candidate.receiptOperationKey === receipt.operationKey)
     await persistGovernedSendReceipt(db, receipt, lineage)
   }
+  for (const commitment of state.governedSendIntegrityCommitments) await persistGovernedSendIntegrityCommitment(db, commitment)
 
-  for (const commitment of state.governedSendIntegrityCommitments) {
-    await persistGovernedSendIntegrityCommitment(db, commitment)
-  }
-
-  const auditEventsByOperationKey = new Map(
-    state.auditEvents.map((auditEvent) => [auditEvent.operationKey, auditEvent] as const)
-  )
-
-  for (const operation of state.operations) {
-    await upsertInquiryOperation(
-      db,
-      operation,
-      auditEventsByOperationKey.get(operation.operationKey)
-    )
-  }
-
-  for (const auditEvent of state.auditEvents) {
-    await upsertAuditEvent(db, auditEvent)
-  }
-
-  for (const funnelEvent of state.funnelEvents) {
-    await upsertFunnelEvent(db, funnelEvent)
-  }
+  const auditEventsByOperationKey = new Map(state.auditEvents.map((auditEvent) => [auditEvent.operationKey, auditEvent] as const))
+  for (const operation of state.operations) await upsertInquiryOperation(db, operation, auditEventsByOperationKey.get(operation.operationKey))
+  for (const auditEvent of state.auditEvents) await upsertAuditEvent(db, auditEvent)
+  for (const funnelEvent of state.funnelEvents) await upsertFunnelEvent(db, funnelEvent)
 }
 
-async function upsertInquiryOperation(
-  db: RuntimeDb,
-  operation: InquiryOperationRecord,
-  auditEvent: InquiryAuditRecord | undefined
-): Promise<void> {
-  await upsertByFields(db, 'operationKeys', ['scope', 'key'], {
+async function upsertInquiryOperation(db: GenericDatabaseWriter<DataModel>, operation: InquiryOperationRecord, auditEvent: InquiryAuditRecord | undefined): Promise<void> {
+  const patch = {
     scope: 'inquiry',
     actorKind: auditEvent?.actorKind ?? 'system',
     actorRef: auditEvent?.actorRef ?? 'system:inquiry',
     operationName: operationNameForResult(operation.resultCode),
     key: operation.operationKey,
     requestHash: operation.requestHash,
-    sourceHash: operation.threadId,
-    status: 'succeeded',
-    resultHash: stableHash({ resultCode: operation.resultCode }),
+    ...(operation.threadId === undefined ? {} : { sourceHash: operation.threadId }),
+    status: 'succeeded' as const,
+    resultHash: canonicalDigest({ resultCode: operation.resultCode }),
     effectRefs: [
       `result:${operation.resultCode}`,
       ...(operation.threadId === undefined ? [] : [`thread:${operation.threadId}`]),
@@ -183,213 +175,129 @@ async function upsertInquiryOperation(
     ],
     createdAt: operation.createdAt,
     updatedAt: operation.createdAt,
-  })
+  }
+  const existingRows = await db.query('operationKeys').withIndex('by_scope_key', (query) => query.eq('scope', patch.scope).eq('key', patch.key)).take(1)
+  const existing = existingRows[0]
+  if (existing === undefined) await db.insert('operationKeys', patch)
+  else await db.patch(existing._id, patch)
 }
-export async function repairGovernedSendErasureKeys(db: RuntimeDb, threadId: string): Promise<void> {
-  const lineageRows = await takeRuntimeRows(
-    db.query('governedSendErasureLineage').withIndex('by_thread_destroyedAt', (query) => query.eq('threadId', threadId)),
-    20,
-  )
+
+export async function repairGovernedSendErasureKeys(db: GenericDatabaseWriter<DataModel>, threadId: string): Promise<void> {
+  const lineageRows = await db.query('governedSendErasureLineage').withIndex('by_thread_destroyedAt', (query) => query.eq('threadId', threadId)).take(20)
   for (const lineageRow of lineageRows) {
     const lineage = toGovernedSendErasureLineageRecord(lineageRow)
-    const receiptLineageRows = lineageRows.filter(
-      (candidate) => stringField(candidate, 'receiptOperationKey') === String(lineage.receiptOperationKey),
-    )
-    if (receiptLineageRows.length !== 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
-    const keyRows = await takeRuntimeRows(
-      db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)), 2,
-    )
+    if (lineageRows.filter((candidate) => requiredString(candidate, 'receiptOperationKey', 'inquiry_persist') === String(lineage.receiptOperationKey)).length !== 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
+    const keyRows = await db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)).take(2)
     if (keyRows.length > 1) throw new Error('governed_send_receipt_key_duplicate_rows')
     const key = keyRows[0]
     if (key === undefined) continue
-    const receiptRows = await takeRuntimeRows(
-      db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', lineage.receiptOperationKey)), 2,
-    )
-    if (receiptRows.length !== 1) throw new Error('governed_send_receipt_conflict')
-    const receipt = receiptRows[0]
-    if (receipt === undefined) throw new Error('governed_send_receipt_conflict')
-    await assertGovernedSendLineageAuthority(db, receipt, lineage)
-    if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
+    const receiptRows = await db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', lineage.receiptOperationKey)).take(2)
+    if (receiptRows.length !== 1 || receiptRows[0] === undefined) throw new Error('governed_send_receipt_conflict')
+    if (db.delete === undefined) throw new Error('inquiry_source_delete_unavailable')
     await db.delete(key._id)
   }
 }
 
-async function assertGovernedSendLineageAuthority(
-  db: RuntimeDb,
-  receipt: RuntimeDocument,
-  lineage: GovernedSendErasureLineageRecord,
-): Promise<void> {
-  const tombstoneRows = await takeRuntimeRows(
-    db.query('inquiryPrivacyTombstones').withIndex('by_thread_operationKey', (query) =>
-      query.eq('threadId', lineage.threadId).eq('operationKey', lineage.privacyOperationKey)), 2,
-  )
-  if (tombstoneRows.length !== 1) throw new Error('governed_send_erasure_lineage_conflict')
+async function assertGovernedSendLineageAuthority(db: GenericDatabaseWriter<DataModel>, receipt: InquirySourceDocument, lineage: GovernedSendErasureLineageRecord): Promise<void> {
+  const tombstoneRows = await db.query('inquiryPrivacyTombstones').withIndex('by_thread_operationKey', (query) => query.eq('threadId', lineage.threadId).eq('operationKey', lineage.privacyOperationKey)).take(2)
+  if (tombstoneRows.length !== 1 || tombstoneRows[0] === undefined) throw new Error('governed_send_erasure_lineage_conflict')
   const tombstone = tombstoneRows[0]
-  if (tombstone === undefined) throw new Error('governed_send_erasure_lineage_conflict')
-  const destroyedAt = optionalNumberFromUnknown(tombstone.appliedAt)
-  const erasureEventIds = stringArrayField(tombstone, 'erasureEventIds')
-  if (
-    stringField(tombstone, 'status') !== 'applied' ||
-    new Set(erasureEventIds).size !== erasureEventIds.length ||
-    destroyedAt === undefined ||
-    numberField(tombstone, 'receiptErasureCount') !== erasureEventIds.length ||
-    !erasureEventIds.includes(lineage.erasureEventId)
-  ) {
-    throw new Error('governed_send_erasure_lineage_conflict')
+  const erasureEventIds = requiredStringArray(tombstone, 'erasureEventIds', 'inquiry_persist')
+  const appliedAt = tombstone.appliedAt === undefined ? undefined : requiredNumber(tombstone, 'appliedAt', 'inquiry_persist')
+  const receiptOperationKey = requiredString(receipt, 'operationKey', 'inquiry_persist')
+  const receiptThreadId = requiredString(receipt, 'threadId', 'inquiry_persist')
+  const receiptDigest = requiredString(receipt, 'digest', 'inquiry_persist')
+  const receiptKeyRef = requiredString(receipt, 'keyRef', 'inquiry_persist')
+  const receiptSchemaVersion = requiredNumber(receipt, 'schemaVersion', 'inquiry_persist')
+  const receiptRecipientRef = requiredString(receipt, 'recipientRef', 'inquiry_persist')
+  if (requiredString(tombstone, 'status', 'inquiry_persist') !== 'applied' || new Set(erasureEventIds).size !== erasureEventIds.length || appliedAt === undefined || requiredNumber(tombstone, 'receiptErasureCount', 'inquiry_persist') !== erasureEventIds.length || !erasureEventIds.includes(lineage.erasureEventId)) throw new Error('governed_send_erasure_lineage_conflict')
+  const material = {
+    erasureEventId: `governed-send-erasure:${canonicalDigest({ receiptOperationKey, privacyOperationKey: lineage.privacyOperationKey, keyRef: receiptKeyRef })}`,
+    receiptOperationKey: brandNonEmpty(receiptOperationKey, 'OperationKey'),
+    privacyOperationKey: brandNonEmpty(requiredString(tombstone, 'operationKey', 'inquiry_persist'), 'OperationKey'),
+    threadId: brandNonEmpty(receiptThreadId, 'InquiryThreadId'),
+    digest: receiptDigest,
+    keyRef: receiptKeyRef,
+    reasonCode: requiredString(tombstone, 'reasonCode', 'inquiry_persist'),
+    destroyedAt: appliedAt,
+    priorReceiptCommitment: canonicalDigest({ operationKey: receiptOperationKey, threadId: receiptThreadId, digest: receiptDigest, schemaVersion: receiptSchemaVersion, recipientRef: receiptRecipientRef, keyRef: receiptKeyRef }),
   }
-  const expectedMaterial = {
-    erasureEventId: `governed-send-erasure:${stableHash({ receiptOperationKey: stringField(receipt, 'operationKey'), privacyOperationKey: lineage.privacyOperationKey, keyRef: stringField(receipt, 'keyRef') })}`,
-    receiptOperationKey: brandNonEmpty(stringField(receipt, 'operationKey'), 'OperationKey'),
-    privacyOperationKey: brandNonEmpty(stringField(tombstone, 'operationKey'), 'OperationKey'),
-    threadId: brandNonEmpty(stringField(receipt, 'threadId'), 'InquiryThreadId'),
-    digest: stringField(receipt, 'digest') as `sha256:${string}`,
-    keyRef: stringField(receipt, 'keyRef'),
-    reasonCode: stringField(tombstone, 'reasonCode'),
-    destroyedAt,
-    priorReceiptCommitment: stableHash({ operationKey: stringField(receipt, 'operationKey'), threadId: stringField(receipt, 'threadId'), digest: stringField(receipt, 'digest'), schemaVersion: numberField(receipt, 'schemaVersion'), recipientRef: stringField(receipt, 'recipientRef'), keyRef: stringField(receipt, 'keyRef') }),
-  }
-  const expected = { ...expectedMaterial, lineageHash: stableHash(expectedMaterial) }
-  if (stableStringify(expected) !== stableStringify(lineage)) throw new Error('governed_send_erasure_lineage_conflict')
+  if (stableStringify({ ...material, lineageHash: canonicalDigest(material) }) !== stableStringify(lineage)) throw new Error('governed_send_erasure_lineage_conflict')
 }
 
-async function persistGovernedSendReceipt(
-  db: RuntimeDb,
-  receipt: GovernedSendReceiptRecord,
-  lineage: GovernedSendErasureLineageRecord | undefined,
-): Promise<void> {
-  const existingRows = await takeRuntimeRows(
-    db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', receipt.operationKey)),
-    2,
-  )
+async function persistGovernedSendReceipt(db: GenericDatabaseWriter<DataModel>, receipt: GovernedSendReceiptRecord, lineage: GovernedSendErasureLineageRecord | undefined): Promise<void> {
+  const existingRows = await db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', receipt.operationKey)).take(2)
   if (existingRows.length > 1) throw new Error('governed_send_receipt_duplicate_rows')
   const existing = existingRows[0]
-
   if (existing === undefined) {
-    if (receipt.retention !== 'recoverable') {
-      throw new Error('Cannot persist erased governed-send metadata without its immutable receipt.')
-    }
+    if (receipt.retention !== 'recoverable') throw new Error('Cannot persist erased governed-send metadata without its immutable receipt.')
     const encrypted = await encryptGovernedSendReceipt(receipt, resolveInquiryReceiptKeyring(process.env))
-    await db.insert('governedSendReceipts', {
-      ...encrypted.payload,
-      digest: receipt.digest,
-      algorithm: receipt.algorithm,
-      schemaVersion: receipt.schemaVersion,
-      createdAt: receipt.createdAt,
-      operationKey: receipt.operationKey,
-      threadId: receipt.threadId,
-      admissionProof: receipt.admissionProof,
-      recipientRef: receipt.recipientRef,
-    })
+    await db.insert('governedSendReceipts', { ...encrypted.payload, digest: receipt.digest, algorithm: receipt.algorithm, schemaVersion: receipt.schemaVersion, createdAt: receipt.createdAt, operationKey: receipt.operationKey, threadId: receipt.threadId, admissionProof: receipt.admissionProof, recipientRef: receipt.recipientRef })
     await db.insert('governedSendReceiptKeys', encrypted.wrappedKey)
     return
   }
-
+  const existingKeyRef = requiredString(existing, 'keyRef', 'inquiry_persist')
   if (receipt.retention === 'recoverable') {
-    const keyRows = await takeRuntimeRows(
-      db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', stringField(existing, 'keyRef'))),
-      2,
-    )
+    const keyRows = await db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', existingKeyRef)).take(2)
     if (keyRows.length !== 1) throw new Error('governed_send_receipt_conflict')
-    const recovered = await toGovernedSendReceiptRecord(
-      existing,
-      keyRows,
-      [],
-      resolveInquiryReceiptKeyring(process.env),
-    )
-    if (recovered === undefined || stableStringify(recovered) !== stableStringify(receipt)) {
-      throw new Error('governed_send_receipt_conflict')
-    }
+    const recovered = await toGovernedSendReceiptRecord(existing, keyRows, [], resolveInquiryReceiptKeyring(process.env))
+    if (recovered === undefined || stableStringify(recovered) !== stableStringify(receipt)) throw new Error('governed_send_receipt_conflict')
     return
   }
-  if (lineage === undefined || lineage.keyRef !== stringField(existing, 'keyRef')) {
-    throw new Error('Governed-send erasure lineage does not match the persisted receipt key.')
-  }
+  if (lineage === undefined || lineage.keyRef !== existingKeyRef) throw new Error('Governed-send erasure lineage does not match the persisted receipt key.')
   const { lineageHash, ...lineageMaterial } = lineage
-  if (lineageHash !== stableHash(lineageMaterial)) {
-    throw new Error('governed_send_erasure_lineage_conflict')
-  }
+  if (lineageHash !== canonicalDigest(lineageMaterial)) throw new Error('governed_send_erasure_lineage_conflict')
   await assertGovernedSendLineageAuthority(db, existing, lineage)
-
-  const existingLineageRows = await takeRuntimeRows(
-    db.query('governedSendErasureLineage')
-      .withIndex('by_erasureEventId', (query) => query.eq('erasureEventId', lineage.erasureEventId)),
-    2,
-  )
+  const existingLineageRows = await db.query('governedSendErasureLineage').withIndex('by_erasureEventId', (query) => query.eq('erasureEventId', lineage.erasureEventId)).take(2)
   if (existingLineageRows.length > 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
   const existingLineage = existingLineageRows[0]
-  if (
-    existingLineage !== undefined &&
-    stableStringify(toGovernedSendErasureLineageRecord(existingLineage)) !== stableStringify(lineage)
-  ) throw new Error('governed_send_erasure_lineage_conflict')
-
-  const wrappedKeyRows = await takeRuntimeRows(
-    db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)),
-    2,
-  )
+  if (existingLineage !== undefined && stableStringify(toGovernedSendErasureLineageRecord(existingLineage)) !== stableStringify(lineage)) throw new Error('governed_send_erasure_lineage_conflict')
+  const wrappedKeyRows = await db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)).take(2)
   if (wrappedKeyRows.length > 1) throw new Error('governed_send_receipt_key_duplicate_rows')
   const wrappedKey = wrappedKeyRows[0]
   if (wrappedKey !== undefined) {
-    if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
+    if (db.delete === undefined) throw new Error('inquiry_source_delete_unavailable')
     await db.delete(wrappedKey._id)
   }
   if (existingLineage === undefined) await db.insert('governedSendErasureLineage', { ...lineage })
 }
 
-async function persistGovernedSendIntegrityCommitment(
-  db: RuntimeDb,
-  commitment: GovernedSendIntegrityCommitmentRecord,
-): Promise<void> {
-  const rows = await takeRuntimeRows(
-    db.query('governedSendIntegrityCommitments').withIndex('by_operationKey', (query) => query.eq('operationKey', commitment.operationKey)),
-    2,
-  )
+async function persistGovernedSendIntegrityCommitment(db: GenericDatabaseWriter<DataModel>, commitment: GovernedSendIntegrityCommitmentRecord): Promise<void> {
+  const rows = await db.query('governedSendIntegrityCommitments').withIndex('by_operationKey', (query) => query.eq('operationKey', commitment.operationKey)).take(2)
   if (rows.length > 1) throw new Error('governed_send_commitment_duplicate_rows')
   const existing = rows[0]
   if (existing === undefined) {
-    await db.insert('governedSendIntegrityCommitments', { ...commitment })
+    await db.insert('governedSendIntegrityCommitments', { version: commitment.version, receiptRef: commitment.receiptRef, operationKey: commitment.operationKey, threadId: commitment.threadId, digest: commitment.digest, keyId: commitment.keyId, targetBinding: { businessId: requireBusinessId(db, commitment.targetBinding.businessId), ownerId: requireOwnerId(db, commitment.targetBinding.ownerId), offeringRef: commitment.targetBinding.offeringRef, claimRef: commitment.targetBinding.claimRef, recipientRef: commitment.targetBinding.recipientRef }, signature: commitment.signature, createdAt: commitment.createdAt })
     return
   }
-  if (stableStringify(toGovernedSendIntegrityCommitmentRecord(existing)) !== stableStringify(commitment)) {
-    throw new Error('governed_send_commitment_conflict')
-  }
+  if (stableStringify(toGovernedSendIntegrityCommitmentRecord(existing)) !== stableStringify(commitment)) throw new Error('governed_send_commitment_conflict')
 }
 
-
-async function upsertAuditEvent(db: RuntimeDb, auditEvent: InquiryAuditRecord): Promise<void> {
-  const eventId = `audit:${stableHash({
-    eventType: auditEvent.eventType,
-    operationKey: auditEvent.operationKey,
-    targetRef: auditEvent.targetRef,
-  })}`
-  await upsertByFields(db, 'auditEvents', ['eventId'], {
-    eventId,
-    eventType: auditEvent.eventType,
-    actorKind: auditEvent.actorKind,
-    actorRef: auditEvent.actorRef,
-    businessId: auditEvent.businessId,
-    targetType: auditEvent.targetType,
-    targetRef: auditEvent.targetRef,
-    beforeState: auditEvent.beforeState,
-    afterState: auditEvent.afterState,
-    idempotencyKey: auditEvent.operationKey,
-    correlationId: auditEvent.correlationId,
-    evidenceRefs: [],
-    redactedPayloadJson: JSON.stringify(auditEvent.redactedPayload),
-    payloadHash: auditEvent.payloadHash,
-    createdAt: auditEvent.createdAt,
-  })
+async function upsertAuditEvent(db: GenericDatabaseWriter<DataModel>, auditEvent: InquiryAuditRecord): Promise<void> {
+  const eventId = `audit:${canonicalDigest({ eventType: auditEvent.eventType, operationKey: auditEvent.operationKey, targetRef: auditEvent.targetRef })}`
+  const patch = { eventId, eventType: auditEvent.eventType, actorKind: auditEvent.actorKind, actorRef: auditEvent.actorRef, ...(auditEvent.businessId === undefined ? {} : { businessId: requireBusinessId(db, auditEvent.businessId) }), targetType: auditEvent.targetType, targetRef: auditEvent.targetRef, ...(auditEvent.beforeState === undefined ? {} : { beforeState: auditEvent.beforeState }), ...(auditEvent.afterState === undefined ? {} : { afterState: auditEvent.afterState }), idempotencyKey: auditEvent.operationKey, correlationId: auditEvent.correlationId, evidenceRefs: [], redactedPayloadJson: JSON.stringify(auditEvent.redactedPayload), payloadHash: auditEvent.payloadHash, createdAt: auditEvent.createdAt }
+  const existing = await db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
+  if (existing === null) await db.insert('auditEvents', patch)
+  else await db.patch(existing._id, patch)
 }
 
-async function upsertFunnelEvent(db: RuntimeDb, funnelEvent: InquiryFunnelRecord): Promise<void> {
-  await upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
-    eventType: funnelEvent.eventType,
-    source: 'inquiry',
-    stage: 'published',
-    pseudonymousSessionId: funnelEvent.pseudonymousSessionId,
-    businessId: funnelEvent.businessId,
-    redactedPayloadJson: JSON.stringify(funnelEvent.redactedPayload),
-    consentFlag: true,
-    correlationId: funnelEvent.correlationId,
-    createdAt: funnelEvent.createdAt,
-  })
+async function upsertFunnelEvent(db: GenericDatabaseWriter<DataModel>, funnelEvent: InquiryFunnelRecord): Promise<void> {
+  const patch = { eventType: funnelEvent.eventType, source: 'inquiry', stage: 'published' as const, pseudonymousSessionId: funnelEvent.pseudonymousSessionId, ...(funnelEvent.businessId === undefined ? {} : { businessId: requireBusinessId(db, funnelEvent.businessId) }), redactedPayloadJson: JSON.stringify(funnelEvent.redactedPayload), consentFlag: true, correlationId: funnelEvent.correlationId, createdAt: funnelEvent.createdAt }
+  const existingRows = await db.query('funnelEvents').withIndex('by_eventType_business_correlation_createdAt', (query) => query.eq('eventType', patch.eventType).eq('businessId', patch.businessId).eq('correlationId', patch.correlationId).eq('createdAt', patch.createdAt)).take(1)
+  const existing = existingRows[0]
+  if (existing === undefined) await db.insert('funnelEvents', patch)
+  else await db.patch(existing._id, patch)
 }
+
+function requireBusinessId(db: GenericDatabaseWriter<DataModel>, value: string): import('./_generated/dataModel').Id<'businesses'> {
+  const id = db.normalizeId('businesses', value)
+  if (id === null) throw new Error('invalid_inquiry_business_id')
+  return id
+}
+
+function requireOwnerId(db: GenericDatabaseWriter<DataModel>, value: string): import('./_generated/dataModel').Id<'owners'> {
+  const id = db.normalizeId('owners', value)
+  if (id === null) throw new Error('invalid_inquiry_owner_id')
+  return id
+}
+

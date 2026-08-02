@@ -2,7 +2,7 @@ import { auth } from '@clerk/tanstack-react-start/server'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { storefrontEnrichDraftAction } from '@/modules/storefront/storefront.actions'
 import { jsonResponse } from './api.businesses'
@@ -25,19 +25,17 @@ export async function handleEnrichStorefrontDraftRequest(request: Request): Prom
     }
   }
 
-  const boundedBody = await readBoundedRequestText(request, MAX_STOREFRONT_ENRICH_BODY_BYTES)
+  const boundedBody = await readBoundedRequestJson(request, MAX_STOREFRONT_ENRICH_BODY_BYTES)
   if (!boundedBody.ok) {
-    return jsonResponse({ kind: 'error', code: 'storefront_enrich_payload_too_large', reason: 'Request body is too large.' }, { status: 413 })
+    const isTooLarge = boundedBody.code === 'payload_too_large'
+    return jsonResponse({
+      kind: 'error',
+      code: isTooLarge ? 'storefront_enrich_payload_too_large' : 'storefront_enrich_invalid_body',
+      reason: isTooLarge ? 'Request body is too large.' : 'Request body must be JSON.',
+    }, { status: isTooLarge ? 413 : 400 })
   }
 
-  let body: unknown
-  try {
-    body = JSON.parse(boundedBody.text)
-  } catch {
-    return jsonResponse({ kind: 'error', code: 'storefront_enrich_invalid_body', reason: 'Request body must be JSON.' }, { status: 400 })
-  }
-
-  const parsed = storefrontEnrichDraftAction.schema.safeParse(body)
+  const parsed = storefrontEnrichDraftAction.schema.safeParse(boundedBody.value)
   if (!parsed.success) {
     return jsonResponse({ kind: 'error', code: 'storefront_enrich_invalid_body', reason: z.prettifyError(parsed.error) }, { status: 400 })
   }

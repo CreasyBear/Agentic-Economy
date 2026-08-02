@@ -1,5 +1,6 @@
 import type { PreparedRouteCandidateSet } from './preparation'
 import type { CustomerOption, CustomerOptionSet } from './agent-contract'
+import { formatCurrencyAmount } from './format-currency-amount'
 
 type CoverageStatus = PreparedRouteCandidateSet['attempts'][number]['status']
 
@@ -48,7 +49,7 @@ function projectOrdering(
         || candidate.commercialInfluence.influencesInclusion
         || candidate.commercialInfluence.influencesOrder))
     || !hasComparableShape(candidateSet.candidates)) return { kind: 'unranked', commercialInfluence }
-  const ordered = [...candidateSet.candidates].sort((left, right) => left.maximumCost.amountMinor - right.maximumCost.amountMinor)
+  const ordered = candidateSet.candidates.toSorted((left, right) => left.maximumCost.amountMinor - right.maximumCost.amountMinor)
   const selected = ordered[0]
   const next = ordered[1]
   if (selected === undefined || next === undefined
@@ -60,8 +61,8 @@ function projectOrdering(
     kind: 'recommended', commercialInfluence, objective: preference.objective,
     optionRef: selected.optionRef, evidenceRef: preference.evidenceRef,
     reasons: Object.freeze([
-      `Lowest provider maximum at ${formatMinor(currency, selected.maximumCost.amountMinor)}.`,
-      `${formatMinor(currency, difference)} below the next-lowest provider maximum.`,
+      `Lowest provider maximum at ${formatCurrencyAmount(currency, selected.maximumCost.amountMinor)}.`,
+      `${formatCurrencyAmount(currency, difference)} below the next-lowest provider maximum.`,
     ]),
     tradeoffs: Object.freeze(tradeoffs.length === 0
       ? ['No differing registered comparison outputs were reported.']
@@ -107,9 +108,6 @@ function comparableOutputTradeoffs(
   }))
 }
 
-function formatMinor(currency: string, amountMinor: number): string {
-  return `${currency} ${(amountMinor / 100).toFixed(2)}`
-}
 
 function optionCommercialInfluence(candidates: PreparedRouteCandidateSet['candidates']): 'none' | 'disclosed' | 'unknown' {
   if (candidates.length === 0) return 'unknown'

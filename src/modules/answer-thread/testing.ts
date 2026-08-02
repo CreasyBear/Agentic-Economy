@@ -13,9 +13,4 @@ export {
   type AnswerHarnessSessionJournalWriter,
 } from './internal/answer-turn-finalization'
 export { setLlmFollowUpChipGeneratorForTests } from './internal/llm-follow-up-chips'
-export {
-  ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT,
-  ANSWER_STREAM_RATE_LIMIT,
-  ANSWER_TURN_RATE_LIMIT,
-  resetAnswerTurnGuardForTests,
-} from './internal/turn-guard'
+export { resetAnswerTurnGuardForTests } from './internal/turn-guard'

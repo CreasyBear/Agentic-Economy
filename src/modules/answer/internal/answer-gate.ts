@@ -1,3 +1,5 @@
+import { createPrefixedRandomId } from '@/modules/common/random-id'
+
 import type { AnswerSnapshot } from '../answer-synthesizer'
 import {
   hasEpistemicVocabulary,
@@ -49,5 +51,5 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
 }
 
 function makeGateCopyId(): string {
-  return `gate-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return createPrefixedRandomId(`gate-${Date.now().toString(36)}-`)
 }

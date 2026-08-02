@@ -1,4 +1,5 @@
 import { parseArgs as parseNodeArgs } from 'node:util'
+import { trimTrailingSlashes } from '../../../src/modules/common/trim-trailing-slashes'
 
 export type CliOptions = {
 
@@ -35,7 +36,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   })
   const baseUrl = parsed.values['base-url'] === undefined
     ? process.env.AE_CLI_BASE_URL?.trim() || DEFAULT_BASE_URL
-    : parsed.values['base-url'].replace(/\/+$/u, '')
+    : trimTrailingSlashes(parsed.values['base-url'])
   const options: CliOptions = {
     baseUrl,
     json: parsed.values.json ?? false,

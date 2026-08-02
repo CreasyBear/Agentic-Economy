@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
-import type { FrozenTurnEvidence, FrozenTurnProse } from '@/modules/answer-thread/harness'
+import type { FrozenTurnEvidence, FrozenTurnEvidenceDraft, FrozenTurnProse } from '@/modules/answer-thread/harness'
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
 import {
   accessForHarnessRunViewerAdminMembership,
@@ -128,6 +129,7 @@ describe('harness run viewer source seam', () => {
     expect(
       accessForHarnessRunViewerAdminMembership({
         clerkUserId: 'reviewer@example.test',
+        tokenIdentifier: 'clerk|reviewer@example.test',
         role: 'reviewer',
         state: 'active',
         grantedBy: 'owner@example.test',
@@ -137,6 +139,7 @@ describe('harness run viewer source seam', () => {
     expect(
       accessForHarnessRunViewerAdminMembership({
         clerkUserId: 'suspended@example.test',
+        tokenIdentifier: 'clerk|suspended@example.test',
         role: 'support',
         state: 'suspended',
         grantedBy: 'owner@example.test',
@@ -157,11 +160,23 @@ function answerTurn(
     prose?: Partial<FrozenTurnProse>
   } = {},
 ): AnswerTurnRecord {
-  const evidence: FrozenTurnEvidence = {
+  const evidenceDraft: FrozenTurnEvidenceDraft = {
     providers: [answerSource()],
     allowedSlugs: ['preston-plumbing'],
     agentJsonUrl: '/api/businesses/search?q=plumber',
+    toolCalls: [],
+    timings: [],
+    workLog: [],
     ...options.evidence,
+  }
+  const evidence: FrozenTurnEvidence = {
+    ...evidenceDraft,
+    answerRun: buildAnswerRunReport({
+      intent: 'refine_search',
+      status: 'complete',
+      snapshotHash: `snapshot-${turnId}`,
+      evidence: evidenceDraft,
+    }),
   }
   const prose: FrozenTurnProse = {
     oneLine: 'One listed business matches.',

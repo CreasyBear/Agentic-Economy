@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { globSync } from 'node:fs'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -18,16 +18,13 @@ const origin = 'https://ae.test'
 const dotEscape = '\u0000'
 
 function readRoutePaths(dir: string, prefix: string, into: Set<string>): void {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      readRoutePaths(path.join(dir, entry.name), `${prefix}${entry.name}/`, into)
-      continue
-    }
-    if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue
-    if (entry.name.startsWith('__root')) continue
+  for (const route of globSync(path.join(dir, '**/*.{ts,tsx}')).sort()) {
+    const relative = path.relative(dir, route).split(path.sep).join('/')
+    const entryName = relative.slice(relative.lastIndexOf('/') + 1)
+    if (entryName.startsWith('__root')) continue
 
-    const withoutExtension = entry.name.replace(/\.tsx?$/u, '')
-    const segments = `${prefix}${withoutExtension}`
+    const withoutExtension = `${prefix}${relative}`.replace(/\.tsx?$/u, '')
+    const segments = withoutExtension
       .replaceAll('[.]', dotEscape)
       .replaceAll('/', '.')
       .split('.')

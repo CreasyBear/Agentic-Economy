@@ -11,7 +11,6 @@ export {
   rankFactCounts,
   SearchGapFactValues,
   SearchGapSurfaceValues,
-  toSearchGapCandidateV1,
   toSearchGapCandidateV2,
 } from './internal/search-gap'
 

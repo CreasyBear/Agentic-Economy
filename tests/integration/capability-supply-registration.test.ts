@@ -6,15 +6,18 @@ import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { capabilityBindingEligibilityHash } from '@/modules/capability-supply/public'
+import {
+  capabilityBindingEligibilityHash,
+  type CapabilityOfferingRegistration,
+  type CapabilityTransportBindingRegistration,
+} from '@/modules/capability-supply/public'
 
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
 
 describe('V2 capability supply registration', () => {
   it('refuses anonymous and missing-contract registration without a supply write', async () => {
     const backend = convexTest(schema, modules)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const registration = offeringRegistration(businessId, missingRef())
 
     await expect(backend.mutation(api.capabilitySupply.registerOffering, {
@@ -22,7 +25,7 @@ describe('V2 capability supply registration', () => {
       ...operationContext('anonymous'),
     })).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
 
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     await expect(admin.mutation(api.capabilitySupply.registerOffering, {
       registration,
       ...operationContext('missing-contract'),
@@ -34,9 +37,9 @@ describe('V2 capability supply registration', () => {
 
   it('registers separate inert records, replays exactly, then atomically admits the pair', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref),
       ...operationContext('offering'),
@@ -61,7 +64,7 @@ describe('V2 capability supply registration', () => {
     })
     if (binding.kind !== 'registered') throw new Error('binding registration failed')
 
-    await expect(backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
 
     const eligibility = await admin.mutation(api.capabilitySupply.setEligibility, {
@@ -80,7 +83,7 @@ describe('V2 capability supply registration', () => {
       eligibilityHash: expect.stringMatching(/^sha256:/),
     })
 
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [{
@@ -117,9 +120,9 @@ describe('V2 capability supply registration', () => {
 
   it('fails offering registration closed when the exact V2 contract row is corrupt', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     await backend.run(async (ctx) => {
       const contract = await ctx.db.query('capabilityContractDocuments').unique()
       if (contract === null) throw new Error('contract missing')
@@ -135,9 +138,9 @@ describe('V2 capability supply registration', () => {
 
   it('replays durable success without rerunning mutable gates and supports audited revocation', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -188,7 +191,7 @@ describe('V2 capability supply registration', () => {
     const revoked = await admin.mutation(api.capabilitySupply.setEligibility, revokeArgs)
     await expect(admin.mutation(api.capabilitySupply.setEligibility, revokeArgs)).resolves.toEqual(revoked)
     expect(revoked).toMatchObject({ kind: 'ineligible', offeringId: offering.offeringId, bindingId: binding.bindingId })
-    await expect(backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
     const transitions = await backend.run(async (ctx) => ({
       offering: await ctx.db.query('capabilityOfferings').unique(),
@@ -208,9 +211,9 @@ describe('V2 capability supply registration', () => {
 
   it('rejects blank and oversized eligibility authority material before persistence', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -242,9 +245,9 @@ describe('V2 capability supply registration', () => {
 
   it('revokes one binding without hiding an eligible sibling for the same offering', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -286,7 +289,7 @@ describe('V2 capability supply registration', () => {
     await expect(admin.mutation(api.capabilitySupply.setEligibility, {
       ...revokeFirst, ...operationContext('revoke-one'),
     })).resolves.toMatchObject({ kind: 'ineligible', bindingId: first.bindingId })
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('eligible supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId)).toEqual([second.bindingId])
@@ -294,9 +297,9 @@ describe('V2 capability supply registration', () => {
 
   it('keeps offering and binding audit identities distinct when their text IDs are equal', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const sharedId = 'shared:supply-identity'
     const sharedOfferingRegistration = { ...offeringRegistration(businessId, ref), offeringId: sharedId }
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
@@ -322,10 +325,10 @@ describe('V2 capability supply registration', () => {
 
   it('refuses cross-offering revocation without writes or false audit evidence', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const firstBusinessId = await publishedBusiness(backend, 'supply-one')
-    const secondBusinessId = await publishedBusiness(backend, 'supply-two')
+    const { businessId: firstBusinessId } = await publishedBusinessOwner(backend, 'supply-one')
+    const { businessId: secondBusinessId } = await publishedBusinessOwner(backend, 'supply-two')
     const first = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(firstBusinessId, ref), ...operationContext('offering-one'),
     })
@@ -368,9 +371,9 @@ describe('V2 capability supply registration', () => {
 
   it('fails eligibility closed for stale hashes, retired contracts and newly suppressed businesses', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -405,15 +408,15 @@ describe('V2 capability supply registration', () => {
     await expect(admin.mutation(api.capabilitySupply.setEligibility, {
       ...base, ...operationContext('retired-contract'),
     })).resolves.toEqual({ kind: 'refused', reason: 'contract_not_active' })
-    await expect(backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
   })
 
   it('refuses adapter, exact-ref, identity and stored-integrity drift without a V1 fallback', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -434,7 +437,11 @@ describe('V2 capability supply registration', () => {
 
     await expect(admin.mutation(api.capabilitySupply.registerBinding, {
       registration: {
-        ...bindingRegistration(ref), adapter: { adapterId: 'not-registered:v1', config: {} },
+        ...bindingRegistration(ref),
+        adapter: {
+          adapterId: 'not-registered:v1',
+          config: {},
+        },
       },
       ...operationContext('unknown-adapter'),
     })).resolves.toEqual({ kind: 'refused', reason: 'adapter_not_registered' })
@@ -442,7 +449,10 @@ describe('V2 capability supply registration', () => {
     await expect(admin.mutation(api.capabilitySupply.registerBinding, {
       registration: {
         ...bindingRegistration(ref),
-        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000, vertical: 'shipping' } },
+        adapter: {
+          adapterId: 'http-json:v1',
+          config: { method: 'POST' as const, requestTimeoutMs: 5_000, vertical: 'shipping' },
+        },
       },
       ...operationContext('invalid-config'),
     })).resolves.toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
@@ -491,7 +501,7 @@ describe('V2 capability supply registration', () => {
       if (row === null) throw new Error('binding missing')
       await ctx.db.patch(row._id, { registrationHash: 'corrupt' })
     })
-    await expect(backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'unavailable', reason: 'supply_integrity_failure' })
     const controlState = await admin.query(api.capabilitySupply.inspectBindingControlState, {
       bindingId: binding.bindingId,
@@ -501,7 +511,7 @@ describe('V2 capability supply registration', () => {
       bindingId: binding.bindingId, expectedObservedRowDigest: controlState.observedRowDigest,
       ...operationContext('quarantine-corrupt-binding'),
     })).resolves.toMatchObject({ kind: 'quarantined', bindingId: binding.bindingId })
-    const recovered = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
+    const recovered = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(recovered).toMatchObject({
       kind: 'available', supplies: [{ binding: { bindingId: healthyBinding.bindingId } }],
     })
@@ -511,9 +521,9 @@ describe('V2 capability supply registration', () => {
 
   it('rolls back the offering and operation when its deterministic audit slot is forged', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const args = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -549,9 +559,9 @@ describe('V2 capability supply registration', () => {
 
   it('quarantines the last binding with standard integrity and replays history after re-admission', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -599,9 +609,9 @@ describe('V2 capability supply registration', () => {
 
   it('fails a successful replay closed when its recorded audit effect is missing', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const args = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -639,9 +649,9 @@ describe('V2 capability supply registration', () => {
 
   it('quarantines a binding without mutating a corrupt parent offering', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -681,9 +691,9 @@ describe('V2 capability supply registration', () => {
   it('fails offering replay closed when its durable row is missing or corrupt', async () => {
     for (const corruption of ['delete', 'invalidate'] as const) {
       const backend = convexTest(schema, modules)
-      const admin = await ownerAdmin(backend)
+      const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
       const ref = await registerContract(admin)
-      const businessId = await publishedBusiness(backend, `supply-${corruption}`)
+      const { businessId } = await publishedBusinessOwner(backend, `supply-${corruption}`)
       const args = {
         registration: offeringRegistration(businessId, ref), ...operationContext(`offering-${corruption}`),
       }
@@ -702,9 +712,9 @@ describe('V2 capability supply registration', () => {
 
   it('fails eligibility replay closed when its committed transition audit is tampered', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const businessId = await publishedBusiness(backend, 'supply-one')
+    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -755,7 +765,7 @@ function offeringRegistration(businessId: Id<'businesses'>, contractRef: ReturnT
       },
     },
     searchTerms: ['reference', 'lookup'], registrationEvidenceRefs: ['business:published-registration'],
-  }
+  } satisfies CapabilityOfferingRegistration
 }
 
 function bindingRegistration(contractRef: ReturnType<typeof missingRef>) {
@@ -764,9 +774,9 @@ function bindingRegistration(contractRef: ReturnType<typeof missingRef>) {
     endpointUrl: 'https://example.test/capability', credentialRef: 'env:AE_SUPPLY_SECRET',
     continuation: { kind: 'single_response' as const, evidenceRefs: ['adapter:single-response'] },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['adapter:no-cancellation'] },
-    adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+    adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },
     registrationEvidenceRefs: ['adapter:production-registration'],
-  }
+  } satisfies CapabilityTransportBindingRegistration
 }
 
 function operationContext(suffix: string) {
@@ -778,33 +788,8 @@ function operationContext(suffix: string) {
   }
 }
 
-async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
-  const identity = {
-    subject: 'user_capability_supply_admin',
-    issuer: 'https://identity.example',
-    tokenIdentifier: 'token_capability_supply_admin',
-  }
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('adminMemberships', {
-      clerkUserId: identity.subject, tokenIdentifier: identity.tokenIdentifier,
-      role: 'owner_admin', state: 'active', grantedBy: 'test_bootstrap', grantedAt: 1,
-    })
-  })
-  return backend.withIdentity(identity)
-}
 
-async function publishedBusiness(backend: ReturnType<typeof convexTest>, slug: string) {
-  return await backend.run(async (ctx) => {
-    const ownerId = await ctx.db.insert('owners', { clerkUserId: `owner:${slug}`, createdAt: 1, updatedAt: 1 })
-    return await ctx.db.insert('businesses', {
-      ownerId, slug, name: slug, normalizedName: slug, category: 'sandbox', suburb: 'Perth', stateTerritory: 'WA',
-      publicStatus: 'published', trustTier: 'listed', claimStatus: 'published', sourceHash: `source:${slug}`,
-      createdAt: 1, updatedAt: 1,
-    })
-  }) as Id<'businesses'>
-}
-
-async function registerContract(admin: Awaited<ReturnType<typeof ownerAdmin>>) {
+async function registerContract(admin: ConvexFixtureAdmin) {
   const result = await admin.mutation(api.capabilityContractDocuments.register, {
     documentJson: JSON.stringify(capabilityContractV2()),
     operationKey: 'op:contract:supply', correlationId: 'corr:contract:supply',

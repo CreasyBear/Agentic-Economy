@@ -24,11 +24,11 @@ type CreditAccountSourceResult = Readonly<
   | { kind: 'refused'; code: string }
 >
 type CreditActivitySourceResult = Readonly<
-  | { kind: 'ok'; items: readonly CreditActivityView[]; nextCursor?: string }
+  | { kind: 'ok'; page: readonly CreditActivityView[]; isDone: boolean; continueCursor: string }
   | { kind: 'refused'; code: string; items: readonly [] }
 >
 type KeyUsageSourceResult = Readonly<
-  | { kind: 'ok'; items: readonly KeyUsageView[]; nextCursor?: string }
+  | ({ kind: 'ok' } & KeyUsageView)
   | { kind: 'refused'; code: string; items: readonly [] }
 >
 
@@ -58,16 +58,22 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
       const result = await callSourceQuery(listCreditActivityQuery, query)
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
-        items: result.items,
-        ...(result.nextCursor === undefined ? {} : { nextCursor: result.nextCursor }),
+        page: result.page,
+        isDone: result.isDone,
+        continueCursor: result.continueCursor,
       }
     },
     readKeyUsage: async (query) => {
       const result = await callSourceQuery(readKeyUsageQuery, query)
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
-        items: result.items,
-        ...(result.nextCursor === undefined ? {} : { nextCursor: result.nextCursor }),
+        credentialId: result.credentialId,
+        callCount: result.callCount,
+        paidCallCount: result.paidCallCount,
+        freeCallCount: result.freeCallCount,
+        grossSpendMinor: result.grossSpendMinor,
+        currency: result.currency,
+        states: result.states,
       }
     },
     readProviderEarnings: async () => {

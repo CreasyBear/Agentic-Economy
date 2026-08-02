@@ -46,6 +46,13 @@ describe('CustomerRequest source completeness', () => {
     expect(applicationGraph).toContain('bindCustomerCapabilityDescriptor')
   })
 
+  it('uses the generated internal rate-limit mutation reference', () => {
+    const application = readFileSync('convex/customerRequestApplication.ts', 'utf8')
+    expect(application).toContain('ctx.runMutation(internal.rateLimit.admit')
+    expect(application).not.toContain('makeFunctionReference')
+    expect(application).not.toContain('rateLimit:admit')
+  })
+
   it('keeps the current Request path exact-V2-only and quarantines V1 authority', () => {
     const currentFiles = [
       'src/modules/customer-request/compiler.ts',
@@ -63,12 +70,12 @@ describe('CustomerRequest source completeness', () => {
     for (const file of currentFiles) expect(readFileSync(file, 'utf8'), file).not.toMatch(forbidden)
 
     const application = readFileSync('convex/customerRequestApplication.ts', 'utf8')
-    expect(application).not.toMatch(/legacy-compiler-v1|customerRequestCompilationStoreAdapter|commitRequestSnapshot|putRequestEvaluation/)
+    expect(application).not.toMatch(/customerRequestCompilationStoreAdapter|commitRequestSnapshot|putRequestEvaluation/)
     expect(application).not.toMatch(/customerRequestPreparationAuthority|customerRequests\.prepare|prepareCustomerRequestAction/)
     expect(readFileSync('src/lib/server/customer-request-agent-api.ts', 'utf8'))
       .not.toMatch(/approvePreparedAction|admitApprovedAction/)
     const persistence = readFileSync('convex/customerRequestV2.ts', 'utf8')
-    expect(persistence).toContain('historical_request_resubmit_required')
+    expect(persistence).not.toContain('historical_request_resubmit_required')
     expect(persistence).not.toMatch(/parseInt|Number\s*\([^)]*version/)
   })
 
@@ -235,33 +242,41 @@ describe('CustomerRequest source completeness', () => {
   })
 
   it('keeps fixture and durable discovery aligned on the agent request contract', () => {
-    const fixtureDiscovery = readFileSync('src/modules/discovery/internal/discovery-files.ts', 'utf8')
+    const discoveryFiles = readFileSync('src/modules/discovery/internal/discovery-files.ts', 'utf8')
     const durableDiscovery = readFileSync('convex/discovery.ts', 'utf8')
+    const publicContract = source('publicContract')
     const publicComprehension = readFileSync('src/modules/customer-request/public-comprehension.ts', 'utf8')
     const requestSchema = readFileSync('src/modules/customer-request/public-contract-schema.ts', 'utf8')
     const requiredMarkers = [
-      'customer_requests:create',
       'schema=',
     ]
 
     for (const marker of requiredMarkers) {
-      expect(fixtureDiscovery, `fixture discovery missing ${marker}`).toContain(marker)
-      expect(durableDiscovery, `durable discovery missing ${marker}`).toContain(marker)
+      expect(discoveryFiles, `shared discovery owner missing ${marker}`).toContain(marker)
     }
-    expect(fixtureDiscovery).toContain('CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES')
-    expect(durableDiscovery).toContain('CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES')
-    for (const source of [fixtureDiscovery, durableDiscovery]) {
-      expect(source).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
-      expect(source).toContain('CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES')
-      expect(source).toContain('CUSTOMER_REQUEST_STATE_VALUES')
+    expect(publicContract).toContain(
+      `export const CUSTOMER_REQUEST_AGENT_SCOPE = '${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}' as const`
+    )
+    expect(discoveryFiles).toContain('CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES')
+    for (const marker of [
+      'CUSTOMER_REQUEST_AGENT_ENTRYPOINT',
+      'CUSTOMER_REQUEST_AGENT_SCOPE',
+      'CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES',
+      'CUSTOMER_REQUEST_STATE_VALUES',
+    ]) {
+      expect(discoveryFiles, `shared discovery owner missing ${marker}`).toContain(marker)
     }
+    expect(durableDiscovery).toMatch(
+      /buildOfferingLlmsTxt\(await publicOfferingSupplyForDiscovery\(ctx\.db\)/
+    )
+    expect(durableDiscovery).toContain('return { body: result.body, urls: [...result.urls] }')
     for (const marker of ['/confirmation', '/run', '/evidence', '/problems', '/cancellation']) {
       expect(requestSchema, `Request schema missing ${marker}`).toContain(marker)
     }
     expect(publicComprehension).toContain('labelled AE sandbox businesses')
     expect(publicComprehension).toContain('separateApprovalBeforeStart')
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
-    expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route/)
+    expect(`${discoveryFiles}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route/)
   })
 
   it('binds hosted proof to the platform-owned revision after source gates', () => {
@@ -284,7 +299,9 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow).toContain('npx convex run capabilitySupply:queryCapabilityGraph')
     expect(workflow).toContain('Labelled sandbox capability publications did not become route-ready.')
     expect(workflow).toContain('needs: source-proof')
-    expect(workflow).toContain('cancel-in-progress: false')
+    expect(workflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
+    expect(workflow).toContain('merge_group:')
+    expect(workflow).toContain('actions/upload-artifact@')
     expect(workflow).toContain('npm exec -- tsx tools/release/deploy-customer-request-git-source.ts')
     expect(workflow).not.toMatch(/deployment="\$\(tsx /)
     expect(workflow).not.toMatch(/vercel deploy|--meta=.*githubCommitSha/)
@@ -305,6 +322,9 @@ describe('CustomerRequest source completeness', () => {
 
     const packageJson = readFileSync('package.json', 'utf8')
     expect(packageJson).toContain('"test:release:hosted:readback": "tsx tools/release/verify-customer-request-release-credential.ts"')
+    expect(packageJson).toContain('"gate:release": "npm run test:release:source"')
+    expect(packageJson).toContain('npm run check:convex-codegen')
+    expect(packageJson).toContain('npm run test:eval:report')
     expect(packageJson).not.toContain('AE_KERNEL_PROOF_MANIFEST_JSON')
   })
 

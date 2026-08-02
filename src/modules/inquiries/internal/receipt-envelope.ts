@@ -5,7 +5,7 @@ import { bytesToHex } from '@noble/hashes/utils'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { GovernedSendReceiptRecord } from './governed-send'
 
-export const InquiryReceiptEnvelopeVersion = 'inquiry-receipt-envelope:v1' as const
+const InquiryReceiptEnvelopeVersion = 'inquiry-receipt-envelope:v1' as const
 
 export type InquiryReceiptKeyring = Readonly<{
   keyId: string

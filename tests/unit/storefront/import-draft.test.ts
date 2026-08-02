@@ -54,7 +54,7 @@ async function runGuardedLookup(
   options: LookupOptions = {},
   hostname = 'northside.example'
 ): Promise<GuardedLookupCallbackResult> {
-  const { promise, resolve } = createDeferred<GuardedLookupCallbackResult>()
+  const { promise, resolve } = Promise.withResolvers<GuardedLookupCallbackResult>()
   createGuardedLookup(dns)(hostname, options, (err, address, family) => {
     resolve({ err, address, family })
   })
@@ -88,15 +88,6 @@ async function expectFetchRejected(websiteUrl: string, options: ImportOptions = 
   }
 }
 
-function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (reason?: unknown) => void } {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
 
 const literalNonPublicUrls = [
   'http://localhost/',
@@ -122,6 +113,47 @@ describe('storefront import draft', () => {
       family: 4,
     })
   })
+
+  it('accepts a public IPv4-mapped IPv6 address in the guarded lookup', async () => {
+    const mappedDns: ImportDnsResolver = {
+      lookup: async () => [{ address: '::ffff:93.184.216.34', family: 6 }],
+    }
+
+    await expect(isPublicHttpTarget(new URL('https://[::ffff:93.184.216.34]/'), mappedDns)).resolves.toBe(true)
+    await expect(isPublicHttpTarget(new URL('https://mapped.example/'), mappedDns)).resolves.toBe(true)
+    await expect(runGuardedLookup(mappedDns, { all: true })).resolves.toEqual({
+      err: null,
+      address: [{ address: '::ffff:93.184.216.34', family: 6 }],
+      family: undefined,
+    })
+  })
+
+  it('accepts zoned global IPv6 answers and preserves their callback family', async () => {
+    const zonedDns: ImportDnsResolver = {
+      lookup: async () => [{ address: '2001:db8::1%eth0', family: 6 }],
+    }
+
+    await expect(isPublicHttpTarget(new URL('https://zoned.example/'), zonedDns)).resolves.toBe(true)
+    await expect(runGuardedLookup(zonedDns, { all: true })).resolves.toEqual({
+      err: null,
+      address: [{ address: '2001:db8::1%eth0', family: 6 }],
+      family: undefined,
+    })
+  })
+
+  it.each(['999.1.1.1', '2001:db8:::1', '::ffff:999.1.1.1'])(
+    'refuses malformed resolved address %s',
+    async (address) => {
+      const malformedDns: ImportDnsResolver = {
+        lookup: async () => [{ address, family: address.includes(':') ? 6 : 4 }],
+      }
+
+      await expect(isPublicHttpTarget(new URL('https://malformed.example/'), malformedDns)).resolves.toBe(false)
+      const result = await runGuardedLookup(malformedDns)
+      expect(result.err).toMatchObject({ code: 'ECONNREFUSED' })
+      expect(result.address).toBe('')
+    }
+  )
 
   it('refuses a private address in the guarded connect lookup', async () => {
     const result = await runGuardedLookup(privateDns('10.0.0.5'))
@@ -308,7 +340,7 @@ describe('storefront import draft', () => {
 
   it('rejects requests that time out', async () => {
     const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
-      const { promise, reject } = createDeferred<Response>()
+      const { promise, reject } = Promise.withResolvers<Response>()
       init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
       return promise
     })

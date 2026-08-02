@@ -1,5 +1,5 @@
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
+import { handleCustomerRequestPostBoundary } from '@/lib/server/customer-request-route-action-api'
 import {
   customerRequestInspectEvidenceAction,
   customerRequestReportProblemAction,
@@ -24,30 +24,18 @@ export async function handleCustomerRequestProblemPost(
   requestRef: string,
   options: Readonly<{ report?: (args: Record<string, unknown>) => Promise<CustomerRequestProblemResult> }> = {},
 ): Promise<Response> {
-  if (!validRequestRef(requestRef)) return response({ error: 'invalid_request_ref' }, 400)
-  const bounded = await readBoundedRequestText(request, 8 * 1024)
-  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
-  let body: unknown
-  try { body = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
-  const parsed = customerRequestProblemInputSchema.safeParse(body)
-  if (!parsed.success) return response({ error: 'invalid_request' }, 400)
-  try {
-    const command = { requestRef, ...parsed.data }
-    const result = customerRequestProblemResultSchema.parse(options.report === undefined
-      ? await customerRequestReportProblemAction.run({
-          data: customerRequestReportProblemAction.schema.parse(command), context: { request },
-        })
-      : await options.report(command))
-    if (result.kind === 'refused') return response(
-      result,
-      result.reason === 'authentication_required' ? 401 : result.reason === 'evidence_not_found' ? 400 : 404,
-    )
-    if (result.kind === 'conflict') return response(result, 409)
-    return response(result, 200)
-  } catch (error) {
-    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-    return response({ error: 'problem_report_unavailable' }, 503)
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 8 * 1024,
+    inputSchema: customerRequestProblemInputSchema,
+    resultSchema: customerRequestProblemResultSchema,
+    run: options.report ?? (async (command) => await customerRequestReportProblemAction.run({
+      data: customerRequestReportProblemAction.schema.parse(command), context: { request },
+    })),
+    unavailableError: 'problem_report_unavailable',
+    resultToStatus: problemReportResultStatus,
+  })
 }
 
 export async function handleCustomerRequestProblemReplyPost(
@@ -58,33 +46,23 @@ export async function handleCustomerRequestProblemReplyPost(
     reply?: (args: Record<string, unknown>) => Promise<CustomerRequestProblemStatusChange>
   }> = {},
 ): Promise<Response> {
-  if (!validRequestRef(requestRef) || reportRef.trim().length === 0 || reportRef.length > 300) {
+  if (reportRef.trim().length === 0 || reportRef.length > 300) {
     return response({ error: 'invalid_request_ref' }, 400)
   }
-  const bounded = await readBoundedRequestText(request, 8 * 1024)
-  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
-  let body: unknown
-  try { body = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
-  const parsed = customerRequestProblemReplyInputSchema.safeParse(body)
-  if (!parsed.success) return response({ error: 'invalid_request' }, 400)
-  try {
-    const command = { requestRef, reportRef, ...parsed.data }
-    const result = customerRequestProblemStatusChangeSchema.parse(options.reply === undefined
-      ? await customerRequestReplyProblemAction.run({
-          data: customerRequestReplyProblemAction.schema.parse(command),
-          context: { request },
-        })
-      : await options.reply(command))
-    if (result.kind === 'refused') {
-      return response(result, result.reason === 'authentication_required' ? 401
-        : result.reason === 'invalid_update' ? 400 : 404)
-    }
-    if (result.kind === 'conflict') return response(result, 409)
-    return response(result, 200)
-  } catch (error) {
-    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-    return response({ error: 'problem_reply_unavailable' }, 503)
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 8 * 1024,
+    inputSchema: customerRequestProblemReplyInputSchema,
+    resultSchema: customerRequestProblemStatusChangeSchema,
+    buildCommand: (input) => ({ requestRef, reportRef, ...(input as Record<string, unknown>) }),
+    run: options.reply ?? (async (command) => await customerRequestReplyProblemAction.run({
+      data: customerRequestReplyProblemAction.schema.parse(command),
+      context: { request },
+    })),
+    unavailableError: 'problem_reply_unavailable',
+    resultToStatus: problemReplyResultStatus,
+  })
 }
 
 export async function handleCustomerRequestEvidenceGet(
@@ -108,5 +86,21 @@ export async function handleCustomerRequestEvidenceGet(
 
 function validRequestRef(requestRef: string): boolean {
   return requestRef.trim().length > 0 && requestRef.length <= 200
+}
+
+function problemReportResultStatus(result: CustomerRequestProblemResult): number {
+  if (result.kind === 'refused') {
+    return result.reason === 'authentication_required' ? 401 : result.reason === 'evidence_not_found' ? 400 : 404
+  }
+  if (result.kind === 'conflict') return 409
+  return 200
+}
+
+function problemReplyResultStatus(result: CustomerRequestProblemStatusChange): number {
+  if (result.kind === 'refused') {
+    return result.reason === 'authentication_required' ? 401 : result.reason === 'invalid_update' ? 400 : 404
+  }
+  if (result.kind === 'conflict') return 409
+  return 200
 }
 

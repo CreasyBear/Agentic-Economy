@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { parseArgs } from '../ae/lib/args'
 
 import {
   evaluateStandingMandatePolicy,
@@ -575,9 +576,8 @@ export async function runCli(command: string, path: string, expectedRevision: st
 }
 
 if (process.argv[1]?.endsWith('full-yolo-evidence-packet.ts')) {
-  const command = process.argv[2]
-  const path = process.argv[3]
-  const expectedRevision = process.argv[4]
+  const { command, positionals } = parseArgs(process.argv.slice(2))
+  const [path, expectedRevision] = positionals
   if (command === undefined || path === undefined || expectedRevision === undefined) {
     throw new Error('command_path_and_revision_required')
   }

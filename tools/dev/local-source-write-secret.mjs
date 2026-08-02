@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseEnv } from 'node:util'
 
 const LOCAL_CONVEX_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost):3210\/?$/u
 const SOURCE_WRITE_SECRET_NAME = 'AE_SOURCE_WRITE_SECRET'
@@ -18,7 +19,7 @@ export function resolveLocalSourceWriteSecret({
   dotenvFiles = [],
   randomBytes: randomBytesImpl = (size) => randomBytes(size),
 } = {}) {
-  const effectiveEnv = { ...dotenvValues(dotenvFiles), ...env }
+  const effectiveEnv = Object.assign({}, ...dotenvFiles.map(({ content }) => parseEnv(content)), env)
   const convexUrl = effectiveEnv.CONVEX_URL?.trim() || effectiveEnv.VITE_CONVEX_URL?.trim()
 
   if (effectiveEnv.NODE_ENV?.trim() === 'production') {
@@ -92,20 +93,6 @@ async function readDotenvFiles(cwd) {
   return files
 }
 
-function dotenvValues(files) {
-  const values = {}
-  for (const file of files) {
-    for (const line of file.content.split(/\r?\n/u)) {
-      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/u)
-      if (match === null) continue
-      const [, name, rawValue] = match
-      if (name === undefined || rawValue === undefined) continue
-      const value = rawValue.replace(/^['"]|['"]$/gu, '')
-      values[name] = value
-    }
-  }
-  return values
-}
 
 async function readLocalConvexConfig(cwd) {
   const path = resolvePath(cwd, '.convex/local/default/config.json')

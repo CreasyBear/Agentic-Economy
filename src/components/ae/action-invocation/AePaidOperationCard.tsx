@@ -19,6 +19,7 @@ import type {
   PaidOperationPresentationBlock,
   PaidOperationSemantics,
 } from '@/modules/action-invocation/paid-operation-semantics'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 
 export type AePaidOperationCardProps = Readonly<{
   semantics: PaidOperationSemantics
@@ -180,7 +181,7 @@ function presentationBlockValue(block: PaidOperationPresentationBlock): string {
     case 'money':
       return money(block)
     case 'timestamp':
-      return formatTime(block.value)
+      return formatUtcTimestamp(block.value)
     case 'source':
       return `${block.providerName} · ${block.operationRevision}`
     case 'status':
@@ -347,18 +348,9 @@ function money(value: Readonly<{ currency: string; amountMinor: number }>): stri
 function formatNumber(value: number): string {
   return numberFormatter.format(value)
 }
-
-function formatTime(value: string): string {
-  return timeFormatter.format(new Date(value))
-}
-
 const moneyFormatters = new Map<string, Intl.NumberFormat>()
 const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 })
-const timeFormatter = new Intl.DateTimeFormat('en-US', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-})
+
 
 function queryReleaseLabel(semantics: PaidOperationSemantics): string {
   switch (semantics.queryRelease.state) {

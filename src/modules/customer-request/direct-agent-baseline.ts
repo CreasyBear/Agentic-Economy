@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { stableUnique } from '@/modules/common/stable-unique'
 import {
   freezeAgentJourneyCohort,
   type AgentJourneyCohortInput,
@@ -225,7 +226,7 @@ function burden(
 ) {
   return {
     originsProvided, discoveryCalls: originsProvided, invocationCalls, schemaMappings,
-    authenticationSchemes: [...new Set(discoveries.map(({ operation }) => operation.authentication.scheme))],
+    authenticationSchemes: stableUnique(discoveries.map(({ operation }) => operation.authentication.scheme)),
     boundaryStatements: discoveries.reduce((sum, provider) => sum + provider.boundaries.length, 0),
   }
 }

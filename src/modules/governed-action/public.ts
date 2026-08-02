@@ -21,11 +21,8 @@ export type GenericGovernedActionIntent<Payload extends GovernedActionPayload = 
   payload: Payload
 }>
 
-/** Reserved discriminator seam: demand and supply variants may join this union in a later wire-format-compatible revision. */
-export type GovernedActionIntent<Payload extends GovernedActionPayload = GovernedActionPayload> =
-  GenericGovernedActionIntent<Payload>
 
-export type GovernedActionEnvelope<Payload extends GovernedActionPayload = GovernedActionPayload> = Readonly<{
+type GovernedActionEnvelope<Payload extends GovernedActionPayload = GovernedActionPayload> = Readonly<{
   wireFormat: typeof GOVERNED_ACTION_WIRE_FORMAT
   schemaVersion: number
   actionClass: string
@@ -39,7 +36,7 @@ export type GovernedActionEncoding = Readonly<{
   digest: `sha256:${string}`
 }>
 
-export type GovernedActionRefusal = Readonly<{
+type GovernedActionRefusal = Readonly<{
   kind: 'refused'
   code: CanonicalizationRefusalCode | 'invalid_action_class' | 'invalid_schema_version'
   path: string

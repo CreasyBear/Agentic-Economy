@@ -1,5 +1,5 @@
-import { convexTest } from 'convex-test'
-import { Response as UndiciResponse } from 'undici'
+import { convexTest, type TestConvex } from 'convex-test'
+import { components } from '../../convex/_generated/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const routeProviderFetch = vi.hoisted(() => vi.fn<typeof import('undici').fetch>())
@@ -8,10 +8,17 @@ vi.mock('undici', async (importOriginal) => ({
   fetch: routeProviderFetch,
 }))
 
+import { Response as UndiciResponse } from 'undici'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
+import { convexTestWithWorkers, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
+import { objectSchema } from '../fixtures/capability-contract-v2'
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import type {
+  CapabilityPublicationBindingDraft,
+  CapabilityPublicationOfferingDraft,
+} from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
@@ -27,10 +34,12 @@ import {
   currentRoutePlanGenerationGraphStatus,
 } from '../../convex/customerRequestV2'
 
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'), load,
-]))
+type RouteTestBackend = TestConvex<typeof schema>
+async function pauseWorkpool(backend: ReturnType<typeof convexTest>) {
+  await backend.run(async (ctx) => {
+    await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 })
+  })
+}
 
 const upstreamDocument = {
   contractFormat: 'ae.capability-contract:v2' as const,
@@ -116,11 +125,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('registers live supply, compiles one governed two-step DAG, commits atomically, and reads it back', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const first = await publishAndActivate(backend, admin, 'resolver', upstreamDocument, 300)
     const second = await publishAndActivate(backend, admin, 'quoter', downstreamDocument, 700)
-    const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 16 })
+    const supply = await backend.query(internal.capabilitySupply.listRouteable, { networkId: 'ae:public', limit: 16 })
     if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
     const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
     const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
@@ -306,8 +315,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('admits both steps against one cumulative mandate ceiling and refuses reuse after revocation', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const current = await committedTwoStepAdmissionRoute(backend, admin)
     const route = current.routeGeneration.routes[0]
     if (route === undefined || route.maximumTotalCost.kind !== 'known') {
@@ -395,8 +404,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('confirms the displayed option through one customer command without releasing a step', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const current = await committedTwoStepAdmissionRoute(backend, admin)
     const compared = await admin.action(api.customerRequestApplication.compare, {
       requestRef: current.aggregate.snapshot.requestId,
@@ -462,8 +471,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('lets the customer create bounded repeat permission for the displayed low-risk option', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const current = await committedTwoStepAdmissionRoute(backend, admin)
     const compared = await admin.action(api.customerRequestApplication.compare, {
       requestRef: current.aggregate.snapshot.requestId,
@@ -478,7 +487,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       principalId: current.aggregate.snapshot.principalId,
       ownerId: 'user_route_admin',
       credentialId: 'credential:repeat-permission',
-      scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      scopes: [
+        'customer_requests:create',
+        'customer_requests:bounded_mandate',
+        'customer_requests:standing_authority',
+      ],
     }
     const permissionCommand = {
       requestRef: compared.requestRef,
@@ -511,6 +524,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       ...permissionCommand,
       serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
     })
+    if (permission.kind !== 'repeat_permission') throw new Error(`repeat permission failed: ${JSON.stringify(permission)}`)
     await expect(admin.action(api.customerRequestApplication.listRepeatPermissionAssistants, {
       requestRef: compared.requestRef,
     })).resolves.toEqual({
@@ -698,8 +712,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('starts the confirmed choice through one customer command and replays one durable run', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const current = await committedTwoStepAdmissionRoute(backend, admin)
     const compared = await admin.action(api.customerRequestApplication.compare, {
       requestRef: current.aggregate.snapshot.requestId,
@@ -740,8 +754,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('fails safely instead of leaving a run queued when call signing is unavailable', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'signing-unavailable')
 
     await expect(admin.action(api.customerRequestApplication.runRoute, {
@@ -768,17 +782,15 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('chains only validated evidence into the next step and completes the same durable run', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'validated-chain')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef,
       idempotencyKey: 'run:validated-chain',
     })
 
-    const firstLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:one', leaseDurationMs: 10_000,
-    })
+    const firstLease = await nextDispatch(backend)
     expect(firstLease).toMatchObject({
       kind: 'leased',
       dispatch: { position: 1 },
@@ -787,17 +799,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(JSON.parse(firstLease.dispatch.inputJson)).toEqual({
       request: 'Resolve a service reference and prepare its quote',
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:two', leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: firstLease.dispatch.dispatchRef,
       attemptRef: firstLease.dispatch.attemptRef,
-      workerId: 'worker:one',
-    })
-    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
-      attemptRef: firstLease.dispatch.attemptRef,
-      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
     })
     const advanced = await backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: firstLease.dispatch.attemptRef,
@@ -824,20 +828,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       },
     })
 
-    const secondLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:two', leaseDurationMs: 10_000,
-    })
+    const secondLease = await nextDispatch(backend)
     expect(secondLease).toMatchObject({ kind: 'leased', dispatch: { position: 2 } })
     if (secondLease.kind !== 'leased') throw new Error('second route step was not leased')
     expect(JSON.parse(secondLease.dispatch.inputJson)).toEqual({ serviceReference: 'service:123' })
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: secondLease.dispatch.dispatchRef,
       attemptRef: secondLease.dispatch.attemptRef,
-      workerId: 'worker:two',
-    })
-    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
-      attemptRef: secondLease.dispatch.attemptRef,
-      operationKeyDigest: secondLease.dispatch.operationKeyDigest,
     })
     await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: secondLease.dispatch.attemptRef,
@@ -865,8 +862,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
     vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-worker')
     routeProviderFetch.mockReset()
     routeProviderFetch.mockImplementationOnce(async (_input, init) => {
@@ -945,7 +942,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
     vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-secret')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const seeded = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     await finishImmediateReadinessProbe(backend)
     for (const [index, publicationRef] of seeded.sandboxRoutePublicationRefs.entries()) {
@@ -962,7 +959,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (requestInput === undefined) throw new Error('source-owned resolver request input missing')
     const customerJob = 'Resolve a labelled sandbox service and prepare its quote'
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [
           {
@@ -971,7 +968,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
           },
           { selectionKey: quoterModel.selectionKey, facts: [] },
         ],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1091,8 +1088,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
     vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-interrupted')
     routeProviderFetch.mockReset()
     routeProviderFetch
@@ -1112,9 +1109,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       action: { state: 'unknown', automaticRetry: false },
       progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
     })
-    await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
-      workerId: 'worker:transport:unsafe-retry',
-    })).resolves.toEqual({ kind: 'none' })
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
@@ -1124,8 +1118,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
     vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-provider-denial')
     routeProviderFetch.mockReset()
     routeProviderFetch
@@ -1161,9 +1155,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       steps: [{ step: 1, state: 'completed' }, { step: 2, state: 'failed' }],
       result: { reason: 'business_reported_failure' },
     })
-    await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
-      workerId: 'worker:transport:denial-retry',
-    })).resolves.toEqual({ kind: 'none' })
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
@@ -1173,8 +1164,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
     vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-partial-result')
     routeProviderFetch.mockReset()
     routeProviderFetch
@@ -1235,31 +1226,21 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       },
     })
     expect(JSON.stringify(evidence)).not.toContain('sandbox-continuation:private')
-    await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
-      workerId: 'worker:transport:partial-retry',
-    })).resolves.toEqual({ kind: 'none' })
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
   it('never advances or retries when a released step has an invalid or unknown outcome', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'unknown-outcome')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:unknown-outcome',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:unknown', leaseDurationMs: 10_000,
-    })
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('unknown-outcome route step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:unknown',
-    })
-    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
-      attemptRef: lease.dispatch.attemptRef,
-      operationKeyDigest: lease.dispatch.operationKeyDigest,
     })
     await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: lease.dispatch.attemptRef,
@@ -1269,9 +1250,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'outcome_unknown',
       run: { completedSteps: 0, currentPosition: 1, currentState: 'outcome_unknown' },
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:retry', leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
     await expect(admin.action(api.customerRequestApplication.resume, {
       requestRef: confirmed.requestRef,
     })).resolves.toMatchObject({
@@ -1281,20 +1259,17 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('keeps a business-reported failure distinct from an unknown outcome', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'known-failure')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:known-failure',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:known-failure', leaseDurationMs: 10_000,
-    })
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('known-failure route step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:known-failure',
     })
     await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: lease.dispatch.attemptRef,
@@ -1309,94 +1284,16 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'request', state: 'failed', nextAction: 'revise_request',
       action: { state: 'failed', automaticRetry: false },
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:after-known-failure', leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
-  })
-
-  it('requeues a lease crash before release and marks a post-release crash unknown', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(10_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
-    const confirmed = await confirmedTwoStepRoute(backend, admin, 'lease-recovery')
-    await admin.action(api.customerRequestApplication.runRoute, {
-      requestRef: confirmed.requestRef, idempotencyKey: 'run:lease-recovery',
-    })
-    const first = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:crashed-before-release', leaseDurationMs: 1_000,
-    })
-    if (first.kind !== 'leased') throw new Error('recovery route step was not leased')
-    vi.spyOn(Date, 'now').mockReturnValue(11_001)
-    await expect(backend.mutation(internal.customerRequestRouteExecution.recoverExpiredDispatch, {
-      dispatchRef: first.dispatch.dispatchRef,
-    })).resolves.toEqual({ kind: 'requeued' })
-    const second = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:replacement', leaseDurationMs: 1_000,
-    })
-    expect(second).toMatchObject({
-      kind: 'leased', dispatch: {
-        attemptRef: first.dispatch.attemptRef,
-        operationKeyDigest: first.dispatch.operationKeyDigest,
-      },
-    })
-    if (second.kind !== 'leased') throw new Error('requeued route step was not leased')
-    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
-      dispatchRef: second.dispatch.dispatchRef,
-      attemptRef: second.dispatch.attemptRef,
-      workerId: 'worker:replacement',
-    })
-    vi.spyOn(Date, 'now').mockReturnValue(12_002)
-    await expect(backend.mutation(internal.customerRequestRouteExecution.recoverExpiredDispatch, {
-      dispatchRef: second.dispatch.dispatchRef,
-    })).resolves.toEqual({ kind: 'outcome_unknown' })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:blind-retry', leaseDurationMs: 1_000,
-    })).resolves.toEqual({ kind: 'none' })
-  })
-
-  it('terminalizes expired unreleased authority instead of poisoning the shared dispatch queue', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
-    const confirmed = await confirmedTwoStepRoute(backend, admin, 'expired-dispatch')
-    await admin.action(api.customerRequestApplication.runRoute, {
-      requestRef: confirmed.requestRef, idempotencyKey: 'run:expired-dispatch',
-    })
-    const expiresAt = await backend.run(async (ctx) => {
-      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
-      expect(attempts).toHaveLength(1)
-      return attempts[0]?.grant.expiresAt
-    })
-    if (expiresAt === undefined) throw new Error('expired dispatch grant missing')
-    vi.spyOn(Date, 'now').mockReturnValue(expiresAt + 1)
-
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:after-authority-expiry', leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
-    await backend.run(async (ctx) => {
-      const runs = await ctx.db.query('customerRequestRouteRuns').collect()
-      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
-      const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox').collect()
-      expect(runs).toHaveLength(1)
-      expect(attempts).toHaveLength(1)
-      expect(outbox).toHaveLength(1)
-      expect(runs[0]).toMatchObject({
-        state: 'failed', resultJson: JSON.stringify({ reason: 'authority_expired_before_release' }),
-      })
-      expect(attempts[0]?.state).toBe('failed')
-      expect(outbox[0]?.state).toBe('failed')
-    })
   })
 
   it('rechecks the exact registered binding at the release boundary', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'release-binding-recheck')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:release-binding-recheck',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:binding-recheck', leaseDurationMs: 10_000,
-    })
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('binding recheck step was not leased')
     const supply = await backend.run(async (ctx) => {
       const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
@@ -1421,20 +1318,19 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       ...operationContext('release-binding-recheck-revoke'),
     })).resolves.toMatchObject({ kind: 'ineligible' })
 
-    await expect(backend.query(internal.customerRequestRouteExecution.openLeasedDispatch, {
-      dispatchRef: lease.dispatch.dispatchRef, workerId: 'worker:binding-recheck',
+    await expect(backend.query(internal.customerRequestRouteExecution.openDispatch, {
+      dispatchRef: lease.dispatch.dispatchRef,
     })).resolves.toEqual({ kind: 'unavailable' })
     await expect(backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:binding-recheck',
-    })).resolves.toEqual({ kind: 'refused', reason: 'lease_not_current' })
+    })).resolves.toEqual({ kind: 'refused', reason: 'dispatch_not_current' })
   })
 
   it('stops a queued run idempotently before any business step is released', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(10_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-before-release')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-before-release',
@@ -1449,15 +1345,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await expect(admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:before-release',
     })).resolves.toEqual(cancelled)
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:after-cancel', leaseDurationMs: 1_000,
-    })).resolves.toEqual({ kind: 'none' })
   })
 
   it('reports problems idempotently and exports customer-safe evidence from the same Request', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(4_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'recovery-contract')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:recovery-contract',
@@ -1540,8 +1433,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('records a suspected duplicate charge or effect without adjudicating whether it occurred', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(4_500)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const support = await supportAdmin(backend)
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'suspected-duplicate-effect')
     await admin.action(api.customerRequestApplication.runRoute, {
@@ -1634,8 +1527,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('tracks an authenticated support question and customer reply without assigning remedy authority', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(5_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const support = await supportAdmin(backend)
     const reviewer = await reviewerAdmin(backend)
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'problem-status-loop')
@@ -1884,27 +1777,19 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('records an affected business claim without turning it into causality or remedy authority', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(8_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const support = await supportAdmin(backend)
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'business-problem-claim')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef,
       idempotencyKey: 'run:business-problem-claim',
     })
-    const firstLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:business-problem-claim',
-      leaseDurationMs: 10_000,
-    })
+    const firstLease = await nextDispatch(backend)
     if (firstLease.kind !== 'leased') throw new Error('business problem step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: firstLease.dispatch.dispatchRef,
       attemptRef: firstLease.dispatch.attemptRef,
-      workerId: 'worker:business-problem-claim',
-    })
-    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
-      attemptRef: firstLease.dispatch.attemptRef,
-      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
     })
     await backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: firstLease.dispatch.attemptRef,
@@ -1930,7 +1815,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (reported.kind !== 'problem_reported') throw new Error('business problem report was not accepted')
 
     const affectedOwner = await businessOwnerForAttempt(backend, firstLease.dispatch.attemptRef)
-    const unrelatedOwner = (await publishedBusinessOwner(backend, 'unrelated-problem-claim')).owner
+    const unrelatedOwner = (await publishedBusinessOwner(
+      backend,
+      'unrelated-problem-claim',
+      { slugPrefix: 'route-', identityPrefix: 'route_' },
+    )).owner
     const command = {
       reportRef: reported.reportRef,
       idempotencyKey: 'business-claim:first',
@@ -2051,8 +1940,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('refuses a problem report that names another step evidence receipt', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(4_100)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'problem-evidence-scope')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:problem-evidence-scope',
@@ -2074,8 +1963,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('replays an unchanged historical problem command after privacy fields are introduced', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(4_200)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'legacy-problem-replay')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:legacy-problem-replay',
@@ -2114,20 +2003,17 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       .mockReturnValueOnce(20_000)
       .mockReturnValueOnce(20_100)
       .mockReturnValue(20_200)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-too-late')
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-too-late',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:cancel-too-late', leaseDurationMs: 10_000,
-    })
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('cancel-too-late route step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:cancel-too-late',
     })
     const result = await admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:too-late',
@@ -2159,71 +2045,26 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
-  it('keeps a leased step distinct from actual business contact', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
-    const confirmed = await confirmedTwoStepRoute(backend, admin, 'step-ready-distinction')
-    await admin.action(api.customerRequestApplication.runRoute, {
-      requestRef: confirmed.requestRef, idempotencyKey: 'run:step-ready-distinction',
-    })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:step-ready-distinction', leaseDurationMs: 10_000,
-    })
-    if (lease.kind !== 'leased') throw new Error('step-ready route step was not leased')
-
-    await expect(admin.action(api.customerRequestApplication.resume, {
-      requestRef: confirmed.requestRef,
-    })).resolves.toMatchObject({
-      progress: { current: { step: 1, state: 'ready_to_contact' } },
-      activity: {
-        actor: 'ae',
-        certainty: 'confirmed',
-        cancellation: { state: 'available' },
-      },
-    })
-
-    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
-      dispatchRef: lease.dispatch.dispatchRef,
-      attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:step-ready-distinction',
-    })
-    await expect(admin.action(api.customerRequestApplication.resume, {
-      requestRef: confirmed.requestRef,
-    })).resolves.toMatchObject({
-      progress: { current: { step: 1, state: 'contacting' } },
-      activity: {
-        actor: 'ae',
-        certainty: 'pending',
-        cancellation: { state: 'not_available', reason: 'business_step_released' },
-      },
-    })
-  })
-
   it('stops unreleased downstream work when cancellation is requested during an in-flight step', async () => {
     vi.spyOn(Date, 'now')
       .mockReturnValueOnce(40_000)
       .mockReturnValueOnce(40_100)
       .mockReturnValue(40_200)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await pauseWorkpool(backend)
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(
       backend, admin, 'cancel-after-current', { adapterCancellation: true },
     )
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-after-current',
     })
-    const firstLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:cancel-after-current', leaseDurationMs: 10_000,
-    })
+    await pauseWorkpool(backend)
+    const firstLease = await nextDispatch(backend)
     if (firstLease.kind !== 'leased') throw new Error('cancel-after-current route step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: firstLease.dispatch.dispatchRef,
       attemptRef: firstLease.dispatch.attemptRef,
-      workerId: 'worker:cancel-after-current',
-    })
-    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
-      attemptRef: firstLease.dispatch.attemptRef,
-      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
     })
 
     await expect(admin.action(api.customerRequestApplication.cancelRoute, {
@@ -2254,9 +2095,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'cancelled',
       run: { state: 'cancelled', completedSteps: 1, currentPosition: 1 },
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:must-not-release-second', leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
     await expect(admin.action(api.customerRequestApplication.resume, {
       requestRef: confirmed.requestRef,
     })).resolves.toMatchObject({
@@ -2295,30 +2133,26 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       expect(cancellations[0]).toMatchObject({ result: 'too_late', committedAt: 40_200 })
       expect(await ctx.db.query('customerRequestRouteCancellationAttempts').collect()).toHaveLength(0)
     })
+    await pauseWorkpool(backend)
   })
 
   it('claims one adapter cancellation attempt and replays without scheduling another request', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(50_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await pauseWorkpool(backend)
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(
       backend, admin, 'adapter-cancel-pending', { adapterCancellation: true },
     )
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-pending',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:adapter-cancel-pending', leaseDurationMs: 10_000,
-    })
+    await pauseWorkpool(backend)
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:adapter-cancel-pending',
-    })
-    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
-      attemptRef: lease.dispatch.attemptRef,
-      operationKeyDigest: lease.dispatch.operationKeyDigest,
     })
 
     const first = await admin.action(api.customerRequestApplication.cancelRoute, {
@@ -2408,10 +2242,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         cancellation: { state: 'pending' },
       },
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:must-not-release-while-cancel-pending',
-      leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
     const unknown = await backend.mutation(
       internal.customerRequestRouteExecution.resolveCancellationAttempt,
       {
@@ -2466,22 +2296,21 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('stops the current route when the exact adapter cancellation is accepted', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(60_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await pauseWorkpool(backend)
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(
       backend, admin, 'adapter-cancel-accepted', { adapterCancellation: true },
     )
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-accepted',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:adapter-cancel-accepted', leaseDurationMs: 10_000,
-    })
+    await pauseWorkpool(backend)
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:adapter-cancel-accepted',
     })
     await admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-accepted',
@@ -2506,9 +2335,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'recorded',
       run: { state: 'cancelled', currentState: 'cancelled', completedSteps: 0 },
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:must-not-release-after-provider-cancel', leaseDurationMs: 10_000,
-    })).resolves.toEqual({ kind: 'none' })
     await expect(admin.action(api.customerRequestApplication.resume, {
       requestRef: confirmed.requestRef,
     })).resolves.toMatchObject({
@@ -2520,22 +2346,21 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
   it('continues exactly once after a provider rejects cancellation', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(70_000)
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await pauseWorkpool(backend)
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(
       backend, admin, 'adapter-cancel-rejected', { adapterCancellation: true },
     )
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-rejected',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:adapter-cancel-rejected', leaseDurationMs: 10_000,
-    })
+    await pauseWorkpool(backend)
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:adapter-cancel-rejected',
     })
     await admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-rejected',
@@ -2573,12 +2398,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         currentState: 'queued',
       },
     })
-    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:continue-after-cancel-rejection', leaseDurationMs: 10_000,
-    })).resolves.toMatchObject({
-      kind: 'leased',
-      dispatch: { position: 2 },
-    })
     await backend.run(async (ctx) => {
       const commands = await ctx.db.query('customerRequestRouteCancellationCommands').take(10)
       expect(commands.filter(({ result }) => result === 'rejected')).toHaveLength(1)
@@ -2586,8 +2405,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('uses the same run, lease, validation, and completion machinery for one step', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const current = await committedOneStepAdmissionRoute(backend, admin)
     const compared = await admin.action(api.customerRequestApplication.compare, {
       requestRef: current.aggregate.snapshot.requestId,
@@ -2607,15 +2426,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRef: compared.requestRef,
       idempotencyKey: 'run:one-step-run',
     })
-    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
-      workerId: 'worker:one-step', leaseDurationMs: 10_000,
-    })
+    const lease = await nextDispatch(backend)
     if (lease.kind !== 'leased') throw new Error('one-step route was not leased')
     expect(lease.dispatch.position).toBe(1)
     await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
-      workerId: 'worker:one-step',
     })
     await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: lease.dispatch.attemptRef,
@@ -2627,8 +2443,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('keeps prior runs as history and resumes only the newly confirmed replacement', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'replacement-run')
     if (confirmed.confirmation === undefined) throw new Error('replacement confirmation missing')
     await admin.action(api.customerRequestApplication.runRoute, {
@@ -2668,8 +2484,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('lets an external agent confirm and resume the same displayed option with command-bound authority', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const current = await committedTwoStepAdmissionRoute(backend, admin)
     const compared = await admin.action(api.customerRequestApplication.compare, {
       requestRef: current.aggregate.snapshot.requestId,
@@ -2757,8 +2573,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('refreshes an expired one-step generation before any preparation record can be created', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const published = await publishAndActivate(backend, admin, 'single-resolver', upstreamDocument, 300)
     await backend.action(internal.capabilitySupplyReadiness.probe, {
       publicationRef: published.publicationRef, expectedRevision: published.revision,
@@ -2768,13 +2584,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const requestInput = model.inputs.find((input) => input.inputPointer === '/request')
     if (requestInput === undefined) throw new Error('single route request input missing')
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, value: 'Resolve this service reference' }],
         }],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -2863,8 +2679,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('compiles and persists the governed DAG through the authenticated public submit action', async () => {
-    const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
     const first = await publishAndActivate(backend, admin, 'resolver', upstreamDocument, 300)
     const second = await publishAndActivate(backend, admin, 'quoter', downstreamDocument, 700)
     for (const publication of [first, second]) {
@@ -2879,13 +2695,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const requestInput = upstreamModel.inputs.find((input) => input.inputPointer === '/request')
     if (requestInput === undefined) throw new Error('upstream request input missing')
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [
           { selectionKey: upstreamModel.selectionKey, facts: [{ inputKey: requestInput.key, value: 'Resolve this service and prepare its quote' }] },
           { selectionKey: downstreamModel.selectionKey, facts: [] },
         ],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -3076,11 +2892,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await observeReady(backend, priceOnly, 'unsafe-resolver')
     await observeReady(backend, second, 'unsafe-quoter')
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ kind: 'capability_candidates', selections: [
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({ kind: 'capability_candidates', selections: [
         { selectionKey: upstreamModel.selectionKey, facts: [
           { inputKey: requestInput.key, value: 'A conflicting request interpretation' },
         ] },
-      ] }) } }],
+      ] }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const sourceOwnedRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
@@ -3117,13 +2933,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const upstreamV3RequestInput = upstreamV3Model.inputs.find((input) => input.inputPointer === '/request')
     if (upstreamV3RequestInput === undefined) throw new Error('v3 upstream request input missing')
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [
           { selectionKey: upstreamV3Model.selectionKey, facts: [{ inputKey: upstreamV3RequestInput.key, value: 'Resolve this service and prepare its quote' }] },
           { selectionKey: downstreamModel.selectionKey, facts: [] },
         ],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const contractRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef,
@@ -3161,14 +2977,14 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const validationModel = openCapabilityDecisionModel(defineCapabilityContract(validationDocument))
     const validatedQuoteModel = openCapabilityDecisionModel(defineCapabilityContract(validatedQuoteDocument))
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [
           { selectionKey: upstreamV3Model.selectionKey, facts: [{ inputKey: upstreamV3RequestInput.key, value: 'Resolve this service and prepare its quote' }] },
           { selectionKey: validationModel.selectionKey, facts: [] },
           { selectionKey: validatedQuoteModel.selectionKey, facts: [] },
         ],
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const routeShapeRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef,
@@ -3214,9 +3030,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await observeReady(backend, validator, 'typed-validator')
     await observeReady(backend, validatedQuoter, 'typed-validated-quoter')
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'needs_intent_direction', prompt: 'What result should the businesses produce?',
-      }) } }],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const needsInformationRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
@@ -3242,7 +3058,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(generate).toHaveBeenCalledTimes(7)
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ kind: 'capability_candidates', selections: [] }) } }],
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({ kind: 'capability_candidates', selections: [] }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const unsupportedRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
@@ -3306,16 +3122,17 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 })
 
-function objectSchema(properties: Record<string, object>, required: string[]) {
-  return { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties, required, additionalProperties: false }
-}
 
 async function publishAndActivate(
-  backend: ReturnType<typeof convexTest>, admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  backend: ReturnType<typeof convexTest>, admin: ConvexFixtureAdmin,
   suffix: string, document: RouteCapabilityDocument, amountMinor: number,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
-  const { businessId, owner } = await publishedBusinessOwner(backend, suffix)
+  const { businessId, owner } = await publishedBusinessOwner(
+    backend,
+    suffix,
+    { slugPrefix: 'route-', identityPrefix: 'route_' },
+  )
   const offering = {
     offeringId: `offering:route:${suffix}`, networkId: 'ae:public',
     presentation: {
@@ -3324,7 +3141,7 @@ async function publishAndActivate(
       commercialRelationship: { kind: 'none' as const, summary: 'No commercial influence.', influencesEligibility: false, influencesInclusion: false, influencesOrder: false, evidenceRefs: ['test:commercial-neutrality'] },
     },
     searchTerms: ['service', 'quote'], registrationEvidenceRefs: [`test:publication:${suffix}`],
-  }
+  } satisfies CapabilityPublicationOfferingDraft
   const binding = {
     bindingId: `binding:route:${suffix}`, endpointUrl: `https://${suffix}.example.test/capability`, credentialRef: `env:ROUTE_${suffix.toUpperCase().replaceAll('-', '_')}_KEY`,
     continuation: { kind: 'single_response' as const, evidenceRefs: ['test:single-response'] },
@@ -3334,13 +3151,13 @@ async function publishAndActivate(
     adapter: {
       adapterId: 'http-json:v1',
       config: {
-        method: 'POST', requestTimeoutMs: 5_000,
+        method: 'POST' as const, requestTimeoutMs: 5_000,
         ...(options.adapterCancellation
           ? { cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 } }
           : {}),
       },
     }, registrationEvidenceRefs: [`test:binding:${suffix}`],
-  }
+  } satisfies CapabilityPublicationBindingDraft
   const published = await owner.mutation(api.capabilitySupply.publishCapability, {
     businessId, source: { kind: 'ae_envelope', documentJson: JSON.stringify(document) },
     offering, binding,
@@ -3386,7 +3203,7 @@ async function observeReady(
 
 async function refreshAndActivate(
   backend: ReturnType<typeof convexTest>,
-  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  admin: ConvexFixtureAdmin,
   current: Awaited<ReturnType<typeof publishAndActivate>>,
   document: RouteCapabilityDocument,
   amountMinor: number,
@@ -3402,13 +3219,13 @@ async function refreshAndActivate(
       price: { kind: 'fixed' as const, currency: 'AUD', amountMinor },
     },
     registrationEvidenceRefs: [`test:publication:${suffix}`],
-  }
+  } satisfies CapabilityPublicationOfferingDraft
   const binding = {
     ...current.binding,
     bindingId: `binding:route:${suffix}`,
     endpointUrl: `https://${suffix}.example.test/capability`,
     registrationEvidenceRefs: [`test:binding:${suffix}`],
-  }
+  } satisfies CapabilityPublicationBindingDraft
   const refreshed = await current.owner.mutation(api.capabilitySupply.refreshCapability, {
     publicationRef: current.publicationRef,
     expectedRevision: current.revision,
@@ -3448,7 +3265,7 @@ async function refreshAndActivate(
 
 async function confirmedTwoStepRoute(
   backend: ReturnType<typeof convexTest>,
-  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  admin: ConvexFixtureAdmin,
   suffix: string,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
@@ -3475,12 +3292,12 @@ async function confirmedTwoStepRoute(
 
 async function committedTwoStepAdmissionRoute(
   backend: ReturnType<typeof convexTest>,
-  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  admin: ConvexFixtureAdmin,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
   await publishAndActivate(backend, admin, 'admission-resolver', upstreamDocument, 300, options)
   await publishAndActivate(backend, admin, 'admission-quoter', downstreamDocument, 700)
-  const supply = await backend.query(internal.capabilitySupply.listEligible, {
+  const supply = await backend.query(internal.capabilitySupply.listRouteable, {
     networkId: 'ae:public', limit: 16,
   })
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
@@ -3559,10 +3376,10 @@ async function committedTwoStepAdmissionRoute(
 
 async function committedOneStepAdmissionRoute(
   backend: ReturnType<typeof convexTest>,
-  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  admin: ConvexFixtureAdmin,
 ) {
   await publishAndActivate(backend, admin, 'one-step-resolver', upstreamDocument, 300)
-  const supply = await backend.query(internal.capabilitySupply.listEligible, {
+  const supply = await backend.query(internal.capabilitySupply.listRouteable, {
     networkId: 'ae:public', limit: 16,
   })
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
@@ -3644,19 +3461,43 @@ async function finishImmediateReadinessProbe(backend: ReturnType<typeof convexTe
   await backend.finishInProgressScheduledFunctions()
 }
 
-async function finishScheduledRouteWorkers(backend: ReturnType<typeof convexTest>, passes: number) {
+async function nextDispatch(backend: RouteTestBackend) {
+  return await backend.run(async (ctx) => {
+    const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
+      .withIndex('by_state_and_availableAt', (query) => (
+        query.eq('state', 'pending').lte('availableAt', Date.now())
+      )).first()
+    if (dispatch === null) throw new Error('pending route dispatch missing')
+    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
+      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', dispatch.attemptRef)).unique()
+    if (attempt === null) throw new Error('pending route attempt missing')
+    return {
+      kind: 'leased' as const,
+      dispatch: {
+        dispatchRef: dispatch.dispatchRef,
+        attemptRef: dispatch.attemptRef,
+        operationKeyDigest: dispatch.operationKeyDigest,
+        inputJson: attempt.inputJson,
+        position: attempt.position,
+      },
+    }
+  })
+}
+
+async function finishScheduledRouteWorkers(backend: RouteTestBackend, passes: number) {
   for (let pass = 0; pass < passes; pass += 1) {
-    await backend.action(internal.customerRequestRouteTransportWorker.runNext, {
-      workerId: `worker:integration:${pass}`,
+    const dispatchRef = await backend.run(async (ctx) => {
+      const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
+        .withIndex('by_state_and_availableAt', (query) => (
+          query.eq('state', 'pending').lt('availableAt', Date.now())
+        )).first()
+      return dispatch?.dispatchRef ?? null
     })
+    if (dispatchRef === null) return
+    await backend.action(internal.customerRequestRouteTransportWorker.run, { dispatchRef })
   }
 }
 
-async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
-  const identity = { subject: 'user_route_admin', issuer: 'https://identity.example', tokenIdentifier: 'token_route_admin' }
-  await backend.run(async (ctx) => { await ctx.db.insert('adminMemberships', { clerkUserId: identity.subject, tokenIdentifier: identity.tokenIdentifier, role: 'owner_admin', state: 'active', grantedBy: 'test_bootstrap', grantedAt: 1 }) })
-  return backend.withIdentity(identity)
-}
 
 async function supportAdmin(backend: ReturnType<typeof convexTest>) {
   const identity = { subject: 'user_route_support', issuer: 'https://identity.example', tokenIdentifier: 'token_route_support' }
@@ -3686,15 +3527,6 @@ async function reviewerAdmin(backend: ReturnType<typeof convexTest>) {
     })
   })
   return backend.withIdentity(identity)
-}
-
-async function publishedBusinessOwner(backend: ReturnType<typeof convexTest>, slug: string) {
-  const identity = { subject: `user_route_${slug}`, issuer: 'https://identity.example', tokenIdentifier: `token_route_${slug}` }
-  const businessId = await backend.run(async (ctx) => {
-    const ownerId = await ctx.db.insert('owners', { clerkUserId: identity.subject, createdAt: 1, updatedAt: 1 })
-    return await ctx.db.insert('businesses', { ownerId, slug: `route-${slug}`, name: `Route ${slug}`, normalizedName: `route ${slug}`, category: 'professional services', suburb: 'Perth', stateTerritory: 'WA', publicStatus: 'published', trustTier: 'listed', claimStatus: 'published', sourceHash: `source:route:${slug}`, createdAt: 1, updatedAt: 1 })
-  }) as Id<'businesses'>
-  return { businessId, owner: backend.withIdentity(identity) }
 }
 
 async function businessOwnerForAttempt(

@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { recordOwnerActivationEvent } from '../../../convex/observability'
-
+import {
+  OPERATOR_CONTROL_KEY_COUNT,
+  readAdminOwnerActivationSummary,
+  readOperatorControls,
+  recordOwnerActivationEvent,
+} from '../../../convex/observability'
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
-type QueryOperation = 'collect' | 'unique' | 'get'
-type QueryRead = { tableName: string; operation: QueryOperation; indexName?: string; filters: EqFilter[] }
+type QueryOperation = 'collect' | 'take' | 'unique' | 'get'
+type QueryRead = { tableName: string; operation: QueryOperation; indexName?: string; filters: EqFilter[]; limit?: number }
 type WriteOperation =
   | { kind: 'insert'; tableName: string; id: string; value: Record<string, unknown> }
   | { kind: 'patch'; tableName: string; id: string; value: Record<string, unknown> }
@@ -17,17 +21,24 @@ type IndexBuilder = {
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
   collect: () => Promise<Row[]>
+  take: (limit: number) => Promise<Row[]>
   unique: () => Promise<Row | null>
 }
 
 type Db = {
   query: (tableName: string) => Query
+  normalizeId: (tableName: string, value: string) => string | null
   get: (id: string) => Promise<Row | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
 
-type Ctx = { db: Db }
+type Ctx = {
+  db: Db
+  auth: { getUserIdentity: () => Promise<null> }
+  runQuery: (_query: unknown, args: unknown) => Promise<unknown>
+  runMutation: (_mutation: unknown, args: unknown) => Promise<{ ok: true }>
+}
 
 type RecordOwnerActivationEventArgs = {
   eventType: 'claim_started' | 'visitor_attributed'
@@ -47,6 +58,23 @@ const recordOwnerActivationEventHandler = getMutationHandler<
   RecordOwnerActivationEventArgs,
   RecordOwnerActivationEventResult
 >(recordOwnerActivationEvent)
+const readAdminOwnerActivationSummaryHandler = (readAdminOwnerActivationSummary as unknown as {
+  _handler: (ctx: AdminSummaryCtx, args: Record<string, never>) => Promise<OwnerActivationSummary>
+})._handler
+const readOperatorControlsHandler = (readOperatorControls as unknown as {
+  _handler: (ctx: AdminSummaryCtx, args: Record<string, never>) => Promise<unknown>
+})._handler
+
+type OwnerActivationSummary = {
+  byStage: Array<{ stage: string; count: number }>
+  totalTracked: number
+}
+
+type AdminSummaryCtx = Omit<Ctx, 'auth'> & {
+  auth: {
+    getUserIdentity: () => Promise<{ issuer: string; subject: string; tokenIdentifier: string }>
+  }
+}
 
 const allowedNoBusinessTables: Record<string, true> = { funnelEvents: true }
 const allowedBusinessTables: Record<string, true> = { funnelEvents: true, ownerActivationState: true }
@@ -56,11 +84,101 @@ describe('Convex observability runtime bridge', () => {
     vi.restoreAllMocks()
   })
 
-  it('records a session-only funnel event without collecting or upserting unrelated Phase 1 source tables', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
-    const db = seededUnrelatedPhaseOneDb()
+  it('keeps canonical stage keys and counts from aggregate readbacks', async () => {
+    const rows: Row[] = [
+      { _id: 'ownerActivationState:1', _creationTime: 1, stage: 'visitor' },
+      { _id: 'ownerActivationState:2', _creationTime: 2, stage: 'claim_started' },
+      { _id: 'ownerActivationState:3', _creationTime: 3, stage: 'visitor' },
+    ]
+    const db = seededUnrelatedDb()
+    db.seed('adminMemberships', {
+      _id: 'adminMemberships:admin',
+      _creationTime: 4,
+      clerkUserId: 'clerk:admin',
+      tokenIdentifier: 'token:admin',
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'bootstrap',
+      grantedAt: 1,
+    })
+    db.seedAggregate(rows)
 
-    const result = await recordOwnerActivationEventHandler({ db }, eventArgs('corr:session-only'))
+    const result = await readAdminOwnerActivationSummaryHandler(
+      {
+        ...testCtx(db),
+        auth: {
+          getUserIdentity: async () => ({
+            issuer: 'issuer:test',
+            subject: 'clerk:admin',
+            tokenIdentifier: 'token:admin',
+          }),
+        },
+      },
+      {},
+    )
+
+    expect(result).toEqual({
+      byStage: [
+        { stage: 'visitor', count: 2 },
+        { stage: 'claim_started', count: 1 },
+      ],
+      totalTracked: 3,
+    })
+    expect(db.aggregateReads()).toEqual([
+      'visitor',
+      'claim_started',
+      'published',
+      'activated',
+      'blocked',
+      undefined,
+    ])
+  })
+  it('reads every finite operator control through one bounded take', async () => {
+    const db = seededUnrelatedDb()
+    db.seed('adminMemberships', {
+      _id: 'adminMemberships:admin',
+      _creationTime: 4,
+      clerkUserId: 'clerk:admin',
+      tokenIdentifier: 'token:admin',
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'bootstrap',
+      grantedAt: 1,
+    })
+
+    const result = await readOperatorControlsHandler(
+      {
+        ...testCtx(db),
+        auth: {
+          getUserIdentity: async () => ({
+            issuer: 'issuer:test',
+            subject: 'clerk:admin',
+            tokenIdentifier: 'token:admin',
+          }),
+        },
+      },
+      {},
+    )
+
+    expect(result).toMatchObject({ kind: 'allowed' })
+    if (typeof result !== 'object' || result === null || !('controls' in result) || !Array.isArray(result.controls)) {
+      throw new Error('Expected operator control readback.')
+    }
+    expect(result.controls).toHaveLength(OPERATOR_CONTROL_KEY_COUNT)
+    expect(result.controls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'claims_enabled', effectiveEnabled: true })])
+    )
+    expect(db.takeReads().filter((read) => read.tableName === 'operatorControls')).toEqual([
+      expect.objectContaining({ limit: OPERATOR_CONTROL_KEY_COUNT }),
+    ])
+  })
+
+
+  it('records a session-only funnel event without collecting or upserting unrelated domain tables', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    const db = seededUnrelatedDb()
+
+    const result = await recordOwnerActivationEventHandler(testCtx(db), eventArgs('corr:session-only'))
 
     expect(result).toEqual({ ok: true })
     expect(db.dump('funnelEvents')).toHaveLength(1)
@@ -74,15 +192,14 @@ describe('Convex observability runtime bridge', () => {
     })
     expect(db.dump('ownerActivationState')).toEqual([])
     expect(touchedUnexpectedTables(db, allowedNoBusinessTables)).toEqual([])
-    expect(bareCollectReads(db)).toEqual([])
   })
 
   it('records a business funnel event by touching only funnelEvents and that business ownerActivationState row', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
-    const db = seededUnrelatedPhaseOneDb()
+    const db = seededUnrelatedDb()
 
     const result = await recordOwnerActivationEventHandler(
-      { db },
+      testCtx(db),
       eventArgs('corr:business-event', { businessId: 'businesses:target' })
     )
 
@@ -102,15 +219,38 @@ describe('Convex observability runtime bridge', () => {
     })
     expect(touchedUnexpectedTables(db, allowedBusinessTables)).toEqual([])
     expect(bareCollectReads(db)).toEqual([])
+    expect(db.aggregateWrites()).toEqual([
+      expect.objectContaining({ kind: 'insert', key: 'claim_started' }),
+    ])
   })
+  it('replaces the owner activation aggregate when the business row is patched', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+    const db = seededUnrelatedDb()
+
+    await recordOwnerActivationEventHandler(
+      testCtx(db),
+      eventArgs('corr:business-event:first', { businessId: 'businesses:target' })
+    )
+    await recordOwnerActivationEventHandler(
+      testCtx(db),
+      eventArgs('corr:business-event:second', { businessId: 'businesses:target' })
+    )
+
+    expect(db.dump('ownerActivationState')).toHaveLength(1)
+    expect(db.aggregateWrites()).toEqual([
+      expect.objectContaining({ kind: 'insert', key: 'claim_started' }),
+      expect.objectContaining({ kind: 'replace' }),
+    ])
+  })
+
 
   it('patches one legacy duplicate funnelEvents correlation row instead of throwing or inserting another row', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
-    const db = seededUnrelatedPhaseOneDb()
+    const db = seededUnrelatedDb()
     db.seed('funnelEvents', legacyFunnelEventRow('funnelEvents:legacy:first', 'legacy-source'))
     db.seed('funnelEvents', legacyFunnelEventRow('funnelEvents:legacy:second', 'legacy-source-two'))
 
-    const result = await recordOwnerActivationEventHandler({ db }, eventArgs('corr:duplicate-funnel-event'))
+    const result = await recordOwnerActivationEventHandler(testCtx(db), eventArgs('corr:duplicate-funnel-event'))
 
     expect(result).toEqual({ ok: true })
     expect(db.dump('funnelEvents')).toHaveLength(2)
@@ -140,6 +280,18 @@ describe('Convex observability runtime bridge', () => {
   })
 })
 
+function testCtx(db: FakeDb): Ctx {
+  return {
+    db,
+    auth: { getUserIdentity: async () => null },
+    runQuery: async (_query, args) => db.runAggregateCount(args),
+    runMutation: async (_mutation, args) => {
+      db.recordAggregateMutation(args)
+      return { ok: true }
+    },
+  }
+}
+
 class FakeIndexBuilder implements IndexBuilder {
   readonly filters: EqFilter[] = []
 
@@ -168,6 +320,10 @@ class FakeQuery implements Query {
     this.recordRead('collect')
     return this.filteredRows()
   }
+  async take(limit: number): Promise<Row[]> {
+    this.recordRead('take', limit)
+    return this.filteredRows().slice(0, limit)
+  }
 
   async unique(): Promise<Row | null> {
     this.recordRead('unique')
@@ -182,12 +338,13 @@ class FakeQuery implements Query {
     return this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
   }
 
-  private recordRead(operation: QueryOperation): void {
+  private recordRead(operation: QueryOperation, limit?: number): void {
     this.reads.push({
       tableName: this.tableName,
       operation,
       filters: this.filters.map((filter) => ({ ...filter })),
       ...(this.indexName === undefined ? {} : { indexName: this.indexName }),
+      ...(limit === undefined ? {} : { limit }),
     })
   }
 }
@@ -196,12 +353,18 @@ class FakeDb implements Db {
   private readonly tables: Record<string, Row[]> = {}
   private readonly queryReads: QueryRead[] = []
   private readonly writeOperations: WriteOperation[] = []
+  private readonly aggregateCountByStage = new Map<string, number>()
+  private readonly aggregateQueryReads: Array<string | undefined> = []
+  private readonly aggregateWriteOperations: Array<Record<string, unknown>> = []
   private sequence = 0
 
   query(tableName: string): Query {
     return new FakeQuery(tableName, this.table(tableName), this.queryReads)
   }
 
+  normalizeId(tableName: string, value: string): string | null {
+    return value.startsWith(`${tableName}:`) ? value : null
+  }
   async get(id: string): Promise<Row | null> {
     const tableName = id.split(':')[0] ?? ''
     this.queryReads.push({
@@ -235,6 +398,50 @@ class FakeDb implements Db {
     this.table(tableName).push(row)
   }
 
+  seedAggregate(rows: readonly Row[]): void {
+    for (const row of rows) {
+      const stage = row.stage
+      if (typeof stage !== 'string') {
+        throw new Error('Aggregate fixture requires stage.')
+      }
+      this.aggregateCountByStage.set(stage, (this.aggregateCountByStage.get(stage) ?? 0) + 1)
+    }
+  }
+
+  async runAggregateCount(args: unknown): Promise<{ count: number }> {
+    const record = typeof args === 'object' && args !== null ? args as Record<string, unknown> : {}
+    const key = record.k1
+    const stage = Array.isArray(key) && typeof key[0] === 'string' ? key[0] : undefined
+    this.aggregateQueryReads.push(stage)
+    if (stage === undefined) {
+      return { count: [...this.aggregateCountByStage.values()].reduce((total, count) => total + count, 0) }
+    }
+    return { count: this.aggregateCountByStage.get(stage) ?? 0 }
+  }
+
+  recordAggregateMutation(args: unknown): void {
+    if (typeof args !== 'object' || args === null) return
+    const record = args as Record<string, unknown>
+    const insertKey = Array.isArray(record.key) && typeof record.key[0] === 'string' ? record.key[0] : undefined
+    if (typeof record.value === 'string' && insertKey !== undefined && !('currentKey' in record)) {
+      this.aggregateCountByStage.set(
+        insertKey,
+        (this.aggregateCountByStage.get(insertKey) ?? 0) + 1
+      )
+      this.aggregateWriteOperations.push({ kind: 'insert', key: insertKey, id: record.value })
+      return
+    }
+    const currentKey = Array.isArray(record.currentKey) && typeof record.currentKey[0] === 'string' ? record.currentKey[0] : undefined
+    const newKey = Array.isArray(record.newKey) && typeof record.newKey[0] === 'string' ? record.newKey[0] : undefined
+    if (typeof record.value === 'string' && currentKey !== undefined && newKey !== undefined) {
+      if (currentKey !== newKey) {
+        this.aggregateCountByStage.set(currentKey, Math.max(0, (this.aggregateCountByStage.get(currentKey) ?? 0) - 1))
+        this.aggregateCountByStage.set(newKey, (this.aggregateCountByStage.get(newKey) ?? 0) + 1)
+      }
+      this.aggregateWriteOperations.push({ kind: 'replace', id: record.value })
+    }
+  }
+
   dump(tableName: string): Row[] {
     return this.table(tableName).map((row) => ({ ...row }))
   }
@@ -245,6 +452,18 @@ class FakeDb implements Db {
 
   writes(): WriteOperation[] {
     return this.writeOperations.map((write) => ({ ...write, value: { ...write.value } }))
+  }
+
+  aggregateReads(): Array<string | undefined> {
+    return [...this.aggregateQueryReads]
+  }
+
+  aggregateWrites(): Array<Record<string, unknown>> {
+    return this.aggregateWriteOperations.map((operation) => ({ ...operation }))
+  }
+
+  takeReads(): QueryRead[] {
+    return this.queryReads.filter((read) => read.operation === 'take')
   }
 
   private table(tableName: string): Row[] {
@@ -282,7 +501,7 @@ function eventArgs(
   }
 }
 
-function seededUnrelatedPhaseOneDb(): FakeDb {
+function seededUnrelatedDb(): FakeDb {
   const db = new FakeDb()
   db.seed('businesses', {
     _id: 'businesses:unrelated',
@@ -291,14 +510,6 @@ function seededUnrelatedPhaseOneDb(): FakeDb {
     slug: 'unrelated-business',
     name: 'Unrelated Business',
     publicStatus: 'published',
-  })
-  db.seed('businessServices', {
-    _id: 'businessServices:unrelated',
-    _creationTime: 2,
-    businessId: 'businesses:unrelated',
-    serviceSlug: 'unrelated-service',
-    name: 'Unrelated Service',
-    status: 'published',
   })
   db.seed('registryProjectionAttempts', {
     _id: 'registryProjectionAttempts:unrelated',
@@ -314,7 +525,9 @@ function seededUnrelatedPhaseOneDb(): FakeDb {
     enabled: true,
     reasonCode: 'operator-default',
     evidenceRefs: ['evidence:operator'],
-    updatedByAdminRef: 'admin:unrelated',
+    changedByAdminRef: 'admin:unrelated',
+    correlationId: 'corr:operator:unrelated',
+    operationKey: 'op:operator:unrelated',
     updatedAt: 4,
   })
   return db
@@ -340,6 +553,7 @@ function legacyFunnelEventRow(id: string, source: string): Row {
     redactedPayload: {},
   }
 }
+
 
 function touchedUnexpectedTables(db: FakeDb, allowedTables: Readonly<Record<string, true>>): string[] {
   const touchedTables = new Set<string>()

@@ -1,25 +1,12 @@
 import type { BusinessId, ClaimId, CorrelationId, OperationKey, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
 import type { ModuleResult } from '@/modules/common/result'
 import type {
-  AbuseRateLimitBucketRecord,
   AdminMembership,
   ClaimFingerprintRecord,
   CsrfCheckInput,
-  RateLimitClaimInput,
   SuppressionRuleRecord,
 } from '@/modules/security/public'
-import {
-  claimBusiness as claimBusinessImpl,
-  createEmptyBusinessSourceState as createEmptyBusinessSourceStateImpl,
-} from './internal/claim'
-import {
-  isPubliclyDiscoverable as isPubliclyDiscoverableImpl,
-  suppressBusiness as suppressBusinessImpl,
-  unsuppressBusiness as unsuppressBusinessImpl,
-} from './internal/visibility'
-import { validateOwnerPublishedPhone as validateOwnerPublishedPhoneImpl } from './internal/published-phone'
 import type { AuditEventContract, InvalidationIntent } from '@/modules/observability/public'
-import type { BusinessServiceRecord } from '@/modules/catalog/public'
 
 export const ClaimStatusValues = ['draft', 'authenticated', 'published', 'contested', 'disputed', 'suppressed'] as const
 export type ClaimStatus = (typeof ClaimStatusValues)[number]
@@ -30,7 +17,13 @@ export type PublicStatus = (typeof PublicStatusValues)[number]
 export const TrustTierValues = ['claimed', 'contact_confirmed', 'listed', 'registry_verified'] as const
 export type TrustTier = (typeof TrustTierValues)[number]
 
-export const validateOwnerPublishedPhone = validateOwnerPublishedPhoneImpl
+export function normalizeTrustTier(value: unknown): TrustTier {
+  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified'
+    ? value
+    : 'claimed'
+}
+
+export { validateOwnerPublishedPhone } from './internal/published-phone'
 
 export const VisibilityTargetTypeValues = ['business', 'service', 'capability'] as const
 export type VisibilityTargetType = (typeof VisibilityTargetTypeValues)[number]
@@ -127,11 +120,9 @@ export type BusinessSourceState = {
   businessContexts: BusinessContextRecord[]
   claims: ClaimRecord[]
   claimFingerprints: ClaimFingerprintRecord[]
-  abuseRateLimitBuckets: AbuseRateLimitBucketRecord[]
 }
 
 export type BusinessSuppressionState = BusinessSourceState & {
-  businessServices: BusinessServiceRecord[]
   suppressionRules: SuppressionRuleRecord[]
   auditEvents: AuditEventContract[]
   invalidationIntents: InvalidationIntent[]
@@ -168,7 +159,6 @@ export type ClaimBusinessCommand = {
   facts: ClaimBusinessFacts
   security: {
     csrf: CsrfCheckInput
-    rateLimit: RateLimitClaimInput
   }
   operationKey: OperationKey
   correlationId: CorrelationId
@@ -182,7 +172,6 @@ export type ClaimBusinessErrorCode =
   | 'claim_duplicate_conflict'
   | 'claim_pending_review'
   | 'claim_csrf_rejected'
-  | 'claim_rate_limited'
 
 export type ClaimBusinessResult = ModuleResult<
   'claim_created',
@@ -191,12 +180,6 @@ export type ClaimBusinessResult = ModuleResult<
   { reason: string; claim?: ClaimRecord; publicReason?: 'duplicate_or_impersonation_review' }
 >
 
-export type VisibilityContract = {
-  targetType: VisibilityTargetType
-  targetRef: string
-  publicStatus: PublicStatus
-  suppressedAt?: number
-}
 
 export type SuppressBusinessCommand = {
   adminMembership: AdminMembership | undefined
@@ -271,12 +254,5 @@ export type BusinessContractResult = ModuleResult<
   { reason: string }
 >
 
-export const createEmptyBusinessSourceState = createEmptyBusinessSourceStateImpl
-
-export const claimBusiness = claimBusinessImpl
-
-export const isPubliclyDiscoverable = isPubliclyDiscoverableImpl
-
-export const suppressBusiness = suppressBusinessImpl
-
-export const unsuppressBusiness = unsuppressBusinessImpl
+export { createEmptyBusinessSourceState, claimBusiness } from './internal/claim'
+export { isPubliclyDiscoverable, suppressBusiness, unsuppressBusiness } from './internal/visibility'

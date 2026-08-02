@@ -22,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatTimestamp } from '@/lib/ui/format-time'
+import { formatMoney } from '@/lib/ui/format-money'
 
 import type {
   CustomerRequestConnectedAssistantsResult,
@@ -29,7 +31,6 @@ import type {
   CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
-import { formatMoney, formatOptionTime } from './panels/shared/format'
 
 type CustomerRoute = NonNullable<CustomerRequestView['decision']>['routes'][number]
 type ConnectedAssistant = Extract<
@@ -187,7 +188,7 @@ export function CustomerRequestRepeatPermissionControl({
         <p>{selectedAssistant?.label ?? 'The connected assistant'} may confirm this exact choice up to {receipt.limits.occurrences} times.</p>
         <p className="text-muted-foreground">Total ceiling {receipt.limits.cumulativeSpend.currency} {minorUnitsToInput(
           receipt.limits.cumulativeSpend.amountMinor,
-        )}. Expires {formatOptionTime(receipt.validUntil)}.</p>
+        )}. Expires {formatTimestamp(receipt.validUntil)}.</p>
         <p className="text-muted-foreground">If this choice changes or a limit is reached, AE will ask you to confirm again.</p>
         {receipt.status === 'active'
           ? <>

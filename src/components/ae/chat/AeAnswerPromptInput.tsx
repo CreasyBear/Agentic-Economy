@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { SearchIcon } from 'lucide-react'
 
 import {
@@ -11,7 +11,10 @@ import {
   PromptInputTools,
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import { cn } from '@/lib/utils'
 import { NeedTimingValues, type NeedTiming } from '@/modules/answer/search-context'
@@ -94,11 +97,11 @@ function AeAnswerPromptInputInner({
   const counterId = `${inputId}-counter`
   const hintId = `${inputId}-hint`
   const placeholderId = `${inputId}-placeholder`
+  const timingDateId = `${inputId}-timing-date`
   const [value, setValue] = useState(initialValue)
   const [timing, setTiming] = useState<NeedTiming>(initialTiming)
   const hydrated = useClientMounted()
   const [timingDate, setTimingDate] = useState(initialTimingDate)
-  const isComposingRef = useRef(false)
   const timingDateValid = timing !== 'date' || (timingDate.length > 0 && timingDate >= localToday())
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const showCharacterLimit = charactersRemaining <= 40
@@ -108,13 +111,6 @@ function AeAnswerPromptInputInner({
     if (focusOnMount) document.getElementById(inputId)?.focus()
   }, [focusOnMount, inputId])
 
-  function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== 'Enter' || event.shiftKey || isComposingRef.current || event.nativeEvent.isComposing) {
-      return
-    }
-    event.preventDefault()
-    submitQuery(value)
-  }
 
   function updateValue(nextValue: string) {
     setValue(nextValue.slice(0, QUERY_MAX_LENGTH))
@@ -165,9 +161,6 @@ function AeAnswerPromptInputInner({
             value={value}
             maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => updateValue(event.currentTarget.value)}
-            onCompositionEnd={() => { isComposingRef.current = false }}
-            onCompositionStart={() => { isComposingRef.current = true }}
-            onKeyDown={handleInputKeyDown}
             role="searchbox"
             autoComplete="off"
             autoCapitalize="off"
@@ -185,34 +178,41 @@ function AeAnswerPromptInputInner({
               disabled={busy || !hydrated}
             >
               <legend className="text-xs font-medium text-foreground">When do you need this?</legend>
-              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="When do you need this?">
+              <RadioGroup
+                value={timing}
+                onValueChange={(value) => setTiming(value as NeedTiming)}
+                disabled={busy || !hydrated}
+                aria-label="When do you need this?"
+                className="flex flex-wrap gap-1.5"
+              >
                 {NeedTimingValues.map((option) => (
-                  <Button
+                  <RadioGroupItem
                     key={option}
-                    type="button"
-                    variant={timing === option ? 'default' : 'secondary'}
-                    size="sm"
-                    role="radio"
-                    aria-checked={timing === option}
-                    disabled={busy || !hydrated}
-                    onClick={() => setTiming(option)}
+                    value={option}
+                    className={cn(buttonVariants({ variant: timing === option ? 'default' : 'secondary', size: 'sm' }), 'aspect-auto w-auto [&_[data-slot=radio-group-indicator]]:hidden')}
                   >
                     {timingLabel(option)}
-                  </Button>
+                  </RadioGroupItem>
                 ))}
-              </div>
+              </RadioGroup>
               {timing === 'date' ? (
-                <label className="flex items-center gap-1 text-xs font-medium text-foreground">
-                  Date
-                  <input
+                <Field
+                  orientation="horizontal"
+                  className="w-auto flex-none items-center gap-1.5 [&>[data-slot=field-label]]:flex-none"
+                >
+                  <FieldLabel htmlFor={timingDateId} className="text-xs font-medium text-foreground">
+                    Date
+                  </FieldLabel>
+                  <Input
+                    id={timingDateId}
                     type="date"
                     value={timingDate}
                     min={localToday()}
                     required
-                    className="min-h-8 rounded-md border border-border bg-card px-2 text-foreground"
+                    className="h-8 w-auto min-w-0 bg-card px-2 text-xs max-sm:h-8 md:text-xs"
                     onChange={(event) => setTimingDate(event.currentTarget.value)}
                   />
-                </label>
+                </Field>
               ) : null}
             </fieldset>
           </PromptInputTools>

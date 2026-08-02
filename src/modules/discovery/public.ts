@@ -1,24 +1,13 @@
 import type { BusinessId, Slug, SourceHash } from '@/modules/common/ids'
-import type { PublicCatalogContract, ServiceCapabilityContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type {
   AuditEventContract,
   InvalidationIntent,
 } from '@/modules/observability/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
-import {
-  invalidateDiscoveryManifest as invalidateDiscoveryManifestImpl,
-  readDiscoveryHealth as readDiscoveryHealthImpl,
-  regenerateDiscoveryManifest as regenerateDiscoveryManifestImpl,
-} from './internal/manifest-attempts'
-import { buildPublicAgentSkillMarkdown as buildPublicAgentSkillMarkdownImpl } from './internal/agent-skill'
-import {
-  buildLlmsTxt as buildLlmsTxtImpl,
-  buildOfferingLlmsTxt as buildOfferingLlmsTxtImpl,
-  buildRobotsTxt as buildRobotsTxtImpl,
-  buildSitemapXml as buildSitemapXmlImpl,
-} from './internal/discovery-files'
-import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
-import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl, safePublicText } from './internal/ucp-manifest'
+import { regenerateDiscoveryManifest } from './internal/manifest-attempts'
+import { buildLlmsTxt, buildSitemapXml } from './internal/discovery-files'
+import { createFixtureDiscoverySourceState } from './internal/source-state'
 export {
   OfferingDiscoveryManifestSchemaVersion,
   buildOfferingDiscoveryManifest,
@@ -77,35 +66,11 @@ export type DiscoveryManifestRouteContract = {
   routeTested: true
 }
 
-export type DiscoveryManifestFirstRequestContract = {
-  mode: PublicCatalogContract['services'][number]['firstRequest']['mode']
-  publicDisclosure: string
-  publicChannel: PublicCatalogContract['services'][number]['firstRequest']['publicChannel']
-  noContactReason?: string
-}
-
-export type DiscoveryManifestCapabilityContract = {
-  kind: ServiceCapabilityContract['kind']
-  status: ServiceCapabilityContract['status']
-  firstRequest: DiscoveryManifestFirstRequestContract
-  callable: false
-  paymentRequired: false
-  reason?: string
-}
-
-export type DiscoveryManifestServiceContract = {
-  slug: Slug
-  name: string
-  category: string
-  summary: string
-  serviceArea: string
-  hoursOrUnknown: string
-  status: 'published'
-  capabilities: readonly DiscoveryManifestCapabilityContract[]
-}
+export type DiscoveryManifestOfferingContract = Readonly<PublicBusinessCatalogApiV2Dto['offerings'][number]>
 
 export type DiscoveryManifestContract = {
   schemaVersion: DiscoveryManifestSchemaVersion
+  businessCatalogSchemaVersion: PublicBusinessCatalogApiV2Dto['schemaVersion']
   businessId: BusinessId
   slug: Slug
   businessName: string
@@ -119,20 +84,16 @@ export type DiscoveryManifestContract = {
   manifestUrl: string
   ucpVersion: string
   pathKind: Extract<DiscoveryPathKind, 'ae_hosted_fallback'>
-  status: DiscoveryStatus
-  sourceHash: SourceHash
+  disposition: PublicBusinessCatalogApiV2Dto['disposition']
+  sourceHash?: SourceHash
   sourceVersion: DiscoveryManifestSourceVersion
   generatedHash: SourceHash
   bodyHash: SourceHash
   urlHash: SourceHash
   generatedAt: number
-  updatedAt: number
+  observedAt: number
   routes: readonly DiscoveryManifestRouteContract[]
-  services: readonly DiscoveryManifestServiceContract[]
-  unsupportedCapabilities: {
-    callable: false
-    paymentRequired: false
-  }
+  offerings: readonly DiscoveryManifestOfferingContract[]
   degradedReason?: string
   suppressedAt?: number
 }
@@ -151,9 +112,10 @@ export type DiscoveryManifestReadback = {
 }
 
 export type BuildCatalogDiscoveryManifestInput = {
-  catalog: PublicCatalogContract | undefined
+  catalog: PublicBusinessCatalogApiV2Dto | undefined
   canonicalBaseUrl: string
   now: number
+  sourceHash?: SourceHash
 }
 
 export type BuildCatalogDiscoveryManifestResult =
@@ -269,8 +231,8 @@ export type ReadCatalogDiscoveryManifestResult = BuildCatalogDiscoveryManifestRe
 export function readFixtureCatalogDiscoveryManifest(
   input: ReadCatalogDiscoveryManifestInput
 ): ReadCatalogDiscoveryManifestResult {
-  const state = createDefaultDiscoverySourceStateImpl()
-  const result = regenerateDiscoveryManifestImpl(
+  const state = createFixtureDiscoverySourceState()
+  const result = regenerateDiscoveryManifest(
     state,
     { slug: input.slug },
     {
@@ -287,31 +249,35 @@ export function readFixtureCatalogDiscoveryManifest(
 }
 
 export function readFixtureLlmsTxt(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
-  return buildLlmsTxtImpl(createDefaultDiscoverySourceStateImpl(), options)
+  return buildLlmsTxt(createFixtureDiscoverySourceState(), options)
 }
 
 export function readFixtureSitemapXml(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
-  return buildSitemapXmlImpl(createDefaultDiscoverySourceStateImpl(), options)
+  return buildSitemapXml(createFixtureDiscoverySourceState(), options)
 }
 
-export const buildCatalogDiscoveryManifest = buildCatalogDiscoveryManifestImpl
-export { safePublicText }
+export { buildCatalogDiscoveryManifest } from './internal/ucp-manifest'
+export { safePublicText } from './internal/ucp-manifest'
 
-export const regenerateDiscoveryManifest = regenerateDiscoveryManifestImpl
+export {
+  regenerateDiscoveryManifest,
+  invalidateDiscoveryManifest,
+  readDiscoveryHealth,
+} from './internal/manifest-attempts'
 
-export const invalidateDiscoveryManifest = invalidateDiscoveryManifestImpl
+export {
+  buildLlmsTxt,
+  buildOfferingLlmsTxt,
+  buildOfferingLlmsUrlsFromSlugs,
+  buildRobotsTxt,
+  buildSitemapXml,
+  buildSitemapXmlFromSlugs,
+} from './internal/discovery-files'
 
-export const readDiscoveryHealth = readDiscoveryHealthImpl
+export { buildPublicAgentSkillMarkdown } from './internal/agent-skill'
 
-export const buildLlmsTxt = buildLlmsTxtImpl
-export const buildOfferingLlmsTxt = buildOfferingLlmsTxtImpl
-
-export const buildPublicAgentSkillMarkdown = buildPublicAgentSkillMarkdownImpl
-
-export const buildSitemapXml = buildSitemapXmlImpl
-
-export const buildRobotsTxt = buildRobotsTxtImpl
-
-export const createDefaultDiscoverySourceState = createDefaultDiscoverySourceStateImpl
+export {
+  createFixtureDiscoverySourceState as createDefaultDiscoverySourceState,
+} from './internal/source-state'
 
 export * from './developer-discovery'

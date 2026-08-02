@@ -6,19 +6,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
-import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
-import { appendThreadOrigin } from '@/lib/ui/append-thread-origin'
 import { pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import { telUri } from '@/lib/ui/tel-uri'
-import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
+import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
+import { ProviderFacts, offeringPathLabel } from '@/components/ae/provider-facts'
 import type { AnswerSource } from '@/modules/answer/public'
-import type { PublicRouteServiceContract } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
 
 export type AeProviderCardProps =
   | { variant: 'answer'; source: AnswerSource; threadId?: string }
   | { variant: 'registry'; item: PublicBusinessCatalogApiV2Dto; onView?: () => void }
-  | { variant: 'capability'; service: PublicRouteServiceContract }
+  | { variant: 'offering'; offering: PublicOfferingDto }
 
 export function AeProviderCard(props: AeProviderCardProps) {
   if (props.variant === 'answer') {
@@ -27,14 +25,14 @@ export function AeProviderCard(props: AeProviderCardProps) {
   if (props.variant === 'registry') {
     return <AeProviderCardRegistry item={props.item} {...(props.onView === undefined ? {} : { onView: props.onView })} />
   }
-  return <AeProviderCardCapability service={props.service} />
+  return <AeProviderCardOffering offering={props.offering} />
 }
 
 function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; threadId?: string }) {
   const area = source.serviceArea || source.suburb
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(source.availabilityLabel))
-  const detailHref = appendThreadOrigin(source.detailUrl, threadId)
-  const detailSearch = threadId === undefined ? {} : { from: 'thread' as const, id: threadId }
+  const detailIsInternal = source.detailUrl.startsWith('/') && !source.detailUrl.startsWith('//')
+  const detailSearch = threadId === undefined || threadId.length === 0 ? {} : { from: 'thread' as const, id: threadId }
   const grounding = answerCardGrounding(source)
 
   return (
@@ -49,12 +47,12 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
         <div className="min-w-0 flex-1">
           <CardTitle>
             <h2 id={`source-${source.citationIndex}-name`} className="text-lg font-semibold text-foreground">
-              {source.detailUrl.startsWith('/') && !source.detailUrl.startsWith('//') ? (
+              {detailIsInternal ? (
                 <Link to="/$slug" params={{ slug: source.slug }} search={detailSearch} className="text-foreground underline-offset-4 hover:underline">
                   {source.name}
                 </Link>
               ) : (
-                <a href={detailHref} className="text-foreground underline-offset-4 hover:underline">{source.name}</a>
+                <a href={source.detailUrl} className="text-foreground underline-offset-4 hover:underline">{source.name}</a>
               )}
             </h2>
           </CardTitle>
@@ -78,7 +76,11 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
         <TokenList labels={source.services.slice(0, 4).map((service) => service.name)} />
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="secondary" size="sm" className="min-h-11">
-            <a href={detailHref}>Ask this business</a>
+            {detailIsInternal ? (
+              <Link to="/$slug" params={{ slug: source.slug }} search={detailSearch}>Ask this business</Link>
+            ) : (
+              <a href={source.detailUrl}>Ask this business</a>
+            )}
           </Button>
         </div>
       </CardContent>
@@ -107,21 +109,21 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
   const telDestination = telUri(phone)
   const offeringNames = item.offerings.slice(0, 2).map((offering) => offering.name)
   const price = offeringPrice(item)
-  const badges = capabilityBadges(item)
+  const badges = offeringBadges(item)
 
   async function copyDetails() {
     const details = [
       item.name,
       item.category,
       ...(location.length === 0 ? [] : [`Location: ${location}`]),
-      ...(offeringNames.length === 0 ? [] : [`Services: ${offeringNames.join(', ')}`]),
+      ...(offeringNames.length === 0 ? [] : [`Offerings: ${offeringNames.join(', ')}`]),
       ...(price === undefined ? [] : [`Price: ${price}`]),
       ...(phone.length === 0 ? [] : [`Phone: ${phone}`]),
       `Page: ${window.location.origin}/${item.slug}`,
     ].join('\n')
 
     try {
-      await navigator.clipboard.writeText(details)
+      await copyTextToClipboard(details)
       setCopied(true)
     } catch {
       setCopied(false)
@@ -147,7 +149,7 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
         )}
       </CardHeader>
       <CardContent className="grid gap-3 p-4 pt-0">
-        <TokenList labels={offeringNames} ariaLabel="Published services" />
+        <TokenList labels={offeringNames} ariaLabel="Published offerings" />
         {price === undefined ? null : <p className="text-lg font-semibold text-foreground">{price}</p>}
         {badges.length === 0 ? null : (
           <ul className="flex flex-wrap gap-2" aria-label="What this business supports">
@@ -158,7 +160,7 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
       <CardFooter className="mt-auto grid gap-2 border-t border-border p-4">
         <div aria-label="Research actions" className="grid gap-2">
           <Button asChild variant="default" className="min-h-11 w-full" {...(onView === undefined ? {} : { onClick: onView })}>
-            <a href={`/${item.slug}?from=registry`} aria-label={`View ${item.name}`}>View business</a>
+            <Link to="/$slug" params={{ slug: item.slug }} aria-label={`View ${item.name}`}>View business</Link>
           </Button>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             {telDestination === undefined ? null : (
@@ -195,7 +197,7 @@ function offeringPrice(item: PublicBusinessCatalogApiV2Dto): string | undefined 
   return undefined
 }
 
-function capabilityBadges(item: PublicBusinessCatalogApiV2Dto): readonly string[] {
+function offeringBadges(item: PublicBusinessCatalogApiV2Dto): readonly string[] {
   if (item.accessSummary.aeSupportedAction) {
     return ['AE can complete this']
   }
@@ -205,33 +207,30 @@ function capabilityBadges(item: PublicBusinessCatalogApiV2Dto): readonly string[
   return []
 }
 
-function AeProviderCardCapability({ service }: { service: PublicRouteServiceContract }) {
-  const serviceTitleId = `ae-service-${service.serviceId}`
+function AeProviderCardOffering({ offering }: { offering: PublicOfferingDto }) {
+  const offeringTitleId = `ae-offering-${offering.offeringRef}`
+  const paths = offering.accessPaths.map((path) => path.kind === 'external_operation' ? path.name : offeringPathLabel(path))
 
   return (
-    <Card className="grid gap-4" data-variant="capability" aria-labelledby={serviceTitleId}>
+    <Card className="grid gap-4" data-variant="offering" aria-labelledby={offeringTitleId}>
       <CardHeader className="grid gap-1 p-4">
         <CardTitle>
-          <h2 id={serviceTitleId} className="text-lg font-semibold text-foreground">{service.name}</h2>
+          <h2 id={offeringTitleId} className="text-lg font-semibold text-foreground">{offering.name}</h2>
         </CardTitle>
-        <p className="block text-muted-foreground">{service.summary}</p>
+        <p className="block text-muted-foreground">{offering.summary}</p>
       </CardHeader>
       <CardContent className="grid gap-4 p-4 pt-0">
         <ProviderFacts
           facts={[
-            { term: 'Service area', description: service.serviceArea },
-            { term: 'Hours', description: service.hoursOrUnknown },
-            { term: 'First request', description: firstRequestModeLabel(service.firstRequest.mode) },
-            { term: 'Public note', description: service.firstRequest.publicDisclosure },
+            { term: 'Service area', description: offering.serviceAreaSummary },
+            { term: 'Availability', description: offering.availabilitySummary },
+            { term: 'Pricing', description: offering.pricingSummary },
           ]}
         />
-        <ul className="flex flex-wrap gap-2">
-          {service.capabilities.map((capability) => (
-            <li key={`${capability.serviceId}:${capability.kind}`}>
-              <AeStatusBadge status={capabilityStatusToAeStatus(capability.status)} />
-            </li>
-          ))}
-        </ul>
+        <TokenList labels={paths} ariaLabel="Published access paths" />
+        {offering.support.aeSupportedAction ? (
+          <p className="block text-sm text-muted-foreground">AE can help with the next step.</p>
+        ) : null}
         <p className="block text-sm text-muted-foreground" role="note">
           The business publishes these details and confirms each request.
         </p>
@@ -240,25 +239,8 @@ function AeProviderCardCapability({ service }: { service: PublicRouteServiceCont
   )
 }
 
-function ProviderFacts({ facts }: { facts: Array<{ term: string; description: string | undefined }> }) {
-  const present = facts.filter((fact) => fact.description !== undefined && fact.description.trim().length > 0)
-  if (present.length === 0) {
-    return null
-  }
 
-  return (
-    <dl className="grid gap-x-6 gap-y-3 border-t border-border pt-3 sm:grid-cols-2">
-      {present.map((fact) => (
-        <div key={fact.term}>
-          <dt><span className="block text-sm text-muted-foreground">{fact.term}</span></dt>
-          <dd className="mt-0.5"><span className="block text-sm font-medium text-foreground">{fact.description}</span></dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-function TokenList({ labels, ariaLabel = 'Listed services' }: { labels: readonly string[]; ariaLabel?: string }) {
+function TokenList({ labels, ariaLabel = 'Listed offerings' }: { labels: readonly string[]; ariaLabel?: string }) {
   if (labels.length === 0) {
     return null
   }

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 import { z } from 'zod'
+import { uniqueSorted } from '../../src/modules/common/unique-sorted'
 
 import {
   customerRequestProductionSmokeConfigFromEnvironment,
@@ -33,19 +34,22 @@ export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   fetch: typeof globalThis.fetch
   run: (credentials: Readonly<{
     agentApiKey: string
+    credentialId: string
     issueCustomerSessionToken: () => Promise<string>
   }>) => Promise<void>
+  scopes?: readonly string[]
   keyNamePrefix?: string
   revocationReason?: string
 }>): Promise<void> {
   const headers = await clerkAcceptanceHeaders({ ...input, expectedPrimaryEmail: ACCEPTANCE_PRIMARY_EMAIL })
-  await withTemporaryAgentKey({ ...input, headers, run: async (agentApiKey) => {
+  await withTemporaryAgentKey({ ...input, headers, run: async (agentApiKey, identity) => {
     let sessionId: string | undefined
     let sessionToken: string | undefined
     let journeyError: unknown
     try {
       await input.run({
         agentApiKey,
+        credentialId: identity.credentialId,
         issueCustomerSessionToken: async () => {
           if (sessionToken !== undefined) return sessionToken
           const sessionValue = await readClerkJson(input.fetch, `${CLERK_API}/sessions`, {
@@ -196,7 +200,7 @@ function temporaryKeyScopes(scopes: readonly string[] | undefined): readonly str
     || !selected.includes(REQUIRED_SCOPE)) {
     throw new Error('temporary_agent_key_scopes_invalid')
   }
-  return [...new Set(selected)].sort()
+  return uniqueSorted(selected)
 }
 
 async function revokeTemporarySession(

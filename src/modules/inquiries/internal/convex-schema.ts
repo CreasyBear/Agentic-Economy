@@ -29,8 +29,7 @@ export const inquiryTables = {
     threadId: v.string(),
     businessId: v.id('businesses'),
     ownerId: v.id('owners'),
-    serviceId: v.id('businessServices'),
-    capabilityKind: v.string(),
+    offeringRef: v.string(),
     status: literalUnion(InquiryThreadStatusValues),
     firstMessageId: v.string(),
     sourceHash: v.string(),
@@ -47,7 +46,7 @@ export const inquiryTables = {
     .index('by_threadId', ['threadId'])
     .index('by_business_status', ['businessId', 'status'])
     .index('by_owner_updatedAt', ['ownerId', 'updatedAt'])
-    .index('by_service_status', ['serviceId', 'status']),
+    .index('by_offering_status', ['offeringRef', 'status']),
 
   inquiryCustomerAccessGrants: defineTable({
     accessId: v.string(),
@@ -104,7 +103,6 @@ export const inquiryTables = {
     operationKey: v.string(),
     correlationId: v.string(),
   }).index('by_owner_thread', ['ownerId', 'threadId']),
-
   inquiryAbuseBuckets: defineTable({
     key: v.string(),
     window: v.string(),
@@ -115,6 +113,7 @@ export const inquiryTables = {
   })
     .index('by_key_window', ['key', 'window'])
     .index('by_state_resetAt', ['state', 'resetAt']),
+
 
   inquiryPrivacyTombstones: defineTable({
     threadId: v.string(),
@@ -168,8 +167,7 @@ export const inquiryTables = {
     targetBinding: v.object({
       businessId: v.id('businesses'),
       ownerId: v.id('owners'),
-      serviceId: v.id('businessServices'),
-      capabilityKind: v.string(),
+      offeringRef: v.string(),
       claimRef: v.string(),
       recipientRef: v.string(),
     }),
@@ -179,7 +177,6 @@ export const inquiryTables = {
     .index('by_operationKey', ['operationKey'])
     .index('by_threadId', ['threadId'])
     .index('by_receiptRef', ['receiptRef']),
-
   governedSendReceiptKeys: defineTable({
     keyRef: v.string(),
     receiptOperationKey: v.string(),

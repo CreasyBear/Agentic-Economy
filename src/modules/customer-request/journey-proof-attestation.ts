@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -96,5 +97,8 @@ export function verifyCustomerRequestJourneyProof(
 }
 
 function asStableHashValue(value: unknown): StableHashValue {
-  return JSON.parse(JSON.stringify(value)) as StableHashValue
+  if (!isBoundedJsonValue(value)) {
+    throw new Error('customer_request_journey_proof_not_json_safe')
+  }
+  return value
 }

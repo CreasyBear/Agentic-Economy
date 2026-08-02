@@ -130,7 +130,7 @@ export const issue = internalMutation({
   returns: issueResult,
   handler: async (ctx, args): Promise<Infer<typeof issueResult>> => (
     await issueMachine(
-      args as unknown as Parameters<typeof issueMachine>[0],
+      args,
       routeMandateMutationPorts(ctx),
     ) as Infer<typeof issueResult>
   ),

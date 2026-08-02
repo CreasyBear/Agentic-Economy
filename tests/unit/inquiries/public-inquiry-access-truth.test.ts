@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PublicOfferingSupplyProjection, PublicRouteCatalogContract } from '@/modules/catalog/public'
+import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { projectPublicInquiryAvailability, projectPublicInquiryOfferingSupply } from '@/modules/inquiries/route-readbacks'
 
@@ -56,33 +57,31 @@ describe('rendered access paths never describe a refused channel', () => {
     expect(projectPublicInquiryOfferingSupply(external, '/x/inquiry')[0]?.accessPaths).toEqual(external[0]?.accessPaths)
   })
 
-  it('withdraws first-contact copy from every service, not only the selected target', () => {
-    const projected = projectPublicInquiryAvailability(twoServiceCatalog(), undefined)
+  it('withdraws the AE path from every Offering, not only the selected target', () => {
+    const projected = projectPublicInquiryAvailability(twoOfferingCatalog(), undefined)
 
-    expect(projected.services.map((service) => service.firstRequest.publicDisclosure)).toEqual([
-      'This business isn’t receiving inquiries through AE yet.',
-      'This business isn’t receiving inquiries through AE yet.',
+    expect(projected.offerings.map((offering) => offering.accessPaths.map((path) => path.kind === 'human_request' ? path.channel : 'external'))).toEqual([
+      ['phone'],
+      ['phone'],
     ])
-    expect(projected.services.flatMap((service) => service.capabilities.map((capability) => capability.status)))
-      .toEqual(['unavailable', 'unavailable'])
   })
 
-  it('keeps published first-contact copy once a target is admitted', () => {
-    const projected = projectPublicInquiryAvailability(twoServiceCatalog(), {
+  it('keeps published first-contact paths once a target is admitted', () => {
+    const projected = projectPublicInquiryAvailability(twoOfferingCatalog(), {
       version: 'r1-target-admitted:v1',
       admitted: true,
       proof: { kind: 'claimed_owner', claimRef: 'claim:access-truth', recipientRef: 'owner@example.test' },
     })
 
-    expect(projected.services.map((service) => service.firstRequest.publicDisclosure))
-      .toEqual([storedInquiryDisclosure, storedInquiryDisclosure])
+    expect(projected.offerings.flatMap((offering) => offering.accessPaths.map((path) => path.kind === 'human_request' ? path.channel : 'external')))
+      .toEqual(['phone', 'ae_inquiry', 'phone', 'ae_inquiry'])
   })
 })
 
 function requiredOffering(): PublicOfferingSupplyProjection {
   return {
     offering: {
-      offeringRef: brandNonEmpty('legacy-offering:demo-plumbing:emergency', 'OfferingRef'),
+      offeringRef: brandNonEmpty('offering:demo-plumbing:emergency', 'OfferingRef'),
       revision: 1,
       name: 'Emergency plumbing visit',
       category: 'Plumber',
@@ -118,15 +117,9 @@ function offeringFixture(): readonly PublicOfferingSupplyProjection[] {
   }]
 }
 
-function twoServiceCatalog(): PublicRouteCatalogContract {
-  const firstRequest = {
-    mode: 'inquiry_available',
-    publicChannel: 'public_business_contact',
-    publicDisclosure: storedInquiryDisclosure,
-    rawContactExcluded: true,
-  } as const
-
+function twoOfferingCatalog(): PublicBusinessCatalogApiV2Dto {
   return {
+    schemaVersion: 'public-business-catalog-api:v2',
     businessId,
     slug: brandNonEmpty('demo-plumbing', 'Slug'),
     name: 'Demo Plumbing',
@@ -134,35 +127,36 @@ function twoServiceCatalog(): PublicRouteCatalogContract {
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     publicUrl: '/demo-plumbing',
-    publicStatus: 'published',
     trustTier: 'listed',
-    indexStatus: 'indexed',
-    discoveryStatus: 'available',
     photos: [],
-    schemaVersion: 'public-catalog:v1',
-    updatedAt: observedAt,
-    services: ['emergency', 'maintenance'].map((slug) => {
-      const serviceId = brandNonEmpty(`service:${slug}`, 'ServiceId')
-      return {
-        serviceId,
-        serviceSlug: brandNonEmpty(slug, 'Slug'),
-        businessId,
-        name: slug,
-        category: 'Plumber',
-        summary: 'Published service.',
-        serviceArea: 'Parramatta',
-        hoursOrUnknown: 'Mon–Fri',
-        firstRequest,
-        status: 'published',
-        capabilities: [{
-          serviceId,
-          kind: 'phone_inquiry',
-          status: 'available',
-          firstRequest,
-          callable: false,
-          paymentRequired: false,
-        }],
-      }
-    }),
+    observedAt,
+    disposition: 'current',
+    offerings: ['emergency', 'maintenance'].map((slug) => ({
+      offeringRef: brandNonEmpty(`offering:${slug}`, 'OfferingRef'),
+      revision: 1,
+      name: slug,
+      category: 'Plumber',
+      summary: 'Published Offering.',
+      accessPaths: [
+        {
+          accessPathRef: brandNonEmpty(`access:phone:${slug}`, 'AccessPathRef'),
+          kind: 'human_request' as const,
+          channel: 'phone' as const,
+          disclosure: storedInquiryDisclosure,
+        },
+        {
+          accessPathRef: brandNonEmpty(`access:ae:${slug}`, 'AccessPathRef'),
+          kind: 'human_request' as const,
+          channel: 'ae_inquiry' as const,
+          disclosure: storedInquiryDisclosure,
+        },
+      ],
+      support: { integrated: false, aeSupportedAction: false },
+    })),
+    accessSummary: {
+      humanRequest: true,
+      externalOperation: false,
+      aeSupportedAction: false,
+    },
   }
 }

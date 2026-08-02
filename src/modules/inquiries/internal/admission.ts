@@ -35,6 +35,17 @@ const blocker = {
   suppressed: Object.freeze({ kind: 'suppressed', ownerLabel: 'Turn inquiry receiving back on' }),
   notReady: Object.freeze({ kind: 'not_ready', ownerLabel: 'Finish inquiry setup' }),
 } satisfies Record<string, AdmissionBlocker>
+export function unconfiguredR1TargetAdmission(): R1TargetAdmission {
+  return Object.freeze({
+    version: R1TargetAdmissionVersion,
+    admitted: false,
+    blockers: Object.freeze([
+      blocker.notPublished,
+      blocker.notClaimed,
+      blocker.recipientUnresolvable,
+    ]),
+  })
+}
 
 export function evaluateR1TargetAdmission(
   state: R1TargetAdmissionState,
@@ -42,12 +53,25 @@ export function evaluateR1TargetAdmission(
 ): R1TargetAdmission {
   const blockers: AdmissionBlocker[] = []
   const business = state.businesses.find((candidate) => candidate.businessId === targetRef.businessId)
-  const service = state.businessServices.find((candidate) =>
-    candidate.businessId === targetRef.businessId && candidate.serviceId === targetRef.serviceId)
-  const capability = state.serviceCapabilities.find((candidate) =>
-    candidate.businessId === targetRef.businessId
-    && candidate.serviceId === targetRef.serviceId
-    && candidate.kind === targetRef.capabilityKind)
+  const offering = state.businessOfferings.find((candidate) =>
+    candidate.businessId === targetRef.businessId && candidate.offeringRef === targetRef.offeringRef)
+  const revision = offering === undefined
+    ? undefined
+    : state.businessOfferingRevisions.find((candidate) =>
+      candidate.businessId === targetRef.businessId
+      && candidate.offeringRef === targetRef.offeringRef
+      && candidate.revision === offering.currentRevision)
+  const inquiryAccessPath = offering === undefined
+    ? undefined
+    : state.offeringAccessPaths.find((candidate) =>
+      candidate.businessId === targetRef.businessId
+      && candidate.offeringRef === targetRef.offeringRef
+      && revision !== undefined
+      && candidate.offeringRevision === offering.currentRevision
+      && candidate.offeringSourceHash === revision.sourceHash
+      && candidate.status === 'published'
+      && candidate.descriptor.kind === 'human_request'
+      && candidate.descriptor.channel === 'ae_inquiry')
   const owner = business === undefined
     ? undefined
     : state.owners.find((candidate) => candidate.ownerId === business.ownerId)
@@ -62,11 +86,16 @@ export function evaluateR1TargetAdmission(
     : state.resolvableOwnerRecipients.find((candidate) =>
       candidate.ownerId === owner.ownerId && candidate.recipientRef.trim().length > 0)
 
-  if (business?.publicStatus !== 'published' || service?.status !== 'published') blockers.push(blocker.notPublished)
+  if (
+    business?.publicStatus !== 'published'
+    || offering?.status !== 'published'
+    || revision === undefined
+    || inquiryAccessPath === undefined
+  ) blockers.push(blocker.notPublished)
   if (business?.claimStatus !== 'published' || owner === undefined || claim === undefined) blockers.push(blocker.notClaimed)
   if (recipient === undefined) blockers.push(blocker.recipientUnresolvable)
-  if (isTargetSuppressed(state, targetRef, business?.publicStatus, service?.status)) blockers.push(blocker.suppressed)
-  if (!isTargetReady(state, capability)) blockers.push(blocker.notReady)
+  if (isTargetSuppressed(state, targetRef, business?.publicStatus)) blockers.push(blocker.suppressed)
+  if (!isTargetReady(state)) blockers.push(blocker.notReady)
 
   if (blockers.length > 0 || claim === undefined || recipient === undefined) {
     return Object.freeze({ version: R1TargetAdmissionVersion, admitted: false, blockers: Object.freeze(blockers) })
@@ -90,25 +119,19 @@ function isTargetSuppressed(
   state: R1TargetAdmissionState,
   targetRef: InquiryTargetRef,
   businessStatus: string | undefined,
-  serviceStatus: string | undefined,
 ): boolean {
-  if (businessStatus === 'suppressed' || serviceStatus === 'suppressed') return true
-  return state.suppressionRules.some((rule) => rule.status === 'active' && (
-    (rule.targetType === 'business' && rule.targetRef === targetRef.businessId)
-    || (rule.targetType === 'service' && rule.targetRef === targetRef.serviceId)
-    || (rule.targetType === 'capability' && rule.targetRef === `${targetRef.serviceId}:${targetRef.capabilityKind}`)
-  ))
+  if (businessStatus === 'suppressed') return true
+  return state.suppressionRules.some((rule) =>
+    rule.status === 'active'
+    && rule.targetType === 'business'
+    && rule.targetRef === targetRef.businessId
+  )
 }
 
-function isTargetReady(
-  state: R1TargetAdmissionState,
-  capability: InquirySourceState['serviceCapabilities'][number] | undefined,
-): boolean {
+function isTargetReady(state: R1TargetAdmissionState): boolean {
   if (!state.operatorControls.inquiriesEnabled
     || !state.operatorControls.ownerHandlingReady
-    || !state.operatorControls.notificationReadbackReady
-    || capability?.status !== 'available'
-    || capability.firstRequest.mode !== 'inquiry_available') return false
+    || !state.operatorControls.notificationReadbackReady) return false
 
   const support = state.capabilityLaunchSupportRecords.find((candidate) =>
     candidate.capability === 'human_inquiry_owner_inbox')

@@ -1,6 +1,7 @@
+import { stableUnique } from '@/modules/common/stable-unique'
+import { roundFiniteNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import {
   HarnessToolStatusValues,
-  type HarnessEvent,
   type HarnessEventCounters,
   type HarnessGateRecord,
   type HarnessModelRequestRecord,
@@ -71,37 +72,19 @@ export class HarnessRunCollector {
   recordTool(record: ToolRecord): void {
     this.toolRecords.push({
       ...record,
-      durationMs: roundDuration(record.durationMs),
+      durationMs: roundFiniteNonNegative2(record.durationMs),
     })
-  }
-
-  recordToolResult(result: { toolId: string; status: HarnessToolStatus; durationMs: number; errorCode?: string }): void {
-    this.recordTool(result)
   }
 
   recordEvent(event: EventRecord): void {
     this.eventRecords.push({
       ...event,
-      durationMs: roundDuration(event.durationMs ?? 0),
-    })
-  }
-
-  recordHarnessEvent(event: HarnessEvent): void {
-    this.recordEvent({
-      phase: event.phase,
-      name: event.name,
-      status: event.status,
-      durationMs: event.durationMs,
-      ...(event.errorCode === undefined ? {} : { errorCode: event.errorCode }),
+      durationMs: roundFiniteNonNegative2(event.durationMs ?? 0),
     })
   }
 
   recordModelRequest(record: HarnessModelRequestRecord): void {
     this.modelRecords.push(normalizeModelRecord(record))
-  }
-
-  recordModelResult(record: HarnessModelRequestRecord): void {
-    this.recordModelRequest(record)
   }
 
   recordGate(record: HarnessGateRecord): void {
@@ -265,13 +248,13 @@ export class HarnessRunCollector {
         ...(startedAt === undefined ? {} : { startedAt }),
         ...(endedAt === undefined ? {} : { endedAt }),
         durationMs: startedAt === undefined || endedAt === undefined
-          ? roundDuration(Math.max(
+          ? roundFiniteNonNegative2(Math.max(
               tools.totalDurationMs,
               events.totalDurationMs,
               models.totalDurationMs,
               gates.totalDurationMs,
             ))
-          : roundDuration(endedAt - startedAt),
+          : roundFiniteNonNegative2(endedAt - startedAt),
       },
       tools,
       events,
@@ -506,7 +489,7 @@ function addCounter(
 ): void {
   counters.total += 1
   counters[status] += 1
-  counters.totalDurationMs = roundDuration(counters.totalDurationMs + durationMs)
+  counters.totalDurationMs = roundFiniteNonNegative2(counters.totalDurationMs + durationMs)
 }
 
 function deriveRunStatus(
@@ -584,7 +567,7 @@ function normalizeModelRecord(record: HarnessModelRequestRecord): HarnessModelRe
   const usage = normalizeUsage(record.usage)
   const normalized: HarnessModelRequestRecord = {
     status: record.status,
-    durationMs: roundDuration(record.durationMs),
+    durationMs: roundFiniteNonNegative2(record.durationMs),
   }
   const seq = normalizeWholeNumber(record.seq)
   const provider = normalizeString(record.provider)
@@ -654,7 +637,7 @@ function normalizeGateRecord(record: HarnessGateRecord): NormalizedGateRecord {
   const normalized: NormalizedGateRecord = {
     gate: normalizeString(record.gate) ?? 'gate',
     status: record.ok ? 'ok' : 'blocked',
-    durationMs: roundDuration(record.durationMs ?? 0),
+    durationMs: roundFiniteNonNegative2(record.durationMs ?? 0),
   }
   const errorCode = normalizeString(record.errorCode)
   if (errorCode !== undefined) {
@@ -672,7 +655,7 @@ function gatesFromEvents(records: readonly EventRecord[]): NormalizedGateRecord[
     const normalized: NormalizedGateRecord = {
       gate: normalizeString(record.name) ?? record.phase,
       status: record.status,
-      durationMs: roundDuration(record.durationMs ?? 0),
+      durationMs: roundFiniteNonNegative2(record.durationMs ?? 0),
     }
     const errorCode = normalizeString(record.errorCode)
     if (errorCode !== undefined) {
@@ -702,17 +685,11 @@ function sortNumberRecord(record: Record<string, number>): Record<string, number
   return Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)))
 }
 
-function stableUnique(values: readonly string[]): string[] {
-  return [...new Set(values)]
-}
-
 function stableSort(values: readonly string[]): string[] {
   return [...values].sort((a, b) => a.localeCompare(b))
 }
 
-function roundDuration(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0
-}
+
 
 function roundCost(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.round(value * 100_000_000) / 100_000_000) : 0

@@ -30,6 +30,7 @@ export function compareCustomerRequestSurfaces(
   if (input.human.state !== input.agent.state) failures.push('state_mismatch')
   if (input.human.evidenceState !== input.agent.evidenceState) failures.push('evidence_state_mismatch')
   if (input.human.resultDigest !== input.agent.resultDigest) failures.push('result_mismatch')
+  // These surfaces compare ordered string arrays; stableStringify would preserve array order and be inert.
   if (JSON.stringify(input.human.businesses) !== JSON.stringify(input.agent.businesses)) {
     failures.push('businesses_mismatch')
   }

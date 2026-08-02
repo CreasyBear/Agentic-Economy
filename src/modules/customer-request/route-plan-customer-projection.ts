@@ -1,5 +1,9 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
+import { stableUnique } from '@/modules/common/stable-unique'
+import { formatCurrencyAmount } from './format-currency-amount'
 
 import type {
   CustomerRoutePlan,
@@ -213,7 +217,7 @@ function projectRoute(
     dataUse: Object.freeze({
       recipientCount: recipients.length,
       recipients: Object.freeze(recipients),
-      purposes: Object.freeze([...new Set(recipients.flatMap(({ purposes }) => purposes))].sort()),
+      purposes: Object.freeze(uniqueSorted(recipients.flatMap(({ purposes }) => purposes))),
     }),
     effects: Object.freeze(effects),
     evidence: Object.freeze(evidence),
@@ -368,8 +372,8 @@ function projectDecisionComparison(
       ? 'disclosed' as const
       : 'none' as const,
     reasons: Object.freeze([
-      `Lowest maximum cost: ${formatCustomerMoney(currency, selected.maximumTotalCost.amountMinor)}.`,
-      `${formatCustomerMoney(currency, difference)} below the next current way forward.`,
+      `Lowest maximum cost: ${formatCurrencyAmount(currency, selected.maximumTotalCost.amountMinor)}.`,
+      `${formatCurrencyAmount(currency, difference)} below the next current way forward.`,
     ]),
     tradeoffs: Object.freeze(comparisonTradeoffs(selected, next)),
   })
@@ -415,13 +419,13 @@ function projectRouteCommercialInfluence(route: Route): CustomerRoutePlan['compa
   const relationships = route.steps.map(({ commercialRelationship }) => commercialRelationship)
   if (relationships.some((relationship) => relationship === undefined)) return Object.freeze({ status: 'unknown' as const })
   const present = relationships.filter((relationship): relationship is NonNullable<typeof relationship> => relationship !== undefined)
-  const evidenceRefs = [...new Set(present.flatMap(({ evidenceRefs: refs }) => refs))].sort()
+  const evidenceRefs = uniqueSorted(present.flatMap(({ evidenceRefs: refs }) => refs))
   if (present.every(({ kind }) => kind === 'none')) {
     return Object.freeze({ status: 'none' as const, evidenceRefs: Object.freeze(evidenceRefs) })
   }
   return Object.freeze({
     status: 'disclosed' as const,
-    summaries: Object.freeze([...new Set(present.filter(({ kind }) => kind !== 'none').map(({ summary }) => summary))]),
+    summaries: Object.freeze(stableUnique(present.filter(({ kind }) => kind !== 'none').map(({ summary }) => summary))),
     evidenceRefs: Object.freeze(evidenceRefs),
     affectsDecision: present.some(({ influencesEligibility, influencesInclusion, influencesOrder }) => (
       influencesEligibility || influencesInclusion || influencesOrder
@@ -433,9 +437,6 @@ function routeOutcomeRef(route: Route, capabilitySemantics: CustomerRouteCapabil
   return route.comparison.outcomeSignature ?? `outcome:${canonicalDigest(routeResult(route, capabilitySemantics) as StableHashValue)}`
 }
 
-function formatCustomerMoney(currency: string, amountMinor: number): string {
-  return `${currency} ${(amountMinor / 100).toFixed(2)}`
-}
 
 function comparisonRecoveryLabel(value: 'retry_safe' | 'reconcile_required'): string {
   return value === 'retry_safe' ? 'safe to retry after confirmed failure' : 'check required before retry'
@@ -736,8 +737,8 @@ function routeResult(
     if (semantics === undefined) throw new Error('customer_route_plan_capability_semantics_missing')
     return semantics
   })
-  const summaries = [...new Set(terminalSemantics.map(({ description }) => description))]
-  const deliverables = [...new Set(terminalSemantics.flatMap(({ resultLabels }) => resultLabels))].sort()
+  const summaries = stableUnique(terminalSemantics.map(({ description }) => description))
+  const deliverables = uniqueSorted(terminalSemantics.flatMap(({ resultLabels }) => resultLabels))
   return Object.freeze({
     resultRef: semanticChoiceRef(route),
     summary: summaries.join(' '),
@@ -802,7 +803,10 @@ function addChanged<Before, After>(
 }
 
 function same(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
+  // Key order must not count as a change. `maximumCosts` spreads `maximumTotalCost`
+  // straight off stored route data, and `previous`/`current` are two generations
+  // written at different times, so their key order is not guaranteed to match.
+  return stableStringify(left as StableHashValue) === stableStringify(right as StableHashValue)
 }
 
 function uniqueBy<Value>(values: readonly Value[], key: (value: Value) => string): Value[] {

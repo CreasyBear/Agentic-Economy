@@ -1,4 +1,5 @@
 import type { AnswerSource } from '@/modules/answer/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export const SHORTLIST_EXPORT_PROOF =
   'This artifact proves what was sent, when, to whom, and their reply. It does not prove acceptance, availability, booking, or confirmation.'
@@ -81,19 +82,13 @@ export function isShortlistExportPreviewCurrent(preview: ShortlistExportPreview,
 }
 
 export function shortlistSemanticRevision(baseRevision: string, providers: readonly AnswerSource[]): string {
-  const semanticPayload = JSON.stringify(providers.map((business) => ({
+  return `${safeRecordValue(baseRevision)}:${canonicalDigest(providers.map((business) => ({
     slug: business.slug,
     name: business.name,
     suburb: business.suburb,
     stateTerritory: business.stateTerritory,
     detailUrl: business.detailUrl,
-  })))
-  let hash = 2166136261
-  for (let index = 0; index < semanticPayload.length; index += 1) {
-    hash ^= semanticPayload.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return `${safeRecordValue(baseRevision)}:${(hash >>> 0).toString(16).padStart(8, '0')}`
+  })))}`
 }
 
 function businessFields(

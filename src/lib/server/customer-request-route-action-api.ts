@@ -1,4 +1,6 @@
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { z } from 'zod'
+
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import {
   customerRequestCancelAction,
@@ -12,6 +14,20 @@ import {
 } from '@/modules/customer-request/agent-contract'
 import { response } from '@/lib/server/no-store-response'
 
+export type CustomerRequestPostBoundaryOptions<Input extends object, Result> = Readonly<{
+  request: Request
+  requestRef?: string
+  maxBodyBytes: number
+  inputSchema: z.ZodType<Input>
+  resultSchema: z.ZodType<Result>
+  run: (command: Record<string, unknown>) => Promise<Result>
+  unavailableError: string
+  resultToStatus: (result: Result) => number
+  domainAdmission?: (input: Input) => Response | undefined
+  buildCommand?: (input: Input, requestRef: string | undefined) => Record<string, unknown>
+  includeInvalidFields?: boolean
+}>
+
 type HandlerOptions = Readonly<{
   run?: (args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>
   cancel?: (args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>
@@ -22,13 +38,18 @@ export async function handleCustomerRequestRunPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  return handleRouteAction(
-    request, requestRef, options.run,
-    async (command) => await customerRequestRunAction.run({
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 4 * 1024,
+    inputSchema: customerRequestRouteActionInputSchema,
+    resultSchema: customerRequestAgentResultSchema,
+    run: options.run ?? (async (command) => await customerRequestRunAction.run({
       data: customerRequestRunAction.schema.parse(command), context: { request },
-    }),
-    customerRequestRouteActionInputSchema, 'run_unavailable',
-  )
+    })),
+    unavailableError: 'run_unavailable',
+    resultToStatus: customerRequestResultStatus,
+  })
 }
 
 export async function handleCustomerRequestCancelPost(
@@ -36,39 +57,67 @@ export async function handleCustomerRequestCancelPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  return handleRouteAction(
-    request, requestRef, options.cancel,
-    async (command) => await customerRequestCancelAction.run({
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 4 * 1024,
+    inputSchema: customerRequestCancellationInputSchema,
+    resultSchema: customerRequestAgentResultSchema,
+    run: options.cancel ?? (async (command) => await customerRequestCancelAction.run({
       data: customerRequestCancelAction.schema.parse(command), context: { request },
-    }),
-    customerRequestCancellationInputSchema, 'cancellation_unavailable',
-  )
+    })),
+    unavailableError: 'cancellation_unavailable',
+    resultToStatus: customerRequestResultStatus,
+  })
 }
 
-async function handleRouteAction(
-  request: Request,
-  requestRef: string,
-  injected: ((args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>) | undefined,
-  runAction: (args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>,
-  inputSchema: typeof customerRequestRouteActionInputSchema | typeof customerRequestCancellationInputSchema,
-  unavailableError: string,
-): Promise<Response> {
-  if (requestRef.trim().length === 0 || requestRef.length > 200) return response({ error: 'invalid_request_ref' }, 400)
-  const bounded = await readBoundedRequestText(request, 4 * 1024)
-  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
-  let body: unknown
-  try { body = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
-  const parsed = inputSchema.safeParse(body)
-  if (!parsed.success) return response({ error: 'invalid_request' }, 400)
+export async function handleCustomerRequestPostBoundary<Input extends object, Result>({
+  request,
+  requestRef,
+  maxBodyBytes,
+  inputSchema,
+  resultSchema,
+  run,
+  unavailableError,
+  resultToStatus,
+  domainAdmission,
+  buildCommand,
+  includeInvalidFields = false,
+}: CustomerRequestPostBoundaryOptions<Input, Result>): Promise<Response> {
+  if (requestRef !== undefined && (requestRef.trim().length === 0 || requestRef.length > 200)) {
+    return response({ error: 'invalid_request_ref' }, 400)
+  }
+  const body = await readBoundedRequestJson(request, maxBodyBytes)
+  if (!body.ok) {
+    return body.code === 'payload_too_large'
+      ? response({ error: 'request_too_large' }, 413)
+      : response({ error: 'invalid_json' }, 400)
+  }
+  const parsed = inputSchema.safeParse(body.value)
+  if (!parsed.success) {
+    return response({
+      error: 'invalid_request',
+      ...(includeInvalidFields ? { fields: parsed.error.issues.map((issue) => issue.path.join('.')) } : {}),
+    }, 400)
+  }
+  const admitted = domainAdmission?.(parsed.data)
+  if (admitted !== undefined) return admitted
   try {
-    const command = { requestRef, ...parsed.data }
-    const result = customerRequestAgentResultSchema.parse(await (injected ?? runAction)(command))
-    if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 404)
-    if (result.kind === 'conflict') return response(result, 409)
-    return response(result, 200)
+    const command = buildCommand?.(parsed.data, requestRef) ?? {
+      ...(requestRef === undefined ? {} : { requestRef }),
+      ...(parsed.data as Record<string, unknown>),
+    }
+    const result = resultSchema.parse(await run(command))
+    return response(result, resultToStatus(result))
   } catch (error) {
     if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
     return response({ error: unavailableError }, 503)
   }
+}
+
+export function customerRequestResultStatus(result: CustomerRequestAgentResult): number {
+  if (result.kind === 'refused') return result.reason === 'authentication_required' ? 401 : 404
+  if (result.kind === 'conflict') return 409
+  return 200
 }
 

@@ -1,29 +1,15 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
 import { error, ok, type ModuleResult } from '@/modules/common/result'
-import { quoteStandardCheckup, type CheckupQuote, type CheckupQuoteOfferingFacts } from './checkup-quote'
+import {
+  quoteCategoryOffering,
+  quoteStandardCheckup,
+  type CategoryQuote,
+  type CategoryQuoteCategory,
+  type CheckupQuote,
+  type CheckupQuoteOfferingFacts,
+} from './checkup-quote'
+export type { CategoryQuote, CategoryQuoteCategory } from './checkup-quote'
 
-export const SANDBOX_OPTION_CAPABILITY_CONTRACT = Object.freeze({
-  capabilityContractId: 'sandbox.option.quote:v1', name: 'Prepare a sandbox option', operation: 'quote' as const,
-  preparation: Object.freeze({ purpose: 'sandbox_option_comparison', customerLabel: 'Compare sandbox options' }),
-  input: Object.freeze({
-    requestContext: Object.freeze({
-      valueType: 'string' as const, customerLabel: 'Request details', required: false, decisionRelevance: 'option_selection' as const,
-      disclosure: Object.freeze({
-        classification: 'public' as const, phase: 'preparation' as const, recipient: 'candidate_provider' as const,
-        purposes: Object.freeze(['sandbox_option_comparison']),
-      }),
-    }),
-  }),
-  output: Object.freeze({
-    optionSummary: Object.freeze({
-      valueType: 'string' as const, customerLabel: 'Option', required: true,
-      decisionRelevance: 'option_selection' as const, evidenceRole: 'provider_offer' as const,
-    }),
-  }),
-  consequence: Object.freeze({
-    commitment: 'none' as const, spend: 'quoted' as const, reversibility: 'not_applicable' as const, approval: 'explicit' as const,
-  }),
-})
 
 export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
   contractFormat: 'ae.capability-contract:v2' as const,
@@ -344,6 +330,79 @@ export function resolveCheckupQuote(input: Readonly<{
   if (offering === undefined) return error('unknown_offering', false, {})
   return ok('quoted', {
     quote: quoteStandardCheckup({
+      slug: input.slug,
+      requestedAt: input.requestedAt,
+      offering,
+    }),
+  })
+}
+
+export function sandboxCategoryQuotePathForSlug(category: CategoryQuoteCategory, slug: string): string {
+  return `/api/sandbox/${category}/${slug}/quote`
+}
+
+export function isOpenSandboxCategoryEndpoint(
+  url: string,
+  category: CategoryQuoteCategory,
+  businessSlug: string,
+  method?: string,
+): boolean {
+  if (method !== undefined && method !== 'POST') return false
+  try {
+    const parsed = new URL(url, 'https://agentic-economy.invalid')
+    return parsed.username.length === 0
+      && parsed.password.length === 0
+      && parsed.search.length === 0
+      && parsed.hash.length === 0
+      && parsed.pathname === sandboxCategoryQuotePathForSlug(category, businessSlug)
+  } catch {
+    return false
+  }
+}
+
+export type ResolveCategoryQuoteResult = ModuleResult<
+  'quoted',
+  'unknown_offering' | 'ambiguous_offering' | 'unsupported_category',
+  { quote: CategoryQuote }
+>
+
+export function resolveCategoryQuote(input: Readonly<{
+  category: CategoryQuoteCategory
+  slug: string
+  requestedAt: number
+  offerings: readonly CheckupQuoteOffering[]
+}>): ResolveCategoryQuoteResult {
+  const matching = input.offerings.flatMap((offering): CheckupQuoteOfferingFacts[] => {
+    const price = offering.price
+    if (price?.kind !== 'fixed' || price.amountMinor === undefined) return []
+    if (!offering.accessPaths.some((path) =>
+      path.kind === 'external_operation'
+      && path.url !== undefined
+      && (
+        isOpenSandboxCategoryEndpoint(path.url, input.category, input.slug, path.method)
+        || (
+          input.category === 'dentist'
+          && isOpenSandboxEndpoint(path.url, input.slug, path.method)
+        )
+      ))) {
+      return []
+    }
+    return [{
+      name: offering.name,
+      price: {
+        currency: price.currency,
+        amountMinor: price.amountMinor,
+        ...(price.unit === undefined ? {} : { unit: price.unit }),
+        ...(price.taxTreatment === undefined ? {} : { taxTreatment: price.taxTreatment }),
+      },
+    }]
+  })
+  if (matching.length > 1) return error('ambiguous_offering', false, {})
+  const offering = matching[0]
+  if (offering === undefined) return error('unknown_offering', false, {})
+  return ok('quoted', {
+    quote: quoteCategoryOffering({
+      category: input.category,
       slug: input.slug,
       requestedAt: input.requestedAt,
       offering,

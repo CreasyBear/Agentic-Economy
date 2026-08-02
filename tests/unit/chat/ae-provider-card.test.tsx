@@ -39,7 +39,7 @@ describe('AeProviderCard registry variant', () => {
   })
 
   it('omits trust facts the business has not published', () => {
-    render(<AeProviderCard variant="registry" item={registryBusiness()} />)
+    renderWithRouter(<AeProviderCard variant="registry" item={registryBusiness()} />)
 
     expect(screen.getByText('Demo Plumbing')).toBeTruthy()
     expect(screen.getByText('Plumber')).toBeTruthy()
@@ -58,12 +58,12 @@ describe('AeProviderCard registry variant', () => {
   it('copies only the published card details', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    render(<AeProviderCard variant="registry" item={registryBusiness()} />)
+    renderWithRouter(<AeProviderCard variant="registry" item={registryBusiness()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-    expect(writeText.mock.calls[0]?.[0]).toContain('Services: Emergency plumbing')
+    expect(writeText.mock.calls[0]?.[0]).toContain('Offerings: Emergency plumbing')
     expect(writeText.mock.calls[0]?.[0]).not.toContain('Phone:')
     expect(screen.getByRole('button', { name: 'Details copied' })).toBeTruthy()
   })

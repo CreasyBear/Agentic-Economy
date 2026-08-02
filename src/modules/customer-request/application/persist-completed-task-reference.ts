@@ -1,5 +1,4 @@
 import type { CompletedResultIdentity } from '@/modules/action-invocation'
-import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   compileCustomerRequest,
@@ -17,7 +16,7 @@ import {
   attachCompletedTaskReference,
   type AttachCompletedTaskReferencePorts,
 } from './completed-task-reference'
-import { rebindStoredFacts, type RequestGraph } from './interpret-compile'
+import { rebindPlanSelections, rebindStoredFacts, type RequestGraph } from './interpret-compile'
 
 export type PersistCompletedTaskReferenceInput = Readonly<{
   requestRef: string
@@ -152,21 +151,12 @@ export async function persistCompletedTaskReference(
   const graph = await ports.loadRequestGraph(current.aggregate.snapshot.networkId)
   if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
   const priorFacts = rebindStoredFacts(current.aggregate.snapshot.facts as never, graph.models)
-  const selections = current.aggregate.plan.actions.flatMap((action) => {
-    const model = graph.models.find((candidate) => (
-      sameCapabilityContractRef(candidate.contractRef, action.contractRef)
-      && candidate.selectionKey === action.selectionKey
-      && candidate.semanticDigest === action.semanticDigest
-    ))
-    if (model === undefined) return []
-    return [{
-      selectionKey: model.selectionKey,
-      contractRef: model.contractRef,
-      facts: priorFacts.filter((fact) => fact.selectionKey === model.selectionKey
-        && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
-    }]
-  })
-  if (selections.length !== current.aggregate.plan.actions.length) {
+  const selections = rebindPlanSelections(
+    current.aggregate.plan.actions,
+    priorFacts,
+    graph.models,
+  )
+  if (selections === undefined) {
     return { kind: 'refused', reason: 'capabilities_unavailable' }
   }
   const compiled = compileCustomerRequest({

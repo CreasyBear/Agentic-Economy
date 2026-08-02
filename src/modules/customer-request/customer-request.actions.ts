@@ -66,6 +66,22 @@ export const customerRequestConfirmAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.confirm:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['requestRef', 'revision', 'routeRef', 'idempotencyKey'],
+    authorityRequirement: 'principal',
+    retryClass: 'attributable_retry',
+    expectedEvidence: ['customer request view with route confirmation receipt'],
+    safeContinuations: ['inspect the returned route confirmation before starting the confirmed request'],
+    invalidationConditions: [
+      'request revision or route generation changes',
+      'route reference changes',
+      'confirmation expires',
+      'principal, caller, or request identity changes',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => confirmCustomerRequestThroughSource(data),
 })
 
@@ -104,6 +120,24 @@ export const customerRequestRunAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.run:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['requestRef', 'idempotencyKey'],
+    authorityRequirement: 'principal',
+    retryClass: 'reconcile_before_retry',
+    expectedEvidence: ['customer request view with action status or route progress'],
+    safeContinuations: [
+      'inspect returned request progress or action resolution',
+      'reconcile an outcome-unknown request before retrying',
+    ],
+    invalidationConditions: [
+      'request identity or principal changes',
+      'confirmed route or confirmation expiry changes',
+      'idempotency key is reused with different command inputs',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => runCustomerRequestThroughSource(data),
 })
 
@@ -136,6 +170,24 @@ export const customerRequestCancelAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.cancel:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['requestRef', 'idempotencyKey', 'mode'],
+    authorityRequirement: 'principal',
+    retryClass: 'reconcile_before_retry',
+    expectedEvidence: ['customer request view with cancellation state and route progress'],
+    safeContinuations: [
+      'inspect returned cancellation state and route progress',
+      'reconcile a pending or unknown cancellation before retrying',
+    ],
+    invalidationConditions: [
+      'request identity or principal changes',
+      'cancellation mode or command inputs change',
+      'active step dispatch state changes',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => cancelCustomerRequestThroughSource(data),
 })
 
@@ -172,6 +224,24 @@ export const customerRequestReportProblemAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.reportProblem:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: [
+      'requestRef', 'idempotencyKey', 'category', 'summary',
+      'affectedStep', 'evidenceReceiptRefs', 'visibility',
+    ],
+    authorityRequirement: 'principal',
+    retryClass: 'attributable_retry',
+    expectedEvidence: ['problem_reported receipt with report reference and received state'],
+    safeContinuations: ['await the next status update for the reported problem'],
+    invalidationConditions: [
+      'request identity or principal changes',
+      'problem category, summary, affected step, evidence, or visibility changes',
+      'idempotency key is reused with different command inputs',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => customerRequestProblemResultSchema.parse(
     await reportCustomerRequestProblemThroughSource(data),
   ),
@@ -210,6 +280,24 @@ export const customerRequestReplyProblemAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.replyProblem:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: [
+      'requestRef', 'reportRef', 'expectedVersion', 'idempotencyKey', 'message',
+    ],
+    authorityRequirement: 'principal',
+    retryClass: 'attributable_retry',
+    expectedEvidence: ['problem_reply_recorded status change with report reference, version, and state'],
+    safeContinuations: ['follow the returned problem nextAction and nextActor'],
+    invalidationConditions: [
+      'request identity, report reference, or principal changes',
+      'expected problem version changes',
+      'message changes',
+      'idempotency key is reused with different command inputs',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => customerRequestProblemStatusChangeSchema.parse(
     await replyCustomerRequestProblemThroughSource(data),
   ),
@@ -239,6 +327,16 @@ export const customerRequestInspectEvidenceAction = defineAction({
     approval: 'none',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.inspectEvidence:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['requestRef'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['customer request evidence export with step, problem, and result evidence'],
+    safeContinuations: ['use returned evidence receipt references when reporting a problem'],
+    invalidationConditions: ['request reference or request identity changes'],
+  },
   run: async ({ data }) => inspectCustomerRequestEvidenceThroughSource(data),
 })
 
@@ -271,6 +369,16 @@ export const customerRequestListConnectedAssistantsAction = defineAction({
     approval: 'none',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.listConnectedAssistants:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['requestRef'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['connected assistants result with assistant and repeat-permission receipts'],
+    safeContinuations: ['inspect a returned repeat-permission receipt before using or withdrawing it'],
+    invalidationConditions: ['request reference or request identity changes'],
+  },
   run: async ({ data }) => listCustomerRequestAssistantsThroughSource(data),
 })
 
@@ -305,6 +413,26 @@ export const customerRequestAllowRepeatPermissionAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.allowRepeatPermission:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: [
+      'requestRef', 'revision', 'routeRef', 'delegatedCredentialId',
+      'occurrences', 'cumulativeSpend', 'validUntil', 'idempotencyKey',
+    ],
+    authorityRequirement: 'principal',
+    retryClass: 'attributable_retry',
+    expectedEvidence: ['active repeat-permission receipt with bounded limits and expiry'],
+    safeContinuations: ['inspect the returned repeat-permission receipt before using it'],
+    invalidationConditions: [
+      'request identity or principal changes',
+      'request revision or route generation changes',
+      'route reference changes',
+      'delegated credential changes',
+      'repeat limits or expiry change',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => allowCustomerRequestRepeatPermissionThroughSource(data),
 })
 
@@ -342,6 +470,29 @@ export const customerRequestUseRepeatPermissionAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.useRepeatPermission:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: [
+      'requestRef', 'revision', 'routeRef', 'permissionRef',
+      'delegatedCredentialId', 'idempotencyKey',
+    ],
+    authorityRequirement: 'principal',
+    retryClass: 'reconcile_before_retry',
+    expectedEvidence: ['customer request view with route confirmation receipt'],
+    safeContinuations: [
+      'inspect the returned route confirmation before starting the confirmed request',
+      'reconcile an uncertain repeat-permission use before retrying',
+    ],
+    invalidationConditions: [
+      'request identity or principal changes',
+      'request revision or route generation changes',
+      'route or permission reference changes',
+      'delegated credential changes',
+      'repeat permission expires, is withdrawn, or changes',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => customerRequestAgentResultSchema.parse(
     await executeCustomerRequestRepeatPermissionThroughSource(data),
   ),
@@ -378,6 +529,16 @@ export const customerRequestInspectRepeatPermissionAction = defineAction({
     approval: 'none',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.inspectRepeatPermission:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['requestRef', 'permissionRef', 'routeRef'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['repeat-permission receipt with current status and bounded limits'],
+    safeContinuations: [],
+    invalidationConditions: ['request, permission, or route reference changes'],
+  },
   run: async ({ data }) => inspectCustomerRequestRepeatPermissionThroughSource(data),
 })
 
@@ -413,5 +574,24 @@ export const customerRequestWithdrawRepeatPermissionAction = defineAction({
     approval: 'approve_each',
   },
   surfaces: ['ui', 'http', 'agentJson'],
+  invocationContract: {
+    version: 'customerRequest.withdrawRepeatPermission:v1',
+    consequenceClass: 'external_effect',
+    materialInputPaths: ['requestRef', 'permissionRef', 'routeRef', 'idempotencyKey'],
+    authorityRequirement: 'principal',
+    retryClass: 'reconcile_before_retry',
+    expectedEvidence: ['withdrawn repeat-permission receipt with withdrawal timestamp'],
+    safeContinuations: [
+      'inspect the returned withdrawn repeat-permission receipt',
+      'reconcile an uncertain withdrawal before retrying',
+    ],
+    invalidationConditions: [
+      'request identity or principal changes',
+      'permission or bound route reference changes',
+      'repeat permission credential or policy changes',
+      'idempotency key is reused with different command inputs',
+      'authority expires',
+    ],
+  },
   run: async ({ data }) => withdrawCustomerRequestRepeatPermissionThroughSource(data),
 })

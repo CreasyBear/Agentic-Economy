@@ -1,3 +1,5 @@
+import { createPrefixedRandomId } from '@/modules/common/random-id'
+
 import {
   runAnswerGate,
   sanitizeStructuredAnswer,
@@ -62,5 +64,5 @@ export function answerRunGateFromAnswerGate(gate: AnswerGateResult): AnswerRunGa
 }
 
 function makeSafetyCopyId(): string {
-  return `gate-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return createPrefixedRandomId(`gate-${Date.now().toString(36)}-`)
 }

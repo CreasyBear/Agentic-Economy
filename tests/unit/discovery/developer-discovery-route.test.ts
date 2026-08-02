@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEmptyBusinessSourceState } from '@/modules/business/public'
-import { createEmptyCatalogSourceState } from '@/modules/catalog/public'
+import { emptyDiscoverySourceState } from '../../fixtures/source-state'
 import {
   createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
@@ -58,13 +57,12 @@ describe('developer discovery route readback', () => {
     const copy = renderDeveloperDiscoveryRouteCopy(readback)
 
     await expect(loadDeveloperDiscoveryRoute()).resolves.toMatchObject({ schemaVersion: 'developer-discovery:v1' })
-    expect(readback.freshness.state).toBe('current')
     expect(readback.publicFacts).toEqual([
       expect.objectContaining({
         slug: 'parramatta-emergency-plumbing',
-        schemaVersion: 'public-business-catalog-api:v1',
-        discoveryStatus: 'available',
-        serviceCount: 1,
+        schemaVersion: 'public-business-catalog-api:v2',
+        disposition: 'current',
+        offeringCount: 1,
       }),
     ])
     expect(readback.artifacts).toEqual(
@@ -125,7 +123,7 @@ describe('developer discovery route readback', () => {
     const routeSnapshot = routeSnapshotWithBusiness({
       slug: 'durable-route-plumbing',
       name: 'Durable Route Plumbing',
-      discoveryStatus: 'available',
+      disposition: 'current',
     })
     const readback = readDeveloperDiscoveryRoute(createDefaultDiscoverySourceState(), {
       canonicalBaseUrl: 'https://ae.example',
@@ -141,7 +139,7 @@ describe('developer discovery route readback', () => {
       expect.objectContaining({
         slug: 'durable-route-plumbing',
         name: 'Durable Route Plumbing',
-        schemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
       }),
     ])
     expect(JSON.stringify(readback)).not.toContain('parramatta-emergency-plumbing')
@@ -155,7 +153,7 @@ describe('developer discovery route readback', () => {
           httpStatus: 200,
           checkedAt: 8_000,
           cacheControl: 'no-store',
-          schemaVersion: 'public-business-catalog-api:v1',
+          schemaVersion: 'public-business-catalog-api:v2',
         }),
         expect.objectContaining({
           route: 'https://ae.example/durable-route-plumbing/ucp',
@@ -176,8 +174,8 @@ describe('developer discovery route readback', () => {
         ok: true,
         checkedAt: 9_000,
         httpStatus: 200,
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: 'https://ae.example/api/businesses/missing',
@@ -344,7 +342,7 @@ function firstBusiness(state: DiscoverySourceState) {
 function routeSnapshotWithBusiness(input: {
   slug: string
   name: string
-  discoveryStatus: 'available' | 'degraded' | 'unavailable' | 'stale'
+  disposition: 'current' | 'partial' | 'stale'
 }): DeveloperDiscoveryRouteSnapshot {
   const business = {
     businessId: `businesses:${input.slug}`,
@@ -355,34 +353,50 @@ function routeSnapshotWithBusiness(input: {
     stateTerritory: 'WA',
     publicUrl: `/${input.slug}`,
     trustTier: 'claimed',
-    publicStatus: 'published',
-    indexStatus: 'indexed',
-    discoveryStatus: input.discoveryStatus,
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: 8_000,
+    observedAt: 8_000,
+    disposition: input.disposition,
     photos: [],
-    services: [
+    offerings: [
       {
-        slug: 'burst-pipe-repair',
+        offeringRef: `offering:${input.slug}:burst-pipe-repair`,
+        revision: 1,
         name: 'Burst pipe repair',
         category: 'Emergency plumbing',
         summary: 'Urgent pipe repair readback.',
-        serviceArea: 'Fremantle',
-        hoursOrUnknown: 'Owner supplied hours',
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicDisclosure: 'This business has not published a request path.',
-          publicChannel: 'not_available',
-          noContactReason: 'Owner has not supplied public contact instructions.',
+        serviceAreaSummary: 'Fremantle',
+        availabilitySummary: 'Owner supplied hours',
+        accessPaths: [
+          {
+            accessPathRef: `access:${input.slug}:burst-pipe-repair`,
+            kind: 'human_request',
+            channel: 'phone',
+            disclosure: 'This business has not published a request path.',
+          },
+        ],
+        support: {
+          integrated: false,
+          aeSupportedAction: false,
         },
-        status: 'published',
-        capabilities: [{ kind: 'phone_inquiry', status: 'unavailable' }],
       },
     ],
+    accessSummary: {
+      humanRequest: true,
+      externalOperation: false,
+      aeSupportedAction: false,
+    },
+    schemaVersion: 'public-business-catalog-api:v2',
   } as const
   const page = {
     kind: 'ok',
-    schemaVersion: 'public-business-catalog-api:v1',
+    schemaVersion: 'public-business-catalog-api:v2',
+    page: [business],
+    isDone: true,
+    continueCursor: '1',
+  } as const
+  const searchPage = {
+    kind: 'ok',
+    schemaVersion: 'public-business-catalog-api:v2',
+    query: 'emergency plumbing',
     items: [business],
     pagination: { limit: 20, total: 1, hasMore: false },
   } as const
@@ -395,8 +409,8 @@ function routeSnapshotWithBusiness(input: {
       checkedAt: 8_000,
       httpStatus: 200,
       cacheControl: 'no-store',
-      schemaVersion: 'public-business-catalog-api:v1',
-      expectedSchemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
+      expectedSchemaVersion: 'public-business-catalog-api:v2',
       body: page,
     },
     search: {
@@ -406,9 +420,9 @@ function routeSnapshotWithBusiness(input: {
       checkedAt: 8_000,
       httpStatus: 200,
       cacheControl: 'no-store',
-      schemaVersion: 'public-business-catalog-api:v1',
-      expectedSchemaVersion: 'public-business-catalog-api:v1',
-      body: { ...page, query: 'emergency plumbing' },
+      schemaVersion: 'public-business-catalog-api:v2',
+      expectedSchemaVersion: 'public-business-catalog-api:v2',
+      body: searchPage,
     },
     detail: {
       route: `https://ae.example/api/businesses/${input.slug}`,
@@ -417,9 +431,9 @@ function routeSnapshotWithBusiness(input: {
       checkedAt: 8_000,
       httpStatus: 200,
       cacheControl: 'no-store',
-      schemaVersion: 'public-business-catalog-api:v1',
-      expectedSchemaVersion: 'public-business-catalog-api:v1',
-      body: { kind: 'found', schemaVersion: 'public-business-catalog-api:v1', business },
+      schemaVersion: 'public-business-catalog-api:v2',
+      expectedSchemaVersion: 'public-business-catalog-api:v2',
+      body: { kind: 'found', schemaVersion: 'public-business-catalog-api:v2', business },
     },
     missingDetail: {
       route: 'https://ae.example/api/businesses/__missing_discovery_slug__',
@@ -442,8 +456,8 @@ function routeSnapshotWithBusiness(input: {
         checkedAt: 8_000,
         httpStatus: 200,
         cacheControl: 'no-store',
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: 'https://ae.example/api/businesses/search?q=Emergency%20plumbing',
@@ -452,8 +466,8 @@ function routeSnapshotWithBusiness(input: {
         checkedAt: 8_000,
         httpStatus: 200,
         cacheControl: 'no-store',
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: `https://ae.example/api/businesses/${input.slug}`,
@@ -462,8 +476,8 @@ function routeSnapshotWithBusiness(input: {
         checkedAt: 8_000,
         httpStatus: 200,
         cacheControl: 'no-store',
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: `https://ae.example/${input.slug}/ucp`,
@@ -503,21 +517,6 @@ function routeSnapshotWithBusiness(input: {
   }
 }
 
-function emptyDiscoverySourceState(): DiscoverySourceState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-    discoveryManifests: [],
-    invalidationIntents: [],
-  }
-}
 
 function expectCopyHasNoPlatformOrPaymentClaims(copy: string): void {
   for (const claim of forbiddenClaims) {

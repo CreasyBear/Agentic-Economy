@@ -28,14 +28,13 @@ describe('acceptsHtml', () => {
 describe('negotiateAgentPage', () => {
   it('serves markdown for a public page requested as markdown', () => {
     expect(negotiateAgentPage(request('/', 'text/markdown'))).toEqual({ kind: 'serve_markdown', path: '/' })
-    expect(negotiateAgentPage(request('/registry', 'text/markdown'))).toEqual({ kind: 'serve_markdown', path: '/registry' })
     expect(negotiateAgentPage(request('/adelaide-locksmith', 'application/json')))
       .toEqual({ kind: 'serve_markdown', path: '/adelaide-locksmith' })
   })
 
   it('keeps the query string out of the negotiated path', () => {
-    expect(negotiateAgentPage(request('/registry?q=plumber', 'text/markdown')))
-      .toEqual({ kind: 'serve_markdown', path: '/registry' })
+    expect(negotiateAgentPage(request('/adelaide-locksmith?q=plumber', 'text/markdown')))
+      .toEqual({ kind: 'serve_markdown', path: '/adelaide-locksmith' })
   })
 
   it('never intercepts a browser request', () => {

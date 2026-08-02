@@ -174,7 +174,7 @@ describe('action registry', () => {
     })
     expect(detail.success).toBe(true)
 
-    for (const leaked of ['ownerId', 'sourceHash', 'serviceId', 'rawContactValue'] as const) {
+    for (const leaked of ['ownerId', 'sourceHash', 'rawContactValue'] as const) {
       expect(findAction('registry.detail')!.outputSchema.safeParse({
         kind: 'found',
         schemaVersion: 'public-business-catalog-api:v2',
@@ -244,9 +244,11 @@ describe('action registry', () => {
     expect(descriptor.boundaries.length).toBeGreaterThan(0)
     expect(descriptor.summary).toMatch(/inquiry/i)
     expect(descriptor.parameters.map((p) => p.name)).toContain('target.businessId')
-    expect(descriptor.parameters.map((p) => p.name)).toContain('target.serviceId')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('target.offeringRef')
     expect(descriptor.parameters.map((p) => p.name)).toContain('target.businessSlug')
-    expect(descriptor.parameters.map((p) => p.name)).toContain('target.serviceSlug')
+    expect(descriptor.parameters.map((p) => p.name)).not.toContain('target.serviceId')
+    expect(descriptor.parameters.map((p) => p.name)).not.toContain('target.serviceSlug')
+    expect(descriptor.parameters.map((p) => p.name)).not.toContain('target.capabilityKind')
     expect(descriptor.parameters.map((p) => p.name)).toContain('body')
   })
 
@@ -270,8 +272,7 @@ describe('action registry', () => {
     const schema = findAction('inquiry.submit')!.schema
     const target = {
       businessId: 'business:plumbing-demo',
-      serviceId: 'service:business:plumbing-demo:emergency-plumbing',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:plumbing-demo:emergency-plumbing',
     }
     const baseInput = {
       target,

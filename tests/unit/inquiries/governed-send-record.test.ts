@@ -2,9 +2,13 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type {
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+} from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   encodeGovernedAction,
   verifyGovernedActionBytes,
@@ -25,8 +29,7 @@ import type {
 const ownerId = brandNonEmpty('owner:governed-record', 'OwnerId')
 const claimId = brandNonEmpty('claim:governed-record', 'ClaimId')
 const businessId = brandNonEmpty('business:governed-record', 'BusinessId')
-const serviceId = brandNonEmpty('service:governed-record', 'ServiceId')
-const serviceSlug = brandNonEmpty('governed-record', 'Slug')
+const offeringRef = brandNonEmpty('offering:governed-record', 'OfferingRef')
 const now = 1_900_000_000_000
 const customerAccessKeyring = {
   keyId: 'test-inquiry-access-v1',
@@ -40,8 +43,7 @@ const governedSendIntegrityKeyring = {
 
 const target = {
   businessId,
-  serviceId,
-  capabilityKind: 'phone_inquiry',
+  offeringRef,
 } as const
 
 type GovernedSendReceipt = Extract<InquirySourceState['governedSendReceipts'][number], { retention: 'recoverable' }>
@@ -75,8 +77,7 @@ type GovernedEnvelopeFixture = {
 
 const targetMismatchCases = [
   { name: 'business', key: 'businessId', value: 'business:other' },
-  { name: 'service', key: 'serviceId', value: 'service:other' },
-  { name: 'capability', key: 'capabilityKind', value: 'email_inquiry' },
+  { name: 'offering', key: 'offeringRef', value: 'offering:other' },
 ] as const
 
 const invalidEnvelopeCases: readonly {
@@ -128,8 +129,7 @@ describe('readCustomerRecord governed send projection', () => {
     const record = readSubmittedCustomerRecord(submit)
     const expectedValues = {
       businessId: String(businessId),
-      serviceId: String(serviceId),
-      capabilityKind: 'phone_inquiry',
+      offeringRef: String(offeringRef),
       body,
       contactName: 'Casey Customer',
       contactEmail: 'casey.customer@example.test',
@@ -258,7 +258,7 @@ describe('readCustomerRecord governed send projection', () => {
       expect(result.record).toMatchObject({
         threadId: submit.thread.threadId,
         business: { name: 'Business unavailable', slug: '' },
-        submitted: { messageSummary: 'Can a human owner contact me about this service?' },
+        submitted: { messageSummary: 'Can a human owner contact me about this offering?' },
       })
     },
   )
@@ -389,7 +389,7 @@ describe('readCustomerRecord governed send projection', () => {
           providerFamily: 'resend',
           status: 'sent',
           providerIdempotencyKey: 'ae:notification_dispatch:governed-record',
-          payloadHash: stableHash({ dispatchId, status: 'sent' }),
+          payloadHash: canonicalDigest({ dispatchId, status: 'sent' }),
           operatorNextAction: 'none',
           updatedAt: now + 1,
         },
@@ -452,12 +452,11 @@ function submitAdmittedInquiry(
   const { expectedDigest, ...commandOverrides } = overrides
   const command = {
     target,
-    body: 'Can a human owner contact me about this service?',
+    body: 'Can a human owner contact me about this offering?',
     contact: { email: 'customer@example.test' },
     operationKey: operationKey(key),
     correlationId: correlationId(key),
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: `ip:${key}`,
     customerAccessKeyring,
     governedSendIntegrityKeyring,
     now,
@@ -529,8 +528,9 @@ function requireDigestValidFixture(receipt: GovernedSendReceipt): void {
 function admittedSourceState(): InquirySourceState {
   return inquiries.createEmptyInquirySourceState({
     businesses: [business()],
-    businessServices: [service()],
-    serviceCapabilities: [capability()],
+    businessOfferings: [offering()],
+    businessOfferingRevisions: [offeringRevision()],
+    offeringAccessPaths: [inquiryAccessPath()],
     capabilityLaunchSupportRecords: [supportRecord()],
     suppressionRules: [],
     owners: [owner()],
@@ -552,7 +552,7 @@ function business(): BusinessRecord {
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
-    sourceHash: stableHash({ businessId: 'business:governed-record' }),
+    sourceHash: canonicalDigest({ businessId: 'business:governed-record' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -575,7 +575,7 @@ function claim(): ClaimRecord {
     businessId,
     slug: brandNonEmpty('governed-record', 'Slug'),
     status: 'published',
-    submittedFactsHash: stableHash({ claimId: 'claim:governed-record' }),
+    submittedFactsHash: canonicalDigest({ claimId: 'claim:governed-record' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -589,39 +589,45 @@ function resolvableOwnerRecipient(): ResolvableOwnerRecipient {
   }
 }
 
-function service(): BusinessServiceRecord {
+function offering(): BusinessOfferingRecord {
   return {
-    serviceId,
-    serviceSlug,
+    offeringRef,
     businessId,
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 1,
-    sourceHash: stableHash({ serviceId: 'service:governed-record' }),
     createdAt: now,
     updatedAt: now,
   }
 }
 
-function capability(): ServiceCapabilityRecord {
+function offeringRevision(): BusinessOfferingRevisionRecord {
   return {
+    offeringRef,
     businessId,
-    serviceId,
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-      rawContactExcluded: true,
+    revision: 1,
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Human triage for urgent plumbing issues.',
+    sourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    createdAt: now,
+  }
+}
+
+function inquiryAccessPath(): OfferingAccessPathRecord {
+  const sourceHash = canonicalDigest({ offeringRef: String(offeringRef), path: 'ae_inquiry' })
+  return {
+    accessPathRef: brandNonEmpty('access:governed-record:inquiry', 'AccessPathRef'),
+    businessId,
+    offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the source-owned inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry' }),
+    sourceHash,
     createdAt: now,
     updatedAt: now,
   }
@@ -669,7 +675,7 @@ function supportRecord(): CapabilityLaunchSupportRecord {
       },
     ],
     evidenceRefs: ['tests/unit/inquiries/governed-send-record.test.ts'],
-    sourceHash: stableHash({ supportRecord: 'governed-record' }),
+    sourceHash: canonicalDigest({ supportRecord: 'governed-record' }),
     correlationId: correlationId('support-record'),
     lastReviewedAt: now + 1_000,
   }

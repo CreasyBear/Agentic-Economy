@@ -31,7 +31,7 @@ export function capabilityContractV2(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function objectSchema(properties: Record<string, unknown>, required: string[]) {
+export function objectSchema(properties: Record<string, unknown>, required: string[]) {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     type: 'object',

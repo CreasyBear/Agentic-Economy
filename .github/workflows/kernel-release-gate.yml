@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -12,7 +13,7 @@ permissions:
 
 concurrency:
   group: kernel-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   source-proof:
@@ -33,8 +34,31 @@ jobs:
       - name: Frozen dependency install
         run: npm ci
 
+      - name: Record exact source evidence identity
+        run: |
+          mkdir -p output/release
+          jq -n \
+            --arg repositorySha "${GITHUB_SHA}" \
+            --arg workflowRun "${GITHUB_RUN_ID}" \
+            --arg evidenceClass "source-release-gate" \
+            '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
+            > output/release/source-metadata.json
+
       - name: Run source release contract
-        run: npm run test:release:source
+        run: npm run gate:release
+
+      - name: Upload sanitized source release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-source-release-gate
+          path: |
+            output/release/source-metadata.json
+            output/release/unit-vitest.json
+            output/release/integration-vitest.json
+            output/eval/answer-suite-report.json
+          if-no-files-found: error
+          retention-days: 14
 
   hosted-proof:
     name: Exact-revision production deploy and authenticated Request readback
@@ -48,9 +72,16 @@ jobs:
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
       AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
+      AE_WORK_TREE_CLERK_INSTANCE_ID: ${{ secrets.AE_WORK_TREE_CLERK_INSTANCE_ID }}
+      AE_WORK_TREE_CLERK_SUBJECT: ${{ secrets.AE_WORK_TREE_CLERK_SUBJECT }}
+      AE_WORK_TREE_SETUP_TOKEN: ${{ secrets.AE_WORK_TREE_SETUP_TOKEN }}
+      DEPLOY_CONVEX_URL: ${{ secrets.AE_WORK_TREE_DEPLOY_CONVEX_URL }}
+      AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
       AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      AE_WORK_TREE_EVIDENCE_DIR: output/release/work-tree-parity
+      AE_WORK_TREE_TIMEOUT_MS: '180000'
     steps:
       - uses: actions/checkout@v6
 
@@ -64,6 +95,17 @@ jobs:
 
       - name: Frozen dependency install for independent readback
         run: npm ci
+
+      - name: Record exact hosted evidence identity
+        run: |
+          mkdir -p output/release
+          jq -n \
+            --arg repositorySha "${GITHUB_SHA}" \
+            --arg workflowRun "${GITHUB_RUN_ID}" \
+            --arg evidenceClass "hosted-release-gate" \
+            '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
+            > output/release/hosted-metadata.json
+
 
       - name: Refuse a checkout other than the triggering revision
         run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
@@ -124,3 +166,34 @@ jobs:
           AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Sandbox Route Resolver","purposes":["resolve_sandbox_service_reference"]},{"name":"Sandbox Route Quoter","purposes":["prepare_sandbox_service_quote"]}]'
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:hosted
+
+      - name: Verify exact hosted T51 WorkTree parity
+        if: success() && env.AE_WORK_TREE_SETUP_TOKEN != '' && env.CLERK_SECRET_KEY != '' && env.AE_WORK_TREE_CLERK_INSTANCE_ID != '' && env.AE_WORK_TREE_CLERK_SUBJECT != '' && env.DEPLOY_CONVEX_URL != '' && env.AE_RELEASE_CONVEX_DEPLOYMENT_ID != ''
+        env:
+          DEPLOY_BASE_URL: https://agentic-economy-phi.vercel.app
+          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+        run: npm run smoke:work-tree:production:hosted
+
+      - name: Upload sanitized T51 hosted parity evidence
+        if: always() && env.AE_WORK_TREE_SETUP_TOKEN != '' && env.CLERK_SECRET_KEY != '' && env.AE_WORK_TREE_CLERK_INSTANCE_ID != '' && env.AE_WORK_TREE_CLERK_SUBJECT != '' && env.DEPLOY_CONVEX_URL != '' && env.AE_RELEASE_CONVEX_DEPLOYMENT_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-t51-hosted-work-tree
+          path: |
+            output/release/hosted-metadata.json
+            output/release/playwright-deploy-smoke.json
+            output/release/work-tree-parity/work-tree-parity-evidence.json
+            test-results/**/*.png
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload sanitized hosted release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-hosted-release-gate
+          path: |
+            output/release/hosted-metadata.json
+            output/release/playwright-deploy-smoke.json
+          if-no-files-found: error
+          retention-days: 14

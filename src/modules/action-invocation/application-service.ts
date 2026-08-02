@@ -409,7 +409,7 @@ function bindHost(
       const projection = projectRichInvocationTask({
         invocationRef,
         expectedInvocationVersion,
-        resolver: { resolve: () => JSON.parse(JSON.stringify(adapter.exportSnapshot())) },
+        snapshot: adapter.exportSnapshot(),
       })
       assertProjectionBinding(projection.semantics.identity, actor, origin)
       return projection
@@ -418,7 +418,7 @@ function bindHost(
       const projection = projectStructuredInvocationTask({
         invocationRef,
         expectedInvocationVersion,
-        resolver: { resolve: () => JSON.parse(JSON.stringify(adapter.exportSnapshot())) },
+        snapshot: adapter.exportSnapshot(),
       })
       assertProjectionBinding(projection.semantics.identity, actor, origin)
       return projection

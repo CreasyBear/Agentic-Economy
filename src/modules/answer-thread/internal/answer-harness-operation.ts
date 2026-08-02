@@ -18,6 +18,7 @@ import {
   type AnswerToolCallStatus,
   type AnswerTurnStatus,
 } from '../answer-thread.schema'
+import { readToolSummaryErrorCode } from './tool-summary'
 
 type AnswerHarnessOperationClock = () => number
 
@@ -272,6 +273,9 @@ function recordObservedToolCall(
   now: AnswerHarnessOperationClock,
 ): void {
   const startedAt = now()
+  const errorCode = toolCall.status === 'complete'
+    ? undefined
+    : readToolSummaryErrorCode(toolCall.resultSummaryJson)
   loop.recordRuntimeEvent({
     type: 'tool.started',
     runId: loop.runId,
@@ -287,7 +291,13 @@ function recordObservedToolCall(
     at: now(),
     status: answerToolCallStatusToHarnessStatus(toolCall.status),
     durationMs: 0,
-    ...(toolCall.status === 'complete' ? {} : { errorCode: readToolCallErrorCode(toolCall) }),
+    ...(toolCall.status === 'complete'
+      ? {}
+      : {
+        errorCode: errorCode !== undefined && errorCode.trim().length > 0
+          ? errorCode
+          : toolCall.status === 'refused' ? 'tool_refused' : 'tool_error',
+      }),
   })
 }
 
@@ -352,18 +362,6 @@ function answerToolCallStatusToHarnessStatus(status: AnswerToolCallStatus): Harn
     case 'error':
       return 'error'
   }
-}
-
-function readToolCallErrorCode(toolCall: AnswerToolCallRecord): string {
-  try {
-    const parsed = JSON.parse(toolCall.resultSummaryJson) as { errorCode?: unknown }
-    if (typeof parsed.errorCode === 'string' && parsed.errorCode.trim().length > 0) {
-      return parsed.errorCode
-    }
-  } catch {
-    // Fall through to a stable generic code.
-  }
-  return toolCall.status === 'refused' ? 'tool_refused' : 'tool_error'
 }
 
 function createGateError(code: string): Error & { code: string } {

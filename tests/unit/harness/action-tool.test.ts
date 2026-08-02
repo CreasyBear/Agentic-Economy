@@ -26,13 +26,23 @@ describe('harness action tool adapter', () => {
         dataClasses: [], spendExposure: 'none', approval: 'none',
       },
       surfaces: ['answerThread'],
+      invocationContract: {
+        version: 'registry.search:v1',
+        consequenceClass: 'read_only',
+        materialInputPaths: ['query', 'limit'],
+        authorityRequirement: 'none',
+        retryClass: 'replayable',
+        expectedEvidence: [],
+        safeContinuations: [],
+        invalidationConditions: [],
+      },
       run: async ({ data }) => ({ kind: 'ok', total: data.limit ?? 1 }),
     })
 
     const tool = actionToHarnessTool(action)
     expect(tool.tier).toBe('read')
     expect(tool.inputJsonSchema).toMatchObject({ type: 'object' })
-    expect(resolveHarnessApproval({ tool, surface: 'answerThread' })).toMatchObject({
+    expect(resolveHarnessApproval({ tool, surface: 'answerThread', mode: 'public-read' })).toMatchObject({
       policy: 'allow',
       reason: 'read_tool_auto_allowed',
     })
@@ -40,6 +50,7 @@ describe('harness action tool adapter', () => {
     const ok = await runHarnessTool({
       tool,
       input: { query: 'plumber', limit: 2 },
+      mode: 'public-read',
       surface: 'answerThread',
       toolCallId: 'tc-1',
     })
@@ -54,6 +65,7 @@ describe('harness action tool adapter', () => {
       tool,
       input: { query: '' },
       surface: 'answerThread',
+      mode: 'public-read',
       toolCallId: 'tc-2',
     })
     expect(invalid.result).toMatchObject({
@@ -77,6 +89,16 @@ describe('harness action tool adapter', () => {
         dataClasses: ['query_text'], spendExposure: 'none', approval: 'approve_each',
       },
       surfaces: ['answerThread'],
+      invocationContract: {
+        version: 'inquiry.submit:v1',
+        consequenceClass: 'communication',
+        materialInputPaths: ['body'],
+        authorityRequirement: 'principal',
+        retryClass: 'attributable_retry',
+        expectedEvidence: ['attributable inquiry receipt'],
+        safeContinuations: ['inspect the returned inquiry receipt'],
+        invalidationConditions: ['body changes', 'source write admission changes'],
+      },
       run: async () => ({ kind: 'ok', receiptId: 'receipt-1' }),
     })
     const tool = actionToHarnessTool(action)
@@ -85,7 +107,7 @@ describe('harness action tool adapter', () => {
       tool,
       input: { body: 'Need help' },
       surface: 'answerThread',
-      allowWrites: true,
+      mode: 'public-qualified-write',
       toolCallId: 'tc-write-1',
     })
     expect(withoutWriteAdmission.decision).toMatchObject({
@@ -101,7 +123,7 @@ describe('harness action tool adapter', () => {
       tool,
       input: { body: 'Need help' },
       surface: 'answerThread',
-      allowWrites: true,
+      mode: 'public-qualified-write',
       toolCallId: 'tc-write-2',
       context: {
         sourceWriteRequest: {
@@ -143,6 +165,7 @@ describe('harness action tool adapter', () => {
       tool,
       input: { query: 'plumber' },
       surface: 'answerThread',
+      mode: 'public-read',
       timeoutMs: 1,
       toolCallId: 'tc-timeout',
     })

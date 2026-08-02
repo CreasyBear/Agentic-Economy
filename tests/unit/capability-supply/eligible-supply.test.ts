@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   getEligibleExactCapabilitySupply,
   listIntegratedCapabilitySupply,
-  listEligibleCapabilitySupply,
   listRouteableCapabilitySupply,
   MAX_ELIGIBLE_SUPPLY,
   type EligibleSupplyPorts,
@@ -153,16 +152,16 @@ function emptyPorts(overrides: Partial<EligibleSupplyPorts> = {}): EligibleSuppl
 
 describe('capability-supply eligible inventory', () => {
   it('refuses invalid limits', async () => {
-    expect(await listEligibleCapabilitySupply(emptyPorts(), { networkId: 'ae:public', limit: 0 }))
+    expect(await listIntegratedCapabilitySupply(emptyPorts(), { networkId: 'ae:public', limit: 0 }))
       .toEqual({ kind: 'unavailable', reason: 'limit_invalid' })
-    expect(await listEligibleCapabilitySupply(emptyPorts(), {
+    expect(await listIntegratedCapabilitySupply(emptyPorts(), {
       networkId: 'ae:public', limit: MAX_ELIGIBLE_SUPPLY + 1,
     })).toEqual({ kind: 'unavailable', reason: 'limit_invalid' })
   })
 
   it('refuses when admitted bindings exceed the requested limit', async () => {
     const binding = admittedBinding()
-    const result = await listEligibleCapabilitySupply(
+    const result = await listIntegratedCapabilitySupply(
       emptyPorts({
         listAdmittedConformantBindingsByNetwork: async () => [binding, { ...binding, bindingId: 'binding-b' }],
       }),
@@ -172,7 +171,7 @@ describe('capability-supply eligible inventory', () => {
   })
 
   it('fails closed on binding integrity failure', async () => {
-    const result = await listEligibleCapabilitySupply(
+    const result = await listIntegratedCapabilitySupply(
       emptyPorts({
         listAdmittedConformantBindingsByNetwork: async () => [
           admittedBinding({ registrationHash: `sha256:${'9'.repeat(64)}` }),
@@ -186,7 +185,7 @@ describe('capability-supply eligible inventory', () => {
   it('skips inactive offerings and unpublished businesses', async () => {
     const binding = admittedBinding()
     const inactive = activeOffering({ status: 'inactive' })
-    const result = await listEligibleCapabilitySupply(
+    const result = await listIntegratedCapabilitySupply(
       emptyPorts({
         listAdmittedConformantBindingsByNetwork: async () => [binding],
         loadOfferingByOfferingId: async () => inactive,
@@ -239,7 +238,7 @@ describe('capability-supply eligible inventory', () => {
       }),
     })
 
-    const result = await listEligibleCapabilitySupply(
+    const result = await listIntegratedCapabilitySupply(
       emptyPorts({
         listAdmittedConformantBindingsByNetwork: async () => [bindingB, bindingA],
         loadOfferingByOfferingId: async (offeringId) => (

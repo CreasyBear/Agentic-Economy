@@ -1,9 +1,8 @@
-import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
+import { rehydrateCapabilitySelectionKey, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 
-import { bindRequirementAnswer, rebindStoredFacts } from '../interpret-compile'
+import { bindRequirementAnswer, rebindPlanSelections, rebindStoredFacts } from '../interpret-compile'
 import type {
-  ProvideFactsAggregate,
   ProvideFactsInput,
   ProvideFactsPorts,
   ProvideFactsResult,
@@ -55,19 +54,20 @@ export async function provideCustomerRequestFacts(
       summary: 'That answer does not match the requested information.',
     })
   }
-  const selections = current.aggregate.plan.actions.flatMap((action: ProvideFactsAggregate['plan']['actions'][number]) => {
-    const model = graph.models.find((candidate) => (
-      sameCapabilityContractRef(candidate.contractRef, action.contractRef)
-    ))
-    if (model === undefined || model.selectionKey !== action.selectionKey
-      || model.semanticDigest !== action.semanticDigest) return []
-    return [{
-      selectionKey: model.selectionKey,
-      contractRef: model.contractRef,
-      facts: answerFacts.filter((fact) => fact.selectionKey === model.selectionKey
-        && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
-    }]
-  })
+  const planActions: readonly Readonly<{
+    contractRef: CapabilityContractRef
+    selectionKey: string
+    semanticDigest: string
+  }>[] = current.aggregate.plan.actions
+  const selections = rebindPlanSelections(
+    planActions.map(({ contractRef, selectionKey, semanticDigest }) => ({
+      contractRef,
+      selectionKey: rehydrateCapabilitySelectionKey(selectionKey),
+      semanticDigest,
+    })),
+    answerFacts,
+    graph.models,
+  ) ?? []
   const proposal = { kind: 'capability_candidates' as const, selections }
   const expectedRouteGeneration = await ports.loadCurrentRouteGenerationNumber(current)
   if (expectedRouteGeneration === undefined) {

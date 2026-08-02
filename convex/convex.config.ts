@@ -1,5 +1,7 @@
+import aggregate from '@convex-dev/aggregate/convex.config'
 import { defineApp } from 'convex/server'
 import { v } from 'convex/values'
+import rateLimiter from '@convex-dev/rate-limiter/convex.config'
 import workflow from '@convex-dev/workflow/convex.config'
 import workpool from '@convex-dev/workpool/convex.config'
 
@@ -17,5 +19,7 @@ const app = defineApp({
 
 app.use(workflow)
 app.use(workpool)
+app.use(rateLimiter)
+app.use(aggregate, { name: 'ownerActivationByStage' })
 
 export default app

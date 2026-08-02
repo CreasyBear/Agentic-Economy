@@ -104,11 +104,6 @@ export function scanRouteBoundaries(targets: readonly ScanTarget[]): readonly Sc
       pattern: /from\s+['"][^'"]*(?:@\/|~\/|src\/)?modules\/[^'"]+\/internal\/[^'"]+['"]/,
     },
     {
-      rule: 'route-clearance-functions-import',
-      message: 'Routes must use the clearance public/server seams, not clearance source mutation implementation files.',
-      pattern: /from\s+['"][^'"]*(?:@\/|~\/|src\/)?modules\/clearance\/clearance\.functions['"]/,
-    },
-    {
       rule: 'route-future-provider-import',
       message: 'Phase 1 routes cannot import future provider SDKs.',
       pattern: /from\s+['"](?:stripe|openai|@ai-sdk\/[^'"]+|x402)['"]/,
@@ -335,7 +330,9 @@ function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
     return false
   }
 
-  const match = /^src\/modules\/([^/]+)\/public\.ts$/.exec(violation.file)
+  // `public.ts` is the general seam; `convex.ts` is the deliberately narrow,
+  // runtime-safe seam for Convex hosts that must not pull Node/server barrels.
+  const match = /^src\/modules\/([^/]+)\/(?:public|convex)\.ts$/.exec(violation.file)
   if (match === null) {
     return false
   }
@@ -344,7 +341,11 @@ function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
 }
 
 function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
-  return violation.rule === 'forbidden-handshake-import'
-    && violation.file === 'src/modules/capability-supply/internal/x402-payment-signer.ts'
-    && /from\s+['"](?:@x402\/(?:core|evm|extensions)\/[^'"]+|viem\/accounts)['"]/.test(violation.excerpt)
+  if (violation.rule !== 'forbidden-handshake-import') return false
+  if (violation.file === 'src/modules/capability-supply/internal/x402-payment-signer.ts') {
+    return /from\s+['"](?:@x402\/(?:core|evm|extensions)\/[^'"]+|viem\/accounts)['"]/.test(violation.excerpt)
+  }
+  // T6's adopted MCP host owns the protocol SDK construction at this exact server seam.
+  return violation.file === 'src/lib/server/mcp-api.ts'
+    && /from\s+['"]@modelcontextprotocol\/sdk\/[^'"]+['"]/.test(violation.excerpt)
 }

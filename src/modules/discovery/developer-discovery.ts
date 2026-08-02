@@ -1,18 +1,21 @@
 import type { SourceHash } from '@/modules/common/ids'
-import type { PublicCatalogContract } from '@/modules/catalog/public'
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import type { FunnelEventType, OperatorControlReadback } from '@/modules/observability/public'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { readCatalogHealth } from '@/modules/registry/public'
-import type {
-  PublicBusinessCatalogApiDto,
-  PublicBusinessCatalogApiV2Dto,
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogApiV2Page,
-  PublicBusinessCatalogDetailResult,
-  PublicBusinessCatalogV2DetailResult,
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  type PublicBusinessCatalogApiV2Dto,
+  type PublicBusinessCatalogApiV2Page,
+  type PublicBusinessCatalogApiV2SearchPage,
+  type PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
-import type { DiscoverySourceState, DiscoveryStatus } from '@/modules/discovery/public'
+import type {
+  DiscoveryAttemptStatus,
+  DiscoverySourceState,
+  DiscoveryStatus,
+} from '@/modules/discovery/public'
 import { readDiscoveryHealth as readDiscoveryHealthImpl } from './internal/manifest-attempts'
 import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 
@@ -141,15 +144,14 @@ export type DeveloperDiscoveryPublicCatalogFact = {
   suburb: string
   stateTerritory: string
   publicUrl: string
-  schemaVersion: PublicBusinessCatalogApiDto['schemaVersion'] | PublicBusinessCatalogApiV2Dto['schemaVersion']
-  indexStatus: PublicCatalogContract['indexStatus']
-  discoveryStatus: PublicCatalogContract['discoveryStatus']
-  updatedAt: number
-  serviceCount: number
-  capabilityStatuses: readonly PublicCatalogContract['services'][number]['capabilities'][number]['status'][]
-  firstRequestModes: readonly PublicCatalogContract['services'][number]['firstRequest']['mode'][]
+  schemaVersion: PublicBusinessCatalogApiV2Dto['schemaVersion']
+  disposition: PublicBusinessCatalogApiV2Dto['disposition']
+  observedAt: number
+  offeringCount: number
+  accessPathKinds: readonly PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'][number]['kind'][]
+  supportStates: readonly ('integrated' | 'ae_supported_action')[]
+  attemptStatus: DiscoveryAttemptStatus | 'not_started'
 }
-
 export const DeveloperDiscoveryRouteHealthErrorCodeValues = [
   'not_found',
   'route_outage',
@@ -190,15 +192,13 @@ export type DeveloperDiscoveryRouteExecution = {
 export type DeveloperDiscoveryRouteSnapshotResponse<Body> = DeveloperDiscoveryRouteExecution & {
   body?: Body
 }
-
 export type DeveloperDiscoveryRouteSnapshot = {
-  list: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiPage | PublicBusinessCatalogApiV2Page>
-  search: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiPage | PublicBusinessCatalogApiV2Page>
-  detail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogDetailResult | PublicBusinessCatalogV2DetailResult>
-  missingDetail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogDetailResult | PublicBusinessCatalogV2DetailResult>
+  list: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiV2Page>
+  search: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiV2SearchPage>
+  detail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogV2DetailResult>
+  missingDetail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogV2DetailResult>
   routeExecutions: readonly DeveloperDiscoveryRouteExecution[]
 }
-
 export type DeveloperDiscoveryArtifactMetadata = {
   kind: DeveloperDiscoveryArtifactKind
   label: string
@@ -255,11 +255,9 @@ export type DeveloperDiscoverySchemaArtifact = DeveloperDiscoveryArtifactBase & 
   kind: 'public_catalog_schema'
   fields: readonly DeveloperDiscoverySchemaField[]
   statusVariants: {
-    publicStatus: readonly PublicCatalogContract['publicStatus'][]
-    indexStatus: readonly PublicCatalogContract['indexStatus'][]
-    discoveryStatus: readonly PublicCatalogContract['discoveryStatus'][]
-    firstRequestMode: readonly PublicCatalogContract['services'][number]['firstRequest']['mode'][]
-    capabilityStatus: readonly PublicCatalogContract['services'][number]['capabilities'][number]['status'][]
+    disposition: readonly PublicBusinessCatalogApiV2Dto['disposition'][]
+    offeringAccessPathKind: readonly PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'][number]['kind'][]
+    offeringSupport: readonly ('integrated' | 'ae_supported_action')[]
   }
   pagination: {
     listRoutes: readonly string[]
@@ -271,21 +269,14 @@ export type DeveloperDiscoverySchemaArtifact = DeveloperDiscoveryArtifactBase & 
 
 export type DeveloperDiscoveryExamplesArtifact = DeveloperDiscoveryArtifactBase & {
   kind: 'public_catalog_examples'
-  examples: readonly (PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto)[]
-  emptyExample: {
-    kind: 'ok'
-    items: []
-    pagination: {
-      total: 0
-      hasMore: false
-    }
-  }
+  examples: readonly PublicBusinessCatalogApiV2Dto[]
+  emptyExample: PublicBusinessCatalogApiV2Page
 }
 
 export type DeveloperDiscoveryFixtureBundleArtifact = DeveloperDiscoveryArtifactBase & {
   kind: 'public_catalog_fixture_bundle'
   schema: DeveloperDiscoverySchemaArtifact
-  examples: readonly (PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto)[]
+  examples: readonly PublicBusinessCatalogApiV2Dto[]
   supportMatrix: readonly DiscoverySupportMatrixRow[]
   gatedExclusions: readonly DiscoveryGatedExclusion[]
   routeHealth: readonly DeveloperDiscoveryRouteHealth[]
@@ -413,32 +404,34 @@ export type DeveloperDiscoveryRouteReadback = {
 }
 
 const developerDiscoverySchemaFields = [
+  'businessId',
   'slug',
   'name',
   'category',
   'suburb',
   'stateTerritory',
   'publishedPhone',
+  'postcode',
   'publicUrl',
   'trustTier',
-  'publicStatus',
-  'indexStatus',
-  'discoveryStatus',
+  'responseTimeMinutes',
+  'photos[].url',
+  'photos[].alt',
+  'observedAt',
+  'disposition',
+  'offerings[].offeringRef',
+  'offerings[].revision',
+  'offerings[].name',
+  'offerings[].category',
+  'offerings[].summary',
+  'offerings[].serviceAreaSummary',
+  'offerings[].availabilitySummary',
+  'offerings[].pricingSummary',
+  'offerings[].price',
+  'offerings[].accessPaths',
+  'offerings[].support',
+  'accessSummary',
   'schemaVersion',
-  'updatedAt',
-  'services[].slug',
-  'services.name',
-  'services.category',
-  'services.summary',
-  'services.serviceArea',
-  'services.hoursOrUnknown',
-  'services.firstRequest.mode',
-  'services.firstRequest.publicDisclosure',
-  'services.firstRequest.publicChannel',
-  'services.firstRequest.noContactReason',
-  'services.status',
-  'services.capabilities.kind',
-  'services.capabilities.status',
 ] as const
 
 export const DeveloperDiscoveryPublicRoutes = [
@@ -504,6 +497,7 @@ const developerDiscoveryCacheVersion = 'public-catalog-readonly-cache:v1' as con
 const developerDiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const satisfies readonly DiscoveryStatus[]
 
 const developerDiscoverySchemaFieldDefinitions: readonly DeveloperDiscoverySchemaField[] = [
+  { path: 'businessId', required: true, nullable: false },
   { path: 'slug', required: true, nullable: false },
   { path: 'name', required: true, nullable: false },
   { path: 'category', required: true, nullable: false },
@@ -512,30 +506,25 @@ const developerDiscoverySchemaFieldDefinitions: readonly DeveloperDiscoverySchem
   { path: 'publishedPhone', required: false, nullable: false },
   { path: 'postcode', required: false, nullable: false },
   { path: 'publicUrl', required: true, nullable: false },
-  { path: 'publicStatus', required: true, nullable: false, values: ['published'] },
   { path: 'trustTier', required: true, nullable: false, values: ['claimed', 'contact_confirmed', 'listed', 'registry_verified'] },
-  { path: 'indexStatus', required: true, nullable: false, values: ['not_queued', 'queued', 'indexed', 'failed', 'stale'] },
-  { path: 'discoveryStatus', required: true, nullable: false, values: developerDiscoveryStatusValues },
-  { path: 'schemaVersion', required: true, nullable: false, values: ['public-business-catalog-api:v1'] },
-  { path: 'updatedAt', required: true, nullable: false },
-  { path: 'services[].slug', required: true, nullable: false },
-  { path: 'services[].name', required: true, nullable: false },
-  { path: 'services[].category', required: true, nullable: false },
-  { path: 'services[].summary', required: true, nullable: false },
-  { path: 'services[].serviceArea', required: true, nullable: false },
-  { path: 'services[].hoursOrUnknown', required: true, nullable: false },
-  { path: 'services[].firstRequest.mode', required: true, nullable: false, values: ['inquiry_available', 'quote_request_available', 'not_available_yet'] },
-  {
-    path: 'services[].firstRequest.publicChannel',
-    required: true,
-    nullable: false,
-    values: ['public_business_contact', 'ae_status_only', 'not_available'],
-  },
-  { path: 'services[].firstRequest.publicDisclosure', required: true, nullable: false },
-  { path: 'services[].firstRequest.noContactReason', required: false, nullable: false },
-  { path: 'services[].status', required: true, nullable: false, values: ['published'] },
-  { path: 'services[].capabilities[].kind', required: true, nullable: false, values: ['phone_inquiry', 'quote_request', 'emergency_callout_interest', 'ae_hosted_discovery'] },
-  { path: 'services[].capabilities[].status', required: true, nullable: false, values: developerDiscoveryStatusValues },
+  { path: 'responseTimeMinutes', required: false, nullable: false },
+  { path: 'photos[].url', required: true, nullable: false },
+  { path: 'photos[].alt', required: true, nullable: false },
+  { path: 'observedAt', required: true, nullable: false },
+  { path: 'disposition', required: true, nullable: false, values: ['current', 'partial', 'stale'] },
+  { path: 'offerings[].offeringRef', required: true, nullable: false },
+  { path: 'offerings[].revision', required: true, nullable: false },
+  { path: 'offerings[].name', required: true, nullable: false },
+  { path: 'offerings[].category', required: true, nullable: false },
+  { path: 'offerings[].summary', required: true, nullable: false },
+  { path: 'offerings[].serviceAreaSummary', required: false, nullable: false },
+  { path: 'offerings[].availabilitySummary', required: false, nullable: false },
+  { path: 'offerings[].pricingSummary', required: false, nullable: false },
+  { path: 'offerings[].price', required: false, nullable: false },
+  { path: 'offerings[].accessPaths', required: true, nullable: false },
+  { path: 'offerings[].support', required: true, nullable: false },
+  { path: 'accessSummary', required: true, nullable: false },
+  { path: 'schemaVersion', required: true, nullable: false, values: ['public-business-catalog-api:v2'] },
 ]
 
 export function readP2InquiryAvailabilityPublicStatus(
@@ -600,7 +589,7 @@ export function createDeveloperDiscoverySupportRecord(
       },
     ],
     evidenceRefs: ['support:developer-discovery:manual'],
-    sourceHash: 'hash:developer-discovery-support' as SourceHash,
+    sourceHash: canonicalDigest('developer-discovery-support'),
     correlationId: 'corr:developer-discovery-support',
     lastReviewedAt: 0,
     ...overrides,
@@ -765,7 +754,7 @@ export function readDeveloperDiscoveryRoute(
   state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl(),
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): DeveloperDiscoveryRouteReadback {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl ?? 'https://ae.example')
+  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl ?? 'https://ae.example')
   const publicationControls = readDeveloperDiscoveryPublicationControls(options.operatorControls)
   const routeHealth =
     options.routeSnapshot === undefined
@@ -853,11 +842,9 @@ export function generateDeveloperDiscoverySchema(
     ...base,
     fields: developerDiscoverySchemaFieldDefinitions,
     statusVariants: {
-      publicStatus: ['published'],
-      indexStatus: ['not_queued', 'queued', 'indexed', 'failed', 'stale'],
-      discoveryStatus: developerDiscoveryStatusValues,
-      firstRequestMode: ['inquiry_available', 'quote_request_available', 'not_available_yet'],
-      capabilityStatus: developerDiscoveryStatusValues,
+      disposition: ['current', 'partial', 'stale'],
+      offeringAccessPathKind: ['human_request', 'external_operation'],
+      offeringSupport: ['integrated', 'ae_supported_action'],
     },
     pagination: {
       listRoutes: ['/api/businesses', '/api/businesses/search'],
@@ -888,11 +875,10 @@ export function generateDeveloperDiscoveryExamples(
         : [],
     emptyExample: {
       kind: 'ok',
-      items: [],
-      pagination: {
-        total: 0,
-        hasMore: false,
-      },
+      schemaVersion: 'public-business-catalog-api:v2',
+      page: [],
+      isDone: true,
+      continueCursor: '',
     },
   }
 
@@ -1038,7 +1024,7 @@ export function renderDeveloperDiscoveryRouteCopy(readback: DeveloperDiscoveryRo
     ),
     ...readback.publicFacts.map(
       (fact) =>
-        `${fact.name} (${fact.slug}) — ${fact.category} in ${fact.suburb}, ${fact.stateTerritory}; discovery=${fact.discoveryStatus}; services=${fact.serviceCount}`
+        `${fact.name} (${fact.slug}) — ${fact.category} in ${fact.suburb}, ${fact.stateTerritory}; disposition=${fact.disposition}; offerings=${fact.offeringCount}`
     ),
     ...readback.artifacts.map(
       (artifact) =>
@@ -1244,7 +1230,9 @@ function readDeveloperDiscoveryCatalogFacts(state: DiscoverySourceState): readon
         discoveryStatus: discoveryHealth.discoveryStatus,
       })
 
-      return result.kind === 'available' ? toDeveloperDiscoveryFactFromApi(toPublicBusinessCatalogApiDto(result.catalog)) : undefined
+      return result.kind === 'available'
+        ? toDeveloperDiscoveryFactFromApi(result.catalog, discoveryHealth.latestAttempt?.status ?? 'not_started')
+        : undefined
     })
     .filter((catalog): catalog is DeveloperDiscoveryPublicCatalogFact => catalog !== undefined)
     .sort((left, right) => left.slug.localeCompare(right.slug))
@@ -1254,11 +1242,11 @@ function readDeveloperDiscoveryCatalogFactsFromSnapshot(
   snapshot: DeveloperDiscoveryRouteSnapshot
 ): readonly DeveloperDiscoveryPublicCatalogFact[] {
   return readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(snapshot)
-    .map(toDeveloperDiscoveryFactFromApi)
+    .map((catalog) => toDeveloperDiscoveryFactFromApi(catalog))
     .sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
-function readDeveloperDiscoveryPublicRouteCatalogs(state: DiscoverySourceState): readonly PublicBusinessCatalogApiDto[] {
+function readDeveloperDiscoveryPublicRouteCatalogs(state: DiscoverySourceState): readonly PublicBusinessCatalogApiV2Dto[] {
   return state.businesses
     .map((business) => {
       const catalogHealth = readCatalogHealth(state, business.businessId)
@@ -1273,13 +1261,13 @@ function readDeveloperDiscoveryPublicRouteCatalogs(state: DiscoverySourceState):
         discoveryStatus: discoveryHealth.discoveryStatus,
       })
 
-      return result.kind === 'available' ? toPublicBusinessCatalogApiDto(result.catalog) : undefined
+      return result.kind === 'available' ? result.catalog : undefined
     })
-    .filter((catalog): catalog is PublicBusinessCatalogApiDto => catalog !== undefined)
+    .filter((catalog): catalog is PublicBusinessCatalogApiV2Dto => catalog !== undefined)
     .sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
-type DeveloperDiscoveryRouteCatalog = PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto
+type DeveloperDiscoveryRouteCatalog = PublicBusinessCatalogApiV2Dto
 
 function readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(
   snapshot: DeveloperDiscoveryRouteSnapshot
@@ -1289,13 +1277,13 @@ function readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(
     bySlug.set(catalog.slug, catalog)
   }
 
-  if (snapshot.list.body?.kind === 'ok') {
-    for (const catalog of snapshot.list.body.items) {
+  if (snapshot.list.body?.kind === 'ok' && Array.isArray(snapshot.list.body.page)) {
+    for (const catalog of snapshot.list.body.page) {
       add(catalog)
     }
   }
 
-  if (snapshot.search.body?.kind === 'ok') {
+  if (snapshot.search.body?.kind === 'ok' && Array.isArray(snapshot.search.body.items)) {
     for (const catalog of snapshot.search.body.items) {
       add(catalog)
     }
@@ -1307,31 +1295,20 @@ function readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(
 
   return Array.from(bySlug.values()).sort((left, right) => left.slug.localeCompare(right.slug))
 }
+function toDeveloperDiscoveryFactFromApi(
+  catalog: DeveloperDiscoveryRouteCatalog,
+  attemptStatus: DiscoveryAttemptStatus | 'not_started' = 'not_started',
+): DeveloperDiscoveryPublicCatalogFact {
+  const accessPathKinds = uniqueSorted(
+    catalog.offerings.flatMap((offering) => offering.accessPaths.map((path) => path.kind)),
+  ) as readonly PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'][number]['kind'][]
+  const supportStates = uniqueSorted(
+    catalog.offerings.flatMap((offering) => [
+      ...(offering.support.integrated ? ['integrated' as const] : []),
+      ...(offering.support.aeSupportedAction ? ['ae_supported_action' as const] : []),
+    ]),
+  ) as readonly ('integrated' | 'ae_supported_action')[]
 
-function toDeveloperDiscoveryFactFromApi(catalog: DeveloperDiscoveryRouteCatalog): DeveloperDiscoveryPublicCatalogFact {
-  if (catalog.schemaVersion === 'public-business-catalog-api:v2') {
-    return {
-      slug: catalog.slug,
-      name: catalog.name,
-      category: catalog.category,
-      suburb: catalog.suburb,
-      stateTerritory: catalog.stateTerritory,
-      publicUrl: catalog.publicUrl,
-      schemaVersion: catalog.schemaVersion,
-      indexStatus: catalog.disposition === 'current' ? 'indexed' : 'stale',
-      discoveryStatus: catalog.disposition === 'current' ? 'available' : 'stale',
-      updatedAt: catalog.observedAt,
-      serviceCount: catalog.offerings.length,
-      capabilityStatuses: uniqueSorted(catalog.offerings.map((offering) =>
-        offering.support.aeSupportedAction ? 'available' as const : 'unavailable' as const,
-      )),
-      firstRequestModes: uniqueSorted(catalog.offerings.flatMap((offering) =>
-        offering.accessPaths
-          .filter((path) => path.kind === 'human_request')
-          .map((path) => path.channel === 'ae_inquiry' ? 'inquiry_available' as const : 'quote_request_available' as const),
-      )),
-    }
-  }
   return {
     slug: catalog.slug,
     name: catalog.name,
@@ -1340,49 +1317,12 @@ function toDeveloperDiscoveryFactFromApi(catalog: DeveloperDiscoveryRouteCatalog
     stateTerritory: catalog.stateTerritory,
     publicUrl: catalog.publicUrl,
     schemaVersion: catalog.schemaVersion,
-    indexStatus: catalog.indexStatus,
-    discoveryStatus: catalog.discoveryStatus,
-    updatedAt: catalog.updatedAt,
-    serviceCount: catalog.services.length,
-    capabilityStatuses: uniqueSorted(
-      catalog.services.flatMap((service) => service.capabilities.map((capability) => capability.status))
-    ),
-    firstRequestModes: uniqueSorted(catalog.services.map((service) => service.firstRequest.mode)),
-  }
-}
-
-function toPublicBusinessCatalogApiDto(catalog: PublicCatalogContract): PublicBusinessCatalogApiDto {
-  return {
-    slug: catalog.slug,
-    name: catalog.name,
-    category: catalog.category,
-    suburb: catalog.suburb,
-    stateTerritory: catalog.stateTerritory,
-    ...(catalog.publishedPhone === undefined ? {} : { publishedPhone: catalog.publishedPhone }),
-    ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
-    publicUrl: catalog.publicUrl,
-    publicStatus: catalog.publicStatus,
-    trustTier: catalog.trustTier,
-    indexStatus: catalog.indexStatus,
-    discoveryStatus: catalog.discoveryStatus,
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: catalog.updatedAt,
-    photos: catalog.photos.map((photo) => ({ url: photo.url, alt: photo.alt })),
-    ...(catalog.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: catalog.responseTimeMinutes }),
-    services: catalog.services.map((service) => ({
-      slug: service.serviceSlug,
-      name: service.name,
-      category: service.category,
-      summary: service.summary,
-      serviceArea: service.serviceArea,
-      hoursOrUnknown: service.hoursOrUnknown,
-      firstRequest: service.firstRequest,
-      status: service.status,
-      capabilities: service.capabilities.map((capability) => ({
-        kind: capability.kind,
-        status: capability.status,
-      })),
-    })),
+    disposition: catalog.disposition,
+    observedAt: catalog.observedAt,
+    offeringCount: catalog.offerings.length,
+    accessPathKinds,
+    supportStates,
+    attemptStatus,
   }
 }
 
@@ -1397,15 +1337,15 @@ function readDeveloperDiscoveryFreshnessFromFacts(
     }
   }
 
-  if (publicFacts.every((fact) => fact.discoveryStatus === 'unavailable')) {
+  if (publicFacts.every((fact) => fact.disposition === 'stale')) {
     return {
-      state: 'unavailable',
-      label: 'Discovery unavailable',
-      reason: 'Every public catalog reports unavailable discovery status.',
+      state: 'degraded',
+      label: 'Discovery degraded',
+      reason: 'Every public catalog is stale for the current source readback.',
     }
   }
 
-  if (publicFacts.some((fact) => fact.discoveryStatus !== 'available')) {
+  if (publicFacts.some((fact) => fact.disposition !== 'current')) {
     return {
       state: 'degraded',
       label: 'Discovery degraded',
@@ -1459,15 +1399,15 @@ function readDeveloperDiscoveryFreshnessFromRouteReadback(
     }
   }
 
-  if (publicFacts.every((fact) => fact.discoveryStatus === 'unavailable')) {
+  if (publicFacts.every((fact) => fact.disposition === 'stale')) {
     return {
-      state: 'unavailable',
-      label: 'Discovery unavailable',
-      reason: 'Every route-derived public catalog reports unavailable discovery status.',
+      state: 'degraded',
+      label: 'Discovery degraded',
+      reason: 'Every route-derived public catalog is stale for the current source readback.',
     }
   }
 
-  if (publicFacts.some((fact) => fact.discoveryStatus !== 'available')) {
+  if (publicFacts.some((fact) => fact.disposition !== 'current')) {
     return {
       state: 'degraded',
       label: 'Discovery degraded',
@@ -1555,6 +1495,3 @@ function fetchOperatorState(status: DeveloperDiscoveryFetchStatus): DeveloperDis
 }
 
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/u, '')
-}

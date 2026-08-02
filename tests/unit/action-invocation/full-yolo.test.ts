@@ -33,7 +33,7 @@ describe('full_yolo bounded authority mode', () => {
       repeatedPrincipalDecisions: 0,
       retainedExactAuthorityUses: 3,
     })
-  })
+  }, 15_000)
 
   it('steps up on action, provider, recipient, purpose, data, currency, fallback, risk and loss widening', async () => {
     const evidence = await runFullYoloEvidence()

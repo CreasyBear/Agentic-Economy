@@ -1,8 +1,9 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { AuditEventContract } from '@/modules/common/audit-events'
 import { validateAuditEvent } from '@/modules/common/audit-events'
-import { stableHash } from '@/modules/common/stable-hash'
-import { assertCsrf, rateLimitClaim } from './duplicates'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableUnique } from '@/modules/common/stable-unique'
+import { assertCsrf } from './duplicates'
 import type {
   DisputeEvidenceInput,
   DisputeEvidenceMediaType,
@@ -38,7 +39,6 @@ type DisputeOpenError = Extract<DisputeOpenResult, { kind: 'error' }>
 export function createEmptyDisputeSourceState(): DisputeSourceState {
   return {
     disputes: [],
-    abuseRateLimitBuckets: [],
     auditEvents: [],
   }
 }
@@ -54,15 +54,6 @@ export function openRemovalDispute(state: DisputeSourceState, command: DisputeOp
     }
   }
 
-  const rateLimitDecision = rateLimitClaim(state.abuseRateLimitBuckets, command.security.rateLimit)
-  if (rateLimitDecision.kind === 'limited') {
-    return {
-      kind: 'error',
-      code: 'dispute_rate_limited',
-      retryable: true,
-      reason: `Retry after ${rateLimitDecision.retryAfter}.`,
-    }
-  }
 
   const target = validateTarget(command)
   if (target.kind === 'error') {
@@ -84,7 +75,7 @@ export function openRemovalDispute(state: DisputeSourceState, command: DisputeOp
     return evidence
   }
 
-  const publicMessageHash = stableHash(normalizePublicMessage(command.publicMessage))
+  const publicMessageHash = canonicalDigest(normalizePublicMessage(command.publicMessage))
   const replay = state.disputes.find((dispute) => dispute.operationKeys.includes(command.operationKey))
   if (replay !== undefined) {
     return {
@@ -132,7 +123,7 @@ export function openRemovalDispute(state: DisputeSourceState, command: DisputeOp
     }
   }
 
-  const disputeId = `dispute:${stableHash({
+  const disputeId = `dispute:${canonicalDigest({
     contactHash: contact.contactHash,
     reasonCode: reason.reasonCode,
     targetRef: target.targetRef,
@@ -229,7 +220,7 @@ function normalizeContact(contact: DisputeOpenCommand['contact']): { kind: 'ok';
 
   return {
     kind: 'ok',
-    contactHash: stableHash({
+    contactHash: canonicalDigest({
       email: email.length === 0 ? null : email,
       name: name.length === 0 ? null : name,
       phone: phone.length === 0 ? null : phone,
@@ -279,13 +270,13 @@ function normalizeEvidence(
       byteLength: item.byteLength,
       label,
       mediaType: item.mediaType,
-      privateRefHash: stableHash(privateRef),
+      privateRefHash: canonicalDigest(privateRef),
     })
   }
 
   return {
     kind: 'ok',
-    evidenceHash: stableHash(normalized),
+    evidenceHash: canonicalDigest(normalized),
     evidenceRefs,
   }
 }
@@ -325,7 +316,7 @@ function recordDisputeAuditEvent(
     reasonCode: dispute.reasonCode,
     evidenceRefs: dispute.evidenceRefs,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: input.now,
   })
 
@@ -351,7 +342,7 @@ function toPublicReceipt(dispute: DisputeRecord): RemovalDisputeReceipt {
 }
 
 function mergeEvidenceRefs(existing: readonly string[], next: readonly string[]): string[] {
-  return [...new Set([...existing, ...next])]
+  return stableUnique([...existing, ...next])
 }
 
 function normalizeContactPart(value: string | undefined): string {

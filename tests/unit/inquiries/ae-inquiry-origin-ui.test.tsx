@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeInquiryInboxPanel } from '@/components/ae/inquiries/AeInquiryInboxPanel'
 import { AeInquiryOriginCard } from '@/components/ae/inquiries/AeInquiryOriginCard'
-import type { BusinessId, OwnerId, ServiceId } from '@/modules/common/ids'
+import type { BusinessId, OfferingRef, OwnerId } from '@/modules/common/ids'
 import type { InquiryThreadId, OwnerInboxReadback } from '@/modules/inquiries/public'
 
 describe('inquiry origin UI', () => {
@@ -55,10 +55,9 @@ function inboxReadback(): OwnerInboxReadback {
       {
         threadId: 'inquiry_thread:demo' as InquiryThreadId,
         businessId: 'business:demo' as BusinessId,
-        serviceId: 'service:demo' as ServiceId,
-        capabilityKind: 'phone_inquiry',
+        offeringRef: 'offering:demo' as OfferingRef,
         businessName: 'Demo Plumbing',
-        serviceName: 'Emergency plumbing',
+        offeringName: 'Emergency plumbing',
         status: 'unread',
         bucket: 'unread',
         preview: 'Please have the owner review this request.',

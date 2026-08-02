@@ -1,6 +1,7 @@
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   compilePreparedActionOptions,
   type PreparedActionOptionCandidate,
@@ -406,7 +407,7 @@ async function recordRecovery(
     lineage,
     reason,
     operationRefs: [...operationRefs].sort(),
-    evidenceRefs: [...new Set(evidenceRefs)].sort(),
+    evidenceRefs: uniqueSorted(evidenceRefs),
   }
   const recoveryDigest = canonicalDigest(material as StableHashValue)
   const recoveryRef = `prepared-action-recovery:${recoveryDigest}`

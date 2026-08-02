@@ -20,7 +20,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
   attemptRef: string
   operationKey: string
   now: () => string
-  legacyReleaseSignal?: DevelopmentReleaseSignal
+  developmentReleaseSignal?: DevelopmentReleaseSignal
   timeoutSignal?: DevelopmentTimeoutSignal
   timeoutMs?: number
   attempt: ActionInvocationView<Result>['attempts'][number]
@@ -29,7 +29,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
   if (prepared === undefined) throw new Error('Consequential attempt requires prepared invocation state.')
   const attempt = input.attempt
   const attempts = input.currentView.attempts
-  input.legacyReleaseSignal?.beginAttempt()
+  input.developmentReleaseSignal?.beginAttempt()
 
   try {
     const runner = input.action.run({ data: input.actionInput, context: input.context })
@@ -47,7 +47,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
     const classification = classifyActionResult(input.action, result)
     const returnedAttempt = {
       ...attempt,
-      release: input.legacyReleaseSignal?.wasReleased() === true
+      release: input.developmentReleaseSignal?.wasReleased() === true
         ? { state: 'released' as const, observedAt: input.now() }
         : { state: 'possibly_released' as const },
       outcome: { state: 'returned' as const, businessOutcome: classification.outcome },
@@ -90,7 +90,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
     }
     const message = error instanceof Error ? error.message : 'Unknown runner failure'
     const explicitlyNotReleased =
-      input.legacyReleaseSignal !== undefined && !input.legacyReleaseSignal.wasReleased()
+      input.developmentReleaseSignal !== undefined && !input.developmentReleaseSignal.wasReleased()
     const failedAttempt = explicitlyNotReleased
       ? {
           ...attempt,

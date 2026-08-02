@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+import { stableUnique } from '@/modules/common/stable-unique'
+import { isRecord } from '@/modules/common/is-record'
 
 import {
   customerRequestAgentResultSchema,
@@ -32,6 +35,7 @@ export function assertExpectedRoute(
   if (expected === undefined) return
   const businesses = route.businesses.map(({ name }) => name)
   if (route.stepCount !== expected.stepCount) throw new Error(`hosted_journey_step_count:${route.stepCount}`)
+  // These are ordered string arrays; stableStringify preserves array order, so key ordering cannot arise.
   if (JSON.stringify(businesses) !== JSON.stringify(expected.businesses)) {
     throw new Error(`hosted_journey_businesses:${businesses.join('|')}`)
   }
@@ -42,7 +46,7 @@ export function assertExpectedRoute(
     const declared = expected.recipients
       .map(({ name, purposes }) => ({ name, purposes: [...purposes].sort() }))
       .sort((left, right) => left.name.localeCompare(right.name))
-    if (JSON.stringify(actual) !== JSON.stringify(declared)) {
+    if (!sameStableValue(actual, declared)) {
       throw new Error('hosted_journey_disclosure_recipients_changed')
     }
   }
@@ -75,6 +79,7 @@ export function assertRouteDisclosureIntegrity(
     recipient.purposes.forEach((purpose) => purposes.add(purpose))
   }
   const aggregate = [...route.dataUse.purposes].sort()
+  // These are ordered string arrays; stableStringify preserves array order, so key ordering cannot arise.
   if (JSON.stringify(aggregate) !== JSON.stringify([...purposes].sort())) {
     throw new Error('hosted_journey_disclosure_purpose_mismatch')
   }
@@ -89,11 +94,7 @@ export async function callAgent(
 ): Promise<CustomerRequestView> {
   recordMutation(input, method, path, mutationSource)
   input.metrics.requestCalls += 1
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-    method, headers: headers(input, input.agentApiKey),
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  const value: unknown = await response.json()
+  const { response, value } = await requestJson(input, path, method, body)
   if (!acceptedStatuses.includes(response.status)) throw responseError(method, path, response.status, value)
   const result = customerRequestAgentResultSchema.parse(value)
   if (result.kind !== 'request') throw new Error(`hosted_journey_agent_result:${result.kind}`)
@@ -128,18 +129,17 @@ export async function confirmThroughRepeatPermission(
   const path = `/api/v1/requests/${encodeURIComponent(view.requestRef)}/repeat-permissions`
   const permission = await callRepeatPermission(input, path, 'POST', allowCommand, 'observed_navigation')
   const replay = await callRepeatPermission(input, path, 'POST', allowCommand, 'automatic_replay')
-  if (JSON.stringify(permission) !== JSON.stringify(replay)) {
+  if (!sameStableValue(permission, replay)) {
     throw new Error('hosted_journey_repeat_permission_allow_replay_changed')
   }
   const inspectPath = `${path}/${encodeURIComponent(permission.permissionRef)}?routeRef=${encodeURIComponent(route.routeRef)}`
   const inspected = await callRepeatPermission(input, inspectPath, 'GET')
-  if (JSON.stringify(permission) !== JSON.stringify(inspected)) {
+  if (!sameStableValue(permission, inspected)) {
     throw new Error('hosted_journey_repeat_permission_inspection_changed')
   }
   const rediscovered = await callRepeatPermissionCollection(input, path)
-  if (JSON.stringify(permission) !== JSON.stringify(
-    rediscovered.find(({ permissionRef }) => permissionRef === permission.permissionRef),
-  )) {
+  const rediscoveredPermission = rediscovered.find(({ permissionRef }) => permissionRef === permission.permissionRef)
+  if (rediscoveredPermission === undefined || !sameStableValue(permission, rediscoveredPermission)) {
     throw new Error('hosted_journey_repeat_permission_collection_readback_changed')
   }
   const useCommand = {
@@ -151,7 +151,7 @@ export async function confirmThroughRepeatPermission(
   const usePath = `${path}/${encodeURIComponent(permission.permissionRef)}/use`
   const confirmed = await callAgent(input, usePath, 'POST', useCommand, [200], 'observed_navigation')
   const confirmedReplay = await callAgent(input, usePath, 'POST', useCommand, [200], 'automatic_replay')
-  if (JSON.stringify(confirmed) !== JSON.stringify(confirmedReplay)) {
+  if (!sameStableValue(confirmed, confirmedReplay)) {
     throw new Error('hosted_journey_repeat_permission_use_replay_changed')
   }
   input.metrics.repeatPermission = {
@@ -193,7 +193,7 @@ export async function withdrawRepeatPermission(
     command,
     'automatic_replay',
   )
-  if (withdrawn.status !== 'withdrawn' || JSON.stringify(withdrawn) !== JSON.stringify(replay)) {
+  if (withdrawn.status !== 'withdrawn' || !sameStableValue(withdrawn, replay)) {
     throw new Error('hosted_journey_repeat_permission_withdrawal_changed')
   }
   const inspected = await callRepeatPermission(
@@ -201,14 +201,13 @@ export async function withdrawRepeatPermission(
     `${basePath}?routeRef=${encodeURIComponent(observed.routeRef)}`,
     'GET',
   )
-  if (JSON.stringify(withdrawn) !== JSON.stringify(inspected)) {
+  if (!sameStableValue(withdrawn, inspected)) {
     throw new Error('hosted_journey_repeat_permission_withdrawn_inspection_changed')
   }
   const collectionPath = `/api/v1/requests/${encodeURIComponent(view.requestRef)}/repeat-permissions`
   const rediscovered = await callRepeatPermissionCollection(input, collectionPath)
-  if (JSON.stringify(withdrawn) !== JSON.stringify(
-    rediscovered.find(({ permissionRef }) => withdrawn.permissionRef === permissionRef),
-  )) {
+  const withdrawnPermission = rediscovered.find(({ permissionRef }) => withdrawn.permissionRef === permissionRef)
+  if (withdrawnPermission === undefined || !sameStableValue(withdrawn, withdrawnPermission)) {
     throw new Error('hosted_journey_repeat_permission_withdrawn_collection_readback_changed')
   }
   const refusedUse = await callAgent(input, `${basePath}/use`, 'POST', {
@@ -233,11 +232,7 @@ export async function callRepeatPermissionCollection(
   path: string,
 ): Promise<readonly CustomerRequestRepeatPermission[]> {
   input.metrics.requestCalls += 1
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-    method: 'GET',
-    headers: headers(input, input.agentApiKey),
-  })
-  const value: unknown = await response.json()
+  const { response, value } = await requestJson(input, path, 'GET')
   if (response.status !== 200) throw responseError('GET', path, response.status, value)
   const result = customerRequestConnectedAssistantsResultSchema.parse(value)
   if (result.kind !== 'connected_assistants') {
@@ -255,12 +250,7 @@ export async function callRepeatPermission(
 ): Promise<CustomerRequestRepeatPermission> {
   recordMutation(input, method, path, mutationSource)
   input.metrics.requestCalls += 1
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-    method,
-    headers: headers(input, input.agentApiKey),
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  const value: unknown = await response.json()
+  const { response, value } = await requestJson(input, path, method, body)
   if (response.status !== 200) throw responseError(method, path, response.status, value)
   const result = customerRequestRepeatPermissionResultSchema.parse(value)
   if (result.kind !== 'repeat_permission') {
@@ -304,7 +294,7 @@ export function observedNavigationAction(
   if (matches.length !== 1) throw new Error(`hosted_journey_navigation_missing:${relation}`)
   const action = matches[0]
   if (action === undefined) throw new Error(`hosted_journey_navigation_missing:${relation}`)
-  const base = new URL(normalizedBaseUrl(input.baseUrl))
+  const base = new URL(trimTrailingSlashes(input.baseUrl))
   let current: URL
   let target: URL
   try {
@@ -345,8 +335,8 @@ export function materializeObservedInput(
   for (const placeholder of Object.keys(replacements)) {
     if (!used.has(placeholder)) throw new Error(`hosted_journey_navigation_input_placeholder_missing:${placeholder}`)
   }
-  if (materialized !== null && typeof materialized === 'object' && !Array.isArray(materialized)) {
-    const record = materialized as Record<string, unknown>
+  if (isRecord(materialized)) {
+    const record = materialized
     for (const revision of [record.revision, record.expectedRevision]) {
       if (revision !== undefined && revision !== view.revision) {
         throw new Error('hosted_journey_navigation_input_stale_revision')
@@ -363,10 +353,7 @@ export function materializeObservedInput(
 
 export async function callAgentEvidence(input: HostedCustomerRequestJourneyRuntimeInput, path: string) {
   input.metrics.requestCalls += 1
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-    method: 'GET', headers: headers(input, input.agentApiKey),
-  })
-  const value: unknown = await response.json()
+  const { response, value } = await requestJson(input, path, 'GET')
   if (!response.ok) throw responseError('GET', path, response.status, value)
   const result = customerRequestEvidenceResultSchema.parse(value)
   if (result.kind !== 'evidence') throw new Error(`hosted_journey_evidence_result:${result.kind}`)
@@ -380,16 +367,26 @@ export async function callAgentProblem(
 ) {
   recordMutation(input, 'POST', path, 'observed_navigation')
   input.metrics.requestCalls += 1
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-    method: 'POST', headers: headers(input, input.agentApiKey),
-    body: JSON.stringify(body),
-  })
-  const value: unknown = await response.json()
+  const { response, value } = await requestJson(input, path, 'POST', body)
   if (!response.ok) throw responseError('POST', path, response.status, value)
   const result = customerRequestProblemResultSchema.parse(value)
   if (result.kind !== 'problem_reported') throw new Error(`hosted_journey_problem_result:${result.kind}`)
   return result
 }
+async function requestJson(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  path: string,
+  method: 'GET' | 'POST',
+  body?: unknown,
+): Promise<Readonly<{ response: Response; value: unknown }>> {
+  const response = await (input.fetch ?? fetch)(`${trimTrailingSlashes(input.baseUrl)}${path}`, {
+    method,
+    headers: headers(input, input.agentApiKey),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  return { response, value: await response.json() as unknown }
+}
+
 export function headers(input: HostedCustomerRequestJourneyInput, credential?: string): Headers {
   const result = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' })
   if (credential !== undefined) result.set('Authorization', `Bearer ${credential}`)
@@ -403,9 +400,6 @@ export function observe(states: CustomerRequestView['state'][], view: CustomerRe
   if (states.at(-1) !== view.state) states.push(view.state)
 }
 
-export function normalizedBaseUrl(value: string): string {
-  return value.replace(/\/+$/u, '')
-}
 
 export function journeyEnvironment(input: HostedCustomerRequestJourneyInput): 'production' | 'development' {
   return input.environment ?? 'production'
@@ -417,7 +411,7 @@ export function journeyReleaseProjection(
 ): z.infer<typeof journeyReleaseSchema> {
   const base = {
     revision: release.revision, deploymentId: release.deploymentId,
-    baseUrl: normalizedBaseUrl(input.baseUrl),
+    baseUrl: trimTrailingSlashes(input.baseUrl),
   }
   return journeyEnvironment(input) === 'development'
     ? { ...base, environment: 'development', verification: 'local_checkout_and_named_dev_deployment' }
@@ -440,12 +434,12 @@ export function assertJourneyBaseUrl(
     throw new Error('hosted_journey_base_url_invalid')
   }
   const isOrigin = url.username === '' && url.password === ''
-    && url.pathname.replace(/\/+$/u, '') === '' && url.search === '' && url.hash === ''
+    && trimTrailingSlashes(url.pathname) === '' && url.search === '' && url.hash === ''
   const isLoopback = url.protocol === 'http:'
     && (url.hostname === '127.0.0.1' || url.hostname === 'localhost')
   const isExplicitTrustedHttps = url.protocol === 'https:'
     && trustedDevelopmentOrigin !== undefined
-    && normalizedBaseUrl(trustedDevelopmentOrigin) === normalizedBaseUrl(value)
+    && trimTrailingSlashes(trustedDevelopmentOrigin) === trimTrailingSlashes(value)
   if (!isOrigin || (!isLoopback && !isExplicitTrustedHttps)) {
     throw new Error('hosted_journey_base_url_not_development')
   }
@@ -459,7 +453,7 @@ export function assertProductionBaseUrl(value: string): void {
     throw new Error('hosted_journey_base_url_invalid')
   }
   if (url.protocol !== 'https:' || url.username !== '' || url.password !== ''
-    || url.port !== '' || url.pathname.replace(/\/+$/u, '') !== ''
+    || url.port !== '' || trimTrailingSlashes(url.pathname) !== ''
     || url.search !== '' || url.hash !== ''
     || url.hostname !== 'agentic-economy-phi.vercel.app') {
     throw new Error('hosted_journey_base_url_not_production')
@@ -543,7 +537,7 @@ export function journeyMeasurements(
     totalCostAccuracy,
     recovery: {
       state: 'durable' as const, resumed,
-      postures: [...new Set(route.recovery.map(({ posture }) => posture))],
+      postures: stableUnique(route.recovery.map(({ posture }) => posture)),
     },
     ...(input.metrics.interruptionRecovery === undefined
       ? {}
@@ -582,13 +576,18 @@ export function journeyMeasurements(
       : {
           state: 'verified' as const,
           resultDigest,
-          steps: evidence.steps.map(({ step, business, providerOrigin, outputDigest, evidence: receipts }) => ({
-            step,
-            business: business!,
-            providerOrigin: providerOrigin!,
-            outputDigest: outputDigest!,
-            receiptRefs: receipts.map(({ receiptRef }) => receiptRef).sort(),
-          })),
+          steps: evidence.steps.map(({ step, business, providerOrigin, outputDigest, evidence: receipts }) => {
+            if (business === undefined || providerOrigin === undefined || outputDigest === undefined) {
+              throw new Error('hosted_journey_step_execution_identity_missing')
+            }
+            return {
+              step,
+              business,
+              providerOrigin,
+              outputDigest,
+              receiptRefs: receipts.map(({ receiptRef }) => receiptRef).sort(),
+            }
+          }),
         },
     resultIntegrity: resultDigest === undefined
       ? { state: 'not_applicable' as const }
@@ -677,6 +676,11 @@ export function assertCancelledExecutionStartReplay(
 
 export function digestInput(value: unknown): string {
   return canonicalDigest(customerRequestJsonValueSchema.parse(value) as StableHashValue)
+}
+
+function sameStableValue(left: unknown, right: unknown): boolean {
+  if (left === undefined || right === undefined) return left === right
+  return stableStringify(left as StableHashValue) === stableStringify(right as StableHashValue)
 }
 
 export async function defaultSleep(milliseconds: number): Promise<void> {

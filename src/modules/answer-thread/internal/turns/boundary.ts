@@ -81,7 +81,11 @@ async function streamBoundaryTurn(
   if (!finalized.ok) {
     return rejectBlockedSnapshot(ctx, [], allowedSlugs, finalized)
   }
-  const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, kind, { planMode: 'boundary' })
+  const assembly = await ctx.emitOrDeferSnapshot(
+    finalized.snapshot,
+    kind,
+    { planMode: kind === 'unsupported' ? 'unsupported' : 'boundary' },
+  )
   return {
     snapshot: finalized.snapshot,
     toolCalls: [],

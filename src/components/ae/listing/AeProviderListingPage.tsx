@@ -1,6 +1,6 @@
 import { ArrowLeftIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,30 +10,34 @@ import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenera
 import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
-import { plainLanguageCopy, type PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
+import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
+import { ProviderFacts, offeringPathLabel } from '@/components/ae/provider-facts'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
-import { appendThreadOrigin } from '@/lib/ui/append-thread-origin'
+import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
 import { telUri } from '@/lib/ui/tel-uri'
 import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
 import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
-import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { projectPublicInquiryOfferingSupply, type PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
 
 export type AeProviderListingPageProps = {
-  catalog: PublicRouteCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
   inquiryAffordance: PublicInquiryAffordance
   agentJsonUrl: string
   supply?: PublicOfferingSupplyView
-  backFrom?: 'thread' | 'registry'
+  backFrom?: 'thread'
   backThreadId?: string
 }
 
 const ownerReplyStamp = 'owner confirms on reply'
 
 const peerActionClassName = 'min-h-11 w-full sm:w-auto'
+
+/** Thread origin carried into the inquiry route; empty when the reader did not arrive from a thread. */
+type InquiryOriginSearch = { from?: 'thread'; id?: string }
 
 export function AeProviderListingPage({
   catalog,
@@ -46,9 +50,10 @@ export function AeProviderListingPage({
   const presentation = buildProviderPresentation(catalog)
   const trust = buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')
   const officeAddress = readOfficeAddress(catalog)
-  const inquiryHref = backFrom === 'thread'
-    ? appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backThreadId)
-    : inquiryAffordance.kind === 'available' ? inquiryAffordance.href : ''
+  const router = useRouter()
+  const inquirySearch: InquiryOriginSearch = backFrom === 'thread' && backThreadId !== undefined && backThreadId.length > 0
+    ? { from: 'thread', id: backThreadId }
+    : {}
   // The offering supply read carries stored access-path copy. Admission is the
   // only fact that says whether the inquiry route will accept a first contact,
   // so the rendered paths are derived from it rather than from what was stored.
@@ -56,7 +61,9 @@ export function AeProviderListingPage({
     ? undefined
     : projectPublicInquiryOfferingSupply(
         supply.offerings,
-        inquiryAffordance.kind === 'available' ? inquiryHref : undefined,
+        inquiryAffordance.kind === 'available'
+          ? router.buildLocation({ to: '/$slug/inquiry', params: { slug: catalog.slug }, search: inquirySearch }).href
+          : undefined,
       )
   const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
 
@@ -70,6 +77,10 @@ export function AeProviderListingPage({
       pseudonymousJourneyId: journeyId,
     })
   }, [catalog.slug])
+  const journeyIdentityForCatalog = journeyIdentity === null || journeyIdentity.slug !== catalog.slug
+    ? null
+    : journeyIdentity
+
   return (
     <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10">
       <nav aria-label="Return to your previous view">
@@ -80,8 +91,8 @@ export function AeProviderListingPage({
         catalog={catalog}
         trust={trust}
         inquiryAffordance={inquiryAffordance}
-        inquiryHref={inquiryHref}
-        pseudonymousJourneyId={journeyIdentity?.slug === catalog.slug ? journeyIdentity.id : null}
+        inquirySearch={inquirySearch}
+        pseudonymousJourneyId={journeyIdentityForCatalog?.id ?? null}
         offeringDetailMode={supply !== undefined}
       />
 
@@ -100,12 +111,12 @@ export function AeProviderListingPage({
 
           {supply === undefined ? (
             <div className="grid gap-4 md:grid-cols-2">
-              <ReachOutStepsCard updatedAt={catalog.updatedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
-              <SourceStampCard updatedAt={catalog.updatedAt} />
+              <ReachOutStepsCard updatedAt={catalog.observedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
+              <SourceStampCard updatedAt={catalog.observedAt} />
             </div>
-          ) : <SourceStampCard updatedAt={catalog.updatedAt} />}
+          ) : <SourceStampCard updatedAt={catalog.observedAt} />}
 
-          {supply === undefined ? <CapabilityCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquiryHref={inquiryHref} /> : null}
+          {supply === undefined ? <OfferingCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquirySearch={inquirySearch} /> : null}
 
           {supply === undefined ? <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} /> : null}
         </div>
@@ -124,7 +135,7 @@ export function AeProviderListingPage({
                 </div>
                 {inquiryAffordance.kind === 'available' ? (
                   <Button asChild variant="secondary" size="lg" className={peerActionClassName}>
-                    <a href={inquiryHref}>Ask this business</a>
+                    <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>Ask this business</Link>
                   </Button>
                 ) : (
                   <p className="block text-muted-foreground">This business hasn’t joined AE yet</p>
@@ -158,14 +169,14 @@ export function ListingFirstScreen({
   catalog,
   trust,
   inquiryAffordance,
-  inquiryHref,
+  inquirySearch,
   pseudonymousJourneyId,
   offeringDetailMode = false,
 }: {
-  catalog: PublicRouteCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
   trust: ListingTrustProjection
   inquiryAffordance: PublicInquiryAffordance
-  inquiryHref: string
+  inquirySearch: InquiryOriginSearch
   pseudonymousJourneyId?: PseudonymousJourneyId | null
   offeringDetailMode?: boolean
 }) {
@@ -194,7 +205,7 @@ export function ListingFirstScreen({
     ].join('\n')
 
     try {
-      await navigator.clipboard.writeText(details)
+      await copyTextToClipboard(details)
       setDetailsCopied(true)
       window.setTimeout(() => setDetailsCopied(false), 1600)
     } catch {
@@ -246,7 +257,7 @@ export function ListingFirstScreen({
           {offeringDetailMode ? null : inquiryAffordance.kind === 'available' ? (
             <div data-peer-action="ask" data-variant="secondary">
               <Button asChild variant="secondary" size="lg" className={peerActionClassName}>
-                <a href={inquiryHref}>Ask this business</a>
+                <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>Ask this business</Link>
               </Button>
             </div>
           ) : (
@@ -284,57 +295,60 @@ function replyPostureLabel(posture: ReplyPosture): string {
   return posture.kind === 'observed' ? NO_REPLY_HISTORY : posture.label
 }
 
-function CapabilityCardsSection({
+function OfferingCardsSection({
   catalog,
   inquiryAffordance,
-  inquiryHref,
+  inquirySearch,
 }: {
-  catalog: PublicRouteCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
   inquiryAffordance: PublicInquiryAffordance
-  inquiryHref: string
+  inquirySearch: InquiryOriginSearch
 }) {
-  const capabilities = collectPublicCapabilities(catalog)
-  if (capabilities.length === 0) {
+  if (catalog.offerings.length === 0) {
     return null
   }
-  const inquiryAvailable = inquiryAffordance.kind === 'available'
+  const selectedOfferingRef = inquiryAffordance.kind === 'available'
+    ? inquiryAffordance.target.offeringRef
+    : undefined
 
   return (
-    <Card className="p-6" aria-labelledby="listing-capabilities">
+    <Card className="p-6" aria-labelledby="listing-offerings">
       <div className="grid gap-4">
         <div>
-          <h2 id="listing-capabilities" className="block text-lg font-semibold text-foreground">
-            How to contact this business
+          <h2 id="listing-offerings" className="block text-lg font-semibold text-foreground">
+            What this business offers
           </h2>
           <p className="block text-sm text-muted-foreground">
-            Choose a contact option. The business reviews your message and confirms the price and timing.
+            Published by {catalog.name}. The business confirms each request.
           </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          {capabilities.map((capability) => {
-            const actionable = inquiryAvailable && capability.status === 'available'
-            const presentation = capabilityCardPresentation(capability.kind, actionable)
+          {catalog.offerings.map((offering) => {
+            const humanPaths = offering.accessPaths.filter((path) => path.kind === 'human_request')
+            const actionable = selectedOfferingRef === offering.offeringRef
             return (
-              <Card key={capability.kind} className="grid h-full content-start gap-2 bg-card p-5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-foreground">{presentation.label}</p>
-                  <Badge variant="outline">{capabilityStatusLabel(capability.status)}</Badge>
+              <Card key={offering.offeringRef} className="grid h-full content-start gap-2 bg-card p-5">
+                <div className="grid gap-1">
+                  <p className="font-semibold text-foreground">{offering.name}</p>
+                  <p className="text-sm text-muted-foreground">{offering.summary}</p>
                 </div>
-                <p className="block text-sm text-muted-foreground">{presentation.body}</p>
-                {capability.reason === undefined ? null : (
-                  <p className="block text-sm text-muted-foreground">{plainLanguageCopy(capability.reason)}</p>
-                )}
+                <ProviderFacts
+                  facts={[
+                    { term: 'Service area', description: offering.serviceAreaSummary },
+                    { term: 'Availability', description: offering.availabilitySummary },
+                    { term: 'Contact paths', description: humanPaths.length === 0 ? undefined : humanPaths.map(offeringPathLabel).join(', ') },
+                  ]}
+                />
+                {offering.support.aeSupportedAction ? (
+                  <p className="text-sm text-muted-foreground">AE can help with the next step.</p>
+                ) : null}
                 {actionable ? (
                   <div className="pt-1">
-                    <Button asChild variant="secondary" size="sm">
-                      <a href={inquiryHref}>Send a message</a>
-                    </Button>
+                    <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>
+                      <Button variant="secondary" size="sm">Send a message</Button>
+                    </Link>
                   </div>
-                ) : (
-                  <p className="block text-sm text-muted-foreground">
-                    {inquiryAvailable ? 'Confirm the price and timing with the business first.' : 'No way to contact this business is listed yet.'}
-                  </p>
-                )}
+                ) : null}
               </Card>
             )
           })}
@@ -344,61 +358,8 @@ function CapabilityCardsSection({
   )
 }
 
-function collectPublicCapabilities(catalog: PublicRouteCatalogContract): readonly PublicRouteCapabilityContract[] {
-  const byKind: Partial<Record<PublicRouteCapabilityContract['kind'], PublicRouteCapabilityContract>> = {}
-  for (const service of catalog.services) {
-    for (const capability of service.capabilities) {
-      const existing = byKind[capability.kind]
-      if (existing === undefined || (existing.status !== 'available' && capability.status === 'available')) {
-        byKind[capability.kind] = capability
-      }
-    }
-  }
-  return Object.values(byKind).filter(
-    (capability): capability is PublicRouteCapabilityContract => capability !== undefined,
-  )
-}
 
-function capabilityCardPresentation(
-  kind: PublicRouteCapabilityContract['kind'],
-  actionable: boolean,
-): { label: string; body: string } {
-  if (!actionable) {
-    return { label: capabilityLabel(kind), body: 'Contact the business about this job.' }
-  }
-  switch (kind) {
-    case 'phone_inquiry':
-      return { label: 'Send a message', body: 'Describe the job in writing; the business reviews your message.' }
-    case 'quote_request':
-      return { label: 'Ask for a quote', body: 'Ask what the job costs. The business confirms the price and timing.' }
-    case 'emergency_callout_interest':
-      return { label: 'Call about an urgent job', body: 'Tell the business what happened; it confirms whether it can help.' }
-    case 'ae_hosted_discovery':
-      return { label: 'Message this business', body: 'Send a message the business reviews before replying.' }
-  }
-}
 
-function capabilityLabel(kind: PublicRouteCapabilityContract['kind']): string {
-  switch (kind) {
-    case 'phone_inquiry': return 'Send a message'
-    case 'quote_request': return 'Ask for a quote'
-    case 'emergency_callout_interest': return 'Call about an urgent job'
-    case 'ae_hosted_discovery': return 'Message this business'
-  }
-}
-
-function capabilityStatusLabel(status: PublicRouteCapabilityContract['status']): string {
-  switch (status) {
-    case 'available':
-      return 'Ready'
-    case 'degraded':
-      return 'Limited'
-    case 'unavailable':
-      return 'Not available'
-    case 'stale':
-      return 'Needs confirmation'
-  }
-}
 
 function SourceStampCard({ updatedAt }: { updatedAt: number }) {
   return (
@@ -436,7 +397,7 @@ function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number;
     {
       title: 'Read the page',
       stamp: 'published details',
-      note: 'Services, area, and contact details are on this page.',
+      note: 'Offerings, area, and contact details are on this page.',
       reached: true,
     },
     {
@@ -493,7 +454,7 @@ function WhatTheyOfferCard({
   presentation,
   officeAddress,
 }: {
-  catalog: PublicRouteCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
   presentation: ProviderPresentation
   officeAddress: string | undefined
 }) {
@@ -501,7 +462,7 @@ function WhatTheyOfferCard({
     <Card className="grid gap-6 p-6" aria-labelledby="listing-offer-details">
       <div className="grid gap-1">
         <h2 id="listing-offer-details" className="block text-lg font-semibold text-foreground">
-          Services and prices
+          Offerings and prices
         </h2>
         <p className="block text-sm text-muted-foreground">
           Published by {catalog.name}.
@@ -529,35 +490,35 @@ function WhatTheyOfferCard({
       <Separator />
 
       <div className="grid gap-3">
-        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Services</span>
+        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Offerings</span>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-1">
-            <p className="text-sm font-medium text-muted-foreground">Service</p>
-            <p className="block text-foreground">{presentation.primaryServiceName ?? catalog.category}</p>
+            <p className="text-sm font-medium text-muted-foreground">Offering</p>
+            <p className="block text-foreground">{presentation.primaryOfferingName ?? catalog.category}</p>
           </div>
-          {presentation.primaryServiceName !== undefined ? (
+          {presentation.primaryOfferingName !== undefined ? (
             <div className="grid gap-1">
-              <p className="text-sm font-medium text-muted-foreground">Hours</p>
+              <p className="text-sm font-medium text-muted-foreground">Availability</p>
               <p className="block tabular-nums text-foreground">{presentation.hoursLabel}</p>
             </div>
           ) : null}
         </div>
-        {presentation.serviceChips.length > 0 ? (
+        {presentation.offeringChips.length > 0 ? (
           <ul className="flex flex-wrap gap-2">
-            {presentation.serviceChips.map((service) => (
-              <li key={service.key}><span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-foreground">{service.label}</span></li>
+            {presentation.offeringChips.map((offering) => (
+              <li key={offering.key}><span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-foreground">{offering.label}</span></li>
             ))}
           </ul>
         ) : null}
       </div>
 
-      {presentation.primaryServiceSummary !== undefined ? (
+      {presentation.primaryOfferingSummary !== undefined ? (
         <>
           <Separator />
           <div className="grid gap-3">
             <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">About</span>
             <p className="block max-w-3xl text-pretty text-foreground">
-              {presentation.primaryServiceSummary}
+              {presentation.primaryOfferingSummary}
             </p>
           </div>
         </>
@@ -566,8 +527,8 @@ function WhatTheyOfferCard({
   )
 }
 
-function ListingPhotosSection({ catalog, presentation }: { catalog: PublicRouteCatalogContract; presentation: ProviderPresentation }) {
-  const photos = catalog.photos ?? []
+function ListingPhotosSection({ catalog, presentation }: { catalog: PublicBusinessCatalogApiV2Dto; presentation: ProviderPresentation }) {
+  const photos = catalog.photos
 
   // No photo is better than a stock category image captioned as a stock
   // category image: it occupied a third of the mobile page to tell the reader
@@ -590,13 +551,12 @@ function ListingPhotosSection({ catalog, presentation }: { catalog: PublicRouteC
   )
 }
 
-function readOfficeAddress(catalog: PublicRouteCatalogContract): string | undefined {
-  const extended = catalog as PublicRouteCatalogContract & { officeAddress?: string }
+function readOfficeAddress(catalog: PublicBusinessCatalogApiV2Dto): string | undefined {
+  const extended = catalog as PublicBusinessCatalogApiV2Dto & { officeAddress?: string }
   const value = extended.officeAddress?.trim()
   return value !== undefined && value.length > 0 ? value : undefined
 }
-
-function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; threadId?: string }) {
+function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: string }) {
   const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : 'Find another business'
   const className = 'inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline'
   const content = (
@@ -609,14 +569,5 @@ function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; thr
   if (from === 'thread' && threadId !== undefined) {
     return <Link to="/t/$threadId" params={{ threadId }} className={className}>{content}</Link>
   }
-  // `from=registry` only ever arrives on a legacy inbound URL; nothing in the
-  // app mints it, and there is no results page to go back to.
   return <Link to="/" className={className}>{content}</Link>
-}
-
-function badgeVariantForTone(tone: string): 'neutral' | 'success' | 'warning' | 'error' {
-  if (tone === 'available' || tone === 'success') return 'success'
-  if (tone === 'limited' || tone === 'warning') return 'warning'
-  if (tone === 'unavailable' || tone === 'error') return 'error'
-  return 'neutral'
 }

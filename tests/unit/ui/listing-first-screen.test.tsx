@@ -13,7 +13,7 @@ import {
   NO_CONTACT_EXPLAINER,
   buildListingTrustProjection,
 } from '@/lib/ui/trust-projection'
-import type { PublicRouteCatalogContract, PublicRouteServiceContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
   projectPublicInquiryAvailability,
@@ -21,7 +21,7 @@ import {
 } from '@/modules/inquiries/route-readbacks'
 
 const BUSINESS_ID = brandNonEmpty('business:listing-first-screen', 'BusinessId')
-const SERVICE_ID = brandNonEmpty('service:emergency-plumbing', 'ServiceId')
+const OFFERING_REF = brandNonEmpty('offering:emergency-plumbing', 'OfferingRef')
 const NO_REPLY_HISTORY = 'No reply history yet'
 
 const availableInquiry: PublicInquiryAffordance = {
@@ -29,12 +29,11 @@ const availableInquiry: PublicInquiryAffordance = {
   label: 'Send inquiry',
   href: '/demo-plumbing/inquiry',
   businessName: 'Demo Plumbing',
-  serviceName: 'Emergency plumbing',
+  offeringName: 'Emergency plumbing',
   disclosure: 'Send a written inquiry for owner review.',
   target: {
     businessId: BUSINESS_ID,
-    serviceId: SERVICE_ID,
-    capabilityKind: 'phone_inquiry',
+    offeringRef: OFFERING_REF,
   },
 }
 
@@ -43,35 +42,29 @@ const unavailableInquiry: PublicInquiryAffordance = {
   label: 'Inquiry unavailable',
   reason: 'No public inquiry path is published.',
   businessName: 'Demo Plumbing',
-  serviceName: 'Emergency plumbing',
+  offeringName: 'Emergency plumbing',
 }
 
 /** The exact copy the dev seed and the v1 catalog stamp onto every human channel. */
 const STORED_INQUIRY_DISCLOSURE = 'Use the inquiry form for a first contact.'
 
 describe('ListingFirstScreen', () => {
-  it('does not present catalog capability readiness or provenance beyond the unavailable inquiry path', () => {
+  it('does not present catalog readiness or provenance beyond the unavailable inquiry path', () => {
     const catalog = catalogFixture()
-    const service = catalog.services[0]
-    if (service === undefined) throw new Error('listing service fixture missing')
-    const sandboxLikeCatalog: PublicRouteCatalogContract = {
+    const offering = catalog.offerings[0]
+    if (offering === undefined) throw new Error('listing offering fixture missing')
+    const sandboxLikeCatalog: PublicBusinessCatalogApiV2Dto = {
       ...catalog,
-      services: [{
-        ...service,
-        capabilities: [{
-          serviceId: service.serviceId,
-          kind: 'phone_inquiry',
-          status: 'available',
-          firstRequest: service.firstRequest,
-          callable: false,
-          paymentRequired: false,
-          reason: 'Catalog capability exists without a published inquiry path.',
-        }],
+      offerings: [{
+        ...offering,
+        support: { integrated: true, aeSupportedAction: true },
       }],
     }
 
     const projectedCatalog = projectPublicInquiryAvailability(sandboxLikeCatalog, undefined)
-    expect(projectedCatalog.services[0]?.capabilities[0]?.status).toBe('unavailable')
+    expect(projectedCatalog.offerings[0]?.accessPaths.some(
+      (path) => path.kind === 'human_request' && path.channel === 'ae_inquiry',
+    )).toBe(false)
 
     const markup = renderListingToStaticMarkup(
       <AeProviderListingPage
@@ -82,13 +75,10 @@ describe('ListingFirstScreen', () => {
     )
     const text = fragmentFrom(markup).textContent ?? ''
 
-    expect(text).toContain('Send a message')
-    expect(text).toContain('Not available')
-    expect(text).toContain('Contact the business about this job.')
-    expect(text).toContain('No way to contact this business is listed yet.')
+    expect(text).toContain('Emergency plumbing')
+    expect(text).toContain('What this business offers')
+    expect(text).toContain('This business hasn’t joined AE yet')
     expect(text).toContain('published details')
-    expect(text).not.toContain('Ready')
-    expect(text).not.toContain('business supplied')
     expect(markup).not.toContain('Send inquiry</')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
@@ -143,13 +133,12 @@ describe('ListingFirstScreen', () => {
   })
 
   it('omits every unpublished trust fact instead of naming its absence', () => {
-    const catalog = catalogFixture({ hoursOrUnknown: 'Unknown', serviceArea: 'unknown' })
+    const catalog = catalogFixture({ availabilitySummary: 'Unknown', serviceAreaSummary: 'unknown' })
     const markup = renderFirstScreen(catalog, availableInquiry)
 
     expect(markup).not.toContain('Phone not published here')
     expect(markup).not.toContain('Hours not published here')
     expect(markup).not.toContain('Service area not published here')
-    // Nothing is invented to fill the gap either.
     expect(markup).not.toContain('href="tel:')
     expect(markup).toContain('Demo Plumbing')
     expectForbiddenCopyAbsent(markup)
@@ -248,7 +237,7 @@ function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): stri
         observedAt: 1_900_000_000_000,
         offerings: [{
           offering: {
-            offeringRef: brandNonEmpty('legacy-offering:demo-plumbing:emergency-plumbing', 'OfferingRef'),
+            offeringRef: brandNonEmpty('offering:demo-plumbing:emergency-plumbing', 'OfferingRef'),
             revision: 1,
             name: 'Emergency plumbing visit',
             category: 'Plumber',
@@ -256,11 +245,11 @@ function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): stri
           },
           accessPaths: [
             {
-              accessPathRef: brandNonEmpty('legacy-access:demo-plumbing:emergency-plumbing:phone', 'AccessPathRef'),
+              accessPathRef: brandNonEmpty('access:demo-plumbing:emergency-plumbing:phone', 'AccessPathRef'),
               descriptor: { kind: 'human_request', channel: 'phone', disclosure: STORED_INQUIRY_DISCLOSURE },
             },
             {
-              accessPathRef: brandNonEmpty('legacy-access:demo-plumbing:emergency-plumbing', 'AccessPathRef'),
+              accessPathRef: brandNonEmpty('access:demo-plumbing:emergency-plumbing:inquiry', 'AccessPathRef'),
               descriptor: { kind: 'human_request', channel: 'ae_inquiry', disclosure: STORED_INQUIRY_DISCLOSURE },
             },
           ],
@@ -272,60 +261,57 @@ function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): stri
 }
 
 function renderFirstScreen(
-  catalog: PublicRouteCatalogContract,
+  catalog: PublicBusinessCatalogApiV2Dto,
   inquiryAffordance: PublicInquiryAffordance,
 ): string {
-  return renderToStaticMarkup(
+  return renderListingToStaticMarkup(
     <ListingFirstScreen
       catalog={catalog}
       trust={buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')}
       inquiryAffordance={inquiryAffordance}
-      inquiryHref={inquiryAffordance.kind === 'available' ? inquiryAffordance.href : ''}
+      inquirySearch={{}}
     />,
   )
 }
 
 function catalogFixture(
-  serviceOverrides: Partial<Pick<PublicRouteServiceContract, 'hoursOrUnknown' | 'serviceArea'>> = {},
+  offeringOverrides: Partial<Pick<PublicBusinessCatalogApiV2Dto['offerings'][number], 'availabilitySummary' | 'serviceAreaSummary'>> = {},
   publishedPhone?: string,
-): PublicRouteCatalogContract {
-  const service: PublicRouteServiceContract = {
-    serviceId: SERVICE_ID,
-    serviceSlug: brandNonEmpty('emergency-plumbing', 'Slug'),
-    businessId: BUSINESS_ID,
+): PublicBusinessCatalogApiV2Dto {
+  const offering: PublicBusinessCatalogApiV2Dto['offerings'][number] = {
+    offeringRef: 'offering:demo-plumbing:emergency-plumbing',
+    revision: 1,
     name: 'Emergency plumbing',
     category: 'Plumber',
     summary: 'Urgent plumbing support.',
-    serviceArea: 'Parramatta and nearby suburbs',
-    hoursOrUnknown: 'Mon–Fri, 8am–5pm',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Send a written inquiry for owner review.',
-      rawContactExcluded: true,
-    },
-    status: 'published',
-    capabilities: [],
-    ...serviceOverrides,
+    serviceAreaSummary: 'Parramatta and nearby suburbs',
+    availabilitySummary: 'Mon–Fri, 8am–5pm',
+    accessPaths: [{
+      accessPathRef: 'access:demo-plumbing:emergency-plumbing:inquiry',
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Send a written inquiry for owner review.',
+    }],
+    support: { integrated: false, aeSupportedAction: false },
+    ...offeringOverrides,
   }
 
   return {
-    businessId: BUSINESS_ID,
-    slug: brandNonEmpty('demo-plumbing', 'Slug'),
+    schemaVersion: 'public-business-catalog-api:v2',
+    businessId: 'business:listing-first-screen',
+    slug: 'demo-plumbing',
     name: 'Demo Plumbing',
     category: 'Plumber',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     publicUrl: '/demo-plumbing',
     ...(publishedPhone === undefined ? {} : { publishedPhone }),
-    publicStatus: 'published',
     trustTier: 'listed',
-    indexStatus: 'indexed',
-    discoveryStatus: 'available',
     photos: [],
-    services: [service],
-    schemaVersion: 'public-catalog:v1',
-    updatedAt: 1_900_000_000_000,
+    observedAt: 1_900_000_000_000,
+    disposition: 'current',
+    offerings: [offering],
+    accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
   }
 }
 
@@ -361,10 +347,10 @@ function renderListingToStaticMarkup(ui: ReactElement): string {
   const rootRoute = createRootRoute()
   const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' })
   const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
+  const inquiryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug/inquiry' })
   const threadRoute = createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' })
-  const registryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/registry' })
   const privacyRemoveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/privacy/remove-business' })
-  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, threadRoute, registryRoute, privacyRemoveRoute])
+  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, inquiryRoute, threadRoute, privacyRemoveRoute])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return renderToStaticMarkup(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

@@ -1,28 +1,10 @@
+import { isSecureRequest, readCookie, serializeCookie } from '@/lib/http/cookies'
+
 const AE_SESSION_COOKIE = 'ae_session'
 const AE_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
 
-function readSessionIdFromRequest(request: Request): string | undefined {
-  const cookieHeader = request.headers.get('cookie')
-  if (cookieHeader === null) {
-    return undefined
-  }
-
-  for (const part of cookieHeader.split(';')) {
-    const trimmed = part.trim()
-    if (!trimmed.startsWith(`${AE_SESSION_COOKIE}=`)) {
-      continue
-    }
-    const value = decodeURIComponent(trimmed.slice(AE_SESSION_COOKIE.length + 1)).trim()
-    if (value.length > 0) {
-      return value
-    }
-  }
-
-  return undefined
-}
-
 export function resolveOrCreateSessionId(request: Request): { sessionId: string; setCookie: boolean } {
-  const existing = readSessionIdFromRequest(request)
+  const existing = readCookie(request.headers.get('cookie'), AE_SESSION_COOKIE)
   if (existing !== undefined) {
     return { sessionId: existing, setCookie: false }
   }
@@ -31,9 +13,14 @@ export function resolveOrCreateSessionId(request: Request): { sessionId: string;
 }
 
 function buildSessionSetCookieHeader(sessionId: string, request?: Request): string {
-  const maxAge = AE_SESSION_MAX_AGE_SECONDS
-  const secure = request !== undefined && isSecureRequest(request)
-  return `${AE_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`
+  const nodeEnv = process.env.NODE_ENV
+  return serializeCookie(AE_SESSION_COOKIE, sessionId, {
+    path: '/',
+    maxAge: AE_SESSION_MAX_AGE_SECONDS,
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: request !== undefined && isSecureRequest(request, nodeEnv === undefined ? {} : { NODE_ENV: nodeEnv }),
+  })
 }
 
 export function appendSessionCookie(
@@ -55,19 +42,3 @@ export function appendSessionCookie(
   })
 }
 
-function isSecureRequest(request: Request): boolean {
-  if (process.env.NODE_ENV === 'production') {
-    return true
-  }
-
-  const forwarded = request.headers.get('x-forwarded-proto')
-  if (forwarded !== null) {
-    return forwarded.split(',')[0]?.trim() === 'https'
-  }
-
-  try {
-    return new URL(request.url).protocol === 'https:'
-  } catch {
-    return false
-  }
-}

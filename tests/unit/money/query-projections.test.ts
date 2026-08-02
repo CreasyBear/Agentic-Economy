@@ -18,13 +18,14 @@ const accounts: readonly MoneyAccount[] = [
 ]
 
 describe('money query projections', () => {
-  it('binds reads to principal and bounds activity', async () => {
+  it('binds reads to principal and returns native activity pages', async () => {
     const charged = authorizePaidCharge({ state: createLedgerState(accounts), transaction: { transactionRef: 'tx-1', kind: 'charge', idempotencyKey: 'key-1:op:1', inputDigest: 'input-1', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 0, now: 1 }, operatorAccountRef: accountRefForOperator('key-1', 'USD'), providerAccountRef: accountRefForProvider('business-1', 'USD'), rakeAccountRef: accountRefForRake('USD'), grossAmountMinor: 500, rakeConfig: { rakeBps: 1_000 }, priceDigest: 'price-1', principalId: 'clerk_api_key:key-1', credentialId: 'key-1', serviceRef: 'service-1', offeringRef: 'offering-1', businessId: 'business-1', invocationRef: 'inv-1', attemptRef: 'attempt-1', operationKey: 'op-1', sourceDigest: 'source-1', evidenceRefs: ['local/dev'], observedAt: 1 })
     const port = createInMemoryMoneyQueryPort({ ledger: charged.state })
     await expect(port.readCreditAccount({ principalId: 'clerk_api_key:key-2', currency: 'USD' })).resolves.toMatchObject({ balanceMinor: 1_000 })
-    const activity = await port.listCreditActivity({ principalId: 'clerk_api_key:key-1', limit: 999 })
-    expect(activity.items).toHaveLength(1)
-    expect(activity.items[0]).toMatchObject({ chargeState: 'paid', currency: 'USD' })
+    const activity = await port.listCreditActivity({ principalId: 'clerk_api_key:key-1', credentialId: 'key-1', currency: 'USD', paginationOpts: { numItems: 999, cursor: null } })
+    expect(activity.page).toHaveLength(1)
+    expect(activity.page[0]).toMatchObject({ chargeState: 'paid', currency: 'USD' })
+    await expect(port.readKeyUsage({ principalId: 'clerk_api_key:key-1', credentialId: 'key-1', currency: 'USD' })).resolves.toMatchObject({ credentialId: 'key-1', callCount: 1, paidCallCount: 1, grossSpendMinor: 500, currency: 'USD' })
     await expect(port.readCreditAccount({ principalId: 'clerk_api_key:key-3', currency: 'USD' })).rejects.toThrow('billing_identity_missing')
   })
 

@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react'
+import { useRef } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -33,8 +33,6 @@ export function AeConfirmDialog({
   pending = false,
   onConfirm,
 }: AeConfirmDialogProps) {
-  const titleId = useId()
-  const descriptionId = useId()
   const cancelRef = useRef<HTMLButtonElement>(null)
   const openerRef = useRef<HTMLElement | null>(null)
 
@@ -57,8 +55,6 @@ export function AeConfirmDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         role="alertdialog"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
@@ -78,8 +74,8 @@ export function AeConfirmDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle id={titleId}>{title}</DialogTitle>
-          <DialogDescription id={descriptionId}>{description}</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button

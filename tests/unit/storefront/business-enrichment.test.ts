@@ -1,7 +1,27 @@
+import type * as Ai from 'ai'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { discoverBusinessesFromWebSearch, enrichBusinessFromWebSearch } from '@/modules/storefront/public'
+
 import { openRouterGatewayConfig } from '@/modules/model-gateway/public'
+
+const aiSdkTestState = vi.hoisted(() => ({
+  generateTextCalls: [] as Array<Record<string, unknown>>,
+}))
+
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof Ai>()
+  return {
+    ...actual,
+    generateText: new Proxy(actual.generateText, {
+      apply(target, thisArg, args) {
+        aiSdkTestState.generateTextCalls.push(args[0] as Record<string, unknown>)
+        return Reflect.apply(target, thisArg, args)
+      },
+    }),
+  }
+})
 
 const config = { apiKey: 'test-key', model: 'test/model' }
 
@@ -27,6 +47,7 @@ describe('business enrichment from a web search', () => {
   beforeEach(() => {
     // Ambient env leaks into vitest in this repo; the unconfigured branch needs a clean slate.
     delete process.env.OPENROUTER_API_KEY
+    aiSdkTestState.generateTextCalls.length = 0
   })
 
   it('reports unavailable rather than failing when no model is configured', async () => {
@@ -58,6 +79,12 @@ describe('business enrichment from a web search', () => {
       { fetch: fetchMock },
     )
 
+    const call = aiSdkTestState.generateTextCalls[0]
+    expect(call).toMatchObject({
+      instructions: expect.stringContaining('You draft public profile facts'),
+      prompt: 'Draft public profile facts for the Australian local business named "Joondalup Emergency Plumbing" in Joondalup.',
+    })
+    expect(call).not.toHaveProperty('system')
     expect(fetchMock).toHaveBeenCalledTimes(1)
     if (result.kind !== 'draft') throw new Error(`expected a draft, received ${result.kind}`)
 

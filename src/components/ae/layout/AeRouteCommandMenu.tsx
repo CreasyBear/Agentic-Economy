@@ -45,6 +45,7 @@ export function AeRouteCommandMenu({
   const router = useRouter()
   const groupedDestinations = useMemo(() => {
     const groups = new Map<string, AeCommandDestination[]>()
+    // Object.groupBy needs Chrome 117+; no declared browser floor (vite default chrome111) — recorded adoption limit, see T42
     for (const destination of destinations) {
       const group = groups.get(destination.group)
       if (group === undefined) {

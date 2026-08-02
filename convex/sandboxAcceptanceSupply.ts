@@ -1,6 +1,5 @@
 import { v } from 'convex/values'
 
-import { internal } from './_generated/api'
 import { internalMutation, type MutationCtx } from './_generated/server'
 import {
   admitSandboxV2Supply,
@@ -16,7 +15,6 @@ import {
   seedSandboxCapabilityPublication,
 } from './devSeed'
 import { setCapabilitySupplyEligibilityCommand } from './capabilitySupply'
-import { runtimeDb } from './source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '../src/modules/dev/public'
 import { SANDBOX_WORKFLOW_PROVIDER_PROFILES } from '../src/modules/sandbox-supply/workflow-cohorts'
 
@@ -57,7 +55,7 @@ export const seedLabelledSandboxSupply = internalMutation({
       )) throw new Error('sandbox_acceptance_supply_identity_mismatch')
     }
     const missingFixtures = fixtures.filter((_, index) => existing[index] === null)
-    const created = await registerSandboxBusinesses(runtimeDb(ctx.db), missingFixtures, registeredAt)
+    const created = await registerSandboxBusinesses(ctx.db, missingFixtures, registeredAt)
     const businesses = {
       seededSlugs: fixtures.map((fixture) => fixture.requestedSlug),
       businessIdsBySlug: {
@@ -92,34 +90,16 @@ export const seedLabelledSandboxSupply = internalMutation({
     ] = await Promise.all([
       admitSandboxV2Supply(ctx.db, registrations, registeredAt + 2_500),
       admitSandboxV2Supply(ctx.db, routeRegistrations, registeredAt + 2_600),
-      Promise.all(registrations.map(async (registration, index) => {
-        const publicationRef = await seedSandboxCapabilityPublication(
-          ctx.db, registration, registeredAt + 2_750 + index,
-        )
-        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-          publicationRef, expectedRevision: 1,
-        })
-        return publicationRef
-      })),
-      Promise.all(routeRegistrations.map(async (registration, index) => {
-        const publicationRef = await seedSandboxCapabilityPublication(
-          ctx.db, registration, registeredAt + 2_800 + index,
-        )
-        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-          publicationRef, expectedRevision: 1,
-        })
-        return publicationRef
-      })),
+      Promise.all(registrations.map((registration, index) => (
+        seedSandboxCapabilityPublication(ctx, registration, registeredAt + 2_750 + index)
+      ))),
+      Promise.all(routeRegistrations.map((registration, index) => (
+        seedSandboxCapabilityPublication(ctx, registration, registeredAt + 2_800 + index)
+      ))),
       admitSandboxV2Supply(ctx.db, workflowRegistrations, registeredAt + 2_650),
-      Promise.all(workflowRegistrations.map(async (registration, index) => {
-        const publicationRef = await seedSandboxCapabilityPublication(
-          ctx.db, registration, registeredAt + 2_900 + index,
-        )
-        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-          publicationRef, expectedRevision: 1,
-        })
-        return publicationRef
-      })),
+      Promise.all(workflowRegistrations.map((registration, index) => (
+        seedSandboxCapabilityPublication(ctx, registration, registeredAt + 2_900 + index)
+      ))),
     ])
     await retireSupersededSandboxV2Supply(ctx.db, registrations, registeredAt + 3_000)
     await retireSupersededSandboxRouteSupply(ctx.db, routeRegistrations, registeredAt + 3_050)
@@ -195,18 +175,9 @@ export const seedSyntheticEventWorkflowSupply = internalMutation({
         }
       }
     }
-    const publicationRefs = await Promise.all(registrations.map(async (registration, index) => {
-      const publicationRef = await seedSandboxCapabilityPublication(
-        ctx.db,
-        registration,
-        registeredAt + 1_000 + index,
-      )
-      await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-        publicationRef,
-        expectedRevision: 1,
-      })
-      return publicationRef
-    }))
+    const publicationRefs = await Promise.all(registrations.map((registration, index) => (
+      seedSandboxCapabilityPublication(ctx, registration, registeredAt + 1_000 + index)
+    )))
     return { bindings, publicationRefs }
   },
 })

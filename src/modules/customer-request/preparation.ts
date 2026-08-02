@@ -1,6 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 import type {
   CapabilityContract,
@@ -674,7 +675,7 @@ function validateReleaseRequest(
 }
 
 function disclosureKey(recipientBindingId: string, purpose: string, fields: readonly string[]) {
-  return canonicalDigest({ recipientBindingId, purpose, fields: [...new Set(fields)].sort() })
+  return canonicalDigest({ recipientBindingId, purpose, fields: uniqueSorted(fields) })
 }
 
 function customerPurposeLabel(value: string) {

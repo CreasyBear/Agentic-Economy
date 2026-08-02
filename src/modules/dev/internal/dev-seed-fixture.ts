@@ -8,11 +8,31 @@ import {
   type ServiceCatalogInput,
 } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { matchingCsrf } from '@/modules/common/matching-csrf'
 import type { CapabilityLaunchSupportRecord } from '@/modules/inquiries/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
 
-export type DevSeedBusinessFixture = {
+export type DevSeedOfferingAccessPathFixture = Readonly<{
+  kind: 'human_request'
+  channel: 'phone' | 'website' | 'ae_inquiry'
+  disclosure: string
+}>
+
+export type DevSeedOfferingFixture = Readonly<{
+  name: string
+  category: string
+  summary: string
+  serviceAreaSummary: string
+  availabilitySummary: string
+  pricingSummary?: string
+  accessPaths: readonly DevSeedOfferingAccessPathFixture[]
+  firstRequestMode: FirstRequestMode
+  publicDisclosure: string
+  noContactReason: string
+}>
+
+export type DevSeedBusinessFixture = Readonly<{
   requestedSlug: string
   businessName: string
   category: string
@@ -21,24 +41,10 @@ export type DevSeedBusinessFixture = {
   ownerMessage: string
   sourceLabel: string
   publishedPhone?: string
-  serviceName: string
-  serviceCategory: string
-  serviceSummary: string
-  serviceArea: string
-  hoursOrUnknown: string
-  /**
-   * Published price. The v1 service model cannot express one, so this reaches
-   * the public catalog only through the Offering revision that `convex/devSeed`
-   * writes after cutover. Absent on purpose for most fixtures: the catalog has
-   * to demonstrate both a supplied price and a genuinely missing one.
-   */
-  pricingSummary?: string
+  offerings: readonly DevSeedOfferingFixture[]
   photoUrl?: string
   responseTimeMinutes?: number
-  firstRequestMode: FirstRequestMode
-  publicDisclosure: string
-  noContactReason: string
-}
+}>
 
 export type DevSeedCatalogState = BusinessSourceState & RegistrySourceState
 
@@ -56,11 +62,13 @@ type DevSeedIndustryTemplate = {
   slug: string
   businessSuffix: string
   category: string
-  serviceName: string
-  serviceCategory: string
-  serviceSummary: string
-  hoursOrUnknown: string
-  pricingSummary?: string
+  offering: Readonly<{
+    name: string
+    category: string
+    summary: string
+    availabilitySummary: string
+    pricingSummary?: string
+  }>
   /**
    * Whether the seeded business publishes a phone number. A published phone is
    * what produces a real `phone` access path, so this is also the switch that
@@ -77,16 +85,30 @@ type DevSeedLocale = {
   areaCode: '02' | '03' | '07' | '08'
 }
 
+function requireDevSeedField(value: string | undefined, field: string): string {
+  if (value === undefined) throw new Error(`dev_seed_fixture_field_missing:${field}`)
+  return value
+}
+
 const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
-  ...LOCAL_E2E_BUSINESS_FIXTURES.map((fixture) => ({
-    ...fixture,
-    ownerMessage: 'Owner supplied service facts for local catalog testing.',
-    sourceLabel: 'Owner supplied service facts',
-    photoUrl: '/images/illustration/cat-plumbing.png',
-    firstRequestMode: 'inquiry_available' as const,
-    publicDisclosure: 'Use the inquiry form for a first contact.',
-    noContactReason: '',
-  })),
+  ...LOCAL_E2E_BUSINESS_FIXTURES.map((fixture) => {
+    const offering = fixture.offerings[0]
+    if (offering === undefined) {
+      throw new Error(`dev_seed_fixture_offering_missing:${fixture.requestedSlug}`)
+    }
+    return {
+      ...fixture,
+      ownerMessage: 'Owner supplied service facts for local catalog testing.',
+      sourceLabel: 'Owner supplied service facts',
+      photoUrl: '/images/illustration/cat-plumbing.png',
+      offerings: [{
+        ...offering,
+        firstRequestMode: 'inquiry_available' as const,
+        publicDisclosure: 'Use the inquiry form for a first contact.',
+        noContactReason: '',
+      }],
+    }
+  }),
   {
     requestedSlug: 'bedford-photography',
     businessName: 'Bedford Photography',
@@ -96,17 +118,18 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publishedPhone: '0432 268 101',
     ownerMessage: 'Publicly observed business facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Wedding photographer day coverage',
-    serviceCategory: 'Wedding photography',
-    serviceSummary: 'Wedding and event photography coverage with a comparable day-rate package.',
-    serviceArea: 'Sydney, South Coast, Newcastle and Hunter Valley',
-    hoursOrUnknown: 'Coverage hours agreed in the package',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 5,000–7,000 typical wedding investment',
-    photoUrl: '/images/illustration/cat-plumbing.png',
-    responseTimeMinutes: 30,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Wedding photographer day coverage',
+      category: 'Wedding photography',
+      summary: 'Wedding and event photography coverage with a comparable day-rate package.',
+      serviceAreaSummary: 'Sydney, South Coast, Newcastle and Hunter Valley',
+      availabilitySummary: 'Coverage hours agreed in the package',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 5,000–7,000 typical wedding investment',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'little-reed-weddings',
@@ -116,17 +139,18 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'VIC',
     ownerMessage: 'Publicly observed business facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Wedding photographer coverage',
-    serviceCategory: 'Wedding photography',
-    serviceSummary: 'Candid wedding photography coverage with package and extra-hour options.',
-    serviceArea: 'Melbourne, Yarra Valley, Macedon Ranges and surrounds',
-    hoursOrUnknown: 'Coverage hours agreed in the package',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 250 per additional hour',
-    photoUrl: '/images/illustration/cat-plumbing.png',
-    responseTimeMinutes: 35,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Wedding photographer coverage',
+      category: 'Wedding photography',
+      summary: 'Candid wedding photography coverage with package and extra-hour options.',
+      serviceAreaSummary: 'Melbourne, Yarra Valley, Macedon Ranges and surrounds',
+      availabilitySummary: 'Coverage hours agreed in the package',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 250 per additional hour',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'rachel-levingston-photography',
@@ -136,17 +160,18 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'NSW',
     ownerMessage: 'Publicly observed business facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Wedding photographer coverage',
-    serviceCategory: 'Wedding photography',
-    serviceSummary: 'Wedding and event photography coverage for Hawkesbury, The Hills and Sydney.',
-    serviceArea: 'Hawkesbury, The Hills and Sydney',
-    hoursOrUnknown: 'Coverage hours agreed in the package',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 1,800 wedding coverage package',
-    photoUrl: '/images/illustration/cat-plumbing.png',
-    responseTimeMinutes: 40,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Wedding photographer coverage',
+      category: 'Wedding photography',
+      summary: 'Wedding and event photography coverage for Hawkesbury, The Hills and Sydney.',
+      serviceAreaSummary: 'Hawkesbury, The Hills and Sydney',
+      availabilitySummary: 'Coverage hours agreed in the package',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 1,800 wedding coverage package',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'wn-bull-funerals-parramatta',
@@ -157,16 +182,22 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publishedPhone: '(02) 9519 5344',
     ownerMessage: 'Publicly observed Parramatta business facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Funeral service arrangement',
-    serviceCategory: 'Funeral services',
-    serviceSummary: 'Funeral director support and arrangement service for Parramatta families.',
-    serviceArea: 'Parramatta and surrounding suburbs',
-    hoursOrUnknown: '24/7 contact; office hours vary',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,500 base funeral service',
-    responseTimeMinutes: 30,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Funeral service arrangement',
+      category: 'Funeral services',
+      summary: 'Funeral director support and arrangement service for Parramatta families.',
+      serviceAreaSummary: 'Parramatta and surrounding suburbs',
+      availabilitySummary: '24/7 contact; office hours vary',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,500 base funeral service',
+      accessPaths: [{
+        kind: 'human_request',
+        channel: 'phone',
+        disclosure: 'Call the published number for a first contact.',
+      }],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'funerals-of-compassion-parramatta',
@@ -177,16 +208,22 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publishedPhone: '1300 906 060',
     ownerMessage: 'Publicly observed Parramatta service facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Compassionate funeral arrangement',
-    serviceCategory: 'Funeral services',
-    serviceSummary: 'Funeral arrangement and family support for the Parramatta area.',
-    serviceArea: 'Parramatta and surrounding suburbs',
-    hoursOrUnknown: 'Available 24/7',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,200 base funeral service',
-    responseTimeMinutes: 35,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Compassionate funeral arrangement',
+      category: 'Funeral services',
+      summary: 'Funeral arrangement and family support for the Parramatta area.',
+      serviceAreaSummary: 'Parramatta and surrounding suburbs',
+      availabilitySummary: 'Available 24/7',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,200 base funeral service',
+      accessPaths: [{
+        kind: 'human_request',
+        channel: 'phone',
+        disclosure: 'Call the published number for a first contact.',
+      }],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'gregory-and-carr-parramatta',
@@ -197,16 +234,22 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publishedPhone: '(02) 9630 6444',
     ownerMessage: 'Publicly observed Parramatta service facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Funeral director consultation',
-    serviceCategory: 'Funeral services',
-    serviceSummary: 'Funeral director consultation and arrangement support serving Parramatta.',
-    serviceArea: 'Parramatta and surrounding suburbs',
-    hoursOrUnknown: '24/7 support; office hours vary',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,800 base funeral service',
-    responseTimeMinutes: 40,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Funeral director consultation',
+      category: 'Funeral services',
+      summary: 'Funeral director consultation and arrangement support serving Parramatta.',
+      serviceAreaSummary: 'Parramatta and surrounding suburbs',
+      availabilitySummary: '24/7 support; office hours vary',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,800 base funeral service',
+      accessPaths: [{
+        kind: 'human_request',
+        channel: 'phone',
+        disclosure: 'Call the published number for a first contact.',
+      }],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'adelaide-cbd-dentist',
@@ -216,16 +259,20 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'SA',
     ownerMessage: 'Publicly observed Adelaide dental facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Dental check-up and clean',
-    serviceCategory: 'Dental clinic',
-    serviceSummary: 'Routine dental check-up and clean for Adelaide CBD patients.',
-    serviceArea: 'Adelaide CBD',
-    hoursOrUnknown: 'Hours vary; appointment required',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 150 check-up and clean',
+    offerings: [{
+      name: 'Dental check-up and clean',
+      category: 'Dental clinic',
+      summary: 'Routine dental check-up and clean for Adelaide CBD patients.',
+      serviceAreaSummary: 'Adelaide CBD',
+      availabilitySummary: 'Hours vary; appointment required',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 150 check-up and clean',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
+    photoUrl: '/images/illustration/cat-plumbing.png',
     responseTimeMinutes: 25,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
   },
   {
     requestedSlug: 'perfect-smile-adelaide',
@@ -235,16 +282,20 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'SA',
     ownerMessage: 'Publicly observed Adelaide dental facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Dental check-up and clean',
-    serviceCategory: 'Dental clinic',
-    serviceSummary: 'General dentistry with check-up and clean appointments in Adelaide.',
-    serviceArea: 'Adelaide CBD',
-    hoursOrUnknown: 'Hours vary; appointment required',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean',
+    offerings: [{
+      name: 'Dental check-up and clean',
+      category: 'Dental clinic',
+      summary: 'General dentistry with check-up and clean appointments in Adelaide.',
+      serviceAreaSummary: 'Adelaide CBD',
+      availabilitySummary: 'Hours vary; appointment required',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
+    photoUrl: '/images/illustration/cat-plumbing.png',
     responseTimeMinutes: 30,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
   },
   {
     requestedSlug: 'fixed-dental-adelaide',
@@ -254,16 +305,20 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'SA',
     ownerMessage: 'Publicly observed Adelaide dental facts used for a development/mock cohort; not AE-verified.',
     sourceLabel: 'publicly_observed / development-mock based on cited website',
-    serviceName: 'Dental check-up and clean',
-    serviceCategory: 'Dental clinic',
-    serviceSummary: 'Routine dental check-ups and cleans for Adelaide patients.',
-    serviceArea: 'Adelaide and nearby suburbs',
-    hoursOrUnknown: 'Hours vary; appointment required',
-    pricingSummary: 'Demo price — publicly observed / development mock — AUD 139 check-up and clean',
+    offerings: [{
+      name: 'Dental check-up and clean',
+      category: 'Dental clinic',
+      summary: 'Routine dentist check-ups and cleans for Adelaide patients.',
+      serviceAreaSummary: 'Adelaide and nearby suburbs',
+      availabilitySummary: 'Hours vary; appointment required',
+      pricingSummary: 'Demo price — publicly observed / development mock — AUD 139 check-up and clean',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+      noContactReason: '',
+    }],
+    photoUrl: '/images/illustration/cat-plumbing.png',
     responseTimeMinutes: 35,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
-    noContactReason: '',
   },
   {
     requestedSlug: 'sandbox-option-one',
@@ -273,14 +328,17 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for neutral routing verification.',
     sourceLabel: 'AE sandbox registration fixture',
-    serviceName: 'Prepare a sandbox option',
-    serviceCategory: 'Sandbox capability provider',
-    serviceSummary: 'Returns a deterministic option through the production capability protocol.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Sandbox only. No real service is supplied.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Prepare a sandbox option',
+      category: 'Sandbox capability provider',
+      summary: 'Returns a deterministic option through the production capability protocol.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Sandbox only. No real service is supplied.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'sandbox-option-two',
@@ -290,14 +348,17 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for neutral routing verification.',
     sourceLabel: 'AE sandbox registration fixture',
-    serviceName: 'Prepare a sandbox option',
-    serviceCategory: 'Sandbox capability provider',
-    serviceSummary: 'Returns a second deterministic option through the production capability protocol.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Sandbox only. No real service is supplied.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Prepare a sandbox option',
+      category: 'Sandbox capability provider',
+      summary: 'Returns a second deterministic option through the production capability protocol.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Sandbox only. No real service is supplied.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'sandbox-route-resolver',
@@ -307,14 +368,17 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for multi-capability route verification.',
     sourceLabel: 'AE sandbox registration fixture',
-    serviceName: 'Resolve a sandbox service reference',
-    serviceCategory: 'Sandbox capability provider',
-    serviceSummary: 'Produces a typed service reference for a separately registered downstream business.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Sandbox only. No real service is supplied.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Resolve a sandbox service reference',
+      category: 'Sandbox capability provider',
+      summary: 'Produces a typed service reference for a separately registered downstream business.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Sandbox only. No real service is supplied.',
+      noContactReason: '',
+    }],
   },
   {
     requestedSlug: 'sandbox-route-quoter',
@@ -324,56 +388,65 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for multi-capability route verification.',
     sourceLabel: 'AE sandbox registration fixture',
-    serviceName: 'Quote a sandbox service reference',
-    serviceCategory: 'Sandbox capability provider',
-    serviceSummary: 'Consumes a typed reference from a separately registered upstream business and returns a quote reference.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Sandbox only. No real service is supplied.',
-    noContactReason: '',
+    offerings: [{
+      name: 'Quote a sandbox service reference',
+      category: 'Sandbox capability provider',
+      summary: 'Consumes a typed reference from a separately registered upstream business and returns a quote reference.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available',
+      publicDisclosure: 'Sandbox only. No real service is supplied.',
+      noContactReason: '',
+    }],
   },
   ...[
     ['procurement-brief', 'Procurement Brief Studio', 'Structure procurement requirements'],
     ['supplier-options', 'Supplier Options Network', 'Find eligible supplier options'],
     ['procurement-recommendation', 'Procurement Comparison Desk', 'Compare supplier options'],
-  ].map(([providerKey, businessName, serviceName]) => ({
+  ].map(([providerKey, businessName, name]) => ({
     requestedSlug: `sandbox-${providerKey}`,
-    businessName: businessName!,
+    businessName: requireDevSeedField(businessName, 'business_name'),
     category: 'Sandbox procurement workflow provider',
     suburb: 'Perth',
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for procurement workflow verification.',
     sourceLabel: 'AE sandbox workflow registration fixture',
-    serviceName: serviceName!,
-    serviceCategory: 'Sandbox procurement workflow provider',
-    serviceSummary: 'Returns deterministic typed evidence through the generic capability path.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available' as const,
-    publicDisclosure: 'Sandbox only. No supplier order, payment, or fulfilment is provided.',
-    noContactReason: '',
+    offerings: [{
+      name: requireDevSeedField(name, 'offering_name'),
+      category: 'Sandbox procurement workflow provider',
+      summary: 'Returns deterministic typed evidence through the generic capability path.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available' as const,
+      publicDisclosure: 'Sandbox only. No supplier order, payment, or fulfilment is provided.',
+      noContactReason: '',
+    }],
   })),
   ...[
     ['event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements'],
     ['event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence'],
     ['event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence'],
-  ].map(([providerKey, businessName, serviceName]) => ({
+  ].map(([providerKey, businessName, name]) => ({
     requestedSlug: `sandbox-${providerKey}`,
-    businessName: businessName!,
+    businessName: requireDevSeedField(businessName, 'business_name'),
     category: 'Synthetic public-event workflow provider',
     suburb: 'Perth',
     stateTerritory: 'WA',
     ownerMessage: 'Fictional non-production business for public-event onboarding rehearsal.',
     sourceLabel: 'AE synthetic workflow registration fixture',
-    serviceName: serviceName!,
-    serviceCategory: 'Synthetic public-event workflow provider',
-    serviceSummary: 'Returns attributable synthetic evidence records through the generic capability path.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for labelled development verification',
-    firstRequestMode: 'inquiry_available' as const,
-    publicDisclosure: 'Synthetic sandbox only. No application, approval, certification, booking, payment, dispatch, or fulfilment is provided.',
-    noContactReason: '',
+    offerings: [{
+      name: requireDevSeedField(name, 'offering_name'),
+      category: 'Synthetic public-event workflow provider',
+      summary: 'Returns attributable synthetic evidence records through the generic capability path.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for labelled development verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available' as const,
+      publicDisclosure: 'Synthetic sandbox only. No application, approval, certification, booking, payment, dispatch, or fulfilment is provided.',
+      noContactReason: '',
+    }],
   })),
   ...[
     ['trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints'],
@@ -383,43 +456,49 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     ['dinner-plan', 'Dinner Plan Service', 'Plan dinner'],
     ['itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary'],
     ['itinerary-readiness', 'Travel Readiness Review', 'Review itinerary readiness'],
-  ].map(([providerKey, businessName, serviceName]) => ({
+  ].map(([providerKey, businessName, name]) => ({
     requestedSlug: `sandbox-${providerKey}`,
-    businessName: businessName!,
+    businessName: requireDevSeedField(businessName, 'business_name'),
     category: 'Sandbox workflow provider',
     suburb: 'Perth',
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for itinerary workflow verification.',
     sourceLabel: 'AE sandbox workflow registration fixture',
-    serviceName: serviceName!,
-    serviceCategory: 'Sandbox workflow provider',
-    serviceSummary: 'Returns deterministic typed evidence through the generic capability path.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available' as const,
-    publicDisclosure: 'Sandbox only. No availability, booking, ticketing, or payment is provided.',
-    noContactReason: '',
+    offerings: [{
+      name: requireDevSeedField(name, 'offering_name'),
+      category: 'Sandbox workflow provider',
+      summary: 'Returns deterministic typed evidence through the generic capability path.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available' as const,
+      publicDisclosure: 'Sandbox only. No availability, booking, ticketing, or payment is provided.',
+      noContactReason: '',
+    }],
   })),
   ...[
     ['journey-case', 'Journey Case Intake', 'Structure a service case'],
     ['milestone-plan', 'Milestone Planning Service', 'Build a milestone plan'],
     ['progress-synthesis', 'Progress Synthesis Service', 'Synthesize journey progress'],
-  ].map(([providerKey, businessName, serviceName]) => ({
+  ].map(([providerKey, businessName, name]) => ({
     requestedSlug: `sandbox-${providerKey}`,
-    businessName: businessName!,
+    businessName: requireDevSeedField(businessName, 'business_name'),
     category: 'Sandbox workflow provider',
     suburb: 'Perth',
     stateTerritory: 'WA',
     ownerMessage: 'Clearly labelled non-production business for service journey workflow verification.',
     sourceLabel: 'AE sandbox workflow registration fixture',
-    serviceName: serviceName!,
-    serviceCategory: 'Sandbox workflow provider',
-    serviceSummary: 'Returns deterministic typed evidence through the generic capability path.',
-    serviceArea: 'Online',
-    hoursOrUnknown: 'Always available for verification',
-    firstRequestMode: 'inquiry_available' as const,
-    publicDisclosure: 'Sandbox only. No physical move, dispatch, or third-party task is performed.',
-    noContactReason: '',
+    offerings: [{
+      name: requireDevSeedField(name, 'offering_name'),
+      category: 'Sandbox workflow provider',
+      summary: 'Returns deterministic typed evidence through the generic capability path.',
+      serviceAreaSummary: 'Online',
+      availabilitySummary: 'Always available for verification',
+      accessPaths: [],
+      firstRequestMode: 'inquiry_available' as const,
+      publicDisclosure: 'Sandbox only. No physical move, dispatch, or third-party task is performed.',
+      noContactReason: '',
+    }],
   })),
 ] as const
 
@@ -452,105 +531,125 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     slug: 'emergency-plumbing',
     businessSuffix: 'Emergency Plumbing',
     category: 'Emergency plumbing',
-    serviceName: 'Emergency pipe repair',
-    serviceCategory: 'Emergency plumbing',
-    serviceSummary: 'Burst pipe and blocked drain triage for urgent local plumbing issues.',
-    hoursOrUnknown: 'Mon–Sun, 24 hours',
-    pricingSummary: 'Demo price — $180 call-out, quoted before work starts',
+    offering: {
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      summary: 'Local emergency plumber for burst pipe and blocked drain triage.',
+      availabilitySummary: 'Mon–Sun, 24 hours',
+      pricingSummary: 'Demo price — $180 call-out, quoted before work starts',
+    },
     publishesPhone: true,
   },
   {
     slug: 'electrical-repairs',
     businessSuffix: 'Electrical Repairs',
     category: 'Electrical repairs',
-    serviceName: 'Electrical fault repairs',
-    serviceCategory: 'Electrical repairs',
-    serviceSummary: 'Electrical fault checks and repair coordination for homes and small businesses.',
-    hoursOrUnknown: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
-    pricingSummary: 'Demo price — $140 first hour, then $95 per hour',
+    offering: {
+      name: 'Electrical fault repairs',
+      category: 'Electrical repairs',
+      summary: 'Electrical fault checks and repair coordination for homes and small businesses.',
+      availabilitySummary: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
+      pricingSummary: 'Demo price — $140 first hour, then $95 per hour',
+    },
     publishesPhone: true,
   },
   {
     slug: 'dental-clinic',
     businessSuffix: 'Dental Clinic',
     category: 'Dental clinic',
-    serviceName: 'General dental care',
-    serviceCategory: 'Dental clinic',
-    serviceSummary: 'Dentist check-ups, tooth pain triage, and routine dental care information.',
-    hoursOrUnknown: 'Mon–Fri 8:30am–5pm',
-    pricingSummary: 'Demo price — $95 check-up and clean',
+    offering: {
+      name: 'General dental care',
+      category: 'Dental clinic',
+      summary: 'Dentist check-ups, tooth pain triage, and routine dental care information.',
+      availabilitySummary: 'Mon–Fri 8:30am–5pm',
+      pricingSummary: 'Demo price — $95 check-up and clean',
+    },
     publishesPhone: true,
   },
   {
     slug: 'family-law',
     businessSuffix: 'Family Law',
     category: 'Family law',
-    serviceName: 'Family lawyer consultation',
-    serviceCategory: 'Family law',
-    serviceSummary: 'Family lawyer guidance for separation, parenting, and property matter first steps.',
-    hoursOrUnknown: 'Mon–Fri 9am–5pm',
-    pricingSummary: 'Demo price — $350 first consultation',
+    offering: {
+      name: 'Family lawyer consultation',
+      category: 'Family law',
+      summary: 'Family lawyer guidance for separation, parenting, and property matter first steps.',
+      availabilitySummary: 'Mon–Fri 9am–5pm',
+      pricingSummary: 'Demo price — $350 first consultation',
+    },
     publishesPhone: true,
   },
   {
     slug: 'accounting',
     businessSuffix: 'Accounting',
     category: 'Accounting',
-    serviceName: 'Small business accounting',
-    serviceCategory: 'Accounting',
-    serviceSummary: 'Accountant support for BAS, payroll, and tax preparation questions.',
-    hoursOrUnknown: 'Mon–Fri 9am–5pm',
+    offering: {
+      name: 'Small business accounting',
+      category: 'Accounting',
+      summary: 'Accountant support for BAS, payroll, and tax preparation questions.',
+      availabilitySummary: 'Mon–Fri 9am–5pm',
+    },
     publishesPhone: true,
   },
   {
     slug: 'home-cleaning',
     businessSuffix: 'Home Cleaning',
     category: 'Home cleaning',
-    serviceName: 'Home cleaning',
-    serviceCategory: 'Home cleaning',
-    serviceSummary: 'Cleaner support for recurring home cleaning and end-of-lease cleaning requests.',
-    hoursOrUnknown: 'Hours unknown',
-    pricingSummary: 'Demo price — $55 per hour, 3 hour minimum',
+    offering: {
+      name: 'Home cleaning',
+      category: 'Home cleaning',
+      summary: 'Cleaner support for recurring home cleaning and end-of-lease cleaning requests.',
+      availabilitySummary: 'Hours unknown',
+      pricingSummary: 'Demo price — $55 per hour, 3 hour minimum',
+    },
     publishesPhone: true,
   },
   {
     slug: 'locksmith',
     businessSuffix: 'Locksmith',
     category: 'Locksmith',
-    serviceName: 'Locksmith lock repair',
-    serviceCategory: 'Locksmith',
-    serviceSummary: 'Locksmith help for lock repair, rekeying, and lost-key first steps.',
-    hoursOrUnknown: 'Mon–Sun, 24 hours',
+    offering: {
+      name: 'Locksmith lock repair',
+      category: 'Locksmith',
+      summary: 'Locksmith help for lock repair, rekeying, and lost-key first steps.',
+      availabilitySummary: 'Mon–Sun, 24 hours',
+    },
     publishesPhone: true,
   },
   {
     slug: 'hvac-repair',
     businessSuffix: 'HVAC Repair',
     category: 'HVAC repair',
-    serviceName: 'Heat pump and air conditioning repair',
-    serviceCategory: 'HVAC repair',
-    serviceSummary: 'Heat pump, split system, and air conditioning fault checks.',
-    hoursOrUnknown: 'Hours unknown',
+    offering: {
+      name: 'Heat pump and air conditioning repair',
+      category: 'HVAC repair',
+      summary: 'Heat pump, split system, and air conditioning fault checks.',
+      availabilitySummary: 'Hours unknown',
+    },
     publishesPhone: false,
   },
   {
     slug: 'math-tutoring',
     businessSuffix: 'Math Tutoring',
     category: 'Tutoring',
-    serviceName: 'Math tutoring',
-    serviceCategory: 'Tutoring',
-    serviceSummary: 'Tutor support for maths homework, exam preparation, and study planning.',
-    hoursOrUnknown: 'Hours unknown',
+    offering: {
+      name: 'Math tutoring',
+      category: 'Tutoring',
+      summary: 'Tutor support for maths homework, exam preparation, and study planning.',
+      availabilitySummary: 'Hours unknown',
+    },
     publishesPhone: false,
   },
   {
     slug: 'aged-care-support',
     businessSuffix: 'Aged Care Support',
     category: 'Aged care support',
-    serviceName: 'Aged care support',
-    serviceCategory: 'Aged care support',
-    serviceSummary: 'Home support information for older people and family carers.',
-    hoursOrUnknown: 'Mon–Fri 8am–6pm',
+    offering: {
+      name: 'Aged care support',
+      category: 'Aged care support',
+      summary: 'Home support information for older people and family carers.',
+      availabilitySummary: 'Mon–Fri 8am–6pm',
+    },
     publishesPhone: true,
   },
 ] as const
@@ -570,7 +669,7 @@ const devSeedActor: BusinessMutationActor = {
   kind: 'authenticated_owner',
   clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
   displayName: 'Dev Seed Owner',
-  emailHash: stableHash({ email: DEV_SEED_OWNER_EMAIL }),
+  emailHash: canonicalDigest({ email: DEV_SEED_OWNER_EMAIL }),
 }
 
 const devSeedNow = 1_777_100_000_000
@@ -622,22 +721,27 @@ function buildBroadSeedFixture(
     ...(industry.publishesPhone ? { publishedPhone } : {}),
     ownerMessage: 'Owner supplied service facts for local catalog testing.',
     sourceLabel: 'Owner supplied service facts',
-    serviceName: industry.serviceName,
-    serviceCategory: industry.serviceCategory,
-    serviceSummary: industry.serviceSummary,
-    serviceArea: `${locale.suburb} and nearby suburbs`,
-    hoursOrUnknown: industry.hoursOrUnknown,
-    ...(industry.pricingSummary === undefined ? {} : { pricingSummary: industry.pricingSummary }),
+    offerings: [{
+      ...industry.offering,
+      serviceAreaSummary: `${locale.suburb} and nearby suburbs`,
+      accessPaths: industry.publishesPhone
+        ? [{
+            kind: 'human_request' as const,
+            channel: 'phone' as const,
+            disclosure: 'Call the published number for a first contact.',
+          }]
+        : [],
+      firstRequestMode: 'inquiry_available',
+      // The only channel these fixtures publish is the phone number above, so the
+      // disclosure names that. Pointing at an inquiry form the seeded business
+      // cannot accept is the promise-without-a-path this catalog is fixing.
+      publicDisclosure: industry.publishesPhone
+        ? 'Call the published number for a first contact.'
+        : 'No contact path is published for this service yet.',
+      noContactReason: '',
+    }],
     photoUrl: '/images/illustration/cat-plumbing.png',
     responseTimeMinutes: 15 + ((localeIndex + industryIndex) % 8) * 5,
-    firstRequestMode: 'inquiry_available',
-    // The only channel these fixtures publish is the phone number above, so the
-    // disclosure names that. Pointing at an inquiry form the seeded business
-    // cannot accept is the promise-without-a-path this catalog is fixing.
-    publicDisclosure: industry.publishesPhone
-      ? 'Call the published number for a first contact.'
-      : 'No contact path is published for this service yet.',
-    noContactReason: '',
   }
 }
 
@@ -701,7 +805,7 @@ function seedBusinessFixture(
         {
           label: fixture.sourceLabel,
           evidenceRef: `private:evidence:dev-seed:${fixture.requestedSlug}`,
-          sourceHash: brandNonEmpty(`hash:dev-seed:${fixture.requestedSlug}`, 'SourceHash'),
+          sourceHash: canonicalDigest(`dev-seed:${fixture.requestedSlug}`),
         },
       ],
       ...(fixture.photoUrl === undefined || fixture.photoUrl.length === 0
@@ -711,13 +815,6 @@ function seedBusinessFixture(
     },
     security: {
       csrf: matchingCsrf(`claim:${fixture.requestedSlug}`),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `dev-seed:${fixture.requestedSlug}`,
-        now,
-        limit: 5,
-        windowMs: 60_000,
-      },
     },
     operationKey: operationKey(`claim:${fixture.requestedSlug}`),
     correlationId: correlationId(`claim:${fixture.requestedSlug}`),
@@ -731,7 +828,7 @@ function seedBusinessFixture(
   const published = publishBusinessCatalog(state, {
     actor: devSeedActor,
     claimId: claim.claim.claimId,
-    services: [toServiceCatalogInput(fixture)],
+    services: fixture.offerings.map(toServiceCatalogInput),
     security: { csrf: matchingCsrf(`publish:${fixture.requestedSlug}`) },
     operationKey: operationKey(`publish:${fixture.requestedSlug}`),
     correlationId: correlationId(`publish:${fixture.requestedSlug}`),
@@ -784,42 +881,35 @@ function createHumanInquirySupportRecord(input: {
       },
     ],
     evidenceRefs: ['convex/devSeed.ts', 'src/modules/dev/internal/dev-seed-fixture.ts'],
-    sourceHash: stableHash({ supportRecord: 'human_inquiry_owner_inbox', stage: 'dev-seed' }),
+    sourceHash: canonicalDigest({ supportRecord: 'human_inquiry_owner_inbox', stage: 'dev-seed' }),
     correlationId: brandNonEmpty('correlation:dev-seed-support-record', 'CorrelationId'),
     lastReviewedAt: input.now,
   }
 }
 
-function toServiceCatalogInput(fixture: DevSeedBusinessFixture): ServiceCatalogInput {
+function toServiceCatalogInput(offering: DevSeedOfferingFixture): ServiceCatalogInput {
   return {
-    name: fixture.serviceName,
-    category: fixture.serviceCategory,
-    summary: fixture.serviceSummary,
-    serviceArea: fixture.serviceArea,
-    hoursOrUnknown: fixture.hoursOrUnknown,
+    name: offering.name,
+    category: offering.category,
+    summary: offering.summary,
+    serviceArea: offering.serviceAreaSummary,
+    hoursOrUnknown: offering.availabilitySummary,
     firstRequest:
-      fixture.firstRequestMode === 'not_available_yet'
+      offering.firstRequestMode === 'not_available_yet'
         ? {
-            mode: fixture.firstRequestMode,
+            mode: offering.firstRequestMode,
             publicChannel: 'not_available',
-            publicDisclosure: fixture.publicDisclosure,
-            noContactReason: fixture.noContactReason,
+            publicDisclosure: offering.publicDisclosure,
+            noContactReason: offering.noContactReason,
           }
         : {
-            mode: fixture.firstRequestMode,
-            publicChannel: fixture.firstRequestMode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact',
-            publicDisclosure: fixture.publicDisclosure,
+            mode: offering.firstRequestMode,
+            publicChannel: offering.firstRequestMode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact',
+            publicDisclosure: offering.publicDisclosure,
           },
   }
 }
 
-function matchingCsrf(key: string) {
-  void key
-  return {
-    origin: 'https://ae.example',
-    allowedOrigins: ['https://ae.example'],
-  }
-}
 
 function operationKey(value: string) {
   return brandNonEmpty(`op:dev-seed:${value}`, 'OperationKey')

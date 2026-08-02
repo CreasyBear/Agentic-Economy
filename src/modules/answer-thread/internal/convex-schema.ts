@@ -47,7 +47,7 @@ export const answerThreadTables = {
     toolId: literalUnion(AnswerToolIdValues),
     inputJson: v.string(),
     resultSummaryJson: v.string(),
-    resultJson: v.optional(v.string()),
+    resultJson: v.string(),
     resultHash: v.string(),
     status: literalUnion(AnswerToolCallStatusValues),
     createdAt: v.number(),

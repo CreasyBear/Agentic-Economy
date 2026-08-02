@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { parseArgs } from 'node:util'
 import { execFileSync } from 'node:child_process'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,17 +9,12 @@ const CHECK_COUNT = 7
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 
 function readOrigin() {
-  let origin = process.env.ORIGIN?.trim() || DEFAULT_ORIGIN
-  const args = process.argv.slice(2)
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]
-    if (argument === '--origin' && args[index + 1]) {
-      origin = args[index + 1]
-      index += 1
-    } else if (argument?.startsWith('--origin=')) {
-      origin = argument.slice('--origin='.length)
-    }
-  }
+  const { values } = parseArgs({
+    options: { origin: { type: 'string' } },
+    strict: false,
+  })
+  const envOrigin = process.env.ORIGIN?.trim() || DEFAULT_ORIGIN
+  const origin = typeof values.origin === 'string' ? values.origin : envOrigin
   return origin.replace(/\/+$/, '')
 }
 

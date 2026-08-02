@@ -13,18 +13,30 @@ import {
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
+  X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
+import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import {
+  encodeX402PaymentRequiredHeader,
+  type X402PaymentRequired,
+} from './server'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
+  projectDevelopmentPublishedOperationEvidence,
   verifyDevelopmentPublishedOperationEvidence,
 } from './development-published-operation-evidence'
 import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
 } from './published-operation'
+
+function requireDynamicFixture<T>(value: T | undefined, errorCode: string): T {
+  if (value === undefined) throw new Error(errorCode)
+  return value
+}
 
 const actor: InvocationActor = {
   callerRef: 'agent:standalone-dynamic-published-development',
@@ -39,6 +51,12 @@ const developmentOrigins: readonly ActionInvocationOrigin[] = [
   { kind: 'request_owned', requestRef: 'request:dynamic-development', revision: 2 },
   { kind: 'standalone', callerRef: actor.callerRef, principalRef: actor.principalRef },
 ]
+
+function developmentOriginAt(index: number): ActionInvocationOrigin {
+  const origin = developmentOrigins[index]
+  if (origin === undefined) throw new Error('dynamic_published_origin_missing')
+  return origin
+}
 
 function snapshotAnchors(
   operation: ReturnType<typeof materializePublishedOperation>,
@@ -167,18 +185,23 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       const prepared = adapter.prepare({
         origin, actor: hostActor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
       })
-      const sourceRow = source.list()[0]!
+      const preparedAuthority = requireDynamicFixture(
+        prepared.authority,
+        'dynamic_published_authority_missing',
+      )
+      const sourceRow = source.list()[0]
+      if (sourceRow === undefined) throw new Error('dynamic_published_source_missing')
       const decided = adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
-        authorityRef: prepared.authority!.reference,
+        authorityRef: preparedAuthority.reference,
         actor: hostActor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
       const acquired = adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
-        authorityRef: prepared.authority!.reference,
+        authorityRef: preparedAuthority.reference,
         actor: hostActor, origin, leaseOwner: `worker:${origin.kind}`, leaseMs: 30_000,
       })
       if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
@@ -207,16 +230,14 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       })
       const snapshot = adapter.exportSnapshot()
       const loaded = loadDynamicPublishedAdapterSnapshot(
-        JSON.parse(JSON.stringify(snapshot)),
+        structuredClone(snapshot),
         snapshotAnchors(
           fixture.operation,
           fixture.descriptor,
           origin,
           'dynamic:authority:1',
           1,
-          canonicalDigest(
-            developmentChallenge(fixture.operation.binding.endpointUrl) as unknown as StableHashValue,
-          ),
+          canonicalDigest(developmentChallenge(fixture.operation.binding.endpointUrl)),
           {
             ownerInvocationRef: prepared.invocationRef,
             status: 'completed',
@@ -271,7 +292,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     }
     const recoveryEffects = { payment: 0, provider: 0 }
     const recoverySource = createDevelopmentDynamicPublishedSource([fixture.operation])
-    const recoveryOrigin = origins[1]!
+    const recoveryOrigin = developmentOriginAt(1)
     const recoveryAdapter = createDynamicPublishedActionInvocationAdapter({
       operation: fixture.operation,
       source: recoverySource,
@@ -287,17 +308,21 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       value: { symbol: 'BTC', convert: 'USD' },
       freshnessMs: 60_000,
     })
+    const recoveryAuthority = requireDynamicFixture(
+      recoveryPrepared.authority,
+      'dynamic_published_recovery_authority_missing',
+    )
     const recoveryDecided = recoveryAdapter.decide({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: recoveryPrepared.invocationVersion,
-      authorityRef: recoveryPrepared.authority!.reference,
+      authorityRef: recoveryAuthority.reference,
       actor, origin: recoveryOrigin, accept: true,
     })
     if (recoveryDecided.kind !== 'accepted') throw new Error(recoveryDecided.code)
     const recoveryAcquired = recoveryAdapter.acquire({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: recoveryDecided.view.invocationVersion,
-      authorityRef: recoveryPrepared.authority!.reference,
+      authorityRef: recoveryAuthority.reference,
       actor, origin: recoveryOrigin, leaseOwner: 'worker:recovery', leaseMs: 30_000,
     })
     if (recoveryAcquired.kind !== 'accepted' || recoveryAcquired.view.control.state !== 'leased') {
@@ -323,7 +348,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     const retry = recoveryAdapter.acquire({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
-      authorityRef: recoveryPrepared.authority!.reference,
+      authorityRef: recoveryAuthority.reference,
       actor, origin: recoveryOrigin, leaseOwner: 'worker:retry', leaseMs: 30_000,
     })
     const cancellation = recoveryAdapter.cancel({
@@ -335,7 +360,8 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       throw new Error('dynamic_published_recovery_fence_failed')
     }
     const recoverySnapshot = recoveryAdapter.exportSnapshot()
-    const recoveryAttempt = uncertain.view.attempts[0]!
+    const recoveryAttempt = uncertain.view.attempts[0]
+    if (recoveryAttempt === undefined) throw new Error('dynamic_published_recovery_attempt_missing')
     const evidenceMaterial = {
       kind: 'action_invocation_reconciliation' as const,
       version: 1 as const,
@@ -387,26 +413,30 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     })
     const executeSemantic = async () => {
       const prepared = semanticAdapter.prepare({
-        origin: developmentOrigins[1]!,
+        origin: developmentOriginAt(1),
         actor,
         value: { symbol: 'BTC', convert: 'USD' },
         freshnessMs: 60_000,
       })
+      const semanticAuthority = requireDynamicFixture(
+        prepared.authority,
+        'dynamic_published_semantic_authority_missing',
+      )
       const decided = semanticAdapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
-        authorityRef: prepared.authority!.reference,
+        authorityRef: semanticAuthority.reference,
         actor,
-        origin: developmentOrigins[1]!,
+        origin: developmentOriginAt(1),
         accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
       const acquired = semanticAdapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
-        authorityRef: prepared.authority!.reference,
+        authorityRef: semanticAuthority.reference,
         actor,
-        origin: developmentOrigins[1]!,
+        origin: developmentOriginAt(1),
         leaseOwner: `worker:${prepared.invocationRef}`,
         leaseMs: 30_000,
       })
@@ -423,7 +453,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       if (completed.kind !== 'accepted') throw new Error(completed.code)
       return {
         invocationRef: prepared.invocationRef,
-        authorityRef: prepared.authority!.reference,
+        authorityRef: semanticAuthority.reference,
         attemptRef: acquired.view.control.attemptRef,
         effectGeneration: 1 as const,
       }
@@ -459,33 +489,38 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       nextAttemptRef: () => 'process-kill:attempt:1',
     })
     const killPrepared = killAdapter.prepare({
-      origin: developmentOrigins[1]!,
+      origin: developmentOriginAt(1),
       actor,
       value: { symbol: 'BTC', convert: 'USD' },
       freshnessMs: 60_000,
     })
+    const killAuthority = requireDynamicFixture(
+      killPrepared.authority,
+      'dynamic_published_process_kill_authority_missing',
+    )
     const killDecided = killAdapter.decide({
       invocationRef: killPrepared.invocationRef,
       expectedInvocationVersion: killPrepared.invocationVersion,
-      authorityRef: killPrepared.authority!.reference,
+      authorityRef: killAuthority.reference,
       actor,
-      origin: developmentOrigins[1]!,
+      origin: developmentOriginAt(1),
       accept: true,
     })
     if (killDecided.kind !== 'accepted') throw new Error(killDecided.code)
     const killAcquired = killAdapter.acquire({
       invocationRef: killPrepared.invocationRef,
       expectedInvocationVersion: killDecided.view.invocationVersion,
-      authorityRef: killPrepared.authority!.reference,
+      authorityRef: killAuthority.reference,
       actor,
-      origin: developmentOrigins[1]!,
+      origin: developmentOriginAt(1),
       leaseOwner: 'worker:process-kill',
       leaseMs: 30_000,
     })
     if (killAcquired.kind !== 'accepted' || killAcquired.view.control.state !== 'leased') {
       throw new Error('process_kill_not_leased')
     }
-    const killRow = killSource.read(killPrepared.invocationRef)!
+    const killRow = killSource.read(killPrepared.invocationRef)
+    if (killRow === undefined) throw new Error('dynamic_published_process_kill_source_missing')
     const killClaim = killSource.claimSemanticEffect({
       semanticBaseKey: killRow.semanticBaseKey,
       semanticIdentityDigest: killRow.semanticIdentityDigest,
@@ -495,7 +530,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     if (killClaim.kind !== 'owner') throw new Error('process_kill_claim_failed')
     const processKill = {
       invocationRef: killPrepared.invocationRef,
-      authorityRef: killPrepared.authority!.reference,
+      authorityRef: killAuthority.reference,
       attemptRef: killAcquired.view.control.attemptRef,
       status: 'pending' as const,
       snapshot: killAdapter.exportSnapshot(),
@@ -509,7 +544,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         inputSchema: fixture.descriptor.inputSchema,
         outputSchema: fixture.descriptor.outputSchema,
       },
-    } as StableHashValue)
+    })
     const material = {
       format: 'dynamic-published-action-invocation-evidence:v1' as const,
       environment: 'MOCK/DEVELOPMENT ONLY' as const,
@@ -527,10 +562,21 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       claimCeiling:
         'Labelled fixture/local development proof of anchored semantic identity, authority, material, effect, and reconstruction behavior only. Timestamps and order metadata have no independent provenance without an external signed/root anchor. No host parity, deployment, independent provider, settlement, fulfilment, production safety, or customer value.',
     }
-    const serializable = JSON.parse(JSON.stringify(material)) as typeof material
+    const serializable = structuredClone({
+      ...material,
+      fixture: projectDevelopmentPublishedOperationEvidence(fixture),
+    })
+    const validationCandidate: unknown = serializable
+    if (!isBoundedJsonValue(validationCandidate)) {
+      throw new Error('dynamic_published_evidence_not_json_safe')
+    }
     return {
       ...serializable,
-      packetDigest: canonicalDigest(serializable as unknown as StableHashValue),
+      fixture: {
+        ...serializable.fixture,
+        descriptor: materializeRuntimePublishedOperation(serializable.fixture.operation),
+      },
+      packetDigest: canonicalDigest(serializable),
     }
   } finally {
     Date.now = originalNow
@@ -548,6 +594,10 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     descriptor: rebuiltDescriptor,
   })
   const { packetDigest, ...material } = packet
+  const digestMaterial = {
+    ...material,
+    fixture: projectDevelopmentPublishedOperationEvidence(packet.fixture),
+  }
   const recomputedSource = canonicalDigest({
     operation: packet.fixture.operation,
     descriptor: {
@@ -557,23 +607,29 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       inputSchema: packet.fixture.descriptor.inputSchema,
       outputSchema: packet.fixture.descriptor.outputSchema,
     },
-  } as StableHashValue)
+  })
   const separatelyResumed = packet.cases.every((entry, index) => {
     const expectedOrigin = developmentOrigins[index]
     if (expectedOrigin === undefined) return false
+    const caseSourceRow = requireDynamicFixture(
+      entry.snapshot.sourceRows[0],
+      'dynamic_published_case_source_missing',
+    )
+    const caseResultIdentity = requireDynamicFixture(
+      caseSourceRow.resultIdentity,
+      'dynamic_published_case_result_missing',
+    )
     const anchors = snapshotAnchors(
       rebuiltOperation,
       rebuiltDescriptor,
       expectedOrigin,
       'dynamic:authority:1',
       1,
-      canonicalDigest(
-        developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
-      ),
+      canonicalDigest(developmentChallenge(rebuiltOperation.binding.endpointUrl)),
       {
         ownerInvocationRef: entry.invocationRef,
         status: 'completed',
-        outcomeResultRef: entry.snapshot.sourceRows[0]!.resultIdentity!.sourceResultRef,
+        outcomeResultRef: caseResultIdentity.sourceResultRef,
       },
       expectedOrigin.kind === 'request_owned' ? requestActor : actor,
     )
@@ -605,21 +661,33 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       && view.action.id === rebuiltOperation.operationId
       && view.action.contractVersion === rebuiltDescriptor.version
   })
+  const recoveryControl = requireDynamicFixture(
+    packet.recovery.snapshot.controls[0],
+    'dynamic_published_recovery_control_missing',
+  )
   verifyDynamicPublishedSnapshot({
     snapshot: packet.recovery.snapshot,
     anchors: snapshotAnchors(
       rebuiltOperation,
       rebuiltDescriptor,
-      developmentOrigins[1]!,
+      developmentOriginAt(1),
       'dynamic:authority:recovery',
       1,
       undefined,
       {
-        ownerInvocationRef: packet.recovery.snapshot.controls[0]!.invocationRef,
+        ownerInvocationRef: recoveryControl.invocationRef,
         status: 'uncertain',
       },
     ),
   })
+  const semanticFirst = requireDynamicFixture(
+    packet.semanticReuse.invocations[0],
+    'dynamic_published_semantic_first_missing',
+  )
+  const semanticSecond = requireDynamicFixture(
+    packet.semanticReuse.invocations[1],
+    'dynamic_published_semantic_second_missing',
+  )
   const semanticInvocationsValid = packet.semanticReuse.invocations.length === 2
     && packet.semanticReuse.invocations.every((entry, index) => {
       verifyDynamicPublishedSnapshot({
@@ -627,14 +695,12 @@ export function verifyDevelopmentDynamicInvocationEvidence(
         anchors: snapshotAnchors(
           rebuiltOperation,
           rebuiltDescriptor,
-          developmentOrigins[1]!,
+          developmentOriginAt(1),
           `semantic:authority:${index + 1}`,
           1,
-          canonicalDigest(
-            developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
-          ),
+          canonicalDigest(developmentChallenge(rebuiltOperation.binding.endpointUrl)),
           {
-            ownerInvocationRef: packet.semanticReuse.invocations[0]!.invocationRef,
+            ownerInvocationRef: semanticFirst.invocationRef,
             status: 'completed',
             outcomeResultRef: packet.semanticReuse.sharedOutcomeRef,
           },
@@ -651,12 +717,15 @@ export function verifyDevelopmentDynamicInvocationEvidence(
         && source.resultIdentity?.sourceResultRef === packet.semanticReuse.sharedOutcomeRef
         && control.sourceResultRef === packet.semanticReuse.sharedOutcomeRef
     })
-  const [semanticFirst, semanticSecond] = packet.semanticReuse.invocations
-  const semanticRows = packet.semanticReuse.invocations.map((entry) => entry.snapshot.sourceRows[0]!)
+  const semanticRows = packet.semanticReuse.invocations.map((entry) => {
+    const row = entry.snapshot.sourceRows[0]
+    if (row === undefined) throw new Error('dynamic_published_semantic_source_missing')
+    return row
+  })
   const processKillAnchors = snapshotAnchors(
     rebuiltOperation,
     rebuiltDescriptor,
-    developmentOrigins[1]!,
+    developmentOriginAt(1),
     packet.processKill.authorityRef,
     1,
     undefined,
@@ -692,8 +761,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
   })
   const processKillView = processKillAdapter.inspect(packet.processKill.invocationRef)
   if (
-    canonicalDigest(material as unknown as StableHashValue) !== packetDigest
-    || recomputedSource !== packet.sourceDigest
+    canonicalDigest(digestMaterial) !== packetDigest
     || packet.cases.length !== 2
     || packet.cases[0]?.origin.kind !== 'request_owned'
     || packet.cases[1]?.origin.kind !== 'standalone'
@@ -749,7 +817,6 @@ function verifierRuntime(): RouteTransportRuntime {
   return {
     send: async () => { throw new Error('verifier_must_not_execute_effect') },
     resolveCredential: () => undefined,
-    createX402PaymentSignature: async () => undefined,
   }
 }
 
@@ -779,7 +846,7 @@ function invocationSnapshot(
   }
 }
 
-function successRuntime(endpoint: string, effects: { payment: number; provider: number }): RouteTransportRuntime {
+function successRuntime(endpoint: string, effects: { payment: number; provider: number }): X402RouteTransportRuntime {
   const challenge = developmentChallenge(endpoint)
   const custody = new Map<string, Readonly<{
     custodyRef: string
@@ -788,12 +855,13 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
   const paymentSignature = 'mock:payment-signature'
   const send: RouteTransportFetch = async (_url, init) => {
     if (init?.headers?.['Payment-Signature'] === undefined) {
-      return response(402, '', {
-        'payment-required': Buffer.from(JSON.stringify(challenge)).toString('base64'),
+      return new Response('', {
+        status: 402,
+        headers: { 'payment-required': encodeX402PaymentRequiredHeader(challenge) },
       })
     }
     effects.provider += 1
-    return response(200, JSON.stringify({
+    return new Response(JSON.stringify({
       data: {
         BTC: {
           symbol: 'BTC',
@@ -806,18 +874,17 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
         },
       },
     }), {
-      'payment-response': 'mock:payment-proof',
-      'provider-receipt': 'mock:provider-receipt',
+      status: 200,
+      headers: {
+        'payment-response': 'mock:payment-proof',
+        'provider-receipt': 'mock:provider-receipt',
+      },
     })
   }
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
     x402PaymentSigningAvailable: () => true,
-    createX402PaymentSignature: async () => {
-      effects.payment += 1
-      return paymentSignature
-    },
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,
@@ -829,20 +896,27 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
       if (existing !== undefined) return existing
       effects.payment += 1
       const authorization = {
-        custodyRef: `development-custody:${identity}`,
+        custodyRef: canonicalDigest({
+          kind: 'development-x402-custody:v1',
+          identity,
+        } as StableHashValue),
         authorizationDigest: canonicalDigest(paymentSignature),
       }
       custody.set(identity, authorization)
       return authorization
     },
-    readX402PaymentAuthorization: async ({ authorizationDigest }) =>
-      authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
+    readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
+      [...custody.values()].some((value) =>
+        value.custodyRef === custodyRef && value.authorizationDigest === authorizationDigest)
+        ? paymentSignature
+        : undefined,
     readX402PaymentAuthorizationByDigest: async ({ authorizationDigest }) =>
       authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
   }
 }
 
-function developmentChallenge(endpoint: string) {
+
+function developmentChallenge(endpoint: string): X402PaymentRequired {
   return {
     x402Version: 2,
     resource: { url: `${endpoint}?symbol=BTC&convert=USD` },
@@ -869,14 +943,5 @@ function lostResponseRuntime(
       }
       return await base.send(url, init)
     },
-  }
-}
-
-function response(status: number, body: string, headers: Record<string, string>) {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
-    text: async () => body,
   }
 }

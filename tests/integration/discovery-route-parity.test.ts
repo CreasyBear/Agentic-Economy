@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { getPublicBusinessCatalog, getPublicBusinessPageReadback } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { stableUnique } from '@/modules/common/stable-unique'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
@@ -12,9 +13,9 @@ import {
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
-  getPublicBusinessCatalogBySlug,
-  listPublicBusinessCatalog,
-  searchPublicBusinessCatalog,
+  getPublicBusinessOfferingSupplyBySlug,
+  listPublicBusinessOfferingSupply,
+  searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
@@ -90,11 +91,13 @@ describe('discovery route parity', () => {
       indexStatus: 'indexed',
       discoveryStatus: 'available',
     })
-    const registryList = listPublicBusinessCatalog(state)
-    const registrySearch = searchPublicBusinessCatalog(state, {
+    const registryList = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    const registrySearch = searchPublicBusinessOfferingSupply(state, {
       query: 'heat pump fremantle',
     })
-    const apiDetail = getPublicBusinessCatalogBySlug(state, {
+    const apiDetail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
     const generated = regenerateDiscoveryManifest(
@@ -118,7 +121,7 @@ describe('discovery route parity', () => {
       kind: 'available',
       catalog: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
     })
-    expect(registryList.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+    expect(registryList.page.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
     expect(registrySearch.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
     expect(apiDetail).toMatchObject({
       kind: 'found',
@@ -168,11 +171,13 @@ describe('discovery route parity', () => {
       indexStatus: 'indexed',
       discoveryStatus: 'available',
     })
-    const suppressedRegistryList = listPublicBusinessCatalog(state)
-    const suppressedRegistrySearch = searchPublicBusinessCatalog(state, {
+    const suppressedRegistryList = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    const suppressedRegistrySearch = searchPublicBusinessOfferingSupply(state, {
       query: 'heat pump fremantle',
     })
-    const suppressedDetail = getPublicBusinessCatalogBySlug(state, {
+    const suppressedDetail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
     const suppressedGenerated = regenerateDiscoveryManifest(
@@ -184,7 +189,7 @@ describe('discovery route parity', () => {
     const suppressedSitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })
 
     expect(suppressedPage).toEqual({ kind: 'hidden', reason: 'not_published' })
-    expect(suppressedRegistryList.items).toEqual([])
+    expect(suppressedRegistryList.page).toEqual([])
     expect(suppressedRegistrySearch.items).toEqual([])
     expect(suppressedDetail).toEqual({
       kind: 'not_found',
@@ -249,8 +254,8 @@ describe('discovery route parity', () => {
       kind: 'ok',
       schemaVersion: 'public-business-catalog-api:v2',
     })
-    const listPage = z.object({ items: z.array(z.object({ slug: z.string() })) }).parse(listBody)
-    expect(listPage.items.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
+    const listPage = z.object({ page: z.array(z.object({ slug: z.string() })) }).parse(listBody)
+    expect(listPage.page.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
     expect(searchBody).toMatchObject({
       kind: 'ok',
       schemaVersion: 'public-business-catalog-api:v2',
@@ -273,7 +278,7 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
     return true
   }
 
-  if (path === '/claim' || path === '/registry' || path === '/for-agents' || path === '/privacy/remove-business') {
+  if (path === '/claim' || path === '/for-agents' || path === '/privacy/remove-business') {
     return true
   }
 
@@ -336,7 +341,7 @@ function sitemapLocs(body: string): readonly string[] {
 }
 
 function uniqueUrls(urls: readonly string[]): readonly string[] {
-  return Array.from(new Set(urls))
+  return stableUnique(urls)
 }
 
 
@@ -351,9 +356,6 @@ function suppressFirstBusiness(state: DiscoverySourceState): void {
   business.publicStatus = 'suppressed'
   business.claimStatus = 'suppressed'
   business.suppressedAt = 12_000
-  for (const service of state.businessServices.filter((candidate) => candidate.businessId === business.businessId)) {
-    service.status = 'suppressed'
-  }
   state.suppressionRules.push({
     targetType: 'business',
     targetRef: business.businessId,

@@ -1,19 +1,22 @@
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type {
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+} from '@/modules/catalog/public'
 import type {
   Brand,
   BusinessId,
   CorrelationId,
   NotificationDispatchId,
+  OfferingRef,
   OperationKey,
   OwnerId,
-  ServiceId,
   SourceHash,
 } from '@/modules/common/ids'
 import type { NotificationAttemptStatus, NotificationSignatureStatus, NotificationWebhookEventStatus } from '@/modules/notification-outbox/public'
 import type { AuditEventType, FunnelEventType, RedactedPayload } from '@/modules/observability/public'
-import type { SuppressionRuleRecord } from '@/modules/security/public'
-import type { AbuseRateLimitBucketRecord } from '@/modules/security/public'
+import type { AbuseRateLimitBucketRecord, SuppressionRuleRecord } from '@/modules/security/public'
 import type {
   GovernedSendCanonicalFieldKey,
   GovernedSendErasureLineageRecord,
@@ -104,8 +107,7 @@ export type InquiryOwnerAuthority = {
 
 export type InquiryTargetRef = {
   businessId: BusinessId
-  serviceId: ServiceId
-  capabilityKind: CapabilityKind
+  offeringRef: OfferingRef
 }
 
 export type ResolvableOwnerRecipient = {
@@ -189,8 +191,7 @@ export type InquiryThreadRecord = {
   threadId: InquiryThreadId
   businessId: BusinessId
   ownerId: OwnerId
-  serviceId: ServiceId
-  capabilityKind: CapabilityKind
+  offeringRef: OfferingRef
   status: InquiryThreadStatus
   firstMessageId: InquiryMessageId
   sourceHash: SourceHash
@@ -292,8 +293,9 @@ export type InquiryPrivacyTombstoneRecord = {
 
 export type InquirySourceState = {
   businesses: BusinessRecord[]
-  businessServices: BusinessServiceRecord[]
-  serviceCapabilities: ServiceCapabilityRecord[]
+  businessOfferings: BusinessOfferingRecord[]
+  businessOfferingRevisions: BusinessOfferingRevisionRecord[]
+  offeringAccessPaths: OfferingAccessPathRecord[]
   suppressionRules: SuppressionRuleRecord[]
   owners: BusinessOwnerRecord[]
   claims: ClaimRecord[]
@@ -323,10 +325,9 @@ export type OwnerInboxBucketCounts = Record<OwnerInboxBucket, number>
 export type OwnerInboxInquiryProjection = {
   threadId: InquiryThreadId
   businessId: BusinessId
-  serviceId: ServiceId
-  capabilityKind: CapabilityKind
+  offeringRef: OfferingRef
   businessName: string
-  serviceName: string
+  offeringName: string
   status: InquiryThreadStatus
   bucket: OwnerInboxBucket
   preview: string
@@ -549,7 +550,7 @@ export type InquiryOperatorReconstructionRow = {
   rowId: string
   threadId: InquiryThreadId
   businessId: BusinessId
-  serviceId: ServiceId
+  offeringRef: OfferingRef
   status: InquiryThreadStatus
   sourceHash: SourceHash
   correlationIds: readonly (CorrelationId | string)[]

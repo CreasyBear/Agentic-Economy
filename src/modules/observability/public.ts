@@ -1,4 +1,5 @@
 import type { BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
+import { sameStringList } from '@/modules/common/same-string-list'
 import type { VisibilityTargetType } from '@/modules/business/public'
 import {
   markOperationSucceeded as markOperationSucceededImpl,
@@ -40,8 +41,11 @@ import {
   FunnelEventTypeValues,
   InvalidationIntentStatusValues,
   InvalidationSurfaceValues,
+  JOURNEY_EVENT_NAMES,
   OperationKeyStatusValues,
   OperatorControlKeyValues,
+  WAVE_1_JOURNEY_EVENT_NAMES,
+  WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
 } from './internal/literals'
 
 export {
@@ -52,8 +56,11 @@ export {
   FunnelEventTypeValues,
   InvalidationIntentStatusValues,
   InvalidationSurfaceValues,
+  JOURNEY_EVENT_NAMES,
   OperationKeyStatusValues,
   OperatorControlKeyValues,
+  WAVE_1_JOURNEY_EVENT_NAMES,
+  WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
 }
 
 export type OperationKeyStatus = (typeof OperationKeyStatusValues)[number]
@@ -346,7 +353,7 @@ function sameEvidenceSet(left: readonly string[], right: readonly string[]): boo
   const normalizedLeft = [...left].sort()
   const normalizedRight = [...right].sort()
 
-  return normalizedLeft.length === normalizedRight.length && normalizedLeft.every((value, index) => value === normalizedRight[index])
+  return sameStringList(normalizedLeft, normalizedRight)
 }
 
 export const BusinessActionPrivateEvidenceRetentionClass = 'business_action_private_evidence' as const

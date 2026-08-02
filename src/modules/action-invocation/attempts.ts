@@ -15,8 +15,7 @@ export function createDevelopmentTimeoutSignal(): Readonly<{
   signal: DevelopmentTimeoutSignal
   fire(): void
 }> {
-  let fire = () => {}
-  const promise = new Promise<void>((resolve) => { fire = resolve })
+  const { promise, resolve: fire } = Promise.withResolvers<void>()
   return { signal: { wait: () => promise }, fire }
 }
 

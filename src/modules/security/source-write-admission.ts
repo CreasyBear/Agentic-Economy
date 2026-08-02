@@ -5,6 +5,7 @@ import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 export const SourceWriteAdmissionScopeValues = [
@@ -21,6 +22,7 @@ export const SourceWriteAdmissionScopeValues = [
   'harness_session',
   'agent_identity',
   'answer_thread',
+  'study',
 ] as const
 
 export type SourceWriteAdmissionScope = (typeof SourceWriteAdmissionScopeValues)[number]
@@ -139,6 +141,7 @@ export function sourceWriteKeyFamilyForScope(scope: SourceWriteAdmissionScope): 
     case 'harness_session':
     case 'agent_identity':
     case 'answer_thread':
+    case 'study':
       return 'session'
   }
 }
@@ -283,8 +286,8 @@ function resolveSourceWriteKeyring(family: SourceWriteKeyFamily, env: Env): {
   assertNoClientExposedSourceWriteKeys(env)
   const activeEnvName = activeKeyEnvName(family)
   const previousEnvName = previousKeysEnvName(family)
-  const activeConfigured = parseConfiguredKey(readEnv(env, activeEnvName), family, activeEnvName)
-  const previousConfigured = parseConfiguredKeys(readEnv(env, previousEnvName), family, previousEnvName)
+  const activeConfigured = parseConfiguredKey(readTrimmedEnv(env, activeEnvName), family, activeEnvName)
+  const previousConfigured = parseConfiguredKeys(readTrimmedEnv(env, previousEnvName), family, previousEnvName)
 
   if (activeConfigured !== undefined) {
     assertNotProviderSecret(activeConfigured.secret, env, activeEnvName)
@@ -304,7 +307,7 @@ function resolveSourceWriteKeyring(family: SourceWriteKeyFamily, env: Env): {
     )
   }
 
-  const root = readEnv(env, nonProdRootSecretName)
+  const root = readTrimmedEnv(env, nonProdRootSecretName)
   if (root === undefined) {
     throw new SourceWriteAdmissionError(
       'missing_source_write_secret',
@@ -313,7 +316,7 @@ function resolveSourceWriteKeyring(family: SourceWriteKeyFamily, env: Env): {
   }
   assertNotProviderSecret(root, env, nonProdRootSecretName)
 
-  const activeKeyId = readEnv(env, derivedKeyIdEnvName(family)) ?? defaultDerivedKeyId[family]
+  const activeKeyId = readTrimmedEnv(env, derivedKeyIdEnvName(family)) ?? defaultDerivedKeyId[family]
   const previousKeyIds = readCsvEnv(env, previousDerivedKeyIdsEnvName(family))
   const active = derivedSigningKey(family, activeKeyId, root)
   return {
@@ -419,7 +422,7 @@ function assertNoClientExposedSourceWriteKeys(env: Env): void {
     ]),
   ]
   for (const name of names) {
-    if (readEnv(env, `VITE_${name}`) !== undefined) {
+    if (readTrimmedEnv(env, `VITE_${name}`) !== undefined) {
       throw new SourceWriteAdmissionError(
         'client_exposed_source_write_secret',
         `${name} must not be configured with a client-exposed VITE_ prefix.`
@@ -431,7 +434,7 @@ function assertNoClientExposedSourceWriteKeys(env: Env): void {
 function assertNotProviderSecret(secret: string, env: Env, envName: string): void {
   const providerSecretNames = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AUTUMN_SECRET_KEY', 'AUTUMN_WEBHOOK_SECRET']
   for (const providerName of providerSecretNames) {
-    const providerSecret = readEnv(env, providerName)
+    const providerSecret = readTrimmedEnv(env, providerName)
     if (providerSecret !== undefined && constantTimeStringEqual(secret, providerSecret)) {
       throw new SourceWriteAdmissionError(
         'source_write_provider_secret_reuse',
@@ -442,21 +445,17 @@ function assertNotProviderSecret(secret: string, env: Env, envName: string): voi
 }
 
 function isProductionEnv(env: Env): boolean {
-  return readEnv(env, 'NODE_ENV') === 'production'
+  return readTrimmedEnv(env, 'NODE_ENV') === 'production'
 }
 
 function readCsvEnv(env: Env, name: string): readonly string[] {
-  const value = readEnv(env, name)
+  const value = readTrimmedEnv(env, name)
   if (value === undefined) {
     return []
   }
   return value.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0)
 }
 
-function readEnv(env: Env, name: string): string | undefined {
-  const value = env[name]
-  return value === undefined || value.trim().length === 0 ? undefined : value.trim()
-}
 
 function readProcessEnv(): Env {
   return typeof process === 'undefined' ? {} : process.env

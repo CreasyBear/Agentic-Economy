@@ -9,10 +9,12 @@ import type {
   SourceHash,
 } from '@/modules/common/ids'
 import { error, ok, type ModuleResult } from '@/modules/common/result'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { RedactedPayload } from '@/modules/observability/public'
 import {
   defaultNotificationOperatorControls,
+  MAX_NOTIFICATION_ATTEMPTS_PER_DISPATCH,
   type NotificationAttemptStatus,
   type NotificationDispatchAttemptRecord,
   type NotificationDispatchReadback,
@@ -26,6 +28,7 @@ import {
   type NotificationWebhookEventRecord,
   type NotificationWebhookEventStatus,
 } from './schema'
+
 
 export type EnqueueInquiryNotificationCommand = {
   businessId: BusinessId
@@ -187,7 +190,7 @@ export function enqueueInquiryNotification(
   state: NotificationOutboxSourceState,
   command: EnqueueInquiryNotificationCommand
 ): EnqueueInquiryNotificationResult {
-  const requestHash = stableHash({
+  const requestHash = canonicalDigest({
     businessId: command.businessId,
     inquiryThreadId: command.inquiryThreadId,
     inquiryMessageId: command.inquiryMessageId,
@@ -347,6 +350,7 @@ export function retryNotificationDispatch(
   if (dispatch.status === 'no_repair') {
     return error('notification_terminal', false, { reason: 'notification_terminal' })
   }
+  assertAttemptCapacity(state, dispatch)
 
   const nextDispatch: NotificationDispatchRecord = {
     ...dispatch,
@@ -390,12 +394,25 @@ export function markNotificationNoRepair(
   })
 }
 
+function assertAttemptCapacity(
+  state: NotificationOutboxSourceState,
+  dispatch: NotificationDispatchRecord,
+): void {
+  if (
+    dispatch.retryCount >= MAX_NOTIFICATION_ATTEMPTS_PER_DISPATCH
+    || state.attempts.filter((attempt) => attempt.dispatchId === dispatch.dispatchId).length >= MAX_NOTIFICATION_ATTEMPTS_PER_DISPATCH
+  ) {
+    throw new Error('notification_attempt_capacity_exceeded')
+  }
+}
+
 function completeDispatchAttempt(
   state: NotificationOutboxSourceState,
   dispatch: NotificationDispatchRecord,
   command: DispatchNotificationOutboxCommand,
   result: NotificationProviderTriggerResult
 ): DispatchNotificationOutboxResult {
+  assertAttemptCapacity(state, dispatch)
   const attempt: NotificationDispatchAttemptRecord = {
     attemptId: notificationDispatchAttemptId({ dispatchId: dispatch.dispatchId, operationKey: command.operationKey, now: command.now }),
     dispatchId: dispatch.dispatchId,
@@ -583,13 +600,13 @@ function normalizeReason(value: string): string {
 }
 
 function notificationDispatchId(value: StableHashValue): NotificationDispatchId {
-  return brandNonEmpty(`notification_dispatch:${stableHash(value)}`, 'NotificationDispatchId')
+  return brandNonEmpty(`notification_dispatch:${canonicalDigest(value)}`, 'NotificationDispatchId')
 }
 
 function notificationDispatchAttemptId(value: StableHashValue): NotificationDispatchAttemptId {
-  return brandNonEmpty(`notification_attempt:${stableHash(value)}`, 'NotificationDispatchAttemptId')
+  return brandNonEmpty(`notification_attempt:${canonicalDigest(value)}`, 'NotificationDispatchAttemptId')
 }
 
 function notificationWebhookEventId(value: StableHashValue): NotificationWebhookEventId {
-  return brandNonEmpty(`notification_webhook:${stableHash(value)}`, 'NotificationWebhookEventId')
+  return brandNonEmpty(`notification_webhook:${canonicalDigest(value)}`, 'NotificationWebhookEventId')
 }

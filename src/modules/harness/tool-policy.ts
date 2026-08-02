@@ -6,7 +6,6 @@ import type {
 } from './harness.schema'
 import {
   resolveHarnessApprovalPolicy,
-  sourceWriteDeclarationForTool,
   type HarnessApprovalMode,
   type HarnessApprovalOverrideMap,
 } from './approval-policy'
@@ -15,15 +14,14 @@ export type HarnessApprovalInput = {
   tool: HarnessToolDefinition
   context?: ActionContext
   surface?: ActionSurface
-  mode?: HarnessApprovalMode
-  allowWrites?: boolean
+  mode: HarnessApprovalMode
   overrides?: HarnessApprovalOverrideMap
 }
 
 export function resolveHarnessApproval(input: HarnessApprovalInput): HarnessApprovalDecision {
   const resolution = resolveHarnessApprovalPolicy({
     tool: input.tool,
-    mode: input.mode ?? legacyModeForInput(input),
+    mode: input.mode,
     ...(input.context === undefined ? {} : { context: input.context }),
     ...(input.surface === undefined ? {} : { surface: input.surface }),
     ...(input.overrides === undefined ? {} : { overrides: input.overrides }),
@@ -36,12 +34,3 @@ export function resolveHarnessApproval(input: HarnessApprovalInput): HarnessAppr
   }
 }
 
-function legacyModeForInput(input: HarnessApprovalInput): HarnessApprovalMode {
-  if (input.allowWrites === true) {
-    const declaration = sourceWriteDeclarationForTool(input.tool)
-    const [declaredMode] = declaration?.allowedModes ?? []
-    return declaredMode ?? 'public-qualified-write'
-  }
-
-  return 'public-read'
-}

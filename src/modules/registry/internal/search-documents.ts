@@ -1,5 +1,5 @@
-import { stableHash } from '@/modules/common/stable-hash'
-import type { SourceHash } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 import {
   canonicalTradeToken,
   TRADE_CANONICAL_TOKENS,
@@ -7,35 +7,14 @@ import {
   tradeAliasesForText,
 } from './trade-vocabulary'
 import type {
-  PublicBusinessCatalogApiDto,
+  PublicBusinessCatalogApiV2Dto,
   PublicBusinessCatalogSearchInput,
-} from './search'
+  RegistrySearchDocumentContract,
+} from '@/modules/registry/public'
 
-const RegistrySearchDocumentSchemaVersion = 'registry-search-document:v1' as const
+const RegistrySearchDocumentSchemaVersion: RegistrySearchDocumentContract['schemaVersion'] = 'registry-search-document:v1'
 
-export type RegistrySearchDocument = {
-  documentId: string
-  schemaVersion: typeof RegistrySearchDocumentSchemaVersion
-  businessSlug: string
-  serviceSlug: string
-  businessName: string
-  serviceName: string
-  serviceCategory: string
-  serviceCategoryKey: string
-  suburb: string
-  stateTerritory: string
-  postcode?: string
-  publicStatus: 'published'
-  trustTier: PublicBusinessCatalogApiDto['trustTier']
-  firstRequestMode: PublicBusinessCatalogApiDto['services'][number]['firstRequest']['mode']
-  placeKeys: readonly string[]
-  serviceKeywords: readonly string[]
-  searchText: string
-  serviceArea: string
-  updatedAt: number
-  generatedHash: SourceHash
-}
-
+export type RegistrySearchDocument = RegistrySearchDocumentContract
 export type RegistrySearchLocation = {
   label: string
   key: string
@@ -115,67 +94,70 @@ const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'
 const LOCATION_PREPOSITION = /\b(?:in|near|around|at)\s+([a-z][a-z\s'-]{1,80})(?:\?|$)/i
 
 export function buildRegistrySearchDocumentsFromCatalogs(
-  catalogs: readonly PublicBusinessCatalogApiDto[],
+  catalogs: readonly PublicBusinessCatalogApiV2Dto[],
 ): RegistrySearchDocument[] {
   return catalogs.flatMap((catalog) => buildRegistrySearchDocumentsForCatalog(catalog))
 }
 
 export function buildRegistrySearchDocumentsForCatalog(
-  catalog: PublicBusinessCatalogApiDto,
+  catalog: PublicBusinessCatalogApiV2Dto,
 ): RegistrySearchDocument[] {
-  return catalog.services.map((service) => {
-    const serviceKeywords = serviceKeywordsFor(service.name, service.category, service.summary)
+  return catalog.offerings.map((offering) => {
+    const offeringRef = offering.offeringRef as RegistrySearchDocument['offeringRef']
+    const keywords = offeringKeywordsFor(offering.name, offering.category, offering.summary)
+    const serviceAreaSummary = offering.serviceAreaSummary ?? ''
     const placeKeys = placeKeysFor({
       suburb: catalog.suburb,
       stateTerritory: catalog.stateTerritory,
       ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
-      serviceArea: service.serviceArea,
+      serviceAreaSummary,
     })
-    const searchText = normalizeRegistrySearchText(
-      [
-        catalog.name,
-        catalog.category,
-        catalog.suburb,
-        catalog.stateTerritory,
-        catalog.postcode ?? '',
-        service.name,
-        service.category,
-        service.summary,
-        service.serviceArea,
-        ...serviceKeywords,
-      ].join(' '),
-    )
+    const searchText = normalizeSearchText([
+      catalog.name,
+      catalog.category,
+      catalog.suburb,
+      catalog.stateTerritory,
+      catalog.postcode ?? '',
+      offering.name,
+      offering.category,
+      offering.summary,
+      serviceAreaSummary,
+      ...keywords,
+    ].join(' '))
     const documentCore = {
       businessSlug: catalog.slug,
-      serviceSlug: service.slug,
+      offeringRef,
       businessName: catalog.name,
-      serviceName: service.name,
-      serviceCategory: service.category,
-      serviceCategoryKey: normalizePlaceKey(service.category),
+      name: offering.name,
+      category: offering.category,
+      categoryKey: normalizeSearchText(offering.category),
       suburb: catalog.suburb,
       stateTerritory: catalog.stateTerritory,
       publicStatus: 'published' as const,
       trustTier: catalog.trustTier,
-      firstRequestMode: service.firstRequest.mode,
+      firstRequestMode: offering.accessPaths.some((path) => path.kind === 'human_request' && path.channel === 'ae_inquiry')
+        ? 'inquiry_available' as const
+        : 'not_available_yet' as const,
       placeKeys,
-      serviceKeywords,
+      keywords,
       searchText,
-      serviceArea: service.serviceArea,
-      updatedAt: catalog.updatedAt,
+      serviceAreaSummary,
+      updatedAt: catalog.observedAt,
     }
 
     return {
-      documentId: buildRegistrySearchDocumentId(catalog.slug, service.slug),
+      documentId: buildRegistrySearchDocumentId(catalog.slug, offeringRef),
       schemaVersion: RegistrySearchDocumentSchemaVersion,
       ...documentCore,
       ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
-      generatedHash: stableHash(documentCore),
+      generatedHash: canonicalDigest(documentCore),
     }
   })
 }
 
-function buildRegistrySearchDocumentId(businessSlug: string, serviceSlug: string): string {
-  return `${businessSlug}__${serviceSlug}`
+function buildRegistrySearchDocumentId(businessSlug: string, offeringRef: string): string {
+  const offeringSlug = offeringRef.split(':').at(-1) ?? offeringRef
+  return `${businessSlug}__${offeringSlug}`
 }
 
 export function resolveRegistrySearchLocation(
@@ -187,7 +169,7 @@ export function resolveRegistrySearchLocation(
 
   const explicit = normalizeLocationLabel(input.location)
   if (explicit !== undefined) {
-    return { label: explicit, key: normalizePlaceKey(explicit), source: 'input' }
+    return { label: explicit, key: normalizeSearchText(explicit), source: 'input' }
   }
 
   const fromQuery = extractLocationFromRegistryQuery(input.query)
@@ -195,19 +177,19 @@ export function resolveRegistrySearchLocation(
     return undefined
   }
 
-  return { label: fromQuery, key: normalizePlaceKey(fromQuery), source: 'query' }
+  return { label: fromQuery, key: normalizeSearchText(fromQuery), source: 'query' }
 }
 
 export function documentMatchesRegistryQuery(
   document: RegistrySearchDocument,
   input: PublicBusinessCatalogSearchInput,
 ): boolean {
-  const query = normalizeRegistrySearchText(input.query)
+  const query = normalizeSearchText(input.query)
   if (query.length === 0) {
     return false
   }
 
-  const stateKey = normalizePlaceKey(document.stateTerritory)
+  const stateKey = normalizeSearchText(document.stateTerritory)
   const queryNamesDocumentPlace = document.placeKeys.some((placeKey) =>
     placeKey !== stateKey && ` ${query} `.includes(` ${placeKey} `),
   )
@@ -231,25 +213,13 @@ export function documentMatchesRegistryQuery(
   return tokens.every((token) => document.searchText.includes(token))
 }
 
-export function normalizeRegistrySearchText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ')
-}
-
-export function normalizePlaceKey(value: string): string {
-  return normalizeRegistrySearchText(value)
-}
-
 
 
 function placeKeysFor(input: {
   suburb: string
   stateTerritory: string
   postcode?: string
-  serviceArea: string
+  serviceAreaSummary: string
 }): readonly string[] {
   const keys = new Set<string>()
   addKey(keys, input.suburb)
@@ -259,15 +229,15 @@ function placeKeysFor(input: {
     addKey(keys, input.postcode)
   }
 
-  for (const candidate of extractPlaceCandidates(input.serviceArea)) {
+  for (const candidate of extractPlaceCandidates(input.serviceAreaSummary)) {
     addKey(keys, candidate)
   }
 
   return [...keys].sort()
 }
 
-function serviceKeywordsFor(...values: readonly string[]): readonly string[] {
-  const text = normalizeRegistrySearchText(values.join(' '))
+function offeringKeywordsFor(...values: readonly string[]): readonly string[] {
+  const text = normalizeSearchText(values.join(' '))
   const keywords = new Set<string>(tradeAliasesForText(text))
   if (/\bemergency\b/.test(text)) {
     keywords.add('urgent')
@@ -293,7 +263,7 @@ function extractLocationFromRegistryQuery(query: string): string | undefined {
 }
 
 function extractPlaceCandidates(value: string): readonly string[] {
-  const normalized = normalizeRegistrySearchText(value)
+  const normalized = normalizeSearchText(value)
   if (normalized.length === 0) {
     return []
   }
@@ -367,7 +337,7 @@ function trimServiceWords(tokens: readonly string[]): readonly string[] {
 }
 
 function addKey(keys: Set<string>, value: string): void {
-  const key = normalizePlaceKey(value)
+  const key = normalizeSearchText(value)
   if (key.length > 0) {
     keys.add(key)
   }

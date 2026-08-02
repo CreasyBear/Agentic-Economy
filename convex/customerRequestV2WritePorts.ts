@@ -6,10 +6,10 @@ import {
 } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   compileRoutePlans,
   composeRequestActions,
+  writableCustomerRequestV2Aggregate,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import {
@@ -17,7 +17,6 @@ import {
   evaluateCustomerRequestSnapshot,
   evaluateIntentDirectionRequestSnapshot,
   requestRegistrySnapshotDigest,
-  type RegisteredEvaluationBinding,
 } from '@/modules/customer-request/evaluation'
 import {
   deriveCustomerDecisionPreference,
@@ -26,19 +25,19 @@ import {
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
-import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
+import {
+  writableCustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
 import {
   type CustomerRequestV2WritePorts,
   type CommitCommandRow,
-  type GenerationCommandRow,
   type GraphValidationStatus,
-  type RequestHeadSnapshot,
-  type RoutePlanHeadSnapshot,
 } from '@/modules/customer-request/v2-write'
 import {
   customerRequestV2AggregateValue,
   routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
+import { exactContractRefKey } from '@/modules/customer-request/contract-ref-key'
 import type { Infer } from 'convex/values'
 
 import type { Id } from './_generated/dataModel'
@@ -48,9 +47,10 @@ import {
   getActiveExactCapabilityContract,
 } from './capabilityContractDocuments'
 import { supersedeCurrentRouteMandate } from './customerRequestRouteMandateLifecycle'
+import { registeredEvaluationBindingsFromRouteableSupply } from './customerRequestEvaluationBindings'
 import {
-  readExactRoutePlanGeneration,
-  readGenerationRefreshCommandResult,
+  customerRequestV2ReadPorts,
+  asDomainAggregate,
   readVerifiedCommandReplay,
 } from './customerRequestV2ReadPorts'
 
@@ -59,6 +59,7 @@ type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
 
 export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2WritePorts {
   return {
+    ...customerRequestV2ReadPorts(ctx),
     loadCommitCommand: async (commandKey) => {
       const prior = await ctx.db.query('customerRequestV2Commands')
         .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
@@ -67,47 +68,22 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
 
     verifyCommitCommandReplay: async (command) => {
       const verified = await readVerifiedCommandReplay(ctx.db, command)
-      if (verified.kind !== 'current') {
-        throw new Error('customer_request_v2_command_integrity_failure')
-      }
       return {
         kind: 'current' as const,
-        aggregate: domainAggregate(verified.aggregate),
+        aggregate: asDomainAggregate(verified.aggregate),
       }
     },
 
     validateAggregateAgainstCurrentCapabilityGraph: async (aggregate, routeGeneration) => (
       await validateAggregateAgainstCurrentCapabilityGraph(
         ctx.db,
-        aggregate as unknown as Aggregate,
-        routeGeneration as unknown as RouteGeneration | undefined,
+        writableCustomerRequestV2Aggregate(aggregate),
+        routeGeneration === undefined
+          ? undefined
+          : writableCustomerRequestRoutePlanGeneration(routeGeneration),
       )
     ),
 
-    loadRequestHead: async (requestId) => {
-      const head = await ctx.db.query('customerRequestV2Heads')
-        .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-      return head === null ? null : toRequestHead(head)
-    },
-
-    loadRoutePlanHead: async (requestId) => {
-      const head = await ctx.db.query('customerRequestV2RoutePlanHeads')
-        .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-      return head === null ? null : toRoutePlanHead(head)
-    },
-
-    loadRevision: async (requestId, requestRevision) => {
-      const revision = await ctx.db.query('customerRequestV2Revisions')
-        .withIndex('by_requestId_and_requestRevision', (query) => (
-          query.eq('requestId', requestId).eq('requestRevision', requestRevision)
-        )).unique()
-      if (revision === null) return null
-      return {
-        requestId: revision.requestId,
-        requestRevision: revision.requestRevision,
-        aggregate: domainAggregate(revision.aggregate),
-      }
-    },
 
     loadGenerationByNumber: async (requestId, generation) => {
       const row = await ctx.db.query('customerRequestV2RoutePlanGenerations')
@@ -117,14 +93,6 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
       return row === null ? null : { generation: row.generation }
     },
 
-    loadExactRoutePlanGeneration: async (requestId, generationRef) => {
-      const result = await readExactRoutePlanGeneration(ctx.db, requestId, generationRef)
-      if (result.kind === 'not_found') return result
-      return {
-        kind: 'found' as const,
-        routeGeneration: domainRouteGeneration(result.routeGeneration),
-      }
-    },
 
     supersedeCurrentRouteMandate: async (input) => {
       await supersedeCurrentRouteMandate(ctx.db, input)
@@ -134,7 +102,7 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
       await ctx.db.insert('customerRequestV2Revisions', {
         requestId: input.requestId,
         requestRevision: input.requestRevision,
-        aggregate: writableAggregate(input.aggregate as unknown as Aggregate),
+        aggregate: writableCustomerRequestV2Aggregate(input.aggregate),
       })
     },
 
@@ -145,7 +113,7 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
         generationRef: input.generationRef,
         generationDigest: input.generationDigest,
         requestRevision: input.requestRevision,
-        routeGeneration: writableRouteGeneration(input.routeGeneration as unknown as RouteGeneration),
+        routeGeneration: writableCustomerRequestRoutePlanGeneration(input.routeGeneration),
         recordedAt: input.recordedAt,
       })
     },
@@ -212,31 +180,6 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
       })
     },
 
-    loadGenerationCommand: async (commandKey) => {
-      const command = await ctx.db.query('customerRequestV2RoutePlanGenerationCommands')
-        .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-      return command === null ? null : toGenerationCommandRow(command)
-    },
-
-    readGenerationRefreshCommandResult: async (command) => (
-      await readGenerationRefreshCommandResult(ctx.db, {
-        requestId: command.requestId,
-        resultKind: command.resultKind,
-        ...(command.retryReason === undefined ? {} : { retryReason: command.retryReason }),
-        ...(command.resultAggregate === undefined
-          ? {}
-          : { resultAggregate: command.resultAggregate as unknown as Aggregate }),
-        ...(command.resultingGeneration === undefined
-          ? {}
-          : { resultingGeneration: command.resultingGeneration }),
-        ...(command.resultingGenerationRef === undefined
-          ? {}
-          : { resultingGenerationRef: command.resultingGenerationRef }),
-        ...(command.resultingGenerationDigest === undefined
-          ? {}
-          : { resultingGenerationDigest: command.resultingGenerationDigest }),
-      })
-    ),
 
     insertGenerationCommand: async (input) => {
       await ctx.db.insert('customerRequestV2RoutePlanGenerationCommands', {
@@ -254,7 +197,7 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
         ...(input.retryReason === undefined ? {} : { retryReason: input.retryReason }),
         ...(input.resultAggregate === undefined
           ? {}
-          : { resultAggregate: writableAggregate(input.resultAggregate as unknown as Aggregate) }),
+          : { resultAggregate: writableCustomerRequestV2Aggregate(input.resultAggregate) }),
         ...(input.resultingGeneration === undefined
           ? {}
           : { resultingGeneration: input.resultingGeneration }),
@@ -280,13 +223,16 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     limit: 64,
   })
   if (currentSupply.kind !== 'available') return 'stale'
-  const bindings = registeredEvaluationBindingsFromEligibleSupply(currentSupply)
+  const bindings = registeredEvaluationBindingsFromRouteableSupply(
+    currentSupply,
+    { includePublication: true },
+  )
   if (requestRegistrySnapshotDigest(bindings) !== aggregate.evaluation.registrySnapshotDigest) {
     return 'stale'
   }
   const models = new Map<string, CapabilityDecisionModel>()
   for (const binding of bindings) {
-    const key = exactRefKey(binding.contractRef)
+    const key = exactContractRefKey(binding.contractRef)
     if (models.has(key)) continue
     const stored = await getActiveExactCapabilityContract(db, binding.contractRef)
     if (stored.kind !== 'found') return 'stale'
@@ -304,7 +250,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
   const facts = rebindAggregateFacts(aggregate.snapshot.facts, models)
   if (facts === undefined) return 'invalid'
   const resolveModel = (ref: Aggregate['plan']['actions'][number]['contractRef']) => (
-    models.get(exactRefKey(ref))
+    models.get(exactContractRefKey(ref))
   )
   const baseActions = [...aggregate.plan.actions]
     .sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
@@ -336,8 +282,8 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
   const actions = composeRequestActions(baseActions, models)
   if (actions === undefined) return 'invalid'
   if (actions.length !== aggregate.plan.actions.length
-    || canonicalDigest(actions as StableHashValue)
-      !== canonicalDigest(aggregate.plan.actions as StableHashValue)) {
+    || canonicalDigest(actions)
+      !== canonicalDigest(aggregate.plan.actions)) {
     return 'invalid'
   }
   const evaluation = aggregate.plan.actions.length === 0
@@ -382,7 +328,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
   if (evaluation.candidates.some((candidate) => candidate.viability.kind === 'incompatible')) {
     return 'invalid'
   }
-  const storedEvaluation = domainAggregate(aggregate).evaluation
+  const storedEvaluation = asDomainAggregate(aggregate).evaluation
   if (!evaluationMatchesConservativeReadinessSnapshot(evaluation, storedEvaluation)) {
     return 'invalid'
   }
@@ -421,45 +367,13 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     && routes.some((route) => route.maximumTotalCost.kind !== 'known')
   if (routes === undefined) return 'invalid'
   if (!unknownCostFailsClosed
-    && canonicalDigest(routes as StableHashValue)
-      !== canonicalDigest(routeGeneration?.routes ?? [] as StableHashValue)) {
+    && canonicalDigest(routes)
+      !== canonicalDigest(routeGeneration?.routes ?? [])) {
     return 'invalid'
   }
   return 'current'
 }
 
-type AvailableEligibleCapabilitySupply = Extract<
-  Awaited<ReturnType<typeof listRouteableCapabilitySupply>>,
-  { kind: 'available' }
->
-
-function registeredEvaluationBindingsFromEligibleSupply(
-  supply: AvailableEligibleCapabilitySupply,
-): RegisteredEvaluationBinding[] {
-  return supply.supplies.map(({ offering, binding, publication }) => ({
-    businessId: String(offering.businessId),
-    offeringId: offering.offeringId,
-    bindingId: binding.bindingId,
-    contractRef: {
-      capabilityId: binding.capabilityId,
-      version: binding.version,
-      contractDigest: binding.contractDigest,
-    },
-    offeringRegistrationHash: offering.registrationHash,
-    bindingRegistrationHash: binding.registrationHash,
-    price: offering.presentation.price,
-    commercialRelationship: {
-      ...offering.presentation.commercialRelationship,
-      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
-    },
-    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
-    ...(publication === undefined ? {} : {
-      publicationRef: publication.publicationRef,
-      publicationRevision: publication.revision,
-      readinessValidUntil: publication.readinessValidUntil,
-    }),
-  }))
-}
 
 function evaluationMatchesConservativeReadinessSnapshot(
   current: CustomerRequestV2Aggregate['evaluation'],
@@ -493,10 +407,10 @@ function evaluationMatchesConservativeReadinessSnapshot(
   return canonicalDigest({
     ...currentMaterial,
     candidates: normalizedCandidates,
-  } as StableHashValue) === canonicalDigest({
+  }) === canonicalDigest({
     ...storedMaterial,
     candidates: stored.candidates,
-  } as StableHashValue)
+  })
 }
 
 function rebindAggregateFacts(
@@ -504,7 +418,7 @@ function rebindAggregateFacts(
   models: ReadonlyMap<string, CapabilityDecisionModel>,
 ) {
   const facts = storedFacts.flatMap((fact) => {
-    const model = models.get(exactRefKey(fact.contractRef))
+    const model = models.get(exactContractRefKey(fact.contractRef))
     const input = model?.inputs.find((candidate) => candidate.key === fact.inputKey
       && candidate.inputPointer === fact.inputPointer
       && candidate.schemaIdentity === fact.schemaIdentity)
@@ -557,123 +471,6 @@ function toCommitCommandRow(row: Readonly<{
   }
 }
 
-function toGenerationCommandRow(row: Readonly<{
-  commandKey: string
-  commandDigest: string
-  principalId: string
-  requestId: string
-  expectedRequestRevision: number
-  expectedGeneration: number
-  expectedGenerationRef: string
-  expectedDecisionCommandKey?: string
-  resultKind: GenerationCommandRow['resultKind']
-  retryReason?: GenerationCommandRow['retryReason']
-  resultAggregate?: Aggregate
-  resultingGeneration?: number
-  resultingGenerationRef?: string
-  resultingGenerationDigest?: string
-  committedAt: number
-}>): GenerationCommandRow {
-  return {
-    commandKey: row.commandKey,
-    commandDigest: row.commandDigest,
-    principalId: row.principalId,
-    requestId: row.requestId,
-    expectedRequestRevision: row.expectedRequestRevision,
-    expectedGeneration: row.expectedGeneration,
-    expectedGenerationRef: row.expectedGenerationRef,
-    ...(row.expectedDecisionCommandKey === undefined
-      ? {}
-      : { expectedDecisionCommandKey: row.expectedDecisionCommandKey }),
-    resultKind: row.resultKind,
-    ...(row.retryReason === undefined ? {} : { retryReason: row.retryReason }),
-    ...(row.resultAggregate === undefined
-      ? {}
-      : { resultAggregate: domainAggregate(row.resultAggregate) }),
-    ...(row.resultingGeneration === undefined
-      ? {}
-      : { resultingGeneration: row.resultingGeneration }),
-    ...(row.resultingGenerationRef === undefined
-      ? {}
-      : { resultingGenerationRef: row.resultingGenerationRef }),
-    ...(row.resultingGenerationDigest === undefined
-      ? {}
-      : { resultingGenerationDigest: row.resultingGenerationDigest }),
-    committedAt: row.committedAt,
-  }
-}
 
-function toRequestHead(head: Readonly<{
-  _id: Id<'customerRequestV2Heads'>
-  requestId: string
-  principalId: string
-  delegatedAgentId: string
-  currentRevision: number
-  currentAggregateDigest: string
-}>): RequestHeadSnapshot {
-  return {
-    id: head._id,
-    requestId: head.requestId,
-    principalId: head.principalId,
-    delegatedAgentId: head.delegatedAgentId,
-    currentRevision: head.currentRevision,
-    currentAggregateDigest: head.currentAggregateDigest,
-  }
-}
 
-function toRoutePlanHead(head: Readonly<{
-  _id: Id<'customerRequestV2RoutePlanHeads'>
-  requestId: string
-  currentGeneration: number
-  currentRequestRevision: number
-  currentGenerationRef?: string
-  currentGenerationDigest?: string
-  currentDecisionCommandKey?: string
-  currentDecisionCommandDigest?: string
-}>): RoutePlanHeadSnapshot {
-  return {
-    id: head._id,
-    requestId: head.requestId,
-    currentGeneration: head.currentGeneration,
-    currentRequestRevision: head.currentRequestRevision,
-    ...(head.currentGenerationRef === undefined
-      ? {}
-      : { currentGenerationRef: head.currentGenerationRef }),
-    ...(head.currentGenerationDigest === undefined
-      ? {}
-      : { currentGenerationDigest: head.currentGenerationDigest }),
-    ...(head.currentDecisionCommandKey === undefined
-      ? {}
-      : { currentDecisionCommandKey: head.currentDecisionCommandKey }),
-    ...(head.currentDecisionCommandDigest === undefined
-      ? {}
-      : { currentDecisionCommandDigest: head.currentDecisionCommandDigest }),
-  }
-}
 
-function writableRouteGeneration(generation: RouteGeneration): RouteGeneration {
-  return structuredClone(generation)
-}
-
-function domainRouteGeneration(value: RouteGeneration): CustomerRequestRoutePlanGeneration
-function domainRouteGeneration(value: undefined): undefined
-function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined
-function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined {
-  return value as CustomerRequestRoutePlanGeneration | undefined
-}
-
-function domainAggregate(value: unknown): CustomerRequestV2Aggregate {
-  return value as CustomerRequestV2Aggregate
-}
-
-function writableAggregate(aggregate: Aggregate): Aggregate {
-  return structuredClone(aggregate)
-}
-
-function exactRefKey(ref: Readonly<{
-  capabilityId: string
-  version: number
-  contractDigest: string
-}>): string {
-  return `${ref.capabilityId}\u0000${ref.version}\u0000${ref.contractDigest}`
-}

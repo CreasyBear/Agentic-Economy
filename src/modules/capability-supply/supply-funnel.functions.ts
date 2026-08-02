@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { callSourceAction, callSourceMutation, callSourceQuery, sourceAction, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { describeActionForAgent, listMcpActions, type AgentToolDescriptor } from '@/modules/actions'
+import type { BusinessOfferingStatus } from '@/modules/catalog/public'
 import type { PublicServicesApiPage } from '@/modules/registry/public'
 import { registryServicesListAction } from '@/modules/registry/registry.actions'
 import type { PricingConfig } from '@/modules/money/public'
@@ -69,7 +70,22 @@ export type OwnerSupplyFunnelReadback = Readonly<{
   kind: 'available'
   businessId: string
   business: Readonly<{ name: string; slug: string }>
-  offerings: readonly Readonly<{ offeringRef: string; revision: number; name: string; summary: string; status: string; sourceHash?: string; publicationRef?: string; documentationUrl?: string; endpointUrl?: string; readiness?: Readonly<{ outcome: string; validUntil?: number; evidenceRefs: readonly string[] }> }>[]
+  offerings: readonly Readonly<{
+    offeringRef: string
+    revision: number
+    name: string
+    summary: string
+    status: BusinessOfferingStatus
+    sourceHash?: string
+    publicationRef?: string
+    documentationUrl?: string
+    endpointUrl?: string
+    readiness?: Readonly<{
+      outcome: 'unobserved' | 'healthy' | 'unhealthy'
+      validUntil?: number
+      evidenceRefs: readonly string[]
+    }>
+  }>[]
   callLog: readonly SupplyCallLogRow[]
   liquidity: SupplyLiquiditySummary
 } | { kind: 'not_found' } | { kind: 'error'; code: 'unauthenticated' | 'source_unavailable'; reason?: string }>
@@ -97,8 +113,8 @@ export type SupplyLiquiditySummary = Readonly<{
 
 const readOwnerSupplyQuery = sourceQuery<Record<string, never>, OwnerSupplyFunnelReadback>('capabilitySupply:readOwnerSupplyFunnel')
 const supplyStepMutation = sourceMutation<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupply:advanceOwnerSupplyStep')
-const probeAction = sourceAction<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupply:runOwnerSupplyReadiness')
-const testAction = sourceAction<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupply:runOwnerSupplyTest')
+const probeAction = sourceAction<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupplyOwnerSupply:runOwnerSupplyReadiness')
+const testAction = sourceAction<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupplyOwnerSupply:runOwnerSupplyTest')
 const publishMutation = sourceMutation<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupply:publishOwnerCapability')
 
 export const readOwnerSupplyFunnelServer = createServerFn().handler(async (): Promise<OwnerSupplyFunnelReadback> => {

@@ -1,4 +1,5 @@
 import { authenticateCustomerRequestAgent } from '@/lib/server/customer-request-agent-auth'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import {
   BUSINESS_TOOL_AGENT_SCOPE,
   BusinessToolContractVersion,
@@ -17,6 +18,14 @@ import {
   submitPublicInquiryServer,
 } from '@/modules/inquiries/inquiry.functions'
 import { selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
+import { response } from '@/lib/server/no-store-response'
+
+const MAX_BUSINESS_TOOL_BODY_BYTES = 4 * 1024
+
+type JsonBodyResult =
+  | Readonly<{ kind: 'ok'; value: unknown }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'too_large' }>
 
 type ToolRefusalCode =
   | 'authentication_required'
@@ -24,6 +33,7 @@ type ToolRefusalCode =
   | 'unknown_tool'
   | 'tool_not_available'
   | 'invalid_input'
+  | 'request_too_large'
   | 'preparation_failed'
 
 /**
@@ -48,7 +58,9 @@ export async function handleBusinessToolPrepare(
   const authenticated = await authenticateToolCall(toolId, options)
   if (authenticated !== undefined) return authenticated
 
-  const parsed = businessToolPrepareSchema.safeParse(await readJsonBody(request))
+  const body = await readJsonBody(request)
+  if (body.kind === 'too_large') return refuse(413, 'request_too_large', 'Request body is too large.')
+  const parsed = businessToolPrepareSchema.safeParse(body.kind === 'ok' ? body.value : undefined)
   if (!parsed.success) return refuse(400, 'invalid_input', parsed.error.issues[0]?.message ?? 'Input did not match the published schema.')
 
   const resolved = await resolveToolTarget(slug)
@@ -63,7 +75,7 @@ export async function handleBusinessToolPrepare(
     return refuse(422, 'preparation_failed', 'This call could not be canonicalized for review.')
   }
 
-  return json(200, {
+  return response({
     kind: 'prepared',
     contractVersion: BusinessToolContractVersion,
     toolId,
@@ -75,7 +87,7 @@ export async function handleBusinessToolPrepare(
       method: 'POST',
       note: 'Echo expectedDigest exactly. A different digest means the reviewed call is not the call being sent.',
     },
-  })
+  }, 200)
 }
 
 export async function handleBusinessToolInvoke(
@@ -87,7 +99,9 @@ export async function handleBusinessToolInvoke(
   const authenticated = await authenticateToolCall(toolId, options)
   if (authenticated !== undefined) return authenticated
 
-  const parsed = businessToolInvokeSchema.safeParse(await readJsonBody(request))
+  const body = await readJsonBody(request)
+  if (body.kind === 'too_large') return refuse(413, 'request_too_large', 'Request body is too large.')
+  const parsed = businessToolInvokeSchema.safeParse(body.kind === 'ok' ? body.value : undefined)
   if (!parsed.success) return refuse(400, 'invalid_input', parsed.error.issues[0]?.message ?? 'Input did not match the published schema.')
 
   const resolved = await resolveToolTarget(slug)
@@ -105,12 +119,12 @@ export async function handleBusinessToolInvoke(
     },
   })
 
-  return json(result.kind === 'ok' ? 200 : 422, {
+  return response({
     contractVersion: BusinessToolContractVersion,
     toolId,
     businessSlug: slug,
     result,
-  })
+  }, result.kind === 'ok' ? 200 : 422)
 }
 
 type ResolvedToolTarget =
@@ -183,21 +197,13 @@ function refusalReason(code: 'authentication_required' | 'scope_required'): stri
     : `This key does not carry the ${BUSINESS_TOOL_AGENT_SCOPE} scope.`
 }
 
-async function readJsonBody(request: Request): Promise<unknown> {
-  try {
-    return await request.json()
-  } catch {
-    return undefined
-  }
+async function readJsonBody(request: Request): Promise<JsonBodyResult> {
+  const bounded = await readBoundedRequestJson(request, MAX_BUSINESS_TOOL_BODY_BYTES)
+  if (!bounded.ok) return { kind: bounded.code === 'payload_too_large' ? 'too_large' : 'invalid' }
+  return { kind: 'ok', value: bounded.value }
 }
 
 function refuse(status: number, code: ToolRefusalCode, reason: string): Response {
-  return json(status, { kind: 'refused', code, reason })
+  return response({ kind: 'refused', code, reason }, status)
 }
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  })
-}

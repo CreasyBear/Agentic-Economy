@@ -1,8 +1,15 @@
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
+  X402RouteTransportRuntime,
 } from './route-transport-runtime'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+
+import {
+  encodeX402PaymentRequiredHeader,
+  type X402PaymentRequired,
+} from './server'
 
 export type DevelopmentEffectCounts = {
   payment: number
@@ -27,7 +34,7 @@ export function developmentSuccessRuntime(
   endpoint: string,
   effects: DevelopmentEffectCounts,
   observer: DevelopmentTransportObserver = () => undefined,
-): RouteTransportRuntime {
+): X402RouteTransportRuntime {
   const send: RouteTransportFetch = async (url, init) => {
     observer({
       kind: 'transport_request',
@@ -38,16 +45,17 @@ export function developmentSuccessRuntime(
       },
     })
     if (init?.headers?.['Payment-Signature'] === undefined) {
-      return response(402, '', {
-        'payment-required': Buffer.from(JSON.stringify(
-          developmentChallenge(endpoint, url),
-        )).toString('base64'),
+      return new Response('', {
+        status: 402,
+        headers: {
+          'payment-required': encodeX402PaymentRequiredHeader(developmentChallenge(endpoint, url)),
+        },
       })
     }
     effects.provider += 1
     observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
     observer({ kind: 'provider_response', detail: { status: 200, evidence: 'quote_data' } })
-    return response(200, JSON.stringify({
+    return new Response(JSON.stringify({
       data: {
         BTC: {
           symbol: 'BTC',
@@ -60,8 +68,11 @@ export function developmentSuccessRuntime(
         },
       },
     }), {
-      'payment-response': 'mock:payment-proof',
-      'provider-receipt': 'mock:provider-receipt',
+      status: 200,
+      headers: {
+        'payment-response': 'mock:payment-proof',
+        'provider-receipt': 'mock:provider-receipt',
+      },
     })
   }
   const prepared = new Map<string, Readonly<{
@@ -73,20 +84,6 @@ export function developmentSuccessRuntime(
     send,
     resolveCredential: () => 'mock:server-held-credential',
     x402PaymentSigningAvailable: () => true,
-    createX402PaymentSignature: async (request) => {
-      observer({
-        kind: 'payment_signature_requested',
-        detail: {
-          network: request.selectedRequirement.network,
-          asset: request.selectedRequirement.asset,
-          payTo: request.selectedRequirement.payTo,
-          amount: request.selectedRequirement.amount,
-        },
-      })
-      effects.payment += 1
-      observer({ kind: 'payment_signature_created', detail: { paymentAttempts: effects.payment } })
-      return paymentSignature
-    },
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,
@@ -108,14 +105,20 @@ export function developmentSuccessRuntime(
       effects.payment += 1
       observer({ kind: 'payment_signature_created', detail: { paymentAttempts: effects.payment } })
       const authorization = {
-        custodyRef: `development-custody:${identity}`,
+        custodyRef: canonicalDigest({
+          kind: 'development-x402-custody:v1',
+          identity,
+        } as StableHashValue),
         authorizationDigest: canonicalDigest(paymentSignature),
       }
       prepared.set(identity, authorization)
       return authorization
     },
-    readX402PaymentAuthorization: async ({ authorizationDigest }) =>
-      authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
+    readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
+      [...prepared.values()].some((value) =>
+        value.custodyRef === custodyRef && value.authorizationDigest === authorizationDigest)
+        ? paymentSignature
+        : undefined,
     readX402PaymentAuthorizationByDigest: async ({ authorizationDigest }) =>
       authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
   }
@@ -223,15 +226,18 @@ export function developmentReleasedRefusalRuntime(
         return await base.send(url, init)
       }
       effects.provider += 1
-      return response(200, JSON.stringify({ unexpected: true }), {
-        'payment-response': 'mock:payment-proof',
-        'provider-receipt': 'mock:provider-refusal-receipt',
+      return new Response(JSON.stringify({ unexpected: true }), {
+        status: 200,
+        headers: {
+          'payment-response': 'mock:payment-proof',
+          'provider-receipt': 'mock:provider-refusal-receipt',
+        },
       })
     },
   }
 }
 
-function developmentChallenge(endpoint: string, requestUrl?: string | URL) {
+function developmentChallenge(endpoint: string, requestUrl?: string | URL): X402PaymentRequired {
   return {
     x402Version: 2,
     resource: { url: requestUrl === undefined ? `${endpoint}?symbol=BTC&convert=USD` : String(requestUrl) },
@@ -247,11 +253,3 @@ function developmentChallenge(endpoint: string, requestUrl?: string | URL) {
   }
 }
 
-function response(status: number, body: string, headers: Record<string, string>) {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
-    text: async () => body,
-  }
-}

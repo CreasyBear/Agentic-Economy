@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, CorrelationId, NotificationDispatchId, OperationKey, SourceHash } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   evaluateAgenticLoopProof,
   parseDeliveryTrailFromDispatchReadback,
@@ -46,7 +46,7 @@ describe('notification outbox readback', () => {
 
     const conflict = notificationOutbox.enqueueInquiryNotification(first.state, {
       ...enqueueCommand(),
-      redactedPayload: { bodyHash: stableHash('changed body') },
+      redactedPayload: { bodyHash: canonicalDigest('changed body') },
     })
     expect(conflict).toMatchObject({ kind: 'error', code: 'notification_duplicate_conflict' })
   })
@@ -94,7 +94,7 @@ describe('notification outbox readback', () => {
         kind: 'ok',
         status: 'sent',
         resendMessageId: 'resend:message:1',
-        providerResponseHash: stableHash({ resend: 'message:1' }),
+        providerResponseHash: canonicalDigest({ resend: 'message:1' }),
       })
     )
     expect(sent).toMatchObject({
@@ -116,7 +116,7 @@ describe('notification outbox readback', () => {
         novuTransactionId: 'novu:transaction:1',
         novuWorkflowId: 'workflow:inquiry-owner',
         novuSubscriberId: 'subscriber:owner',
-        providerResponseHash: stableHash({ novu: 'transaction:1' }),
+        providerResponseHash: canonicalDigest({ novu: 'transaction:1' }),
       })
     )
     expect(triggered).toMatchObject({
@@ -187,7 +187,7 @@ describe('notification outbox readback', () => {
       providerEventId: 'svix:delivered',
       eventType: 'email.delivered',
       dispatchId: queued.dispatch.dispatchId,
-      payloadHash: stableHash({ providerEventId: 'svix:delivered', changed: true }),
+      payloadHash: canonicalDigest({ providerEventId: 'svix:delivered', changed: true }),
     }))
     expect(conflict).toMatchObject({
       kind: 'ok',
@@ -335,8 +335,8 @@ function enqueueCommand(): EnqueueInquiryNotificationCommand {
     recipientRole: 'owner' as const,
     providerFamily: 'resend' as const,
     redactedPayload: {
-      bodyHash: stableHash('burst pipe raw body'),
-      contactHash: stableHash('customer@example.test'),
+      bodyHash: canonicalDigest('burst pipe raw body'),
+      contactHash: canonicalDigest('customer@example.test'),
       template: 'inquiry-owner',
     },
     operationKey,
@@ -368,7 +368,7 @@ function webhookCommand(overrides: Partial<{
   dispatchId: NotificationDispatchId
 }> = {}) {
   const providerEventId = overrides.providerEventId ?? 'svix:1'
-  const payloadHash = overrides.payloadHash ?? stableHash({ providerEventId, eventType: overrides.eventType ?? 'email.delivered' })
+  const payloadHash = overrides.payloadHash ?? canonicalDigest({ providerEventId, eventType: overrides.eventType ?? 'email.delivered' })
   const command: IngestNotificationWebhookCommand = {
     providerFamily: 'resend' as const,
     providerEventId,

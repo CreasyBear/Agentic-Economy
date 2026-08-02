@@ -13,6 +13,7 @@ import {
 } from '@/modules/customer-request/semantic-interpreter'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import {
+  customerRequestJsonValueSchema,
   customerRequestAuthorityModeForScopes,
   customerRequestModeAllows,
   type CustomerRequestAuthorityMode,
@@ -56,6 +57,7 @@ import {
 
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
+import { admissionKey } from './lib/rateLimit'
 import { authorizePreparationPorts } from './customerRequestAuthorizePreparationPorts'
 import { compareResumePorts } from './customerRequestCompareResumePorts'
 import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
@@ -67,6 +69,7 @@ import { standingRoutePorts } from './customerRequestStandingRoutePorts'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
 const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
+const customerCriterionValue = v.any() // runtime-validated JsonValue boundary
 
 const commercialInfluence = v.union(
   v.object({ status: v.literal('unknown') }),
@@ -247,11 +250,11 @@ const customerRouteDecisionChange = v.union(
   v.object({
     kind: v.literal('request_criteria'),
     before: v.array(v.object({
-      label: v.string(), value: v.any(),
+      label: v.string(), value: customerCriterionValue,
       basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
     })),
     after: v.array(v.object({
-      label: v.string(), value: v.any(),
+      label: v.string(), value: customerCriterionValue,
       basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
     })),
   }),
@@ -554,6 +557,7 @@ const refusedReason = v.union(
   v.literal('authentication_required'), v.literal('request_not_found'),
   v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
   v.literal('evidence_not_found'), v.literal('invalid_amendment'),
+  v.literal('rate_limited'),
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
@@ -631,6 +635,7 @@ const previewResult = v.union(
       v.literal('no_current_supply'),
       v.literal('preview_unavailable'),
       v.literal('options_changed'),
+      v.literal('rate_limited'),
     ),
     destination: previewDestination,
   }),
@@ -662,6 +667,18 @@ export const preview = action({
   args: { customerJob: v.string(), network: v.string() },
   returns: previewResult,
   handler: async (ctx, args) => {
+    const admission = await ctx.runMutation(internal.rateLimit.admit, {
+      name: 'public-read',
+      key: await admissionKey(ctx, 'customer-request-preview'),
+    })
+    if (!admission.ok) {
+      const destinationText = args.customerJob.trim().slice(0, 200)
+      return writablePreviewResult({
+        kind: 'unavailable',
+        reason: 'rate_limited',
+        destination: { label: destinationText, request: destinationText },
+      })
+    }
     const result = await previewCustomerRequestApplication(
       { customerJob: args.customerJob, network: args.network },
       { loadRequestGraph: (network) => loadRequestGraph(ctx, network) },
@@ -689,6 +706,11 @@ export const submit = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    const admission = await ctx.runMutation(internal.rateLimit.admit, {
+      name: 'public-mutation',
+      key: await admissionKey(ctx, 'customer-request-submit'),
+    })
+    if (!admission.ok) return { kind: 'refused', reason: 'rate_limited' }
     if (args.expectedRevision !== undefined && args.expectedRevision !== 0) return {
       kind: 'conflict', requestRef: args.requestId, reason: 'revision_changed',
     }
@@ -782,9 +804,10 @@ export const provideFacts = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    const value = customerRequestJsonValueSchema.parse(args.value)
     const command = {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
-      idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value: args.value,
+      idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value,
     }
     const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
@@ -1360,7 +1383,31 @@ const supportProblemListResult = v.union(
       v.literal('inactive_membership'),
       v.literal('action_not_allowed'),
     ),
-    rows: v.array(v.any()),
+    rows: v.array(v.object({
+      reportRef: v.string(),
+      requestRef: v.string(),
+      version: v.number(),
+      state: v.union(
+        v.literal('received'),
+        v.literal('update_due'),
+        v.literal('investigating'),
+        v.literal('waiting_for_customer'),
+        v.literal('closed'),
+      ),
+      nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+      category: v.union(
+        v.literal('incorrect_result'),
+        v.literal('unexpected_cost'),
+        v.literal('duplicate_charge_or_effect'),
+        v.literal('privacy_concern'),
+        v.literal('could_not_stop'),
+        v.literal('other'),
+      ),
+      summary: v.string(),
+      business: v.optional(v.string()),
+      reportedAt: v.number(),
+      lastUpdatedAt: v.number(),
+    })),
   }),
 )
 type SupportProblemListResult = Infer<typeof supportProblemListResult>
@@ -1723,7 +1770,7 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
     // Routeable, not merely integrated: commitAggregate validates the recorded plan against
     // `listRouteable`, so planning over a wider set guarantees `context_stale` at commit and
     // hands the customer a retry that can never succeed.
-    listEligible: async (id) => await ctx.runQuery(
+    listRouteable: async (id) => await ctx.runQuery(
       internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
     ) as EligibleSupplyResult,
     getActiveExact: async (contractRef) => await ctx.runQuery(
@@ -1740,7 +1787,6 @@ type StoredAggregateResult = Readonly<
       kind: 'current'; aggregate: StoredAggregate
       routeGenerationNumber: number; routeGenerationRef?: string; currentDecisionCommandKey?: string
     }
-  | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
   | { kind: 'not_found' }
 >
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>

@@ -93,7 +93,7 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
     prepareAction: (input) => ctx.runMutation(internal.customerRequestV2Preparation.prepare, input),
     loadRequestGraph: (networkId) => loadRequestGraphApplication(networkId, {
       // Must match commitAggregate's validation set (listRouteable) or every refresh dies stale.
-      listEligible: async (id) => await ctx.runQuery(
+      listRouteable: async (id) => await ctx.runQuery(
         internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
       ) as EligibleSupplyResult,
       getActiveExact: async (contractRef) => await ctx.runQuery(

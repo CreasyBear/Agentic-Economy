@@ -1,7 +1,9 @@
 import { mkdirSync } from 'node:fs'
 
+import slugify from '@sindresorhus/slugify'
+
 import { expect, test, type Page } from '@playwright/test'
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
+import { LOCAL_E2E_BUSINESS_FIXTURES, type LocalE2eBusinessFixture } from '../../src/lib/dev/local-e2e-business-fixtures'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
 import { DIALOG_WELCOME } from '../../src/content/brand-copy'
 
@@ -15,10 +17,20 @@ if (admittedBusiness === undefined) {
   throw new Error('An admitted local E2E business fixture is required.')
 }
 
+function requireFirstOffering(fixture: LocalE2eBusinessFixture): LocalE2eBusinessFixture['offerings'][number] {
+  const offering = fixture.offerings[0]
+  if (offering === undefined) {
+    throw new Error(`The ${fixture.requestedSlug} local E2E fixture requires an Offering.`)
+  }
+  return offering
+}
+
+const demoOffering = requireFirstOffering(demoBusiness)
+
 const phase2ArtifactDir = 'output/playwright/phase2-ui'
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|hosted-agent/i
-const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|serviceId|sourceHash|rawContact|clerk|admin)\b/i
+const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|offeringRef|sourceHash|rawContact|clerk|admin)\b/i
 const operatorPrivateLeakage =
   /customer@example\.test|Water is leaking under the kitchen sink|saved owner contact path|rawBody|raw provider|provider payload|webhook secret/i
 
@@ -93,8 +105,8 @@ test.describe('public owner routes', () => {
     expect(assistantText).toContain('You decide whether to confirm an option. Starting it is a separate decision.')
   })
 
-  test('registry search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
-    await page.goto('/registry')
+  test('home search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
+    await page.goto('/')
 
     await expect(page.getByRole('heading', { name: /who does what, near you/i })).toBeVisible()
     await expect(page.getByLabel('Business, service, or place')).toBeVisible()
@@ -112,7 +124,7 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Business, service, or place').fill('emergency plumber parramatta')
     await page.getByRole('button', { name: /^search businesses$/i }).click()
     await expect(page).toHaveURL(/q=emergency\+plumber\+parramatta/)
-    await expect(page.getByRole('link', { name: /view parramatta emergency plumbing/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing?from=registry')
+    await expect(page.getByRole('link', { name: /view parramatta emergency plumbing/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing')
 
     await page.getByLabel('Business, service, or place').fill('fremantle locksmith')
     await page.getByRole('button', { name: /^search businesses$/i }).click()
@@ -121,7 +133,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('link', { name: /clear search/i })).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
-    expect(bodyText).not.toMatch(/ownerId|serviceId|businessId|clerk|sourceHash|rawContact|admin/i)
+    expect(bodyText).not.toMatch(/ownerId|offeringRef|businessId|clerk|sourceHash|rawContact|admin/i)
     await assertPublicLanguage(page)
   })
 
@@ -155,7 +167,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: 'Review recent activity' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Manage assistant access' })).toBeVisible()
     const body = await page.locator('body').innerText()
-    expect(body).not.toMatch(/clerk_api_key:|ownerId|businessId|serviceId|sourceHash|rawContact/i)
+    expect(body).not.toMatch(/clerk_api_key:|ownerId|businessId|offeringRef|sourceHash|rawContact/i)
   })
 
   test('claim form remains usable when first request state changes', async ({ page }) => {
@@ -172,7 +184,7 @@ test.describe('public owner routes', () => {
 
   test('claim submission readbacks use the submitted catalog instead of the default Sam record', async ({ page }, testInfo) => {
     const runId = `${Date.now().toString(36)}-${testInfo.workerIndex}`
-    const suffix = `${testInfo.project.name}-${runId}`.replace(/[^a-z0-9]+/giu, '-').toLowerCase()
+    const suffix = slugify(`${testInfo.project.name}-${runId}`)
     const slug = `fremantle-priority-electrical-${suffix}`
     const businessName = `Fremantle Priority Electrical ${suffix}`
 
@@ -270,7 +282,7 @@ test.describe('public owner routes', () => {
 
   test('privacy removal request validates and records a receipt', async ({ page }, testInfo) => {
     const runId = `${Date.now().toString(36)}-${testInfo.workerIndex}`
-    const suffix = `${testInfo.project.name}-${runId}`.replace(/[^a-z0-9]+/giu, '-').toLowerCase()
+    const suffix = slugify(`${testInfo.project.name}-${runId}`)
     const slug = `privacy-removal-target-${suffix}`
 
     await page.goto('/claim', { waitUntil: 'networkidle' })
@@ -362,14 +374,14 @@ test.describe('public owner routes', () => {
     await assertNoFutureSurfaceCopy(page)
 
     const inboxInquiryLink = page.getByRole('link', {
-      name: new RegExp(`${demoBusiness.serviceName}.*${demoBusiness.businessName}`, 'i'),
+      name: new RegExp(`${demoOffering.name}.*${demoBusiness.businessName}`, 'i'),
     }).first()
     await expect(inboxInquiryLink).toContainText(demoBusiness.businessName)
     const inboxInquiryHref = await inboxInquiryLink.getAttribute('href')
-    expect(inboxInquiryHref).toMatch(/^\/owner\/inquiries\/inquiry_thread%3Ahash%3A[0-9a-f]+$/)
+    expect(inboxInquiryHref).toMatch(/^\/owner\/inquiries\/inquiry_thread%3Ahash%3A[0-9a-f]+$/u)
     await page.goto(inboxInquiryHref ?? '/owner/inquiries')
     await expect(page).toHaveURL(inboxInquiryHref ?? '/owner/inquiries')
-    await expect(page.getByRole('heading', { name: demoBusiness.serviceName, exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: demoOffering.name, exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: /delivery status/i })).toBeVisible()
 
     const markReadButton = page.getByRole('button', { name: /mark read/i })
@@ -404,7 +416,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: 'Audit refs' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Funnel refs' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Operation refs' })).toBeVisible()
-    await expect(page.getByText(/Source hash hash:/i)).toBeVisible()
+    await expect(page.getByText(/Source hash sha256:/i)).toBeVisible()
     await expect(page.locator('dt').filter({ hasText: /^Correlation$/ })).toBeVisible()
     await expect(page.locator('body')).not.toContainText(operatorPrivateLeakage)
 

@@ -1,6 +1,9 @@
 import type { ActionContext, AnyAction } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
+import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
+import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 
 import {
   type HarnessApprovalDecision,
@@ -9,6 +12,7 @@ import {
   type HarnessToolStatus,
 } from './harness.schema'
 import { resolveHarnessApproval } from './tool-policy'
+import type { HarnessApprovalMode } from './approval-policy'
 import {
   actionToHarnessToolContract,
   describeHarnessToolExecutionValidation,
@@ -34,7 +38,7 @@ export type RunHarnessToolInput = {
   context?: ActionContext
   toolCallId?: string
   surface?: HarnessToolSurface
-  allowWrites?: boolean
+  mode: HarnessApprovalMode
   timeoutMs?: number
   signal?: AbortSignal
 }
@@ -68,7 +72,7 @@ export async function runHarnessTool(input: RunHarnessToolInput): Promise<RunHar
     tool: input.tool,
     context,
     ...(input.surface === undefined ? {} : { surface: input.surface }),
-    ...(input.allowWrites === undefined ? {} : { allowWrites: input.allowWrites }),
+    mode: input.mode,
   })
 
   if (decision.policy !== 'allow') {
@@ -105,12 +109,15 @@ export async function runHarnessTool(input: RunHarnessToolInput): Promise<RunHar
   }
 
   try {
-    const output = await runWithOptionalTimeout(
-      (signal) => input.tool.run({ input: parsedInput.data, context, ...(signal === undefined ? {} : { signal }) }),
-      input.timeoutMs,
-      input.signal,
-      input.tool.interruptible ?? (input.tool.tier === 'read'),
-    )
+    const output = await runWithAbortAndTimeout({
+      run: (signal) => input.tool.run({ input: parsedInput.data, context, ...(signal === undefined ? {} : { signal }) }),
+      ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+      ...(input.signal === undefined ? {} : { parentSignal: input.signal }),
+      useControllerSignal: input.tool.interruptible ?? (input.tool.tier === 'read'),
+      deferRun: true,
+      abortError: normalizeToolAbortReason,
+      timeoutError: (timeoutMs) => new HarnessToolTimeoutError(timeoutMs),
+    })
     const parsedOutput = input.tool.outputSchema.safeParse(output)
 
     if (!parsedOutput.success) {
@@ -179,10 +186,10 @@ function buildHarnessToolResult(input: {
   errorCode?: string
   output?: unknown
 }): HarnessToolResult {
-  const inputJson = safeStringify(input.input)
-  const summaryJson = safeStringify(input.summary)
-  const outputJson = input.output === undefined ? undefined : safeStringify(input.output)
-  const resultHash = stableHash({
+  const inputJson = safeJsonStringify(input.input)
+  const summaryJson = safeJsonStringify(input.summary)
+  const outputJson = input.output === undefined ? undefined : safeJsonStringify(input.output)
+  const resultHash = canonicalDigest({
     toolId: input.toolId,
     input: inputJson,
     summary: summaryJson,
@@ -205,52 +212,6 @@ function buildHarnessToolResult(input: {
   }
 }
 
-async function runWithOptionalTimeout<T>(
-  work: (signal: AbortSignal | undefined) => Promise<T>,
-  timeoutMs: number | undefined,
-  parentSignal: AbortSignal | undefined,
-  interruptible: boolean,
-): Promise<T> {
-  if (parentSignal?.aborted === true) {
-    throw new HarnessToolAbortError(parentSignal.reason)
-  }
-
-  const controller = new AbortController()
-  const cleanup: (() => void)[] = []
-  const races: Promise<T>[] = [
-    Promise.resolve().then(() => work(interruptible ? controller.signal : parentSignal)),
-  ]
-
-  races.push(new Promise<T>((_, reject) => {
-    const onAbort = () => reject(normalizeToolAbortReason(controller.signal.reason))
-    controller.signal.addEventListener('abort', onAbort, { once: true })
-    cleanup.push(() => controller.signal.removeEventListener('abort', onAbort))
-  }))
-
-  if (parentSignal !== undefined) {
-    const onParentAbort = () => {
-      abortController(controller, new HarnessToolAbortError(parentSignal.reason))
-    }
-    parentSignal.addEventListener('abort', onParentAbort, { once: true })
-    cleanup.push(() => parentSignal.removeEventListener('abort', onParentAbort))
-  }
-
-  if (timeoutMs !== undefined) {
-    const timer = setTimeout(
-      () => abortController(controller, new HarnessToolTimeoutError(timeoutMs)),
-      timeoutMs,
-    )
-    cleanup.push(() => clearTimeout(timer))
-  }
-
-  try {
-    return await Promise.race(races)
-  } finally {
-    for (const cleanupFn of cleanup) {
-      cleanupFn()
-    }
-  }
-}
 
 class HarnessToolTimeoutError extends Error {
   constructor(timeoutMs: number) {
@@ -266,11 +227,6 @@ class HarnessToolAbortError extends Error {
   }
 }
 
-function abortController(controller: AbortController, reason: Error): void {
-  if (!controller.signal.aborted) {
-    controller.abort(reason)
-  }
-}
 
 function normalizeToolAbortReason(reason: unknown): Error {
   if (reason instanceof HarnessToolTimeoutError || reason instanceof HarnessToolAbortError) {
@@ -287,13 +243,6 @@ function buildToolCallId(toolId: string): string {
 }
 
 function elapsed(startedAt: number): number {
-  return Math.max(0, Math.round((Date.now() - startedAt) * 100) / 100)
+  return roundNonNegative2((Date.now() - startedAt))
 }
 
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return 'null'
-  }
-}

@@ -1,25 +1,39 @@
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { buildOfferingSupplyProjection, validateServiceCatalogInput } from './catalog-model'
 import {
-  buildPublicCatalogDto,
-  validateServiceCatalogInput,
-} from './catalog-model'
+  changeOfferingStatusInState,
+  createOfferingInState,
+  reviseOfferingInState,
+  upsertAccessPathInState,
+  withdrawAccessPathInState,
+  type OfferingFactsInput,
+  type OfferingSourceState,
+} from './offering-source'
 import type {
-  BusinessServiceRecord,
+  BusinessOfferingRecord,
+} from './offering-supply'
+import type {
   PublishBusinessCatalogCommand,
   PublishBusinessCatalogResult,
   PublishBusinessCatalogState,
-  ServiceCapabilityRecord,
   ValidatedServiceCatalogInput,
 } from './catalog-model'
-import type { AuditEventContract, OperationKeyInput, OperationKeyRecord, OperationKeyStore } from '@/modules/observability/public'
+import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
+import type { RegistryProjectionAttemptContract } from '@/modules/registry/public'
+import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
 import {
   markOperationSucceeded,
   reserveOperationKey,
   validateAuditEvent,
 } from '@/modules/observability/public'
-import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
-import type { RegistryProjectionAttemptContract } from '@/modules/registry/public'
+import type {
+  AuditEventContract,
+  OperationKeyInput,
+  OperationKeyRecord,
+  OperationKeyStore,
+} from '@/modules/observability/public'
 import { assertCsrf } from '@/modules/security/public'
 
 export function publishBusinessCatalog(
@@ -95,7 +109,7 @@ export function publishBusinessCatalog(
     }
   }
 
-  const requestHash = stableHash({
+  const requestHash = canonicalDigest({
     claimId: command.claimId,
     services: serviceValidation.services.map((service) => ({
       category: service.category,
@@ -130,37 +144,38 @@ export function publishBusinessCatalog(
       reason: operationDecision.reason,
     }
   }
-
   const replayed = operationDecision.code === 'operation_replayed'
+
   if (!replayed) {
-    applyPublishState(state, business, claim, serviceValidation.services, command.now)
+    applyPublishState(state, business, claim, serviceValidation.services, command.operationKey, command.now)
   }
 
-  const services = state.businessServices.filter((service) => service.businessId === business.businessId)
-  const capabilities = state.serviceCapabilities.filter((capability) => capability.businessId === business.businessId)
-  const catalogResult = buildPublicCatalogDto({
+  const projection = buildOfferingSupplyProjection({
     business,
     context,
-    services,
-    capabilities,
+    offerings: state.offerings.filter((offering) => offering.businessId === business.businessId),
+    revisions: state.revisions.filter((revision) => revision.businessId === business.businessId),
+    accessPaths: state.accessPaths.filter((path) => path.businessId === business.businessId),
     indexStatus: 'queued',
     discoveryStatus: 'degraded',
+    observedAt: command.now,
   })
-  if (catalogResult.kind === 'hidden') {
+  if (projection === undefined) {
     return {
       kind: 'error',
       code: 'catalog_publish_invalid_services',
       retryable: false,
-      reason: catalogResult.reason,
+      reason: 'no_published_offerings',
     }
   }
+  const catalog = projectBusinessSupplyToPublicApi(projection, command.now)
 
   const auditEvent = ensurePublishAuditEvent(state, business, command, replayed)
-  const registryAttempts = ensureRegistryAttempts(state, business.businessId, business.sourceHash, services, command.now)
+  const registryAttempts = ensureRegistryAttempts(state, business.businessId, business.sourceHash, command.now)
   const discoveryAttempts = ensureDiscoveryAttempts(state, business.businessId, business.sourceHash, command.now)
 
   if (!replayed) {
-    const resultHash = stableHash({
+    const resultHash = canonicalDigest({
       auditEventId: auditEvent.eventId,
       businessId: business.businessId,
       registryAttempts: registryAttempts.map((attempt) => attempt.logicalKey),
@@ -174,7 +189,7 @@ export function publishBusinessCatalog(
         ...registryAttempts.map((attempt) => attempt.logicalKey),
         ...discoveryAttempts.map((attempt) => attempt.attemptId),
       ],
-      command.now
+      command.now,
     )
     operationStore.save(succeeded)
   }
@@ -184,7 +199,7 @@ export function publishBusinessCatalog(
     code: replayed ? 'catalog_publish_replayed' : 'catalog_published',
     business,
     claim,
-    catalog: catalogResult.catalog,
+    catalog,
     auditEvent,
     registryProjectionAttempts: registryAttempts,
     discoveryManifestAttempts: discoveryAttempts,
@@ -196,7 +211,8 @@ function applyPublishState(
   business: PublishBusinessCatalogState['businesses'][number],
   claim: PublishBusinessCatalogState['claims'][number],
   services: readonly ValidatedServiceCatalogInput[],
-  now: number
+  operationKey: string,
+  now: number,
 ): void {
   business.publicStatus = 'published'
   business.claimStatus = 'published'
@@ -204,51 +220,119 @@ function applyPublishState(
   claim.status = 'published'
   claim.updatedAt = now
 
-  services.forEach((service, index) => {
-    const serviceSlug = brandNonEmpty(slugify(service.name), 'Slug')
-    const serviceId = brandNonEmpty(`service:${business.businessId}:${serviceSlug}`, 'ServiceId')
-    const serviceHash = stableHash({
-      businessId: business.businessId,
-      category: service.category,
+  let source: OfferingSourceState = {
+    offerings: state.offerings,
+    revisions: state.revisions,
+    accessPaths: state.accessPaths,
+    operations: [],
+  }
+  const activeRefs = new Set<string>()
+  const authority = { actorRef: business.ownerId, ownerRef: business.ownerId, businessOwnerRef: business.ownerId }
+  for (const service of services) {
+    const slug = normalizeSlug(service.name) || 'offering'
+    const offeringRef = brandNonEmpty(`offering:${business.businessId}:${slug}`, 'OfferingRef')
+    activeRefs.add(offeringRef)
+    const facts: OfferingFactsInput = {
       name: service.name,
-      serviceArea: service.serviceArea,
-      summary: service.summary,
-    })
-    const serviceRecord: BusinessServiceRecord = {
-      serviceId,
-      serviceSlug,
-      businessId: business.businessId,
-      name: service.name,
       category: service.category,
       summary: service.summary,
-      serviceArea: service.serviceArea,
-      hoursOrUnknown: service.hoursOrUnknown,
-      status: 'published',
-      sortOrder: index,
-      sourceHash: serviceHash,
-      createdAt: now,
-      updatedAt: now,
+      serviceAreaSummary: service.serviceArea,
+      availabilitySummary: service.hoursOrUnknown,
     }
-    upsertService(state.businessServices, serviceRecord)
+    const existing = source.offerings.find((offering) => offering.offeringRef === offeringRef)
+    let offering: BusinessOfferingRecord
+    if (existing === undefined) {
+      const created = createOfferingInState(source, {
+        authority,
+        operationKey: `${operationKey}:offering:${slug}:create`,
+        businessId: business.businessId,
+        offeringRef,
+        facts,
+        now,
+      })
+      if (created.kind === 'error') throw new Error(created.reason)
+      source = created.state
+      offering = created.value
+    } else {
+      const revised = reviseOfferingInState(source, {
+        authority,
+        operationKey: `${operationKey}:offering:${slug}:revise:${existing.currentRevision}`,
+        offeringRef,
+        expectedRevision: existing.currentRevision,
+        facts,
+        now,
+      })
+      if (revised.kind === 'error') throw new Error(revised.reason)
+      source = revised.state
+      offering = revised.value
+    }
+    if (offering.status !== 'published') {
+      const published = changeOfferingStatusInState(source, {
+        authority,
+        operationKey: `${operationKey}:offering:${slug}:publish`,
+        offeringRef,
+        expectedRevision: offering.currentRevision,
+        status: 'published',
+        now,
+      })
+      if (published.kind === 'error') throw new Error(published.reason)
+      source = published.state
+      offering = published.value
+    }
 
-    const capabilityRecord: ServiceCapabilityRecord = {
-      businessId: business.businessId,
-      serviceId,
-      kind: service.firstRequest.mode === 'quote_request_available' ? 'quote_request' : 'phone_inquiry',
-      status: service.firstRequest.mode === 'not_available_yet' ? 'unavailable' : 'available',
-      firstRequest: service.firstRequest,
-      callable: false,
-      paymentRequired: false,
-      ...(service.firstRequest.noContactReason === undefined ? {} : { reason: service.firstRequest.noContactReason }),
-      sourceHash: stableHash({
-        firstRequestMode: service.firstRequest.mode,
-        serviceId,
-      }),
-      createdAt: now,
-      updatedAt: now,
+    const channel = service.firstRequest.publicChannel === 'public_business_contact'
+      ? 'phone'
+      : service.firstRequest.publicChannel === 'ae_status_only'
+        ? 'ae_inquiry'
+        : undefined
+    const existingPaths = source.accessPaths.filter((path) => path.offeringRef === offeringRef && path.status !== 'withdrawn')
+    if (channel !== undefined && service.firstRequest.mode !== 'not_available_yet') {
+      const upserted = upsertAccessPathInState(source, {
+        authority,
+        operationKey: `${operationKey}:offering:${slug}:access-path`,
+        offeringRef,
+        accessPathRef: brandNonEmpty(`access:${business.businessId}:${slug}:human`, 'AccessPathRef'),
+        expectedRevision: offering.currentRevision,
+        status: 'published',
+        descriptor: {
+          kind: 'human_request',
+          channel,
+          disclosure: service.firstRequest.publicDisclosure ?? 'Contact the business to begin.',
+        },
+        now,
+      })
+      if (upserted.kind === 'error') throw new Error(upserted.reason)
+      source = upserted.state
+    } else {
+      for (const path of existingPaths) {
+        const withdrawn = withdrawAccessPathInState(source, {
+          authority,
+          operationKey: `${operationKey}:offering:${slug}:withdraw:${path.accessPathRef}`,
+          accessPathRef: path.accessPathRef,
+          expectedRevision: offering.currentRevision,
+          now,
+        })
+        if (withdrawn.kind === 'error') throw new Error(withdrawn.reason)
+        source = withdrawn.state
+      }
     }
-    upsertCapability(state.serviceCapabilities, capabilityRecord)
-  })
+  }
+  for (const offering of source.offerings) {
+    if (offering.businessId !== business.businessId || activeRefs.has(offering.offeringRef) || offering.status === 'retired') continue
+    const drafted = changeOfferingStatusInState(source, {
+      authority,
+      operationKey: `${operationKey}:offering:${offering.offeringRef}:draft`,
+      offeringRef: offering.offeringRef,
+      expectedRevision: offering.currentRevision,
+      status: 'draft',
+      now,
+    })
+    if (drafted.kind === 'error') throw new Error(drafted.reason)
+    source = drafted.state
+  }
+  state.offerings.splice(0, state.offerings.length, ...source.offerings)
+  state.revisions.splice(0, state.revisions.length, ...source.revisions)
+  state.accessPaths.splice(0, state.accessPaths.length, ...source.accessPaths)
 }
 
 function ensurePublishAuditEvent(
@@ -280,7 +364,7 @@ function ensurePublishAuditEvent(
     beforeState: 'authenticated',
     afterState: 'published',
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: command.now,
   })
 
@@ -296,10 +380,9 @@ function ensureRegistryAttempts(
   state: PublishBusinessCatalogState,
   businessId: PublishBusinessCatalogState['businesses'][number]['businessId'],
   sourceHash: PublishBusinessCatalogState['businesses'][number]['sourceHash'],
-  services: readonly BusinessServiceRecord[],
-  now: number
+  now: number,
 ): readonly RegistryProjectionAttemptContract[] {
-  const businessAttempt = upsertRegistryAttempt(state.registryProjectionAttempts, {
+  return [upsertRegistryAttempt(state.registryProjectionAttempts, {
     businessId,
     logicalKey: `registry:business:${businessId}:${sourceHash}`,
     sourceHash,
@@ -310,23 +393,7 @@ function ensureRegistryAttempts(
     startedAt: now,
     repairAction: 'rebuild_projection',
     repairResult: 'not_run',
-  })
-  const serviceAttempts = services.map((service) =>
-    upsertRegistryAttempt(state.registryProjectionAttempts, {
-      businessId,
-      serviceId: service.serviceId,
-      logicalKey: `registry:service:${service.serviceId}:${service.sourceHash}`,
-      sourceHash: service.sourceHash,
-      sourceVersion: 'public-catalog:v1',
-      projectionKind: 'service_catalog',
-      status: 'queued',
-      retryCount: 0,
-      startedAt: now,
-      repairAction: 'rebuild_projection',
-      repairResult: 'not_run',
-    })
-  )
-  return [businessAttempt, ...serviceAttempts]
+  })]
 }
 
 function ensureDiscoveryAttempts(
@@ -352,59 +419,26 @@ function ensureDiscoveryAttempts(
   return [attempt]
 }
 
-function upsertService(records: BusinessServiceRecord[], next: BusinessServiceRecord): void {
-  const existing = records.findIndex((record) => record.serviceId === next.serviceId)
-  if (existing === -1) {
-    records.push(next)
-    return
-  }
-
-  records[existing] = next
-}
-
-function upsertCapability(records: ServiceCapabilityRecord[], next: ServiceCapabilityRecord): void {
-  const existing = records.findIndex((record) => record.serviceId === next.serviceId && record.kind === next.kind)
-  if (existing === -1) {
-    records.push(next)
-    return
-  }
-
-  records[existing] = next
-}
-
 function upsertRegistryAttempt(
   records: RegistryProjectionAttemptContract[],
-  next: RegistryProjectionAttemptContract
+  next: RegistryProjectionAttemptContract,
 ): RegistryProjectionAttemptContract {
   const existing = records.find((record) => record.logicalKey === next.logicalKey)
-  if (existing !== undefined) {
-    return existing
-  }
-
+  if (existing !== undefined) return existing
   records.push(next)
   return next
 }
 
 function upsertDiscoveryAttempt(
   records: DiscoveryManifestAttemptContract[],
-  next: DiscoveryManifestAttemptContract
+  next: DiscoveryManifestAttemptContract,
 ): DiscoveryManifestAttemptContract {
   const existing = records.find((record) => record.attemptId === next.attemptId)
-  if (existing !== undefined) {
-    return existing
-  }
-
+  if (existing !== undefined) return existing
   records.push(next)
   return next
 }
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72)
-}
 
 class ArrayOperationKeyStore implements OperationKeyStore {
   constructor(private readonly records: OperationKeyRecord[]) {}

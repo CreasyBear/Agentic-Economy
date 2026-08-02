@@ -1,29 +1,20 @@
-import { auth } from '@clerk/tanstack-react-start/server'
-import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import {
+  requireClerkServerSession,
+  type ClerkServerSessionAdmission,
+} from '@/lib/server/require-clerk-server-session'
 
-export type OperatorSessionAdmission = { userId: string }
+export type OperatorSessionAdmission = ClerkServerSessionAdmission
 
 const admitOperatorSessionServer = createServerFn()
   .validator((data: { redirectTo: string }) => data)
-  .handler(async ({ data }): Promise<OperatorSessionAdmission> => {
-    if (isLocalE2EAuthBypassEnabled()) {
-      return { userId: 'local-e2e-operator' }
-    }
-
-    const { isAuthenticated, userId } = await auth()
-    if (!isAuthenticated) {
-      throw redirect({
-        to: '/sign-in/$',
-        params: { _splat: '' },
-        search: { redirect: data.redirectTo },
-      })
-    }
-
-    return { userId }
-  })
+  .handler(({ data }): Promise<OperatorSessionAdmission> =>
+    requireClerkServerSession({
+      localBypassPrincipal: 'local-e2e-operator',
+      redirectTo: data.redirectTo,
+    }),
+  )
 
 /**
  * Shared beforeLoad guard for every /owner/*, /admin/*, and /developers/*

@@ -14,7 +14,6 @@ import {
 afterEach(cleanup)
 
 const businessId = brandNonEmpty('business:status-card', 'BusinessId')
-const serviceId = brandNonEmpty('service:status-card:emergency-plumbing', 'ServiceId')
 const slug = brandNonEmpty('status-card-plumbing', 'Slug')
 
 const blockerExpectations = [
@@ -98,6 +97,7 @@ function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteRead
     publicUrl: '/status-card-plumbing',
     noindex: true,
     catalog: {
+      schemaVersion: 'public-business-catalog-api:v2',
       businessId,
       slug,
       name: 'Status Card Plumbing',
@@ -105,33 +105,38 @@ function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteRead
       suburb: 'Parramatta',
       stateTerritory: 'NSW',
       publicUrl: '/status-card-plumbing',
-      publicStatus: 'published',
       trustTier: 'contact_confirmed',
-      indexStatus: 'queued',
-      discoveryStatus: 'degraded',
+      observedAt: 1,
+      disposition: 'current',
       photos: [],
-      services: [
+      offerings: [
         {
-          serviceId,
-          serviceSlug: brandNonEmpty('emergency-plumbing', 'Slug'),
-          businessId,
+          offeringRef: 'offering:status-card-plumbing:emergency-plumbing',
+          revision: 1,
           name: 'Emergency plumbing',
           category: 'Emergency plumbing',
           summary: 'Urgent plumbing help.',
-          serviceArea: 'Parramatta',
-          hoursOrUnknown: 'Hours supplied by owner',
-          firstRequest: {
-            mode: 'inquiry_available',
-            publicDisclosure: 'Use the inquiry form for first contact.',
-            publicChannel: 'public_business_contact',
-            rawContactExcluded: true,
+          serviceAreaSummary: 'Parramatta',
+          availabilitySummary: 'Hours supplied by owner',
+          accessPaths: [
+            {
+              accessPathRef: 'access:status-card-plumbing:emergency-plumbing:inquiry',
+              kind: 'human_request',
+              channel: 'ae_inquiry',
+              disclosure: 'Use the inquiry form for first contact.',
+            },
+          ],
+          support: {
+            integrated: false,
+            aeSupportedAction: false,
           },
-          status: 'published',
-          capabilities: [],
         },
       ],
-      schemaVersion: 'public-catalog:v1',
-      updatedAt: 1,
+      accessSummary: {
+        humanRequest: true,
+        externalOperation: false,
+        aeSupportedAction: false,
+      },
     },
     unavailableCapabilities: [],
     nextAction: 'Share the public page and keep service facts current.',

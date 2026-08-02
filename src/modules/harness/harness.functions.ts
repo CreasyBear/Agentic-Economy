@@ -1,14 +1,9 @@
 import {
   callPublicSourceMutation,
-  callPublicSourceQuery,
-  callSourceQuery,
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import {
-  sourceWriteAdmissionFromContext,
-  sourceWriteAdmissionFromRequest,
-} from '@/lib/server/source-write-admission'
+import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 import type {
@@ -183,28 +178,6 @@ async function appendHarnessSessionEntryToSource(
   return callPublicSourceMutation(harnessSessionSourceFunctionRefs.appendEntry, args)
 }
 
-export async function appendHarnessSessionEntryToSourceFromServerContext(input: {
-  context: unknown
-  entry: AppendHarnessSessionEntrySourceInput
-  operationKey?: string
-  correlationId?: string
-}): Promise<AppendHarnessSessionEntryResult> {
-  const operationKey = input.operationKey ?? harnessSessionAppendOperationKey(input.entry)
-  const correlationId = input.correlationId ?? input.entry.runId
-
-  return appendHarnessSessionEntryToSource({
-    ...input.entry,
-    operationKey,
-    correlationId,
-    sourceWrite: await sourceWriteAdmissionFromContext({
-      context: input.context,
-      scope: 'harness_session',
-      operationKey,
-      correlationId,
-    }),
-  })
-}
-
 export async function appendHarnessSessionEntryToSourceFromRequest(input: {
   request: Request
   entry: AppendHarnessSessionEntrySourceInput
@@ -234,20 +207,3 @@ function harnessSessionAppendOperationKey(entry: Pick<
   return `harness-session:${entry.sessionId}:${entry.idempotencyKey ?? entry.entryId}`
 }
 
-export async function listHarnessSessionEntriesFromSource(
-  args: { sessionId: string; limit?: number },
-): Promise<ListHarnessSessionEntriesResult> {
-  return callPublicSourceQuery(harnessSessionSourceFunctionRefs.listSessionEntries, args)
-}
-
-export async function listHarnessRunEntriesFromSource(
-  args: { runId: string; limit?: number },
-): Promise<ListHarnessRunEntriesResult> {
-  return callPublicSourceQuery(harnessSessionSourceFunctionRefs.listRunEntries, args)
-}
-
-export async function readAdminHarnessSessionEntriesFromSource(
-  args: { sessionId: string; limit?: number },
-): Promise<ReadAdminHarnessSessionEntriesResult> {
-  return callSourceQuery(harnessSessionSourceFunctionRefs.readAdminSessionEntries, args)
-}

@@ -1,3 +1,4 @@
+import { parseBoundedJson } from '@/modules/common/bounded-json'
 import type {
   HarnessRunStatus,
   HarnessSessionEntry,
@@ -66,13 +67,6 @@ export type HarnessPublicReplayProjection = {
   staleTerminalCount: number
 }
 
-export function buildHarnessReplayProjection(
-  sessionId: string,
-  entries: readonly HarnessSessionEntry[],
-): HarnessPrivateReplayProjection {
-  return buildHarnessPrivateReplayProjection(sessionId, entries)
-}
-
 export function buildHarnessPrivateReplayProjection(
   sessionId: string,
   entries: readonly HarnessSessionEntry[],
@@ -125,8 +119,8 @@ export function isHarnessTerminalSessionEntry(entry: HarnessSessionEntry): boole
 }
 
 function toPrivateReplayEntry(entry: HarnessSessionEntry): HarnessPrivateReplayEntry {
-  const publicSummary = entry.publicSummaryJson === undefined ? undefined : parseJson(entry.publicSummaryJson)
-  const privatePayload = entry.privatePayloadJson === undefined ? undefined : parseJson(entry.privatePayloadJson)
+  const publicSummary = entry.publicSummaryJson === undefined ? undefined : parseBoundedJson(entry.publicSummaryJson) ?? null
+  const privatePayload = entry.privatePayloadJson === undefined ? undefined : parseBoundedJson(entry.privatePayloadJson) ?? null
 
   return {
     entryId: entry.entryId,
@@ -137,14 +131,14 @@ function toPrivateReplayEntry(entry: HarnessSessionEntry): HarnessPrivateReplayE
     kind: entry.kind,
     ...(entry.status === undefined ? {} : { status: entry.status }),
     createdAt: entry.createdAt,
-    payload: parseJson(entry.payloadJson),
+    payload: parseBoundedJson(entry.payloadJson) ?? null,
     ...(publicSummary === undefined ? {} : { publicSummary }),
     ...(privatePayload === undefined ? {} : { privatePayload }),
   }
 }
 
 function toPublicReplayEntry(entry: HarnessSessionEntry): HarnessPublicReplayEntry {
-  const summary = entry.publicSummaryJson === undefined ? undefined : parseJson(entry.publicSummaryJson)
+  const summary = entry.publicSummaryJson === undefined ? undefined : parseBoundedJson(entry.publicSummaryJson) ?? null
 
   return {
     seq: entry.seq,
@@ -174,10 +168,3 @@ function buildPublicTerminal(entry: HarnessSessionEntry): HarnessPublicReplayTer
   }
 }
 
-function parseJson(json: string): unknown {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
-}

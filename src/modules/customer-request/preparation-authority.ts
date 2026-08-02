@@ -4,6 +4,8 @@ import { bytesToHex } from '@noble/hashes/utils'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
+import { stableUnique } from '@/modules/common/stable-unique'
 
 type Awaitable<Value> = Value | Promise<Value>
 
@@ -87,10 +89,10 @@ export function preparationAuthorityDigest(
     authorityId: authority.authorityId, authorityVersion: authority.authorityVersion,
     principalId: authority.principalId, delegatedAgentId: authority.delegatedAgentId,
     requestId: authority.requestId, requestRevision: authority.requestRevision, mode: authority.mode,
-    permittedFields: [...new Set(authority.permittedFields)].sort(),
-    permittedRecipientKinds: [...new Set(authority.permittedRecipientKinds)].sort(),
-    permittedRecipientBindingIds: [...new Set(authority.permittedRecipientBindingIds)].sort(),
-    permittedPurposes: [...new Set(authority.permittedPurposes)].sort(),
+    permittedFields: uniqueSorted(authority.permittedFields),
+    permittedRecipientKinds: uniqueSorted(authority.permittedRecipientKinds),
+    permittedRecipientBindingIds: uniqueSorted(authority.permittedRecipientBindingIds),
+    permittedPurposes: uniqueSorted(authority.permittedPurposes),
     maximumRecipients: authority.maximumRecipients, maximumExposures: authority.maximumExposures,
     maximumOperations: authority.maximumOperations, grantedAt: authority.grantedAt, expiresAt: authority.expiresAt,
   })
@@ -265,7 +267,7 @@ export function createInMemoryPreparationDisclosureStore(
         return { kind: 'refused' as const, reason: 'authority_state_conflict' as const }
       }
       const isNewRecipient = !state.recipients.has(input.command.recipient.bindingId)
-      const exposureKeys = [...new Set(input.command.fields)].map((field) => [
+      const exposureKeys = stableUnique(input.command.fields).map((field) => [
         input.command.recipient.bindingId, input.command.purpose, field,
       ].join('\u001f'))
       const newExposureCount = exposureKeys.filter((key) => !state.exposures.has(key)).length
@@ -354,7 +356,7 @@ export function createPreparationDisclosureAllocation(
     recipient: command.recipient,
     purpose: command.purpose,
     purposeLabel: command.purposeLabel,
-    fields: Object.freeze([...new Set(command.fields)].sort()),
+    fields: Object.freeze(uniqueSorted(command.fields)),
     fieldCategories: Object.freeze(command.fieldCategories.map((item) => Object.freeze({ ...item }))),
     disposition: 'allocated',
     allocatedAt: now,
@@ -480,7 +482,7 @@ function allocationMaterial(authority: VerifiedPreparationAuthority, command: Pr
     recipientKind: command.recipient.kind,
     purpose: command.purpose,
     purposeLabel: command.purposeLabel,
-    fields: [...new Set(command.fields)].sort(),
+    fields: uniqueSorted(command.fields),
     fieldCategories: command.fieldCategories.map((item) => ({ ...item })),
   }
 }
@@ -499,7 +501,7 @@ function validateAuthorityScope(
   if (authority.status !== 'active') return 'authority_revoked'
   if (authority.grantedAt > now) return 'authority_not_yet_valid'
   if (authority.expiresAt <= now) return 'authority_expired'
-  const fields = [...new Set(command.fields)]
+  const fields = stableUnique(command.fields)
   const permittedFields = new Set(authority.permittedFields)
   if (fields.length === 0 || fields.some((field) => !permittedFields.has(field))) return 'authority_field_denied'
   const protectedValueFields = Object.keys(command.protectedValues).sort()

@@ -3,17 +3,16 @@ import {
   jsonSchema,
   NoSuchToolError,
   Output,
-  stepCountIs,
+  isStepCount,
+  type StepResult,
   tool,
   type LanguageModelUsage,
-  type ModelMessage,
-  type ProviderMetadata,
   type Tool,
   type ToolSet,
 } from 'ai'
-import { z } from 'zod'
 
 import type { AnyAction } from '@/modules/actions'
+import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import {
   openRouterCostUsd,
   openRouterGatewayConfig,
@@ -59,11 +58,10 @@ import type { HarnessModelRequestRecord, HarnessModelUsage, HarnessRunLoop } fro
  * matters here: `runAnswerToolCall` validates every call against the action's
  * Zod schema and records it as evidence, and the tool budget is enforced in
  * the tool itself so an over-budget call is a recorded refusal rather than a
- * dropped one. After at most `MAX_ROUNDS` steps the model returns
+ * dropped one. After at most `MAX_ROUNDS` tool rounds the model returns
  * `AnswerProse` (oneLine / summary / whatToDoNow). The server assembles
  * `AnswerSource[]` and `allowedSlugs` from the tool results - never from the
  * model - and gates the prose against them.
- *
  * The registry stays literal. Misspelling recovery happens only when the model
  * chooses better `registry.search` arguments; the chosen input is persisted as
  * tool evidence. No hidden query-rewrite preprocessor runs.
@@ -251,7 +249,7 @@ async function runRealToolUseAgent(
   const tools = buildAnswerAgentTools(runToolCall)
 
   const recordStep = (timingName: string, extraMetadata: Record<string, string | number | boolean | null>) =>
-    (step: AnswerAgentStep): void => {
+    (step: StepResult<ToolSet>): void => {
       const seq = modelRequests.length
       const resolvedModel = step.response.modelId ?? modelId
       const usage = harnessUsage(step.usage)
@@ -283,90 +281,80 @@ async function runRealToolUseAgent(
     ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
   })
 
+  const proseOutput = Output.object({ schema: AnswerProseSchema, name: 'answer_prose' })
+
   /**
    * The prose request withholds the toolset entirely and pins a strict
    * `AnswerProse` schema, so the model cannot reach the catalogue again and
    * cannot answer in free text.
    */
   const requestProse = (
-    prompt: { prompt: string } | { messages: ModelMessage[] },
+    prompt: string,
     timingName: string,
-  ) => runGuardedModelCall(input, modelId, () => generateText({
+  ) => runGuardedModelCall(input, modelId, modelRequests, () => generateText({
     model: openRouterModel(config, modelId, { structuredOutputs: true }),
-    system: buildToolUseAgentSystemPrompt(),
-    ...prompt,
-    output: Output.object({ schema: AnswerProseSchema, name: 'answer_prose' }),
+    instructions: buildToolUseAgentSystemPrompt(),
+    prompt,
+    output: proseOutput,
     temperature: 0.2,
     maxRetries: 0,
-    onStepFinish: recordStep(timingName, { tools: 0 }),
+    onStepEnd: recordStep(timingName, { tools: 0 }),
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   }))
 
   // filter_known / compare_known reuse frozen prior evidence, so the turn is a
   // single prose request that never exposes the catalogue toolset at all.
   if (input.disableTools === true) {
-    const frozen = await requestProse({ prompt: userPrompt }, 'model.openrouter_round')
+    const frozen = await requestProse(userPrompt, 'model.openrouter_round')
     if (frozen.toolCalls.length > 0) {
       throw new AnswerToolUseAgentError('tool_unavailable')
     }
-    const frozenProse = frozen.output ?? parseProse(frozen.text)
+    const frozenProse = frozen.output
     if (frozenProse === undefined) {
       throw new AnswerToolUseAgentError('prose_failed')
     }
     return buildAgentResult(input, frozenProse, toolCalls, providers, timings, modelRequests)
   }
 
-  const toolPhase = await runGuardedModelCall(input, modelId, () => generateText({
-    model: openRouterModel(config, modelId),
-    system: buildToolUseAgentSystemPrompt(),
+  let finalStepRequested = false
+  const stopAtMaxRounds = isStepCount(MAX_ROUNDS)
+  const toolStopCondition = async ({ steps }: { steps: Array<StepResult<ToolSet>> }): Promise<boolean> => {
+    const reachedStop = (await stopAtMaxRounds({ steps })) || toolBudgetExhausted
+    if (!reachedStop) {
+      return false
+    }
+    if (!finalStepRequested) {
+      finalStepRequested = true
+      return false
+    }
+    return true
+  }
+  const result = await runGuardedModelCall(input, modelId, modelRequests, () => generateText({
+    model: openRouterModel(config, modelId, { structuredOutputs: true }),
+    instructions: buildToolUseAgentSystemPrompt(),
     prompt: userPrompt,
     tools,
+    output: proseOutput,
     temperature: 0.2,
     maxRetries: 0,
-    // Stop as soon as the tool budget is spent: the final prose is a separate,
-    // schema-constrained request rather than another tool-capable round.
-    stopWhen: [stepCountIs(MAX_ROUNDS), () => toolBudgetExhausted],
-    onStepFinish: recordStep('model.openrouter_round', { tools: Object.keys(tools).length }),
+    prepareStep: () => (finalStepRequested ? { activeTools: [] } : undefined),
+    // Defer the existing round/budget stop once so the same SDK call can make
+    // one structured, tool-less prose step after the final tool result.
+    stopWhen: [toolStopCondition],
+    onStepEnd: recordStep('model.openrouter_round', { tools: Object.keys(tools).length }),
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   }))
   if (toolBudgetExhausted) {
     updateLastModelTiming(timings, { toolBudgetExhausted: true, maxToolCalls })
   }
 
-  const directProse = parseProse(toolPhase.text)
-  if (directProse !== undefined) {
-    return buildAgentResult(input, directProse, toolCalls, providers, timings, modelRequests)
-  }
-
-  const prosePhase = await requestProse(
-    {
-      messages: [
-        ...toolPhase.response.messages,
-        {
-          role: 'user',
-          content:
-            'Stop calling tools. Return AnswerProse JSON now: {"oneLine","summary","whatToDoNow"}.',
-        },
-      ],
-    },
-    'model.openrouter_final_prose',
-  )
-  updateLastModelStopReason(modelRequests, 'final_prose')
-  const prose = prosePhase.output ?? parseProse(prosePhase.text)
+  const prose = result.output
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
   return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
 }
 
-type AnswerAgentStep = Readonly<{
-  finishReason: string
-  rawFinishReason: string | undefined
-  usage: LanguageModelUsage
-  performance: Readonly<{ responseTimeMs: number }>
-  response: Readonly<{ id?: string | undefined; modelId?: string | undefined; timestamp: Date }>
-  providerMetadata: ProviderMetadata | undefined
-}>
 
 /**
  * The AE read toolset, projected onto AI SDK tools.
@@ -409,24 +397,26 @@ function buildAnswerAgentTools(
 }
 
 /**
- * Runs one model interaction under the turn's harness guards when the caller
- * owns a live loop, and records a failed request otherwise.
+ * Runs one model interaction under the turn's harness guards and records a
+ * failed request in the turn's model accounting when the interaction errors.
  */
 async function runGuardedModelCall<T>(
   input: AnswerToolUseAgentInput,
   modelId: string,
+  modelRequests: HarnessModelRequestRecord[],
   work: () => Promise<T>,
 ): Promise<T> {
   const startedAt = Date.now()
+  const seq = modelRequests.length
   try {
     return input.harnessLoop === undefined
       ? await work()
-      : await input.harnessLoop.runModel<T>({ seq: 0, provider: 'openrouter', model: modelId }, work)
+      : await input.harnessLoop.runModel<T>({ seq, provider: 'openrouter', model: modelId }, work)
   } catch (error) {
     const durationMs = Date.now() - startedAt
     const agentError = toAgentError(error)
-    recordModelRequest(input, [], {
-      seq: 0,
+    recordModelRequest(input, modelRequests, {
+      seq,
       provider: 'openrouter',
       model: modelId,
       status: 'error',
@@ -461,6 +451,9 @@ function harnessUsage(usage: LanguageModelUsage): HarnessModelUsage | undefined 
     ...(usage.inputTokenDetails.cacheReadTokens === undefined
       ? {}
       : { cachedInputTokens: usage.inputTokenDetails.cacheReadTokens }),
+    ...(usage.inputTokenDetails.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens }),
     ...(usage.outputTokenDetails.reasoningTokens === undefined
       ? {}
       : { reasoningOutputTokens: usage.outputTokenDetails.reasoningTokens }),
@@ -510,7 +503,7 @@ function timingEntry(
 ): AnswerTurnTimingEntry {
   return {
     name,
-    durationMs: Math.max(0, Math.round(durationMs * 100) / 100),
+    durationMs: roundNonNegative2(durationMs),
     atMs: Date.now(),
     ...(metadata === undefined ? {} : { metadata }),
   }
@@ -582,38 +575,6 @@ function appendProvidersFromToolResult(
   }
 }
 
-
-function parseProse(content: string | undefined): AnswerProse | undefined {
-  if (content === undefined || content.trim().length === 0) {
-    return undefined
-  }
-  try {
-    const parsed = AnswerProseSchema.safeParse(JSON.parse(extractJsonObject(content)))
-    return parsed.success ? parsed.data : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function parseToolInput(argumentsJson: string | undefined): unknown {
-  if (argumentsJson === undefined || argumentsJson.length === 0) {
-    return {}
-  }
-  try {
-    return JSON.parse(argumentsJson)
-  } catch {
-    return {}
-  }
-}
-
-function extractJsonObject(content: string): string {
-  const start = content.indexOf('{')
-  const end = content.lastIndexOf('}')
-  if (start === -1 || end === -1 || end <= start) {
-    return content
-  }
-  return content.slice(start, end + 1)
-}
 
 function resolveAgentQuery(
   toolCalls: readonly AnswerToolCallRecord[],
@@ -734,25 +695,13 @@ function normalizeMaxRegistrySearchLimit(value: number | undefined): number {
 
 function safeToolResultJsonForPrompt(resultJson: string): string {
   try {
-    return JSON.stringify(sanitizePromptValue(JSON.parse(resultJson)))
+    return JSON.stringify(
+      JSON.parse(resultJson),
+      (_key, value) => typeof value === 'string' ? sanitizePromptString(value) : value,
+    ) ?? sanitizePromptString(resultJson)
   } catch {
     return sanitizePromptString(resultJson)
   }
-}
-
-function sanitizePromptValue(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return sanitizePromptString(value)
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizePromptValue(entry))
-  }
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizePromptValue(entry)]),
-    )
-  }
-  return value
 }
 
 function sanitizePromptString(value: string): string {
@@ -790,5 +739,3 @@ export function isAnswerToolUseAgentError(error: unknown): error is AnswerToolUs
   return error instanceof AnswerToolUseAgentError
 }
 
-// Re-export so callers can build a Zod-validated plan if needed.
-export { z }

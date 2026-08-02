@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
 
 import { jsonResponse } from './api.businesses'
@@ -7,7 +8,7 @@ import { jsonResponse } from './api.businesses'
 export const Route = createFileRoute('/api/sandbox/$slug/checkup-quote')({
   server: {
     handlers: {
-      POST: ({ params }) => handleSandboxCheckupQuoteRequest(params.slug),
+      POST: ({ request, params }) => withHttpRateLimit(request, 'public-read', () => handleSandboxCheckupQuoteRequest(params.slug)),
     },
   },
 })

@@ -494,7 +494,6 @@ export async function openCurrentRouteGeneration(
       query.eq('requestId', requestId).eq('requestRevision', requestHead.currentRevision)
     )).unique()
   if (revision === null
-    || 'routes' in revision.aggregate.plan
     || revision.aggregate.aggregateDigest !== requestHead.currentAggregateDigest
     || revision.aggregate.snapshot.requestId !== requestId
     || revision.aggregate.snapshot.revision !== requestHead.currentRevision

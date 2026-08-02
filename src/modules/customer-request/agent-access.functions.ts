@@ -3,10 +3,14 @@ import type { ClerkClient } from '@clerk/backend'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+
 import {
   issueCustomerRequestAgentKey,
   listCustomerRequestAgentKeys,
   revokeCustomerRequestAgentKey,
+  type CustomerRequestAgentPrincipalRegistration,
+  type CustomerRequestAgentPrincipalRegistrationResult,
 } from './agent-access'
 import type { AgentKeyCreateInput, AgentKeyRecord } from './agent-access'
 
@@ -45,8 +49,22 @@ type ClerkCustomerRequestAgentKeyApi = Readonly<{
   create: (input: AgentKeyCreateInput) => Promise<{ id: string; secret?: string }>
   getSecret: (keyId: string) => Promise<{ secret: string }>
   get: (keyId: string) => Promise<AgentKeyRecord>
-  revoke: (input: { apiKeyId: string; revocationReason: string }) => Promise<unknown>
+  revoke: (input: { apiKeyId: string; revocationReason: string }) => Promise<void>
 }>
+
+type RegisterAgentPrincipalArgs = {
+  principalId: string
+  credentialId: string
+  scopes: string[]
+  seenAt: number
+}
+type RegisterAgentPrincipalResult =
+  | { kind: 'recorded' }
+  | { kind: 'conflict' }
+  | { kind: 'refused'; code: 'authentication_required' }
+const registerAgentPrincipalMutation = sourceMutation<RegisterAgentPrincipalArgs, RegisterAgentPrincipalResult>(
+  'customerRequestPrincipals:registerAgentPrincipal',
+)
 
 export function createClerkCustomerRequestAgentKeyApi(apiKeys: ClerkApiKeysClient): ClerkCustomerRequestAgentKeyApi {
   return {
@@ -60,7 +78,9 @@ export function createClerkCustomerRequestAgentKeyApi(apiKeys: ClerkApiKeysClien
     },
     getSecret: async (keyId) => await apiKeys.getSecret(keyId),
     get: async (keyId) => normalizeKey(await apiKeys.get(keyId)),
-    revoke: async (value) => await apiKeys.revoke(value),
+    revoke: async (value) => {
+      await apiKeys.revoke(value)
+    },
   }
 }
 
@@ -81,6 +101,23 @@ const normalizeKey = (key: ClerkApiKeyLike): AgentKeyRecord => {
     ...(expiresAt === undefined ? {} : { expiresAt }),
   }
 }
+export async function registerCustomerRequestAgentPrincipal(
+  input: CustomerRequestAgentPrincipalRegistration,
+): Promise<CustomerRequestAgentPrincipalRegistrationResult> {
+  try {
+    const result = await callSourceMutation(registerAgentPrincipalMutation, {
+      principalId: input.principalId,
+      credentialId: input.credentialId,
+      scopes: [...input.scopes],
+      seenAt: input.seenAt,
+    })
+    return result.kind === 'recorded' || result.kind === 'conflict'
+      ? result
+      : { kind: 'unavailable' }
+  } catch {
+    return { kind: 'unavailable' }
+  }
+}
 
 export const issueCustomerRequestAgentKeyServer = createServerFn({ method: 'POST' })
   .validator((data) => issueInputSchema.parse(data))
@@ -96,6 +133,7 @@ export const issueCustomerRequestAgentKeyServer = createServerFn({ method: 'POST
         ...(data.grantRef === undefined ? {} : { grantRef: data.grantRef }),
       },
       api,
+      registerPrincipal: registerCustomerRequestAgentPrincipal,
     }
     return await issueCustomerRequestAgentKey(input)
   })

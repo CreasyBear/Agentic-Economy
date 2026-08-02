@@ -6,7 +6,6 @@ import type {
   AnswerSource,
 } from '@/modules/answer/public'
 import { mergeAnswerArtifact } from '@/modules/answer/public'
-import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
 
 import type { ThinkingStep } from '@/modules/answer-thread/public'
 
@@ -18,8 +17,6 @@ type AnswerPlanState = Pick<
   Extract<AnswerEvent, { type: 'plan' }>,
   'providerBudget' | 'artifactBudget'
 >
-type EnginePlanState = Omit<Extract<AnswerEvent, { type: 'plan-contract' }>, 'type'>
-type RecommendationState = Omit<Extract<AnswerEvent, { type: 'recommendation' }>, 'type'>
 
 export type AnswerTurnUiState = {
   phase: AnswerTurnPhase
@@ -31,10 +28,6 @@ export type AnswerTurnUiState = {
   workLog: readonly AnswerWorkStep[]
   layoutProfile: AnswerLayoutProfile | undefined
   plan: AnswerPlanState | undefined
-  enginePlan: EnginePlanState | undefined
-  decisionMap: DecisionMapSnapshot | undefined
-  clarifyingQuestion: string | undefined
-  recommendation: RecommendationState | undefined
   errorMessage: string | null
   complete: boolean
 }
@@ -49,10 +42,6 @@ export const initialAnswerTurnUiState: AnswerTurnUiState = {
   workLog: [],
   layoutProfile: undefined,
   plan: undefined,
-  enginePlan: undefined,
-  decisionMap: undefined,
-  clarifyingQuestion: undefined,
-  recommendation: undefined,
   errorMessage: null,
   complete: false,
 }
@@ -90,29 +79,6 @@ export function reduceAnswerTurnEvent(state: AnswerTurnUiState, event: AnswerEve
         plan: {
           providerBudget: event.providerBudget,
           artifactBudget: event.artifactBudget,
-        },
-      }
-    case 'plan-contract':
-      return {
-        ...state,
-        enginePlan: {
-          planId: event.planId,
-          revision: event.revision,
-          goalText: event.goalText,
-          steps: event.steps,
-        },
-      }
-    case 'decision-map':
-      return { ...state, decisionMap: event.snapshot }
-    case 'clarifying-question':
-      return { ...state, clarifyingQuestion: event.question }
-    case 'recommendation':
-      return {
-        ...state,
-        recommendation: {
-          summary: event.summary,
-          ...(event.recommendedSlug === undefined ? {} : { recommendedSlug: event.recommendedSlug }),
-          nextStep: event.nextStep,
         },
       }
     case 'one-line':

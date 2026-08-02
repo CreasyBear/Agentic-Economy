@@ -6,15 +6,3 @@ export type ProjectSpineDefinitionVersion =
   | typeof PROJECT_SPINE_DEFINITION_V1
   | typeof PROJECT_SPINE_DEFINITION_V2
 
-export type ProjectSpineStatus =
-  | 'awaiting_decision'
-  | 'decision_received'
-  | 'chasing'
-  | 'completed'
-  | 'failed'
-
-export type ProjectSpineDecisionEvent = {
-  generation: number
-  decisionId: string
-  decisionHash: string
-}

@@ -1,6 +1,7 @@
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { deepFreeze } from '@/modules/common/deep-freeze'
+import { sameStringList } from '@/modules/common/same-string-list'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { CustomerRequestRoutePlan } from './compiler'
@@ -484,6 +485,6 @@ function isRecordWithExactKeys<const Keys extends readonly string[]>(
 function hasExactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort()
   const expected = [...keys].sort()
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+  return sameStringList(actual, expected)
 }
 

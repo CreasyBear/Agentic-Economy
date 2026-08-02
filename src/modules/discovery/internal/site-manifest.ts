@@ -1,4 +1,5 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { BUSINESS_TOOL_AGENT_SCOPE } from '@/modules/business-tools/public'
 import {
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
@@ -105,7 +106,6 @@ const agentKeyPath = '/agent-access' as const
 const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/': 'Human entry point',
   '/claim': 'Claim your business page',
-  '/registry': 'Browse business pages',
   '/for-agents': 'Guide for AI assistants',
   '/privacy/remove-business': 'Listing correction or removal',
   [SiteDiscoveryManifestPath]: 'This document',
@@ -124,7 +124,7 @@ const humanSurfaceLabels: Readonly<Record<string, string>> = {
 export function buildSiteDiscoveryManifest(
   input: Readonly<{ canonicalBaseUrl: string; now: number }>
 ): SiteDiscoveryManifestContract {
-  const origin = input.canonicalBaseUrl.replace(/\/+$/u, '')
+  const origin = trimTrailingSlashes(input.canonicalBaseUrl)
   const endpoints = buildEndpoints(origin)
   const body = {
     schemaVersion: SiteDiscoveryManifestSchemaVersion,
@@ -167,7 +167,7 @@ export function buildSiteDiscoveryManifest(
     unsupportedCapabilities: DeveloperDiscoveryUnsupportedCapabilities,
   } as const
 
-  return { ...body, generatedAt: input.now, generatedHash: stableHash(body) }
+  return { ...body, generatedAt: input.now, generatedHash: canonicalDigest(body) }
 }
 
 function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[] {

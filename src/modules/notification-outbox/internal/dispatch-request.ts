@@ -1,4 +1,5 @@
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { NotificationProviderError } from '@/lib/server/notification-provider'
 import { z } from 'zod'
 
@@ -9,7 +10,7 @@ const dispatchBodySchema = z.object({
 
 export function requireDispatchAuthorization(headers: Headers, systemKey: string): void {
   const authorization = headers.get('authorization')?.trim()
-  if (authorization !== `Bearer ${systemKey}`) {
+  if (authorization === undefined || !constantTimeStringEqual(authorization, `Bearer ${systemKey}`)) {
     throw new NotificationProviderError(
       'notification_dispatch_unauthorized',
       'Notification dispatch route requires a valid server bearer token.',
@@ -19,21 +20,20 @@ export function requireDispatchAuthorization(headers: Headers, systemKey: string
 }
 
 export async function readDispatchId(request: Request): Promise<string> {
-  const boundedBody = await readBoundedRequestText(request, MAX_NOTIFICATION_DISPATCH_BODY_BYTES)
+  const boundedBody = await readBoundedRequestJson(request, MAX_NOTIFICATION_DISPATCH_BODY_BYTES)
   if (!boundedBody.ok) {
+    const isTooLarge = boundedBody.code === 'payload_too_large'
     throw new NotificationProviderError(
       'invalid_notification_dispatch_payload',
-      'Notification dispatch request body is too large.',
-      413,
+      isTooLarge
+        ? 'Notification dispatch request body is too large.'
+        : 'Notification dispatch request body must include dispatchId.',
+      isTooLarge ? 413 : 400,
     )
   }
 
-  try {
-    const parsed = dispatchBodySchema.safeParse(JSON.parse(boundedBody.text))
-    if (parsed.success) return parsed.data.dispatchId
-  } catch {
-    // Handled below.
-  }
+  const parsed = dispatchBodySchema.safeParse(boundedBody.value)
+  if (parsed.success) return parsed.data.dispatchId
 
   throw new NotificationProviderError(
     'invalid_notification_dispatch_payload',

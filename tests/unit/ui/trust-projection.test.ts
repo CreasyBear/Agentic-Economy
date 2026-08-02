@@ -8,11 +8,8 @@ import {
   NO_REPLY_HISTORY,
   buildListingTrustProjection,
 } from '@/lib/ui/trust-projection'
-import { brandNonEmpty } from '@/modules/common/ids'
-import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
-const BUSINESS_ID = brandNonEmpty('business:trust-fixture', 'BusinessId')
-const SERVICE_ID = brandNonEmpty('service:trust-fixture', 'ServiceId')
 const UPDATED_AT = 1_900_000_000_000
 
 function trustCatalog({
@@ -25,44 +22,34 @@ function trustCatalog({
   serviceArea: string
   responseTimeMinutes?: number
   publishedPhone?: string
-}): PublicRouteCatalogContract {
+}): PublicBusinessCatalogApiV2Dto {
   return {
-    businessId: BUSINESS_ID,
-    slug: brandNonEmpty('trust-fixture', 'Slug'),
+    schemaVersion: 'public-business-catalog-api:v2',
+    businessId: 'business:trust-fixture',
+    slug: 'trust-fixture',
     name: 'Trust Fixture Plumbing',
     category: 'Plumbing',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     ...(publishedPhone === undefined ? {} : { publishedPhone }),
     publicUrl: '/trust-fixture',
-    publicStatus: 'published',
     trustTier: 'contact_confirmed',
-    indexStatus: 'queued',
-    discoveryStatus: 'degraded',
-    photos: [],
     ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
-    services: [
-      {
-        serviceId: SERVICE_ID,
-        serviceSlug: brandNonEmpty('emergency-plumbing', 'Slug'),
-        businessId: BUSINESS_ID,
-        name: 'Emergency plumbing',
-        category: 'Plumbing',
-        summary: 'Urgent plumbing triage and repair.',
-        serviceArea,
-        hoursOrUnknown,
-        firstRequest: {
-          mode: 'inquiry_available',
-          publicChannel: 'public_business_contact',
-          publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-          rawContactExcluded: true,
-        },
-        status: 'published',
-        capabilities: [],
-      },
-    ],
-    schemaVersion: 'public-catalog:v1',
-    updatedAt: UPDATED_AT,
+    photos: [],
+    observedAt: UPDATED_AT,
+    disposition: 'partial',
+    offerings: [{
+      offeringRef: 'offering:trust-fixture:emergency-plumbing',
+      revision: 1,
+      name: 'Emergency plumbing',
+      category: 'Plumbing',
+      summary: 'Urgent plumbing triage and repair.',
+      serviceAreaSummary: serviceArea,
+      availabilitySummary: hoursOrUnknown,
+      accessPaths: [],
+      support: { integrated: false, aeSupportedAction: false },
+    }],
+    accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
   }
 }
 
@@ -164,7 +151,7 @@ describe('buildListingTrustProjection', () => {
 })
 
 describe('trust projection source boundary', () => {
-  it('keeps catalog/public as its only cross-module type import and excludes routing-kernel and inquiries', () => {
+  it('keeps registry/public as its only cross-module type import and excludes routing-kernel and inquiries', () => {
     const source = readFileSync(
       new URL('../../../src/lib/ui/trust-projection.ts', import.meta.url),
       'utf8',
@@ -180,7 +167,7 @@ describe('trust projection source boundary', () => {
     )
 
     expect(moduleImports).toEqual([
-      { typeOnly: true, specifier: '@/modules/catalog/public' },
+      { typeOnly: true, specifier: '@/modules/registry/public' },
     ])
     expect(
       imports.filter(({ specifier }) =>

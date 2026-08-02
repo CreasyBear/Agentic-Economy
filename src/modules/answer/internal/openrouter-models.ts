@@ -1,3 +1,8 @@
+import { uniqBy } from 'es-toolkit/array'
+
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
+
 export type AnswerModel = {
   id: string
   name: string
@@ -16,6 +21,8 @@ export type AnswerModelSelectorData = {
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
 const MODEL_CACHE_TTL_MS = 2 * 60 * 1000
+const OPENROUTER_MODELS_TIMEOUT_MS = 10_000
+const MAX_OPENROUTER_MODELS_RESPONSE_BYTES = 512 * 1024
 
 const EXCLUDED_ID_KEYWORDS = [
   'embed',
@@ -122,13 +129,8 @@ export function normalizeOpenRouterModels(records: readonly OpenRouterModelRecor
 }
 
 export function groupModelsByProvider(models: readonly AnswerModel[]): AnswerModelsByProvider {
-  const grouped: AnswerModelsByProvider = {}
-
-  for (const model of models) {
-    const bucket = grouped[model.provider] ?? []
-    bucket.push(model)
-    grouped[model.provider] = bucket
-  }
+  // Provably pure: Object.groupBy preserves provider key order and bucket membership/order from the prior loop.
+  const grouped = Object.groupBy(models, (model) => model.provider) as AnswerModelsByProvider
 
   for (const provider of Object.keys(grouped)) {
     const bucket = grouped[provider]
@@ -174,9 +176,19 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<AnswerModel
     return modelsCache.value
   }
 
-  const response = await fetch(OPENROUTER_MODELS_URL, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
+  const { response, responseBody } = await runWithAbortAndTimeout({
+    timeoutMs: OPENROUTER_MODELS_TIMEOUT_MS,
+    timeoutError: () => new Error('openrouter_models_timeout'),
+    run: async (signal) => {
+      const response = await fetch(OPENROUTER_MODELS_URL, {
+        redirect: 'error',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        ...(signal === undefined ? {} : { signal }),
+      })
+      const bounded = await readBoundedRequestText(response, MAX_OPENROUTER_MODELS_RESPONSE_BYTES)
+      return { response, responseBody: bounded.ok ? bounded.text : undefined }
     },
   })
 
@@ -184,7 +196,11 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<AnswerModel
     throw new Error(`openrouter_models_${response.status}`)
   }
 
-  const payload = (await response.json()) as { data?: OpenRouterModelRecord[] }
+  if (responseBody === undefined) {
+    throw new Error('openrouter_models_response_too_large')
+  }
+
+  const payload = JSON.parse(responseBody) as { data?: OpenRouterModelRecord[] }
   const models = normalizeOpenRouterModels(payload.data ?? [])
   modelsCache = {
     expiresAt: now + MODEL_CACHE_TTL_MS,
@@ -231,22 +247,11 @@ export async function getAnswerModelSelectorData(
 }
 
 function sortModels(models: AnswerModel[]): AnswerModel[] {
-  return [...models].sort((a, b) => a.name.localeCompare(b.name))
+  return models.toSorted((a, b) => a.name.localeCompare(b.name))
 }
 
 function dedupeModels(models: AnswerModel[]): AnswerModel[] {
-  const seen = new Set<string>()
-  const deduped: AnswerModel[] = []
-
-  for (const model of models) {
-    if (seen.has(model.id)) {
-      continue
-    }
-    seen.add(model.id)
-    deduped.push(model)
-  }
-
-  return deduped
+  return uniqBy(models, (model) => model.id)
 }
 
 export function resetOpenRouterModelsCacheForTest(): void {

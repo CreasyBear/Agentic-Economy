@@ -24,8 +24,7 @@ export const MAX_INQUIRY_DRAFT_CHARS = 500
 
 /** Slug params are bounded so a hand-crafted link can never carry an oversized path/query segment. */
 const MAX_INQUIRY_SLUG_CHARS = 120
-
-/** Business and service slugs are lowercase kebab identifiers. */
+/** Business slugs are lowercase kebab identifiers. */
 const INQUIRY_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 /**
@@ -53,12 +52,11 @@ export function sanitizeInquiryDraft(raw: unknown): string | undefined {
 }
 
 /**
- * Validate a business/service slug carried in a prefill link, or drop it.
+ * Validate a business slug carried in a prefill link, or drop it.
  *
  * Slugs must be lowercase kebab and within the length bound. Anything else
  * (uppercase, path traversal, query characters, whitespace) returns
- * `undefined`, so a malformed slug can never reach a path segment or a
- * service-preselect lookup.
+ * `undefined`, so a malformed slug can never reach a path segment.
  */
 export function sanitizeInquirySlug(raw: unknown): string | undefined {
   if (typeof raw !== 'string') {
@@ -77,19 +75,16 @@ export type PublicInquirySearch = {
   from?: 'thread'
   id?: string
   draft?: string
-  service?: string
 }
 
 export function validateInquirySearch(search: Record<string, unknown>): PublicInquirySearch {
   const from = search.from === 'thread' ? search.from : undefined
   const id = typeof search.id === 'string' && search.id.trim().length > 0 ? search.id.trim() : undefined
   const draft = sanitizeInquiryDraft(search.draft)
-  const service = sanitizeInquirySlug(search.service)
   return {
     ...(from === undefined ? {} : { from }),
     ...(id === undefined ? {} : { id }),
     ...(draft === undefined ? {} : { draft }),
-    ...(service === undefined ? {} : { service }),
   }
 }
 
@@ -98,8 +93,6 @@ export type InquiryPrefillHrefInput = {
   slug: string
   /** Stated need to seed the form body. Sanitized and capped; dropped if unusable. */
   draft?: string
-  /** Service slug to preselect when the listing publishes more than one inquiry path. */
-  service?: string
 }
 
 /**
@@ -118,11 +111,6 @@ export function buildInquiryPrefillHref(input: InquiryPrefillHrefInput): string 
   const draft = sanitizeInquiryDraft(input.draft)
   if (draft !== undefined) {
     params.push(`draft=${encodeURIComponent(draft)}`)
-  }
-
-  const service = sanitizeInquirySlug(input.service)
-  if (service !== undefined) {
-    params.push(`service=${encodeURIComponent(service)}`)
   }
 
   const base = `/${slug}/inquiry`

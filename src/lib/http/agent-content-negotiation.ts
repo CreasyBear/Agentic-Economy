@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+
 /**
  * A cold agent that fetches a page route with `Accept: text/markdown` used to
  * receive a framework 500 (`Only HTML requests are supported here`), because
@@ -64,7 +66,7 @@ export function negotiateAgentPage(request: Request): AgentPageNegotiation {
 
   // The router presents `/SKILL.md` as `/SKILL.md/`, so normalize before matching.
   const rawPath = new URL(request.url).pathname
-  const path = rawPath.length > 1 ? rawPath.replace(/\/+$/u, '') : rawPath
+  const path = rawPath.length > 1 ? trimTrailingSlashes(rawPath) : rawPath
   if (reservedPaths.some((reserved) => path === reserved)) return { kind: 'serve_html' }
   if (reservedPathPrefixes.some((prefix) => path.startsWith(prefix))) return { kind: 'serve_html' }
   if (reservedPathSuffixes.some((suffix) => path.endsWith(suffix))) return { kind: 'serve_html' }

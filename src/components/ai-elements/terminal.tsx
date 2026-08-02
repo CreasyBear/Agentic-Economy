@@ -2,17 +2,16 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useClipboardCopy } from "@/hooks/use-clipboard-copy";
 import Ansi from "ansi-to-react";
 import { CheckIcon, CopyIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 
 interface TerminalContextType {
@@ -97,7 +96,7 @@ export const TerminalActions = ({
   </div>
 );
 
-export type TerminalCopyButtonProps = ComponentProps<typeof Button> & {
+export type TerminalCopyButtonProps = Omit<ComponentProps<typeof Button>, "onCopy" | "onError"> & {
   onCopy?: () => void;
   onError?: (error: Error) => void;
   timeout?: number;
@@ -111,32 +110,12 @@ export const TerminalCopyButton = ({
   className,
   ...props
 }: TerminalCopyButtonProps) => {
-  const [isCopied, setIsCopied] = useState(false);
-  const timeoutRef = useRef<number>(0);
   const { output } = useContext(TerminalContext);
-
-  const copyToClipboard = useCallback(async () => {
-    if (typeof window === "undefined" || !navigator?.clipboard?.writeText) {
-      onError?.(new Error("Clipboard API not available"));
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(output);
-      setIsCopied(true);
-      onCopy?.();
-      timeoutRef.current = window.setTimeout(() => setIsCopied(false), timeout);
-    } catch (error) {
-      onError?.(error as Error);
-    }
-  }, [output, onCopy, onError, timeout]);
-
-  useEffect(
-    () => () => {
-      window.clearTimeout(timeoutRef.current);
-    },
-    []
-  );
+  const { isCopied, copy: copyToClipboard } = useClipboardCopy(output, {
+    timeout,
+    ...(onCopy === undefined ? {} : { onCopy }),
+    ...(onError === undefined ? {} : { onError }),
+  });
 
   const Icon = isCopied ? CheckIcon : CopyIcon;
 

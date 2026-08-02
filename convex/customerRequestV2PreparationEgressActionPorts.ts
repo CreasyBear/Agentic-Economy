@@ -4,6 +4,7 @@ import { Agent, fetch as guardedFetch } from 'undici'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { isRecord } from '@/modules/common/is-record'
 import type {
   CustomerRequestV2PreparationEgressActionPorts,
   DispatchPayload,
@@ -229,18 +230,15 @@ function resolveCredential(reference: string): string | undefined {
 }
 
 function isHttpConfiguration(value: unknown): value is HttpConfiguration {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
+  if (!isRecord(value)) return false
+  const record = value
   const keys = Object.keys(record).sort()
   const reconciliation = record.reconciliation
-  const reconciliationValid = reconciliation === undefined || (reconciliation !== null
-    && typeof reconciliation === 'object' && !Array.isArray(reconciliation)
+  const reconciliationValid = reconciliation === undefined || (isRecord(reconciliation)
     && Object.keys(reconciliation).length === 2
-    && typeof (reconciliation as Record<string, unknown>).path === 'string'
-    && /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/.test(
-      (reconciliation as Record<string, unknown>).path as string,
-    )
-    && validTimeout((reconciliation as Record<string, unknown>).requestTimeoutMs))
+    && typeof reconciliation.path === 'string'
+    && /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/.test(reconciliation.path)
+    && validTimeout(reconciliation.requestTimeoutMs))
   const keysValid = keys.join(',') === 'method,requestTimeoutMs'
     || keys.join(',') === 'method,reconciliation,requestTimeoutMs'
   return keysValid && record.method === 'POST'
@@ -259,8 +257,8 @@ function isReconciliationEvidence(value: unknown, operationRef: string): value i
   disposition: 'released' | 'not_released' | 'uncertain'
   evidenceRef: string
 }> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
+  if (!isRecord(value)) return false
+  const record = value
   return Object.keys(record).length === 4
     && record.protocol === 'ae.preparation-reconciliation:v1'
     && record.operationRef === operationRef

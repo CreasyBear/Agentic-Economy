@@ -26,7 +26,6 @@ export type {
 
 export {
   MAX_ELIGIBLE_SUPPLY,
-  listEligibleCapabilitySupply,
   listIntegratedCapabilitySupply,
   listRouteableCapabilitySupply,
 } from './list'

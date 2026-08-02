@@ -1,3 +1,4 @@
+import { isSecureRequest, readCookie, serializeCookie } from '@/lib/http/cookies'
 import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
 import { handleCustomerRequestFactsPost, type FactsResult } from '@/lib/server/customer-request-facts-api'
 import { handleCustomerRequestGet, type InspectResult } from '@/lib/server/customer-request-inspect-api'
@@ -5,8 +6,8 @@ import { handleCustomerRequestMessagePost, type MessageResult } from '@/lib/serv
 import type { ConfirmationResult } from '@/lib/server/customer-request-confirmation-api'
 import { handleCustomerRequestPost, type SubmitResult } from '@/lib/server/customer-request-api'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
-import { base64Codec } from '@/modules/common/base64-codec'
-import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
+import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
+import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
 import type {
   CustomerRequestAgentResult,
   CustomerRequestEvidenceResult,
@@ -21,7 +22,7 @@ const SESSION_LIFETIME_SECONDS = 24 * 60 * 60
 const SESSION_LIFETIME_MS = SESSION_LIFETIME_SECONDS * 1_000
 const SESSION_SCOPE = 'customer_requests:create'
 
-type BrowserActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult
+type BrowserActionResult = SubmitResult | FactsResult | MessageResult | CustomerRequestProjection | InspectResult
   | ConfirmationResult | CustomerRequestAgentResult | CustomerRequestProblemResult
   | CustomerRequestProblemStatusChange | CustomerRequestEvidenceResult
 
@@ -53,7 +54,7 @@ export async function handleBrowserCustomerRequestPost(
   const session = await createGuestSession(options)
   if (session === undefined) return authenticated
   const response = await handleGuestSubmit(request, session, options)
-  return response.ok ? withGuestCookie(response, session, request.url) : response
+  return response.ok ? withGuestCookie(response, session, request, options) : response
 }
 
 export async function handleBrowserCustomerRequestFactsPost(
@@ -94,7 +95,7 @@ export async function handleBrowserCustomerOptionsPost(
   const session = await readGuestSession(request, options)
   if (session === undefined) return handleCustomerOptionsPost(request, requestRef)
   return handleCustomerOptionsPost(request, requestRef, {
-    compare: async (args) => await callAsGuest<CustomerOptionsProjection>(
+    compare: async (args) => await callAsGuest<CustomerRequestProjection>(
       'customerRequestApplication:compare', 'compare', args, session, options,
     ),
   })
@@ -193,24 +194,20 @@ async function readGuestSession(request: Request, options: BrowserApiOptions): P
   return { sessionId, issuedAt, token }
 }
 
-function withGuestCookie(response: Response, session: GuestSession, requestUrl: string): Response {
+function withGuestCookie(response: Response, session: GuestSession, request: Request, options: BrowserApiOptions): Response {
   const headers = new Headers(response.headers)
-  const secure = new URL(requestUrl).protocol === 'https:' ? '; Secure' : ''
+  const nodeEnv = options.env?.NODE_ENV ?? process.env.NODE_ENV
   headers.append(
     'Set-Cookie',
-    `${COOKIE_NAME}=${encodeURIComponent(session.token)}; Path=/api/requests; HttpOnly; SameSite=Lax; Max-Age=${SESSION_LIFETIME_SECONDS}${secure}`,
+    serializeCookie(COOKIE_NAME, session.token, {
+      path: '/api/requests',
+      httpOnly: true,
+      sameSite: 'Lax',
+      maxAge: SESSION_LIFETIME_SECONDS,
+      secure: isSecureRequest(request, nodeEnv === undefined ? {} : { NODE_ENV: nodeEnv }),
+    }),
   )
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
-}
-
-function readCookie(header: string | null, name: string): string | undefined {
-  if (header === null) return undefined
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=')
-    if (separator < 0 || part.slice(0, separator).trim() !== name) continue
-    try { return decodeURIComponent(part.slice(separator + 1).trim()) } catch { return undefined }
-  }
-  return undefined
 }
 
 function readServiceKey(options: BrowserApiOptions): string | undefined {
@@ -229,7 +226,7 @@ async function sign(key: string, material: string): Promise<string> {
 }
 
 async function verify(key: string, material: string, signature: string): Promise<boolean> {
-  const bytes = fromBase64Url(signature)
+  const bytes = tryDecodeBase64Url(signature)
   if (bytes === undefined) return false
   return crypto.subtle.verify(
     'HMAC', await importKey(key, ['verify']), new Uint8Array(bytes).buffer, new TextEncoder().encode(material),
@@ -240,10 +237,3 @@ async function importKey(key: string, usages: Array<'sign' | 'verify'>): Promise
   return crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, usages)
 }
 
-
-function fromBase64Url(value: string): Uint8Array | undefined {
-  if (!/^[A-Za-z0-9_-]+$/u.test(value)) return undefined
-  try {
-    return base64Codec.fromBase64Url(value)
-  } catch { return undefined }
-}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
 import {
   createEmptyCatalogSourceState,
@@ -42,7 +43,7 @@ describe('publishBusinessCatalog', () => {
 
   })
 
-  it('publishes a discoverable business profile before its first offering', () => {
+  it('rejects publish without a current Offering', () => {
     const state = claimedState()
     const result = publishBusinessCatalog(state, {
       actor: { kind: 'authenticated_owner', clerkUserId: 'user_sam' },
@@ -54,8 +55,13 @@ describe('publishBusinessCatalog', () => {
       now: 20,
     })
 
-    expect(result).toMatchObject({ kind: 'ok', catalog: { services: [] } })
+    expect(result).toMatchObject({
+      kind: 'error',
+      code: 'catalog_publish_invalid_services',
+      reason: 'no_published_offerings',
+    })
   })
+
 
   it('publishes once and replays repeated publish without duplicate side effects', () => {
     const state = claimedState()
@@ -79,17 +85,26 @@ describe('publishBusinessCatalog', () => {
       business: { publicStatus: 'published', claimStatus: 'published' },
       claim: { status: 'published' },
       catalog: {
-        services: [
+        schemaVersion: 'public-business-catalog-api:v2',
+        offerings: [
           {
-            firstRequest: { rawContactExcluded: true },
-            capabilities: [{ callable: false, paymentRequired: false }],
+            name: 'Emergency pipe repair',
+            summary: 'Burst pipe triage and repair.',
+            accessPaths: [
+              {
+                kind: 'human_request',
+                channel: 'ae_inquiry',
+                disclosure: 'Use the public business contact listed on the catalog.',
+              },
+            ],
+            support: { integrated: false, aeSupportedAction: false },
           },
         ],
       },
     })
     expect(second).toMatchObject({ kind: 'ok', code: 'catalog_publish_replayed' })
     expect(state.auditEvents).toHaveLength(1)
-    expect(state.registryProjectionAttempts).toHaveLength(2)
+    expect(state.registryProjectionAttempts).toHaveLength(1)
     expect(state.discoveryManifestAttempts).toHaveLength(1)
     expect(state.operationKeys).toHaveLength(1)
   })
@@ -117,7 +132,7 @@ function claimedState(): PublishBusinessCatalogState {
         {
           label: 'Owner supplied',
           evidenceRef: 'private:evidence:1',
-          sourceHash: brandNonEmpty('hash:source:1', 'SourceHash'),
+          sourceHash: canonicalDigest('source:1'),
         },
       ],
     },
@@ -153,7 +168,7 @@ function validServices(): readonly ServiceCatalogInput[] {
       hoursOrUnknown: 'Hours supplied by owner',
       firstRequest: {
         mode: 'inquiry_available',
-        publicChannel: 'public_business_contact',
+        publicChannel: 'ae_status_only',
         publicDisclosure: 'Use the public business contact listed on the catalog.',
         rawContactValue: 'sam-owner@example.test',
       },
@@ -167,13 +182,6 @@ function validSecurity(key: string) {
       csrfToken: `csrf-${key}`,
       csrfCookie: `csrf-${key}`,
       allowedOrigins: ['https://ae.example'],
-    },
-    rateLimit: {
-      scope: 'claim_submit' as const,
-      key,
-      now: 1_000,
-      limit: 5,
-      windowMs: 60_000,
     },
   }
 }

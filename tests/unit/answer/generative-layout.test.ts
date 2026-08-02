@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { computeLayoutProfile, resolveLayoutProfile } from '@/modules/answer/internal/answer-layout-profile'
 import { buildMessagePartsFromSnapshot } from '@/modules/answer/internal/build-message-parts'
 import { buildArtifactsFromSnapshot } from '@/modules/answer/internal/snapshot-artifacts'
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import { buildPublicThreadProjection } from '@/modules/answer-thread/internal/public-projection'
+import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
 import type { AnswerTurnRecord, AnswerThreadRecord } from '@/modules/answer-thread/public'
 import type { AnswerSource } from '@/modules/answer/public'
 
@@ -26,6 +28,25 @@ const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
   inquiryUrl: '/demo/inquiry',
   ...overrides,
 })
+function replayEvidence(providers: readonly AnswerSource[], allowedSlugs: readonly string[]) {
+  const draft: FrozenTurnEvidenceDraft = {
+    providers,
+    allowedSlugs: [...allowedSlugs],
+    agentJsonUrl: '/api/businesses/search?q=plumber',
+    toolCalls: [],
+    timings: [],
+    workLog: [],
+  }
+  return {
+    ...draft,
+    answerRun: buildAnswerRunReport({
+      intent: 'refine_search',
+      status: 'complete',
+      snapshotHash: 'hash',
+      evidence: draft,
+    }),
+  }
+}
 
 describe('answer layout profile', () => {
   it('maps compact follow-ups to refinement_compact', () => {
@@ -76,11 +97,7 @@ describe('answer layout profile', () => {
       seq: 2,
       query: 'Narrow to Parramatta',
       intent: 'refine_search',
-      evidenceJson: JSON.stringify({
-        providers: [provider()],
-        allowedSlugs: ['demo'],
-        agentJsonUrl: '/api/businesses/search?q=plumber',
-      }),
+      evidenceJson: JSON.stringify(replayEvidence([provider()], ['demo'])),
       snapshotHash: 'hash',
       proseJson: JSON.stringify({
         oneLine: '1 listed in Parramatta.',
@@ -188,11 +205,7 @@ describe('buildMessagePartsFromSnapshot', () => {
       seq: 2,
       query: 'message the first one',
       intent: 'inquiry_handoff',
-      evidenceJson: JSON.stringify({
-        providers: [provider()],
-        allowedSlugs: ['demo'],
-        agentJsonUrl: '/api/businesses/search?q=plumber',
-      }),
+      evidenceJson: JSON.stringify(replayEvidence([provider()], ['demo'])),
       snapshotHash: 'hash',
       proseJson: JSON.stringify({
         oneLine: "Ready to open Demo Plumbing's qualified inquiry form.",

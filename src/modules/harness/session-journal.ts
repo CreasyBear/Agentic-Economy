@@ -1,4 +1,6 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableUnique } from '@/modules/common/stable-unique'
+import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 
 import type {
   HarnessRunStatus,
@@ -236,12 +238,12 @@ function normalizeHarnessSessionEntry(
   input: HarnessSessionEntryInput,
   defaults: { parentEntryId: string | undefined; seq: number },
 ): HarnessSessionEntry {
-  const payloadJson = input.payloadJson ?? safeStringify(input.payload ?? {})
+  const payloadJson = input.payloadJson ?? safeJsonStringify(input.payload ?? {})
   const publicSummaryJson = input.publicSummaryJson ?? (
-    input.publicSummary === undefined ? undefined : safeStringify(input.publicSummary)
+    input.publicSummary === undefined ? undefined : safeJsonStringify(input.publicSummary)
   )
   const privatePayloadJson = input.privatePayloadJson ?? (
-    input.privatePayload === undefined ? undefined : safeStringify(input.privatePayload)
+    input.privatePayload === undefined ? undefined : safeJsonStringify(input.privatePayload)
   )
   const schemaVersion = input.schemaVersion ?? 1
   const parentEntryId = input.parentEntryId ?? defaults.parentEntryId
@@ -298,7 +300,7 @@ function buildHarnessSessionRequestHash(input: {
   toolContractHash?: string
   sourceSnapshotHash?: string
 }): string {
-  return stableHash({
+  return canonicalDigest({
     sessionId: input.sessionId,
     runId: input.runId,
     turnId: input.turnId ?? null,
@@ -338,14 +340,3 @@ function nextEntrySeq(entries: readonly HarnessSessionEntry[], sessionId: string
     .reduce((maxSeq, entry) => Math.max(maxSeq, entry.seq), 0) + 1
 }
 
-function stableUnique(values: readonly string[]): readonly string[] {
-  return [...new Set(values)]
-}
-
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return 'null'
-  }
-}

@@ -195,7 +195,18 @@ export function createDevelopmentEvidenceVerifier() {
   const issued = new Set<string>()
   return {
     issue(material: ReconciliationEvidenceMaterial): ReconciliationEvidence {
-      const evidence = { ...material, digest: canonicalDigest(material as never) }
+      const exact: ReconciliationEvidenceMaterial = {
+        kind: material.kind,
+        version: material.version,
+        evidenceRef: material.evidenceRef,
+        source: material.source,
+        invocationRef: material.invocationRef,
+        attemptRef: material.attemptRef,
+        effectGeneration: material.effectGeneration,
+        resolution: material.resolution,
+        observedAt: material.observedAt,
+      }
+      const evidence = { ...exact, digest: canonicalDigest(exact as never) }
       issued.add(canonicalDigest(evidence as never))
       return evidence
     },

@@ -13,7 +13,7 @@ export type CustomerRequestRefusedReason =
   | 'capabilities_unavailable'
   | 'evidence_not_found'
   | 'invalid_amendment'
-
+  | 'rate_limited'
 /** Composition-layer action result — Convex adapters clone into validators via writableView. */
 export type CustomerRequestActionResult =
   | CustomerRequestView

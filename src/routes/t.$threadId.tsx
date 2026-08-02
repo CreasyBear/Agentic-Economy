@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
 import { AeCustomerRecord } from '@/components/ae/inquiries/AeCustomerRecord'
@@ -12,6 +13,7 @@ import {
   readPrivateRecordAccessKey,
   securePrivateRecordLocation,
 } from '@/lib/observability/private-route-safety'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 
 type ThreadRouteReadback = {
   projection: PublicThreadProjection | null
@@ -26,7 +28,7 @@ const threadRouteParamsSchema = z.object({
 
 export const readThreadRouteServer = createServerFn()
   .validator((data) => threadRouteParamsSchema.parse(data))
-  .handler(({ data }) => loadThreadRouteReadback(data.threadId))
+  .handler(({ data }) => loadThreadRouteReadback(data.threadId, getRequest()))
 
 export const Route = createFileRoute('/t/$threadId')({
   validateSearch: (search: Record<string, unknown>): ThreadRouteSearch => {
@@ -85,7 +87,7 @@ function ThreadPage() {
 }
 
 
-export async function loadThreadRouteReadback(threadId: string): Promise<ThreadRouteReadback> {
+export async function loadThreadRouteReadback(threadId: string, request?: Request): Promise<ThreadRouteReadback> {
   try {
     const projection = await getPublicThreadProjection(threadId)
     if (projection === null) {
@@ -99,7 +101,7 @@ export async function loadThreadRouteReadback(threadId: string): Promise<ThreadR
         threadId: projection.threadId,
         title: projection.title,
         ...(firstTurn === undefined ? {} : { firstTurnOneLine: firstTurn.oneLine }),
-        options: { canonicalBaseUrl: 'https://ae.example' },
+        options: { canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl },
       }),
     }
   } catch {

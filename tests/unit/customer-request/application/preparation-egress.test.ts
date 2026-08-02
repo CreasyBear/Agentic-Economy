@@ -16,6 +16,7 @@ import {
   type ReadyForRoutingPreparation,
 } from '@/modules/customer-request/application/public'
 import type { PreparedActionV2 } from '@/modules/customer-request/prepared-action-v2'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const aggregate: PreparationEgressAggregate = {
   snapshot: {
@@ -89,14 +90,14 @@ function preparedActionFixture(): PreparedActionV2 {
     business: { businessId: 'biz:1', name: 'AccessRide' },
     offering: {
       offeringId: 'off:1',
-      registrationHash: 'hash:off',
+      registrationHash: canonicalDigest('offering'),
       registrationEvidenceRefs: [],
       label: 'Accessible transfer',
       summary: 'Door-to-door accessible transfer',
     },
     binding: {
       bindingId: 'bind:1',
-      registrationHash: 'hash:bind',
+      registrationHash: canonicalDigest('binding'),
       registrationEvidenceRefs: [],
     },
     providerAssertion: {

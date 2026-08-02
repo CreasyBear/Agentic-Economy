@@ -1,9 +1,11 @@
+import { Link } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { SearchIcon } from 'lucide-react'
+import { isRecord } from '@/modules/common/is-record'
 
 export type FoundBusiness = Readonly<{
   slug: string
@@ -31,7 +33,7 @@ export function readClaimEnrichIntent(): ClaimEnrichIntent | undefined {
 
   try {
     const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null || !('businessName' in parsed)) return undefined
+    if (!isRecord(parsed) || !('businessName' in parsed)) return undefined
     const businessName = parsed.businessName
     if (typeof businessName !== 'string' || businessName.trim().length === 0) return undefined
     const suburb = 'suburb' in parsed && typeof parsed.suburb === 'string' ? parsed.suburb : undefined
@@ -46,15 +48,22 @@ export function clearClaimEnrichIntent(): void {
   window.sessionStorage.removeItem(CLAIM_ENRICH_INTENT_STORAGE_KEY)
 }
 
-export function claimFormHrefFor(business: FoundBusiness): string {
-  const params = new URLSearchParams({
+export type ClaimFormSearch = Readonly<{
+  businessName: string
+  category: string
+  suburb: string
+  stateTerritory: string
+  requestedSlug: string
+}>
+
+export function claimFormSearchFor(business: FoundBusiness): ClaimFormSearch {
+  return {
     businessName: business.name,
     category: business.category,
     suburb: business.suburb,
     stateTerritory: business.stateTerritory,
     requestedSlug: business.slug,
-  })
-  return `/claim/form?${params.toString()}`
+  }
 }
 
 /**
@@ -135,7 +144,7 @@ export function AeFindMyBusiness({
                   </p>
                   <div>
                     <Button asChild variant="secondary" className="min-h-11">
-                      <a href={claimFormHrefFor(business)}>This is my business</a>
+                      <Link to="/claim/form" search={claimFormSearchFor(business)}>This is my business</Link>
                     </Button>
                   </div>
                 </CardContent>
@@ -155,7 +164,7 @@ export function AeFindMyBusiness({
             Start with my website
           </Button>
           <Button asChild variant="ghost" className="min-h-11">
-            <a href="/claim/form">My business is not listed. Start fresh.</a>
+            <Link to="/claim/form">My business is not listed. Start fresh.</Link>
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">

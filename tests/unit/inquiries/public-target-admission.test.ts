@@ -13,8 +13,7 @@ describe('public target admission source wrapper', () => {
 
     await expect(readPublicTargetAdmissionThroughSource({
       businessId: 'business:joondalup-rapid-plumbing',
-      serviceId: 'service:business:joondalup-rapid-plumbing:emergency-plumbing',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:joondalup-rapid-plumbing:emergency-plumbing',
     })).resolves.toMatchObject({
       kind: 'ok',
       admission: {
@@ -31,8 +30,7 @@ describe('public target admission source wrapper', () => {
 
     await expect(readPublicTargetAdmissionThroughSource({
       businessId: 'business:plumbing-demo',
-      serviceId: 'service:business:plumbing-demo:diagnostic-plumbing',
-      capabilityKind: 'phone_inquiry',
+      offeringRef: 'offering:plumbing-demo:diagnostic-plumbing',
     })).resolves.toMatchObject({
       kind: 'ok',
       admission: {

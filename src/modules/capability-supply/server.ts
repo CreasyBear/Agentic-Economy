@@ -1,5 +1,9 @@
 export { signRouteTransportCall } from './internal/route-call-signing'
-export { createEvmX402PaymentSignature } from './internal/x402-payment-signer'
+export {
+  createEvmX402PaymentSignature,
+  encodeX402PaymentRequiredHeader,
+} from './internal/x402-payment-signer'
+export type { X402PaymentRequired } from './internal/x402-payment-signer'
 
 export {
   qualifySuppliedCandidate,

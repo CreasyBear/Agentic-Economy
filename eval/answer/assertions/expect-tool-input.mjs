@@ -1,3 +1,5 @@
+import { parseProviderOutput } from './parse-provider-output.mjs'
+
 /**
  * Assertion for the tool-use agent eval mode.
  *
@@ -9,12 +11,9 @@
  * OpenRouter key.
  */
 export default function assertToolInput(output, context) {
-  let parsed
-  try {
-    parsed = JSON.parse(String(output))
-  } catch {
-    return { pass: false, score: 0, reason: 'Provider output was not JSON' }
-  }
+  const parsedOutput = parseProviderOutput(output)
+  if (parsedOutput.error) return parsedOutput.error
+  const parsed = parsedOutput.value
 
   const expectPass = context.vars.expectPass === 'true'
   const expectedSlug = typeof context.vars.expectedSlug === 'string' ? context.vars.expectedSlug : ''

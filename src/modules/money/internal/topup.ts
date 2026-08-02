@@ -1,4 +1,4 @@
-import type { ChargeAuthorizationResult, MoneyRefusal } from '../public'
+import { isMoneyRefusal, type ChargeAuthorizationResult, type MoneyRefusal } from '../public'
 import type { CreditPaymentEvidence, CreditPaymentPort, CreditPaymentRequest } from './ports'
 import { applyTopup, type BeginTransactionInput, type LedgerState } from './ledger'
 
@@ -25,6 +25,9 @@ export type CreditTopupCommand = Readonly<{
   inputDigest: string
   state: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown'
   externalRef?: string
+  appliedStripeEventId?: string
+  appliedPayloadDigest?: string
+  appliedTransactionRef?: string
   createdAt: number
   updatedAt: number
 }>
@@ -86,6 +89,7 @@ export async function beginCreditTopup(input: Readonly<{
   }
   const providerResult = await input.port.createCreditPayment(request)
   if (isMoneyRefusal(providerResult)) return { state: input.state, ledgerState: input.ledgerState, result: providerResult }
+  if (providerResult.amountMinor !== chargeAmountMinor || providerResult.currency !== input.currency) return { state: input.state, ledgerState: input.ledgerState, result: refusal('credit_topup_outcome_unknown', true) }
   const command: CreditTopupCommand = {
     commandRef: input.commandRef,
     principalId: input.principalId,
@@ -114,15 +118,17 @@ export function applyCreditTopup(input: Readonly<{
   evidenceRefs: readonly string[]
 }>): Readonly<{ state: TopupState; ledgerState: LedgerState; result: ChargeAuthorizationResult | MoneyRefusal }> {
   const command = input.state.commands.find((item) => item.commandRef === input.commandRef)
-  if (command === undefined || command.principalId !== input.event.principalId || command.accountRef !== input.event.accountRef || command.currency !== input.event.currency || command.chargeAmountMinor !== input.event.amountMinor || command.externalRef !== input.event.externalRef) {
+  if (command === undefined || command.principalId !== input.event.principalId || command.accountRef !== input.event.accountRef || command.currency !== input.event.currency || command.chargeAmountMinor !== input.event.amountMinor || command.externalRef !== input.event.externalRef || input.transaction.principalId !== command.principalId || input.transaction.currency !== command.currency || input.transaction.kind !== 'topup' || input.transaction.inputDigest !== command.inputDigest) {
     return { state: input.state, ledgerState: input.ledgerState, result: refusal('credit_topup_pending', true) }
   }
   if (command.state === 'succeeded') {
-    return { state: input.state, ledgerState: input.ledgerState, result: { kind: 'accepted', chargeState: 'paid', currency: command.currency, amountMinor: command.amountMinor, priceDigest: command.inputDigest, transactionRef: input.transaction.transactionRef } }
+    if (command.appliedStripeEventId !== input.event.stripeEventId || command.appliedPayloadDigest !== input.event.payloadDigest) return { state: input.state, ledgerState: input.ledgerState, result: refusal('ledger_idempotency_conflict', false) }
+    if (command.appliedTransactionRef === undefined) return { state: input.state, ledgerState: input.ledgerState, result: refusal('credit_topup_outcome_unknown', false) }
+    return { state: input.state, ledgerState: input.ledgerState, result: { kind: 'accepted', chargeState: 'paid', currency: command.currency, amountMinor: command.amountMinor, priceDigest: command.inputDigest, transactionRef: command.appliedTransactionRef } }
   }
   const applied = applyTopup({ state: input.ledgerState, transaction: input.transaction, accountRef: command.accountRef, amountMinor: command.amountMinor, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs })
   if (applied.result.kind === 'refused') return { state: input.state, ledgerState: input.ledgerState, result: applied.result }
-  const nextCommand = { ...command, state: 'succeeded' as const, updatedAt: input.event.observedAt }
+  const nextCommand = { ...command, state: 'succeeded' as const, appliedStripeEventId: input.event.stripeEventId, appliedPayloadDigest: input.event.payloadDigest, appliedTransactionRef: input.transaction.transactionRef, updatedAt: input.event.observedAt }
   return { state: { ...input.state, commands: input.state.commands.map((item) => item.commandRef === command.commandRef ? nextCommand : item) }, ledgerState: applied.state, result: applied.result }
 }
 
@@ -155,7 +161,4 @@ function validAmount(value: number): boolean {
 
 function refusal(code: MoneyRefusal['code'], retryable: boolean): MoneyRefusal {
   return { kind: 'refused', code, retryable }
-}
-function isMoneyRefusal(value: CreditPaymentEvidence | MoneyRefusal): value is MoneyRefusal {
-  return 'kind' in value && value.kind === 'refused'
 }

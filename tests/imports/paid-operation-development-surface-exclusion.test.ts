@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { globSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -24,12 +24,5 @@ describe('paid operation development surface inventory exclusion', () => {
 })
 
 function sourceFiles(root: string): string[] {
-  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(root, entry.name)
-    return entry.isDirectory()
-      ? sourceFiles(path)
-      : /\.(?:ts|tsx|js|jsx)$/u.test(entry.name)
-        ? [path]
-        : []
-  })
+  return globSync(join(root, '**/*.{ts,tsx,js,jsx}')).sort()
 }

@@ -1,15 +1,16 @@
+import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import { isPubliclyDiscoverable } from '@/modules/business/public'
-import { buildPublicCatalogDto } from '@/modules/catalog/public'
-import type { PublicCatalogContract, PublicCatalogReadState } from '@/modules/catalog/public'
+import type { PublicCatalogReadState } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import type { BusinessId, CorrelationId, OperationKey, ServiceId, SourceHash } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import type { BusinessId, CorrelationId, OfferingRef, OperationKey, SourceHash } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateAuditEvent } from '@/modules/observability/public'
 import type { AuditEventContract, AuditEventType, RedactedPayload } from '@/modules/observability/public'
 import type {
   CatalogHealthReadback,
   IndexStatus,
   IndexStatusContract,
+  PublicBusinessCatalogApiV2Dto,
   RegistryProjectionAdapter,
   RegistryProjectionAttemptContract,
   RegistryProjectionItemContract,
@@ -23,7 +24,6 @@ import type {
 
 const sourceVersion = 'public-catalog:v1' as const
 const publicSurfaces = [
-  '/registry',
   '/api/businesses',
   '/api/businesses/search',
   '/api/businesses/{slug}',
@@ -35,7 +35,7 @@ const defaultStaleAfterMs = 86_400_000
 const defaultAdapter: RegistryProjectionAdapter = {
   writeProjection: (catalog) => ({
     kind: 'ok',
-    generatedHash: stableHash(toProjectionPayload(catalog)),
+    generatedHash: canonicalDigest(toProjectionPayload(catalog)),
   }),
 }
 
@@ -48,8 +48,8 @@ export function syncCatalogProjection(
   const currentSourceHash =
     catalogResult.kind === 'available'
       ? catalogSourceHash(catalogResult.catalog)
-      : stableHash({ businessId: input.businessId, sourceState: 'not_public' })
-  const logicalKey = `registry:sync:${input.businessId}:${currentSourceHash}`
+      : canonicalDigest({ businessId: input.businessId, sourceState: 'not_public' })
+  const logicalKey = `registry:business:${input.businessId}:${currentSourceHash}`
   const existingAttempt = state.registryProjectionAttempts.find((attempt) => attempt.logicalKey === logicalKey)
 
   if (catalogResult.kind === 'hidden') {
@@ -63,7 +63,7 @@ export function syncCatalogProjection(
       retryCount: existingAttempt?.retryCount ?? 0,
       retryAfter: options.now + (options.retryAfterMs ?? defaultRetryAfterMs),
       lastErrorCode: 'registry_projection_not_public',
-      lastErrorRedacted: 'Catalog is not public or has no published services.',
+      lastErrorRedacted: 'Catalog is not public or has no published Offerings.',
       startedAt: existingAttempt?.startedAt ?? options.now,
       finishedAt: options.now,
       staleThresholdAt: options.now + (options.staleAfterMs ?? defaultStaleAfterMs),
@@ -115,7 +115,7 @@ export function syncCatalogProjection(
       payload: {
         replayed: true,
         publicUrl: catalogResult.catalog.publicUrl,
-        serviceCount: catalogResult.catalog.services.length,
+        offeringCount: catalogResult.catalog.offerings.length,
       },
       now: options.now,
     })
@@ -161,7 +161,7 @@ export function syncCatalogProjection(
       payload: {
         failureCode: adapterResult.code,
         publicUrl: catalogResult.catalog.publicUrl,
-        serviceCount: catalogResult.catalog.services.length,
+        offeringCount: catalogResult.catalog.offerings.length,
       },
       failureCode: adapterResult.code,
       now: options.now,
@@ -187,7 +187,7 @@ export function syncCatalogProjection(
     }
   }
 
-  const catalog = { ...catalogResult.catalog, indexStatus: 'indexed' as const }
+  const catalog = catalogResult.catalog
   const readback = buildProjectionReadback(catalog, currentSourceHash, options.now, adapterResult.generatedHash)
   const attempt = upsertAttempt(state.registryProjectionAttempts, {
     businessId: input.businessId,
@@ -215,7 +215,7 @@ export function syncCatalogProjection(
     payload: {
       generatedHash: adapterResult.generatedHash,
       publicUrl: catalog.publicUrl,
-      serviceCount: catalog.services.length,
+      offeringCount: catalog.offerings.length,
     },
     now: options.now,
   })
@@ -291,8 +291,8 @@ function readSourceCatalog(
   state: PublicCatalogReadState,
   businessId: BusinessId
 ):
-  | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'hidden'; reason: 'not_public' | 'missing_context' | 'not_published' | 'no_published_services' } {
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
+  | { kind: 'hidden'; reason: 'not_public' | 'missing_context' | 'not_published' | 'no_published_offerings' } {
   const business = state.businesses.find((candidate) => candidate.businessId === businessId)
   if (business === undefined || !isPubliclyDiscoverable(business, state.suppressionRules)) {
     return { kind: 'hidden', reason: 'not_public' }
@@ -303,23 +303,24 @@ function readSourceCatalog(
     return { kind: 'hidden', reason: 'missing_context' }
   }
 
-  const catalog = buildPublicCatalogDto({
-    business,
-    context,
-    services: state.businessServices.filter((service) => service.businessId === businessId),
-    capabilities: state.serviceCapabilities.filter((capability) => capability.businessId === businessId),
+  const result = getPublicBusinessCatalog(state, {
+    slug: business.slug,
     indexStatus: 'queued',
     discoveryStatus: 'degraded',
   })
-
-  if (catalog.kind === 'hidden') {
-    return catalog
+  if (result.kind === 'hidden') {
+    return {
+      kind: 'hidden',
+      reason: state.offerings.some((offering) => offering.businessId === businessId && offering.status === 'published')
+        ? 'not_published'
+        : 'no_published_offerings',
+    }
   }
 
-  return catalog
+  return result
 }
 
-function safeWriteProjection(adapter: RegistryProjectionAdapter, catalog: PublicCatalogContract) {
+function safeWriteProjection(adapter: RegistryProjectionAdapter, catalog: PublicBusinessCatalogApiV2Dto) {
   try {
     return adapter.writeProjection(catalog)
   } catch {
@@ -333,13 +334,13 @@ function safeWriteProjection(adapter: RegistryProjectionAdapter, catalog: Public
 
 function upsertProjectionItems(
   items: RegistryProjectionItemContract[],
-  catalog: PublicCatalogContract,
+  catalog: PublicBusinessCatalogApiV2Dto,
   sourceHash: SourceHash,
   generatedHash: SourceHash,
   now: number
 ): readonly RegistryProjectionItemContract[] {
   const businessItem = upsertProjectionItem(items, {
-    businessId: catalog.businessId,
+    businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
     logicalKey: `registry:item:business:${catalog.businessId}`,
     projectionKind: 'business_catalog',
     publicStatus: 'published',
@@ -347,26 +348,32 @@ function upsertProjectionItems(
     sourceVersion,
     generatedHash,
     publicUrl: catalog.publicUrl,
-    serviceCount: catalog.services.length,
+    offeringCount: catalog.offerings.length,
     updatedAt: now,
   })
-  const serviceItems = catalog.services.map((service) =>
-    upsertProjectionItem(items, {
-      businessId: catalog.businessId,
-      serviceId: service.serviceId,
-      logicalKey: `registry:item:service:${service.serviceId}`,
-      projectionKind: 'service_catalog',
+  const offeringItems = catalog.offerings.map((offering) => {
+    const offeringRef = brandNonEmpty(offering.offeringRef, 'OfferingRef')
+    const offeringSourceHash = canonicalDigest({
+      offeringRef,
+      revision: offering.revision,
+      offering,
+    })
+    return upsertProjectionItem(items, {
+      businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
+      offeringRef,
+      logicalKey: `registry:item:offering:${offeringRef}`,
+      projectionKind: 'offering_catalog',
       publicStatus: 'published',
-      sourceHash: service.sourceHash,
+      sourceHash: offeringSourceHash,
       sourceVersion,
-      generatedHash: stableHash(toServiceProjectionPayload(catalog, service.serviceId)),
-      publicUrl: `${catalog.publicUrl}#${service.serviceSlug}`,
-      serviceCount: 1,
+      generatedHash: canonicalDigest(toOfferingProjectionPayload(catalog, offeringRef)),
+      publicUrl: `${catalog.publicUrl}#${offeringRef.split(':').at(-1) ?? offeringRef}`,
+      offeringCount: 1,
       updatedAt: now,
     })
-  )
+  })
 
-  return [businessItem, ...serviceItems]
+  return [businessItem, ...offeringItems]
 }
 
 function upsertProjectionItem(
@@ -377,7 +384,7 @@ function upsertProjectionItem(
     (item) =>
       item.businessId === next.businessId &&
       item.projectionKind === next.projectionKind &&
-      item.serviceId === next.serviceId
+      item.offeringRef === next.offeringRef
   )
 
   if (index === -1) {
@@ -391,43 +398,46 @@ function upsertProjectionItem(
 
 function upsertIndexedStatuses(
   statuses: IndexStatusContract[],
-  catalog: PublicCatalogContract,
+  catalog: PublicBusinessCatalogApiV2Dto,
   sourceHash: SourceHash,
   now: number
 ): readonly IndexStatusContract[] {
   const businessStatus = upsertIndexStatus(statuses, {
     targetType: 'business',
     targetRef: catalog.businessId,
-    businessId: catalog.businessId,
+    businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
     status: 'indexed',
     lastAttemptAt: now,
     sourceHash,
     sourceVersion,
   })
-  const serviceStatuses = catalog.services.map((service) =>
-    upsertIndexStatus(statuses, {
-      targetType: 'service',
-      targetRef: service.serviceId,
-      businessId: catalog.businessId,
-      serviceId: service.serviceId,
+  const offeringStatuses = catalog.offerings.map((offering) => {
+    const offeringRef = brandNonEmpty(offering.offeringRef, 'OfferingRef')
+    return upsertIndexStatus(statuses, {
+      targetType: 'offering',
+      targetRef: offeringRef,
+      businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
+      offeringRef,
       status: 'indexed',
       lastAttemptAt: now,
-      sourceHash: service.sourceHash,
+      sourceHash: canonicalDigest(offering),
       sourceVersion,
     })
-  )
+  })
 
-  return [businessStatus, ...serviceStatuses]
+  return [businessStatus, ...offeringStatuses]
 }
 
 function readIndexedStatuses(
   statuses: readonly IndexStatusContract[],
-  catalog: PublicCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
 ): readonly IndexStatusContract[] {
   return statuses.filter(
     (status) =>
       (status.targetType === 'business' && status.targetRef === catalog.businessId) ||
-      catalog.services.some((service) => status.targetType === 'service' && status.targetRef === service.serviceId)
+      catalog.offerings.some((offering) =>
+        status.targetType === 'offering' && status.targetRef === offering.offeringRef
+      )
   )
 }
 
@@ -499,19 +509,19 @@ function statusForHealth(
 }
 
 function buildProjectionReadback(
-  catalog: PublicCatalogContract,
+  catalog: PublicBusinessCatalogApiV2Dto,
   sourceHash: SourceHash,
   now: number,
   generatedHash?: SourceHash
 ): RegistryProjectionReadback {
   return {
-    businessId: catalog.businessId,
-    slug: catalog.slug,
+    businessId: brandNonEmpty(catalog.businessId, 'BusinessId'),
+    slug: brandNonEmpty(catalog.slug, 'Slug'),
     publicUrl: catalog.publicUrl,
     sourceVersion,
     sourceHash,
     ...(generatedHash === undefined ? {} : { generatedHash }),
-    serviceCount: catalog.services.length,
+    offeringCount: catalog.offerings.length,
     publicSurfaces,
     readAt: now,
   }
@@ -547,7 +557,7 @@ function ensureRegistryAuditEvent(
     idempotencyKey: input.operationKey ?? brandNonEmpty(`op:${input.logicalKey}`, 'OperationKey'),
     correlationId: input.correlationId ?? brandNonEmpty(`corr:${input.logicalKey}`, 'CorrelationId'),
     redactedPayload: input.payload,
-    payloadHash: stableHash(input.payload),
+    payloadHash: canonicalDigest(input.payload),
     ...(input.failureCode === undefined ? {} : { failureCode: input.failureCode }),
     createdAt: input.now,
   })
@@ -560,79 +570,17 @@ function ensureRegistryAuditEvent(
   return validation.event
 }
 
-function catalogSourceHash(catalog: PublicCatalogContract): SourceHash {
-  return stableHash({
-    businessSourceHash: catalog.sourceHash,
-    services: catalog.services.map((service) => ({
-      serviceId: service.serviceId,
-      sourceHash: service.sourceHash,
-      capabilities: service.capabilities.map((capability) => ({
-        kind: capability.kind,
-        sourceHash: capability.sourceHash,
-      })),
-    })),
-  })
+function catalogSourceHash(catalog: PublicBusinessCatalogApiV2Dto): SourceHash {
+  return canonicalDigest(catalog)
 }
 
-function toProjectionPayload(catalog: PublicCatalogContract) {
-  return {
-    category: catalog.category,
-    discoveryStatus: catalog.discoveryStatus,
-    indexStatus: catalog.indexStatus,
-    name: catalog.name,
-    postcode: catalog.postcode ?? '',
-    publicStatus: catalog.publicStatus,
-    publicUrl: catalog.publicUrl,
-    schemaVersion: catalog.schemaVersion,
-    services: catalog.services.map((service) => ({
-      category: service.category,
-      firstRequest: {
-        mode: service.firstRequest.mode,
-        noContactReason: service.firstRequest.noContactReason ?? '',
-        publicChannel: service.firstRequest.publicChannel,
-        publicDisclosure: service.firstRequest.publicDisclosure,
-      },
-      name: service.name,
-      serviceArea: service.serviceArea,
-      slug: service.serviceSlug,
-      status: service.status,
-      summary: service.summary,
-      capabilities: service.capabilities.map((capability) => ({
-        callable: capability.callable,
-        kind: capability.kind,
-        paymentRequired: capability.paymentRequired,
-        status: capability.status,
-      })),
-    })),
-    slug: catalog.slug,
-    stateTerritory: catalog.stateTerritory,
-    suburb: catalog.suburb,
-    trustTier: catalog.trustTier,
-    updatedAt: catalog.updatedAt,
-  }
+function toProjectionPayload(catalog: PublicBusinessCatalogApiV2Dto) {
+  return catalog
 }
 
-function toServiceProjectionPayload(catalog: PublicCatalogContract, serviceId: ServiceId) {
-  const service = catalog.services.find((candidate) => candidate.serviceId === serviceId)
-
+function toOfferingProjectionPayload(catalog: PublicBusinessCatalogApiV2Dto, offeringRef: OfferingRef) {
   return {
     businessSlug: catalog.slug,
-    service:
-      service === undefined
-        ? null
-        : {
-            category: service.category,
-            firstRequest: {
-              mode: service.firstRequest.mode,
-              noContactReason: service.firstRequest.noContactReason ?? '',
-              publicChannel: service.firstRequest.publicChannel,
-              publicDisclosure: service.firstRequest.publicDisclosure,
-            },
-            name: service.name,
-            serviceArea: service.serviceArea,
-            slug: service.serviceSlug,
-            status: service.status,
-            summary: service.summary,
-          },
+    offering: catalog.offerings.find((offering) => offering.offeringRef === offeringRef) ?? null,
   }
 }

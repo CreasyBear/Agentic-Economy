@@ -24,7 +24,7 @@ const COMPARE_FOLLOW_UP_QUERY = 'Compare the top two'
 const COMPARE_FOLLOW_UP_LABEL = /Compare the top two/
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|agent-native/i
-const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|serviceId|sourceHash|rawContact|clerk|admin)\b/i
+const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|offeringRef|sourceHash|rawContact|clerk|admin)\b/i
 
 test.describe('chat discovery to inquiry loop', () => {
   test.describe.configure({ mode: 'serial' })

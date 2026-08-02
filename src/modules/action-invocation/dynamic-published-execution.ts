@@ -3,6 +3,7 @@ import {
   prepareRegisteredRouteTransportInvocation,
   type PreparedRouteTransportInvocation,
   type RouteTransportRuntime,
+  type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -201,7 +202,6 @@ function liquidityZeroReason(failureCode: string | undefined): LiquidityZeroReas
     default: return 'provider_refused'
   }
 }
-
 export function createPaymentAttemptRuntime(
   runtime: RouteTransportRuntime,
   prepared: DynamicPublishedPreparedTransport,
@@ -209,12 +209,13 @@ export function createPaymentAttemptRuntime(
   authorizationEvents: Map<string, X402PaymentAuthorizationEvent> | undefined,
   now: () => number,
   attemptPort?: X402PaymentAttemptPort,
-): RouteTransportRuntime {
+): X402RouteTransportRuntime {
   const key = x402PaymentAttemptKey({
     invocationRef: prepared.invocationRef,
     attemptRef: prepared.attemptRef,
     effectGeneration: prepared.effectGeneration,
   })
+  const custodyRuntime = runtime as Partial<X402RouteTransportRuntime>
   let volatileCustodyRef: string | undefined
   return {
     ...runtime,
@@ -235,12 +236,17 @@ export function createPaymentAttemptRuntime(
           authorizationDigest: current.authorizationDigest,
         }
       }
-      if (runtime.prepareX402PaymentAuthorization === undefined) {
+      if (typeof custodyRuntime.prepareX402PaymentAuthorization !== 'function'
+        || typeof custodyRuntime.readX402PaymentAuthorization !== 'function'
+        || typeof custodyRuntime.readX402PaymentAuthorizationByDigest !== 'function') {
         throw new Error('x402_payment_custody_prepare_unavailable')
       }
-      const authorization = await runtime.prepareX402PaymentAuthorization(request)
+      const authorization = await custodyRuntime.prepareX402PaymentAuthorization(request)
       if (authorization === undefined) return undefined
       volatileCustodyRef = authorization.custodyRef
+      if (!x402CustodyDigestReferenceValid(authorization.custodyRef)) {
+        throw new Error('x402_payment_custody_reference_invalid')
+      }
       const paymentAttempt: X402PaymentAttempt = {
         paymentIdentifier: request.paymentIdentifier,
         invocationRef: prepared.invocationRef,
@@ -256,7 +262,7 @@ export function createPaymentAttemptRuntime(
         providerEndpoint: request.challenge.resource.url,
         operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
         authorizationDigest: authorization.authorizationDigest,
-        custodyRef: custodyDigest(authorization.custodyRef),
+        custodyRef: authorization.custodyRef,
         state: 'prepared',
         preparedAt: now(),
         evidenceRefs: [],
@@ -285,16 +291,30 @@ export function createPaymentAttemptRuntime(
         || current.authorizationDigest !== authorization.authorizationDigest) {
         throw new Error('x402_payment_attempt_reconciliation_required')
       }
-      const custodyReader = volatileCustodyRef === undefined
-        ? runtime.readX402PaymentAuthorizationByDigest
-        : runtime.readX402PaymentAuthorization
-      if (custodyReader === undefined) {
+      if (typeof custodyRuntime.readX402PaymentAuthorization !== 'function'
+        || typeof custodyRuntime.readX402PaymentAuthorizationByDigest !== 'function') {
         throw new Error('x402_payment_custody_read_unavailable')
       }
+      const custodyReader = volatileCustodyRef === undefined
+        ? custodyRuntime.readX402PaymentAuthorizationByDigest
+        : custodyRuntime.readX402PaymentAuthorization
       return custodyReader({
         ...authorization,
         custodyRef: volatileCustodyRef ?? authorization.custodyRef,
       })
+    },
+    async readX402PaymentAuthorizationByDigest(authorization) {
+      const current = attemptPort?.load(key) ?? attempts?.get(key)
+      if (current === undefined
+        || current.state !== 'prepared'
+        || !custodyReferenceMatches(current.custodyRef, authorization.custodyRef)
+        || current.authorizationDigest !== authorization.authorizationDigest) {
+        throw new Error('x402_payment_attempt_reconciliation_required')
+      }
+      if (typeof custodyRuntime.readX402PaymentAuthorizationByDigest !== 'function') {
+        throw new Error('x402_payment_custody_read_unavailable')
+      }
+      return custodyRuntime.readX402PaymentAuthorizationByDigest(authorization)
     },
     async markX402PaymentPossiblySubmitted(event) {
       const current = attemptPort?.load(key) ?? attempts?.get(key)
@@ -335,14 +355,8 @@ export function createPaymentAttemptRuntime(
   }
 }
 
-function custodyDigest(value: string): string {
-  return x402CustodyDigestReferenceValid(value)
-    ? value
-    : canonicalDigest(value as unknown as StableHashValue)
-}
-
 function custodyReferenceMatches(persisted: string, candidate: string): boolean {
-  return persisted === candidate || persisted === custodyDigest(candidate)
+  return persisted === candidate
 }
 
 function dynamicTransportInvocation(input: Readonly<{

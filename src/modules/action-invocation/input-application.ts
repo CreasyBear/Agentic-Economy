@@ -5,6 +5,8 @@ import type {
 import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
+import { stableUnique } from '@/modules/common/stable-unique'
 
 import type {
   ActionInvocationOrigin,
@@ -63,8 +65,9 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
         || current.readiness.validUntil <= input.now()) {
         throw new Error('published_operation_not_current')
       }
-      const schema = input.descriptor.inputSchema as Record<string, any>
-      const allowed = new Set(Object.keys(schema.properties ?? {}))
+      const schema = input.descriptor.inputSchema
+      const properties = isRecord(schema.properties) ? schema.properties : {}
+      const allowed = new Set(Object.keys(properties))
       if (Object.keys(request.partial).some((field) => !allowed.has(field))) {
         throw new Error('invocation_input_field_refused')
       }
@@ -79,7 +82,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
         knownInput: { ...request.partial }, requiredFields: contract.requiredFields,
         missingFields, askedFields: missingFields, updatedAt: now,
       }
-      const commandMaterial = { kind: 'begin', row } as unknown as StableHashValue
+      const commandMaterial: StableHashValue = { kind: 'begin', row }
       const commandDigest = canonicalDigest(commandMaterial)
       const commandId = `${invocationRef}:create:begin_information`
       const result = input.durablePort.transact({
@@ -148,10 +151,10 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
       }
       const next: InvocationInputWork = {
         ...current, invocationVersion: nextVersion, knownInput, missingFields,
-        askedFields: [...new Set([...current.askedFields, ...missingFields])], updatedAt: now,
+        askedFields: stableUnique([...current.askedFields, ...missingFields]), updatedAt: now,
       }
-      const commandMaterial = { kind: 'answer', current: current.invocationVersion, next }
-      const commandDigest = canonicalDigest(commandMaterial as unknown as StableHashValue)
+      const commandMaterial: StableHashValue = { kind: 'answer', current: current.invocationVersion, next }
+      const commandDigest = canonicalDigest(commandMaterial)
       const control = input.durableState.controls.get(current.invocationRef)
       if (control === undefined) throw new Error('invocation_control_not_found')
       const commandId = `${current.invocationRef}:${current.invocationVersion}:answer_information`
@@ -169,7 +172,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
           invocationRef: current.invocationRef, commandId, commandDigest,
           commandResult: 'applied', kind: 'answer_information',
         },
-        canonicalCommandMaterial: commandMaterial as unknown as StableHashValue,
+        canonicalCommandMaterial: commandMaterial,
       })
       if (result.kind === 'refused') throw new Error(`answer_information_refused:${result.code}`)
       input.work.set(current.invocationRef, next)

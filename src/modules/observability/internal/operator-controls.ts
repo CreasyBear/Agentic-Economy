@@ -1,5 +1,5 @@
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { assertCsrf, requireAdminAuthority } from '@/modules/security/public'
 import { validateAuditEvent } from './audit'
 import type {
@@ -192,7 +192,7 @@ function recordOperatorControlAuditEvent(
     reasonCode: control.reasonCode,
     evidenceRefs: control.evidenceRefs,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: input.now,
   })
 

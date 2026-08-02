@@ -123,10 +123,11 @@ export type CancelMutationPorts = Readonly<{
   ) => Promise<void>
 }>
 
-export type CancelOpenPorts = Readonly<{
-  now: () => number
-  loadCancellationAttempt: CancelMutationPorts['loadCancellationAttempt']
-  loadAttemptByRef: CancelMutationPorts['loadAttemptByRef']
-  loadActiveMandateForCancellation: CancelMutationPorts['loadActiveMandateForCancellation']
-  loadEligibleExactCapabilitySupply: CancelMutationPorts['loadEligibleExactCapabilitySupply']
-}>
+export type CancelOpenPorts = Pick<
+  CancelMutationPorts,
+  | 'now'
+  | 'loadCancellationAttempt'
+  | 'loadAttemptByRef'
+  | 'loadActiveMandateForCancellation'
+  | 'loadEligibleExactCapabilitySupply'
+>

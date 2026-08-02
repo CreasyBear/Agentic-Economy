@@ -3,10 +3,15 @@ import { createFileRoute } from '@tanstack/react-router'
 import {
   callPublicSourceMutation,
   callPublicSourceQuery,
-  ConvexSourceError,
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import {
+  notificationErrorResponse,
+  statusForNotificationRuntimeError,
+} from '@/lib/server/notification-dispatch'
+import { response as notificationDispatchJsonResponse } from '@/lib/server/no-store-response'
 import {
   NotificationProviderError,
   readClerkSecretKey,
@@ -20,6 +25,13 @@ import type {
   ResendProviderSendResult,
   SendOwnerInquiryResendEmailInput,
 } from '@/lib/server/notification-provider'
+import type {
+  NotificationDispatchProviderFailure,
+  NotificationRecordDispatchArgs,
+  NotificationRecordDispatchResult,
+  NotificationSystemSendReadArgs,
+  NotificationSystemSendReadResult,
+} from '@/lib/server/notification-dispatch'
 import { readDispatchId, requireDispatchAuthorization } from '@/modules/notification-outbox/public'
 
 export const Route = createFileRoute('/api/notification/resend-dispatch')({
@@ -32,149 +44,25 @@ export const Route = createFileRoute('/api/notification/resend-dispatch')({
 
 type Env = Record<string, string | undefined>
 
-type NotificationDispatchProjection = {
-  dispatchId: string
-  businessId: string
-  inquiryThreadId: string
-  inquiryMessageId: string
-  recipientRole: 'owner' | 'customer'
-  providerFamily: 'resend' | 'novu'
-  status:
-    | 'queued'
-    | 'triggered'
-    | 'sent'
-    | 'delivered'
-    | 'bounced'
-    | 'complained'
-    | 'delivery_delayed'
-    | 'failed'
-    | 'suppressed'
-    | 'retry_scheduled'
-    | 'retry_attempted'
-    | 'retry_exhausted'
-    | 'no_repair'
-    | 'provider_missing'
-    | 'orchestrator_missing'
-  providerIdempotencyKey: string
-  payloadHash: string
-  resendMessageId?: string
-  providerMissing: boolean
-  orchestratorMissing: boolean
-  retryCount: number
-  operationKey: string
-  correlationId: string
-  createdAt: number
-  updatedAt: number
-}
-
-type NotificationAttemptStatus =
-  | 'pending'
-  | 'triggered'
-  | 'sent'
-  | 'failed'
-  | 'provider_missing'
-  | 'orchestrator_missing'
-
-type NotificationSystemSendReadArgs = {
-  dispatchId: string
-  systemKey: string
-}
-
-type NotificationSystemSendReadResult =
-  | {
-      kind: 'ok'
-      code: 'notification_dispatch_send_read'
-      send: {
-        dispatch: NotificationDispatchProjection
-        owner: {
-          ownerId: string
-          clerkUserId: string
-        }
-        business: {
-          businessId: string
-          slug: string
-          name: string
-        }
-        inquiry?: {
-          serviceName?: string
-          customerMessageFirstLine?: string
-          isFirstInquiryForBusiness: boolean
-        }
-      }
-    }
-  | NotificationRuntimeErrorResult
-
-type NotificationRuntimeErrorResult = {
-  kind: 'error'
-  code: string
-  retryable: boolean
-  reason: string
-}
-
-type NotificationDispatchProviderResult =
-  | ResendProviderSendResult
-  | {
-      kind: 'error'
-      status: 'failed' | 'provider_missing' | 'orchestrator_missing'
-      redactedError: string
-      retryAfter?: number
-      providerResponseHash?: string
-    }
-
-type NotificationRecordDispatchArgs = {
-  dispatchId: string
-  systemKey: string
-  providerResult: NotificationDispatchProviderResult
-  operationKey: string
-  correlationId: string
-}
-
-type NotificationRecordDispatchResult =
-  | {
-      kind: 'ok'
-      code:
-        | 'notification_triggered'
-        | 'notification_sent'
-        | 'notification_provider_missing'
-        | 'notification_orchestrator_missing'
-        | 'notification_dispatch_failed'
-        | 'notification_dispatch_replayed'
-      dispatch: NotificationDispatchProjection
-      attempt: {
-        attemptId: string
-        status: NotificationAttemptStatus
-        providerResponseHash?: string
-      }
-    }
-  | NotificationRuntimeErrorResult
-
-type NotificationResendDispatchResponse =
-  | {
-      kind: 'ok'
-      code: 'notification_resend_dispatched' | 'notification_resend_already_recorded'
-      dispatchId: string
-      dispatchStatus: string
-      resendMessageId?: string
-      providerResponseHash?: string
-      ownerAddressHash?: string
-      businessSlug: string
-    }
-  | NotificationRuntimeErrorResult
+type NotificationDispatchProviderResult = ResendProviderSendResult | NotificationDispatchProviderFailure
 
 type ResendDispatchHandlerOptions = {
   env?: Env
   readDispatchForSend?: (args: NotificationSystemSendReadArgs) => Promise<NotificationSystemSendReadResult>
   resolveOwnerDeliveryAddress?: (input: { clerkUserId: string; secretKey: string }) => Promise<ClerkOwnerDeliveryAddress>
   sendOwnerInquiry?: (input: SendOwnerInquiryResendEmailInput) => Promise<ResendProviderSendResult>
-  recordDispatch?: (args: NotificationRecordDispatchArgs) => Promise<NotificationRecordDispatchResult>
+  recordDispatch?: (
+    args: NotificationRecordDispatchArgs<NotificationDispatchProviderResult>
+  ) => Promise<NotificationRecordDispatchResult>
 }
 
 const readDispatchForSendQuery = sourceQuery<NotificationSystemSendReadArgs, NotificationSystemSendReadResult>(
   'notificationOutbox:readNotificationDispatchForSystemSend'
 )
-const recordDispatchMutation = sourceMutation<NotificationRecordDispatchArgs, NotificationRecordDispatchResult>(
-  'notificationOutbox:dispatchNotificationOutbox'
-)
+const recordDispatchMutation = sourceMutation<
+  NotificationRecordDispatchArgs<NotificationDispatchProviderResult>,
+  NotificationRecordDispatchResult
+>('notificationOutbox:dispatchNotificationOutbox')
 
 export async function handleResendDispatchRequest(
   request: Request,
@@ -188,7 +76,7 @@ export async function handleResendDispatchRequest(
     const dispatchId = await readDispatchId(request)
     const readback = await (options.readDispatchForSend ?? defaultReadDispatchForSend)({ dispatchId, systemKey })
     if (readback.kind === 'error') {
-      return notificationDispatchJsonResponse(readback, { status: statusForNotificationRuntimeError(readback.code) })
+      return notificationDispatchJsonResponse(readback, statusForNotificationRuntimeError(readback.code))
     }
 
     const send = readback.send
@@ -207,7 +95,7 @@ export async function handleResendDispatchRequest(
         dispatchStatus: send.dispatch.status,
         ...(send.dispatch.resendMessageId === undefined ? {} : { resendMessageId: send.dispatch.resendMessageId }),
         businessSlug: send.business.slug,
-      })
+      }, 200)
     }
 
     const deliveryAddress = await (options.resolveOwnerDeliveryAddress ?? defaultResolveOwnerDeliveryAddress)({
@@ -223,11 +111,11 @@ export async function handleResendDispatchRequest(
         inquiryThreadId: send.dispatch.inquiryThreadId,
         businessName: send.business.name,
         businessSlug: send.business.slug,
-        ...(send.inquiry?.serviceName === undefined ? {} : { serviceName: send.inquiry.serviceName }),
+        ...(send.inquiry?.offeringName === undefined ? {} : { offeringName: send.inquiry.offeringName }),
         ...(send.inquiry?.customerMessageFirstLine === undefined ? {} : { customerMessageFirstLine: send.inquiry.customerMessageFirstLine }),
         ...(send.inquiry === undefined ? {} : { isFirstInquiryForBusiness: send.inquiry.isFirstInquiryForBusiness }),
       },
-      appBaseUrl: new URL(request.url).origin,
+      appBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     })
     const record = await (options.recordDispatch ?? defaultRecordDispatch)({
       dispatchId: send.dispatch.dispatchId,
@@ -237,7 +125,7 @@ export async function handleResendDispatchRequest(
       correlationId: `correlation:notification:dispatch:resend:${send.dispatch.dispatchId}`,
     })
     if (record.kind === 'error') {
-      return notificationDispatchJsonResponse(record, { status: statusForNotificationRuntimeError(record.code) })
+      return notificationDispatchJsonResponse(record, statusForNotificationRuntimeError(record.code))
     }
 
     return notificationDispatchJsonResponse({
@@ -249,15 +137,10 @@ export async function handleResendDispatchRequest(
       providerResponseHash: providerResult.providerResponseHash,
       ownerAddressHash: deliveryAddress.addressHash,
       businessSlug: send.business.slug,
-    })
+    }, 200)
   } catch (error) {
-    if (error instanceof NotificationProviderError || error instanceof ConvexSourceError) {
-      return notificationDispatchJsonResponse(
-        { kind: 'error', code: error.code, retryable: false, reason: error.message },
-        { status: error.status }
-      )
-    }
-
+    const normalizedError = notificationErrorResponse(error)
+    if (normalizedError !== undefined) return normalizedError
     throw error
   }
 }
@@ -279,23 +162,8 @@ async function defaultSendOwnerInquiry(input: SendOwnerInquiryResendEmailInput):
   return await sendOwnerInquiryResendEmail(input)
 }
 
-async function defaultRecordDispatch(args: NotificationRecordDispatchArgs): Promise<NotificationRecordDispatchResult> {
+async function defaultRecordDispatch(
+  args: NotificationRecordDispatchArgs<NotificationDispatchProviderResult>
+): Promise<NotificationRecordDispatchResult> {
   return await callPublicSourceMutation(recordDispatchMutation, args)
-}
-
-function notificationDispatchJsonResponse(body: NotificationResendDispatchResponse, init: ResponseInit = {}): Response {
-  return Response.json(body, {
-    ...init,
-    headers: {
-      'Cache-Control': 'no-store',
-      ...init.headers,
-    },
-  })
-}
-
-function statusForNotificationRuntimeError(code: string): number {
-  if (code === 'notification_not_found' || code === 'owner_not_found') return 404
-  if (code === 'notification_system_denied') return 403
-  if (code === 'notification_terminal' || code === 'notification_provider_mismatch') return 409
-  return 500
 }

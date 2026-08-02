@@ -1,17 +1,11 @@
 import { agentMarkdownResponse } from '@/lib/http/agent-content-negotiation'
 import {
-  AgentCatalogMarkdownLimit,
   buildBusinessMarkdown,
-  buildCatalogMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,
 } from '@/modules/discovery/public'
-import {
-  readPublicOfferingRegistryBusinessDetail,
-  readPublicOfferingRegistryPage,
-  readPublicOfferingRegistrySearchPage,
-} from '@/modules/registry/registry.functions'
+import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 
 /**
  * Binds a public page path to the same source read its HTML route performs, and
@@ -19,7 +13,6 @@ import {
  * generic page, so a caller cannot mistake an unknown business for a listed one.
  */
 export async function respondWithAgentPageMarkdown(
-  request: Request,
   path: string,
   canonicalBaseUrl: string,
 ): Promise<Response> {
@@ -29,17 +22,6 @@ export async function respondWithAgentPageMarkdown(
     return agentMarkdownResponse(buildSiteBriefMarkdown(options))
   }
 
-  if (path === '/registry') {
-    const query = new URL(request.url).searchParams.get('q')?.trim() ?? ''
-    const page = query.length === 0
-      ? await readPublicOfferingRegistryPage({ limit: AgentCatalogMarkdownLimit })
-      : await readPublicOfferingRegistrySearchPage({ query, limit: AgentCatalogMarkdownLimit })
-    return agentMarkdownResponse(buildCatalogMarkdown(page.items, {
-      ...options,
-      ...(query.length === 0 ? {} : { query }),
-      total: page.pagination.total,
-    }))
-  }
 
   const slug = readSlugPath(path)
   if (slug === undefined) {
@@ -58,7 +40,7 @@ export async function respondWithAgentPageMarkdown(
  */
 const nonBusinessPagePaths = new Set([
   'about', 'agent-access', 'claim', 'developers', 'engine', 'for-agents',
-  'help', 'privacy', 'registry', 'terms',
+  'help', 'privacy', 'terms',
 ])
 
 /** Only a single-segment, slug-shaped path that names no page can name a business. */

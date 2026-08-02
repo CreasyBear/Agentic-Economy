@@ -1,11 +1,38 @@
 import { x402Client } from '@x402/core/client'
-import { x402HTTPClient } from '@x402/core/http'
+import { decodePaymentRequiredHeader, encodePaymentRequiredHeader, x402HTTPClient } from '@x402/core/http'
 import type { PaymentRequired } from '@x402/core/types'
 import { ExactEvmScheme } from '@x402/evm/exact/client'
 import { appendPaymentIdentifierToExtensions } from '@x402/extensions/payment-identifier'
 import { privateKeyToAccount } from 'viem/accounts'
 
 import type { X402PaymentSignatureRequest } from '../route-transport-runtime'
+
+export type X402PaymentRequired = {
+  x402Version: number
+  resource: {
+    url: string
+    description?: string
+    mimeType?: string
+  }
+  accepts: Array<{
+    scheme: string
+    network: `${string}:${string}`
+    amount: string
+    asset: string
+    payTo: string
+    maxTimeoutSeconds: number
+    extra: Record<string, unknown>
+  }>
+  extensions?: Record<string, unknown>
+}
+
+export function encodeX402PaymentRequiredHeader(paymentRequired: X402PaymentRequired): string {
+  return encodePaymentRequiredHeader(paymentRequired)
+}
+
+export function decodeX402PaymentRequiredHeader(header: string): unknown {
+  return decodePaymentRequiredHeader(header)
+}
 
 const privateKeyPattern = /^0x[0-9a-fA-F]{64}$/
 

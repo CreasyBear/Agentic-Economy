@@ -39,6 +39,24 @@ describe('public agent skill', () => {
       expect(body).toContain(`- \`${toolName}\``)
     }
   })
+  it('advertises the complete authenticated WorkTree repeat surface and exact scopes', () => {
+    expect(body).toContain('/api/v1/work-tree/{create|inspect|apply|decide|reserveRepeatUse|finalizeRepeatUse|reconcileRepeatUse|inspectRepeatUse}')
+    for (const scope of [
+      'work_trees:create',
+      'work_trees:inspect',
+      'work_trees:apply',
+      'work_trees:decide',
+      'work_trees:repeat_reserve',
+      'work_trees:repeat_finalize',
+      'work_trees:repeat_reconcile',
+      'work_trees:repeat_inspect',
+    ]) {
+      expect(body).toContain(`\`${scope}\``)
+    }
+    expect(body).not.toContain('work_trees:*')
+    expect(body).toContain('(approve-each writes)')
+    expect(body).toContain('(inspect-only)')
+  })
 
   it('leads with the keyless entry before any key-gated instruction', () => {
     const keylessHeading = body.indexOf('## Start here (no key needed)')

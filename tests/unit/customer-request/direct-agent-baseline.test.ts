@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { runFrozenDirectAgentBaseline } from '@/modules/customer-request/direct-agent-baseline'
 
 describe('frozen direct-agent baseline', () => {
@@ -269,7 +270,7 @@ function discovery(
 ) {
   return {
     format: 'ae.sandbox-capability-provider:v1', supplyClass: 'labelled_sandbox', sandbox: true,
-    business: { slug: name.toLowerCase().replaceAll(' ', '-'), name },
+    business: { slug: normalizeSlug(name), name },
     operation: {
       method: 'POST', endpoint, authentication: { scheme: 'bearer' },
       maximumCost: { currency: 'AUD', amountMinor },

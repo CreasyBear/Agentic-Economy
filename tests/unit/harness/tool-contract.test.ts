@@ -71,6 +71,16 @@ describe('harness tool contract', () => {
         dataClasses: [], spendExposure: 'none', approval: 'none',
       },
       surfaces: ['answerThread'],
+      invocationContract: {
+        version: 'registry.search:v1',
+        consequenceClass: 'read_only',
+        materialInputPaths: ['mode'],
+        authorityRequirement: 'none',
+        retryClass: 'replayable',
+        expectedEvidence: [],
+        safeContinuations: [],
+        invalidationConditions: [],
+      },
       run: async (): Promise<FakeActionResult> => ({ kind: 'ok' }),
     })
 

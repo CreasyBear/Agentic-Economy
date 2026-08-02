@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-
+import type { Page } from '@playwright/test'
 import {
   customerRequestAgentResultSchema,
   customerRequestEvidenceResultSchema,
@@ -83,7 +83,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await emitHumanObservation(page, requestRef as string)
 })
 
-async function provePreApprovalDisclosures(page: import('@playwright/test').Page): Promise<void> {
+async function provePreApprovalDisclosures(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Review before you confirm' })).toBeVisible()
   const main = page.locator('main')
   for (const label of [
@@ -123,7 +123,7 @@ async function provePreApprovalDisclosures(page: import('@playwright/test').Page
 }
 
 async function emitHumanObservation(
-  page: import('@playwright/test').Page,
+  page: Page,
   requestRef: string,
   expected: 'complete' | 'outcome_unknown' | 'partial_result' = 'complete',
 ): Promise<void> {
@@ -153,21 +153,50 @@ async function emitHumanObservation(
 }
 
 async function proveUnknownOutcomeRecovery(
-  page: import('@playwright/test').Page,
+  page: Page,
   expected: 'outcome_unknown' | 'partial_result',
 ): Promise<void> {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (await page.getByText('Still confirming', { exact: true }).first().isVisible().catch(() => false)) break
-    if (await page.getByText('Completed', { exact: true }).first().isVisible().catch(() => false)) {
-      throw new Error('hosted_human_journey_expected_unknown_but_completed')
+  let terminalState: 'pending' | 'still_confirming' | 'completed' | 'failed' | undefined
+  let failureDetails = ''
+  let checkRequested = false
+  const stillConfirming = page.getByText('Still confirming', { exact: true }).first()
+  const completed = page.getByText('Completed', { exact: true }).first()
+  const failed = page.getByText('Could not be completed', { exact: true }).first()
+  const check = page.getByRole('button', { name: 'Check progress' })
+
+  await expect.poll(async () => {
+    if (await stillConfirming.isVisible().catch(() => false)) {
+      terminalState = 'still_confirming'
+      return true
     }
-    const failed = page.getByText('Could not be completed', { exact: true }).first()
+    if (await completed.isVisible().catch(() => false)) {
+      terminalState = 'completed'
+      return true
+    }
     if (await failed.isVisible().catch(() => false)) {
-      throw new Error(`hosted_human_journey_failed:${(await page.locator('main').innerText()).slice(0, 500)}`)
+      terminalState = 'failed'
+      failureDetails = (await page.locator('main').innerText()).slice(0, 500)
+      return true
     }
-    const check = page.getByRole('button', { name: 'Check progress' })
-    if (await check.isVisible().catch(() => false)) await check.click()
-    await page.waitForTimeout(1_000)
+    const checkVisible = await check.isVisible().catch(() => false)
+    if (checkVisible && !checkRequested) {
+      await check.click()
+      checkRequested = true
+    } else if (!checkVisible) {
+      checkRequested = false
+    }
+    terminalState = 'pending'
+    return false
+  }, {
+    timeout: 30_000,
+    message: 'hosted_human_journey_unknown_outcome_timeout',
+  }).toBe(true)
+
+  if (terminalState === 'completed') {
+    throw new Error('hosted_human_journey_expected_unknown_but_completed')
+  }
+  if (terminalState === 'failed') {
+    throw new Error(`hosted_human_journey_failed:${failureDetails}`)
   }
   await expect(page.getByText('Still confirming', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
@@ -204,7 +233,7 @@ async function proveUnknownOutcomeRecovery(
 }
 
 async function proveInlineActivityRecord(
-  page: import('@playwright/test').Page,
+  page: Page,
   expected: 'completed' | 'outcome_unknown',
 ): Promise<void> {
   await page.getByRole('button', { name: 'View activity record' }).click()
@@ -225,7 +254,7 @@ async function proveInlineActivityRecord(
   expect(await page.locator('main').innerText()).not.toMatch(/receipt:[a-z0-9_-]+/iu)
 }
 
-async function activeRequestRef(page: import('@playwright/test').Page): Promise<string> {
+async function activeRequestRef(page: Page): Promise<string> {
   const requestRef = await page.evaluate(() => {
     const stored: unknown = JSON.parse(localStorage.getItem('ae.customer-request.active:v1') ?? 'null')
     return stored !== null && typeof stored === 'object' && 'requestRef' in stored
@@ -236,51 +265,92 @@ async function activeRequestRef(page: import('@playwright/test').Page): Promise<
   return requestRef as string
 }
 
-async function reachComparableChoice(page: import('@playwright/test').Page): Promise<void> {
-  for (let turn = 0; turn < 5; turn += 1) {
-    const continueButton = page.getByRole('button', { name: 'Continue' })
-    const allowButton = page.getByRole('button', { name: 'Allow this comparison' })
-    const showButton = page.getByRole('button', { name: 'Show available options' })
-    await Promise.race([
-      continueButton.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined),
-      allowButton.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined),
-      showButton.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined),
-    ])
-    if (await continueButton.isVisible().catch(() => false)) {
+async function reachComparableChoice(page: Page): Promise<void> {
+  const continueButton = page.getByRole('button', { name: 'Continue' })
+  const allowButton = page.getByRole('button', { name: 'Allow this comparison' })
+  const showButton = page.getByRole('button', { name: 'Show available options' })
+  const reviewButton = page.getByRole('button', { name: /^Review /u }).first()
+  const nextAction = continueButton.or(allowButton).or(showButton).or(reviewButton).first()
+  let lastAction: 'continue' | 'allow' | 'show' | undefined
+
+  await expect.poll(async () => {
+    if (await reviewButton.isVisible().catch(() => false)) return true
+    if (!await nextAction.isVisible().catch(() => false)) {
+      lastAction = undefined
+      return false
+    }
+    const continueVisible = await continueButton.isVisible().catch(() => false)
+    if (continueVisible && lastAction !== 'continue') {
       await page.getByRole('textbox').last().fill('Resolve a labelled sandbox service and prepare its quote.')
       await continueButton.click()
-      continue
+      lastAction = 'continue'
+      return false
     }
-    if (await allowButton.isVisible().catch(() => false)) {
+    const allowVisible = await allowButton.isVisible().catch(() => false)
+    if (allowVisible && lastAction !== 'allow') {
       await allowButton.click()
-      continue
+      lastAction = 'allow'
+      return false
     }
-    if (await showButton.isVisible().catch(() => false)) {
+    const showVisible = await showButton.isVisible().catch(() => false)
+    if (showVisible && lastAction !== 'show') {
       await showButton.click()
-      await page.getByRole('button', { name: /^Review /u }).first().waitFor({ state: 'visible', timeout: 30_000 })
-      return
+      lastAction = 'show'
+      return false
     }
-  }
-  throw new Error('hosted_human_journey_did_not_reach_choice')
+    if (!continueVisible && !allowVisible && !showVisible) lastAction = undefined
+    return false
+  }, {
+    timeout: 150_000,
+    message: 'hosted_human_journey_did_not_reach_choice',
+  }).toBe(true)
 }
 
-async function waitForCompletedResult(page: import('@playwright/test').Page): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (await page.getByText('Completed', { exact: true }).first().isVisible().catch(() => false)) return
-    const failed = page.getByText('Could not be completed', { exact: true }).first()
+async function waitForCompletedResult(page: Page): Promise<void> {
+  let terminalState: 'pending' | 'completed' | 'failed' | 'outcome_unknown' | undefined
+  let failureDetails = ''
+  let checkRequested = false
+  const completed = page.getByText('Completed', { exact: true }).first()
+  const failed = page.getByText('Could not be completed', { exact: true }).first()
+  const unknown = page.getByText('Still confirming', { exact: true }).first()
+  const check = page.getByRole('button', { name: 'Check progress' })
+
+  await expect.poll(async () => {
+    if (await completed.isVisible().catch(() => false)) {
+      terminalState = 'completed'
+      return true
+    }
     if (await failed.isVisible().catch(() => false)) {
-      throw new Error(`hosted_human_journey_failed:${(await page.locator('main').innerText()).slice(0, 500)}`)
+      terminalState = 'failed'
+      failureDetails = (await page.locator('main').innerText()).slice(0, 500)
+      return true
     }
-    const unknown = page.getByText('Still confirming', { exact: true }).first()
     if (await unknown.isVisible().catch(() => false)) {
-      throw new Error('hosted_human_journey_outcome_unknown')
+      terminalState = 'outcome_unknown'
+      return true
     }
-    const check = page.getByRole('button', { name: 'Check progress' })
-    if (await check.isVisible().catch(() => false)) await check.click()
-    await page.waitForTimeout(1_000)
+    const checkVisible = await check.isVisible().catch(() => false)
+    if (checkVisible && !checkRequested) {
+      await check.click()
+      checkRequested = true
+    } else if (!checkVisible) {
+      checkRequested = false
+    }
+    terminalState = 'pending'
+    return false
+  }, {
+    timeout: 20_000,
+    message: 'hosted_human_journey_completion_timeout',
+  }).toBe(true)
+
+  if (terminalState === 'failed') {
+    throw new Error(`hosted_human_journey_failed:${failureDetails}`)
   }
-  throw new Error('hosted_human_journey_completion_timeout')
+  if (terminalState === 'outcome_unknown') {
+    throw new Error('hosted_human_journey_outcome_unknown')
+  }
 }
+
 
 function productionBaseUrl(): URL {
   const configured = process.env.AE_CUSTOMER_REQUEST_BASE_URL?.trim()

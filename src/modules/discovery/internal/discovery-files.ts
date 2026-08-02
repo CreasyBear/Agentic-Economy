@@ -1,7 +1,7 @@
 import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
-import type { PublicCatalogContract } from '@/modules/catalog/public'
 import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult, DiscoverySourceState } from '@/modules/discovery/public'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES,
 } from '@/modules/customer-request/public-comprehension'
@@ -16,11 +16,10 @@ import { readCatalogHealth } from '@/modules/registry/public'
 import { readDiscoveryHealth } from './manifest-attempts'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
-const staticSitemapPaths = ['/', '/claim', '/registry', '/for-agents', '/privacy/remove-business'] as const
+const staticSitemapPaths = ['/', '/claim', '/for-agents', '/privacy/remove-business'] as const
 export const DiscoveryPublicSurfacePaths = [
   '/',
   '/claim',
-  '/registry',
   '/for-agents',
   '/privacy/remove-business',
   '/.well-known/ucp',
@@ -67,7 +66,7 @@ export function buildLlmsTxt(
   state: DiscoverySourceState,
   options: BuildDiscoveryFileOptions
 ): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const catalogs = readEligibleCatalogs(state)
   const urls = [
     ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
@@ -79,7 +78,7 @@ export function buildLlmsTxt(
   ]
   const catalogLines = catalogs.map(
     (catalog) =>
-      `- slug=${catalog.slug} publicUrl=${canonicalBaseUrl}/${catalog.slug} ucpUrl=${canonicalBaseUrl}/${catalog.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${catalog.slug} publicStatus=${catalog.publicStatus} indexStatus=${catalog.indexStatus} discoveryStatus=${catalog.discoveryStatus}`
+      `- slug=${catalog.slug} publicUrl=${canonicalBaseUrl}/${catalog.slug} ucpUrl=${canonicalBaseUrl}/${catalog.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${catalog.slug} disposition=${catalog.disposition}`
   )
   const body = [
     '# Agentic Economy',
@@ -144,19 +143,27 @@ const offeringLlmsByteCeiling = 4096
  * projection; access-path internals and support diagnostics never enter it.
  * `urls` stays complete for sitemap and route-parity consumers even though the
  * body samples. */
-export function buildOfferingLlmsTxt(
-  businesses: readonly PublicBusinessCatalogApiV2Dto[],
+export function buildOfferingLlmsUrlsFromSlugs(
+  slugs: readonly string[],
   options: BuildDiscoveryFileOptions,
-): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
-  const urls = [
+): readonly string[] {
+  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
+  return [
     ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
-    ...businesses.flatMap((business) => [
-      `${canonicalBaseUrl}/${business.slug}`,
-      `${canonicalBaseUrl}/${business.slug}/ucp`,
-      `${canonicalBaseUrl}/api/businesses/${business.slug}`,
+    ...slugs.flatMap((slug) => [
+      `${canonicalBaseUrl}/${slug}`,
+      `${canonicalBaseUrl}/${slug}/ucp`,
+      `${canonicalBaseUrl}/api/businesses/${slug}`,
     ]),
   ]
+}
+
+export function buildOfferingLlmsTxt(
+  businesses: readonly PublicBusinessCatalogApiV2Dto[],
+  options: BuildDiscoveryFileOptions & { totalBusinesses?: number },
+): DiscoveryFileBuildResult {
+  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
+  const urls = buildOfferingLlmsUrlsFromSlugs(businesses.map((business) => business.slug), options)
   const beforeSample = [
     '# Agentic Economy',
     '',
@@ -199,7 +206,7 @@ export function buildOfferingLlmsTxt(
   ]
   const afterSample = [
     `- full list=${canonicalBaseUrl}/api/businesses search=${canonicalBaseUrl}/api/businesses/search?q=`,
-    `- total=${businesses.length}; the lines above are a sample, not the catalog`,
+    `- total=${options.totalBusinesses ?? businesses.length}; the lines above are a sample, not the catalog`,
     '',
     'Listing boundary:',
     `- ${DiscoveryListingBoundaryLine}`,
@@ -225,15 +232,15 @@ export function buildOfferingLlmsTxt(
   return { body, urls }
 }
 
-export function buildSitemapXml(
-  state: DiscoverySourceState,
-  options: BuildDiscoveryFileOptions
+export function buildSitemapXmlFromSlugs(
+  slugs: readonly string[],
+  options: BuildDiscoveryFileOptions,
 ): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const now = new Date(options.now ?? 0).toISOString()
   const urls = [
     ...staticSitemapPaths.map((path) => `${canonicalBaseUrl}${path}`),
-    ...readEligibleCatalogs(state).map((catalog) => `${canonicalBaseUrl}/${catalog.slug}`),
+    ...slugs.map((slug) => `${canonicalBaseUrl}/${slug}`),
   ]
   const body = [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -246,8 +253,18 @@ export function buildSitemapXml(
   return { body, urls }
 }
 
+export function buildSitemapXml(
+  state: DiscoverySourceState,
+  options: BuildDiscoveryFileOptions
+): DiscoveryFileBuildResult {
+  return buildSitemapXmlFromSlugs(
+    readEligibleCatalogs(state).map((catalog) => catalog.slug),
+    options,
+  )
+}
+
 export function buildRobotsTxt(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const sitemapUrl = `${canonicalBaseUrl}/sitemap.xml`
   const body = [
     'User-agent: *',
@@ -262,7 +279,7 @@ export function buildRobotsTxt(options: BuildDiscoveryFileOptions): DiscoveryFil
   return { body, urls: [sitemapUrl] }
 }
 
-function readEligibleCatalogs(state: DiscoverySourceState): readonly PublicCatalogContract[] {
+function readEligibleCatalogs(state: DiscoverySourceState): readonly PublicBusinessCatalogApiV2Dto[] {
   return state.businesses
     .map((business) => {
       const registryHealth = readCatalogHealth(state, business.businessId)
@@ -279,7 +296,7 @@ function readEligibleCatalogs(state: DiscoverySourceState): readonly PublicCatal
 
       return result.kind === 'available' ? result.catalog : undefined
     })
-    .filter((catalog): catalog is PublicCatalogContract => catalog !== undefined)
+    .filter((catalog): catalog is PublicBusinessCatalogApiV2Dto => catalog !== undefined)
     .sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
@@ -292,6 +309,3 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;')
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/u, '')
-}

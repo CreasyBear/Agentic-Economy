@@ -13,6 +13,7 @@ import type {
   CapabilityOfferingRegistration,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 export type RegisteredSupplyPrice =
@@ -483,8 +484,8 @@ function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]
   if (selected === undefined) return undefined
   const targets = Object.freeze(uniqueTargets(selected.targets).sort(compareTargets))
   const impact = Object.freeze({
-    affectedCandidates: Object.freeze([...new Set(selected.affectedCandidates)].sort()),
-    probesEnabled: Object.freeze([...new Set(selected.probesEnabled)].sort()),
+    affectedCandidates: Object.freeze(uniqueSorted(selected.affectedCandidates)),
+    probesEnabled: Object.freeze(uniqueSorted(selected.probesEnabled)),
   })
   const requirementKey = `requirement:${canonicalDigest({ targets, impact })}`
   return Object.freeze({

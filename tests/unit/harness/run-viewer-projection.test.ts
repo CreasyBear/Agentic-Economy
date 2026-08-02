@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
-import type { FrozenTurnEvidence, FrozenTurnProse } from '@/modules/answer-thread/harness'
+import type { FrozenTurnEvidence, FrozenTurnEvidenceDraft, FrozenTurnProse } from '@/modules/answer-thread/harness'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
+import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import { buildHarnessRunReport } from '@/modules/harness/public'
 import {
   buildHarnessRunViewerDetailProjection,
@@ -10,7 +11,7 @@ import {
 } from '@/modules/harness/internal/run-viewer-projection'
 
 describe('harness run viewer projection', () => {
-  it('parses legacy turns with and without harnessRun evidence', () => {
+  it('reports missing harness evidence without reconstructing a run', () => {
     const withHarnessRun = answerTurn('turn-with-harness', {
       evidence: {
         harnessRun: buildHarnessRunReport({
@@ -25,18 +26,18 @@ describe('harness run viewer projection', () => {
         }),
       },
     })
-    const withoutHarnessRun = answerTurn('turn-legacy', {
+    const withoutHarnessRun = answerTurn('turn-without-harness', {
       evidence: {
         toolCalls: [
           {
-            toolCallId: 'tool-call-legacy',
-            turnId: 'turn-legacy',
+            toolCallId: 'tool-call-current',
+            turnId: 'turn-without-harness',
             seq: 0,
             toolId: 'registry.search',
             inputJson: JSON.stringify({ query: 'plumber preston' }),
             resultSummaryJson: JSON.stringify({ count: 1, slugs: ['preston-plumbing'] }),
             resultJson: JSON.stringify({ kind: 'ok', items: [{ slug: 'preston-plumbing' }] }),
-            resultHash: 'result-hash-legacy',
+            resultHash: 'result-hash-current',
             status: 'complete',
             createdAt: 1_000,
           },
@@ -65,31 +66,30 @@ describe('harness run viewer projection', () => {
     expect(result.summary).toMatchObject({
       turns: 2,
       withHarnessRun: 1,
-      legacyBackfilled: 1,
-      missingRunEvidence: 0,
+      missingRunEvidence: 1,
     })
     expect(result.rows.map((row) => [row.turnId, row.runSource, row.runStatus])).toEqual([
-      ['turn-legacy', 'legacyAnswerRun', 'ok'],
+      ['turn-without-harness', 'missing', 'missing'],
       ['turn-with-harness', 'harnessRun', 'ok'],
     ])
 
     const detail = buildHarnessRunViewerDetailProjection({
       actorRef: 'admin@example.test',
       turns: [withHarnessRun, withoutHarnessRun],
-      turnId: 'turn-legacy',
+      turnId: 'turn-without-harness',
       generatedAt: 2_000,
     })
     expect(detail.kind).toBe('allowed')
     if (detail.kind !== 'allowed') {
       throw new Error('Expected allowed detail projection.')
     }
-    expect(detail.detail.run.source).toBe('legacyAnswerRun')
+    expect(detail.detail.run.source).toBe('missing')
     expect(detail.detail.tools).toHaveLength(1)
     expect(detail.detail.tools[0]).toMatchObject({
       toolId: 'registry.search',
       status: 'complete',
       durationMs: 13,
-      resultHash: 'result-hash-legacy',
+      resultHash: 'result-hash-current',
     })
   })
 
@@ -194,11 +194,23 @@ function answerTurn(
     prose?: Partial<FrozenTurnProse>
   } = {},
 ): AnswerTurnRecord {
-  const evidence: FrozenTurnEvidence = {
+  const evidenceDraft: FrozenTurnEvidenceDraft = {
     providers: [answerSource()],
     allowedSlugs: ['preston-plumbing'],
     agentJsonUrl: '/api/businesses/search?q=plumber',
+    toolCalls: [],
+    timings: [],
+    workLog: [],
     ...options.evidence,
+  }
+  const evidence: FrozenTurnEvidence = {
+    ...evidenceDraft,
+    answerRun: buildAnswerRunReport({
+      intent: 'refine_search',
+      status: 'complete',
+      snapshotHash: `snapshot-${turnId}`,
+      evidence: evidenceDraft,
+    }),
   }
   const prose: FrozenTurnProse = {
     oneLine: 'One listed business matches.',
@@ -210,7 +222,7 @@ function answerTurn(
   return {
     turnId,
     threadId: 'thread-run-viewer',
-    seq: turnId.endsWith('legacy') ? 2 : 1,
+    seq: turnId.endsWith('without-harness') ? 2 : 1,
     query: options.query ?? 'plumber Preston',
     intent: 'refine_search',
     evidenceJson: JSON.stringify(evidence),
@@ -218,7 +230,7 @@ function answerTurn(
     proseJson: JSON.stringify(prose),
     artifactKindsJson: JSON.stringify(['one-line', 'provider-cards']),
     status: 'complete',
-    createdAt: turnId.endsWith('legacy') ? 2_000 : 1_000,
+    createdAt: turnId.endsWith('without-harness') ? 2_000 : 1_000,
   }
 }
 

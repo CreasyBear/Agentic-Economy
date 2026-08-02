@@ -15,10 +15,6 @@ export async function prepareCompare(
   ports: CompareResumePorts,
 ): Promise<CustomerRequestActionResult> {
   const current = await ports.loadCurrent(input.requestRef)
-  if (current.kind === 'needs_attention') return projectNeedsAttention({
-    requestRef: input.requestRef, revision: 0,
-    summary: 'This earlier request used a retired contract format. Start a new request to continue.',
-  })
   if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== input.principalId) {
     return { kind: 'refused', reason: 'request_not_found' }
   }

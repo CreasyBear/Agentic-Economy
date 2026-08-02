@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import {
   AeOwnerOfferingEditor,
@@ -11,26 +12,6 @@ import {
 } from '@/components/ae/offerings/AeOwnerOfferings'
 import type { OwnerOfferingEditorValue, OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 
-beforeAll(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    value: vi.fn((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  })
-})
 
 beforeEach(() => {
   // This repo does not enable testing-library auto-cleanup, so renders would

@@ -1,4 +1,4 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AccessPathRef, BusinessId, OfferingRef, SourceHash } from '@/modules/common/ids'
 
 import { normalizeOfferingPrice, type OfferingPrice, type OfferingPriceInput } from './offering-price'
@@ -88,7 +88,7 @@ export function createOfferingInState(state: OfferingSourceState, command: Reado
   }
   const facts = validateFacts(command.facts)
   if (!facts) return fail(state, 'invalid_offering', 'Offering facts are invalid.')
-  const sourceHash = stableHash({ businessId: command.businessId, offeringRef: command.offeringRef, revision: 1, ...facts }) as SourceHash
+  const sourceHash = canonicalDigest({ businessId: command.businessId, offeringRef: command.offeringRef, revision: 1, ...facts }) as SourceHash
   const offering: BusinessOfferingRecord = {
     offeringRef: command.offeringRef, businessId: command.businessId, currentRevision: 1,
     status: 'draft', createdAt: command.now, updatedAt: command.now,
@@ -121,7 +121,7 @@ export function reviseOfferingInState(state: OfferingSourceState, command: Reado
   const facts = validateFacts(command.facts)
   if (!facts) return fail(state, 'invalid_offering', 'Offering facts are invalid.')
   const revisionNumber = current.currentRevision + 1
-  const sourceHash = stableHash({ businessId: current.businessId, offeringRef: current.offeringRef, revision: revisionNumber, ...facts }) as SourceHash
+  const sourceHash = canonicalDigest({ businessId: current.businessId, offeringRef: current.offeringRef, revision: revisionNumber, ...facts }) as SourceHash
   const offering = { ...current, currentRevision: revisionNumber, updatedAt: command.now }
   const revision: BusinessOfferingRevisionRecord = {
     offeringRef: current.offeringRef, businessId: current.businessId, revision: revisionNumber, ...facts, sourceHash, createdAt: command.now,
@@ -184,7 +184,7 @@ export function upsertAccessPathInState(state: OfferingSourceState, command: Rea
     accessPathRef: command.accessPathRef, businessId: offering.businessId, offeringRef: offering.offeringRef,
     offeringRevision: revision.revision, offeringSourceHash: revision.sourceHash, status: command.status,
     descriptor: validation.descriptor,
-    sourceHash: stableHash({ accessPathRef: command.accessPathRef, offeringSourceHash: revision.sourceHash, descriptor: validation.descriptor }) as SourceHash,
+    sourceHash: canonicalDigest({ accessPathRef: command.accessPathRef, offeringSourceHash: revision.sourceHash, descriptor: validation.descriptor }) as SourceHash,
     createdAt: existing?.createdAt ?? command.now, updatedAt: command.now,
   }
   const paths = existing ? state.accessPaths.map((item) => item.accessPathRef === path.accessPathRef ? path : item) : [...state.accessPaths, path]
@@ -243,9 +243,9 @@ function validateFacts(input: OfferingFactsInput): ValidatedOfferingFacts | unde
 }
 
 function hash(command: unknown): SourceHash {
-  if (typeof command !== 'object' || command === null) return stableHash(command as never) as SourceHash
+  if (typeof command !== 'object' || command === null) return canonicalDigest(command as never) as SourceHash
   const { now: _now, ...stableCommand } = command as Record<string, unknown>
-  return stableHash(stableCommand as never) as SourceHash
+  return canonicalDigest(stableCommand as never) as SourceHash
 }
 function operation(actorRef: string, operationName: string, operationKey: string, requestHash: SourceHash, resultRef: string): OfferingSourceOperation {
   return { actorRef, operationName, operationKey, requestHash, resultRef }

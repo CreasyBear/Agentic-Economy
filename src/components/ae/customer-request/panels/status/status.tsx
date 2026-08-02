@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import type { ConversationTurn } from '../../workspace-types'
 import {
   Conversation,
@@ -74,10 +75,10 @@ export function ActionStatusCard({ projection, turns, refresh, edit, restart }: 
           </p> : null}
         </div>}
         <p className="text-sm text-muted-foreground">
-          Last checked {new Date(action.observedAt).toLocaleString()}
+          Last checked {formatTimestamp(action.observedAt)}
         </p>
         {projection.activity?.nextCheckAt === undefined ? null : <p className="text-sm text-muted-foreground">
-          Check again after {new Date(projection.activity.nextCheckAt).toLocaleString()}.
+          Check again after {formatTimestamp(projection.activity.nextCheckAt)}.
         </p>}
         {unknown ? <Button type="button" variant="default" onClick={() => void refresh()}>Check again</Button> : null}
         <RequestRecordLinks requestRef={projection.requestRef} />

@@ -1,5 +1,6 @@
 import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
+import { isRecord } from '@/modules/common/is-record'
 
 import {
   bootstrapOwnerAdmin,
@@ -24,6 +25,8 @@ type IndexBuilder = {
 
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
+  order: (direction: 'asc' | 'desc') => Query
+  take: (limit: number) => Promise<Row[]>
   collect: () => Promise<Row[]>
   unique: () => Promise<Row | null>
   first: () => Promise<Row | null>
@@ -36,12 +39,12 @@ type Db = {
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
 
-type RuntimeCtx = {
+type TestCtx = {
   db: Db
   auth: { getUserIdentity: () => Promise<UserIdentity | null> }
 }
 
-type Handler<Args> = (ctx: RuntimeCtx, args: Args) => Promise<unknown>
+type Handler<Args> = (ctx: TestCtx, args: Args) => Promise<unknown>
 
 const readClaimsHandler = (readAdminClaims as unknown as { _handler: Handler<Record<string, never>> })._handler
 const readAuditHandler = (readAdminAuditEvents as unknown as { _handler: Handler<Record<string, never>> })._handler
@@ -61,6 +64,7 @@ type AdminBootstrapArgs = {
 
 type GrantArgs = {
   targetClerkUserId: string
+  targetTokenIdentifier: string
   role: 'owner_admin' | 'support' | 'reviewer'
   reasonCode: string
   evidenceRefs: string[]
@@ -142,6 +146,7 @@ describe('admin Convex runtime controls', () => {
       authCtx(db, ownerAdmin()),
       withSourceWrite('admin_operator', {
         targetClerkUserId: 'user_new_support',
+        targetTokenIdentifier: 'clerk|user_new_support',
         role: 'support',
         reasonCode: 'support_queue_access',
         evidenceRefs: ['private:evidence:grant'],
@@ -182,6 +187,33 @@ describe('admin Convex runtime controls', () => {
     )
     expect(JSON.stringify(controls)).not.toContain('private:evidence')
   })
+
+  it('bounds claims readbacks to the newest native rows', async () => {
+    const db = seededAdminDb()
+    for (let index = 0; index < 105; index += 1) {
+      db.seed('claims', {
+        _id: `claims:extra:${index}`,
+        _creationTime: 100 + index,
+        ownerId: 'owners:1',
+        businessId: 'businesses:1',
+        slug: `sam-plumbing-${index}`,
+        status: 'contested',
+        submittedFactsHash: `source:claim:${index}`,
+        createdAt: 100 + index,
+        updatedAt: 100 + index,
+      })
+    }
+
+    const claims = await readClaimsHandler(authCtx(db, ownerAdmin()), {})
+    if (!isRecord(claims) || !Array.isArray(claims.rows)) {
+      throw new Error('Expected bounded claims rows.')
+    }
+
+    expect(claims.rows).toHaveLength(100)
+    expect(claims.rows[0]).toMatchObject({ rowId: 'row:claim:claims:extra:104' })
+    expect(claims.rows.at(-1)).toMatchObject({ rowId: 'row:claim:claims:extra:5' })
+  })
+
 })
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -196,13 +228,28 @@ class FakeIndexBuilder implements IndexBuilder {
 class FakeQuery implements Query {
   constructor(
     private readonly rows: readonly Row[],
-    private readonly filters: readonly EqFilter[] = []
+    private readonly filters: readonly EqFilter[] = [],
+    private readonly direction: 'asc' | 'desc' = 'asc'
   ) {}
 
   withIndex(_indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
     const builder = new FakeIndexBuilder()
     callback(builder)
-    return new FakeQuery(this.rows, [...this.filters, ...builder.filters])
+    return new FakeQuery(this.rows, [...this.filters, ...builder.filters], this.direction)
+  }
+
+  order(direction: 'asc' | 'desc'): Query {
+    return new FakeQuery(this.rows, this.filters, direction)
+  }
+
+  async take(limit: number): Promise<Row[]> {
+    const rows = this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
+    rows.sort((left, right) =>
+      this.direction === 'desc'
+        ? right._creationTime - left._creationTime
+        : left._creationTime - right._creationTime
+    )
+    return rows.slice(0, limit)
   }
 
   async collect(): Promise<Row[]> {
@@ -265,6 +312,7 @@ function seededAdminDb(): FakeDb {
     _id: 'adminMemberships:owner',
     _creationTime: 1,
     clerkUserId: 'user_owner',
+    tokenIdentifier: 'clerk|user_owner',
     role: 'owner_admin',
     state: 'active',
     grantedBy: 'bootstrap:user_owner',
@@ -275,6 +323,7 @@ function seededAdminDb(): FakeDb {
     _id: 'adminMemberships:support',
     _creationTime: 2,
     clerkUserId: 'user_support',
+    tokenIdentifier: 'clerk|user_support',
     role: 'support',
     state: 'active',
     grantedBy: 'user_owner',
@@ -333,12 +382,16 @@ function seededAdminDb(): FakeDb {
     logicalKey: 'registry:businesses:1',
     status: 'failed',
     sourceHash: 'source:business:v1',
-    targetSurface: 'registry',
+    sourceVersion: 'public-catalog:v1',
+    projectionKind: 'business_catalog',
     retryCount: 1,
     startedAt: 6,
     finishedAt: 7,
-    failureCode: 'adapter_failed',
-    redactedError: 'Projection adapter failed.',
+    lastErrorCode: 'adapter_failed',
+    lastErrorRedacted: 'Projection adapter failed.',
+    staleThresholdAt: 8,
+    repairAction: 'retry_projection',
+    repairResult: 'failed',
   })
   db.seed('indexStatus', {
     _id: 'indexStatus:1',
@@ -353,7 +406,7 @@ function seededAdminDb(): FakeDb {
   return db
 }
 
-function authCtx(db: Db, identity: UserIdentity | null): RuntimeCtx {
+function authCtx(db: Db, identity: UserIdentity | null): TestCtx {
   return {
     db,
     auth: {
@@ -370,9 +423,6 @@ function support(): UserIdentity {
   return { tokenIdentifier: 'clerk|user_support', subject: 'user_support', issuer: 'https://clerk.example.test' }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function bootstrapArgs(key: string): AdminBootstrapArgs {
   return withSourceWrite('admin_operator', {

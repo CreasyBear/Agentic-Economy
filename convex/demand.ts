@@ -1,6 +1,7 @@
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import { admissionKey, assertAdmission } from './lib/rateLimit'
 const demandCaptureError = v.object({
   kind: v.literal('error'),
   code: v.union(v.literal('demand_capture_failed'), v.literal('demand_capture_invalid_input')),
@@ -52,6 +53,19 @@ export const captureDemandSignal = mutationGeneric({
     const queryText = args.queryText?.trim()
     if (queryText !== undefined && queryText.length > 120) {
       return invalidDemandInput('queryText', 'Registry search text must be 120 characters or fewer.')
+    }
+
+    const admission = await assertAdmission(ctx, {
+      name: 'public-mutation',
+      key: await admissionKey(ctx, `demand:${args.sourceSurface}`),
+    })
+    if (!admission.ok) {
+      return {
+        kind: 'error' as const,
+        code: 'demand_capture_failed' as const,
+        retryable: true,
+        reason: `Retry after ${admission.retryAfter}.`,
+      }
     }
 
     const createdAt = Date.now()

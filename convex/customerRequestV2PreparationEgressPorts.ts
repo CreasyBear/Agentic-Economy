@@ -1,6 +1,5 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ActionPreparationLineage,
   DurableActionPreparation,
@@ -13,6 +12,7 @@ import type {
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
+import { customerRequestV2ReadPorts } from './customerRequestV2ReadPorts'
 import { listRouteableCapabilitySupply } from './capabilitySupply'
 
 type DbCtx = MutationCtx | QueryCtx
@@ -79,16 +79,17 @@ export function customerRequestV2PreparationEgressPorts(
       }
     },
 
-    loadRevisionAggregate: async (input) => {
-      const revision = await db.query('customerRequestV2Revisions')
-        .withIndex('by_requestId_and_requestRevision', (query) => query
-          .eq('requestId', input.requestId)
-          .eq('requestRevision', input.requestRevision)).unique()
-      if (revision === null) return null
-      return structuredClone(revision.aggregate) as unknown as CustomerRequestV2Aggregate
+    loadRevisionAggregate: async (
+      input,
+    ): Promise<CustomerRequestV2Aggregate | null> => {
+      const revision = await customerRequestV2ReadPorts(ctx).loadRevision(
+        input.requestId,
+        input.requestRevision,
+      )
+      return revision?.aggregate ?? null
     },
 
-    listEligibleSupplies: async (input) => {
+    listRouteableSupplies: async (input) => {
       const live = await listRouteableCapabilitySupply(db, {
         networkId: input.networkId,
         limit: input.limit,
@@ -265,11 +266,11 @@ export async function verifiedPreparationAuthority(
     reservationRef: _reservationRef,
     ...reservationMaterial
   } = expected
-  if (canonicalDigest(reservationMaterial as StableHashValue) !== expected.reservationDigest
+  if (canonicalDigest(reservationMaterial) !== expected.reservationDigest
     || expected.reservationRef !== `action-authority-reservation:${expected.reservationDigest}`
     || reservation.reservationDigest !== expected.reservationDigest
-    || canonicalDigest(reservation.reservation as StableHashValue)
-      !== canonicalDigest(expected as StableHashValue)) {
+    || canonicalDigest(reservation.reservation)
+      !== canonicalDigest(expected)) {
     return false
   }
   const approval = await db.query('customerRequestV2PreparationApprovalEvidence')
@@ -281,7 +282,7 @@ export async function verifiedPreparationAuthority(
     approvalRef: _approvalRef,
     ...approvalMaterial
   } = approval.approval
-  return canonicalDigest(approvalMaterial as StableHashValue) === approval.approvalDigest
+  return canonicalDigest(approvalMaterial) === approval.approvalDigest
     && approval.approvalRef === `action-preparation-approval:${approval.approvalDigest}`
     && approval.approvalDigest === expected.approvalDigest
     && approval.reviewDigest === expected.reviewDigest
@@ -289,8 +290,8 @@ export async function verifiedPreparationAuthority(
     && approval.principalId === expected.principalId
     && approval.ownerId === expected.ownerId
     && approval.credentialId === expected.credentialId
-    && canonicalDigest(approval.lineage as StableHashValue)
-      === canonicalDigest(expected.lineage as StableHashValue)
+    && canonicalDigest(approval.lineage)
+      === canonicalDigest(expected.lineage)
 }
 
 export function toOperationRow(
@@ -346,7 +347,7 @@ function toEligibleSupply(supply: {
     version: number
     contractDigest: string
     presentation: EligibleSupply['offering']['presentation']
-    status: string
+    status: 'active' | 'inactive'
     registrationHash: string
   }
   binding: {

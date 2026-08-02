@@ -1,9 +1,11 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import { mutationGeneric, paginationOptsValidator, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+
+import { internal } from './_generated/api'
+import { internalMutation, type MutationCtx } from './_generated/server'
 
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { resolveAdminAuthority } from './authz'
-import { runtimeDb } from './source_state'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import {
   AnswerTurnStatusValues,
@@ -18,6 +20,12 @@ import type {
   AnswerToolCallRecord,
   AnswerTurnRecord,
 } from '../src/modules/answer-thread/answer-thread.schema'
+
+const ANSWER_THREAD_MAX_TURNS = 25
+const ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT = ANSWER_THREAD_MAX_TURNS + 1
+const ANSWER_THREAD_PUBLIC_TURN_SNAPSHOT_LIMIT = ANSWER_THREAD_MAX_TURNS
+const ANSWER_THREAD_DELETE_BATCH_SIZE = 100
+
 
 const now = () => Date.now()
 
@@ -113,7 +121,7 @@ export const appendAnswerTurn = mutationGeneric({
     const existingTurns = await ctx.db
       .query('answerTurns')
       .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
+      .take(26)
 
     if (existingTurns.length >= 25) {
       throw new Error('thread_turn_limit')
@@ -187,7 +195,7 @@ export const appendAnswerTurnWithToolCalls = mutationGeneric({
     const existingTurns = await ctx.db
       .query('answerTurns')
       .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
+      .take(26)
 
     if (existingTurns.length >= 25) {
       throw new Error('thread_turn_limit')
@@ -276,7 +284,7 @@ export const appendAnswerTurnWithThreadAndToolCalls = mutationGeneric({
       const existingTurns = await ctx.db
         .query('answerTurns')
         .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-        .collect()
+        .take(26)
 
       if (existingTurns.length >= 25) {
         throw new Error('thread_turn_limit')
@@ -371,19 +379,43 @@ export const appendAnswerToolCalls = mutationGeneric({
 })
 
 export const readTurnToolCalls = queryGeneric({
-  args: { turnId: v.string() },
+  args: {
+    turnId: v.string(),
+    pseudonymousSessionId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
   handler: async (ctx, args) => {
-    const rows = await ctx.db
+    const turn = await ctx.db
+      .query('answerTurns')
+      .withIndex('by_turnId', (q) => q.eq('turnId', args.turnId))
+      .unique()
+
+    if (turn === null) {
+      return { page: [], isDone: true, continueCursor: '' }
+    }
+
+    const thread = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (q) => q.eq('threadId', turn.threadId))
+      .unique()
+
+    if (thread === null || thread.pseudonymousSessionId !== args.pseudonymousSessionId) {
+      return { page: [], isDone: true, continueCursor: '' }
+    }
+
+    const page = await ctx.db
       .query('answerToolCalls')
       .withIndex('by_turn_seq', (q) => q.eq('turnId', args.turnId))
-      .collect()
+      .order('asc')
+      .paginate(args.paginationOpts)
 
     return {
-      toolCalls: rows.map(toToolCallRecord).sort((a, b) => a.seq - b.seq),
+      page: page.page.map(toToolCallRecord),
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
     }
   },
 })
-
 
 export const listSessionThreads = queryGeneric({
   args: {
@@ -391,7 +423,7 @@ export const listSessionThreads = queryGeneric({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 20
+    const limit = normalizeSessionThreadLimit(args.limit)
     const rows = await ctx.db
       .query('answerThreads')
       .withIndex('by_session_updatedAt', (q) => q.eq('pseudonymousSessionId', args.pseudonymousSessionId))
@@ -405,18 +437,36 @@ export const listSessionThreads = queryGeneric({
 })
 
 export const getThreadTurns = queryGeneric({
-  args: { threadId: v.string() },
+  args: {
+    threadId: v.string(),
+    pseudonymousSessionId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
   handler: async (ctx, args) => {
-    const rows = await ctx.db
+    const thread = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
+      .unique()
+
+    if (thread === null || thread.pseudonymousSessionId !== args.pseudonymousSessionId) {
+      return { page: [], isDone: true, continueCursor: '' }
+    }
+
+    const page = await ctx.db
       .query('answerTurns')
       .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
+      .order('asc')
+      .paginate(args.paginationOpts)
 
     return {
-      turns: rows.map(toTurnRecord).sort((a, b) => a.seq - b.seq),
+      page: page.page.map(toTurnRecord),
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
     }
   },
 })
+
+
 
 export const listAdminHarnessRunTurns = queryGeneric({
   args: {
@@ -430,7 +480,7 @@ export const listAdminHarnessRunTurns = queryGeneric({
   returns: adminHarnessRunTurnsResult,
   handler: async (ctx, args) => {
     const limit = normalizeAdminRunViewerLimit(args.limit)
-    const authority = await resolveAdminAuthority({ db: runtimeDb(ctx.db), auth: ctx.auth }, 'read_admin_readbacks')
+    const authority = await resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'read_admin_readbacks')
     if (authority.kind === 'denied') {
       return {
         kind: 'denied' as const,
@@ -479,21 +529,22 @@ export const listAdminHarnessRunTurns = queryGeneric({
 })
 
 export const getAnswerThread = queryGeneric({
-  args: { threadId: v.string() },
+  args: { threadId: v.string(), pseudonymousSessionId: v.string() },
   handler: async (ctx, args) => {
     const threadRow = await ctx.db
       .query('answerThreads')
       .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
       .unique()
 
-    if (threadRow === null) {
+    if (threadRow === null || threadRow.pseudonymousSessionId !== args.pseudonymousSessionId) {
       return null
     }
 
+    // Snapshot count: answer-thread writes cap a thread at ANSWER_THREAD_MAX_TURNS.
     const turnRows = await ctx.db
       .query('answerTurns')
       .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
+      .take(ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT)
 
     const thread = toThreadRecord(threadRow)
     return {
@@ -504,27 +555,42 @@ export const getAnswerThread = queryGeneric({
 })
 
 export const getAnswerThreadWithTurns = queryGeneric({
-  args: { threadId: v.string() },
+  args: {
+    threadId: v.string(),
+    pseudonymousSessionId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
   handler: async (ctx, args) => {
     const threadRow = await ctx.db
       .query('answerThreads')
       .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
       .unique()
 
-    if (threadRow === null) {
+    if (threadRow === null || threadRow.pseudonymousSessionId !== args.pseudonymousSessionId) {
       return null
     }
 
+    // Snapshot count: answer-thread writes cap a thread at ANSWER_THREAD_MAX_TURNS.
     const turnRows = await ctx.db
       .query('answerTurns')
       .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
+      .take(ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT)
+    const page = await ctx.db
+      .query('answerTurns')
+      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+      .order('asc')
+      .paginate(args.paginationOpts)
 
-    const turns = turnRows.map(toTurnRecord).sort((a, b) => a.seq - b.seq)
     return {
-      ...toThreadRecord(threadRow),
-      turnCount: turns.length,
-      turns,
+      thread: {
+        ...toThreadRecord(threadRow),
+        turnCount: turnRows.length,
+      },
+      turns: {
+        page: page.page.map(toTurnRecord),
+        isDone: page.isDone,
+        continueCursor: page.continueCursor,
+      },
     }
   },
 })
@@ -541,10 +607,12 @@ export const getPublicThreadProjection = queryGeneric({
       return null
     }
 
+    // Public route snapshot: answer-thread writes cap a thread at ANSWER_THREAD_MAX_TURNS.
     const turnRows = await ctx.db
       .query('answerTurns')
       .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
+      .order('asc')
+      .take(ANSWER_THREAD_PUBLIC_TURN_SNAPSHOT_LIMIT)
 
     return buildPublicThreadProjection(
       toThreadRecord(threadRow),
@@ -643,6 +711,13 @@ function normalizeAdminRunViewerLimit(limit: number | undefined): number {
   return Math.min(Math.max(Math.trunc(limit), 1), 250)
 }
 
+function normalizeSessionThreadLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 20
+  }
+  return Math.min(Math.max(Math.trunc(limit), 1), 50)
+}
+
 function normalizeAdminFilter(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined
@@ -652,6 +727,10 @@ function normalizeAdminFilter(value: string | undefined): string | undefined {
 }
 
 function toToolCallRecord(row: Record<string, unknown>): AnswerToolCallRecord {
+  if (typeof row.resultJson !== 'string') {
+    throw new Error('answer_tool_result_missing')
+  }
+
   return {
     toolCallId: String(row.toolCallId),
     turnId: String(row.turnId),
@@ -659,19 +738,73 @@ function toToolCallRecord(row: Record<string, unknown>): AnswerToolCallRecord {
     toolId: row.toolId as AnswerToolCallRecord['toolId'],
     inputJson: String(row.inputJson),
     resultSummaryJson: String(row.resultSummaryJson),
-    resultJson: typeof row.resultJson === 'string' ? row.resultJson : legacyToolResultJson(row.resultSummaryJson),
+    resultJson: row.resultJson,
     resultHash: String(row.resultHash),
     status: row.status as AnswerToolCallRecord['status'],
     createdAt: Number(row.createdAt),
   }
 }
 
-function legacyToolResultJson(resultSummaryJson: unknown): string {
-  return JSON.stringify({
-    kind: 'legacy_missing_result',
-    resultSummary: typeof resultSummaryJson === 'string' ? resultSummaryJson : '',
-  })
+async function deleteAnswerThreadBatch(ctx: MutationCtx, threadId: string): Promise<void> {
+  const thread = await ctx.db
+    .query('answerThreads')
+    .withIndex('by_threadId', (q) => q.eq('threadId', threadId))
+    .unique()
+
+  if (thread === null) {
+    return
+  }
+
+  const turns = await ctx.db
+    .query('answerTurns')
+    .withIndex('by_thread_createdAt', (q) => q.eq('threadId', threadId))
+    .order('asc')
+    .take(ANSWER_THREAD_DELETE_BATCH_SIZE)
+  let remainingWrites = ANSWER_THREAD_DELETE_BATCH_SIZE
+  let completedFetchedTurns = true
+
+  for (const turn of turns) {
+    if (remainingWrites === 0) {
+      completedFetchedTurns = false
+      break
+    }
+
+    const toolCalls = await ctx.db
+      .query('answerToolCalls')
+      .withIndex('by_turn_seq', (q) => q.eq('turnId', turn.turnId))
+      .order('asc')
+      .take(remainingWrites)
+    if (toolCalls.length >= remainingWrites) {
+      for (const toolCall of toolCalls) {
+        await ctx.db.delete(toolCall._id)
+      }
+      remainingWrites = 0
+      completedFetchedTurns = false
+      break
+    }
+
+    for (const toolCall of toolCalls) {
+      await ctx.db.delete(toolCall._id)
+      remainingWrites -= 1
+    }
+    await ctx.db.delete(turn._id)
+    remainingWrites -= 1
+  }
+
+  if (completedFetchedTurns && turns.length < ANSWER_THREAD_DELETE_BATCH_SIZE) {
+    await ctx.db.delete(thread._id)
+    return
+  }
+
+  await ctx.scheduler.runAfter(0, internal.answerThreads.continueDeleteAnswerThread, { threadId })
 }
+
+export const continueDeleteAnswerThread = internalMutation({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    await deleteAnswerThreadBatch(ctx, args.threadId)
+  },
+})
 
 export const deleteAnswerThread = mutationGeneric({
   args: {
@@ -696,23 +829,7 @@ export const deleteAnswerThread = mutationGeneric({
       throw new Error('thread_forbidden')
     }
 
-    const turns = await ctx.db
-      .query('answerTurns')
-      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .collect()
-
-    for (const turn of turns) {
-      const toolCalls = await ctx.db
-        .query('answerToolCalls')
-        .withIndex('by_turn_seq', (q) => q.eq('turnId', turn.turnId))
-        .collect()
-      for (const toolCall of toolCalls) {
-        await ctx.db.delete(toolCall._id)
-      }
-      await ctx.db.delete(turn._id)
-    }
-
-    await ctx.db.delete(thread._id)
+    await deleteAnswerThreadBatch(ctx, args.threadId)
     return { threadId: args.threadId }
   },
 })

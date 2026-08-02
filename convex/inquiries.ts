@@ -1,23 +1,27 @@
 import type { UserIdentity } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
+import { literalUnion } from '../src/modules/common/convex-literals'
 import { v } from 'convex/values'
-
 import { internal } from './_generated/api'
-import { internalMutation } from './_generated/server'
-import { runtimeDb } from './source_state'
-import { inquirySourceStatePorts } from './inquirySourceStatePorts'
-import { inquiryNotificationPorts } from './inquiryNotificationPorts'
-import { serializeOperatorReconstructionReadback } from './inquirySerializeOperator'
+import { internalMutation, type QueryCtx } from './_generated/server'
+
 import {
-  collect,
-  stringField,
-} from './inquiryRuntimeDbHelpers'
+  loadInquiryCustomerAccessGrant,
+  loadInquiryCustomerRecordState,
+  loadInquirySourceState,
+} from './inquirySourceStateLoad'
+import {
+  persistInquirySourceState,
+  repairGovernedSendErasureKeys,
+} from './inquirySourceStatePersist'
+import { enqueueInquiryNotificationDispatches } from './inquiryNotificationBridge'
+import { serializeOperatorReconstructionReadback } from './inquirySerializeOperator'
 import { csrfArgs } from './notificationOutbox'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
+import { admissionKey, assertAdmission } from './lib/rateLimit'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { CapabilityKindValues } from '../src/modules/catalog/public'
+import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import {
   accessIdFromInquiryCustomerAccessKey,
   closeInquiry as closeInquiryModule,
@@ -69,8 +73,7 @@ const publicInquiryContact = v.object({
 
 const inquiryTarget = v.object({
   businessId: v.string(),
-  serviceId: v.string(),
-  capabilityKind: literalUnion(CapabilityKindValues),
+  offeringRef: v.string(),
 })
 
 const inquiryOrigin = v.object({
@@ -140,7 +143,7 @@ const submitInquiryResult = v.union(
     thread: v.object({
       threadId: v.string(),
       businessId: v.string(),
-      serviceId: v.string(),
+      offeringRef: v.string(),
       status: literalUnion(InquiryThreadStatusValues),
       version: v.number(),
       customerAccessKey: v.string(),
@@ -164,10 +167,9 @@ const submitInquiryResult = v.union(
 const inboxInquiryProjection = v.object({
   threadId: v.string(),
   businessId: v.string(),
-  serviceId: v.string(),
-  capabilityKind: literalUnion(CapabilityKindValues),
+  offeringRef: v.string(),
   businessName: v.string(),
-  serviceName: v.string(),
+  offeringName: v.string(),
   status: literalUnion(InquiryThreadStatusValues),
   bucket: literalUnion(OwnerInboxBucketValues),
   preview: v.string(),
@@ -295,8 +297,7 @@ const customerRecordReadback = v.object({
       fields: v.array(v.object({
         key: v.union(
           v.literal('businessId'),
-          v.literal('serviceId'),
-          v.literal('capabilityKind'),
+          v.literal('offeringRef'),
           v.literal('body'),
           v.literal('contactName'),
           v.literal('contactEmail'),
@@ -600,7 +601,7 @@ const operatorReconstructionRow = v.object({
   rowId: v.string(),
   threadId: v.string(),
   businessId: v.string(),
-  serviceId: v.string(),
+  offeringRef: v.string(),
   status: literalUnion(InquiryThreadStatusValues),
   sourceHash: v.string(),
   correlationIds: v.array(v.string()),
@@ -643,7 +644,6 @@ const operatorInquiryReconstructionReadbackResult = v.union(
     rows: v.array(operatorReconstructionRow),
   })
 )
-
 const inquiryAbuseBucketCleanupResult = v.object({
   deleted: v.number(),
   cutoff: v.number(),
@@ -653,20 +653,6 @@ const inquiryAbuseBucketCleanupResult = v.object({
 const INQUIRY_ABUSE_BUCKET_STATES = ['open', 'limited'] as const
 const ABUSE_BUCKET_CLEANUP_BATCH_SIZE = 100
 const ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE = 250
-
-type RuntimeCtx = {
-  db: object
-  auth: {
-    getUserIdentity: () => Promise<UserIdentity | null>
-  }
-}
-
-type RuntimeQueryCtx = {
-  db: object
-  auth: {
-    getUserIdentity: () => Promise<UserIdentity | null>
-  }
-}
 
 export const cleanupExpiredInquiryAbuseBuckets = internalMutation({
   args: {
@@ -680,9 +666,7 @@ export const cleanupExpiredInquiryAbuseBuckets = internalMutation({
     let deleted = 0
 
     for (const state of INQUIRY_ABUSE_BUCKET_STATES) {
-      if (deleted >= batchSize) {
-        break
-      }
+      if (deleted >= batchSize) break
 
       const expiredBuckets = await ctx.db
         .query('inquiryAbuseBuckets')
@@ -707,6 +691,7 @@ export const cleanupExpiredInquiryAbuseBuckets = internalMutation({
   },
 })
 
+
 export const submitPublicInquiry = mutationGeneric({
   args: {
     target: inquiryTarget,
@@ -714,7 +699,6 @@ export const submitPublicInquiry = mutationGeneric({
     contact: publicInquiryContact,
     inquiryOrigin: v.optional(inquiryOrigin),
     pseudonymousSessionId: v.string(),
-    abuseBucketKey: v.string(),
     ...csrfArgs,
     operationKey: v.string(),
     expectedDigest: v.string(),
@@ -727,13 +711,32 @@ export const submitPublicInquiry = mutationGeneric({
       return inquiryCsrfError(sourceWrite.reason)
     }
 
-    const db = runtimeDb(ctx.db)
-    const state = await inquirySourceStatePorts(db).load()
+    const admission = await assertAdmission(ctx, {
+      name: 'inquiry-submit',
+      key: await admissionKey(ctx, args.pseudonymousSessionId),
+    })
+    if (!admission.ok) {
+      return {
+        kind: 'error' as const,
+        code: 'inquiry_rate_limited' as const,
+        retryable: true,
+        reason: `Retry after ${admission.retryAfter}.`,
+        retryAfter: admission.retryAfter,
+      }
+    }
+
+    const db = ctx.db
+    
+    const state = await loadInquirySourceState(db, {
+      kind: 'target',
+      businessId: args.target.businessId,
+      offeringRef: args.target.offeringRef,
+      operationKey: args.operationKey,
+    })
     const result = submitInquiryModule(state, {
       target: {
         businessId: brandNonEmpty(args.target.businessId, 'BusinessId'),
-        serviceId: brandNonEmpty(args.target.serviceId, 'ServiceId'),
-        capabilityKind: args.target.capabilityKind,
+        offeringRef: brandNonEmpty(args.target.offeringRef, 'OfferingRef'),
       },
       body: args.body,
       contact: args.contact,
@@ -743,32 +746,32 @@ export const submitPublicInquiry = mutationGeneric({
       operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
       pseudonymousSessionId: args.pseudonymousSessionId,
-      abuseBucketKey: args.abuseBucketKey,
       expectedDigest: args.expectedDigest,
       now: Date.now(),
     })
 
     if (result.kind === 'error') {
       if (result.state !== undefined) {
-        await inquirySourceStatePorts(db).persist(result.state)
+        await persistInquirySourceState(db, result.state)
       }
       return summarizeSubmitError(result)
     }
 
-    const bridged = await inquiryNotificationPorts(db).enqueueDispatches(
+    const bridged = await enqueueInquiryNotificationDispatches(
+      db,
       result.state,
       result.notification,
       result.thread.businessId,
       args.correlationId,
     )
-    await inquirySourceStatePorts(db).persist(bridged.state)
+    await persistInquirySourceState(db, bridged.state)
     return {
       kind: 'ok' as const,
       code: result.code,
       thread: {
         threadId: result.thread.threadId,
         businessId: result.thread.businessId,
-        serviceId: result.thread.serviceId,
+        offeringRef: result.thread.offeringRef,
         status: result.thread.status,
         version: result.thread.version,
         customerAccessKey: result.customerAccessKey,
@@ -790,7 +793,7 @@ export const listCurrentOwnerInbox = queryGeneric({
       return owner
     }
 
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, { kind: 'owner_inbox', ownerId: owner.ownerId })
     return {
       kind: 'allowed' as const,
       inbox: serializeOwnerInbox(listOwnerInboxModule(state, { authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') } })),
@@ -802,11 +805,15 @@ export const readPublicTargetAdmission = queryGeneric({
   args: inquiryTarget,
   returns: r1TargetAdmission,
   handler: async (ctx, args) => {
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, {
+      kind: 'target',
+      businessId: args.businessId,
+      offeringRef: args.offeringRef,
+      operationKey: 'target-admission',
+    })
     const admission = evaluateR1TargetAdmission(state, {
       businessId: brandNonEmpty(args.businessId, 'BusinessId'),
-      serviceId: brandNonEmpty(args.serviceId, 'ServiceId'),
-      capabilityKind: args.capabilityKind,
+      offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
     })
     return admission.admitted
       ? { ...admission, proof: { ...admission.proof } }
@@ -816,8 +823,7 @@ export const readPublicTargetAdmission = queryGeneric({
 
 const publicCatalogInquiryAvailability = v.object({
   businessSlug: v.string(),
-  serviceSlug: v.string(),
-  capabilityKind: literalUnion(CapabilityKindValues),
+  offeringRef: v.string(),
   admitted: v.boolean(),
 })
 
@@ -825,29 +831,38 @@ export const readPublicCatalogInquiryAvailability = queryGeneric({
   args: {
     targets: v.array(v.object({
       businessSlug: v.string(),
-      serviceSlug: v.string(),
-      capabilityKind: literalUnion(CapabilityKindValues),
+      offeringRef: v.string(),
     })),
   },
   returns: v.array(publicCatalogInquiryAvailability),
   handler: async (ctx, args) => {
     if (args.targets.length > 100) throw new Error('public_catalog_inquiry_targets_exceeded')
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
-    return args.targets.map((target) => {
-      const business = state.businesses.find((candidate) => String(candidate.slug) === target.businessSlug)
-      const service = business === undefined
-        ? undefined
-        : state.businessServices.find((candidate) =>
-            candidate.businessId === business.businessId
-            && String(candidate.serviceSlug) === target.serviceSlug)
-      const admitted = business !== undefined && service !== undefined
-        && evaluateR1TargetAdmission(state, {
-          businessId: business.businessId,
-          serviceId: service.serviceId,
-          capabilityKind: target.capabilityKind,
-        }).admitted
-      return { ...target, admitted }
-    })
+    const db = ctx.db
+    return await Promise.all(args.targets.map(async (target) => {
+      const business = await db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(target.businessSlug)))
+        .unique()
+      const offering = business === null
+        ? null
+        : await db.query('businessOfferings')
+          .withIndex('by_offeringRef', (query) => query.eq('offeringRef', target.offeringRef))
+          .unique()
+      if (business === null || offering === null || offering.businessId !== business._id) return { ...target, admitted: false }
+      const businessId = brandNonEmpty(String(business._id), 'BusinessId')
+      const state = await loadInquirySourceState(db, {
+        kind: 'target',
+        businessId,
+        offeringRef: target.offeringRef,
+        operationKey: 'catalog-availability',
+      })
+      return {
+        ...target,
+        admitted: evaluateR1TargetAdmission(state, {
+          businessId,
+          offeringRef: brandNonEmpty(target.offeringRef, 'OfferingRef'),
+        }).admitted,
+      }
+    }))
   },
 })
 
@@ -860,15 +875,11 @@ export const readCurrentOwnerTargetAdmission = queryGeneric({
       return { kind: 'error' as const, code: 'owner_not_found' as const, retryable: false, reason: owner.reason }
     }
 
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, { kind: 'target', businessId: args.businessId, offeringRef: args.offeringRef, operationKey: 'target-admission' })
     const business = state.businesses.find((candidate) => candidate.businessId === args.businessId)
-    const service = state.businessServices.find((candidate) =>
-      candidate.businessId === args.businessId && candidate.serviceId === args.serviceId)
-    const capability = state.serviceCapabilities.find((candidate) =>
-      candidate.businessId === args.businessId
-      && candidate.serviceId === args.serviceId
-      && candidate.kind === args.capabilityKind)
-    if (business === undefined || service === undefined || capability === undefined) {
+    const offering = state.businessOfferings.find((candidate) =>
+      candidate.businessId === args.businessId && candidate.offeringRef === args.offeringRef)
+    if (business === undefined || offering === undefined) {
       return {
         kind: 'error' as const,
         code: 'inquiry_target_not_found' as const,
@@ -887,8 +898,7 @@ export const readCurrentOwnerTargetAdmission = queryGeneric({
 
     const admission = evaluateR1TargetAdmission(state, {
       businessId: brandNonEmpty(args.businessId, 'BusinessId'),
-      serviceId: brandNonEmpty(args.serviceId, 'ServiceId'),
-      capabilityKind: args.capabilityKind,
+      offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
     })
     return {
       kind: 'ok' as const,
@@ -907,7 +917,7 @@ export const readOperatorInquiryReconstruction = queryGeneric({
   },
   returns: operatorInquiryReconstructionReadbackResult,
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
+    const db = ctx.db
     const authority = await resolveAdminAuthority({ db, auth: ctx.auth }, 'read_admin_readbacks')
     const filter = compactOperatorFilter(args)
     if (authority.kind === 'denied') {
@@ -923,12 +933,12 @@ export const readOperatorInquiryReconstruction = queryGeneric({
     }
 
     const [state, attempts, webhooks, auditRows, funnelRows, operationRows] = await Promise.all([
-      inquirySourceStatePorts(db).load(),
-      collect(db, 'notificationDispatchAttempts'),
-      collect(db, 'notificationWebhookEvents'),
-      collect(db, 'auditEvents'),
-      collect(db, 'funnelEvents'),
-      collect(db, 'operationKeys'),
+      loadInquirySourceState(db, { kind: 'operator', filter }),
+      db.query('notificationDispatchAttempts').take(200),
+      db.query('notificationWebhookEvents').take(200),
+      db.query('auditEvents').take(200),
+      db.query('funnelEvents').take(200),
+      db.query('operationKeys').withIndex('by_scope_key', (query) => query.eq('scope', 'inquiry')).take(200),
     ])
     const readback = readInquiryOperatorReconstructionModule(state, filter)
 
@@ -959,7 +969,7 @@ export const readCurrentOwnerInquiry = queryGeneric({
       }
     }
 
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, { kind: 'thread', threadId: args.threadId })
     const result = readOwnerInquiryModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -983,13 +993,14 @@ export const readCustomerRecord = queryGeneric({
   },
   returns: customerRecordResult,
   handler: async (ctx, args) => {
-    const db = runtimeDb(ctx.db)
+    const db = ctx.db
+    
     const threadId = brandNonEmpty(args.threadId, 'InquiryThreadId')
     const keyring = resolveInquiryCustomerAccessKeyring(process.env)
     const accessId = accessIdFromInquiryCustomerAccessKey(args.accessKey)
     const grant = accessId === undefined
       ? undefined
-      : await inquirySourceStatePorts(db).loadCustomerAccessGrant(accessId)
+      : await loadInquiryCustomerAccessGrant(db, accessId)
     const now = Date.now()
     if (grant === undefined || !verifyInquiryCustomerAccess({
       grant,
@@ -1001,7 +1012,7 @@ export const readCustomerRecord = queryGeneric({
       return { kind: 'error' as const, code: 'inquiry_access_denied' as const, retryable: false, reason: 'Inquiry record was not found for this key.' }
     }
 
-    const state = await inquirySourceStatePorts(db).loadCustomerRecord(threadId, grant)
+    const state = await loadInquiryCustomerRecordState(db, threadId, grant)
     const result = readCustomerRecordModule(state, {
       threadId,
       accessKey: args.accessKey,
@@ -1032,7 +1043,7 @@ export const readCurrentOwnerInquiryDeliveryReadback = queryGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, { kind: 'thread', threadId: args.threadId })
     const result = readInquiryDeliveryReadbackModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1060,7 +1071,7 @@ export const requestCurrentOwnerInquiryExport = queryGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, { kind: 'thread', threadId: args.threadId })
     const result = requestInquiryExportModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1097,8 +1108,13 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
       return ownerMutationAuthError(owner.reason)
     }
 
-    const db = runtimeDb(ctx.db)
-    const state = await inquirySourceStatePorts(db).load()
+    const db = ctx.db
+    
+    const state = await loadInquirySourceState(db, {
+      kind: 'thread',
+      threadId: args.threadId,
+      operationKey: args.operationKey,
+    })
     const result = markInquiryReadModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1111,7 +1127,7 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
       return ownerMutationError(result)
     }
 
-    await inquirySourceStatePorts(db).persist(result.state)
+    await persistInquirySourceState(db, result.state)
     return ownerMutationOk(result)
   },
 })
@@ -1136,15 +1152,16 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const db = runtimeDb(ctx.db)
+    const db = ctx.db
+    
     const ownedThread = await db.query('inquiryThreads')
       .withIndex('by_threadId', (query) => query.eq('threadId', args.threadId))
       .unique()
-    if (ownedThread === null || stringField(ownedThread, 'ownerId') !== owner.ownerId) {
+    if (ownedThread === null || ownedThread.ownerId !== owner.ownerId) {
       return { kind: 'error' as const, code: 'inquiry_not_found' as const, retryable: false, reason: 'Inquiry thread was not found for this owner.' }
     }
-    await inquirySourceStatePorts(db).repairErasureKeys(args.threadId)
-    const state = await inquirySourceStatePorts(db).load()
+    await repairGovernedSendErasureKeys(db, args.threadId)
+    const state = await loadInquirySourceState(db, { kind: 'thread', threadId: args.threadId, operationKey: args.operationKey })
     const result = deleteInquiryPrivateContentModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1157,7 +1174,7 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
       return ownerPrivacyError(result)
     }
 
-    await inquirySourceStatePorts(db).persist(result.state)
+    await persistInquirySourceState(db, result.state)
     return {
       kind: 'ok' as const,
       code: result.code,
@@ -1177,7 +1194,7 @@ export const readCurrentOwnerInquiryPrivacyTombstone = queryGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
+    const state = await loadInquirySourceState(ctx.db, { kind: 'thread', threadId: args.threadId })
     const result = readInquiryPrivacyTombstoneModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1215,8 +1232,13 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
       return ownerMutationAuthError(owner.reason)
     }
 
-    const db = runtimeDb(ctx.db)
-    const state = await inquirySourceStatePorts(db).load()
+    const db = ctx.db
+    
+    const state = await loadInquirySourceState(db, {
+      kind: 'thread',
+      threadId: args.threadId,
+      operationKey: args.operationKey,
+    })
     const result = replyToInquiryModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1230,13 +1252,14 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
       return ownerMutationError(result)
     }
 
-    const bridged = await inquiryNotificationPorts(db).enqueueDispatches(
+    const bridged = await enqueueInquiryNotificationDispatches(
+      db,
       result.state,
       result.notification,
       result.thread.businessId,
       args.correlationId,
     )
-    await inquirySourceStatePorts(db).persist(bridged.state)
+    await persistInquirySourceState(db, bridged.state)
     return ownerMutationOk(result)
   },
 })
@@ -1261,8 +1284,13 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
       return ownerMutationAuthError(owner.reason)
     }
 
-    const db = runtimeDb(ctx.db)
-    const state = await inquirySourceStatePorts(db).load()
+    const db = ctx.db
+    
+    const state = await loadInquirySourceState(db, {
+      kind: 'thread',
+      threadId: args.threadId,
+      operationKey: args.operationKey,
+    })
     const result = closeInquiryModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1275,12 +1303,13 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
       return ownerMutationError(result)
     }
 
-    await inquirySourceStatePorts(db).persist(result.state)
+    await persistInquirySourceState(db, result.state)
     return ownerMutationOk(result)
   },
 })
 
-async function readCurrentOwner(ctx: RuntimeQueryCtx | RuntimeCtx): Promise<
+type InquiryHostCtx = Pick<QueryCtx, 'db' | 'auth'>
+async function readCurrentOwner(ctx: InquiryHostCtx): Promise<
   | { kind: 'allowed'; ownerId: string }
   | { kind: 'denied'; reason: 'missing_auth' | 'owner_not_found' }
 > {
@@ -1289,7 +1318,7 @@ async function readCurrentOwner(ctx: RuntimeQueryCtx | RuntimeCtx): Promise<
     return { kind: 'denied', reason: 'missing_auth' }
   }
 
-  const owner = await runtimeDb(ctx.db)
+  const owner = await ctx.db
     .query('owners')
     .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
     .unique()
@@ -1304,7 +1333,6 @@ function summarizeSubmitError(result: Extract<ReturnType<typeof submitInquiryMod
     reason: result.reason,
     ...(result.blockers === undefined ? {} : { blockers: [...result.blockers] }),
     ...(result.field === undefined ? {} : { field: result.field }),
-    ...(result.retryAfter === undefined ? {} : { retryAfter: result.retryAfter }),
   }
 }
 
@@ -1416,7 +1444,6 @@ function compactOperatorFilter(input: {
     ...(input.dispatchId === undefined || input.dispatchId.trim().length === 0 ? {} : { dispatchId: input.dispatchId.trim() }),
   }
 }
-
 function cleanupCutoff(value: number | undefined): number {
   return value === undefined || !Number.isFinite(value) ? Date.now() : value
 }
@@ -1428,3 +1455,4 @@ function cleanupBatchSize(value: number | undefined): number {
 
   return Math.min(Math.max(Math.floor(value), 1), ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE)
 }
+

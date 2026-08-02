@@ -1,5 +1,4 @@
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
-import { AeDecisionMapReadback } from '@/components/ae/decision-map/AeDecisionMapReadback'
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
@@ -40,7 +39,7 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
             checkSummary={turn.answerCheckSummary}
             query={turn.query}
           />
-          {threadId === undefined || turn.decisionMapRevision === undefined ? fallback : <AeDecisionMapReadback threadId={threadId} fallback={fallback} />}
+          {fallback}
         </MessageContent>
       </Message>
     </div>

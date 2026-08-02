@@ -1,4 +1,4 @@
-import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
+import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/route-execution/problem-support'
 
 import type {
   ProblemAffected,

@@ -14,7 +14,6 @@ import {
 } from '../../convex/capabilitySupply'
 import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
 import schema from '../../convex/schema'
-import { runtimeDb } from '../../convex/source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
@@ -30,9 +29,7 @@ import {
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 describe('labelled sandbox V2 capability supply', () => {
   it('binds labelled sandbox businesses to an explicit authenticated dev owner idempotently', async () => {
@@ -115,7 +112,7 @@ describe('labelled sandbox V2 capability supply', () => {
       'offering:sandbox-procurement-recommendation:v2',
     ]))
 
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, {
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public',
       limit: 32,
     })
@@ -146,7 +143,7 @@ describe('labelled sandbox V2 capability supply', () => {
       'offering:sandbox-itinerary-readiness:v2',
     ]))
 
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, {
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public',
       limit: 32,
     })
@@ -417,7 +414,7 @@ describe('labelled sandbox V2 capability supply', () => {
       'binding:sandbox-option-one:http-json:v4',
       'binding:sandbox-option-two:http-json:v4',
     ])
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, {
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public', limit: 32,
     })
     expect(eligible.kind).toBe('available')
@@ -450,7 +447,7 @@ describe('labelled sandbox V2 capability supply', () => {
       fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
     ))
     const existing = await backend.run((ctx) => (
-      registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      registerSandboxBusinesses(ctx.db, fixtures, 1_000)
     ))
 
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -466,15 +463,15 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       return registerSandboxV2SupplyRegistrations(ctx.db, 3_000)
     })
 
-    await expect(backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
 
     await backend.run((ctx) => admitSandboxV2Supply(ctx.db, registrations, 3_500))
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
@@ -573,7 +570,7 @@ describe('labelled sandbox V2 capability supply', () => {
       && binding.adapterId === 'http-json:v1'
     ))).toBe(true)
     expect(JSON.stringify({ offerings: state.offerings, bindings: state.bindings })).not.toContain('"operation"')
-    expect(state.supplyOperations).toHaveLength(12)
+    expect(state.supplyOperations).toHaveLength(16)
     expect(state.supplyOperations.every((operation) => operation.actorKind === 'system' && operation.status === 'succeeded')).toBe(true)
     expect(state.catalogOperations).toHaveLength(20)
     expect(state.catalogOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
@@ -581,7 +578,7 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(state.claimOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
     expect(state.audits.filter((audit) => (
       audit.eventType.startsWith('capability_')
-    ))).toHaveLength(16)
+    ))).toHaveLength(20)
     expect(state.audits.filter((audit) => audit.eventType.startsWith('capability_')).every((audit) => (
       audit.actorKind === 'system' && audit.actorRef === 'system:dev-seed'
     ))).toBe(true)
@@ -595,7 +592,7 @@ describe('labelled sandbox V2 capability supply', () => {
       audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
     ))).toHaveLength(20)
 
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [
@@ -611,7 +608,7 @@ describe('labelled sandbox V2 capability supply', () => {
     const backend = convexTest(schema, modules)
     const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => fixture.requestedSlug.startsWith('sandbox-'))
     const existing = await backend.run((ctx) => (
-      registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      registerSandboxBusinesses(ctx.db, fixtures, 1_000)
     ))
     await backend.run(async (ctx) => {
       const operations = await ctx.db.query('operationKeys').withIndex('by_scope_key', (query) => (
@@ -645,7 +642,7 @@ describe('labelled sandbox V2 capability supply', () => {
       await ctx.db.insert('businesses', { ...business, slug: 'sandbox-listing-only-v2', name: 'Sandbox Listing Only V2' })
     })
 
-    const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
@@ -668,7 +665,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerLegacySandboxSupply(ctx.db)
       await registerPriorV2SandboxSupply(ctx.db)
       await retireOriginalLegacySandboxBindings(ctx.db)
@@ -780,7 +777,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalRouteV1Supply(ctx.db)
     })
 
@@ -806,7 +803,7 @@ describe('labelled sandbox V2 capability supply', () => {
         || fixture.requestedSlug === 'sandbox-supplier-options'
         || fixture.requestedSlug === 'sandbox-procurement-recommendation'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalProcurementV1Supply(ctx.db, {
         workflowOrigin: 'https://workflow-provider.example.test',
       })
@@ -832,7 +829,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-itinerary-builder'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalItineraryBuilderV2Supply(ctx.db)
     })
 
@@ -860,7 +857,7 @@ describe('labelled sandbox V2 capability supply', () => {
         || fixture.requestedSlug === 'sandbox-supplier-options'
         || fixture.requestedSlug === 'sandbox-procurement-recommendation'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalProcurementV1Supply(ctx.db, {
         briefEndpointUrl: 'https://wrong-provider.example.test/capability',
       })
@@ -878,7 +875,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalRouteV1Supply(ctx.db, { generation: 'v2' })
     })
 
@@ -904,7 +901,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalRouteV1Supply(ctx.db, { generation: 'v3' })
     })
 
@@ -931,7 +928,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalRouteV1Supply(ctx.db, { generation: 'v4' })
     })
 
@@ -956,7 +953,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalRouteV1Supply(ctx.db, { generation: 'v5', routeKeys: ['resolver'] })
     })
 
@@ -995,7 +992,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerHistoricalRouteV1Supply(ctx.db, {
         resolverEndpointUrl: 'https://wrong-provider.example.test/capability',
       })
@@ -1011,7 +1008,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerLegacySandboxSupply(ctx.db, {
         firstLegacyEndpointOverride: 'https://wrong-provider.example.test/capability',
       })
@@ -1027,7 +1024,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       const expected = await ctx.db.query('businesses')
         .withIndex('by_slug', (query) => query.eq('slug', 'sandbox-option-one')).unique()
       if (expected === null) throw new Error('sandbox business missing')
@@ -1048,7 +1045,7 @@ describe('labelled sandbox V2 capability supply', () => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
         fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
       ))
-      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerLegacySandboxSupply(ctx.db, { firstLegacyRequestTimeoutMs: 4_000 })
     })
 

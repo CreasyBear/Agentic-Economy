@@ -1,11 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { parseJsonEventStream } from '@ai-sdk/provider-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { handleMcpRequest, createAeMcpServer } from '@/lib/server/mcp-api'
 import {
+  defineAction,
+  listActions,
   listMcpActions,
   mcpToolName,
-  type AnyAction,
 } from '@/modules/actions'
 import {
   registryDetailAction,
@@ -18,27 +20,14 @@ type JsonRpcBody = {
   error?: Record<string, unknown>
 }
 
-const previousEnv = {
-  localE2e: process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E,
-  seed: process.env.AE_ANSWER_EVAL_REGISTRY_SEED,
-  convexUrl: process.env.CONVEX_URL,
-  publicConvexUrl: process.env.VITE_CONVEX_URL,
-}
 
 function pinEnv(): void {
-  process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-  process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
-  delete process.env.CONVEX_URL
-  delete process.env.VITE_CONVEX_URL
+  vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+  vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', 'default')
+  vi.stubEnv('CONVEX_URL', undefined)
+  vi.stubEnv('VITE_CONVEX_URL', undefined)
 }
 
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name]
-    return
-  }
-  process.env[name] = value
-}
 
 async function postMcp(body: object): Promise<Response> {
   const request = new Request('https://ae.example/mcp', {
@@ -55,30 +44,30 @@ async function postMcp(body: object): Promise<Response> {
 async function readMcpBody(response: Response): Promise<JsonRpcBody> {
   const text = await response.text()
   if (response.headers.get('content-type')?.includes('text/event-stream') === true) {
-    const dataLine = text.split(/\r?\n/).find((line) => line.startsWith('data:'))
-    if (dataLine === undefined) {
-      throw new Error('MCP stream did not include a data event.')
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${text}\n\n`))
+        controller.close()
+      },
+    })
+    for await (const candidate of parseJsonEventStream({ stream, schema: z.unknown() })) {
+      if (!candidate.success) continue
+      return candidate.value as JsonRpcBody
     }
-    return JSON.parse(dataLine.slice('data:'.length).trim()) as JsonRpcBody
+    throw new Error('MCP stream did not include a data event.')
   }
   return JSON.parse(text) as JsonRpcBody
 }
 
 describe('MCP host adapter', () => {
-  beforeAll(() => {
-    pinEnv()
-  })
 
   beforeEach(() => {
     vi.restoreAllMocks()
     pinEnv()
   })
 
-  afterAll(() => {
-    restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousEnv.localE2e)
-    restoreEnv('AE_ANSWER_EVAL_REGISTRY_SEED', previousEnv.seed)
-    restoreEnv('CONVEX_URL', previousEnv.convexUrl)
-    restoreEnv('VITE_CONVEX_URL', previousEnv.publicConvexUrl)
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('initializes with server information and the tools capability', async () => {
@@ -255,12 +244,19 @@ describe('MCP host adapter', () => {
     expect(names).not.toContain('customerRequest_confirm')
     expect(names).not.toContain('customer.request.confirm')
     expect(names).toEqual(listMcpActions().map(mcpToolName))
+    const workTreeNames = listActions()
+      .filter(({ id }) => id.startsWith('workTree.'))
+      .map(mcpToolName)
+    expect(names).not.toEqual(expect.arrayContaining(workTreeNames))
+    const writeToolNames = listActions().filter(({ readOnly }) => !readOnly).map(mcpToolName)
+    expect(names).not.toEqual(expect.arrayContaining(writeToolNames))
     expect(names).not.toContain('registry.list')
     expect(names).not.toContain('registry.search')
   })
 
-  it('rejects a non-read-only MCP action for the anonymous tier', () => {
-    const fakeAction = {
+  it('uses the canonical base URL for protected MCP challenges', async () => {
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.example')
+    const fakeAction = defineAction({
       id: 'fake.write',
       name: 'Fake write',
       summary: 'A fake write action.',
@@ -274,8 +270,106 @@ describe('MCP host adapter', () => {
       },
       surfaces: ['mcp'],
       outputSchema: z.strictObject({ kind: z.literal('ok') }),
+      invocationContract: {
+        version: 'fake.write:v1',
+        consequenceClass: 'external_effect',
+        materialInputPaths: [],
+        authorityRequirement: 'none',
+        retryClass: 'reconcile_before_retry',
+        expectedEvidence: [],
+        safeContinuations: [],
+        invalidationConditions: ['action_contract_version_changed'],
+      },
       run: async () => ({ kind: 'ok' }),
-    } as AnyAction
+    })
+
+    const response = await handleMcpRequest(
+      new Request('https://attacker.example/mcp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 8,
+          method: 'tools/call',
+          params: { name: mcpToolName(fakeAction), arguments: {} },
+        }),
+      }),
+      {
+        actions: [fakeAction],
+        authenticate: async () => ({
+          isAuthenticated: false,
+          tokenType: null,
+          id: null,
+          subject: null,
+          scopes: null,
+        }),
+      },
+    )
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('WWW-Authenticate')).toBe(
+      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="customer_requests:approve_each"',
+    )
+  })
+
+  it('bounds the POST body before handing it to the MCP transport', async () => {
+    const encoder = new TextEncoder()
+    let canceled = false
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(encoder.encode('x'.repeat(65 * 1024)))
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const request = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' })
+
+    const response = await handleMcpRequest(request)
+
+    expect(canceled).toBe(true)
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ error: { code: -32700 } })
+  })
+
+  it('rejects a non-read-only MCP action for the anonymous tier', () => {
+    const fakeAction = defineAction({
+      id: 'fake.write',
+      name: 'Fake write',
+      summary: 'A fake write action.',
+      boundaries: ['Writes nothing in this test.'],
+      schema: z.strictObject({}),
+      parameters: [],
+      readOnly: false,
+      effect: {
+        class: 'external_state_change', reversible: false, recipientKind: 'none',
+        dataClasses: [], spendExposure: 'none', approval: 'approve_each',
+      },
+      surfaces: ['mcp'],
+      outputSchema: z.strictObject({ kind: z.literal('ok') }),
+      invocationContract: {
+        version: 'fake.write:v1',
+        consequenceClass: 'external_effect',
+        materialInputPaths: [],
+        authorityRequirement: 'none',
+        retryClass: 'reconcile_before_retry',
+        expectedEvidence: [],
+        safeContinuations: [],
+        invalidationConditions: ['action_contract_version_changed'],
+      },
+      run: async () => ({ kind: 'ok' }),
+    })
 
     expect(() => createAeMcpServer(new Request('https://ae.example/mcp'), [fakeAction])).toThrow(
       /read-only actions/,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { handleCustomerRequestPost } from '@/lib/server/customer-request-api'
+import { postJsonRequest } from '../../helpers/http'
 
 describe('customer Request HTTP API', () => {
   it('maps agent-facing input into the authenticated application command and returns customer semantics', async () => {
@@ -8,7 +9,7 @@ describe('customer Request HTTP API', () => {
       kind: 'request', requestRef: 'request:1', revision: 1, state: 'ready_to_compare',
       summary: 'Find a suitable option', nextAction: 'prepare_options', missingFields: [], options: [],
     })
-    const response = await handleCustomerRequestPost(request({
+    const response = await handleCustomerRequestPost(postJsonRequest('/api/requests', {
       idempotencyKey: 'command:1', requestRef: 'request:1', agentRef: 'agent:claude', request: 'Find a suitable option',
     }), { submit })
 
@@ -23,14 +24,14 @@ describe('customer Request HTTP API', () => {
 
   it('rejects malformed input before invoking the application', async () => {
     const submit = vi.fn()
-    const response = await handleCustomerRequestPost(request({ request: '' }), { submit })
+    const response = await handleCustomerRequestPost(postJsonRequest('/api/requests', { request: '' }), { submit })
     expect(response.status).toBe(400)
     expect(submit).not.toHaveBeenCalled()
   })
 
   it('refuses payment-card and account-secret oversharing before model release or Request persistence', async () => {
     const submit = vi.fn()
-    const response = await handleCustomerRequestPost(request({
+    const response = await handleCustomerRequestPost(postJsonRequest('/api/requests', {
       idempotencyKey: 'command:sensitive', requestRef: 'request:sensitive', agentRef: 'agent:claude',
       request: 'Find the cheapest option. My card is 4242 4242 4242 4242 and password is synthetic-password.',
     }), { submit })
@@ -52,7 +53,7 @@ describe('customer Request HTTP API', () => {
       nextAction: 'retry', missingFields: [], options: [],
     })
 
-    const response = await handleCustomerRequestPost(request({
+    const response = await handleCustomerRequestPost(postJsonRequest('/api/requests', {
       idempotencyKey: 'command:retry', requestRef: 'request:retry',
       agentRef: 'agent:claude', request: 'Find a suitable option',
     }), { submit })
@@ -68,8 +69,3 @@ describe('customer Request HTTP API', () => {
   })
 })
 
-function request(body: unknown): Request {
-  return new Request('https://ae.test/api/requests', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  })
-}

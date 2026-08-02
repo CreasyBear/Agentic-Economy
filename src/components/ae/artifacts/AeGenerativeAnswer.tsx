@@ -19,7 +19,6 @@ import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
 import { AeGenerativeMap } from './AeGenerativeMap'
 import { AeConsumerPlanResult } from '@/components/ae/plan/AeConsumerPlan'
 import { AeImportedClaims } from '@/components/ae/services/AeImportedClaims'
-import { appendThreadOrigin } from '@/lib/ui/append-thread-origin'
 import { cn } from '@/lib/utils'
 
 // Calm fade-only reveal. Slide-from-bottom on every streamed part stacks into
@@ -492,8 +491,10 @@ function AnswerPartView({
 function SelectedProviderConfirmation({ provider, threadId }: { provider: AnswerSource; threadId: string | undefined }) {
   const inquiryUrl = provider.inquiryUrl
   const hasInquiryForm = inquiryUrl !== undefined
-  const detailHref = appendThreadOrigin(provider.detailUrl, threadId)
-  const inquiryHref = inquiryUrl === undefined ? undefined : appendThreadOrigin(inquiryUrl, threadId)
+  // Protocol-relative `//host` is external; only a rooted path is router-owned.
+  const detailIsInternal = provider.detailUrl.startsWith('/') && !provider.detailUrl.startsWith('//')
+  const inquiryIsInternal = inquiryUrl !== undefined && inquiryUrl.startsWith('/') && !inquiryUrl.startsWith('//')
+  const threadSearch = threadId === undefined || threadId.length === 0 ? {} : { from: 'thread' as const, id: threadId }
   const selectionScope = threadId === undefined ? 'in this answer' : 'from this thread'
 
   return (
@@ -527,13 +528,21 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
             ].join(' ')}
       </p>
       <div className="flex flex-wrap gap-2">
-        {inquiryHref !== undefined ? (
+        {inquiryUrl === undefined ? null : (
           <Button asChild variant="default" size="sm">
-            <a href={inquiryHref}>Open inquiry form</a>
+            {inquiryIsInternal ? (
+              <Link to="/$slug/inquiry" params={{ slug: provider.slug }} search={threadSearch}>Open inquiry form</Link>
+            ) : (
+              <a href={inquiryUrl}>Open inquiry form</a>
+            )}
           </Button>
-        ) : null}
+        )}
         <Button asChild variant={hasInquiryForm ? 'secondary' : 'default'} size="sm">
-          <a href={detailHref}>Review business</a>
+          {detailIsInternal ? (
+            <Link to="/$slug" params={{ slug: provider.slug }} search={threadSearch}>Review business</Link>
+          ) : (
+            <a href={provider.detailUrl}>Review business</a>
+          )}
         </Button>
       </div>
     </section>

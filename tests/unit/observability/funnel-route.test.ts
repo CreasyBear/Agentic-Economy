@@ -43,6 +43,21 @@ describe('POST /api/observability/funnel', () => {
     expect(mocks.recordOwnerActivationThroughSource).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed JSON before schema parsing or source-syncing public funnel events', async () => {
+    const response = await handleRecordOwnerActivationEvent(
+      new Request('https://ae.example/api/observability/funnel', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"eventType":',
+      }),
+    )
+
+    await expect(response.json()).resolves.toEqual({ ok: false, reason: 'invalid_json' })
+    expect(response.status).toBe(400)
+    expect(mocks.parse).not.toHaveBeenCalled()
+    expect(mocks.recordOwnerActivationThroughSource).not.toHaveBeenCalled()
+  })
+
   it.each([
     'answer_query_started',
     'answer_clarification_requested',

@@ -53,7 +53,7 @@ describe('V2 Request semantics', () => {
   it('resolves an amendment into exact source statements without retaining a superseded assertion', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:canonical-amendment',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -65,7 +65,7 @@ describe('V2 Request semantics', () => {
           priorQuote: 'Arrival before 08:00 is immovable.',
           amendmentQuote: 'Arrival before 09:00 is now immovable.',
         }],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -88,13 +88,13 @@ describe('V2 Request semantics', () => {
   it('rejects a canonical amendment statement that the customer did not provide', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:fabricated-amendment',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
           { source: 'amendment', quote: 'The customer approved provider contact.' },
         ],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -111,14 +111,14 @@ describe('V2 Request semantics', () => {
   it('rejects an append amendment that silently drops a prior authority boundary', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:dropped-authority-boundary',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
           { source: 'prior', quote: 'Find an accessible itinerary.' },
           { source: 'amendment', quote: 'Move arrival to 09:00.' },
         ],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -135,7 +135,7 @@ describe('V2 Request semantics', () => {
   it('rejects an append amendment that silently drops any prior customer statement', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:dropped-customer-requirement',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -143,7 +143,7 @@ describe('V2 Request semantics', () => {
           { source: 'amendment', quote: 'Move arrival to 09:00.' },
         ],
         supersededStatements: [],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -160,7 +160,7 @@ describe('V2 Request semantics', () => {
   it('rejects a source-exact supersession between unrelated customer statements', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:unrelated-supersession',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -171,7 +171,7 @@ describe('V2 Request semantics', () => {
           priorQuote: 'Wheelchair assistance is mandatory.',
           amendmentQuote: 'Move arrival to 09:00.',
         }],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -188,7 +188,7 @@ describe('V2 Request semantics', () => {
   it('rejects a replacement target that is not an exact prior customer statement', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:invalid-replacement-target',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -199,7 +199,7 @@ describe('V2 Request semantics', () => {
           priorQuote: 'Wheelchair assistance is mandatory.',
           amendmentQuote: 'Move arrival to 09:00.',
         }],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -217,7 +217,7 @@ describe('V2 Request semantics', () => {
   it('rejects a replacement target the semantic proposal leaves unresolved', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:unresolved-replacement-target',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -225,7 +225,7 @@ describe('V2 Request semantics', () => {
           { source: 'amendment', quote: 'Arrival before 09:00 is now immovable.' },
         ],
         supersededStatements: [],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -243,7 +243,7 @@ describe('V2 Request semantics', () => {
   it('rejects a claimed supersession that shares an entity but changes a different property', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:shared-entity-unrelated-property',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -254,7 +254,7 @@ describe('V2 Request semantics', () => {
           priorQuote: 'The hotel must be wheelchair accessible.',
           amendmentQuote: 'Set the hotel check-in to 15:00 now.',
         }],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -272,7 +272,7 @@ describe('V2 Request semantics', () => {
   it('rejects a multi-statement amendment when any new statement is omitted', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:dropped-amendment-statement',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -280,7 +280,7 @@ describe('V2 Request semantics', () => {
           { source: 'amendment', quote: 'Move arrival to 09:00.' },
         ],
         supersededStatements: [],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -299,7 +299,7 @@ describe('V2 Request semantics', () => {
       + 'Use https://example.com/path. Dr. J. Chen must approve.'
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:punctuation-safe-amendment',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
@@ -310,7 +310,7 @@ describe('V2 Request semantics', () => {
           { source: 'amendment', quote: 'Move arrival to 09:00.' },
         ],
         supersededStatements: [],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -400,9 +400,9 @@ describe('V2 Request semantics', () => {
   it('distinguishes a clear unsupported operation from missing intent', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:unsupported-operation',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'unsupported_request', reason: 'requested_result_not_available', prompt: '', selections: [],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -439,9 +439,9 @@ describe('V2 Request semantics', () => {
   it('keeps intent-direction copy in customer language instead of exposing model or capability vocabulary', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:intent-direction',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'needs_intent_direction', prompt: 'Choose a sandbox lookup capability.', selections: [],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -451,9 +451,9 @@ describe('V2 Request semantics', () => {
   })
 
   it('treats named component results as material and later changes as authoritative', async () => {
-    const generateJson = vi.fn().mockResolvedValue({ content: JSON.stringify({
+    const generateJson = vi.fn().mockResolvedValue({
       kind: 'unsupported_request', reason: 'requested_result_not_available', prompt: '', selections: [],
-    }) })
+    })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:component-amendment',
       transport: { generateJson }, timeoutMs: 1_000,
@@ -475,12 +475,12 @@ describe('V2 Request semantics', () => {
     const requestInput = requiredInput(model, 'request')
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:value-json',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'capability_candidates', prompt: '', selections: [{
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify({ topic: 'Fremantle' }) }],
         }],
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
@@ -500,13 +500,11 @@ describe('V2 Request semantics', () => {
     const model = decisionModelWithCommitment()
     const requestInput = requiredInput(model, 'request')
     const generateJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: requestInput.key, value: { topic: 'market data' } }],
-        }],
-      }),
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: requestInput.key, value: { topic: 'market data' } }],
+      }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:test', transport: { generateJson }, timeoutMs: 1_000,
@@ -560,10 +558,8 @@ describe('V2 Request semantics', () => {
     const lookup = compositionLookupModel('catalog.resolve-for-quote')
     const quote = compositionShippingModel(lookup)
     const generateJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{ selectionKey: quote.selectionKey, facts: [] }],
-      }),
+      kind: 'capability_candidates',
+      selections: [{ selectionKey: quote.selectionKey, facts: [] }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:dependency-closure', transport: { generateJson }, timeoutMs: 1_000,
@@ -612,13 +608,11 @@ describe('V2 Request semantics', () => {
     const requestInput = lookup.inputs.find((input) => input.role === 'request')
     if (requestInput === undefined) throw new Error('request input missing')
     const generateJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: lookup.selectionKey,
-          facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify('A shorter model paraphrase.') }],
-        }],
-      }),
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: lookup.selectionKey,
+        facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify('A shorter model paraphrase.') }],
+      }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:source-first', transport: { generateJson }, timeoutMs: 1_000,
@@ -659,9 +653,7 @@ describe('V2 Request semantics', () => {
   it('uses the literal customer request for a plain request input without asking them to restate it', async () => {
     const lookup = compositionLookupModel('catalog.customer-grounded', 'customer_required')
     const generateJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({
-        kind: 'capability_candidates', selections: [{ selectionKey: lookup.selectionKey, facts: [] }],
-      }),
+      kind: 'capability_candidates', selections: [{ selectionKey: lookup.selectionKey, facts: [] }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:customer-grounded', transport: { generateJson }, timeoutMs: 1_000,
@@ -698,9 +690,7 @@ describe('V2 Request semantics', () => {
     const second = compositionLookupModel('catalog.resolve-two')
     const quote = compositionShippingModel(first)
     const generateJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({
-        kind: 'capability_candidates', selections: [{ selectionKey: quote.selectionKey, facts: [] }],
-      }),
+      kind: 'capability_candidates', selections: [{ selectionKey: quote.selectionKey, facts: [] }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:ambiguous-dependency', transport: { generateJson }, timeoutMs: 1_000,
@@ -739,16 +729,12 @@ describe('V2 Request semantics', () => {
     const model = decisionModelWithCommitment()
     const generateJson = vi.fn()
       .mockResolvedValueOnce({
-        content: JSON.stringify({
-          kind: 'capability_candidates',
-          selections: [{ selectionKey: 'unknown:first', facts: [] }],
-        }),
+        kind: 'capability_candidates',
+        selections: [{ selectionKey: 'unknown:first', facts: [] }],
       })
       .mockResolvedValueOnce({
-        content: JSON.stringify({
-          kind: 'capability_candidates',
-          selections: [{ selectionKey: 'unknown:second', facts: [] }],
-        }),
+        kind: 'capability_candidates',
+        selections: [{ selectionKey: 'unknown:second', facts: [] }],
       })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:divergence', transport: { generateJson }, timeoutMs: 1_000,
@@ -1737,9 +1723,9 @@ describe('V2 Request semantics', () => {
     const model = decisionModelWithCommitment()
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:preference-injection',
-      transport: { generateJson: async () => ({ content: JSON.stringify({
+      transport: { generateJson: async () => ({
         kind: 'capability_candidates', selections: [], decisionPreference: 'lowest_maximum_price',
-      }) }) },
+      }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 

@@ -1,7 +1,8 @@
 import type { BusinessRecord } from '@/modules/business/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   GOVERNED_ACTION_DIGEST_ALGORITHM,
 } from '@/modules/governed-action/public'
@@ -13,6 +14,7 @@ import {
   type GovernedSendIntegrityKeyring,
   type GovernedSendReceiptRecord,
 } from '../governed-send'
+import { normalizeInquiryWhitespace } from '../normalize-text'
 import type {
   InquiryAuditRecord,
   InquiryFunnelRecord,
@@ -52,7 +54,7 @@ export function notificationRecord(input: {
     recipientRole: input.recipientRole,
     status: input.status,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: input.now,
     updatedAt: input.now,
     ...(input.failureCode === undefined ? {} : { failureCode: input.failureCode }),
@@ -116,7 +118,7 @@ export function auditRecord(input: {
     beforeState: input.beforeState,
     afterState: input.afterState,
     redactedPayload: input.redactedPayload,
-    payloadHash: stableHash(input.redactedPayload),
+    payloadHash: canonicalDigest(input.redactedPayload),
     createdAt: input.now,
   }
 }
@@ -135,7 +137,7 @@ export function funnelRecord(input: {
     correlationId: input.correlationId,
     pseudonymousSessionId: input.pseudonymousSessionId,
     redactedPayload: input.redactedPayload,
-    payloadHash: stableHash(input.redactedPayload),
+    payloadHash: canonicalDigest(input.redactedPayload),
     createdAt: input.now,
   }
 }
@@ -214,31 +216,33 @@ export function validatedGovernedSendBusiness(
   const threads = state.threads.filter((candidate) => candidate.threadId === receipt.threadId)
   const businesses = state.businesses.filter((candidate) => candidate.businessId === binding.businessId)
   const claims = state.claims.filter((candidate) => String(candidate.claimId) === binding.claimRef)
-  const services = state.businessServices.filter((candidate) => candidate.serviceId === binding.serviceId)
+  const offerings = state.businessOfferings.filter(
+    (candidate) => candidate.offeringRef === binding.offeringRef && candidate.businessId === binding.businessId,
+  )
   if (
     operations.length !== 1 ||
     threads.length !== 1 ||
     businesses.length !== 1 ||
     claims.length !== 1 ||
-    services.length !== 1
+    offerings.length !== 1
   ) return undefined
 
   const thread = threads[0]
   const business = businesses[0]
   const claim = claims[0]
-  const service = services[0]
-  if (thread === undefined || business === undefined || claim === undefined || service === undefined) return undefined
+  const offering = offerings[0]
+  if (thread === undefined || business === undefined || claim === undefined || offering === undefined) return undefined
   if (
     receipt.admissionProof.proof.claimRef !== binding.claimRef ||
     receipt.recipientRef !== binding.recipientRef ||
     thread.businessId !== binding.businessId ||
     thread.ownerId !== binding.ownerId ||
-    thread.serviceId !== binding.serviceId ||
-    thread.capabilityKind !== binding.capabilityKind ||
+    thread.offeringRef !== binding.offeringRef ||
     business.ownerId !== binding.ownerId ||
     claim.businessId !== binding.businessId ||
     claim.ownerId !== binding.ownerId ||
-    service.businessId !== binding.businessId
+    offering.businessId !== binding.businessId ||
+    offering.offeringRef !== binding.offeringRef
   ) return undefined
 
   return business
@@ -249,13 +253,10 @@ export function latestNotification(state: InquirySourceState, threadId: InquiryT
     .sort((left, right) => right.updatedAt - left.updatedAt || String(left.notificationId).localeCompare(String(right.notificationId)))[0]
 }
 export function preview(value: string): string {
-  const normalized = normalizeText(value)
+  const normalized = normalizeInquiryWhitespace(value)
   return normalized.length <= 96 ? normalized : `${normalized.slice(0, 93)}...`
 }
 
-export function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, ' ')
-}
 
 export function isBlank(value: string): boolean {
   return value.trim().length === 0
@@ -264,21 +265,20 @@ export function isBlank(value: string): boolean {
 export function requestTarget(target: InquiryTargetRef): StableHashValue {
   return {
     businessId: target.businessId,
-    serviceId: target.serviceId,
-    capabilityKind: target.capabilityKind,
+    offeringRef: target.offeringRef,
   }
 }
 
 export function inquiryThreadId(value: StableHashValue): InquiryThreadId {
-  return brandNonEmpty(`inquiry_thread:${stableHash(value)}`, 'InquiryThreadId')
+  return brandNonEmpty(`inquiry_thread:${canonicalDigest(value)}`, 'InquiryThreadId')
 }
 
 export function inquiryMessageId(value: StableHashValue): InquiryMessageId {
-  return brandNonEmpty(`inquiry_message:${stableHash(value)}`, 'InquiryMessageId')
+  return brandNonEmpty(`inquiry_message:${canonicalDigest(value)}`, 'InquiryMessageId')
 }
 
 export function inquiryNotificationId(value: StableHashValue): InquiryNotificationId {
-  return brandNonEmpty(`inquiry_notification:${stableHash(value)}`, 'InquiryNotificationId')
+  return brandNonEmpty(`inquiry_notification:${canonicalDigest(value)}`, 'InquiryNotificationId')
 }
 
 export function admissionError(

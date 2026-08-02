@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sameStringList } from '@/modules/common/same-string-list'
 
 import type { X402PaymentAttempt } from './x402-payment-attempt'
 
@@ -130,6 +131,5 @@ function exactEvidenceShape(evidence: X402PaymentReconciliationEvidence): boolea
 function exactKeys(value: object, expected: readonly string[]): boolean {
   const actual = Object.keys(value).sort()
   const sortedExpected = [...expected].sort()
-  return actual.length === expected.length
-    && actual.every((key, index) => key === sortedExpected[index])
+  return sameStringList(actual, sortedExpected)
 }

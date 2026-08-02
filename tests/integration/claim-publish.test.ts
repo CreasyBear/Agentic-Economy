@@ -1,26 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   claimBusiness,
-  createEmptyBusinessSourceState,
   suppressBusiness,
 } from '@/modules/business/public'
-import type { BusinessSuppressionState } from '@/modules/business/public'
 import {
-  createEmptyCatalogSourceState,
   getPublicBusinessCatalog,
   publishBusinessCatalog,
 } from '@/modules/catalog/public'
-import type {
-  PublishBusinessCatalogState,
-  ServiceCatalogInput,
-} from '@/modules/catalog/public'
+import type { ServiceCatalogInput } from '@/modules/catalog/public'
+import { emptyCatalogPublishSourceState } from '../fixtures/source-state'
 import type { AdminMembership } from '@/modules/security/public'
 
 describe('PR03 claim publish suppress flow', () => {
   it('claims without ABN, publishes idempotently, excludes raw contact, and suppresses public reads', () => {
-    const state = emptyState()
+    const state = emptyCatalogPublishSourceState()
 
     const anonymousClaim = claimBusiness(state, {
       actor: { kind: 'anonymous', anonymousBucket: 'ip:masked' },
@@ -71,9 +67,9 @@ describe('PR03 claim publish suppress flow', () => {
       now: 20,
     })
     expect(emptyPublish).toMatchObject({
-      kind: 'ok',
-      code: 'catalog_published',
-      catalog: { services: [] },
+      kind: 'error',
+      code: 'catalog_publish_invalid_services',
+      retryable: false,
     })
 
     const publishCommand = {
@@ -92,20 +88,23 @@ describe('PR03 claim publish suppress flow', () => {
       kind: 'ok',
       code: 'catalog_published',
       catalog: {
-        publicStatus: 'published',
         publishedPhone: '0412 345 678',
-        services: [
+        offerings: [
           {
-            firstRequest: { rawContactExcluded: true },
-            capabilities: [{ callable: false, paymentRequired: false }],
+            name: 'Emergency pipe repair',
+            category: 'Emergency plumbing',
+            summary: 'Burst pipe triage and repair.',
+            serviceAreaSummary: 'Parramatta and nearby suburbs',
+            accessPaths: [{ kind: 'human_request', channel: 'phone' }],
+            support: { integrated: false, aeSupportedAction: false },
           },
         ],
       },
     })
     expect(replayed).toMatchObject({ kind: 'ok', code: 'catalog_publish_replayed' })
     expect(JSON.stringify(published)).not.toContain('sam-owner@example.test')
-    expect(state.auditEvents.filter((event) => event.eventType === 'claim.published')).toHaveLength(2)
-    expect(state.registryProjectionAttempts).toHaveLength(2)
+    expect(state.auditEvents.filter((event) => event.eventType === 'claim.published')).toHaveLength(1)
+    expect(state.registryProjectionAttempts).toHaveLength(1)
     expect(state.discoveryManifestAttempts).toHaveLength(1)
 
     expect(
@@ -142,14 +141,13 @@ describe('PR03 claim publish suppress flow', () => {
     expect(state.invalidationIntents).toHaveLength(1)
   })
 
-  it('handles CSRF, rate limit, duplicate review, and unavailable first request reasons deterministically', () => {
-    const state = emptyState()
+  it('handles CSRF, duplicate review, and unavailable first request reasons deterministically', () => {
+    const state = emptyCatalogPublishSourceState()
     const missingCsrf = claimBusiness(state, {
       actor: { kind: 'authenticated_owner', clerkUserId: 'user_csrf' },
       facts: claimFacts('Parramatta Emergency Plumbing', 'parramatta-emergency-plumbing'),
       security: {
         csrf: { allowedOrigins: ['https://ae.example'] },
-        rateLimit: claimRateLimit('csrf'),
       },
       operationKey: brandNonEmpty('op:claim:missing-csrf-integration', 'OperationKey'),
       correlationId: brandNonEmpty('corr:claim:missing-csrf-integration', 'CorrelationId'),
@@ -157,24 +155,6 @@ describe('PR03 claim publish suppress flow', () => {
     })
     expect(missingCsrf).toMatchObject({ kind: 'error', code: 'claim_csrf_rejected' })
 
-    const firstLimited = claimBusiness(state, {
-      actor: { kind: 'authenticated_owner', clerkUserId: 'user_limit' },
-      facts: claimFacts('Limit Emergency Plumbing', 'limit-emergency-plumbing'),
-      security: { csrf: mutationCsrf('limit').csrf, rateLimit: { ...claimRateLimit('limit'), limit: 1 } },
-      operationKey: brandNonEmpty('op:claim:limit-1-integration', 'OperationKey'),
-      correlationId: brandNonEmpty('corr:claim:limit-1-integration', 'CorrelationId'),
-      now: 10,
-    })
-    const secondLimited = claimBusiness(state, {
-      actor: { kind: 'authenticated_owner', clerkUserId: 'user_limit_2' },
-      facts: claimFacts('Another Limit Emergency Plumbing', 'another-limit-emergency-plumbing'),
-      security: { csrf: mutationCsrf('limit').csrf, rateLimit: { ...claimRateLimit('limit'), limit: 1 } },
-      operationKey: brandNonEmpty('op:claim:limit-2-integration', 'OperationKey'),
-      correlationId: brandNonEmpty('corr:claim:limit-2-integration', 'CorrelationId'),
-      now: 11,
-    })
-    expect(firstLimited).toMatchObject({ kind: 'ok', code: 'claim_created' })
-    expect(secondLimited).toMatchObject({ kind: 'error', code: 'claim_rate_limited' })
 
     const first = claimBusiness(state, {
       actor: { kind: 'authenticated_owner', clerkUserId: 'user_original' },
@@ -218,37 +198,17 @@ describe('PR03 claim publish suppress flow', () => {
     expect(unavailablePublish).toMatchObject({
       kind: 'ok',
       catalog: {
-        services: [
+        offerings: [
           {
-            firstRequest: {
-              mode: 'not_available_yet',
-              noContactReason: 'Owner has not supplied public contact instructions.',
-            },
-            capabilities: [
-              {
-                status: 'unavailable',
-                reason: 'Owner has not supplied public contact instructions.',
-              },
-            ],
+            name: 'Emergency pipe repair',
+            accessPaths: [],
+            support: { integrated: false, aeSupportedAction: false },
           },
         ],
       },
     })
   })
 })
-
-function emptyState(): PublishBusinessCatalogState & BusinessSuppressionState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    suppressionRules: [],
-    invalidationIntents: [],
-  }
-}
 
 function claimFacts(name: string, requestedSlug: string) {
   return {
@@ -262,7 +222,7 @@ function claimFacts(name: string, requestedSlug: string) {
       {
         label: 'Owner supplied',
         evidenceRef: 'private:evidence:1',
-        sourceHash: brandNonEmpty(`hash:source:${requestedSlug}`, 'SourceHash'),
+        sourceHash: canonicalDigest(`source:${requestedSlug}`),
       },
     ],
   }
@@ -306,7 +266,6 @@ function unavailableServices(): readonly ServiceCatalogInput[] {
 function claimSecurity(key: string) {
   return {
     csrf: mutationCsrf(key).csrf,
-    rateLimit: claimRateLimit(key),
   }
 }
 
@@ -320,19 +279,11 @@ function mutationCsrf(key: string) {
   }
 }
 
-function claimRateLimit(key: string) {
-  return {
-    scope: 'claim_submit' as const,
-    key,
-    now: 1_000,
-    limit: 5,
-    windowMs: 60_000,
-  }
-}
 
 function ownerAdmin(): AdminMembership {
   return {
     clerkUserId: 'admin_1',
+    tokenIdentifier: 'clerk|admin_1',
     role: 'owner_admin',
     state: 'active',
     grantedBy: 'bootstrap',

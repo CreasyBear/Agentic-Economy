@@ -4,7 +4,6 @@ import { v } from 'convex/values'
 import { ClaimStatusValues, PublicStatusValues, VisibilityTargetTypeValues } from '@/modules/business/public'
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
-  AbuseBucketStateValues,
   AdminMembershipAuditEventTypeValues,
   AdminMembershipStateValues,
   AdminRoleValues,
@@ -54,7 +53,7 @@ export const securityTables = {
 
   adminMemberships: defineTable({
     clerkUserId: v.string(),
-    tokenIdentifier: v.optional(v.string()),
+    tokenIdentifier: v.string(),
     role: literalUnion(AdminRoleValues),
     state: literalUnion(AdminMembershipStateValues),
     grantedBy: v.string(),
@@ -64,7 +63,8 @@ export const securityTables = {
     evidenceRef: v.optional(v.string()),
   })
     .index('by_clerkUserId_state', ['clerkUserId', 'state'])
-    .index('by_tokenIdentifier_state', ['tokenIdentifier', 'state']),
+    .index('by_tokenIdentifier_state', ['tokenIdentifier', 'state'])
+    .index('by_state_and_role', ['state', 'role']),
 
   adminMembershipAuditEvents: defineTable({
     auditEventId: v.string(),
@@ -78,17 +78,6 @@ export const securityTables = {
     createdAt: v.number(),
   }).index('by_auditEventId', ['auditEventId']),
 
-  abuseRateLimitBuckets: defineTable({
-    scope: v.string(),
-    key: v.string(),
-    window: v.string(),
-    count: v.number(),
-    state: literalUnion(AbuseBucketStateValues),
-    resetAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_scope_key_window', ['scope', 'key', 'window'])
-    .index('by_state_resetAt', ['state', 'resetAt']),
 
   claimFingerprints: defineTable({
     fingerprint: v.string(),

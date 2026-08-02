@@ -8,12 +8,14 @@ import { z } from 'zod'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
-function readConsentDetails(html: string): Readonly<{ clientName?: string; mode?: string }> {
+function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string }> {
   const document = new DOMParser().parseFromString(html, 'text/html')
   const consent = document.querySelector<HTMLElement>('[data-ae-consent]')
+  const grantRef = consent?.dataset.grantRef
   const clientName = consent?.dataset.clientName
   const mode = consent?.dataset.authorityMode
   return {
+    ...(grantRef === undefined || grantRef.length === 0 ? {} : { grantRef }),
     ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
     ...(mode === undefined || mode.length === 0 ? {} : { mode }),
   }
@@ -44,12 +46,14 @@ function AgentAccessAuthorizeRoute() {
   const [consentLoading, setConsentLoading] = useState(userCode !== undefined)
   const [clientName, setClientName] = useState<string>()
   const [mode, setMode] = useState<string>()
+  const [grantRef, setGrantRef] = useState<string>()
 
   useEffect(() => {
     if (userCode === undefined) {
       setConsentLoading(false)
       setClientName(undefined)
       setMode(undefined)
+      setGrantRef(undefined)
       return
     }
 
@@ -58,14 +62,15 @@ function AgentAccessAuthorizeRoute() {
     setStatus('idle')
     setClientName(undefined)
     setMode(undefined)
-    void fetch(`/oauth/authorize?user_code=${encodeURIComponent(userCode)}`, { signal: controller.signal })
+    void fetch(`/oauth/authorize?user_code=${encodeURIComponent(userCode)}`, { credentials: 'same-origin', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('authorization_unavailable')
         const html = await response.text()
         const details = readConsentDetails(html)
-        if (details.clientName === undefined || details.mode === undefined) {
+        if (details.grantRef === undefined || details.clientName === undefined || details.mode === undefined) {
           throw new Error('authorization_details_missing')
         }
+        setGrantRef(details.grantRef)
         setClientName(details.clientName)
         setMode(details.mode)
       })
@@ -80,13 +85,14 @@ function AgentAccessAuthorizeRoute() {
   }, [userCode])
 
   async function decide(decision: 'approve' | 'deny') {
-    if (userCode === undefined) return
+    if (grantRef === undefined) return
     setPending(true)
     try {
       const response = await fetch('/oauth/authorize', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ user_code: userCode, decision }).toString(),
+        body: new URLSearchParams({ grant_ref: grantRef, decision }).toString(),
       })
       setStatus(response.ok ? (decision === 'approve' ? 'approved' : 'denied') : 'error')
     } catch {
@@ -97,7 +103,7 @@ function AgentAccessAuthorizeRoute() {
   }
 
   const permission = consentPermissionCopy(mode)
-  const consentReady = clientName !== undefined && mode !== undefined
+  const consentReady = grantRef !== undefined && clientName !== undefined && mode !== undefined
 
   return (
     <AeOperatorShell operatorRole="owner" title="Review assistant access" description="Choose what your assistant may ask AE to do, then approve or decline." currentPath="/agent-access">

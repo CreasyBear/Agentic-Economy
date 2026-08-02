@@ -8,13 +8,18 @@ import {
   verifyDynamicPublishedSnapshot,
   type DevelopmentHostReadReceipt,
   type DevelopmentHostSemanticRead,
+  type DynamicPublishedAdapterSnapshot,
+  type DynamicPublishedSnapshotAnchors,
 } from '@/modules/action-invocation'
+import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
+  projectDevelopmentPublishedOperationEvidence,
 } from './development-published-operation-evidence'
+import { materializeRuntimePublishedOperation } from './published-operation'
 import {
   runDevelopmentHostScenarioMatrix,
   type DevelopmentHostScenarioRecord,
@@ -24,6 +29,23 @@ export const developmentHostParityClaimCeiling =
   'Labelled local adapter/caller parity over mock transport, payment, and provider effects only; no hosted reachability, real-human usability, independent signing or root provenance, settlement, provider fulfilment, production safety, or customer value.'
 export const developmentHostParitySourceBaseCommit =
   'ebe35bdbd3b4707b356607e8dc615d3e29babe8d'
+function requireFirst<T>(values: readonly T[], error: string): T {
+  const value = values[0]
+  if (value === undefined) throw new Error(error)
+  return value
+}
+
+type CanonicalValueRecord = { readonly [key: string]: StableHashValue }
+
+function isCanonicalValueRecord(value: StableHashValue): value is CanonicalValueRecord {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function canonicalValueRecord(value: StableHashValue | undefined): CanonicalValueRecord | undefined {
+  if (value === undefined || !isCanonicalValueRecord(value)) return undefined
+  return value
+}
+
 
 export type DevelopmentHostParityEvidence = Readonly<{
   format: 'action-invocation-host-parity:development:v2'
@@ -54,6 +76,85 @@ export type DevelopmentHostParityEvidence = Readonly<{
   claimCeiling: string
   packetDigest: string
 }>
+type DevelopmentHostParityEvidenceMaterial = Omit<DevelopmentHostParityEvidence, 'packetDigest'>
+
+export function digestDevelopmentHostParityMaterial(
+  material: DevelopmentHostParityEvidenceMaterial,
+): string {
+  const {
+    format,
+    environment,
+    provenance,
+    fixture,
+    hosts,
+    hostReads,
+    parity,
+    evals,
+    verdict,
+    claimCeiling,
+  } = material
+  return canonicalDigest({
+    format,
+    environment,
+    provenance,
+    fixtureDigest: canonicalDigest(projectDevelopmentPublishedOperationEvidence(fixture)),
+    hosts: hosts.map((host) => ({
+      host: host.host,
+      actor: host.actor,
+      clarificationDigest: canonicalDigest(host.clarification),
+      correctionDigest: canonicalDigest(host.correction),
+      successDigest: canonicalDigest(host.success),
+      preflightRefusalDigest: canonicalDigest(host.preflightRefusal),
+      sourceRefusalDigest: canonicalDigest(host.sourceRefusal),
+      releasedRefusalDigest: canonicalDigest(host.releasedRefusal),
+      uncertaintyDigest: canonicalDigest(host.uncertainty),
+      timeoutDigest: canonicalDigest(host.timeout),
+      staleFencesDigest: canonicalDigest(host.staleFences),
+      coldResumeDigest: canonicalDigest(host.coldResume),
+      completedResultReuseDigest: canonicalDigest(host.completedResultReuse),
+    })),
+    hostReadsDigest: canonicalDigest(hostReads),
+    parityDigest: canonicalDigest(parity),
+    evalsDigest: canonicalDigest(evals),
+    verdict,
+    claimCeiling,
+  })
+}
+
+function assertDevelopmentHostParityEvidenceComponents(value: Readonly<{
+  fixture: unknown
+  provenance: unknown
+  hosts: readonly DevelopmentHostScenarioRecord[]
+  hostReads: unknown
+  parity: unknown
+  evals: unknown
+}>): void {
+  const components: readonly unknown[] = [
+    value.fixture,
+    value.provenance,
+    value.hostReads,
+    value.parity,
+    value.evals,
+    ...value.hosts.flatMap((host) => [
+      host.actor,
+      host.clarification,
+      host.correction,
+      host.success,
+      host.preflightRefusal,
+      host.sourceRefusal,
+      host.releasedRefusal,
+      host.uncertainty,
+      host.timeout,
+      host.staleFences,
+      host.coldResume,
+      host.completedResultReuse,
+    ]),
+  ]
+  if (components.some((component) => !isBoundedJsonValue(component))) {
+    throw new Error('host_parity_evidence_not_json_safe')
+  }
+}
+
 
 export async function buildDevelopmentHostParityEvidence(provenance: Readonly<{
   sourceBaseCommit: string
@@ -66,11 +167,11 @@ export async function buildDevelopmentHostParityEvidence(provenance: Readonly<{
   const hostReads = [
     readDevelopmentHostSnapshot({
       host: 'request_owned_human',
-      snapshot: JSON.parse(JSON.stringify(hosts[0].success.snapshot)),
+      snapshot: hosts[0].success.snapshot,
     }),
     readDevelopmentHostSnapshot({
       host: 'standalone_external_agent',
-      snapshot: JSON.parse(JSON.stringify(hosts[1].success.snapshot)),
+      snapshot: hosts[1].success.snapshot,
     }),
   ] as const
   const parity = compareHostSemantics(hostReads, hosts)
@@ -92,10 +193,18 @@ export async function buildDevelopmentHostParityEvidence(provenance: Readonly<{
     verdict: 'PASS_FOR_DECLARED_CLASS' as const,
     claimCeiling: developmentHostParityClaimCeiling,
   }
-  const serializable = JSON.parse(JSON.stringify(material)) as typeof material
+  const serializable = structuredClone({
+    ...material,
+    fixture: projectDevelopmentPublishedOperationEvidence(fixture),
+  })
+  assertDevelopmentHostParityEvidenceComponents(serializable)
   return Object.freeze({
     ...serializable,
-    packetDigest: canonicalDigest(serializable as unknown as StableHashValue),
+    fixture: {
+      ...serializable.fixture,
+      descriptor: materializeRuntimePublishedOperation(serializable.fixture.operation),
+    },
+    packetDigest: digestDevelopmentHostParityMaterial(material),
   })
 }
 
@@ -110,7 +219,6 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
       timeout: host.timeout,
       coldResume: host.coldResume,
     })) {
-      const source = scenario.snapshot.sourceRows[0]
       const expectedStatus = scenario.state === 'reconciliation_required' ? 'uncertain' : 'completed'
       const effectWasAdmitted = scenarioName === 'success'
         || scenarioName === 'releasedRefusal'
@@ -128,40 +236,15 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
         }
         verifyDynamicPublishedSnapshot({
           snapshot: scenario.snapshot,
-          anchors: {
-          operation: packet.fixture.operation,
-          descriptor: packet.fixture.descriptor,
-          actor: host.actor,
-          origin: host.host === 'request_owned_human'
-            ? { kind: 'request_owned', requestRef: 'request:host-parity-existing', revision: 7 }
-            : {
-                kind: 'standalone',
-                callerRef: host.actor.callerRef,
-                principalRef: host.actor.principalRef,
-              },
-          issuedAuthority: {
-            reference: scenario.authorityRef,
-            accepted: { kind: 'approve_each', authorityRef: scenario.authorityRef },
-            materialInputDigest: materialDigest(
-              buildDynamicPublishedInput({
-                operation: packet.fixture.operation,
-                descriptor: packet.fixture.descriptor,
-                value: { symbol: 'BTC', convert: 'USD' },
-              }),
-              ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
-            ),
-          },
-          expectedEffectCount: 1,
-          ...(effectWasAdmitted ? {
-            expectedSemanticClaim: {
-              ownerInvocationRef: scenario.invocationRef,
-              status: expectedStatus,
-              ...(source?.resultIdentity === undefined
-                ? {}
-                : { outcomeResultRef: source.resultIdentity.sourceResultRef }),
-            },
-          } : {}),
-          },
+          anchors: buildParitySnapshotAnchors({
+            packet,
+            host,
+            snapshot: scenario.snapshot,
+            invocationRef: scenario.invocationRef,
+            authorityRef: scenario.authorityRef,
+            expectedStatus,
+            effectWasAdmitted,
+          }),
         })
       } catch (error) {
         throw new Error(
@@ -170,49 +253,23 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
         )
       }
     }
-    const correctionSource = host.correction.snapshot.sourceRows[0]
-    const correctedMaterial = buildDynamicPublishedInput({
-      operation: packet.fixture.operation,
-      descriptor: packet.fixture.descriptor,
-      value: { symbol: 'BTC', convert: 'USD' },
-    })
-    const correctedDigest = materialDigest(
-      correctedMaterial,
-      ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
-    )
     verifyDynamicPublishedSnapshot({
       snapshot: host.correction.snapshot,
-      anchors: {
-        operation: packet.fixture.operation,
-        descriptor: packet.fixture.descriptor,
-        actor: host.actor,
-        origin: host.host === 'request_owned_human'
-          ? { kind: 'request_owned', requestRef: 'request:host-parity-existing', revision: 7 }
-          : {
-              kind: 'standalone',
-              callerRef: host.actor.callerRef,
-              principalRef: host.actor.principalRef,
-            },
-        issuedAuthority: {
-          reference: host.correction.newAuthorityRef,
-          accepted: { kind: 'approve_each', authorityRef: host.correction.newAuthorityRef },
-          materialInputDigest: correctedDigest,
-        },
-        expectedEffectCount: 1,
-        expectedSemanticClaim: {
-          ownerInvocationRef: host.correction.invocationRef,
-          status: 'completed',
-          ...(correctionSource?.resultIdentity === undefined
-            ? {}
-            : { outcomeResultRef: correctionSource.resultIdentity.sourceResultRef }),
-        },
-      },
+      anchors: buildParitySnapshotAnchors({
+        packet,
+        host,
+        snapshot: host.correction.snapshot,
+        invocationRef: host.correction.invocationRef,
+        authorityRef: host.correction.newAuthorityRef,
+        expectedStatus: 'completed',
+        effectWasAdmitted: true,
+      }),
     })
     const gathering = host.clarification.gatheringSnapshot
     const gatheringWork = gathering.inputWork?.[0]
     const gatheringControl = gathering.controls[0]
-    if (canonicalDigest(gathering.operations?.[0] as unknown as StableHashValue)
-        !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
+    if (canonicalDigest(gathering.operations?.[0])
+        !== canonicalDigest(packet.fixture.operation)
       || gatheringWork?.invocationRef !== host.clarification.invocationRef
       || gatheringWork.missingFields.join(',') !== 'convert'
       || gatheringWork.knownInput.symbol !== 'BTC'
@@ -224,18 +281,69 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
   }
 }
 
+function buildParitySnapshotAnchors(input: Readonly<{
+  packet: DevelopmentHostParityEvidence
+  host: DevelopmentHostScenarioRecord
+  snapshot: DynamicPublishedAdapterSnapshot
+  invocationRef: string
+  authorityRef: string
+  expectedStatus: 'completed' | 'uncertain'
+  effectWasAdmitted: boolean
+}>): DynamicPublishedSnapshotAnchors {
+  const source = input.snapshot.sourceRows[0]
+  const materialInput = buildDynamicPublishedInput({
+    operation: input.packet.fixture.operation,
+    descriptor: input.packet.fixture.descriptor,
+    value: { symbol: 'BTC', convert: 'USD' },
+  })
+  return {
+    operation: input.packet.fixture.operation,
+    descriptor: input.packet.fixture.descriptor,
+    actor: input.host.actor,
+    origin: input.host.host === 'request_owned_human'
+      ? { kind: 'request_owned', requestRef: 'request:host-parity-existing', revision: 7 }
+      : {
+          kind: 'standalone',
+          callerRef: input.host.actor.callerRef,
+          principalRef: input.host.actor.principalRef,
+        },
+    issuedAuthority: {
+      reference: input.authorityRef,
+      accepted: { kind: 'approve_each', authorityRef: input.authorityRef },
+      materialInputDigest: materialDigest(
+        materialInput,
+        ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+      ),
+    },
+    expectedEffectCount: 1,
+    ...(input.effectWasAdmitted && input.snapshot.paymentAttempts[0] !== undefined
+      ? { expectedChallengeDigest: input.snapshot.paymentAttempts[0].challengeDigest }
+      : {}),
+    ...(input.effectWasAdmitted ? {
+      expectedSemanticClaim: {
+        ownerInvocationRef: input.invocationRef,
+        status: input.expectedStatus,
+        ...(source?.resultIdentity === undefined
+          ? {}
+          : { outcomeResultRef: source.resultIdentity.sourceResultRef }),
+      },
+    } : {}),
+  }
+}
+
 function verifyReleasedRefusalSnapshot(
   packet: DevelopmentHostParityEvidence,
   host: DevelopmentHostScenarioRecord,
   scenario: DevelopmentHostScenarioRecord['releasedRefusal'],
 ): void {
   assertDynamicPublishedSnapshotShape(scenario.snapshot)
-  const source = scenario.snapshot.sourceRows[0]!
-  const control = scenario.snapshot.controls[0]!
-  const attempt = scenario.snapshot.attempts[0]!.rows[0]!
+  const source = requireFirst(scenario.snapshot.sourceRows, 'released_refusal_source_missing')
+  const control = requireFirst(scenario.snapshot.controls, 'released_refusal_control_missing')
+  const attemptRecord = requireFirst(scenario.snapshot.attempts, 'released_refusal_attempt_missing')
+  const attempt = requireFirst(attemptRecord.rows, 'released_refusal_attempt_row_missing')
   const claim = scenario.snapshot.semanticClaims[0]
-  if (canonicalDigest(source.operation as unknown as StableHashValue)
-      !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
+  if (canonicalDigest(source.operation)
+      !== canonicalDigest(packet.fixture.operation)
     || control.control.owner.callerRef !== host.actor.callerRef
     || control.control.owner.principalRef !== host.actor.principalRef
     || control.authorityBinding?.reference !== scenario.authorityRef
@@ -268,17 +376,15 @@ export function evaluateHostMatrix(
         const rich = projectRichInvocationTask({
           invocationRef: host.clarification.invocationRef,
           expectedInvocationVersion: host.clarification.gatheringVersion,
-          resolver: {
-            resolve: () => JSON.parse(JSON.stringify(host.clarification.gatheringSnapshot)),
-          },
+          snapshot: host.clarification.gatheringSnapshot,
         })
         return host.clarification.missing.join(',') === 'convert'
           && host.clarification.sameLineage
           && host.clarification.preparedVersion > host.clarification.gatheringVersion
           && host.clarification.rich.semanticDigest === host.clarification.structured.semanticDigest
           && rich.semanticDigest === host.clarification.rich.semanticDigest
-          && canonicalDigest(rich.semantics as unknown as StableHashValue)
-            === canonicalDigest(host.clarification.structured.semantics as unknown as StableHashValue)
+          && canonicalDigest(rich.semantics)
+            === canonicalDigest(host.clarification.structured.semantics)
       }),
       evidence: hosts.map((host) => host.clarification),
     },
@@ -288,12 +394,12 @@ export function evaluateHostMatrix(
         const rich = projectRichInvocationTask({
           invocationRef: host.correction.invocationRef,
           expectedInvocationVersion: host.correction.newVersion,
-          resolver: { resolve: () => structuredClone(host.correction.projectionSnapshot) },
+          snapshot: host.correction.projectionSnapshot,
         })
         const structured = projectStructuredInvocationTask({
           invocationRef: host.correction.invocationRef,
           expectedInvocationVersion: host.correction.newVersion,
-          resolver: { resolve: () => structuredClone(host.correction.projectionSnapshot) },
+          snapshot: host.correction.projectionSnapshot,
         })
         return host.correction.newVersion > host.correction.oldVersion
           && host.correction.oldAuthorityRef !== host.correction.newAuthorityRef
@@ -405,7 +511,7 @@ export function evaluateHostMatrix(
   return checks.map(({ name, passed, evidence }) => Object.freeze({
     name,
     passed,
-    evidenceDigest: canonicalDigest(evidence as unknown as StableHashValue),
+    evidenceDigest: canonicalDigest(evidence),
   }))
 }
 
@@ -421,8 +527,8 @@ export function compareHostSemantics(
   }
   const differences = [
     request.identity.callerRef !== standalone.identity.callerRef,
-    canonicalDigest(request.identity.origin as unknown as StableHashValue)
-      !== canonicalDigest(standalone.identity.origin as unknown as StableHashValue),
+    canonicalDigest(request.identity.origin)
+      !== canonicalDigest(standalone.identity.origin),
     request.identity.invocationRef !== standalone.identity.invocationRef,
     request.authority.reference !== standalone.authority.reference,
     request.attempt?.attemptRef !== standalone.attempt?.attemptRef,
@@ -464,18 +570,19 @@ export function compareHostSemantics(
       'resolution.resultIdentity', 'resolution.sourceResultDigest',
     ],
     sharedDigest: canonicalDigest(shared),
-    requestDigest: canonicalDigest(request as unknown as StableHashValue),
-    standaloneDigest: canonicalDigest(standalone as unknown as StableHashValue),
+    requestDigest: canonicalDigest(request),
+    standaloneDigest: canonicalDigest(standalone),
     normalizedScenarioDigests,
   })
 }
 
 export function normalizedOutcomeEvidenceResult(
   snapshot: DevelopmentHostScenarioRecord['success']['snapshot'],
-): StableHashValue {
-  const source = snapshot.sourceRows[0]!
-  const control = snapshot.controls[0]!
-  const attempt = snapshot.attempts[0]!.rows[0]!
+): unknown {
+  const source = requireFirst(snapshot.sourceRows, 'normalized_outcome_source_missing')
+  const control = requireFirst(snapshot.controls, 'normalized_outcome_control_missing')
+  const attemptRecord = requireFirst(snapshot.attempts, 'normalized_outcome_attempt_missing')
+  const attempt = requireFirst(attemptRecord.rows, 'normalized_outcome_attempt_row_missing')
   const claim = snapshot.semanticClaims[0]
   const returned = source.observedResolution.state === 'returned'
     ? source.observedResolution
@@ -501,15 +608,15 @@ export function normalizedOutcomeEvidenceResult(
     semantic: {
       status: claim?.status ?? null,
       observedResolution: normalizedSemanticObserved,
-      normalizedResultDigest: canonicalDigest(normalizedObserved as unknown as StableHashValue),
+      normalizedResultDigest: canonicalDigest(normalizedObserved),
     },
-    normalizedResultDigest: canonicalDigest(normalizedObserved as unknown as StableHashValue),
-    releaseEvidence: snapshot.history[0]!.rows.flatMap(
+    normalizedResultDigest: canonicalDigest(normalizedObserved),
+    releaseEvidence: requireFirst(snapshot.history, 'normalized_outcome_history_missing').rows.flatMap(
       (row) => row.observation === undefined ? [] : [{
         release: row.observation.release,
       }],
     ),
-  } as unknown as StableHashValue
+  }
 }
 
 function normalizeObservedResolution(
@@ -517,18 +624,18 @@ function normalizeObservedResolution(
     DevelopmentHostScenarioRecord['success']['snapshot']['sourceRows'][number]['observedResolution'],
     { state: 'returned' }
   >,
-): StableHashValue {
+): unknown {
   const { requestDigest: _hostBoundRequestDigest, ...result } = resolution.result
   return {
     state: resolution.state,
     execution: resolution.execution,
     result,
-  } as unknown as StableHashValue
+  }
 }
 
 function sharedSemantics(read: DevelopmentHostSemanticRead): StableHashValue {
-  const idempotency = read.attempt?.idempotency as Record<string, StableHashValue> | undefined
-  const release = read.resolution.release as Record<string, StableHashValue> | null
+  const idempotency = canonicalValueRecord(read.attempt?.idempotency)
+  const release = canonicalValueRecord(read.resolution.release)
   return {
     action: read.action,
     operation: read.operation,

@@ -1,14 +1,14 @@
 import type { CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ModuleResult } from '@/modules/common/result'
 import type { GovernedSendErasureLineageRecord } from '../governed-send'
 import { inquiryReceiptKeyRef } from '../receipt-envelope'
+import { normalizeInquiryWhitespace } from '../normalize-text'
 import {
   auditRecord,
   error,
   findOperation,
   findOwnedThread,
-  normalizeText,
   operationRecord,
 } from '../ledger/facts'
 import type {
@@ -55,7 +55,7 @@ export function deleteInquiryPrivateContent(
   }
 
   const reasonCode = normalizeReasonCode(command.reasonCode)
-  const requestHash = stableHash({
+  const requestHash = canonicalDigest({
     action: 'delete_private_content',
     threadId: command.threadId,
     ownerId: command.authority.ownerId,
@@ -78,12 +78,12 @@ export function deleteInquiryPrivateContent(
     .filter((receipt) => receipt.threadId === thread.threadId && receipt.retention === 'recoverable')
     .map((receipt) => {
       const keyRef = inquiryReceiptKeyRef(receipt)
-      const erasureEventId = `governed-send-erasure:${stableHash({
+      const erasureEventId = `governed-send-erasure:${canonicalDigest({
         receiptOperationKey: String(receipt.operationKey),
         privacyOperationKey: String(command.operationKey),
         keyRef,
       })}`
-      const priorReceiptCommitment = stableHash({
+      const priorReceiptCommitment = canonicalDigest({
         operationKey: String(receipt.operationKey),
         threadId: String(receipt.threadId),
         digest: receipt.digest,
@@ -102,7 +102,7 @@ export function deleteInquiryPrivateContent(
         destroyedAt: command.now,
         priorReceiptCommitment,
       }
-      return { ...lineage, lineageHash: stableHash(lineage) }
+      return { ...lineage, lineageHash: canonicalDigest(lineage) }
     })
   const erasureEventIds = receiptErasureLineage.map((lineage) => lineage.erasureEventId)
   const tombstone: InquiryPrivacyTombstoneRecord = {
@@ -209,6 +209,6 @@ function redactPrivateMessage(message: InquiryMessageRecord, deletedAt: number):
 }
 
 function normalizeReasonCode(value: string): string {
-  const normalized = normalizeText(value).toLowerCase().replace(/[^a-z0-9:_-]+/g, '_')
+  const normalized = normalizeInquiryWhitespace(value).toLowerCase().replace(/[^a-z0-9:_-]+/g, '_')
   return normalized.length === 0 ? 'privacy_delete_requested' : normalized.slice(0, 96)
 }

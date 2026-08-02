@@ -1,5 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 
+import { readObservabilityServerConfig } from '@/lib/observability/config'
+
 import {
   readAdminOwnerActivationSummaryThroughSource,
   recordFunnelEventSchema,
@@ -34,16 +36,6 @@ export const readAdminOwnerActivationSummaryServer = createServerFn().handler(as
 
 export const readAdminAnalyticsServer = createServerFn().handler(async () => ({
   activationSummary: await readAdminOwnerActivationSummaryThroughSource(),
-  posthogAppUrl: readPosthogAppUrl(),
+  posthogAppUrl: readObservabilityServerConfig().posthogAppUrl,
 }))
 
-
-function readPosthogAppUrl(): string | undefined {
-  const value = process.env.POSTHOG_APP_URL ?? process.env.VITE_POSTHOG_APP_URL
-  if (value === undefined) {
-    return undefined
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length === 0 ? undefined : trimmed
-}

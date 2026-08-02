@@ -5,6 +5,8 @@ import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { formatTimestamp } from '@/lib/ui/format-time'
+import { formatMoney } from '@/lib/ui/format-money'
 import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { CustomerRequestRepeatPermissionControl } from '../../CustomerRequestRepeatPermissionControl'
 import type { ConversationTurn, CustomerRoute } from '../../workspace-types'
@@ -16,8 +18,6 @@ import {
   WorkingUnderstanding,
   RecoveryActions,
   activityResponsibility,
-  formatMoney,
-  formatOptionTime,
   businessList,
   readableLabel,
   effectLabel,
@@ -118,7 +118,7 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
               </FactValue>
             </Fact>
             <Fact label="Available until">
-              <FactValue>{formatOptionTime(route.validUntil)}</FactValue>
+              <FactValue>{formatTimestamp(route.validUntil)}</FactValue>
             </Fact>
           </div>
           <FactBlock label="Why it fits">
@@ -222,7 +222,7 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
             </FactValue>
           </Fact>
           <Fact label="Confirm before">
-            <FactValue>{formatOptionTime(route.validUntil)}</FactValue>
+            <FactValue>{formatTimestamp(route.validUntil)}</FactValue>
           </Fact>
           <Fact label="Shared">
             <SharingSummary route={route} />
@@ -311,7 +311,7 @@ export function RouteConfirmationCard({ projection, turns, start, edit, restart 
           <p className="text-muted-foreground">Through {businessList(route.businesses.map(({ name }) => name))}. Nothing has started yet.</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div><p className="text-sm font-semibold">Confirmed until</p><p className="text-muted-foreground">{formatOptionTime(confirmation.validUntil)}</p></div>
+          <div><p className="text-sm font-semibold">Confirmed until</p><p className="text-muted-foreground">{formatTimestamp(confirmation.validUntil)}</p></div>
         </div>
         <div><p className="font-semibold">Information recipients</p><ul className="mt-2 grid gap-1 text-sm text-muted-foreground">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}</li>)}</ul></div>
         <div><p className="font-semibold">What changes</p><ul className="mt-2 grid gap-1 text-sm text-muted-foreground">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
@@ -396,7 +396,7 @@ function cancellationMessage(
 ) {
   if (typeof cancellation === 'object' && cancellation.state === 'available') {
     return <p className="text-sm text-muted-foreground">
-      AE will not release the next business step before {new Date(cancellation.releaseMayStartAt).toISOString()}.
+      AE will not release the next business step before {formatTimestamp(cancellation.releaseMayStartAt)}.
     </p>
   }
   if (typeof cancellation === 'object' && cancellation.state === 'pending') {
@@ -405,7 +405,7 @@ function cancellationMessage(
         AE sent one stop request to the business. The business has not confirmed the outcome yet.
       </p>
       <p className="text-sm text-muted-foreground">
-        Sent at {new Date(cancellation.requestedAt).toISOString()}. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
+        Sent at {formatTimestamp(cancellation.requestedAt)}. Check again after {formatTimestamp(cancellation.nextCheckAt)}.
         {' '}AE will not send the stop request twice.
       </p>
     </div>
@@ -416,8 +416,8 @@ function cancellationMessage(
         AE cannot yet confirm whether the business received or accepted the stop request.
       </p>
       <p className="text-sm text-muted-foreground">
-        Sent at {new Date(cancellation.requestedAt).toISOString()}; uncertainty recorded at {new Date(cancellation.observedAt).toISOString()}.
-        {' '}AE will not repeat it while the outcome is unknown. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
+        Sent at {formatTimestamp(cancellation.requestedAt)}; uncertainty recorded at {formatTimestamp(cancellation.observedAt)}.
+        {' '}AE will not repeat it while the outcome is unknown. Check again after {formatTimestamp(cancellation.nextCheckAt)}.
       </p>
     </div>
   }
@@ -427,10 +427,10 @@ function cancellationMessage(
         The business declined the stop request. The current work may continue.
       </p>
       <p className="text-sm text-muted-foreground">
-        AE sent the stop request at {new Date(cancellation.requestedAt).toISOString()}.
+        AE sent the stop request at {formatTimestamp(cancellation.requestedAt)}.
       </p>
       <p className="text-sm text-muted-foreground">
-        The business response was recorded at {new Date(cancellation.observedAt).toISOString()}; AE will not send the stop request twice.
+        The business response was recorded at {formatTimestamp(cancellation.observedAt)}; AE will not send the stop request twice.
       </p>
     </div>
   }
@@ -443,10 +443,10 @@ function cancellationMessage(
         : 'You asked AE to stop, but the business step had already started.'}
     </p>
     <p className="text-sm text-muted-foreground">
-      The business step was released at {new Date(cancellation.changedAt).toISOString()}.
+      The business step was released at {formatTimestamp(cancellation.changedAt)}.
     </p>
     {cancellation.requestedAt === undefined ? null : <p className="text-sm text-muted-foreground">
-      AE recorded your stop request at {new Date(cancellation.requestedAt).toISOString()}.
+      AE recorded your stop request at {formatTimestamp(cancellation.requestedAt)}.
     </p>}
   </div>
 }
@@ -602,7 +602,7 @@ function dateList(
   values: readonly { resultRef: string; validUntil: number }[],
   names: ReadonlyMap<string, string>,
 ): string {
-  return values.map(({ resultRef, validUntil }) => `${resultName(resultRef, names)}: ${formatOptionTime(validUntil)}`)
+  return values.map(({ resultRef, validUntil }) => `${resultName(resultRef, names)}: ${formatTimestamp(validUntil)}`)
     .join(', ') || 'none'
 }
 function fallbackList(

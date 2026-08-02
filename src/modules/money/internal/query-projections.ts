@@ -10,9 +10,10 @@ import type {
   PayoutStatusView,
   ProviderEarningsQuery,
   ProviderEarningsView,
+  TopupState,
 } from '../public'
+import { usageSummaryKey } from './ledger'
 import type { LedgerState } from './ledger'
-import type { TopupState } from './topup'
 
 export function createInMemoryMoneyQueryPort(input: Readonly<{
   ledger: LedgerState
@@ -43,50 +44,19 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
     listCreditActivity: async (query: CreditActivityQuery) => {
       const rows = input.ledger.usageEvents
         .filter((event) => event.principalId === query.principalId)
-        .filter((event) => query.credentialId === undefined || event.credentialId === query.credentialId)
-        .filter((event) => query.currency === undefined || event.currency === query.currency)
-        .filter((event) => query.from === undefined || event.observedAt >= query.from)
-        .filter((event) => query.to === undefined || event.observedAt <= query.to)
+        .filter((event) => event.credentialId === query.credentialId)
+        .filter((event) => event.currency === query.currency)
         .sort((left, right) => right.observedAt - left.observedAt)
-      const offset = readCursor(query.cursor)
-      const items = rows.slice(offset, offset + boundedLimit(query.limit)).map(activity)
-      const nextOffset = offset + items.length
-      return { items, ...(nextOffset < rows.length ? { nextCursor: String(nextOffset) } : {}) }
+      const rawOffset = query.paginationOpts.cursor === null ? 0 : Number(query.paginationOpts.cursor)
+      const offset = Number.isSafeInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0
+      const page = rows.slice(offset, offset + query.paginationOpts.numItems).map(activity)
+      const nextOffset = offset + page.length
+      return { page, isDone: nextOffset >= rows.length, continueCursor: String(nextOffset) }
     },
-    readKeyUsage: async (query: KeyUsageQuery) => {
-      const events = input.ledger.usageEvents
-        .filter((event) => event.principalId === query.principalId)
-        .filter((event) => query.credentialId === undefined || event.credentialId === query.credentialId)
-        .filter((event) => query.from === undefined || event.observedAt >= query.from)
-        .filter((event) => query.to === undefined || event.observedAt <= query.to)
-      const grouped = new Map<string, KeyUsageView>()
-      for (const event of events) {
-        const prior = grouped.get(event.credentialId)
-        const current: KeyUsageView = prior === undefined
-          ? {
-              credentialId: event.credentialId,
-              callCount: 1,
-              paidCallCount: event.chargeState === 'paid' ? 1 : 0,
-              freeCallCount: event.chargeState === 'free_tier' ? 1 : 0,
-              grossSpendMinor: event.chargeState === 'paid' ? event.amountMinor : 0,
-              currency: event.currency,
-              states: [event.chargeState],
-            }
-          : {
-              ...prior,
-              callCount: prior.callCount + 1,
-              paidCallCount: prior.paidCallCount + (event.chargeState === 'paid' ? 1 : 0),
-              freeCallCount: prior.freeCallCount + (event.chargeState === 'free_tier' ? 1 : 0),
-              grossSpendMinor: prior.grossSpendMinor + (event.chargeState === 'paid' ? event.amountMinor : 0),
-              states: prior.states.includes(event.chargeState) ? prior.states : [...prior.states, event.chargeState],
-            }
-        grouped.set(event.credentialId, current)
-      }
-      const rows = [...grouped.values()]
-      const offset = readCursor(query.cursor)
-      const items = rows.slice(offset, offset + boundedLimit(query.limit))
-      const nextOffset = offset + items.length
-      return { items, ...(nextOffset < rows.length ? { nextCursor: String(nextOffset) } : {}) }
+    readKeyUsage: async (query: KeyUsageQuery): Promise<KeyUsageView> => {
+      const summary = input.ledger.usageSummaries.get(usageSummaryKey(query.principalId, query.credentialId, query.currency))
+      if (summary !== undefined) return { credentialId: summary.credentialId, callCount: summary.callCount, paidCallCount: summary.paidCallCount, freeCallCount: summary.freeCallCount, grossSpendMinor: summary.grossSpendMinor, currency: summary.currency, states: summary.states }
+      return { credentialId: query.credentialId, callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpendMinor: 0, currency: query.currency, states: [] }
     },
     readProviderEarnings: async (query: ProviderEarningsQuery): Promise<ProviderEarningsView> => {
       const provider = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'provider_earnings' && item.businessId === query.businessId && item.currency === query.currency)
@@ -122,14 +92,3 @@ function activity(event: LedgerState['usageEvents'][number]): CreditActivityView
   }
 }
 
-function boundedLimit(limit: number): number {
-  if (!Number.isSafeInteger(limit) || limit < 1) return 1
-  return Math.min(limit, 100)
-}
-
-function readCursor(cursor: string | undefined): number {
-  if (cursor === undefined) return 0
-  const value = Number(cursor)
-  if (!Number.isSafeInteger(value) || value < 0) return 0
-  return value
-}

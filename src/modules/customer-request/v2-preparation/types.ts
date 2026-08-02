@@ -32,7 +32,6 @@ export type PrepareActionPreparationResult =
     kind: 'needs_attention'
     reason:
       | 'capability_graph_changed'
-      | 'historical_request_resubmit_required'
       | 'preparation_recipient_unsupported'
   }>
   | Readonly<{
@@ -117,7 +116,6 @@ export type AuthorityReservationRow = Readonly<{
 
 export type CurrentAggregateLoad =
   | Readonly<{ kind: 'current'; aggregate: CustomerRequestV2Aggregate }>
-  | Readonly<{ kind: 'historical' }>
   | Readonly<{ kind: 'not_found' }>
 
 export type RequestHeadSnapshot = Readonly<{

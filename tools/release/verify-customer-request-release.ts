@@ -3,6 +3,7 @@ import {
   verifyCustomerRequestHostedRevision,
 } from '../../src/modules/customer-request/release-readback'
 import { pathToFileURL } from 'node:url'
+import { resolveVercelProtectionBypassSecret } from './work-tree-parity-release'
 
 type Environment = Record<string, string | undefined>
 
@@ -51,14 +52,15 @@ export async function main(env: Environment = process.env): Promise<void> {
   const apiKey = required(env, 'AE_CUSTOMER_REQUEST_API_KEY')
   const expectedRevision = required(env, 'AE_RELEASE_SOURCE_REVISION')
   const expectedDeploymentId = required(env, 'AE_RELEASE_DEPLOYMENT_ID')
+  const bypass = resolveVercelProtectionBypassSecret(env)
   const result = await verifyHostedCustomerRequestRelease({
     baseUrl,
     apiKey,
     expectedRevision,
     expectedDeploymentId,
-    ...(env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET?.trim() === undefined
+    ...(bypass === undefined
       ? {}
-      : { deploymentProtectionBypass: env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET.trim() }),
+      : { deploymentProtectionBypass: bypass }),
   })
   process.stdout.write(`${JSON.stringify(result)}\n`)
 }

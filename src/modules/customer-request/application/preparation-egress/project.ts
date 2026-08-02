@@ -176,11 +176,9 @@ export function preparationResultView(
     return projectNeedsAttention({
       requestRef,
       revision,
-      summary: result.reason === 'historical_request_resubmit_required'
-        ? 'This earlier request used a retired contract format. Start a new request to continue.'
-        : result.reason === 'preparation_recipient_unsupported'
-          ? 'AE cannot safely compare these options before you choose which business may receive your information.'
-          : 'The registered options changed. Review this request again.',
+      summary: result.reason === 'preparation_recipient_unsupported'
+        ? 'AE cannot safely compare these options before you choose which business may receive your information.'
+        : 'The registered options changed. Review this request again.',
     })
   }
   if (result.kind === 'refused') {

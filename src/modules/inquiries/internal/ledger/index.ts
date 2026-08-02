@@ -21,4 +21,3 @@ export type {
   ReplyToInquiryResult,
   CloseInquiryResult,
 } from './commands'
-export type { InquirySourceStatePorts } from './ports'

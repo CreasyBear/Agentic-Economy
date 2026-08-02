@@ -3,10 +3,11 @@ import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
-  CapabilityKindValues,
-  FirstRequestModeValues,
-  PublicFirstRequestChannelValues,
-  ServiceCapabilityStatusValues,
+  ExternalOperationProvenanceValues,
+  HumanRequestChannelValues,
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
 } from '@/modules/catalog/public'
 import {
   DiscoveryAttemptStatusValues,
@@ -14,9 +15,7 @@ import {
   DiscoveryPathKindValues,
   DiscoveryRepairActionValues,
   DiscoveryRepairResultValues,
-  DiscoveryStatusValues,
 } from '@/modules/discovery/public'
-
 
 const discoveryManifestRoute = v.object({
   kind: literalUnion(DiscoveryManifestRouteKindValues),
@@ -24,31 +23,64 @@ const discoveryManifestRoute = v.object({
   routeTested: v.literal(true),
 })
 
-const discoveryManifestFirstRequest = v.object({
-  mode: literalUnion(FirstRequestModeValues),
-  publicDisclosure: v.string(),
-  publicChannel: literalUnion(PublicFirstRequestChannelValues),
-  noContactReason: v.optional(v.string()),
+const discoveryManifestPrice = v.object({
+  kind: literalUnion(OfferingPriceKindValues),
+  currency: v.string(),
+  amountMinor: v.optional(v.number()),
+  maximumAmountMinor: v.optional(v.number()),
+  unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+  taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
 })
 
-const discoveryManifestCapability = v.object({
-  kind: literalUnion(CapabilityKindValues),
-  status: literalUnion(ServiceCapabilityStatusValues),
-  firstRequest: discoveryManifestFirstRequest,
-  callable: v.literal(false),
-  paymentRequired: v.literal(false),
-  reason: v.optional(v.string()),
+const discoveryManifestHumanRequestAccessPath = v.object({
+  accessPathRef: v.string(),
+  kind: v.literal('human_request'),
+  channel: literalUnion(HumanRequestChannelValues),
+  disclosure: v.string(),
+  url: v.optional(v.string()),
 })
 
-const discoveryManifestService = v.object({
-  slug: v.string(),
+const discoveryManifestExternalOperationAccessPath = v.object({
+  accessPathRef: v.string(),
+  kind: v.literal('external_operation'),
+  name: v.string(),
+  summary: v.string(),
+  url: v.string(),
+  method: v.optional(v.string()),
+  documentationUrl: v.optional(v.string()),
+  interfaceDescription: v.optional(v.object({
+    format: v.string(),
+    url: v.optional(v.string()),
+  })),
+  authenticationSummary: v.optional(v.string()),
+  pricingSummary: v.optional(v.string()),
+  provenance: literalUnion(ExternalOperationProvenanceValues),
+})
+
+const discoveryManifestAccessPath = v.union(
+  discoveryManifestHumanRequestAccessPath,
+  discoveryManifestExternalOperationAccessPath,
+)
+
+const discoveryManifestOfferingSupport = v.object({
+  integrated: v.boolean(),
+  aeSupportedAction: v.boolean(),
+  observedAt: v.optional(v.number()),
+  validUntil: v.optional(v.number()),
+})
+
+const discoveryManifestOffering = v.object({
+  offeringRef: v.string(),
+  revision: v.number(),
   name: v.string(),
   category: v.string(),
   summary: v.string(),
-  serviceArea: v.string(),
-  hoursOrUnknown: v.string(),
-  status: v.literal('published'),
-  capabilities: v.array(discoveryManifestCapability),
+  serviceAreaSummary: v.optional(v.string()),
+  availabilitySummary: v.optional(v.string()),
+  pricingSummary: v.optional(v.string()),
+  price: v.optional(discoveryManifestPrice),
+  accessPaths: v.array(discoveryManifestAccessPath),
+  support: discoveryManifestOfferingSupport,
 })
 
 const discoveryManifestReadback = v.object({
@@ -66,6 +98,7 @@ const discoveryManifestReadback = v.object({
 export const discoveryTables = {
   discoveryManifests: defineTable({
     schemaVersion: v.string(),
+    businessCatalogSchemaVersion: v.optional(v.string()),
     businessId: v.id('businesses'),
     slug: v.string(),
     businessName: v.string(),
@@ -77,22 +110,18 @@ export const discoveryTables = {
     manifestUrl: v.string(),
     ucpVersion: v.string(),
     pathKind: literalUnion(DiscoveryPathKindValues),
-    status: literalUnion(DiscoveryStatusValues),
+    disposition: v.optional(v.union(v.literal('current'), v.literal('partial'), v.literal('stale'))),
     sourceHash: v.string(),
     sourceVersion: v.string(),
     generatedHash: v.string(),
     bodyHash: v.string(),
     urlHash: v.string(),
     generatedAt: v.number(),
-    updatedAt: v.number(),
+    observedAt: v.optional(v.number()),
     degradedReason: v.optional(v.string()),
     suppressedAt: v.optional(v.number()),
     routes: v.array(discoveryManifestRoute),
-    services: v.array(discoveryManifestService),
-    unsupportedCapabilities: v.object({
-      callable: v.literal(false),
-      paymentRequired: v.literal(false),
-    }),
+    offerings: v.optional(v.array(discoveryManifestOffering)),
   })
     .index('by_business_version', ['businessId', 'ucpVersion'])
     .index('by_business_generatedAt', ['businessId', 'generatedAt']),

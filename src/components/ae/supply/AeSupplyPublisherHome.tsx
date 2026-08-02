@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
@@ -16,7 +17,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <a href="/owner/supply">Try again</a>
+            <Link to="/owner/supply">Try again</Link>
           </Button>
         </CardFooter>
       </Card>
@@ -33,7 +34,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <a href="/claim?source=supply">Claim your business</a>
+            <Link to="/claim" search={{ source: 'supply' }}>Claim your business</Link>
           </Button>
         </CardFooter>
       </Card>
@@ -67,7 +68,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
                     <p className="block text-sm text-muted-foreground">{offering.summary}</p>
                   </div>
                   <Button asChild variant="secondary" className="min-h-11">
-                    <a href={`/owner/supply/${encodeURIComponent(offering.offeringRef)}`}>Continue setup</a>
+                    <Link to="/owner/supply/$offeringRef" params={{ offeringRef: offering.offeringRef }}>Continue setup</Link>
                   </Button>
                 </li>
               ))}
@@ -76,7 +77,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <a href="/owner/offerings/new?next=supply">Describe a service</a>
+            <Link to="/owner/offerings/new" search={{ next: 'supply' }}>Describe a service</Link>
           </Button>
         </CardFooter>
       </Card>

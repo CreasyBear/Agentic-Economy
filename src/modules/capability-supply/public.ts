@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { JsonValue } from '@/modules/capability-contract/public'
+import { identifier, jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
@@ -76,8 +76,9 @@ export {
   type CapabilityBindingRow,
 } from './internal/binding'
 export {
+  MAX_ELIGIBLE_SUPPLY,
   getEligibleExactCapabilitySupply,
-  listEligibleCapabilitySupply,
+  listIntegratedCapabilitySupply,
   listRouteableCapabilitySupply,
   setCapabilitySupplyEligibility,
   type EligiblePublicationRow,
@@ -125,12 +126,8 @@ export {
 } from './internal/shared'
 export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
 
-const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
-  z.null(), z.boolean(), z.number().finite(), z.string(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema),
-]))
 const evidenceRefs = z.array(identifier).min(1).max(64)
 const contractRefSchema = z.strictObject({
   capabilityId: identifier,

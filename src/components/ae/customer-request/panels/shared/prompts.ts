@@ -1,9 +1,4 @@
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
-import type { CustomerClarification } from '../../workspace-types'
-
-export function customerClarificationPrompt(clarification: CustomerClarification): string {
-  return customerFacingAeTurn(clarification.prompt)
-}
 export function customerFacingAeTurn(text: string): string {
   const prompt = text.trim()
   return prompt.endsWith('?') ? prompt : 'What else should AE know to find the right options?'

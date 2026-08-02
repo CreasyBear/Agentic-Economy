@@ -2,20 +2,17 @@ import type { UserIdentity } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { internal } from './_generated/api'
-import { internalMutation } from './_generated/server'
-import {
-  loadPhaseOneSourceState,
-  persistPhaseOneSourceState,
-  runtimeDb,
-} from './source_state'
-import { readActiveAdminMembership } from './authz'
+import type { MutationCtx, QueryCtx } from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
+import { readCurrentActiveAdminMembership as readCurrentActiveMembership } from './authz'
+import { admissionKey, assertAdmission } from './lib/rateLimit'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash } from '../src/modules/common/stable-hash'
+import { literalUnion } from '../src/modules/common/convex-literals'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { validateAuditEvent } from '../src/modules/observability/public'
 import {
-  AbuseBucketStateValues,
+  RemovalDisputeReasonCodeValues,
   bootstrapOwnerAdmin as bootstrapOwnerAdminModule,
   grantAdminMembership as grantAdminMembershipModule,
   openRemovalDispute as openRemovalDisputeModule,
@@ -33,19 +30,15 @@ import type {
   AdminReadbackRow,
   AdminShellReadback,
   DisputeOpenCommand,
+  DisputeOpenResult,
   DisputeRecord,
   DisputeSourceState,
+  RemovalDisputeReasonCode,
 } from '../src/modules/security/public'
-
 const adminRole = v.union(v.literal('owner_admin'), v.literal('support'), v.literal('reviewer'))
 const adminMembershipState = v.union(v.literal('active'), v.literal('revoked'), v.literal('suspended'))
 const visibilityTargetType = v.union(v.literal('business'), v.literal('service'), v.literal('capability'))
-const removalReason = v.union(
-  v.literal('privacy_removal_requested'),
-  v.literal('ownership_contested'),
-  v.literal('duplicate_or_impersonation'),
-  v.literal('unsafe_or_inaccurate')
-)
+const removalReason = literalUnion(RemovalDisputeReasonCodeValues)
 const disputeStatus = v.union(v.literal('opened'), v.literal('updated'), v.literal('closed'), v.literal('contested'))
 const adminReadbackSurface = v.union(
   v.literal('claims_queue'),
@@ -78,6 +71,7 @@ const adminReadbackRepairAction = v.union(
 
 const adminMembershipResult = v.object({
   clerkUserId: v.string(),
+  tokenIdentifier: v.string(),
   role: adminRole,
   state: adminMembershipState,
   grantedBy: v.string(),
@@ -248,58 +242,6 @@ const closeDisputeResult = v.union(
   })
 )
 
-const abuseBucketCleanupResult = v.object({
-  deleted: v.number(),
-  cutoff: v.number(),
-  rescheduled: v.boolean(),
-})
-
-const ABUSE_BUCKET_CLEANUP_BATCH_SIZE = 100
-const ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE = 250
-
-type RuntimeMutationCtx = {
-  db: object
-  auth: { getUserIdentity: () => Promise<UserIdentity | null> }
-}
-
-type RuntimeQueryCtx = RuntimeMutationCtx
-
-export const cleanupExpiredAbuseRateLimitBuckets = internalMutation({
-  args: {
-    now: v.optional(v.number()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: abuseBucketCleanupResult,
-  handler: async (ctx, args) => {
-    const cutoff = cleanupCutoff(args.now)
-    const batchSize = cleanupBatchSize(args.batchSize)
-    let deleted = 0
-
-    for (const state of AbuseBucketStateValues) {
-      if (deleted >= batchSize) {
-        break
-      }
-
-      const expiredBuckets = await ctx.db
-        .query('abuseRateLimitBuckets')
-        .withIndex('by_state_resetAt', (query) => query.eq('state', state).lte('resetAt', cutoff))
-        .take(batchSize - deleted)
-
-      await Promise.all(expiredBuckets.map(({ _id }) => ctx.db.delete(_id)))
-      deleted += expiredBuckets.length
-    }
-
-    const rescheduled = deleted >= batchSize
-    if (rescheduled) {
-      await ctx.scheduler.runAfter(0, internal.security.cleanupExpiredAbuseRateLimitBuckets, {
-        now: cutoff,
-        batchSize,
-      })
-    }
-
-    return { deleted, cutoff, rescheduled }
-  },
-})
 
 export const bootstrapOwnerAdmin = mutationGeneric({
   args: {
@@ -316,15 +258,13 @@ export const bootstrapOwnerAdmin = mutationGeneric({
       return adminSourceWriteDenied(sourceWrite.reason)
     }
 
-    const db = runtimeDb(ctx.db)
     const [source, identity] = await Promise.all([
-      loadPhaseOneSourceState(db),
+      loadAdminAuthoritySource(ctx.db, { includeActiveOwnerAdmins: true }),
       ctx.auth.getUserIdentity(),
     ])
-    const state = adminAuthorityState(source)
-    const result = bootstrapOwnerAdminModule(state, {
+    const result = bootstrapOwnerAdminModule(adminAuthorityState(source), {
       clerkUserId: identity?.subject ?? 'anonymous',
-      ...(identity === null ? {} : { tokenIdentifier: identity.tokenIdentifier }),
+      tokenIdentifier: identity?.tokenIdentifier ?? '',
       authorizedClerkUserIds: bootstrapPrincipalIds(),
       reasonCode: args.reasonCode,
       evidenceRefs: args.evidenceRefs,
@@ -333,7 +273,7 @@ export const bootstrapOwnerAdmin = mutationGeneric({
       now: Date.now(),
     })
 
-    await persistPhaseOneSourceState(db, source)
+    await persistAdminAuthorityMutation(ctx.db, result)
     return summarizeAdminMutation(result)
   },
 })
@@ -341,7 +281,7 @@ export const bootstrapOwnerAdmin = mutationGeneric({
 export const grantAdminMembership = mutationGeneric({
   args: {
     targetClerkUserId: v.string(),
-    targetTokenIdentifier: v.optional(v.string()),
+    targetTokenIdentifier: v.string(),
     role: adminRole,
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
@@ -356,15 +296,17 @@ export const grantAdminMembership = mutationGeneric({
       return adminSourceWriteDenied(sourceWrite.reason)
     }
 
-    const db = runtimeDb(ctx.db)
     const [source, actorMembership] = await Promise.all([
-      loadPhaseOneSourceState(db),
+      loadAdminAuthoritySource(ctx.db, {
+        clerkUserIds: [args.targetClerkUserId],
+        tokenIdentifiers: [args.targetTokenIdentifier],
+      }),
       readCurrentActiveMembership(ctx),
     ])
     const result = grantAdminMembershipModule(adminAuthorityState(source), {
       actorMembership,
       targetClerkUserId: args.targetClerkUserId,
-      ...(args.targetTokenIdentifier === undefined ? {} : { targetTokenIdentifier: args.targetTokenIdentifier }),
+      targetTokenIdentifier: args.targetTokenIdentifier,
       role: args.role,
       reasonCode: args.reasonCode,
       evidenceRefs: args.evidenceRefs,
@@ -373,7 +315,7 @@ export const grantAdminMembership = mutationGeneric({
       now: Date.now(),
     })
 
-    await persistPhaseOneSourceState(db, source)
+    await persistAdminAuthorityMutation(ctx.db, result)
     return summarizeAdminMutation(result)
   },
 })
@@ -395,9 +337,11 @@ export const revokeAdminMembership = mutationGeneric({
       return adminSourceWriteDenied(sourceWrite.reason)
     }
 
-    const db = runtimeDb(ctx.db)
     const [source, actorMembership] = await Promise.all([
-      loadPhaseOneSourceState(db),
+      loadAdminAuthoritySource(ctx.db, {
+        clerkUserIds: [args.targetClerkUserId],
+        ...(args.targetTokenIdentifier === undefined ? {} : { tokenIdentifiers: [args.targetTokenIdentifier] }),
+      }),
       readCurrentActiveMembership(ctx),
     ])
     const result = revokeAdminMembershipModule(adminAuthorityState(source), {
@@ -411,7 +355,7 @@ export const revokeAdminMembership = mutationGeneric({
       now: Date.now(),
     })
 
-    await persistPhaseOneSourceState(db, source)
+    await persistAdminAuthorityMutation(ctx.db, result)
     return summarizeAdminMutation(result)
   },
 })
@@ -466,6 +410,18 @@ export const openRemovalDispute = mutationGeneric({
   },
   returns: openDisputeResult,
   handler: async (ctx, args) => {
+    const admission = await assertAdmission(ctx, {
+      name: 'dispute-open',
+      key: await admissionKey(ctx, disputeRateLimitKey(args)),
+    })
+    if (!admission.ok) {
+      return {
+        kind: 'error' as const,
+        code: 'dispute_rate_limited' as const,
+        retryable: true,
+        reason: `Retry after ${admission.retryAfter}.`,
+      }
+    }
     const sourceWrite = await requireSourceWrite(ctx, args, 'removal_dispute')
     if (sourceWrite.kind === 'rejected') {
       return {
@@ -476,11 +432,13 @@ export const openRemovalDispute = mutationGeneric({
       }
     }
 
-    const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
+    const businessId = brandNonEmpty(args.businessId, 'BusinessId')
+    const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
+    const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+    const source = await loadDisputeSource(ctx.db, args.targetType, args.targetRef, operationKey)
     const state = disputeSourceState(source)
     const result = openRemovalDisputeModule(state, {
-      businessId: brandNonEmpty(args.businessId, 'BusinessId'),
+      businessId,
       targetType: args.targetType,
       targetRef: args.targetRef,
       reasonCode: args.reasonCode,
@@ -495,20 +453,12 @@ export const openRemovalDispute = mutationGeneric({
         csrf: {
           ...sourceWrite.csrf,
         },
-        rateLimit: {
-          scope: 'dispute_open',
-          key: disputeRateLimitKey(args),
-          now: Date.now(),
-          limit: 3,
-          windowMs: 60_000,
-        },
       },
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
+      operationKey,
+      correlationId,
       now: Date.now(),
     })
-
-    await persistPhaseOneSourceState(db, source)
+    await persistOpenedDispute(ctx.db, result)
     return result.kind === 'ok'
       ? { kind: 'ok' as const, code: result.code, receipt: result.receipt }
       : result
@@ -536,25 +486,29 @@ export const closeRemovalDispute = mutationGeneric({
       }
     }
 
-    const db = runtimeDb(ctx.db)
-    const [source, actorMembership] = await Promise.all([
-      loadPhaseOneSourceState(db),
-      readCurrentActiveMembership(ctx),
-    ])
+    const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
+    const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+    const auditEventId = `audit:dispute.closed:${args.disputeId}:${operationKey}`
+    const disputeSource = await loadDisputeByIdSource(ctx.db, args.disputeId, auditEventId)
+    const disputeState = disputeSourceState(disputeSource)
+    const actorMembership = await readCurrentActiveMembership(ctx)
     const authority = requireAdminAuthority(actorMembership, 'close_dispute')
     if (authority.kind === 'denied') {
-      const denied = recordAdminActionDenied(adminAuthorityState(source), {
-        actorMembership,
-        action: 'close_dispute',
-        targetType: 'dispute',
-        targetRef: args.disputeId,
-        reasonCode: authority.reason,
-        evidenceRefs: args.evidenceRefs,
-        operationKey: args.operationKey,
-        correlationId: args.correlationId,
-        now: Date.now(),
-      })
-      await persistPhaseOneSourceState(db, source)
+      const denied = recordAdminActionDenied(
+        { adminMemberships: [], adminMembershipAuditEvents: [], auditEvents: [] },
+        {
+          actorMembership,
+          action: 'close_dispute',
+          targetType: 'dispute',
+          targetRef: args.disputeId,
+          reasonCode: authority.reason,
+          evidenceRefs: args.evidenceRefs,
+          operationKey,
+          correlationId,
+          now: Date.now(),
+        }
+      )
+      await persistAdminAuthorityMutation(ctx.db, denied)
       return {
         kind: 'error' as const,
         code: 'admin_action_denied' as const,
@@ -584,9 +538,7 @@ export const closeRemovalDispute = mutationGeneric({
       }
     }
 
-    const dispute = source.security.disputes.find((candidate) => stringField(candidate, 'disputeId') === args.disputeId) as
-      | DisputeRecord
-      | undefined
+    const dispute = disputeState.disputes.find((candidate) => candidate.disputeId === args.disputeId)
     if (dispute === undefined) {
       return {
         kind: 'error' as const,
@@ -603,12 +555,11 @@ export const closeRemovalDispute = mutationGeneric({
       beforeState,
       reasonCode,
       evidenceRefs: args.evidenceRefs,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
+      operationKey,
+      correlationId,
       now: dispute.updatedAt,
     })
-    source.observability.auditEvents.push(auditEvent)
-    await persistPhaseOneSourceState(db, source)
+    await persistClosedDispute(ctx.db, dispute, auditEvent)
 
     return {
       kind: 'ok' as const,
@@ -619,17 +570,113 @@ export const closeRemovalDispute = mutationGeneric({
   },
 })
 
-async function readAdminRows(
-  ctx: RuntimeQueryCtx,
-  surface: 'claims_queue' | 'audit_events' | 'index_health',
-  buildRows: (source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>, now: number) => readonly AdminReadbackRow[]
-) {
-  const db = runtimeDb(ctx.db)
-  const now = Date.now()
-  const [source, membership] = await Promise.all([
-    loadPhaseOneSourceState(db),
-    readCurrentActiveMembership(ctx),
+type AdminAuthorityReadSource = {
+  adminMemberships: Doc<'adminMemberships'>[]
+  adminMembershipAuditEvents: Doc<'adminMembershipAuditEvents'>[]
+  auditEvents: Doc<'auditEvents'>[]
+}
+
+async function loadAdminAuthoritySource(
+  db: QueryCtx['db'],
+  options: {
+    clerkUserIds?: readonly string[]
+    tokenIdentifiers?: readonly string[]
+    includeActiveOwnerAdmins?: boolean
+  } = {},
+): Promise<AdminAuthorityReadSource> {
+  const reads: Promise<Doc<'adminMemberships'> | null>[] = []
+  const states = ['active', 'revoked', 'suspended'] as const
+  for (const clerkUserId of options.clerkUserIds ?? []) {
+    for (const state of states) {
+      reads.push(db.query('adminMemberships')
+        .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', clerkUserId).eq('state', state))
+        .unique())
+    }
+  }
+  for (const tokenIdentifier of options.tokenIdentifiers ?? []) {
+    for (const state of states) {
+      reads.push(db.query('adminMemberships')
+        .withIndex('by_tokenIdentifier_state', (query) => query.eq('tokenIdentifier', tokenIdentifier).eq('state', state))
+        .unique())
+    }
+  }
+  if (options.includeActiveOwnerAdmins === true) {
+    reads.push(db.query('adminMemberships')
+      .withIndex('by_state_and_role', (query) => query.eq('state', 'active').eq('role', 'owner_admin'))
+      .first())
+  }
+  const rows = await Promise.all(reads)
+  const memberships = new Map<string, Doc<'adminMemberships'>>()
+  for (const row of rows) {
+    if (row !== null) memberships.set(String(row._id), row)
+  }
+  return { adminMemberships: [...memberships.values()], adminMembershipAuditEvents: [], auditEvents: [] }
+}
+
+type DisputeReadSource = {
+  disputes: Doc<'disputes'>[]
+  auditEvents: Doc<'auditEvents'>[]
+}
+
+async function loadDisputeSource(
+  db: QueryCtx['db'],
+  targetType: string,
+  targetRef: string,
+  operationKey: string,
+): Promise<DisputeReadSource> {
+  const statuses = ['opened', 'updated', 'closed', 'contested'] as const
+  const [operationRow, ...targetRows] = await Promise.all([
+    db.query('disputes').withIndex('by_operation_key', (query) => query.eq('operationKey', operationKey)).unique(),
+    ...statuses.map((status) => db.query('disputes')
+      .withIndex('by_target_status', (query) => query.eq('targetType', targetType).eq('targetRef', targetRef).eq('status', status))
+      .unique()),
   ])
+  const disputes = new Map<string, Doc<'disputes'>>()
+  for (const row of [operationRow, ...targetRows]) {
+    if (row !== null) disputes.set(String(row._id), row)
+  }
+  return { disputes: [...disputes.values()], auditEvents: [] }
+}
+
+async function loadDisputeByIdSource(
+  db: QueryCtx['db'],
+  disputeId: string,
+  auditEventId: string,
+): Promise<DisputeReadSource> {
+  const id = db.normalizeId('disputes', disputeId)
+  const [dispute, auditEvent] = await Promise.all([
+    id === null ? Promise.resolve(null) : db.get(id),
+    db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', auditEventId)).unique(),
+  ])
+  return {
+    disputes: dispute === null ? [] : [dispute],
+    auditEvents: auditEvent === null ? [] : [auditEvent],
+  }
+}
+
+type AdminReadbackSource = {
+  claims: Doc<'claims'>[]
+  disputes: Doc<'disputes'>[]
+  auditEvents: Doc<'auditEvents'>[]
+  registryProjectionAttempts: Doc<'registryProjectionAttempts'>[]
+  businesses: Doc<'businesses'>[]
+}
+
+const ADMIN_READBACK_ROW_CAP = 100
+
+async function readAdminRows(
+  ctx: QueryCtx,
+  surface: 'claims_queue' | 'audit_events' | 'index_health',
+  buildRows: (source: AdminReadbackSource, now: number) => readonly AdminReadbackRow[]
+) {
+  const now = Date.now()
+  const membership = await readCurrentActiveMembership(ctx)
+  const denied = readAdminRouteShell({ membership, surface, rows: [], now })
+  if (denied.kind === 'denied') {
+    return summarizeAdminReadback(denied)
+  }
+
+  const source = await readAdminReadbackSource(ctx.db, surface)
   return summarizeAdminReadback(readAdminRouteShell({
     membership,
     surface,
@@ -638,75 +685,100 @@ async function readAdminRows(
   }))
 }
 
+async function readAdminReadbackSource(
+  db: QueryCtx['db'],
+  surface: 'claims_queue' | 'audit_events' | 'index_health'
+): Promise<AdminReadbackSource> {
+  if (surface === 'claims_queue') {
+    const [claims, disputes] = await Promise.all([
+      db.query('claims').order('desc').take(ADMIN_READBACK_ROW_CAP),
+      db.query('disputes').order('desc').take(ADMIN_READBACK_ROW_CAP),
+    ])
+    return { claims, disputes, auditEvents: [], registryProjectionAttempts: [], businesses: [] }
+  }
+
+  if (surface === 'audit_events') {
+    return {
+      claims: [],
+      disputes: [],
+      auditEvents: await db.query('auditEvents').order('desc').take(ADMIN_READBACK_ROW_CAP),
+      registryProjectionAttempts: [],
+      businesses: [],
+    }
+  }
+
+  const [registryProjectionAttempts, business] = await Promise.all([
+    db.query('registryProjectionAttempts').order('desc').take(ADMIN_READBACK_ROW_CAP),
+    db.query('businesses').first(),
+  ])
+  const businesses = business === null ? [] : [business]
+  return { claims: [], disputes: [], auditEvents: [], registryProjectionAttempts, businesses }
+}
+
 function buildClaimRows(
-  source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>,
+  source: AdminReadbackSource,
   now: number
 ): readonly AdminReadbackRow[] {
-  const claimRows = source.business.claims.map((claim) => ({
-    rowId: `row:claim:${stringField(claim, 'claimId')}`,
+  const claimRows = source.claims.map((claim) => ({
+    rowId: `row:claim:${claim._id}`,
     rowType: 'claim' as const,
-    objectRef: `claim:${stringField(claim, 'slug')}:${stringField(claim, 'status')}`,
-    rowState: claimRowState(stringField(claim, 'status')),
+    objectRef: `claim:${claim.slug}:${claim.status}`,
+    rowState: claimRowState(claim.status),
     surface: 'claims_queue' as const,
     readbackState: 'available' as const,
     repairAction: 'review_claim' as const,
-    updatedAt: numberField(claim, 'updatedAt') || now,
+    updatedAt: claim.updatedAt || now,
   }))
-  const disputeRows = source.security.disputes.map((dispute) => ({
-    rowId: `row:dispute:${stringField(dispute, 'disputeId')}`,
+  const disputeRows = source.disputes.map((dispute) => ({
+    rowId: `row:dispute:${dispute._id}`,
     rowType: 'claim' as const,
-    objectRef: `dispute:${stringField(dispute, 'targetType')}:${stringField(dispute, 'status')}`,
-    rowState: claimRowState(stringField(dispute, 'status')),
+    objectRef: `dispute:${dispute.targetType}:${dispute.status}`,
+    rowState: claimRowState(dispute.status),
     surface: 'claims_queue' as const,
     readbackState: 'available' as const,
     repairAction: 'review_claim' as const,
-    updatedAt: numberField(dispute, 'updatedAt') || now,
+    updatedAt: dispute.updatedAt || now,
   }))
 
   return [...claimRows, ...disputeRows]
 }
 
 function buildAuditRows(
-  source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>,
+  source: AdminReadbackSource,
   now: number
 ): readonly AdminReadbackRow[] {
-  return source.observability.auditEvents.map((event) => {
-    const correlationId = optionalStringField(event, 'correlationId')
-    return {
-      rowId: `row:audit:${stringField(event, 'eventId')}`,
-      rowType: 'audit_event' as const,
-      objectRef: `audit:${stringField(event, 'eventType')}:${stringField(event, 'targetType')}`,
-      rowState: 'guarded' as const,
-      surface: 'audit_events' as const,
-      readbackState: 'available' as const,
-      repairAction: 'inspect_audit' as const,
-      ...(correlationId === undefined ? {} : { correlationId }),
-      updatedAt: numberField(event, 'createdAt') || now,
-    }
-  })
+  return source.auditEvents.map((event) => ({
+    rowId: `row:audit:${event.eventId}`,
+    rowType: 'audit_event' as const,
+    objectRef: `audit:${event.eventType}:${event.targetType}`,
+    rowState: 'guarded' as const,
+    surface: 'audit_events' as const,
+    readbackState: 'available' as const,
+    repairAction: 'inspect_audit' as const,
+    correlationId: event.correlationId,
+    updatedAt: event.createdAt || now,
+  }))
 }
 
 function buildIndexRows(
-  source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>,
+  source: AdminReadbackSource,
   now: number
 ): readonly AdminReadbackRow[] {
-  const attemptRows = source.registry.registryProjectionAttempts.map((attempt) => {
-    const correlationId = optionalStringField(attempt, 'sourceHash')
-    const attemptRef = optionalStringField(attempt, 'logicalKey')
-    const succeeded = stringField(attempt, 'status') === 'succeeded'
+  const attemptRows = source.registryProjectionAttempts.map((attempt) => {
+    const succeeded = attempt.status === 'succeeded'
     return {
-      rowId: `row:index:attempt:${stringField(attempt, 'logicalKey')}`,
+      rowId: `row:index:attempt:${attempt.logicalKey}`,
       rowType: 'index_surface' as const,
-      objectRef: `registry:${stringField(attempt, 'status')}:${stringField(attempt, 'targetSurface')}`,
-      rowState: indexRowState(stringField(attempt, 'status')),
+      objectRef: `registry:${attempt.status}:${attempt.projectionKind}`,
+      rowState: indexRowState(attempt.status),
       surface: 'index_health' as const,
       readbackState: succeeded ? 'available' as const : 'unavailable' as const,
       repairAction: succeeded ? 'no_repair_available' as const : 'regenerate_projection' as const,
       repairResult: succeeded ? 'succeeded' as const : 'failed' as const,
-      affectedPublicSurfaces: ['/registry', '/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'],
-      ...(correlationId === undefined ? {} : { correlationId }),
-      ...(attemptRef === undefined ? {} : { attemptRef }),
-      updatedAt: numberField(attempt, 'finishedAt') || numberField(attempt, 'startedAt') || now,
+      affectedPublicSurfaces: ['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'],
+      correlationId: attempt.sourceHash,
+      attemptRef: attempt.logicalKey,
+      updatedAt: attempt.finishedAt ?? attempt.startedAt,
     }
   })
 
@@ -717,38 +789,305 @@ function buildIndexRows(
   return [
     {
       rowId: 'row:index:source-catalog',
-      rowType: 'index_surface',
-      objectRef: source.business.businesses.length === 0 ? 'source:catalog:none' : 'source:catalog:available',
-      rowState: source.business.businesses.length === 0 ? 'no_source_rows' : 'queued',
-      surface: 'index_health',
-      readbackState: source.business.businesses.length === 0 ? 'not_queued' : 'guarded',
-      repairAction: source.business.businesses.length === 0 ? 'source_auth_required' : 'regenerate_projection',
-      repairResult: 'not_run',
+      rowType: 'index_surface' as const,
+      objectRef: source.businesses.length === 0 ? 'source:catalog:none' : 'source:catalog:available',
+      rowState: source.businesses.length === 0 ? 'no_source_rows' as const : 'queued' as const,
+      surface: 'index_health' as const,
+      readbackState: source.businesses.length === 0 ? 'not_queued' as const : 'guarded' as const,
+      repairAction: source.businesses.length === 0 ? 'source_auth_required' as const : 'regenerate_projection' as const,
+      repairResult: 'not_run' as const,
       updatedAt: now,
     },
   ]
 }
 
-function adminAuthorityState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): AdminAuthorityState {
-  return {
-    adminMemberships: source.security.adminMemberships as AdminMembership[],
-    adminMembershipAuditEvents: source.security.adminMembershipAuditEvents as AdminDecisionAudit[],
-    auditEvents: source.observability.auditEvents as AuditEventContract[],
+type AdminAuthorityWriteResult = {
+  membership?: AdminMembership
+  auditEvent?: AuditEventContract
+  membershipAuditEvent?: AdminDecisionAudit
+}
+
+async function persistAdminAuthorityMutation(
+  db: MutationCtx['db'],
+  result: AdminAuthorityWriteResult,
+): Promise<void> {
+  if (result.membership !== undefined) {
+    const document = adminMembershipDocument(result.membership)
+    const existing = await findAdminMembershipDocument(db, result.membership.tokenIdentifier)
+    if (existing === null) {
+      await db.insert('adminMemberships', document)
+    } else {
+      await db.patch(existing._id, document)
+    }
+  }
+
+  if (result.auditEvent !== undefined) {
+    await persistAuditEvent(db, result.auditEvent)
+  }
+
+  if (result.membershipAuditEvent !== undefined) {
+    const membershipAuditEvent = result.membershipAuditEvent
+    const existing = await db
+      .query('adminMembershipAuditEvents')
+      .withIndex('by_auditEventId', (builder) =>
+        builder.eq('auditEventId', membershipAuditEvent.auditEventId)
+      )
+      .unique()
+    if (existing === null) {
+      await db.insert('adminMembershipAuditEvents', {
+        auditEventId: membershipAuditEvent.auditEventId,
+        eventType: membershipAuditEvent.eventType,
+        actorRef: membershipAuditEvent.actorRef,
+        targetRef: membershipAuditEvent.targetRef,
+        reasonCode: membershipAuditEvent.reasonCode,
+        evidenceRefs: [...membershipAuditEvent.evidenceRefs],
+        operationKey: membershipAuditEvent.operationKey,
+        correlationId: membershipAuditEvent.correlationId,
+        createdAt: membershipAuditEvent.createdAt,
+      })
+    }
   }
 }
 
-function disputeSourceState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): DisputeSourceState {
+async function findAdminMembershipDocument(
+  db: MutationCtx['db'],
+  tokenIdentifier: string,
+): Promise<Doc<'adminMemberships'> | null> {
+  for (const state of ['active', 'revoked', 'suspended'] as const) {
+    const row = await db
+      .query('adminMemberships')
+      .withIndex('by_tokenIdentifier_state', (builder) =>
+        builder.eq('tokenIdentifier', tokenIdentifier).eq('state', state)
+      )
+      .unique()
+    if (row !== null) {
+      return row
+    }
+  }
+  return null
+}
+
+function adminMembershipDocument(membership: AdminMembership) {
   return {
-    disputes: source.security.disputes as DisputeRecord[],
-    abuseRateLimitBuckets: source.business.abuseRateLimitBuckets as DisputeSourceState['abuseRateLimitBuckets'],
-    auditEvents: source.observability.auditEvents as AuditEventContract[],
+    clerkUserId: membership.clerkUserId,
+    tokenIdentifier: membership.tokenIdentifier,
+    role: membership.role,
+    state: membership.state,
+    grantedBy: membership.grantedBy,
+    grantedAt: membership.grantedAt,
+    ...(membership.revokedBy === undefined ? {} : { revokedBy: membership.revokedBy }),
+    ...(membership.revokedAt === undefined ? {} : { revokedAt: membership.revokedAt }),
+    ...(membership.evidenceRef === undefined ? {} : { evidenceRef: membership.evidenceRef }),
   }
 }
 
-async function readCurrentActiveMembership(ctx: RuntimeMutationCtx): Promise<AdminMembership | undefined> {
-  const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity)
+async function persistOpenedDispute(
+  db: MutationCtx['db'],
+  result: DisputeOpenResult,
+): Promise<void> {
+  if (result.kind === 'error') {
+    return
+  }
+
+  if (result.code !== 'dispute_open_replayed') {
+    const document = disputeDocument(db, result.dispute)
+    const existing = await findDisputeDocument(db, result.dispute.operationKeys)
+    if (existing === null) {
+      await db.insert('disputes', document)
+    } else {
+      await db.patch(existing._id, document)
+    }
+  }
+
+  if (result.auditEvent !== undefined) {
+    await persistAuditEvent(db, result.auditEvent)
+  }
 }
+
+async function persistClosedDispute(
+  db: MutationCtx['db'],
+  dispute: DisputeRecord,
+  auditEvent: AuditEventContract,
+): Promise<void> {
+  const existing = await findDisputeDocument(db, dispute.operationKeys)
+  if (existing === null) {
+    throw new Error('dispute_persistence_missing')
+  }
+  await db.patch(existing._id, disputeDocument(db, dispute))
+  await persistAuditEvent(db, auditEvent)
+}
+
+async function findDisputeDocument(
+  db: MutationCtx['db'],
+  operationKeys: readonly string[],
+): Promise<Doc<'disputes'> | null> {
+  for (const operationKey of operationKeys) {
+    const row = await db
+      .query('disputes')
+      .withIndex('by_operation_key', (builder) => builder.eq('operationKey', operationKey))
+      .unique()
+    if (row !== null) {
+      return row
+    }
+  }
+  return null
+}
+
+function disputeDocument(db: MutationCtx['db'], dispute: DisputeRecord) {
+  return {
+    businessId: businessIdFromValue(db, dispute.businessId),
+    status: dispute.status,
+    openedByContactHash: dispute.openedByContactHash,
+    targetType: dispute.targetType,
+    targetRef: dispute.targetRef,
+    reasonCode: dispute.reasonCode,
+    evidenceHash: dispute.evidenceHash,
+    evidenceRefs: dispute.evidenceRefs,
+    publicMessageHash: dispute.publicMessageHash,
+    operationKey: dispute.operationKey,
+    operationKeys: dispute.operationKeys,
+    correlationId: dispute.correlationId,
+    requestCount: dispute.requestCount,
+    createdAt: dispute.createdAt,
+    updatedAt: dispute.updatedAt,
+  }
+}
+
+
+async function persistAuditEvent(
+  db: MutationCtx['db'],
+  event: AuditEventContract,
+): Promise<void> {
+  const existing = await db
+    .query('auditEvents')
+    .withIndex('by_eventId', (builder) => builder.eq('eventId', event.eventId))
+    .unique()
+  if (existing === null) {
+    const businessId = event.businessId === undefined
+      ? undefined
+      : businessIdFromValue(db, event.businessId)
+    await db.insert('auditEvents', {
+      eventId: event.eventId,
+      eventType: event.eventType,
+      actorKind: event.actorKind,
+      actorRef: event.actorRef,
+      ...(businessId === undefined ? {} : { businessId }),
+      targetType: event.targetType,
+      targetRef: event.targetRef,
+      ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
+      ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+      idempotencyKey: event.idempotencyKey,
+      correlationId: event.correlationId,
+      ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
+      evidenceRefs: [...event.evidenceRefs],
+      redactedPayloadJson: JSON.stringify(event.redactedPayload),
+      payloadHash: event.payloadHash,
+      ...(event.failureCode === undefined ? {} : { failureCode: event.failureCode }),
+      createdAt: event.createdAt,
+    })
+  }
+}
+
+function adminAuthorityState(source: AdminAuthorityReadSource): AdminAuthorityState {
+  return {
+    adminMemberships: source.adminMemberships.map(adminMembershipFromDocument),
+    adminMembershipAuditEvents: source.adminMembershipAuditEvents.map(adminMembershipAuditFromDocument),
+    auditEvents: source.auditEvents.map(auditEventFromDocument),
+  }
+}
+
+function adminMembershipFromDocument(row: Doc<'adminMemberships'>): AdminMembership {
+  return {
+    clerkUserId: row.clerkUserId,
+    tokenIdentifier: row.tokenIdentifier,
+    role: row.role,
+    state: row.state,
+    grantedBy: row.grantedBy,
+    grantedAt: row.grantedAt,
+    ...(row.revokedBy === undefined ? {} : { revokedBy: row.revokedBy }),
+    ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
+    ...(row.evidenceRef === undefined ? {} : { evidenceRef: row.evidenceRef }),
+  }
+}
+
+function adminMembershipAuditFromDocument(row: Doc<'adminMembershipAuditEvents'>): AdminDecisionAudit {
+  return {
+    auditEventId: brandNonEmpty(row.auditEventId, 'AuditEventId'),
+    eventType: row.eventType,
+    actorRef: row.actorRef,
+    targetRef: row.targetRef,
+    reasonCode: row.reasonCode,
+    evidenceRefs: [...row.evidenceRefs],
+    operationKey: brandNonEmpty(row.operationKey, 'OperationKey'),
+    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
+    createdAt: row.createdAt,
+  }
+}
+
+function disputeSourceState(source: DisputeReadSource): DisputeSourceState {
+  return {
+    disputes: source.disputes.map(disputeFromDocument),
+    auditEvents: source.auditEvents.map(auditEventFromDocument),
+  }
+}
+
+function disputeFromDocument(row: Doc<'disputes'>): DisputeRecord {
+  return {
+    disputeId: String(row._id),
+    businessId: brandNonEmpty(String(row.businessId), 'BusinessId'),
+    status: row.status,
+    openedByContactHash: row.openedByContactHash,
+    targetType: row.targetType,
+    targetRef: row.targetRef,
+    reasonCode: readRemovalDisputeReasonCode(row.reasonCode),
+    evidenceHash: row.evidenceHash,
+    evidenceRefs: [...row.evidenceRefs],
+    publicMessageHash: row.publicMessageHash,
+    operationKey: brandNonEmpty(row.operationKey, 'OperationKey'),
+    operationKeys: row.operationKeys.map((value) => brandNonEmpty(value, 'OperationKey')),
+    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
+    requestCount: row.requestCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function readRemovalDisputeReasonCode(value: string): RemovalDisputeReasonCode {
+  const reasonCode = RemovalDisputeReasonCodeValues.find((candidate) => candidate === value)
+  if (reasonCode === undefined) {
+    throw new Error('invalid_dispute_reason_code')
+  }
+  return reasonCode
+}
+
+function auditEventFromDocument(row: Doc<'auditEvents'>): AuditEventContract {
+  let redactedPayload: AuditEventContract['redactedPayload']
+  try {
+    redactedPayload = JSON.parse(row.redactedPayloadJson) as AuditEventContract['redactedPayload']
+  } catch {
+    redactedPayload = null
+  }
+  return {
+    eventId: brandNonEmpty(row.eventId, 'AuditEventId'),
+    eventType: row.eventType,
+    actorKind: row.actorKind,
+    actorRef: row.actorRef,
+    targetType: row.targetType,
+    targetRef: row.targetRef,
+    ...(row.businessId === undefined ? {} : { businessId: brandNonEmpty(String(row.businessId), 'BusinessId') }),
+    idempotencyKey: brandNonEmpty(row.idempotencyKey, 'OperationKey'),
+    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
+    ...(row.beforeState === undefined ? {} : { beforeState: row.beforeState }),
+    ...(row.afterState === undefined ? {} : { afterState: row.afterState }),
+    ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
+    evidenceRefs: [...row.evidenceRefs],
+    redactedPayload,
+    payloadHash: brandNonEmpty(row.payloadHash, 'SourceHash'),
+    ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+    createdAt: row.createdAt,
+  }
+}
+
 
 function summarizeAdminMutation(
   result: ReturnType<typeof bootstrapOwnerAdminModule> | ReturnType<typeof grantAdminMembershipModule>
@@ -881,7 +1220,7 @@ function recordDisputeClosedAudit(
     reasonCode: input.reasonCode,
     evidenceRefs: input.evidenceRefs,
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     createdAt: input.now,
   })
 
@@ -928,17 +1267,6 @@ function envList(name: string): string[] {
       })
 }
 
-function cleanupCutoff(value: number | undefined): number {
-  return value === undefined || !Number.isFinite(value) ? Date.now() : value
-}
-
-function cleanupBatchSize(value: number | undefined): number {
-  if (value === undefined || !Number.isFinite(value)) {
-    return ABUSE_BUCKET_CLEANUP_BATCH_SIZE
-  }
-
-  return Math.min(Math.max(Math.floor(value), 1), ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE)
-}
 
 function disputeRateLimitKey(args: {
   targetRef: string
@@ -946,7 +1274,7 @@ function disputeRateLimitKey(args: {
   contactPhone?: string
   contactName?: string
 }): string {
-  return `removal:${stableHash({
+  return `removal:${canonicalDigest({
     email: args.contactEmail?.toLowerCase().trim() ?? null,
     name: args.contactName?.trim() ?? null,
     phone: args.contactPhone?.trim() ?? null,
@@ -954,47 +1282,54 @@ function disputeRateLimitKey(args: {
   })}`
 }
 
-function claimRowState(value: string): AdminReadbackRow['rowState'] {
-  if (value === 'suppressed') {
-    return 'suppressed'
+function claimRowState(
+  value: Doc<'claims'>['status'] | Doc<'disputes'>['status'],
+): AdminReadbackRow['rowState'] {
+  switch (value) {
+    case 'suppressed':
+      return 'suppressed'
+    case 'opened':
+    case 'updated':
+    case 'contested':
+    case 'disputed':
+      return 'pending_review'
+    case 'draft':
+    case 'authenticated':
+    case 'published':
+    case 'closed':
+      return 'guarded'
+    default:
+      throw new Error(`Unexpected claim or dispute status: ${String(value)}`)
   }
-  if (value === 'opened' || value === 'updated' || value === 'contested' || value === 'disputed') {
-    return 'pending_review'
-  }
-  return 'guarded'
 }
 
-function indexRowState(value: string): AdminReadbackRow['rowState'] {
-  if (value === 'succeeded') {
-    return 'indexed'
+function indexRowState(value: Doc<'registryProjectionAttempts'>['status']): AdminReadbackRow['rowState'] {
+  switch (value) {
+    case 'succeeded':
+      return 'indexed'
+    case 'failed':
+      return 'degraded'
+    case 'stale':
+      return 'stale'
+    case 'queued':
+      return 'queued'
+    default:
+      throw new Error(`Unexpected registry projection status: ${String(value)}`)
   }
-  if (value === 'failed') {
-    return 'degraded'
-  }
-  if (value === 'stale') {
-    return 'stale'
-  }
-  return 'queued'
 }
 
 function hasEvidence(evidenceRefs: readonly string[]): boolean {
   return evidenceRefs.some((evidenceRef) => evidenceRef.trim().length > 0)
 }
 
-function stringField(record: Record<string, unknown>, field: string): string {
-  const value = record[field]
-  return typeof value === 'string' ? value : ''
+function businessIdFromValue(db: MutationCtx['db'], value: string): Id<'businesses'> {
+  const id = db.normalizeId('businesses', value)
+  if (id === null) {
+    throw new Error('invalid_business_id')
+  }
+  return id
 }
 
-function optionalStringField(record: Record<string, unknown>, field: string): string | undefined {
-  const value = record[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(record: Record<string, unknown>, field: string): number {
-  const value = record[field]
-  return typeof value === 'number' ? value : 0
-}
 
 export type {
   AdminAction,

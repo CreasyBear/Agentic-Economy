@@ -11,7 +11,13 @@ import {
   setAnswerThreadPortForTests,
   setAnswerToolCallPortForTests,
 } from '@/modules/answer-thread/testing'
-import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
+import {
+  buildAnswerRunReport,
+  type AnswerToolCallRecord,
+  type FrozenTurnEvidenceDraft,
+} from '@/modules/answer-thread/harness'
+import { buildHarnessRunReport } from '@/modules/harness/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('answerToolCalls persistence', () => {
   let resetThreadPort: () => void
@@ -67,9 +73,16 @@ describe('answerToolCalls persistence', () => {
           [...turns.values()].filter((turn) => turn.threadId === threadId),
         )
       },
-      getThreadTurns: async (threadId) => ({
-        turns: [...turns.values()].filter((turn) => turn.threadId === threadId),
-      }),
+      getThreadTurns: async (threadId, _sessionId, paginationOpts) => {
+        const rows = [...turns.values()].filter((turn) => turn.threadId === threadId)
+        const start = paginationOpts.cursor === null ? 0 : Number(paginationOpts.cursor)
+        const page = rows.slice(start, start + paginationOpts.numItems)
+        return {
+          page,
+          isDone: start + page.length >= rows.length,
+          continueCursor: String(start + page.length),
+        }
+      },
     })
 
     resetToolCallPort = setAnswerToolCallPortForTests({
@@ -83,11 +96,18 @@ describe('answerToolCalls persistence', () => {
         }
         return { inserted: args.toolCalls.length }
       },
-      readTurnToolCalls: async (turnId) => ({
-        toolCalls: [...toolCalls.values()]
+      readTurnToolCalls: async (turnId, _sessionId, paginationOpts) => {
+        const rows = [...toolCalls.values()]
           .filter((call) => call.turnId === turnId)
-          .sort((a, b) => a.seq - b.seq),
-      }),
+          .sort((a, b) => a.seq - b.seq)
+        const start = paginationOpts.cursor === null ? 0 : Number(paginationOpts.cursor)
+        const page = rows.slice(start, start + paginationOpts.numItems)
+        return {
+          page,
+          isDone: start + page.length >= rows.length,
+          continueCursor: String(start + page.length),
+        }
+      },
     })
 
     const threadId = 'thread-tool-1'
@@ -107,11 +127,7 @@ describe('answerToolCalls persistence', () => {
       seq: 1,
       query: 'after hours plumber Preston',
       intent: 'refine_search',
-      evidenceJson: JSON.stringify({
-        providers: [],
-        allowedSlugs: [],
-        agentJsonUrl: '/api/businesses/search?q=plumber',
-      }),
+      evidenceJson: JSON.stringify(currentEvidence({ toolCalls: buffered })),
       snapshotHash: 'hash-1',
       proseJson: JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' }),
       artifactKindsJson: '[]',
@@ -128,9 +144,9 @@ describe('answerToolCalls persistence', () => {
       })),
     })
 
-    const stored = await readTurnToolCalls(turnId)
-    expect(stored.toolCalls.map((call) => call.toolCallId)).toEqual(['tc-1', 'tc-2'])
-    expect(stored.toolCalls[0]?.toolId).toBe('registry.search')
+    const stored = await readTurnToolCalls(turnId, 'session-1', { cursor: null, numItems: 25 })
+    expect(stored.page.map((call) => call.toolCallId)).toEqual(['tc-1', 'tc-2'])
+    expect(stored.page[0]?.toolId).toBe('registry.search')
   })
 
   it('keeps tool-call evidence out of the public thread projection', async () => {
@@ -148,19 +164,13 @@ describe('answerToolCalls persistence', () => {
       seq: 1,
       query: 'after hours plumber Preston',
       intent: 'refine_search',
-      evidenceJson: JSON.stringify({
-        providers: [],
-        allowedSlugs: [],
-        agentJsonUrl: '/api/businesses/search?q=plumber',
+      evidenceJson: JSON.stringify(currentEvidence({
         toolCalls: [buildToolCall('tc-1', 'turn-share-1', 1, 'registry.search', [], 0)],
-        harnessRun: {
-          summary: {
-            run: { status: 'ok' },
-            tools: { byName: { 'registry.search': { total: 1 } } },
-          },
-          coverage: { toolsInvoked: ['registry.search'] },
-        },
-      }),
+        harnessRun: buildHarnessRunReport({
+          availableTools: ['registry.search'],
+          tools: [{ toolId: 'registry.search', status: 'ok', durationMs: 0 }],
+        }),
+      })),
       snapshotHash: 'hash-1',
       proseJson: JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' }),
       artifactKindsJson: '[]',
@@ -185,6 +195,30 @@ describe('answerToolCalls persistence', () => {
     })
   })
 })
+function currentEvidence(input: {
+  toolCalls?: readonly AnswerToolCallRecord[]
+  harnessRun?: NonNullable<FrozenTurnEvidenceDraft['harnessRun']>
+} = {}) {
+  const draft: FrozenTurnEvidenceDraft = {
+    providers: [],
+    allowedSlugs: [],
+    agentJsonUrl: '/api/businesses/search?q=plumber',
+    toolCalls: input.toolCalls ?? [],
+    timings: [],
+    workLog: [],
+    ...(input.harnessRun === undefined ? {} : { harnessRun: input.harnessRun }),
+  }
+  return {
+    ...draft,
+    answerRun: buildAnswerRunReport({
+      intent: 'refine_search',
+      status: 'complete',
+      snapshotHash: 'hash-1',
+      evidence: draft,
+    }),
+  }
+}
+
 
 async function createThread(threadId: string, sessionId: string, title: string): Promise<void> {
   const { createAnswerThread } = await import('@/modules/answer-thread/answer-thread.functions')
@@ -207,7 +241,7 @@ function buildToolCall(
     inputJson: JSON.stringify({ query: 'parramatta' }),
     resultSummaryJson: JSON.stringify({ slugs, count }),
     resultJson: JSON.stringify({ kind: 'ok', items: slugs.map((slug) => ({ slug })) }),
-    resultHash: 'hash:tool',
+    resultHash: canonicalDigest('tool'),
     status: 'complete',
     createdAt: 1_000,
   }

@@ -33,7 +33,7 @@ const previewOutputSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
-    reason: z.enum(['no_current_supply', 'preview_unavailable', 'options_changed']),
+    reason: z.enum(['no_current_supply', 'preview_unavailable', 'options_changed', 'rate_limited']),
     destination: destinationSchema,
   }),
 ])
@@ -65,5 +65,19 @@ export const customerRequestPlanPreviewAction = defineAction({
     approval: 'none',
   },
   surfaces: ['ui'],
+  invocationContract: {
+    version: 'customerRequest.planPreview:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['customerJob', 'network'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['inspect-only plan preview with bounded steps and expiry'],
+    safeContinuations: ['review the returned inspect-only steps before starting a separate Request'],
+    invalidationConditions: [
+      'customer job or network changes',
+      'preview expires',
+      'action contract version changes',
+    ],
+  },
   run: async ({ data }) => previewCustomerRequestThroughSource(data),
 })

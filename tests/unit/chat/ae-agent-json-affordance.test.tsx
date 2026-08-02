@@ -2,36 +2,10 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-dialog'
 
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
-
-let showModalDescriptor: PropertyDescriptor | undefined
-let closeDescriptor: PropertyDescriptor | undefined
-
-beforeEach(() => {
-  showModalDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
-  closeDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-    configurable: true,
-    writable: true,
-    value(this: HTMLDialogElement) {
-      this.setAttribute('open', '')
-    },
-  })
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
-    configurable: true,
-    writable: true,
-    value(this: HTMLDialogElement) {
-      this.removeAttribute('open')
-    },
-  })
-})
-
-afterEach(() => {
-  restoreDialogMethod('showModal', showModalDescriptor)
-  restoreDialogMethod('close', closeDescriptor)
-})
 
 describe('AeAgentJsonAffordance', () => {
   afterEach(() => {
@@ -78,10 +52,3 @@ describe('AeAgentJsonAffordance', () => {
   })
 })
 
-function restoreDialogMethod(name: 'showModal' | 'close', descriptor: PropertyDescriptor | undefined) {
-  if (descriptor === undefined) {
-    Reflect.deleteProperty(HTMLDialogElement.prototype, name)
-    return
-  }
-  Object.defineProperty(HTMLDialogElement.prototype, name, descriptor)
-}

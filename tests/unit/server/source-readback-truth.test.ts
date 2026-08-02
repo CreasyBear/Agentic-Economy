@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { readOwnerStatusThroughSource } from '@/modules/catalog/owner-claim.functions'
 import { resetPublicOwnerRouteReadbacksForTest } from '@/modules/catalog/public'
@@ -25,7 +25,6 @@ describe('source readback truth seams', () => {
           { kind: 'not_published', ownerLabel: 'Publish this business page' },
           { kind: 'not_claimed', ownerLabel: 'Complete the business claim' },
           { kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' },
-          { kind: 'not_ready', ownerLabel: 'Finish inquiry setup' },
         ],
       })
     })
@@ -65,37 +64,24 @@ function removalInput(overrides: Partial<Parameters<typeof openRemovalDisputeThr
 }
 
 async function withLocalBypass(run: () => Promise<void>) {
-  const previousBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-  process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+  vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
 
   try {
     await run()
   } finally {
-    restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousBypass)
+    vi.unstubAllEnvs()
   }
 }
 
 async function withoutSourceConfig(run: () => Promise<void>) {
-  const previousBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-  const previousConvexUrl = process.env.CONVEX_URL
-  const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
-  delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-  delete process.env.CONVEX_URL
-  delete process.env.VITE_CONVEX_URL
+  vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', undefined)
+  vi.stubEnv('CONVEX_URL', undefined)
+  vi.stubEnv('VITE_CONVEX_URL', undefined)
 
   try {
     await run()
   } finally {
-    restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousBypass)
-    restoreEnv('CONVEX_URL', previousConvexUrl)
-    restoreEnv('VITE_CONVEX_URL', previousPublicConvexUrl)
+    vi.unstubAllEnvs()
   }
 }
 
-function restoreEnv(name: string, value: string | undefined) {
-  if (value === undefined) {
-    delete process.env[name]
-  } else {
-    process.env[name] = value
-  }
-}

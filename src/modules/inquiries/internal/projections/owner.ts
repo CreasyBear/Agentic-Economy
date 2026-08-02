@@ -103,17 +103,23 @@ export function messageBodyForProjection(message: InquiryMessageRecord): string 
 
 export function projectInquiry(state: InquirySourceState, thread: InquiryThreadRecord): OwnerInboxInquiryProjection {
   const business = state.businesses.find((candidate) => candidate.businessId === thread.businessId)
-  const service = state.businessServices.find((candidate) => candidate.serviceId === thread.serviceId)
+  const offering = state.businessOfferings.find((candidate) =>
+    candidate.businessId === thread.businessId && candidate.offeringRef === thread.offeringRef)
+  const revision = offering === undefined
+    ? undefined
+    : state.businessOfferingRevisions.find((candidate) =>
+      candidate.businessId === thread.businessId
+      && candidate.offeringRef === thread.offeringRef
+      && candidate.revision === offering.currentRevision)
   const firstMessage = state.messages.find((message) => message.messageId === thread.firstMessageId)
   const notificationStatus = latestNotification(state, thread.threadId)?.status ?? 'held'
 
   return {
     threadId: thread.threadId,
     businessId: thread.businessId,
-    serviceId: thread.serviceId,
-    capabilityKind: thread.capabilityKind,
+    offeringRef: thread.offeringRef,
     businessName: business?.name ?? 'Business unavailable',
-    serviceName: service?.name ?? 'Service unavailable',
+    offeringName: revision?.name ?? 'Offering unavailable',
     status: thread.status,
     bucket: bucketForThread(thread),
     preview: preview(firstMessage?.body ?? ''),

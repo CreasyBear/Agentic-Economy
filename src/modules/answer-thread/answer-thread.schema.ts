@@ -1,8 +1,11 @@
 import { z } from 'zod'
 
-import type { AnswerArtifact } from '@/modules/answer/answer-schema'
-import type { AnswerSource, AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
-import type { AnswerLayoutProfile } from '@/modules/answer/layout-profile'
+import type {
+  AnswerArtifact,
+  AnswerLayoutProfile,
+  AnswerSource,
+  AnswerWorkStep,
+} from '@/modules/answer/public'
 import type { HarnessRunReport } from '@/modules/harness/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 import {
@@ -177,7 +180,6 @@ export type PublicThreadTurn = {
   artifacts: readonly AnswerArtifact[]
   oneLine: string
   layoutProfile?: AnswerLayoutProfile
-  decisionMapRevision?: number
   answerCheckSummary?: PublicAnswerCheckSummary
   timing?: AeSearchContext['timing']
   timingDate?: string
@@ -208,13 +210,13 @@ export type FrozenTurnEvidence = {
   allowedSlugs: readonly string[]
   agentJsonUrl: string
   searchContext?: AeSearchContext
-  toolCalls?: readonly AnswerToolCallRecord[]
+  toolCalls: readonly AnswerToolCallRecord[]
   /** Internal timing trace for answer quality/performance audits. */
-  timings?: readonly AnswerTurnTimingEntry[]
+  timings: readonly AnswerTurnTimingEntry[]
   /** Public work log persisted so replay shows the same visible process as the live stream. */
-  workLog?: readonly AnswerWorkStep[]
+  workLog: readonly AnswerWorkStep[]
   /** Private OMP-style rollup used for debugging/evals; public projection exposes only sanitized counts. */
-  answerRun?: AnswerRunReport
+  answerRun: AnswerRunReport
   /** Internal reusable harness rollup; never exposed through public thread projection. */
   harnessRun?: HarnessRunReport
   /** Private source-write receipt proving the final harness report and replay journal landed together. */
@@ -227,11 +229,13 @@ export type FrozenTurnEvidence = {
   }
 }
 
+/** Evidence assembled before the persisted answer-run report is attached. */
+export type FrozenTurnEvidenceDraft = Omit<FrozenTurnEvidence, 'answerRun'>
+
 export type FrozenTurnProse = {
   oneLine: string
   summary: string
   nextStep: string
   compactLayout?: boolean
   layoutProfile?: AnswerLayoutProfile
-  decisionMapRevision?: number
 }

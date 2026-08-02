@@ -178,6 +178,9 @@ export type AnswerTurnEvalCase = {
     harnessToolsInvoked?: readonly string[]
     harnessPhases?: readonly string[]
     maxTotalTimingMs?: number
+    expectedModelRequests?: number
+    maxModelRequests?: number
+    maxToolRuns?: number
   }
 }
 
@@ -199,7 +202,7 @@ export type AnswerThreadEvalCase = {
 export const ANSWER_TURN_EVAL_CASES = [
   {
     id: 'turn-direct-parramatta-fast-path',
-    description: 'Direct Parramatta search returns the listed provider without model planning.',
+    description: 'Direct Parramatta search returns the listed businesses without model planning.',
     covers: [
       'direct-retrieval-fast-path',
       'persisted-tool-evidence',
@@ -211,7 +214,8 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'emergency plumber parramatta',
     expected: {
       status: 'complete',
-      slugs: ['parramatta-emergency-plumbing'],
+      expectedModelRequests: 0,
+      slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['emergency plumber parramatta'],
       includeTimingNames: [
         'turn.context_parse',
@@ -222,7 +226,7 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['model.agent_total'],
-      summaryIncludes: ['publishes service coverage'],
+      summaryIncludes: ['publish service coverage'],
       agentJsonIncludes: ['q=emergency+plumber+parramatta'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
@@ -248,16 +252,18 @@ export const ANSWER_TURN_EVAL_CASES = [
     openRouterAgent: {
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
-        oneLine: 'One listed business matches this need.',
+        oneLine: 'Two listed businesses match this need.',
         summary:
-          'The listing publishes emergency pipe repair in Parramatta. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          'The listings publish emergency pipe repair in Parramatta. The businesses handle timing, price, and availability. Agentic Economy does not book or take payment on this page.',
         whatToDoNow:
           'Open the provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
       },
     },
     expected: {
       status: 'complete',
-      slugs: ['parramatta-emergency-plumbing'],
+      expectedModelRequests: 1,
+      maxToolRuns: 2,
+      slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['paramata', 'parramatta'],
       includeTimingNames: [
         'retrieval.initial_search',
@@ -284,6 +290,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'Emergency plumber Brunswick',
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: [],
       toolQueries: ['Emergency plumber Brunswick'],
       includeTimingNames: [
@@ -312,6 +319,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'businesses in Perth',
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: [],
       toolQueries: [],
       includeTimingNames: [
@@ -356,6 +364,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     },
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: [],
       toolQueries: ['emergency plumber'],
       includeTimingNames: [
@@ -382,6 +391,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'can you book a plumber for me',
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: [],
       toolQueries: [],
       includeTimingNames: ['turn.context_parse', 'sse.emit_snapshot', 'turn.persistence_prepare'],
@@ -411,6 +421,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'dentist coburg',
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: ['coburg-dental-clinic'],
       toolQueries: ['dentist coburg'],
       includeTimingNames: [
@@ -457,6 +468,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     },
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: ['perth-emergency-plumbing'],
       toolQueries: ['emergency plumber'],
       includeTimingNames: [
@@ -491,6 +503,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'family lawyer in Parramatta',
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: ['parramatta-family-law'],
       toolQueries: ['family lawyer in Parramatta'],
       includeTimingNames: [
@@ -525,6 +538,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'locksmith near Geelong',
     expected: {
       status: 'complete',
+      expectedModelRequests: 0,
       slugs: ['geelong-locksmith'],
       toolQueries: ['locksmith near Geelong'],
       includeTimingNames: [
@@ -561,7 +575,8 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'emergency plumber parramatta',
         expected: {
           status: 'complete',
-          slugs: ['parramatta-emergency-plumbing'],
+          expectedModelRequests: 0,
+          slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: ['emergency plumber parramatta'],
           includeTimingNames: ['retrieval.initial_search', 'sse.emit_snapshot'],
           excludeTimingNames: ['model.agent_total'],
@@ -574,6 +589,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'which take inquiries?',
         expected: {
           status: 'complete',
+          expectedModelRequests: 0,
           slugs: [],
           toolQueries: [],
           includeTimingNames: ['sse.emit_snapshot'],
@@ -601,7 +617,8 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'emergency plumber parramatta',
         expected: {
           status: 'complete',
-          slugs: ['parramatta-emergency-plumbing'],
+          expectedModelRequests: 0,
+          slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: ['emergency plumber parramatta'],
           includeTimingNames: ['retrieval.initial_search', 'sse.emit_snapshot'],
           excludeTimingNames: ['model.agent_total'],
@@ -614,7 +631,8 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'book the first one and pay now',
         expected: {
           status: 'complete',
-          slugs: ['parramatta-emergency-plumbing'],
+          expectedModelRequests: 0,
+          slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: [],
           includeTimingNames: ['turn.context_parse', 'sse.emit_snapshot', 'turn.persistence_prepare'],
           excludeTimingNames: ['model.agent_total', 'retrieval.initial_search'],

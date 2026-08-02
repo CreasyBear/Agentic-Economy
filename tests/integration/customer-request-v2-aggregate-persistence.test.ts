@@ -9,7 +9,6 @@ import {
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { projectStoredAggregate } from '@/modules/customer-request/application/route-plan-projection'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { evaluateCustomerRequestSnapshot } from '@/modules/customer-request/evaluation'
 import {
@@ -20,97 +19,9 @@ import {
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
-import historicalV2Fixture from '../fixtures/customer-request/v2-pre-reference-aggregate.json'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 describe('atomic V2 Customer Request aggregate persistence', () => {
-  it('replays a frozen pre-reference V2 record without changing its aggregate, projection, or authority meaning', async () => {
-    const backend = convexTest(schema, modules)
-    const fixture = structuredClone(historicalV2Fixture)
-    const frozenAggregate = fixture.revision.aggregate
-    const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = frozenAggregate
-    const customerProjection = projectStoredAggregate(
-      frozenAggregate as Parameters<typeof projectStoredAggregate>[0],
-      fixture.command.resultingRouteGenerationRef,
-    )
-
-    expect(fixture.sourceRevision).toBe('d15f3b4b23cca4444535e982591f4b7c3983c144')
-    expect(canonicalDigest(aggregateMaterial as StableHashValue)).toBe(frozenAggregate.aggregateDigest)
-    expect(frozenAggregate.aggregateDigest).toBe(fixture.head.currentAggregateDigest)
-    expect(frozenAggregate.aggregateDigest).toBe(fixture.command.aggregateDigest)
-    expect(frozenAggregate.plan.authority).toBe('proposal_only')
-    expect(customerProjection).toMatchObject({
-      requestRef: fixture.head.requestId,
-      revision: fixture.head.currentRevision,
-      state: 'ready_to_compare',
-      summary: frozenAggregate.snapshot.intent,
-      nextAction: 'prepare_options',
-      routeGenerationRef: fixture.command.resultingRouteGenerationRef,
-    })
-    expect(frozenAggregate).not.toHaveProperty('completedTaskReferences')
-    expect(frozenAggregate).not.toHaveProperty('importedCommitmentReferences')
-
-    await backend.run(async (ctx) => {
-      await ctx.db.insert('customerRequestV2Revisions', fixture.revision as never)
-      await ctx.db.insert('customerRequestV2Heads', fixture.head as never)
-      await ctx.db.insert('customerRequestV2RoutePlanGenerations', fixture.routeGeneration as never)
-      await ctx.db.insert('customerRequestV2RoutePlanHeads', fixture.routeHead as never)
-      await ctx.db.insert('customerRequestV2Commands', fixture.command as never)
-    })
-
-    const current = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
-      requestId: fixture.head.requestId,
-    })
-    expect(current).toEqual({
-      kind: 'current',
-      aggregate: frozenAggregate,
-      routeGenerationNumber: fixture.routeHead.currentGeneration,
-      routeGenerationRef: fixture.command.resultingRouteGenerationRef,
-    })
-    if (current.kind !== 'current') throw new Error('historical current readback missing')
-    expect(projectStoredAggregate(
-      current.aggregate,
-      current.routeGenerationRef,
-    )).toEqual(customerProjection)
-    expect(current.aggregate).not.toHaveProperty('completedTaskReferences')
-    expect(current.aggregate).not.toHaveProperty('importedCommitmentReferences')
-
-    const replayInput = {
-      commandKey: fixture.command.commandKey,
-      commandDigest: fixture.command.commandDigest,
-      principalId: fixture.command.principalId,
-      requestId: fixture.command.requestId,
-    }
-    const exactReplay = {
-      kind: 'replayed',
-      aggregate: frozenAggregate,
-      noEffect: false,
-      routeGenerationRef: fixture.command.resultingRouteGenerationRef,
-    }
-    await expect(backend.query(internal.customerRequestV2.getCommandReplay, replayInput))
-      .resolves.toEqual(exactReplay)
-    await expect(backend.query(internal.customerRequestV2.getCommandReplay, replayInput))
-      .resolves.toEqual(exactReplay)
-    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
-      ...replayInput,
-      commandDigest: canonicalDigest({ changed: true }),
-    })).resolves.toEqual({ kind: 'conflict' })
-
-    const persisted = await backend.run(async (ctx) => {
-      const revision = await ctx.db.query('customerRequestV2Revisions').first()
-      const head = await ctx.db.query('customerRequestV2Heads').first()
-      const command = await ctx.db.query('customerRequestV2Commands').first()
-      if (revision === null || head === null || command === null) throw new Error('historical rows missing')
-      return { revision: revision.aggregate, head, command }
-    })
-    expect(persisted.revision).toEqual(frozenAggregate)
-    expect(persisted.revision).not.toHaveProperty('completedTaskReferences')
-    expect(persisted.revision).not.toHaveProperty('importedCommitmentReferences')
-    expect(persisted.head.currentAggregateDigest).toBe(frozenAggregate.aggregateDigest)
-    expect(persisted.command).toMatchObject(fixture.command)
-  })
 
   it('reserves one inspectable Request shell before interpretation and rejects key or identity drift', async () => {
     const backend = convexTest(schema, modules)
@@ -402,9 +313,21 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       commandKey: 'command:v2:liveness-base', commandDigest: canonicalDigest({ command: 'liveness-base' }),
       expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     })
-    const publication = await backend.run(async (ctx) => await ctx.db.query('capabilityPublications').first())
-    if (publication === null) throw new Error('liveness refresh publication missing')
-    const now = Date.now()
+    const currentRoute = routeGeneration.routes[0]
+    const currentStep = currentRoute?.steps[0]
+    const publication = await backend.run(async (ctx) => (
+      currentStep === undefined
+        ? null
+        : await ctx.db.query('capabilityPublications')
+          .withIndex('by_publicationRef_and_revision', (query) => (
+            query.eq('publicationRef', currentStep.publicationRef)
+              .eq('revision', currentStep.publicationRevision)
+          )).unique()
+    ))
+    const now = publication?.readinessValidUntil
+    if (publication === null || now === undefined) {
+      throw new Error('liveness refresh publication missing')
+    }
     const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
       publicationRef: publication.publicationRef, expectedRevision: publication.revision,
       credentialState: 'ready', healthState: 'healthy', validUntil: now + 900_000,
@@ -774,119 +697,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
-  it('returns typed resubmission for historical nonterminal work without converting it', async () => {
-    const backend = convexTest(schema, modules)
-    await backend.run(async (ctx) => {
-      await ctx.db.insert('customerRequestHeads', {
-        requestId: 'request:v1:historical', principalId: 'principal:v1', delegatedAgentId: 'agent:v1',
-        currentRevision: 1, createdAt: 1, updatedAt: 1,
-      })
-    })
 
-    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
-      requestId: 'request:v1:historical',
-    })).resolves.toEqual({
-      kind: 'needs_attention', requestId: 'request:v1:historical',
-      reason: 'historical_request_resubmit_required', resumable: false,
-    })
-    await expect(backend.mutation(internal.customerRequestV2Preparation.prepare, {
-      commandKey: 'prepare:v1:historical', commandDigest: 'sha256:' + '8'.repeat(64),
-      principalId: 'principal:v1', requestId: 'request:v1:historical', expectedRevision: 1,
-      actionId: 'action:v1:historical', now: 2,
-    })).resolves.toEqual({
-      kind: 'needs_attention', reason: 'historical_request_resubmit_required',
-    })
-    const persisted = await backend.run(async (ctx) => ({
-      historicalHeads: await ctx.db.query('customerRequestHeads').collect(),
-      heads: await ctx.db.query('customerRequestV2Heads').collect(),
-      revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
-      commands: await ctx.db.query('customerRequestV2Commands').collect(),
-      preparations: await ctx.db.query('customerRequestV2ActionPreparations').collect(),
-      preparationCommands: await ctx.db.query('customerRequestV2PreparationCommands').collect(),
-    }))
-    expect(persisted).toEqual({
-      historicalHeads: [expect.objectContaining({
-        requestId: 'request:v1:historical', principalId: 'principal:v1',
-        delegatedAgentId: 'agent:v1', currentRevision: 1, createdAt: 1, updatedAt: 1,
-      })],
-      heads: [], revisions: [], commands: [], preparations: [], preparationCommands: [],
-    })
-  })
-
-  it('retains an exact embedded-route revision as immutable history and requires resubmission', async () => {
-    const backend = convexTest(schema, modules)
-    const { aggregate, routeGeneration } = await compiledAggregate(backend)
-    const { planRevisionId: _planRevisionId, planDigest: _planDigest, createdAt, ...planMaterial } = aggregate.plan
-    const legacyRoutes = routeGeneration.routes.map((route) => ({
-      ...route,
-      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }) => step),
-    }))
-    const legacyPlanMaterial = { ...planMaterial, routes: legacyRoutes }
-    const planDigest = canonicalDigest(legacyPlanMaterial)
-    const legacyPlan = { planRevisionId: `plan:${planDigest}`, ...legacyPlanMaterial, planDigest, createdAt }
-    const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = aggregate
-    const legacyAggregateMaterial = { ...aggregateMaterial, plan: legacyPlan }
-    const legacyAggregate = { ...legacyAggregateMaterial, aggregateDigest: canonicalDigest(legacyAggregateMaterial) }
-    await backend.run(async (ctx) => {
-      await ctx.db.insert('customerRequestV2Revisions', {
-        requestId: aggregate.snapshot.requestId,
-        requestRevision: aggregate.snapshot.revision,
-        aggregate: legacyAggregate,
-      })
-      await ctx.db.insert('customerRequestV2Heads', {
-        requestId: aggregate.snapshot.requestId,
-        principalId: aggregate.snapshot.principalId,
-        delegatedAgentId: aggregate.snapshot.delegatedAgentId,
-        currentRevision: aggregate.snapshot.revision,
-        currentAggregateDigest: legacyAggregate.aggregateDigest,
-        createdAt: aggregate.snapshot.recordedAt,
-        updatedAt: aggregate.snapshot.recordedAt,
-      })
-      await ctx.db.insert('customerRequestV2Commands', {
-        commandKey: 'command:v2:legacy-replay',
-        commandDigest: 'sha256:' + '4'.repeat(64),
-        principalId: aggregate.snapshot.principalId,
-        requestId: aggregate.snapshot.requestId,
-        expectedRevision: 0,
-        resultingRevision: aggregate.snapshot.revision,
-        aggregateDigest: legacyAggregate.aggregateDigest,
-        committedAt: aggregate.snapshot.recordedAt,
-      })
-    })
-    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
-      requestId: aggregate.snapshot.requestId,
-    })).resolves.toEqual({
-      kind: 'needs_attention', requestId: aggregate.snapshot.requestId,
-      reason: 'historical_request_resubmit_required', resumable: false,
-    })
-    const persisted = await backend.run(async (ctx) => (
-      await ctx.db.query('customerRequestV2Revisions').first()
-    ))
-    expect(persisted?.aggregate).toEqual(legacyAggregate)
-    expect(persisted?.aggregate.plan).toHaveProperty('routes')
-    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
-      commandKey: 'command:v2:legacy-replay',
-      commandDigest: 'sha256:' + '4'.repeat(64),
-      principalId: aggregate.snapshot.principalId,
-      requestId: aggregate.snapshot.requestId,
-    })).resolves.toEqual({
-      kind: 'needs_attention', requestId: aggregate.snapshot.requestId,
-      reason: 'historical_request_resubmit_required', resumable: false,
-    })
-    await backend.run(async (ctx) => {
-      const revision = await ctx.db.query('customerRequestV2Revisions').first()
-      if (revision === null || !('routes' in revision.aggregate.plan)) throw new Error('legacy revision missing')
-      await ctx.db.patch(revision._id, {
-        aggregate: {
-          ...revision.aggregate,
-          plan: { ...revision.aggregate.plan, proposalDigest: 'sha256:' + '5'.repeat(64) },
-        },
-      })
-    })
-    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
-      requestId: aggregate.snapshot.requestId,
-    })).rejects.toThrow('customer_request_v2_legacy_aggregate_integrity_failure')
-  })
 })
 
 async function compiledAggregate(backend: ReturnType<typeof convexTest>) {

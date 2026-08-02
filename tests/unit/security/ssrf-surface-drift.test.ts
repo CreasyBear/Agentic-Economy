@@ -19,8 +19,6 @@ const KNOWN_PROVIDER_CLIENT_FILES: Record<string, true> = {
   // Web Bot Auth directory lookup at the caller-declared signature agent origin, used
   // only to verify inbound request signatures, never to import owner content.
   'src/modules/routing-kernel/caller-identity.ts': true,
-  // Meilisearch search client: fixed, operator-configured search host.
-  'src/modules/registry/internal/catalog-search-port.ts': true,
 }
 
 // A "non-literal" fetch(...) call is one whose first argument is not a single plain

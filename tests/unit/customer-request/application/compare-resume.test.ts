@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
   hasTransientBindingUnavailable,
@@ -68,8 +69,8 @@ const generation = {
       offeringId: 'off:1',
       bindingId: 'bind:1',
       contractRef: { capabilityId: 'cap.ride', version: 1, contractDigest: 'cd:1' },
-      offeringRegistrationHash: 'hash:off',
-      bindingRegistrationHash: 'hash:bind',
+      offeringRegistrationHash: canonicalDigest('offering'),
+      bindingRegistrationHash: canonicalDigest('binding'),
       publicationRef: 'pub:1',
       publicationRevision: 1,
       price: { kind: 'fixed', currency: 'AUD', amountMinor: 2500 },
@@ -87,8 +88,8 @@ const availableGraph = {
     offeringId: 'off:1',
     bindingId: 'bind:1',
     contractRef: { capabilityId: 'cap.ride', version: 1, contractDigest: 'cd:1' },
-    offeringRegistrationHash: 'hash:off',
-    bindingRegistrationHash: 'hash:bind',
+    offeringRegistrationHash: canonicalDigest('offering'),
+    bindingRegistrationHash: canonicalDigest('binding'),
     publicationRef: 'pub:1',
     publicationRevision: 1,
     readinessValidUntil: FUTURE,

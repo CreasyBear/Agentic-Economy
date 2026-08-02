@@ -3,6 +3,7 @@ import {
   type AnswerSource,
   type AnswerWorkStep,
   buildAgentJsonUrl,
+  buildProviderDecisionOneLine,
   extractRequestedLocation,
 } from '@/modules/answer/public'
 import {
@@ -211,7 +212,7 @@ function buildRetrievalFirstSnapshot(input: {
   return {
     query: input.query,
     oneLine: count === 1 && providers[0] !== undefined
-      ? buildListedOptionOneLine(providers[0])
+      ? buildProviderDecisionOneLine(providers[0])
       : `${count} listed businesses match${placeSuffix}.`,
     providers,
     summary: count === 1
@@ -224,20 +225,6 @@ function buildRetrievalFirstSnapshot(input: {
       buildAgentJsonScope(input.searchInput, input.searchContext),
     ),
   }
-}
-
-function buildListedOptionOneLine(provider: AnswerSource): string {
-  const suburb = provider.suburb.trim()
-  const price = provider.pricingSummary?.trim()
-  const availability = provider.availabilitySummary?.trim()
-  const details = [
-    suburb.length === 0 ? undefined : `in ${suburb}`,
-    price === undefined || price.length === 0 ? undefined : `Price: ${price}`,
-    availability === undefined || availability.length === 0 ? undefined : `Published availability: ${availability}`,
-  ].filter((detail): detail is string => detail !== undefined)
-  return details.length === 0
-    ? `${provider.name}.`
-    : `${provider.name} — ${details.join(' · ')}.`
 }
 
 function buildDeterministicEmptySnapshot(input: {

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { globSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -19,14 +19,10 @@ const forbiddenDomainVocabulary = [
 ]
 
 function sourceFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name)
-    return entry.isDirectory()
-      ? sourceFiles(path)
-      : entry.isFile() && entry.name.endsWith('.ts')
-        ? [path]
-        : []
-  })
+  return globSync(join(directory, '**/*.ts'), { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort()
 }
 
 describe('neutral Action Invocation contract boundary', () => {

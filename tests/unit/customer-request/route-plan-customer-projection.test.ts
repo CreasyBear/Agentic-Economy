@@ -5,6 +5,7 @@ import {
   repeatPermissionUseRecoverySummary,
   type RepeatPermissionUseRefusalReason,
 } from '@/modules/customer-request/customer-projection'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   customerRouteRef,
   projectCustomerRoutePlanDecision,
@@ -697,9 +698,9 @@ describe('RoutePlan customer projection', () => {
     const businessChange = decision.changes.items.find(({ kind }) => kind === 'businesses')
     expect(businessChange?.kind).toBe('businesses')
     if (businessChange?.kind !== 'businesses') return
-    const globalNames = (snapshots: typeof businessChange.before) => [...new Set(
+    const globalNames = (snapshots: typeof businessChange.before) => uniqueSorted(
       snapshots.flatMap(({ businesses }) => businesses.map(({ name }) => name)),
-    )].sort()
+    )
     expect(globalNames(businessChange.before)).toEqual(globalNames(businessChange.after))
     expect(businessChange.before.every(({ resultRef }) => resultRef.startsWith('result:'))).toBe(true)
     expect(businessChange.after.every(({ resultRef }) => resultRef.startsWith('result:'))).toBe(true)

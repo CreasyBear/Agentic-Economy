@@ -14,6 +14,7 @@ import {
   type AnswerHarnessSessionJournalWriteInput,
 } from '@/modules/answer-thread/testing'
 import type { AnswerToolCallRecord, FrozenTurnEvidence } from '@/modules/answer-thread/harness'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   buildHarnessRunReport,
   HarnessRunPhaseValues,
@@ -45,7 +46,7 @@ describe('answer harness operation persistence bridge', () => {
       sessionId: 'session-spine',
       status: 'complete',
       toolCalls: [
-        toolCall('tc-search', 1, 'registry.search', 'complete', 'hash:search'),
+        toolCall('tc-search', 1, 'registry.search', 'complete', canonicalDigest('search')),
       ],
       gate: { ok: true, source: 'answer_gate' },
       fallbackReport: buildHarnessRunReport(),
@@ -118,7 +119,7 @@ describe('answer harness operation persistence bridge', () => {
       sessionId: 'session-blocked',
       status: 'complete',
       toolCalls: [
-        toolCall('tc-search', 1, 'registry.search', 'complete', 'hash:search'),
+        toolCall('tc-search', 1, 'registry.search', 'complete', canonicalDigest('search')),
       ],
       modelRequests: [
         {
@@ -174,7 +175,7 @@ describe('answer harness operation persistence bridge', () => {
       },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [...turns.values()] }),
+      getThreadTurns: async () => ({ page: [...turns.values()], isDone: true, continueCursor: '' }),
     }))
     resets.push(setAnswerHarnessSessionJournalWriterForTests(async (write) => {
       journalWrites.push(write)
@@ -208,7 +209,7 @@ describe('answer harness operation persistence bridge', () => {
       captured: answerSnapshot(),
       errorCopyId: undefined,
       toolCalls: [
-        toolCall('tc-search', 1, 'registry.search', 'complete', 'hash:search'),
+        toolCall('tc-search', 1, 'registry.search', 'complete', canonicalDigest('search')),
       ],
       modelRequests: [
         {
@@ -282,7 +283,7 @@ describe('answer harness operation persistence bridge', () => {
     const publicSummaries = JSON.stringify(journalWrites.map((write) => write.entry.publicSummaryJson))
     expect(publicSummaries).not.toContain('registry.search')
     expect(publicSummaries).not.toContain('plumber Preston')
-    expect(publicSummaries).not.toContain('hash:search')
+    expect(publicSummaries).not.toContain(canonicalDigest('search'))
 
     const reportedRun = journalWrites.find((write) => write.entry.kind === 'run.reported')?.entry
     expect(reportedRun?.privatePayloadJson).toContain('harnessRun')
@@ -315,7 +316,7 @@ describe('answer harness operation persistence bridge', () => {
       },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [] }),
+      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
     }))
     resets.push(setAnswerHarnessFinalizerForTests(async (write) => {
       finalizationWrites.push(write)
@@ -396,8 +397,8 @@ describe('answer harness operation persistence bridge', () => {
       ok: 2,
     })
     expect(evidence.harnessRun?.summary.models?.byProvider.openrouter).toMatchObject({
-      total: 2,
-      ok: 2,
+      total: 1,
+      ok: 1,
     })
     expect(evidence.harnessRun?.coverage.phases).toEqual(
       expect.arrayContaining(['context', 'intent', 'route', 'retrieval', 'model', 'assemble', 'gate']),
@@ -419,7 +420,7 @@ describe('answer harness operation persistence bridge', () => {
     ]))
     expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(2)
     expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
-    expect(finalizationWrites[0]?.finalizationHash).toMatch(/^hash:/)
+    expect(finalizationWrites[0]?.finalizationHash).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(evidence.harnessFinalization).toMatchObject({
       schemaVersion: 1,
       status: 'accepted',
@@ -448,7 +449,7 @@ describe('answer harness operation persistence bridge', () => {
       },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [] }),
+      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
     }))
     resets.push(setAnswerHarnessFinalizerForTests(async () => ({
       status: 'error',

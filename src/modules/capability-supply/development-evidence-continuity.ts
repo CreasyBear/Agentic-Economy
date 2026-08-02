@@ -30,6 +30,11 @@ import {
 type Graph = ReturnType<typeof createDevelopmentEvidenceSupplyPorts>
 type Input = Awaited<ReturnType<typeof createDevelopmentEvidenceQuoteInput>>
 
+function requireContinuityFixture<T>(value: T | undefined, errorCode: string): T {
+  if (value === undefined) throw new Error(errorCode)
+  return value
+}
+
 export async function buildDevelopmentContinuityEvidence(
   graph: Graph,
   input: Input,
@@ -38,6 +43,10 @@ export async function buildDevelopmentContinuityEvidence(
   const directRead = await executeDirectRead()
   const directConsequential = await executeDirectConsequential(graph, input)
   const effectsBeforeReuse = invocations.standalone.effectCalls
+  const standaloneView = requireContinuityFixture(
+    invocations.views[1],
+    'continuity_standalone_invocation_missing',
+  )
   const compiled = compileCustomerRequest({
     requestId: 'mock:request:reuse', expectedRevision: 0,
     principalId: actor.principalRef, delegatedAgentId: actor.callerRef,
@@ -49,7 +58,7 @@ export async function buildDevelopmentContinuityEvidence(
   if (compiled.kind !== 'compiled') throw new Error('mock_request_compile_failed')
   const attached = attachCompletedTaskReference({
     principalRef: actor.principalRef, callerRef: actor.callerRef,
-    invocationRef: invocations.views[1]!.invocationRef, referencedAt: nowMs + 1,
+    invocationRef: standaloneView.invocationRef, referencedAt: nowMs + 1,
     candidateAggregate: compiled.aggregate,
   }, {
     readCompletedResultIdentity: ({ invocationRef, actor: identity }) =>
@@ -98,7 +107,6 @@ export async function buildDevelopmentContinuityEvidence(
     /authority|attempt|control|quoteRef|price|terms|evidenceRefs/u,
   )?.length ?? 0
   const controlledEvents = deriveControlledEvents(invocations)
-  const standaloneView = invocations.views[1]!
   const history = invocations.standalone.state.history.get(standaloneView.invocationRef) ?? []
   const transfer = evaluateAdr009Transfer({
     events: {
@@ -209,7 +217,10 @@ async function executeDirectConsequential(graph: Graph, input: SuppliedCandidate
 function deriveControlledEvents(
   invocations: DevelopmentInvocationEvidence,
 ): TransferBoundaryEvent[] {
-  const ref = invocations.views[1]!.invocationRef
+  const ref = requireContinuityFixture(
+    invocations.views[1],
+    'continuity_controlled_invocation_missing',
+  ).invocationRef
   const history = invocations.standalone.state.history.get(ref) ?? []
   const authorityIndex = history.findIndex(({ kind }) => kind === 'decide')
   const releaseIndex = history.findIndex(({ kind }) => kind === 'begin_release')

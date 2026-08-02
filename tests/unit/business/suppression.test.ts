@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { claimBusiness, createEmptyBusinessSourceState, suppressBusiness, unsuppressBusiness } from '@/modules/business/public'
 import type { BusinessSuppressionState } from '@/modules/business/public'
 import {
@@ -55,7 +56,6 @@ describe('suppressBusiness', () => {
       },
     })
     expect(replay).toMatchObject({ kind: 'ok', code: 'business_suppression_replayed' })
-    expect(state.businessServices).toMatchObject([{ status: 'suppressed' }])
     expect(state.auditEvents.filter((event) => event.eventType === 'business.suppressed')).toHaveLength(1)
     expect(state.invalidationIntents).toHaveLength(1)
     expect(
@@ -219,7 +219,7 @@ function publishedState(): PublishBusinessCatalogState & BusinessSuppressionStat
         {
           label: 'Owner supplied',
           evidenceRef: 'private:evidence:1',
-          sourceHash: brandNonEmpty('hash:source:1', 'SourceHash'),
+          sourceHash: canonicalDigest('source:1'),
         },
       ],
     },
@@ -228,13 +228,6 @@ function publishedState(): PublishBusinessCatalogState & BusinessSuppressionStat
         csrfToken: 'csrf-claim',
         csrfCookie: 'csrf-claim',
         allowedOrigins: ['https://ae.example'],
-      },
-      rateLimit: {
-        scope: 'claim_submit',
-        key: 'claim-suppress-fixture',
-        now: 1_000,
-        limit: 5,
-        windowMs: 60_000,
       },
     },
     operationKey: brandNonEmpty('op:claim:suppress-fixture', 'OperationKey'),
@@ -275,6 +268,7 @@ function firstBusinessId(state: BusinessSuppressionState) {
 function ownerAdmin(): AdminMembership {
   return {
     clerkUserId: 'admin_1',
+    tokenIdentifier: 'clerk|admin_1',
     role: 'owner_admin',
     state: 'active',
     grantedBy: 'bootstrap',

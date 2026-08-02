@@ -15,13 +15,13 @@ import {
 import { serializeJsonLd } from '@/modules/seo/public'
 
 type ProviderListingSearch = {
-  from?: 'thread' | 'registry'
+  from?: 'thread'
   id?: string
 }
 
 export const Route = createFileRoute('/$slug')({
   validateSearch: (search: Record<string, unknown>): ProviderListingSearch => {
-    const from = search.from === 'thread' || search.from === 'registry' ? search.from : undefined
+    const from = search.from === 'thread' ? search.from : undefined
     const id = typeof search.id === 'string' && search.id.trim().length > 0 ? search.id.trim() : undefined
     return {
       ...(from === undefined ? {} : { from }),

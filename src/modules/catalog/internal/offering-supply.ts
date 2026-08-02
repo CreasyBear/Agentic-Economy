@@ -5,7 +5,7 @@ import type {
   SourceHash,
 } from '@/modules/common/ids'
 import type { TrustTier } from '@/modules/business/public'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { OfferingPrice } from './offering-price'
 
 export const BusinessOfferingStatusValues = ['draft', 'published', 'paused', 'retired'] as const
@@ -267,7 +267,7 @@ export function buildBusinessSupplyProjection(input: Readonly<{
       business: input.business,
       offerings: projections,
       sourceRevision: input.sourceRevision,
-      sourceDigest: stableHash(digestInput) as SourceHash,
+      sourceDigest: canonicalDigest(digestInput) as SourceHash,
       observedAt: input.observedAt,
       disposition: input.disposition ?? 'current',
     },

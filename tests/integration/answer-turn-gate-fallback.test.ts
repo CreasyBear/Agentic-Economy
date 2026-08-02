@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { AnswerEvent } from '@/modules/answer/public'
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import {
@@ -8,17 +8,6 @@ import {
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
 
-type StreamFrame = { seq: number; event: AnswerEvent }
-
-function parseStream(text: string): StreamFrame[] {
-  return text
-    .split('\n\n')
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.startsWith('data:'))
-    .map(
-      (frame) => JSON.parse(frame.slice('data:'.length).trim()) as StreamFrame,
-    )
-}
 
 describe('POST /api/answer/turn gate failure', () => {
   afterEach(() => {
@@ -50,7 +39,7 @@ describe('POST /api/answer/turn gate failure', () => {
       },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [] }),
+      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
     })
 
 
@@ -67,7 +56,7 @@ describe('POST /api/answer/turn gate failure', () => {
       )
 
       expect(response.headers.get('content-type')).toContain('text/event-stream')
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const lastEvent = frames.at(-1)?.event
       expect(lastEvent?.type).toBe('error')
 

@@ -102,4 +102,36 @@ describe('Customer Request hosted release readback', () => {
       readback: entrypointMismatch,
     })).toThrow('hosted_release_entrypoint_mismatch')
   })
+  it('returns source-owned hosted Convex identity and refuses exact ID or URL mismatches', () => {
+    const env = {
+      ...productionEnvironment,
+      CONVEX_DEPLOYMENT_ID: 'happy-animal-123',
+      CONVEX_URL: 'https://happy-animal-123.convex.cloud',
+    }
+    const readback = readCustomerRequestRelease({ env, observedAt: () => 0 })
+    expect(readback.kind).toBe('release_readback')
+    if (readback.kind !== 'release_readback') throw new Error('test setup failed')
+    expect(readback.deployment.convex).toEqual({
+      provider: 'convex',
+      id: 'happy-animal-123',
+      url: 'https://happy-animal-123.convex.cloud/',
+    })
+    expect(verifyCustomerRequestHostedRevision({
+      expectedRevision: revision,
+      expectedDeploymentId: productionEnvironment.VERCEL_DEPLOYMENT_ID,
+      expectedConvexDeploymentId: 'happy-animal-123',
+      expectedConvexUrl: 'https://happy-animal-123.convex.cloud',
+      readback,
+    })).toEqual({ kind: 'verified', revision, deploymentId: productionEnvironment.VERCEL_DEPLOYMENT_ID })
+    expect(() => verifyCustomerRequestHostedRevision({
+      expectedRevision: revision,
+      expectedConvexDeploymentId: 'other-deployment',
+      readback,
+    })).toThrow('hosted_release_convex_deployment_id_mismatch')
+    expect(() => verifyCustomerRequestHostedRevision({
+      expectedRevision: revision,
+      expectedConvexUrl: 'https://other.convex.cloud',
+      readback,
+    })).toThrow('hosted_release_convex_url_mismatch')
+  })
 })

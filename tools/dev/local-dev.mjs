@@ -15,7 +15,6 @@ const app = spawn('npm', ['run', 'dev', '--', ...appArgs], {
     ...process.env,
     AE_SOURCE_WRITE_SECRET: secret,
     CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey,
-    AE_ENGINE_PROPOSALS: process.env.AE_ENGINE_PROPOSALS ?? 'false',
     VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E ?? 'true',
   },
   stdio: 'inherit',

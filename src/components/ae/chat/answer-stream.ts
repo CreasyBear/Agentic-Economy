@@ -1,9 +1,8 @@
-import { EventSourceParserStream } from 'eventsource-parser/stream'
-
+import { readAnswerTurnFrames, type AnswerTurnFrame } from '@/modules/answer/public'
 import type { AnswerEvent } from '@/modules/answer/public'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 
-export type AnswerStreamFrame = { seq: number; event: AnswerEvent }
+export type AnswerStreamFrame = AnswerTurnFrame
 
 export type StreamAnswerResult = 'done' | 'aborted' | 'error' | 'rate_limited'
 
@@ -36,16 +35,8 @@ async function streamAnswerSse(input: {
       return input.signal?.aborted === true ? 'aborted' : 'error'
     }
 
-    const eventStream = response.body
-      .pipeThrough(new TextDecoderStream())
-      .pipeThrough(new EventSourceParserStream())
-
-    for await (const message of eventStream) {
-      try {
-        input.onFrame(JSON.parse(message.data) as AnswerStreamFrame)
-      } catch {
-        // Skip malformed frame.
-      }
+    for await (const frame of readAnswerTurnFrames(response.body)) {
+      input.onFrame(frame)
     }
 
     return input.signal?.aborted === true ? 'aborted' : 'done'

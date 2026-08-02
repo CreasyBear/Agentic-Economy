@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { identifier } from '@/modules/capability-contract/public'
+
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   qualifySuppliedCandidate,
@@ -8,7 +10,7 @@ import {
 
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/)
 const contractRefSchema = z.strictObject({
-  capabilityId: z.string().trim().min(1).max(200),
+  capabilityId: identifier,
   version: z.number().int().positive(),
   contractDigest: digestSchema,
 })
@@ -109,7 +111,14 @@ export function validateDevelopmentQuoteDisclosure(
     ...Object.entries(input.quoteRequest.constraints)
       .map(([key, value]) => [`quoteRequest.constraints.${key}`, value] as const),
   ])
-  if (fields.some((field) => values.get(field)!.length > input.disclosure.limits[field]!)) {
+  if (fields.some((field) => {
+    const value = values.get(field)
+    const limit = input.disclosure.limits[field]
+    if (value === undefined || limit === undefined) {
+      throw new Error('development_quote_disclosure_invariant')
+    }
+    return value.length > limit
+  })) {
     return { kind: 'invalid', code: 'disclosed_value_over_limit' }
   }
   return {

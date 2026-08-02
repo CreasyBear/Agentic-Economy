@@ -1,4 +1,4 @@
-import { base64Codec } from '@/modules/common/base64-codec'
+import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -38,7 +38,7 @@ export async function verifyCustomerRequestServiceAssertion(input: Readonly<{
   const now = input.now ?? Date.now()
   if (!validPrincipal(input.assertion) || !Number.isSafeInteger(input.assertion.issuedAt)
     || input.assertion.issuedAt > now + 5_000 || now - input.assertion.issuedAt > MAX_ASSERTION_AGE_MS) return false
-  const signature = fromBase64Url(input.assertion.signature)
+  const signature = tryDecodeBase64Url(input.assertion.signature)
   if (signature === undefined) return false
   return await crypto.subtle.verify(
     'HMAC',
@@ -74,10 +74,3 @@ async function hmacKey(value: string, usages: Array<'sign' | 'verify'>) {
   return await crypto.subtle.importKey('raw', new TextEncoder().encode(value), { name: 'HMAC', hash: 'SHA-256' }, false, usages)
 }
 
-
-function fromBase64Url(value: string): Uint8Array | undefined {
-  if (!/^[A-Za-z0-9_-]+$/.test(value)) return undefined
-  try {
-    return base64Codec.fromBase64Url(value)
-  } catch { return undefined }
-}

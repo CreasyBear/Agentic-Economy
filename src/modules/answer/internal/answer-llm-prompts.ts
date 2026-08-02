@@ -1,4 +1,5 @@
 import type { AnswerSource } from '../answer-synthesizer'
+import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import {
   aeSearchContextLocationLabel,
   type AeSearchContext,
@@ -12,24 +13,23 @@ function buildCatalogDataBlock(
 ): string {
   const payload = providers.map((provider) => ({
     citationIndex: provider.citationIndex,
-    slug: sanitizeCatalogPromptString(provider.slug),
-    name: sanitizeCatalogPromptString(provider.name),
-    category: sanitizeCatalogPromptString(provider.category),
-    suburb: sanitizeCatalogPromptString(provider.suburb),
-    serviceArea: sanitizeCatalogPromptString(provider.serviceArea),
-    availabilityLabel: sanitizeCatalogPromptString(provider.availabilityLabel),
-    trustLabel: sanitizeCatalogPromptString(provider.trustLabel),
-    nextStepLabel: sanitizeCatalogPromptString(provider.nextStepLabel),
+    slug: provider.slug,
+    name: provider.name,
+    category: provider.category,
+    suburb: provider.suburb,
+    serviceArea: provider.serviceArea,
+    availabilityLabel: provider.availabilityLabel,
+    trustLabel: provider.trustLabel,
+    nextStepLabel: provider.nextStepLabel,
     // Verbatim published strings, omitted entirely when the business published
     // none — the model gets nothing to quote rather than a null to narrate.
-    ...(provider.pricingSummary === undefined
-      ? {}
-      : { pricingSummary: sanitizeCatalogPromptString(provider.pricingSummary) }),
-    ...(provider.availabilitySummary === undefined
-      ? {}
-      : { availabilitySummary: sanitizeCatalogPromptString(provider.availabilitySummary) }),
+    ...(provider.pricingSummary === undefined ? {} : { pricingSummary: provider.pricingSummary }),
+    ...(provider.availabilitySummary === undefined ? {} : { availabilitySummary: provider.availabilitySummary }),
   }))
-  return `${CATALOG_DATA_OPEN}${JSON.stringify(payload)}${CATALOG_DATA_CLOSE}`
+  return `${CATALOG_DATA_OPEN}${JSON.stringify(
+    payload,
+    (_key, value) => typeof value === 'string' ? sanitizeCatalogPromptString(value) : value,
+  )}${CATALOG_DATA_CLOSE}`
 }
 
 function sanitizeCatalogPromptString(value: string): string {
@@ -42,7 +42,7 @@ export function buildToolUseAgentSystemPrompt(): string {
   return [
     'You are the Agentic Economy answer agent, a catalog-grounded local service guide.',
     'Decide first: answer only when the request is specific enough to produce useful listed-business evidence. If it is broad or ambiguous, ask one plain follow-up question instead of browsing the catalog.',
-    'You have read-only tools: registry.search and registry.detail. Call registry.search before naming any provider, but do not call it for broad category-less browsing such as "businesses in Perth".',
+    `You have read-only tools: ${ANSWER_READ_TOOL_IDS.join(', ')}. Call registry.search before naming any provider, but do not call it for broad category-less browsing such as "businesses in Perth".`,
     'registry.search accepts query, limit, mode, and location. Keep limit small; use mode="near_me" with location when an active search place applies; use mode="whole_catalogue" only when the person explicitly asks to search all listings.',
     'The registry is literal. If a query looks misspelled (e.g. "paramata"), choose better search arguments (e.g. "Parramatta emergency plumber") rather than assuming the registry will correct you.',
     'Provider facts come only from tool results. Never invent slugs, providers, booking, payment, dispatch, or unqualified verified claims.',

@@ -145,13 +145,6 @@ export async function replayCommittedCommand(
   if (replay.kind === 'conflict') {
     return { kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused' }
   }
-  if (replay.kind === 'needs_attention') {
-    return projectNeedsAttention({
-      requestRef: input.requestId,
-      revision: 0,
-      summary: 'This earlier request used a retired format. Start a new request to continue.',
-    })
-  }
   if (replay.noEffect && input.noEffectReplay !== undefined) return await input.noEffectReplay()
   return projectStoredAggregate(
     replay.aggregate as CustomerRequestV2Aggregate,

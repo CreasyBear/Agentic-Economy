@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { AeSupplyFunnel, emptySupplyFunnelDraft, readSupplyFunnelDraft, writeSupplyFunnelDraft } from '@/components/ae/supply/AeSupplyFunnel'
@@ -22,22 +25,12 @@ const service: ServiceDto = {
 
 beforeEach(() => {
   window.sessionStorage.clear()
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia
 })
 afterEach(() => { cleanup(); window.sessionStorage.clear() })
 
 describe('supply landing', () => {
   it('leads with the business outcome and generated service rows', () => {
-    render(<AeSupplyLanding tools={[tool]} services={[service]} />)
+    renderWithRouter(<AeSupplyLanding tools={[tool]} services={[service]} />)
     expect(screen.getByRole('heading', { name: /AI assistants/i })).toBeDefined()
     expect(screen.getByRole('link', { name: /start publishing your service/i }).getAttribute('href')).toBe('/claim?source=supply')
     expect(screen.getByText(/agents bring you work/i)).toBeDefined()
@@ -47,7 +40,7 @@ describe('supply landing', () => {
   })
 
   it('renders the honest empty state', () => {
-    render(<AeSupplyLanding tools={[]} services={[]} />)
+    renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />)
     expect(screen.getByText('No services are listed yet.')).toBeDefined()
   })
 })
@@ -137,3 +130,12 @@ describe('resumable supply draft', () => {
     expect(screen.getByText(/No earnings are recorded from setup or test calls/i)).toBeDefined()
   })
 })
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const claimRoute = createRoute({ getParentRoute: () => rootRoute, path: '/claim' })
+  const ownerSupplyRoute = createRoute({ getParentRoute: () => rootRoute, path: '/owner/supply' })
+  const routeTree = rootRoute.addChildren([claimRoute, ownerSupplyRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/claim'] }) })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+}

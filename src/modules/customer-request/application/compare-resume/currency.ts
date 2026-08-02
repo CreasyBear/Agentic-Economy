@@ -39,22 +39,25 @@ export function hasTransientBindingUnavailable(
   graph: RequestGraph,
   now: number,
 ): boolean {
-  return generation.routes.some((route) => route.steps.some((step) => (
-    graph.bindings.some((binding) => (
-      binding.businessId === step.businessId
-      && binding.offeringId === step.offeringId
-      && binding.bindingId === step.bindingId
+  return generation.routes.some((route) => route.steps.some((step) => {
+    const binding = graph.bindings.find((candidate) => (
+      candidate.businessId === step.businessId
+      && candidate.offeringId === step.offeringId
+      && candidate.bindingId === step.bindingId
       && step.contractRef.contractDigest !== undefined
-      && sameCapabilityContractRef(binding.contractRef, {
+      && sameCapabilityContractRef(candidate.contractRef, {
         capabilityId: step.contractRef.capabilityId,
         version: step.contractRef.version,
         contractDigest: step.contractRef.contractDigest,
       })
-      && (binding.publicationRef === undefined
-        || binding.readinessValidUntil === undefined
-        || binding.readinessValidUntil <= now)
     ))
-  )))
+    if (binding !== undefined) {
+      return binding.publicationRef === undefined
+        || binding.readinessValidUntil === undefined
+        || binding.readinessValidUntil <= now
+    }
+    return !graph.bindings.some((candidate) => candidate.publicationRef === step.publicationRef)
+  }))
 }
 
 export function routeRefreshCommand(

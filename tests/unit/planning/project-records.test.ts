@@ -42,23 +42,6 @@ describe('project record-keeping system', () => {
     expect(queue).toContain('Closing research does not resolve the associated decision')
   })
 
-  it('keeps active strategic research reviewable and maturity-bounded', () => {
-    const research = read('.planning/research/2026-07-17-conversational-agentic-workspace-patterns.md')
-    const requiredFields = [
-      '**Owner:**',
-      '**Status:**',
-      '**Maturity:**',
-      '**Question:**',
-      '**Decision affected:**',
-      '**Evidence cutoff:**',
-      '**Review by:**',
-      '**Supersedes:**',
-      '**Superseded by:**',
-    ]
-
-    for (const field of requiredFields) expect(research).toContain(field)
-    expect(research).toContain('do not establish production reliability')
-  })
 
   it('records the partial-entry product boundary as an accepted ADR', () => {
     const adr = read('.planning/adr/ADR-009-partial-entry-without-request-ownership.md')

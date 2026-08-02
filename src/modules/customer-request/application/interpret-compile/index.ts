@@ -1,10 +1,10 @@
 export {
   bindRequirementAnswer,
+  rebindPlanSelections,
   rebindStoredFacts,
 } from './facts'
 export {
   assembleRequestGraph,
-  exactRefKey,
   loadRequestGraph,
   type LoadRequestGraphPorts,
   type RequestGraphLimits,

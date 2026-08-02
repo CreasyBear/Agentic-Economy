@@ -25,7 +25,7 @@ function business(
     ...(publishedPhone === undefined ? {} : { publishedPhone }),
     offerings: [
       {
-        offeringRef: `legacy-offering:${slug}:emergency`,
+        offeringRef: `offering:${slug}:emergency`,
         revision: 1,
         name: 'Emergency pipe repair',
         category: 'Emergency plumbing',

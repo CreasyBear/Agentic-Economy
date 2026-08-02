@@ -7,6 +7,7 @@ import type {
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 export type DynamicPublishedInvocationInput = Readonly<{
   operationKey: string
@@ -33,21 +34,6 @@ export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
   failureCode?: string
 }>
 
-export type DynamicPublishedAuthorityTarget = Readonly<{
-  operationId: string
-  operationVersion: string
-  invocationGeneration: number
-  source: PublishedOperation['identity'] & Readonly<{
-    materialDigest: string
-    readiness: PublishedOperation['readiness']
-  }>
-  effect: Readonly<{
-      amount: Readonly<{ currency: string; amountMinor: number }>
-    payment: PublishedOperation['identity']['payment']
-    data: readonly Readonly<{ inputPointer: string; recipient: string; purposes: readonly string[] }>[]
-  }>
-}>
-
 export function buildDynamicPublishedInput(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
@@ -58,7 +44,7 @@ export function buildDynamicPublishedInput(input: Readonly<{
   }
   assertExactDescriptor(input.operation, input.descriptor)
   const inputDigest = canonicalDigest(input.value)
-  const target: DynamicPublishedAuthorityTarget = {
+  const target: StableHashValue = {
     operationId: input.operation.operationId,
     operationVersion: input.descriptor.version,
     invocationGeneration: 1,
@@ -89,7 +75,7 @@ export function buildDynamicPublishedInput(input: Readonly<{
     input: input.value,
     inputDigest,
     sourceSnapshotDigest,
-    target: target as unknown as StableHashValue,
+    target,
   }
 }
 
@@ -117,7 +103,7 @@ export function dynamicPublishedSourceDigest(
       price: descriptor.price,
       target: descriptor.target,
     },
-  } as StableHashValue)
+  })
 }
 
 export function assertExactDescriptor(
@@ -127,8 +113,8 @@ export function assertExactDescriptor(
   if (
     descriptor.id !== operation.operationId
     || descriptor.version !== `published:v1:${operation.materialDigest}`
-    || canonicalDigest(descriptor.target as unknown as StableHashValue)
-      !== canonicalDigest(operation.identity as unknown as StableHashValue)
+    || canonicalDigest(descriptor.target)
+      !== canonicalDigest(operation.identity)
   ) throw new Error('published_operation_descriptor_not_exact')
   executableFixedPrice(operation)
 }
@@ -160,7 +146,7 @@ export function createDynamicPublishedAction(input: Readonly<{
     reversible: descriptor.effects.every(({ reversibility }) =>
       reversibility === 'not_applicable' || reversibility === 'reversible'),
     recipientKind: descriptor.effects.length === 0 ? 'none' as const : 'provider_system' as const,
-    dataClasses: [...new Set(descriptor.dataUse.map(({ classification }) => classification))].sort(),
+    dataClasses: uniqueSorted(descriptor.dataUse.map(({ classification }) => classification)),
     spendExposure: classes.has('financial_exposure') ? 'bounded' as const : 'none' as const,
     approval: descriptor.effects.length === 0
       ? 'none' as const

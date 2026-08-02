@@ -149,6 +149,44 @@ describe('browser Customer Request API', () => {
     })).resolves.toBe(true)
   })
 
+  it('omits Secure when a non-production proxy reports HTTP', async () => {
+    const response = await handleBrowserCustomerRequestPost(new Request('https://ae.example/api/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'http' },
+      body: JSON.stringify({
+        idempotencyKey: 'submit:guest:forwarded-http',
+        requestRef: 'request:guest:forwarded-http',
+        agentRef: 'web:guest:forwarded-http',
+        request: 'Find a suitable service',
+        routing: { network: 'ae:public' },
+      }),
+    }), {
+      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey, NODE_ENV: 'test' },
+      now: () => 10_000,
+      randomUUID: () => '018f3f24-8f17-7b72-8b5a-a3d6d6bf35d7',
+      tryAuthenticatedSubmit: async () => Response.json({ error: 'missing_auth' }, { status: 401 }),
+      callAction: async () => ({
+        kind: 'request',
+        requestRef: 'request:guest:forwarded-http',
+        revision: 1,
+        state: 'needs_information',
+        summary: 'Find a suitable service',
+        nextAction: 'provide_information',
+        missingFields: [],
+        options: [],
+        clarification: {
+          kind: 'intent_direction',
+          prompt: 'Where should AE look?',
+          answerKind: 'natural_language',
+        },
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('set-cookie')).toContain('ae_request_session=')
+    expect(response.headers.get('set-cookie')).not.toContain('Secure')
+  })
+
   it('does not create a browser session when an authenticated submission succeeds', async () => {
     const response = await handleBrowserCustomerRequestPost(new Request('https://ae.example/api/requests', {
       method: 'POST', body: '{}',

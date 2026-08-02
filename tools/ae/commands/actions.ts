@@ -18,7 +18,7 @@ export async function runActionsCommand(_args: readonly string[], options: CliOp
       surfaces: action.surfaces,
       consequenceClass: contract.consequenceClass,
       authorityRequirement: contract.authorityRequirement,
-      contract: contract.compatibility,
+      contract,
       hasInputSchema: descriptor.inputJsonSchema !== undefined,
     }
   })
@@ -38,7 +38,7 @@ export async function runActionsCommand(_args: readonly string[], options: CliOp
       ['surfaces', row.surfaces.join(', ')],
       ['consequence', row.consequenceClass],
       ['authority', row.authorityRequirement],
-      ['contract', row.contract],
+      ['contract', JSON.stringify(row.contract)],
     ])
   }
   line('')

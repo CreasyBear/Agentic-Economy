@@ -5,14 +5,13 @@ import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
+import { convexModules as modules, ownerAdmin } from '../helpers/convex-fixtures'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('durable V2 capability contract registry', () => {
   it('persists, audits, replays and resolves one exact immutable contract', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_admin')
     const documentJson = JSON.stringify(capabilityContractV2())
     const args = registrationArgs(documentJson)
 
@@ -47,7 +46,7 @@ describe('durable V2 capability contract registry', () => {
 
   it('refuses a semantic change in the same slot and fails closed on stored corruption', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_admin')
     const first = await admin.mutation(
       api.capabilityContractDocuments.register,
       registrationArgs(JSON.stringify(capabilityContractV2())),
@@ -79,7 +78,7 @@ describe('durable V2 capability contract registry', () => {
 
   it('rolls back registration when the deterministic audit slot is forged', async () => {
     const backend = convexTest(schema, modules)
-    const admin = await ownerAdmin(backend)
+    const admin = await ownerAdmin(backend, 'user_capability_admin')
     const encoded = encodeCapabilityContractDocument(capabilityContractV2())
     await backend.run(async (ctx) => {
       await ctx.db.insert('auditEvents', {
@@ -96,7 +95,7 @@ describe('durable V2 capability contract registry', () => {
         reasonCode: 'forged_reason',
         evidenceRefs: ['forged:evidence'],
         redactedPayloadJson: '{}',
-        payloadHash: 'hash:forged',
+        payloadHash: canonicalDigest('forged'),
         createdAt: 1,
       })
     })
@@ -124,21 +123,3 @@ function registrationArgs(documentJson: string) {
   }
 }
 
-async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
-  const identity = {
-    subject: 'user_capability_admin',
-    issuer: 'https://identity.example',
-    tokenIdentifier: 'token_capability_admin',
-  }
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('adminMemberships', {
-      clerkUserId: identity.subject,
-      tokenIdentifier: identity.tokenIdentifier,
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'test_bootstrap',
-      grantedAt: 1,
-    })
-  })
-  return backend.withIdentity(identity)
-}

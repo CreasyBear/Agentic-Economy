@@ -1,7 +1,7 @@
 import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   dispatchNotificationOutbox,
   enqueueInquiryNotificationDispatch,
@@ -26,7 +26,7 @@ type IndexBuilder = {
 
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
-  collect: () => Promise<Row[]>
+  order: (direction: 'asc' | 'desc') => Query
   take: (limit: number) => Promise<Row[]>
   unique: () => Promise<Row | null>
   first: () => Promise<Row | null>
@@ -35,6 +35,7 @@ type Query = {
 type Db = {
   query: (tableName: string) => Query
   get: (id: string) => Promise<Row | null>
+  normalizeId: (tableName: string, id: string) => string | null
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
@@ -145,7 +146,7 @@ describe('Convex notification outbox runtime bridge', () => {
         owner: { ownerId: 'owners:1', clerkUserId: 'user_sam' },
         business: { businessId: 'businesses:1', slug: 'sam-plumbing', name: 'Sam Plumbing' },
         inquiry: {
-          serviceName: 'Emergency plumbing',
+          offeringName: 'Emergency plumbing',
           customerMessageFirstLine: 'Burst pipe under kitchen sink.',
           isFirstInquiryForBusiness: true,
         },
@@ -217,7 +218,7 @@ describe('Convex notification outbox runtime bridge', () => {
       providerResult: {
         kind: 'ok',
         status: 'sent',
-        providerResponseHash: stableHash({ provider: 'resend', id: 'resend_email_123' }),
+        providerResponseHash: canonicalDigest({ provider: 'resend', id: 'resend_email_123' }),
         resendMessageId: 'resend_email_123',
       },
       operationKey: 'notification:dispatch:sent-provider-result',
@@ -407,33 +408,54 @@ class FakeIndexBuilder implements IndexBuilder {
     return this
   }
 }
-
 class FakeQuery implements Query {
   constructor(
     private readonly rows: readonly Row[],
-    private readonly filters: readonly EqFilter[] = []
+    private readonly filters: readonly EqFilter[] = [],
+    private readonly indexName = '',
+    private readonly direction: 'asc' | 'desc' = 'asc',
   ) {}
 
-  withIndex(_indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
+  withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
     const builder = new FakeIndexBuilder()
     callback(builder)
-    return new FakeQuery(this.rows, [...this.filters, ...builder.filters])
+    return new FakeQuery(this.rows, [...this.filters, ...builder.filters], indexName, this.direction)
   }
 
-  async collect(): Promise<Row[]> {
-    return this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
+  order(direction: 'asc' | 'desc'): Query {
+    return new FakeQuery(this.rows, this.filters, this.indexName, direction)
   }
 
 
   async take(limit: number): Promise<Row[]> {
-    return (await this.collect()).slice(0, limit)
+    return this.readRows().slice(0, limit)
   }
+
   async unique(): Promise<Row | null> {
-    return (await this.collect()).at(0) ?? null
+    return this.readRows().at(0) ?? null
   }
 
   async first(): Promise<Row | null> {
     return this.unique()
+  }
+
+  private readRows(): Row[] {
+    const rows = this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
+    const orderField = this.indexName.includes('startedAt')
+      ? 'startedAt'
+      : this.indexName.includes('receivedAt')
+        ? 'receivedAt'
+        : this.indexName.includes('createdAt')
+          ? 'createdAt'
+          : '_creationTime'
+    return rows.toSorted((left, right) => {
+      const leftValue = left[orderField]
+      const rightValue = right[orderField]
+      const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+        ? leftValue - rightValue
+        : String(leftValue).localeCompare(String(rightValue))
+      return this.direction === 'asc' ? comparison : -comparison
+    })
   }
 }
 
@@ -447,6 +469,10 @@ class FakeDb implements Db {
 
   async get(id: string): Promise<Row | null> {
     return this.allRows().find((row) => row._id === id) ?? null
+  }
+
+  normalizeId(tableName: string, id: string): string | null {
+    return id.startsWith(`${tableName}:`) ? id : null
   }
 
   async insert(tableName: string, value: Record<string, unknown>): Promise<string> {
@@ -523,6 +549,7 @@ function seededNotificationDb(options: { includeInquiry?: boolean } = {}): FakeD
     _id: 'adminMemberships:1',
     _creationTime: 4,
     clerkUserId: 'user_admin',
+    tokenIdentifier: 'clerk|user_admin',
     role: 'owner_admin',
     state: 'active',
     grantedBy: 'system',
@@ -532,6 +559,7 @@ function seededNotificationDb(options: { includeInquiry?: boolean } = {}): FakeD
     _id: 'adminMemberships:2',
     _creationTime: 5,
     clerkUserId: 'user_support',
+    tokenIdentifier: 'clerk|user_support',
     role: 'support',
     state: 'active',
     grantedBy: 'system',
@@ -541,47 +569,52 @@ function seededNotificationDb(options: { includeInquiry?: boolean } = {}): FakeD
     return db
   }
 
-  db.seed('businessServices', {
-    _id: 'businessServices:1',
+  db.seed('businessOfferings', {
+    _id: 'businessOfferings:1',
     _creationTime: 6,
-    serviceId: 'businessServices:1',
-    serviceSlug: 'emergency-plumbing',
+    offeringRef: 'offering:sam-plumbing:emergency-plumbing',
     businessId: 'businesses:1',
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Urgent plumbing help.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 0,
-    sourceHash: 'source:service:sam',
     createdAt: 6,
     updatedAt: 6,
   })
+  db.seed('businessOfferingRevisions', {
+    _id: 'businessOfferingRevisions:1',
+    _creationTime: 7,
+    offeringRef: 'offering:sam-plumbing:emergency-plumbing',
+    businessId: 'businesses:1',
+    revision: 1,
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Urgent plumbing help.',
+    serviceAreaSummary: 'Parramatta',
+    sourceHash: 'source:offering:sam',
+    createdAt: 7,
+  })
   db.seed('inquiryThreads', {
     _id: 'inquiryThreads:1',
-    _creationTime: 7,
+    _creationTime: 8,
     threadId: 'inquiry_thread:1',
     businessId: 'businesses:1',
     ownerId: 'owners:1',
-    serviceId: 'businessServices:1',
-    capabilityKind: 'phone_inquiry',
+    offeringRef: 'offering:sam-plumbing:emergency-plumbing',
     status: 'unread',
     firstMessageId: 'inquiry_message:1',
     sourceHash: 'source:thread:1',
-    createdAt: 7,
-    updatedAt: 7,
+    createdAt: 8,
+    updatedAt: 8,
     version: 1,
   })
   db.seed('inquiryMessages', {
     _id: 'inquiryMessages:1',
-    _creationTime: 8,
+    _creationTime: 9,
     messageId: 'inquiry_message:1',
     threadId: 'inquiry_thread:1',
     sender: 'customer',
     body: 'Burst pipe under kitchen sink.\nPlease help.',
-    bodyHash: stableHash('Burst pipe under kitchen sink.'),
-    createdAt: 8,
+    bodyHash: canonicalDigest('Burst pipe under kitchen sink.'),
+    createdAt: 9,
   })
   return db
 }
@@ -594,8 +627,8 @@ function enqueueArgs(key: string): EnqueueArgs {
     recipientRole: 'owner',
     providerFamily: 'resend',
     redactedPayloadJson: JSON.stringify({
-      bodyHash: stableHash('burst pipe raw body'),
-      contactHash: stableHash('customer@example.test'),
+      bodyHash: canonicalDigest('burst pipe raw body'),
+      contactHash: canonicalDigest('customer@example.test'),
       template: 'inquiry-owner',
     }),
     systemKey,
@@ -607,7 +640,7 @@ function enqueueArgs(key: string): EnqueueArgs {
 function webhookArgs(overrides: Partial<WebhookArgs> = {}): WebhookArgs {
   const providerEventId = overrides.providerEventId ?? 'svix:1'
   const eventType = overrides.eventType ?? 'email.delivered'
-  const payloadHash = overrides.payloadHash ?? stableHash({ providerEventId, eventType })
+  const payloadHash = overrides.payloadHash ?? canonicalDigest({ providerEventId, eventType })
   return {
     providerFamily: overrides.providerFamily ?? 'resend',
     providerEventId,

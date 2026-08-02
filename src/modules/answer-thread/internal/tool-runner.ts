@@ -1,7 +1,9 @@
 import { findAction } from '@/modules/actions'
 import type { ActionTimingSink } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
+import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 import { toAnswerSource } from '@/modules/answer/public'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
 import {
@@ -11,10 +13,11 @@ import {
   type HarnessToolStatus,
 } from '@/modules/harness/public'
 import type {
-  PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
 import { isAnswerReadToolId } from './answer-tool-registry'
+import { parseToolSummary } from './tool-summary'
 
 import type {
   AnswerToolCallRecord,
@@ -78,9 +81,9 @@ export async function runAnswerToolCall(
     return recordResult(input, toolCallId, {
       status: 'error',
       summary: { slugs: [], count: 0, errorCode },
-      inputJson: safeStringify(input.input),
+      inputJson: safeJsonStringify(input.input),
       providers: [],
-      resultJson: safeStringify({ kind: 'error', code: errorCode }),
+      resultJson: safeJsonStringify({ kind: 'error', code: errorCode }),
       timings: timings.entries(),
     })
   }
@@ -91,7 +94,7 @@ export async function runAnswerToolCall(
         input: input.input,
         context: { timing: timings.sink },
         surface: 'answerThread',
-        allowWrites: false,
+        mode: 'public-read',
         toolCallId,
       })
     : await input.harnessLoop.runTool({
@@ -99,7 +102,7 @@ export async function runAnswerToolCall(
         input: input.input,
         context: { timing: timings.sink },
         surface: 'answerThread',
-        allowWrites: false,
+        mode: 'public-read',
         toolCallId,
       })
   timings.record('tool.run', outcome.result.durationMs, {
@@ -115,7 +118,7 @@ export async function runAnswerToolCall(
       summary: { slugs: [], count: 0, errorCode },
       inputJson: outcome.result.inputJson,
       providers: [],
-      resultJson: safeStringify({
+      resultJson: safeJsonStringify({
         kind: outcome.result.status === 'blocked' || outcome.result.status === 'refused' ? 'refused' : 'error',
         code: errorCode,
       }),
@@ -134,7 +137,7 @@ export async function runAnswerToolCall(
     summary,
     inputJson: outcome.result.inputJson,
     providers: extracted.providers,
-    resultJson: outcome.result.outputJson ?? safeStringify(outcome.result.output),
+    resultJson: outcome.result.outputJson ?? safeJsonStringify(outcome.result.output),
     timings: timings.entries(),
     resultHash: outcome.result.resultHash,
   })
@@ -160,9 +163,9 @@ function refuse(
   return recordResult(input, toolCallId, {
     status: 'refused',
     summary: { slugs: [], count: 0, errorCode },
-    inputJson: safeStringify(input.input),
+    inputJson: safeJsonStringify(input.input),
     providers: [],
-    resultJson: safeStringify({ kind: 'refused', code: errorCode }),
+    resultJson: safeJsonStringify({ kind: 'refused', code: errorCode }),
     timings: [],
   })
 }
@@ -180,8 +183,8 @@ function recordResult(
     resultHash?: string
   },
 ): RunAnswerToolCallResult {
-  const resultSummaryJson = safeStringify(outcome.summary)
-  const resultHash = outcome.resultHash ?? stableHash({
+  const resultSummaryJson = safeJsonStringify(outcome.summary)
+  const resultHash = outcome.resultHash ?? canonicalDigest({
     toolId: input.toolId,
     input: outcome.inputJson,
     summary: resultSummaryJson,
@@ -223,7 +226,7 @@ function extractProviders(
     }
   }
   if (toolId === 'registry.search') {
-    const page = result as PublicBusinessCatalogApiV2Page
+    const page = result as PublicBusinessCatalogApiV2SearchPage
     return {
       providers: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
       count: page.pagination.total,
@@ -241,13 +244,6 @@ function extractProviders(
   return { providers: [], count: 0 }
 }
 
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return 'null'
-  }
-}
 
 function harnessStatusToAnswerStatus(status: HarnessToolStatus): AnswerToolCallStatus {
   switch (status) {
@@ -292,7 +288,7 @@ function createTimingCollector(): {
   const record: ActionTimingSink['record'] = (name, durationMs, metadata) => {
     entries.push({
       name,
-      durationMs: Math.max(0, Math.round(durationMs * 100) / 100),
+      durationMs: roundNonNegative2(durationMs),
       atMs: Date.now(),
       ...(metadata === undefined ? {} : { metadata }),
     })
@@ -313,15 +309,8 @@ export function toolCallRecordsToGateInput(
   records: readonly AnswerToolCallRecord[],
 ): { slug: string }[][] {
   return records.map((record) => {
-    const summary = parseSummary(record.resultSummaryJson)
+    const summary = parseToolSummary(record.resultSummaryJson)
     return summary.slugs.map((slug) => ({ slug }))
   })
 }
 
-function parseSummary(value: string): AnswerToolCallResultSummary {
-  try {
-    return JSON.parse(value) as AnswerToolCallResultSummary
-  } catch {
-    return { slugs: [], count: 0 }
-  }
-}

@@ -2,6 +2,10 @@ export type BoundedRequestTextResult =
   | { ok: true; text: string }
   | { ok: false; code: 'payload_too_large' }
 
+export type BoundedRequestJsonResult =
+  | { ok: true; value: unknown }
+  | { ok: false; code: 'payload_too_large' | 'invalid_json' }
+
 const decoder = new TextDecoder()
 
 export async function readBoundedRequestText(
@@ -55,4 +59,17 @@ export async function readBoundedRequestText(
   }
 
   return { ok: true, text: decoder.decode(body) }
+}
+
+export async function readBoundedRequestJson(
+  request: Pick<Request, 'body' | 'headers'>,
+  maxBytes: number,
+): Promise<BoundedRequestJsonResult> {
+  const bounded = await readBoundedRequestText(request, maxBytes)
+  if (!bounded.ok) return bounded
+  try {
+    return { ok: true, value: JSON.parse(bounded.text) as unknown }
+  } catch {
+    return { ok: false, code: 'invalid_json' }
+  }
 }

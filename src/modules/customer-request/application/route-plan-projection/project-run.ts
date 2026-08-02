@@ -19,7 +19,7 @@ export type StoredRouteRunProjection = Readonly<{
   totalSteps: number
   completedSteps: number
   currentPosition: number
-  currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+  currentState: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   resultJson?: string
   cancellationReleaseMayStartAt?: number
@@ -50,8 +50,6 @@ export function customerProgressState(
   switch (state) {
     case 'queued':
       return 'queued'
-    case 'leased':
-      return 'ready_to_contact'
     case 'dispatched':
       return 'contacting'
     case 'accepted':
@@ -157,7 +155,7 @@ export function projectStoredRouteRun(
     total: run.totalSteps,
     current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
     updatedAt: run.updatedAt,
-    cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
+    cancellationAvailable: run.currentState === 'queued',
     ...(run.cancellationReleaseMayStartAt === undefined
       ? {}
       : { cancellationReleaseMayStartAt: run.cancellationReleaseMayStartAt }),

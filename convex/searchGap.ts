@@ -14,7 +14,6 @@ import type {
 } from '@/modules/demand/public'
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
 import { requireAdminAuthority } from '@/modules/security/public'
-import { runtimeDb } from './source_state'
 
 const factValidator = literalUnion(SearchGapFactValues)
 const surfaceValidator = literalUnion(SearchGapSurfaceValues)
@@ -253,7 +252,7 @@ export const readSearchGapOutreach = queryGeneric({
     const identity = await ctx.auth.getUserIdentity()
     const membership = identity === null
       ? undefined
-      : await readActiveAdminMembership(runtimeDb(ctx.db), identity)
+      : await readActiveAdminMembership(ctx.db, identity)
     if (requireAdminAuthority(membership, 'read_admin_readbacks').kind === 'denied') {
       return { kind: 'denied' as const }
     }

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
-import { buildOfferingLlmsTxt } from '@/modules/discovery/internal/discovery-files'
+import {
+  buildOfferingLlmsTxt,
+  buildOfferingLlmsUrlsFromSlugs,
+} from '@/modules/discovery/internal/discovery-files'
 import { PublicBusinessCatalogApiSchemaVersion } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
@@ -39,7 +42,9 @@ describe('Offering llms.txt index', () => {
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}/ucp`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/api/businesses/${business.slug}`)
     }
-    expect(result.urls).toHaveLength(10 + 50 * 3)
+    // The legacy registry page was retired; the V2 index advertises only current public surfaces.
+    expect(result.urls).not.toContain(`${canonicalBaseUrl}/registry`)
+    expect(result.urls).toHaveLength(9 + 50 * 3)
   })
 
   /** Pathological slugs, not just large catalogs, are what push an index past a
@@ -55,7 +60,7 @@ describe('Offering llms.txt index', () => {
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.length).toBeLessThanOrEqual(12)
     expect(result.body).toContain('- total=50;')
-    expect(result.urls).toHaveLength(10 + 50 * 3)
+    expect(result.urls).toHaveLength(9 + 50 * 3)
   })
 
   /** The index points at the full procedure rather than restating it. */
@@ -118,6 +123,19 @@ describe('Offering llms.txt index', () => {
       `- auth=Bearer AE API key with customer_requests:create, issued to a signed-in account at ${canonicalBaseUrl}/agent-access`
     )
     expect(body).toContain('- escalate=take this path only when the customer wants to confirm and start an option')
+  })
+
+  it('keeps the exact catalog total separate from the bounded DTO sample', () => {
+    const result = buildOfferingLlmsTxt(catalogOf(12, (index) => `business-${index}`), {
+      canonicalBaseUrl,
+      totalBusinesses: 50,
+    })
+
+    expect(result.body).toContain('- total=50; the lines above are a sample, not the catalog')
+    expect(buildOfferingLlmsUrlsFromSlugs(
+      Array.from({ length: 50 }, (_unused, index) => `business-${index}`),
+      { canonicalBaseUrl },
+    )).toHaveLength(9 + 50 * 3)
   })
 
   it('keeps the boundary and correction sections and says none for an empty catalog', () => {

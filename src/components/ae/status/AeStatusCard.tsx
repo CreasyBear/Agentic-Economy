@@ -9,9 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import {
-  discoveryStatusToAeStatus,
-  indexStatusToAeStatus,
-  publicStatusToAeStatus,
+  dispositionToAeStatus,
+  offeringAccessToAeStatus,
+  offeringSupportToAeStatus,
   trustTierToAeStatus,
 } from '@/lib/ui/status-presentation'
 
@@ -50,6 +50,16 @@ function ownerActionForAdmissionBlocker(blocker: AdmissionBlocker): AdmissionOwn
 export function AeStatusCard({ readback }: AeStatusCardProps) {
   const titleId = `ae-status-card-${readback.catalog.slug}`
   const hasUnavailableCapabilities = readback.unavailableCapabilities.length > 0
+  const offeringStatuses = readback.catalog.offerings.map((offering) => ({
+    support: offeringSupportToAeStatus(offering.support),
+    access: offeringAccessToAeStatus(offering.accessPaths),
+  }))
+  const supportStatus = offeringStatuses.some(({ support }) => support === 'available')
+    ? 'available'
+    : offeringStatuses.some(({ support }) => support === 'guarded')
+      ? 'guarded'
+      : 'not_live'
+  const accessStatus = offeringStatuses.some(({ access }) => access === 'listed') ? 'listed' : 'not_queued'
 
   return (
     <Card className="p-6" aria-labelledby={titleId}>
@@ -75,10 +85,10 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         <Separator />
         <div className="grid gap-4">
           <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2">
-            <li><AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} /></li>
+            <li><AeStatusBadge status={dispositionToAeStatus(readback.catalog.disposition)} /></li>
             <li><AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} /></li>
-            <li><AeStatusBadge status={indexStatusToAeStatus(readback.catalog.indexStatus)} /></li>
-            <li><AeStatusBadge status={discoveryStatusToAeStatus(readback.catalog.discoveryStatus)} /></li>
+            <li><AeStatusBadge status={supportStatus} /></li>
+            <li><AeStatusBadge status={accessStatus} /></li>
           </ul>
           {hasUnavailableCapabilities ? (
             <ul className="m-0 grid list-none gap-3 p-0">

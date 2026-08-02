@@ -1,3 +1,5 @@
+import { createPrefixedRandomId } from '@/modules/common/random-id'
+
 import {
   type AnswerEvent,
   type AnswerSnapshot,
@@ -27,7 +29,6 @@ export type TurnPathId =
   | 'frozen_filter'
   | 'frozen_compare'
   | 'agent'
-  | 'proposal'
   | 'inquiry_handoff'
   | 'boundary_explain'
   | 'unsupported'
@@ -155,7 +156,7 @@ export function providerNameList(providers: readonly AnswerSource[]): string {
 }
 
 export function makeCopyId(): string {
-  return `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return createPrefixedRandomId(`turn-${Date.now().toString(36)}-`)
 }
 
 export function describeProviderCount(count: number, noun: string): string {

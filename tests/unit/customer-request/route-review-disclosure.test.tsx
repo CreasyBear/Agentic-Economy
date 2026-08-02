@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import '../../setup/jsdom-platform'
 
 import { RouteReviewCard } from '@/components/ae/customer-request/panels/routes'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
@@ -18,13 +19,6 @@ import type { CustomerRequestView } from '@/modules/customer-request/customer-pr
 const noop = () => undefined
 const asyncNoop = async () => undefined
 
-beforeAll(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe() { /* layout observation is not exercised in jsdom */ }
-    unobserve() { /* layout observation is not exercised in jsdom */ }
-    disconnect() { /* layout observation is not exercised in jsdom */ }
-  })
-})
 
 beforeEach(() => {
   // This repo does not enable testing-library auto-cleanup.

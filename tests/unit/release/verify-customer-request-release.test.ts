@@ -1,8 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { verifyHostedCustomerRequestRelease } from '../../../tools/release/verify-customer-request-release'
+import {
+  main as verifyHostedCustomerRequestReleaseMain,
+  verifyHostedCustomerRequestRelease,
+} from '../../../tools/release/verify-customer-request-release'
 
 const revision = '50fa5ed886dbf5eddbfc1397704b12fc52469abe'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 function readback(sourceRevision = revision): Record<string, unknown> {
   return {
@@ -55,6 +63,24 @@ describe('hosted Customer Request release verifier', () => {
       revision,
       deploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
     })
+  })
+
+  it('passes canonical-first bypass configuration from environment into the readback request', async () => {
+    const fetchImpl = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json(readback()))
+    vi.stubGlobal('fetch', fetchImpl)
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await verifyHostedCustomerRequestReleaseMain({
+      AE_CUSTOMER_REQUEST_BASE_URL: 'https://agentic-economy-abc123.vercel.app',
+      AE_CUSTOMER_REQUEST_API_KEY: 'test_key',
+      AE_RELEASE_SOURCE_REVISION: revision,
+      AE_RELEASE_DEPLOYMENT_ID: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
+      VERCEL_AUTOMATION_BYPASS_SECRET: ' canonical-secret ',
+      AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ' alias-secret ',
+    })
+
+    expect(new Headers(fetchImpl.mock.calls[0]?.[1]?.headers).get('x-vercel-protection-bypass'))
+      .toBe('canonical-secret')
   })
 
   it('admits the platform-reported production alias for protected deployment URLs', async () => {

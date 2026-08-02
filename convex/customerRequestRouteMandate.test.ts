@@ -7,6 +7,7 @@ import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import type { RouteMandate } from '@/modules/customer-request/route-mandate'
+import { isRecord } from '@/modules/common/is-record'
 import { deriveRouteStepAuthority } from '@/modules/customer-request/route-mandate-admission'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
@@ -1297,7 +1298,8 @@ describe('durable RouteMandate lifecycle', () => {
       idempotencyKey: command.idempotencyKey,
     })
     // Convex serialization erases branded types (e.g. PointedSchemaIdentity); the runtime shape is exact.
-    const issuedMandate = fixture.issued.mandate as unknown as RouteMandate
+    const issuedMandate = fixture.issued.mandate
+    if (!isRouteMandate(issuedMandate)) throw new Error('issued mandate shape invalid')
     const derived = deriveRouteStepAuthority({
       mandate: issuedMandate,
       expectedMandateDigest: command.expectedMandateDigest,
@@ -1367,6 +1369,219 @@ describe('durable RouteMandate lifecycle', () => {
     })
   })
 })
+
+function isRouteMandate(value: unknown): value is RouteMandate {
+  if (!isRecord(value)
+    || value.format !== 'ae.route-mandate:v1'
+    || !hasStringFields(value, ['mandateRef', 'mandateDigest'])
+    || !isMandatePrincipal(value.principal)
+    || !isMandateAuthorization(value.authorization)
+    || !isRecord(value.request)
+    || !hasStringFields(value.request, ['requestId'])
+    || !isFiniteNumber(value.request.requestRevision)
+    || !isRouteMandateRoute(value.route)
+    || !isFiniteNumber(value.issuedAt)
+    || !isFiniteNumber(value.expiresAt)) {
+    return false
+  }
+  return true
+}
+
+function isMandatePrincipal(value: unknown): value is RouteMandate['principal'] {
+  return isRecord(value)
+    && hasStringFields(value, ['principalId', 'authenticationEvidenceRef'])
+}
+
+function isMandateAuthorization(value: unknown): value is RouteMandate['authorization'] {
+  if (!isRecord(value)) return false
+  if (value.kind === 'explicit') {
+    return hasStringFields(value, [
+      'authorizationEvidenceRef',
+      'authorizationEvidenceDigest',
+      'authorityScopeDigest',
+    ])
+  }
+  if (value.kind === 'standing_low_risk') {
+    return hasStringFields(value, [
+      'standingPolicyRef',
+      'standingPolicyDigest',
+      'authorityUseRef',
+      'authorityScopeDigest',
+    ])
+  }
+  return false
+}
+
+function isRouteMandateRoute(value: unknown): value is RouteMandate['route'] {
+  if (!isRecord(value)
+    || !hasStringFields(value, [
+      'generationRef',
+      'generationDigest',
+      'registrySnapshotDigest',
+      'routePlanId',
+      'routeDigest',
+      'stepGraphDigest',
+      'dataScopeDigest',
+      'effectScopeDigest',
+      'evidenceScopeDigest',
+    ])
+    || !isFiniteNumber(value.generation)
+    || !isFiniteNumber(value.routeExpiresAt)
+    || !Array.isArray(value.steps)
+    || !value.steps.every((step) => isRouteMandateStep(step))
+    || !isMoney(value.maximumTotalSpend)
+    || !isRecord(value.fallback)) {
+    return false
+  }
+  return value.fallback.kind === 'new_mandate_required'
+    && Array.isArray(value.fallback.alternatives)
+    && value.fallback.alternatives.every((alternative) => (
+      isRecord(alternative)
+      && hasStringFields(alternative, ['routePlanId', 'routeDigest'])
+    ))
+}
+
+function isRouteMandateStep(value: unknown): value is RouteMandate['route']['steps'][number] {
+  if (!isRecord(value)
+    || !hasStringFields(value, [
+      'actionId',
+      'candidateRef',
+      'businessId',
+      'offeringId',
+      'bindingId',
+      'offeringRegistrationHash',
+      'bindingRegistrationHash',
+      'publicationRef',
+      'inputScopeDigest',
+    ])
+    || !isFiniteNumber(value.position)
+    || !isFiniteNumber(value.publicationRevision)
+    || !isCapabilityContractRef(value.contractRef)
+    || !isRegisteredPrice(value.price)
+    || !Array.isArray(value.dataScope)
+    || !value.dataScope.every((scope) => isRouteMandateDataScope(scope))
+    || !Array.isArray(value.effects)
+    || !value.effects.every((effect) => isRouteMandateEffect(effect))
+    || !Array.isArray(value.evidence)
+    || !value.evidence.every((evidence) => isRouteMandateEvidence(evidence))
+    || !isRouteMandateCancellation(value.cancellation)
+    || !isRouteMandateRecovery(value.recovery)) {
+    return false
+  }
+  return true
+}
+
+function isCapabilityContractRef(value: unknown): boolean {
+  return isRecord(value)
+    && hasStringFields(value, ['capabilityId', 'contractDigest'])
+    && isFiniteNumber(value.version)
+}
+
+function isMoney(value: unknown): boolean {
+  return isRecord(value)
+    && hasStringFields(value, ['currency'])
+    && isFiniteNumber(value.amountMinor)
+}
+
+function isRegisteredPrice(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  if (value.kind === 'fixed') {
+    return hasStringFields(value, ['currency'])
+      && isFiniteNumber(value.amountMinor)
+  }
+  if (value.kind === 'range') {
+    return hasStringFields(value, ['currency'])
+      && isFiniteNumber(value.minimumAmountMinor)
+      && isFiniteNumber(value.maximumAmountMinor)
+  }
+  return value.kind === 'on_request'
+}
+
+function isRouteMandateDataScope(value: unknown): boolean {
+  if (!isRecord(value)
+    || !hasStringFields(value, ['effectId', 'inputPointer'])
+    || !(
+      value.classification === 'public'
+      || value.classification === 'personal'
+      || value.classification === 'sensitive'
+      || value.classification === 'credential'
+    )
+    || !(value.phase === 'preparation' || value.phase === 'execution')
+    || !isRouteMandateRecipient(value.recipient)
+    || !isStringArray(value.purposes)) {
+    return false
+  }
+  return true
+}
+
+function isRouteMandateRecipient(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  if (value.kind === 'registered_binding') {
+    return hasStringFields(value, ['businessId', 'bindingId'])
+  }
+  if (value.kind === 'named_recipient') {
+    return hasStringFields(value, ['recipientId'])
+  }
+  return false
+}
+
+function isRouteMandateEffect(value: unknown): boolean {
+  return isRecord(value)
+    && hasStringFields(value, ['effectId'])
+    && (
+      value.class === 'data_release'
+      || value.class === 'financial_exposure'
+      || value.class === 'external_state_change'
+    )
+    && (value.authority === 'none' || value.authority === 'explicit' || value.authority === 'mandate_or_explicit')
+    && (
+      value.reversibility === 'not_applicable'
+      || value.reversibility === 'reversible'
+      || value.reversibility === 'conditional'
+      || value.reversibility === 'irreversible'
+    )
+}
+
+function isRouteMandateEvidence(value: unknown): boolean {
+  if (!isRecord(value)
+    || !hasStringFields(value, [
+      'evidenceId',
+      'outputPointer',
+      'purpose',
+      'annotationId',
+      'label',
+      'role',
+      'schemaIdentity',
+    ])
+    || typeof value.guaranteed !== 'boolean') {
+    return false
+  }
+  return value.semanticIdentity === undefined || typeof value.semanticIdentity === 'string'
+}
+
+function isRouteMandateCancellation(value: unknown): boolean {
+  return isRecord(value)
+    && (value.kind === 'unsupported' || value.kind === 'adapter_managed')
+    && isStringArray(value.evidenceRefs)
+}
+
+function isRouteMandateRecovery(value: unknown): boolean {
+  return isRecord(value)
+    && (value.idempotency === 'not_applicable' || value.idempotency === 'required')
+    && (value.recovery === 'retry_safe' || value.recovery === 'reconcile_required')
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function hasStringFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  return fields.every((field) => typeof value[field] === 'string')
+}
 
 async function issuedAdmissionFixture(
   backend: ReturnType<typeof convexTest>,
@@ -1500,7 +1715,7 @@ async function compileFixture(
     principalId?: string
   }>,
 ) {
-  const supply = await backend.query(internal.capabilitySupply.listEligible, {
+  const supply = await backend.query(internal.capabilitySupply.listRouteable, {
     networkId: 'ae:public', limit: 64,
   })
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)

@@ -1,7 +1,6 @@
-import type { PublicStatus, TrustTier } from '@/modules/business/public'
-import type { FirstRequestMode, ServiceCapabilityStatus } from '@/modules/catalog/public'
-import type { DiscoveryStatus } from '@/modules/discovery/public'
-import type { IndexStatus } from '@/modules/registry/public'
+import type { TrustTier } from '@/modules/business/public'
+import type { FirstRequestMode } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { formatRelativeTime } from './format-time'
 
 export const aeStatusValues = [
@@ -591,16 +590,16 @@ export function getStatusPresentation(status: AeStatus): AeStatusPresentation {
   return aeStatusPresentation[status]
 }
 
-export function publicStatusToAeStatus(status: PublicStatus): AeStatus {
-  if (status === 'published') {
-    return 'published'
+export function dispositionToAeStatus(disposition: PublicBusinessCatalogApiV2Dto['disposition']): AeStatus {
+  if (disposition === 'stale') {
+    return 'stale'
   }
 
-  if (status === 'suppressed') {
-    return 'suppressed'
+  if (disposition === 'partial') {
+    return 'degraded'
   }
 
-  return 'not_queued'
+  return 'available'
 }
 
 export function trustTierToAeStatus(trustTier: TrustTier): AeStatus {
@@ -619,28 +618,20 @@ export function trustTierToAeStatus(trustTier: TrustTier): AeStatus {
   return 'claimed'
 }
 
-export function indexStatusToAeStatus(status: IndexStatus): AeStatus {
-  return status
+export function offeringSupportToAeStatus(
+  support: PublicBusinessCatalogApiV2Dto['offerings'][number]['support'],
+): AeStatus {
+  if (support.aeSupportedAction) {
+    return 'available'
+  }
+
+  return support.integrated ? 'guarded' : 'not_live'
 }
 
-export function discoveryStatusToAeStatus(status: DiscoveryStatus): AeStatus {
-  if (status === 'stale') {
-    return 'discovery_stale'
-  }
-
-  if (status === 'degraded') {
-    return 'discovery_degraded'
-  }
-
-  if (status === 'unavailable') {
-    return 'discovery_unavailable'
-  }
-
-  return 'available'
-}
-
-export function capabilityStatusToAeStatus(status: ServiceCapabilityStatus): AeStatus {
-  return status
+export function offeringAccessToAeStatus(
+  accessPaths: PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'],
+): AeStatus {
+  return accessPaths.length > 0 ? 'listed' : 'not_queued'
 }
 
 export function firstRequestModeLabel(mode: FirstRequestMode): string {
@@ -661,18 +652,14 @@ export function firstRequestModeLabel(mode: FirstRequestMode): string {
  * time. Google-Maps-clean: one short label, one meaning.
  */
 export type PlainAvailabilityInput = {
-  discoveryStatus: DiscoveryStatus
+  disposition: PublicBusinessCatalogApiV2Dto['disposition']
   firstRequestMode: FirstRequestMode
 }
 
 export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
-  const { discoveryStatus, firstRequestMode } = input
+  const { disposition, firstRequestMode } = input
 
-  if (discoveryStatus === 'unavailable') {
-    return 'Details not published'
-  }
-
-  if (discoveryStatus === 'degraded' || discoveryStatus === 'stale') {
+  if (disposition === 'partial' || disposition === 'stale') {
     return 'Needs confirmation'
   }
 
@@ -691,14 +678,15 @@ export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
   }
 }
 
-const HOURS_META_LABELS: Record<string, true> = {
-  unknown: true,
-  'hours unknown': true,
-  'hours supplied by owner': true,
-  'owner supplied hours': true,
-  'owner confirmed hours are not listed yet': true,
-  'after-hours availability supplied by owner': true,
-}
+
+const HOURS_META_LABELS = new Set([
+  'unknown',
+  'hours unknown',
+  'hours supplied by owner',
+  'owner supplied hours',
+  'owner confirmed hours are not listed yet',
+  'after-hours availability supplied by owner',
+])
 
 /**
  * Plain hours line. Echoes the real hours string when present; otherwise a plain
@@ -706,7 +694,7 @@ const HOURS_META_LABELS: Record<string, true> = {
  */
 export function plainHoursLabel(hoursOrUnknown: string | undefined): string {
   const trimmed = (hoursOrUnknown ?? '').trim()
-  if (trimmed.length === 0 || HOURS_META_LABELS[trimmed.toLowerCase()] === true) {
+  if (trimmed.length === 0 || HOURS_META_LABELS.has(trimmed.toLowerCase())) {
     return 'Check hours'
   }
 

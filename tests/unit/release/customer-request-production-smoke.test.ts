@@ -69,6 +69,19 @@ describe('customer Request production smoke entrypoint', () => {
     })
   })
 
+  it('resolves canonical and alias Vercel bypass secrets with canonical precedence', () => {
+    const alias = customerRequestProductionSmokeConfigFromEnvironment({
+      AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ' alias-secret ',
+    })
+    expect(alias.deploymentProtectionBypass).toBe('alias-secret')
+
+    const canonical = customerRequestProductionSmokeConfigFromEnvironment({
+      VERCEL_AUTOMATION_BYPASS_SECRET: ' canonical-secret ',
+      AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ' alias-secret ',
+    })
+    expect(canonical.deploymentProtectionBypass).toBe('canonical-secret')
+  })
+
   it('rejects an unknown finish mode instead of falling back to cancellation', () => {
     expect(() => customerRequestProductionSmokeConfigFromEnvironment({
       AE_CUSTOMER_REQUEST_BASE_URL: 'https://ae.example',

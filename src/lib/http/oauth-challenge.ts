@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+
 import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
@@ -6,7 +8,7 @@ import {
 } from '@/modules/customer-request/agent-contract'
 
 export function bearerChallenge(canonicalBaseUrl: string, requiredScope: string = CUSTOMER_REQUEST_AGENT_SCOPE): string {
-  const metadata = `${canonicalBaseUrl.replace(/\/+$/u, '')}/.well-known/oauth-protected-resource`
+  const metadata = `${trimTrailingSlashes(canonicalBaseUrl)}/.well-known/oauth-protected-resource`
   return `Bearer resource_metadata="${metadata}", scope="${requiredScope}"`
 }
 
@@ -20,7 +22,7 @@ export function oauthProtectedResourceMetadata(canonicalBaseUrl: string): Readon
   bearer_methods_supported: readonly ['header']
   scopes_supported: readonly string[]
 }> {
-  const base = canonicalBaseUrl.replace(/\/+$/u, '')
+  const base = trimTrailingSlashes(canonicalBaseUrl)
   return {
     resource: base,
     authorization_servers: [base],

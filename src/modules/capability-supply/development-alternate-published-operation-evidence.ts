@@ -1,6 +1,5 @@
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import {
   admitRegisteredTransport,
@@ -26,6 +25,11 @@ const expectedPayment = {
 } as const
 const claimCeiling =
   'Labelled local alternate-provider fixture only; no hosted route, real payment, independent provider, settlement, fulfilment, production safety, or customer value.'
+
+function requireAlternateFixture<T>(value: T | undefined, errorCode: string): T {
+  if (value === undefined) throw new Error(errorCode)
+  return value
+}
 
 export function buildDevelopmentAlternatePublishedOperationEvidence() {
   const contract = defineCapabilityContract({
@@ -210,11 +214,15 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
       },
     ],
   }
+  const publicationSource = requireAlternateFixture(
+    qualification.sources[0],
+    'alternate_published_source_missing',
+  )
   const publication = {
     publicationRef: qualification.candidate.publicationRef,
     revision: qualification.candidate.revision,
     businessId: qualification.candidate.businessId,
-    sourceDigest: qualification.sources[0]!.digest,
+    sourceDigest: publicationSource.digest,
     readinessObservedAt: observedAt,
     readinessValidUntil: validUntil,
     readinessEvidenceRefs: ['mock:evidence:alternate-fresh-402'],
@@ -254,8 +262,8 @@ export function verifyDevelopmentAlternatePublishedOperationEvidence(
     throw new Error('development_alternate_published_operation_evidence_invalid')
   }
   const descriptor = materializeRuntimePublishedOperation(rebuilt)
-  const operationDigest = canonicalDigest(packet.operation as unknown as StableHashValue)
-  const rebuiltDigest = canonicalDigest(rebuilt as unknown as StableHashValue)
+  const operationDigest = canonicalDigest(packet.operation)
+  const rebuiltDigest = canonicalDigest(rebuilt)
   if (
     operationDigest !== rebuiltDigest
     || packet.operation.materialDigest !== rebuilt.materialDigest
@@ -274,7 +282,7 @@ export function verifyDevelopmentAlternatePublishedOperationEvidence(
     || packet.operation.identity.payment.payTo !== expectedPayment.payTo
     || packet.operation.identity.payment.currency !== expectedPayment.currency
     || packet.operation.transport.configDigest
-      !== canonicalDigest(JSON.parse(packet.operation.transport.configJson) as StableHashValue)
+      !== canonicalDigest(JSON.parse(packet.operation.transport.configJson))
     || packet.readinessObservation.status !== 402
     || packet.readinessObservation.observedAt !== observedAt
     || packet.readinessObservation.validUntil !== validUntil
@@ -312,5 +320,5 @@ function runtimeDescriptorDigest(
     safeContinuations: descriptor.safeContinuations,
     price: descriptor.price,
     target: descriptor.target,
-  } as StableHashValue)
+  })
 }

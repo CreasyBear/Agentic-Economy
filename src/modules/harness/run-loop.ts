@@ -1,6 +1,8 @@
 import type { ActionContext, ActionSurface } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { isRecord } from '@/modules/common/is-record'
+import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
+import { roundFiniteNonNegative2 } from '@/modules/common/round-nonnegative-2'
 
 import {
   runHarnessTool,
@@ -39,7 +41,6 @@ export type HarnessRunLoopOptions = {
   toolTimeoutMs?: number
   toolContext?: ActionContext
   surface?: HarnessToolSurface
-  allowWrites?: boolean
   onEvent?: HarnessRunLoopEventSink
   throwOnError?: boolean
 }
@@ -123,7 +124,6 @@ export class HarnessRunLoop {
   private readonly toolTimeoutMs: number | undefined
   private readonly toolContext: ActionContext | undefined
   private readonly surface: HarnessToolSurface | undefined
-  private readonly allowWrites: boolean | undefined
   private readonly onEvent: HarnessRunLoopEventSink | undefined
   private readonly shouldThrowOnError: boolean
   private readonly runtimeEvents: HarnessRuntimeEvent[] = []
@@ -142,7 +142,6 @@ export class HarnessRunLoop {
     this.toolTimeoutMs = options.toolTimeoutMs
     this.toolContext = options.toolContext
     this.surface = options.surface
-    this.allowWrites = options.allowWrites
     this.onEvent = options.onEvent
     this.shouldThrowOnError = options.throwOnError ?? false
 
@@ -247,35 +246,7 @@ export class HarnessRunLoop {
 
   async phase<T>(phase: string, work: HarnessRunLoopGuardedWork<T>): Promise<T> {
     this.startRun()
-    const startedAt = this.now()
-    this.emit({
-      type: 'phase.started',
-      runId: this.runId,
-      phase,
-      at: startedAt,
-    })
-
-    try {
-      const result = await this.withRunGuards(work)
-      this.emit({
-        type: 'phase.completed',
-        runId: this.runId,
-        phase,
-        at: this.now(),
-        durationMs: this.elapsedSince(startedAt),
-      })
-      return result
-    } catch (error) {
-      this.emit({
-        type: 'phase.failed',
-        runId: this.runId,
-        phase,
-        at: this.now(),
-        durationMs: this.elapsedSince(startedAt),
-        errorCode: errorCodeFromError(error),
-      })
-      throw error
-    }
+    return this.withPhaseEvents(phase, () => this.withRunGuards(work))
   }
 
   async runTool<Input, Output>(
@@ -492,12 +463,7 @@ export class HarnessRunLoop {
     })
   }
 
-  private async runPhase<State>(
-    phase: HarnessRunPhase,
-    state: State,
-    handler: HarnessRunLoopPhaseHandler<State> | undefined,
-    options: { applyGuards: boolean },
-  ): Promise<State> {
+  private async withPhaseEvents<T>(phase: string, work: () => Promise<T>): Promise<T> {
     const startedAt = this.now()
     this.emit({
       type: 'phase.started',
@@ -507,7 +473,7 @@ export class HarnessRunLoop {
     })
 
     try {
-      const next = await this.runPhaseHandler(phase, state, handler, options)
+      const result = await work()
       this.emit({
         type: 'phase.completed',
         runId: this.runId,
@@ -515,7 +481,7 @@ export class HarnessRunLoop {
         at: this.now(),
         durationMs: this.elapsedSince(startedAt),
       })
-      return next
+      return result
     } catch (error) {
       this.emit({
         type: 'phase.failed',
@@ -527,6 +493,18 @@ export class HarnessRunLoop {
       })
       throw error
     }
+  }
+
+  private runPhase<State>(
+    phase: HarnessRunPhase,
+    state: State,
+    handler: HarnessRunLoopPhaseHandler<State> | undefined,
+    options: { applyGuards: boolean },
+  ): Promise<State> {
+    return this.withPhaseEvents(
+      phase,
+      () => this.runPhaseHandler(phase, state, handler, options),
+    )
   }
 
   private async runPhaseHandler<State>(
@@ -555,45 +533,16 @@ export class HarnessRunLoop {
     this.throwIfAborted()
     this.throwIfTimedOut()
 
-    const controller = new AbortController()
-    const workPromise = Promise.resolve().then(() => work(controller.signal))
-    const races: Promise<T>[] = [workPromise]
-    const cleanup: (() => void)[] = []
-
-    if (this.signal !== undefined) {
-      races.push(new Promise<T>((_, reject) => {
-        const onAbort = (): void => {
-          const error = new HarnessRunLoopAbortError(this.signal?.reason)
-          abortController(controller, error)
-          reject(error)
-        }
-        this.signal?.addEventListener('abort', onAbort, { once: true })
-        cleanup.push(() => this.signal?.removeEventListener('abort', onAbort))
-      }))
-    }
-
     const remainingTimeoutMs = this.remainingTimeoutMs()
-    if (remainingTimeoutMs !== undefined) {
-      races.push(new Promise<T>((_, reject) => {
-        const timer = setTimeout(
-          () => {
-            const error = new HarnessRunLoopTimeoutError(this.timeoutMs ?? remainingTimeoutMs)
-            abortController(controller, error)
-            reject(error)
-          },
-          remainingTimeoutMs,
-        )
-        cleanup.push(() => clearTimeout(timer))
-      }))
-    }
-
-    try {
-      return await Promise.race(races)
-    } finally {
-      for (const cleanupFn of cleanup) {
-        cleanupFn()
-      }
-    }
+    return runWithAbortAndTimeout({
+      run: work,
+      ...(remainingTimeoutMs === undefined ? {} : { timeoutMs: remainingTimeoutMs }),
+      ...(remainingTimeoutMs === undefined ? {} : { timeoutErrorMs: this.timeoutMs ?? remainingTimeoutMs }),
+      ...(this.signal === undefined ? {} : { parentSignal: this.signal }),
+      deferRun: true,
+      abortError: (reason) => new HarnessRunLoopAbortError(reason),
+      timeoutError: (timeoutMs) => new HarnessRunLoopTimeoutError(timeoutMs),
+    })
   }
 
   private toolInput<Input, Output>(
@@ -603,16 +552,15 @@ export class HarnessRunLoop {
   ): RunHarnessToolInput {
     const context = input.context ?? this.toolContext
     const surface = input.surface ?? this.surface
-    const allowWrites = input.allowWrites ?? this.allowWrites
     const timeoutMs = input.timeoutMs ?? this.toolTimeoutMs
 
     return {
       tool: input.tool as HarnessToolDefinition<unknown, unknown>,
       input: input.input,
       toolCallId,
+      mode: input.mode,
       ...(context === undefined ? {} : { context }),
       ...(surface === undefined ? {} : { surface }),
-      ...(allowWrites === undefined ? {} : { allowWrites }),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
       ...(signal === undefined ? {} : { signal }),
     }
@@ -639,7 +587,7 @@ export class HarnessRunLoop {
   }
 
   private elapsedSince(startedAt: number): number {
-    return roundDuration(this.now() - startedAt)
+    return roundFiniteNonNegative2(this.now() - startedAt)
   }
 
   private emit(event: HarnessRuntimeEvent): void {
@@ -666,7 +614,7 @@ export class HarnessRunLoop {
     const seq = accounting?.seq ?? input.seq
     const requestId = accounting?.requestId ?? input.requestId
     const costUnavailableReason = accounting?.costUnavailableReason ?? input.costUnavailableReason
-    const usage = normalizeModelUsage(accounting?.usage)
+    const usage = accounting?.usage
     return {
       ...(seq === undefined ? {} : { seq }),
       ...(input.provider === undefined ? {} : { provider: input.provider }),
@@ -678,19 +626,6 @@ export class HarnessRunLoop {
       ...(accounting?.costUsd === undefined ? {} : { costUsd: accounting.costUsd }),
       ...(costUnavailableReason === undefined ? {} : { costUnavailableReason }),
     }
-  }
-}
-
-function normalizeModelUsage(usage: HarnessModelUsage | undefined): HarnessModelUsage | undefined {
-  if (usage === undefined) {
-    return undefined
-  }
-  return usage
-}
-
-function abortController(controller: AbortController, reason: Error): void {
-  if (!controller.signal.aborted) {
-    controller.abort(reason)
   }
 }
 
@@ -777,9 +712,7 @@ function createToolCallId(toolId: string): string {
   return createRuntimeId(createRuntimeIdPrefix('ht', toolId))
 }
 
-function roundDuration(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0
-}
+
 
 function normalizeErrorCode(value: string): string {
   return value.trim().replaceAll(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()

@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+
 import type { BuildPublicThreadSeoInput, PublicThreadSeoContract } from '@/modules/seo/public'
 
 /**
@@ -8,7 +10,7 @@ import type { BuildPublicThreadSeoInput, PublicThreadSeoContract } from '@/modul
  * falling back to the thread title.
  */
 export function buildPublicThreadSeo(input: BuildPublicThreadSeoInput): PublicThreadSeoContract {
-  const canonicalBaseUrl = trimTrailingSlash(input.options?.canonicalBaseUrl ?? 'https://ae.example')
+  const canonicalBaseUrl = trimTrailingSlashes(input.options?.canonicalBaseUrl ?? 'https://ae.example')
   const canonicalUrl = `${canonicalBaseUrl}/t/${input.threadId}`
   const description = input.firstTurnOneLine?.trim() || input.title.trim()
 
@@ -22,6 +24,3 @@ export function buildPublicThreadSeo(input: BuildPublicThreadSeoInput): PublicTh
   }
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/u, '')
-}

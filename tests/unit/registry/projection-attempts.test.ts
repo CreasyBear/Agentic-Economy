@@ -1,25 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
-import type { BusinessSuppressionState } from '@/modules/business/public'
-import { createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
-import type { PublishBusinessCatalogState, ServiceCatalogInput } from '@/modules/catalog/public'
-import { brandNonEmpty } from '@/modules/common/ids'
-import { readCatalogHealth, retryRegistryProjection, syncCatalogProjection } from '@/modules/registry/public'
+import { claimBusiness } from '@/modules/business/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { readCatalogHealth, retryRegistryProjection, syncCatalogProjection } from '@/modules/registry/public'
+import { emptyRegistryProjectionSourceState } from '../../fixtures/source-state'
 
 describe('registry projection attempts', () => {
   it('syncs a published catalog DTO into durable projection items and index readback', () => {
-    const state = emptyState()
+    const state = emptyRegistryProjectionSourceState()
     const published = publishSamCatalog(state)
 
-    expect(state.registryProjectionAttempts).toHaveLength(2)
-    expect(state.registryProjectionAttempts[0]).toMatchObject({
-      status: 'queued',
-      sourceVersion: 'public-catalog:v1',
-      repairAction: 'rebuild_projection',
-      repairResult: 'not_run',
-    })
 
     const synced = syncCatalogProjection(
       state,
@@ -35,7 +27,11 @@ describe('registry projection attempts', () => {
     expect(synced).toMatchObject({
       kind: 'ok',
       code: 'registry_projection_indexed',
-      catalog: { slug: 'parramatta-emergency-plumbing', indexStatus: 'indexed' },
+      catalog: {
+        slug: 'parramatta-emergency-plumbing',
+        schemaVersion: 'public-business-catalog-api:v2',
+        offerings: [{ offeringRef: 'offering:business:parramatta-emergency-plumbing:emergency-pipe-repair' }],
+      },
       attempt: {
         status: 'succeeded',
         sourceVersion: 'public-catalog:v1',
@@ -43,12 +39,12 @@ describe('registry projection attempts', () => {
         repairResult: 'succeeded',
       },
       projectionItems: [
-        { projectionKind: 'business_catalog', publicStatus: 'published', serviceCount: 1 },
-        { projectionKind: 'service_catalog', publicStatus: 'published', serviceCount: 1 },
+        { projectionKind: 'business_catalog', publicStatus: 'published', offeringCount: 1 },
+        { projectionKind: 'offering_catalog', publicStatus: 'published', offeringCount: 1 },
       ],
       indexStatuses: [
         { targetType: 'business', status: 'indexed' },
-        { targetType: 'service', status: 'indexed' },
+        { targetType: 'offering', status: 'indexed' },
       ],
     })
     expect(replayed).toMatchObject({ kind: 'ok', code: 'registry_projection_replayed' })
@@ -58,7 +54,7 @@ describe('registry projection attempts', () => {
   })
 
   it('persists redacted forced failures and repairs without duplicate projection side effects', () => {
-    const state = emptyState()
+    const state = emptyRegistryProjectionSourceState()
     const published = publishSamCatalog(state)
 
     const failed = syncCatalogProjection(
@@ -124,22 +120,7 @@ describe('registry projection attempts', () => {
   })
 })
 
-function emptyState(): PublishBusinessCatalogState & BusinessSuppressionState & RegistrySourceState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-    invalidationIntents: [],
-  }
-}
-
-function publishSamCatalog(state: PublishBusinessCatalogState & RegistrySourceState) {
+function publishSamCatalog(state: RegistrySourceState) {
   const claim = claimBusiness(state, {
     actor: { kind: 'authenticated_owner', clerkUserId: 'user_sam' },
     facts: {
@@ -152,20 +133,11 @@ function publishSamCatalog(state: PublishBusinessCatalogState & RegistrySourceSt
         {
           label: 'Owner supplied',
           evidenceRef: 'private:evidence:sam',
-          sourceHash: brandNonEmpty('hash:source:sam', 'SourceHash'),
+          sourceHash: canonicalDigest('source:sam'),
         },
       ],
     },
-    security: {
-      csrf: mutationCsrf('claim').csrf,
-      rateLimit: {
-        scope: 'claim_submit',
-        key: 'sam',
-        now: 1_000,
-        limit: 5,
-        windowMs: 60_000,
-      },
-    },
+    security: { csrf: mutationCsrf('claim').csrf },
     operationKey: brandNonEmpty('op:claim:sam-registry-unit', 'OperationKey'),
     correlationId: brandNonEmpty('corr:claim:sam-registry-unit', 'CorrelationId'),
     now: 1_000,
@@ -175,39 +147,41 @@ function publishSamCatalog(state: PublishBusinessCatalogState & RegistrySourceSt
     throw new Error(claim.reason)
   }
 
-  const published = publishBusinessCatalog(state, {
-    actor: { kind: 'authenticated_owner', clerkUserId: 'user_sam' },
-    claimId: claim.claim.claimId,
-    services: samServices(),
-    security: mutationCsrf('publish'),
-    operationKey: brandNonEmpty('op:publish:sam-registry-unit', 'OperationKey'),
-    correlationId: brandNonEmpty('corr:publish:sam-registry-unit', 'CorrelationId'),
-    now: 2_000,
+  claim.business.publicStatus = 'published'
+  claim.business.claimStatus = 'published'
+  claim.business.updatedAt = 2_000
+  claim.claim.status = 'published'
+  claim.claim.updatedAt = 2_000
+
+  const offeringRef = brandNonEmpty(
+    'offering:business:parramatta-emergency-plumbing:emergency-pipe-repair',
+    'OfferingRef',
+  )
+  const facts = {
+    name: 'Emergency pipe repair',
+    category: 'Emergency plumbing',
+    summary: 'Burst pipe triage and repair.',
+    serviceAreaSummary: 'Parramatta and nearby suburbs',
+  }
+  const sourceHash = canonicalDigest({ businessId: claim.business.businessId, offeringRef, revision: 1, ...facts })
+  state.offerings.push({
+    offeringRef,
+    businessId: claim.business.businessId,
+    currentRevision: 1,
+    status: 'published',
+    createdAt: 2_000,
+    updatedAt: 2_000,
+  })
+  state.revisions.push({
+    offeringRef,
+    businessId: claim.business.businessId,
+    revision: 1,
+    ...facts,
+    sourceHash,
+    createdAt: 2_000,
   })
 
-  if (published.kind === 'error') {
-    throw new Error(published.reason)
-  }
-
-  return published
-}
-
-function samServices(): readonly ServiceCatalogInput[] {
-  return [
-    {
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
-      summary: 'Burst pipe triage and repair.',
-      serviceArea: 'Parramatta and nearby suburbs',
-      hoursOrUnknown: 'Hours supplied by owner',
-      firstRequest: {
-        mode: 'inquiry_available',
-        publicChannel: 'public_business_contact',
-        publicDisclosure: 'Use the public business contact listed on the catalog.',
-        rawContactValue: 'sam-owner@example.test',
-      },
-    },
-  ]
+  return { business: claim.business }
 }
 
 function mutationCsrf(key: string) {

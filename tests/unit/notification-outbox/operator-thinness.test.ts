@@ -1,10 +1,11 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const hostSource = readFileSync('convex/notificationOutbox.ts', 'utf8')
-const operatorPortsSource = readFileSync('convex/notificationOutboxOperatorPorts.ts', 'utf8')
+const reconstructionSource = readFileSync('convex/notificationOutboxReconstruction.ts', 'utf8')
 const moduleRoot = 'src/modules/notification-outbox/operator'
 
 const hostOperatorMachines = [
@@ -14,85 +15,26 @@ const hostOperatorMachines = [
 ] as const
 
 const moduleFiles = [
-  'ports.ts',
-  'types.ts',
   'serialize.ts',
   'parse-payload.ts',
   'resolve-webhook-dispatch.ts',
-  'ingest-webhook.ts',
-  'retry-dispatch.ts',
-  'mark-no-repair.ts',
   'index.ts',
 ] as const
 
 function collectModuleSources(root: string): string[] {
-  const sources: string[] = []
-  for (const entry of readdirSync(root)) {
-    const path = join(root, entry)
-    if (statSync(path).isDirectory()) {
-      sources.push(...collectModuleSources(path))
-      continue
-    }
-    if (path.endsWith('.ts')) sources.push(readFileSync(path, 'utf8'))
-  }
-  return sources
+  return listTsFiles(root).map((path) => readFileSync(path, 'utf8'))
 }
 
 describe('notification-outbox operator thinness', () => {
-  it('hosts operator machines under notification-outbox/operator/', () => {
+  it('keeps only framework-free operator serializers and resolvers', () => {
     for (const file of moduleFiles) {
       expect(statSync(join(moduleRoot, file)).isFile()).toBe(true)
     }
     const index = readFileSync(join(moduleRoot, 'index.ts'), 'utf8')
-    expect(index).toContain('ingestWebhook')
-    expect(index).toContain('retryDispatch')
-    expect(index).toContain('markNoRepair')
-    expect(index).toContain('NotificationOutboxOperatorPorts')
+    expect(index).toContain('parseRedactedPayload')
+    expect(index).toContain('resolveWebhookDispatchId')
     expect(index).toContain('serializeDispatch')
-  })
-
-  it('keeps host operator exports as thin ports-wired shells', () => {
-    for (const symbol of hostOperatorMachines) {
-      expect(hostSource).toMatch(new RegExp(`export const ${symbol}\\s*=`))
-    }
-    expect(hostSource).toContain('notificationOutboxOperatorPorts(ctx)')
-    expect(hostSource).toContain('ingestWebhookMachine')
-    expect(hostSource).toContain('retryDispatchMachine')
-    expect(hostSource).toContain('markNoRepairMachine')
-    expect(hostSource).toContain("from './notificationOutboxOperatorPorts'")
-    expect(hostSource).toContain("from '../src/modules/notification-outbox/operator'")
-
-    for (const symbol of hostOperatorMachines) {
-      const start = hostSource.indexOf(`export const ${symbol} = mutationGeneric({`)
-      expect(start).toBeGreaterThanOrEqual(0)
-      const end = hostSource.indexOf('\n})', start)
-      expect(end).toBeGreaterThan(start)
-      const body = hostSource.slice(start, end)
-      expect(body).toContain('notificationOutboxOperatorPorts(ctx)')
-      expect(body.split('\n').length).toBeLessThanOrEqual(40)
-      expect(body).not.toContain('notificationOutboxSourceStatePorts')
-      expect(body).not.toContain('ingestNotificationWebhookModule')
-      expect(body).not.toContain('retryNotificationDispatchModule')
-      expect(body).not.toContain('markNotificationNoRepairModule')
-      expect(body).not.toContain('recordNotificationOperationReconstruction')
-      expect(body).not.toContain('readCurrentOperatorAuthority')
-    }
-  })
-
-  it('does not invent webhook/operator sibling hosts or WritePlan DTOs', () => {
-    expect(statSync('convex/notificationOutboxOperatorPorts.ts').isFile()).toBe(true)
-    for (const forbidden of [
-      'convex/notificationOutboxWebhook.ts',
-      'convex/notificationOutboxOperator.ts',
-      'convex/notificationOutboxRepair.ts',
-    ]) {
-      expect(() => statSync(forbidden)).toThrow()
-    }
-    expect(operatorPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
-    expect(operatorPortsSource).toContain('export function notificationOutboxOperatorPorts')
-    expect(operatorPortsSource).toContain('notificationOutboxSourceStatePorts')
-    expect(operatorPortsSource).not.toMatch(/\bWritePlan\b/)
-    expect(operatorPortsSource).not.toMatch(/\bintendedPatches\b/)
+    expect(index).not.toContain('NotificationOutboxOperatorPorts')
     for (const source of collectModuleSources(moduleRoot)) {
       expect(source).not.toMatch(/\bWritePlan\b/)
       expect(source).not.toMatch(/\bintendedPatches\b/)
@@ -102,30 +44,64 @@ describe('notification-outbox operator thinness', () => {
     }
   })
 
-  it('reuses Wave 37 source-state ports inside the adapter only', () => {
-    expect(operatorPortsSource).toContain("from './notificationOutboxSourceStatePorts'")
-    expect(operatorPortsSource).toContain('loadSourceState:')
-    expect(operatorPortsSource).toContain('persistSourceState:')
-    expect(operatorPortsSource).toContain('readOperatorAuthority:')
-    expect(operatorPortsSource).toContain('recordReconstruction:')
-    for (const source of collectModuleSources(moduleRoot)) {
-      expect(source).not.toContain('notificationOutboxSourceStatePorts')
-      expect(source).not.toContain('loadNotificationOutboxSourceState')
-      expect(source).not.toContain('persistNotificationOutboxSourceState')
+  it('hosts operator commands and persistence directly in notificationOutbox.ts', () => {
+    for (const symbol of hostOperatorMachines) {
+      expect(hostSource).toMatch(new RegExp(`export const ${symbol}\\s*=`))
+    }
+    expect(hostSource).toContain('ingestNotificationWebhook(')
+    expect(hostSource).toContain('retryNotificationDispatch(')
+    expect(hostSource).toContain('markNotificationNoRepair(')
+    expect(hostSource).toContain('runNotificationRepair(')
+    expect(hostSource).toContain('loadNotificationOutboxSourceStateForWebhook')
+    expect(hostSource).toContain('loadNotificationOutboxSourceStateForDispatch')
+    expect(hostSource).toContain('persistNotificationOutboxSourceState')
+    expect(hostSource).toContain('recordNotificationOperationReconstruction')
+    expect(hostSource).not.toContain('notificationOutboxOperatorPorts')
+    expect(hostSource).not.toContain('notificationOutboxSourceStatePorts')
+    expect(hostSource).not.toContain('ingestWebhookMachine')
+    expect(hostSource).not.toContain('retryDispatchMachine')
+    expect(hostSource).not.toContain('markNoRepairMachine')
+    expect(hostSource).not.toContain("from './notificationOutboxOperatorPorts'")
+
+    for (const symbol of hostOperatorMachines) {
+      const start = hostSource.indexOf(`export const ${symbol} = mutationGeneric({`)
+      const end = hostSource.indexOf('\n})', start)
+      expect(start).toBeGreaterThanOrEqual(0)
+      expect(end).toBeGreaterThan(start)
+      const body = hostSource.slice(start, end)
+      expect(body).not.toContain('notificationOutboxOperatorPorts')
+      expect(body).not.toContain('notificationOutboxSourceStatePorts')
     }
   })
 
-  it('keeps enqueueInquiryNotificationDispatch out of OperatorPorts', () => {
-    expect(operatorPortsSource).not.toContain('enqueueInquiryNotificationDispatch')
-    expect(operatorPortsSource).not.toContain('enqueueInquiryNotificationModule')
-    expect(hostSource).toMatch(/export const enqueueInquiryNotificationDispatch\s*=/)
+  it('deletes the single-host adapter files while retaining reconstruction persistence', () => {
+    for (const forbidden of [
+      'convex/notificationOutboxOperatorPorts.ts',
+      'convex/notificationOutboxSourceStatePorts.ts',
+      'convex/inquiryNotificationPorts.ts',
+      'convex/inquirySourceStatePorts.ts',
+      'convex/notificationOutboxWebhook.ts',
+      'convex/notificationOutboxOperator.ts',
+      'convex/notificationOutboxRepair.ts',
+    ]) {
+      expect(() => statSync(forbidden)).toThrow()
+    }
+    expect(statSync('convex/notificationOutboxReconstruction.ts').isFile()).toBe(true)
+    expect(reconstructionSource).toContain('recordNotificationOperationReconstruction')
+    expect(reconstructionSource).not.toContain('notificationOutboxSourceStatePorts')
+    expect(reconstructionSource).not.toContain('NotificationOutboxOperatorPorts')
+  })
+
+  it('keeps enqueueInquiryNotificationDispatch out of operator orchestration', () => {
     const enqueueStart = hostSource.indexOf(
       'export const enqueueInquiryNotificationDispatch = mutationGeneric({',
     )
     const enqueueEnd = hostSource.indexOf('\n})', enqueueStart)
     const enqueueBody = hostSource.slice(enqueueStart, enqueueEnd)
-    expect(enqueueBody).not.toContain('notificationOutboxOperatorPorts')
+    expect(enqueueBody).not.toContain('runNotificationRepair')
     expect(enqueueBody).toContain('enqueueInquiryNotificationModule')
+    expect(enqueueBody).toContain('loadNotificationOutboxSourceStateForThread')
+    expect(enqueueBody).toContain('persistNotificationOutboxSourceState')
   })
 
   it('does not re-inflate inquiryNotificationBridge', () => {
@@ -134,5 +110,7 @@ describe('notification-outbox operator thinness', () => {
     expect(bridgeSource).not.toContain('retryDispatch')
     expect(bridgeSource).not.toContain('markNoRepair')
     expect(bridgeSource).not.toContain('notificationOutboxOperatorPorts')
+    expect(bridgeSource).toContain('loadNotificationOutboxSourceStateForThread')
+    expect(bridgeSource).toContain('persistNotificationOutboxSourceState')
   })
 })

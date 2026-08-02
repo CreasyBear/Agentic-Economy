@@ -59,6 +59,12 @@ export type NotificationWebhookEventStatus = (typeof NotificationWebhookEventSta
 export const NotificationSignatureStatusValues = ['verified', 'rejected'] as const
 export type NotificationSignatureStatus = (typeof NotificationSignatureStatusValues)[number]
 
+export const MAX_NOTIFICATION_ATTEMPTS_PER_DISPATCH = 100
+
+export const MAX_NOTIFICATION_THREAD_DISPATCH_READBACK = 100
+
+export const MAX_NOTIFICATION_WEBHOOK_EVENT_READBACK = 100
+
 export type NotificationDispatchRecord = {
   dispatchId: NotificationDispatchId
   businessId: BusinessId
@@ -187,7 +193,15 @@ export const notificationOutboxTables = {
     .index('by_dispatchId', ['dispatchId'])
     .index('by_business_status', ['businessId', 'status'])
     .index('by_inquiry_thread', ['inquiryThreadId'])
-    .index('by_provider_status', ['providerFamily', 'status']),
+    .index('by_inquiry_thread_createdAt', ['inquiryThreadId', 'createdAt'])
+    .index('by_inquiry_thread_operationKey', ['inquiryThreadId', 'operationKey'])
+    .index('by_provider_status', ['providerFamily', 'status'])
+    .index('by_providerIdempotencyKey', ['providerIdempotencyKey'])
+    .index('by_resendMessageId', ['resendMessageId'])
+    .index('by_novuTransactionId', ['novuTransactionId'])
+    .index('by_novuWorkflowId', ['novuWorkflowId'])
+    .index('by_novuMessageId', ['novuMessageId'])
+    .index('by_novuSubscriberId', ['novuSubscriberId']),
 
   notificationDispatchAttempts: defineTable({
     attemptId: v.string(),
@@ -226,5 +240,6 @@ export const notificationOutboxTables = {
     .index('by_webhookEventId', ['webhookEventId'])
     .index('by_provider_event', ['providerFamily', 'providerEventId'])
     .index('by_dispatch', ['dispatchId'])
+    .index('by_dispatch_receivedAt', ['dispatchId', 'receivedAt'])
     .index('by_status_receivedAt', ['status', 'receivedAt']),
 } as const

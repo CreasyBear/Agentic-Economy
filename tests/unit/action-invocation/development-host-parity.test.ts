@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildDevelopmentHostParityEvidence,
-  normalizedOutcomeEvidenceResult,
+  digestDevelopmentHostParityMaterial,
   type DevelopmentHostParityEvidence,
 } from '@/modules/capability-supply/development-host-parity-evidence'
 import {
@@ -11,7 +11,6 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
-import { runDevelopmentHostScenarioMatrix } from '@/modules/capability-supply/development-host-scenarios'
 import { loadDynamicPublishedAdapterSnapshot } from '@/modules/action-invocation'
 
 const provenance = {
@@ -22,9 +21,6 @@ const provenance = {
 
 describe('ADR-010 development host parity', () => {
   it('drives the complete matrix independently through both thin hosts', async () => {
-    const debugHosts = await runDevelopmentHostScenarioMatrix(buildDevelopmentPublishedOperationEvidence())
-    expect(normalizedOutcomeEvidenceResult(debugHosts[0].success.snapshot))
-      .toEqual(normalizedOutcomeEvidenceResult(debugHosts[1].success.snapshot))
     const packet = await buildDevelopmentHostParityEvidence(provenance)
     expect(() => verifyDevelopmentHostParityEvidence(packet, {
       sourceBaseCommit: provenance.sourceBaseCommit,
@@ -278,5 +274,5 @@ function redigestReceipt(receipt: any): void {
 
 function redigestPacket(packet: DevelopmentHostParityEvidence | any): void {
   const { packetDigest: _discarded, ...material } = packet
-  packet.packetDigest = canonicalDigest(material as StableHashValue)
+  packet.packetDigest = digestDevelopmentHostParityMaterial(material)
 }

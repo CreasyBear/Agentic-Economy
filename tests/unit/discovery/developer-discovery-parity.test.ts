@@ -49,35 +49,33 @@ describe('developer discovery generated artifact parity', () => {
     })
     expect(schema.fields.map((field) => field.path)).toEqual(
       expect.arrayContaining([
-        'slug',
-        'services[].slug',
-        'services[].firstRequest.publicChannel',
-        'services[].capabilities[].kind',
-        'services[].capabilities[].status',
+        'businessId',
+        'offerings[].offeringRef',
+        'offerings[].accessPaths',
+        'offerings[].support',
       ])
     )
     expect(schema.statusVariants).toMatchObject({
-      publicStatus: ['published'],
-      indexStatus: ['not_queued', 'queued', 'indexed', 'failed', 'stale'],
-      discoveryStatus: ['unavailable', 'degraded', 'available', 'stale'],
-      firstRequestMode: ['inquiry_available', 'quote_request_available', 'not_available_yet'],
-      capabilityStatus: ['unavailable', 'degraded', 'available', 'stale'],
+      disposition: ['current', 'partial', 'stale'],
+      offeringAccessPathKind: ['human_request', 'external_operation'],
+      offeringSupport: ['integrated', 'ae_supported_action'],
     })
 
     expect(examples).toMatchObject({
       kind: 'public_catalog_examples',
       state: 'available',
-      emptyExample: { kind: 'ok', items: [], pagination: { total: 0, hasMore: false } },
+      emptyExample: {
+        kind: 'ok',
+        schemaVersion: 'public-business-catalog-api:v2',
+        page: [],
+        isDone: true,
+        continueCursor: '',
+      },
     })
     expect(examples.examples[0]).toMatchObject({
       slug: 'parramatta-emergency-plumbing',
-      schemaVersion: 'public-business-catalog-api:v1',
-      services: [
-        expect.objectContaining({
-          slug: 'emergency-pipe-repair',
-          capabilities: [expect.objectContaining({ kind: 'phone_inquiry', status: 'unavailable' })],
-        }),
-      ],
+      schemaVersion: 'public-business-catalog-api:v2',
+      offerings: [expect.objectContaining({ name: 'Emergency pipe repair' })],
     })
 
     expect(fixtures).toMatchObject({
@@ -111,8 +109,8 @@ describe('developer discovery generated artifact parity', () => {
         expect.objectContaining({
           slug: 'route-derived-solar-repair',
           name: 'Route Derived Solar Repair',
-          schemaVersion: 'public-business-catalog-api:v1',
-          services: [expect.objectContaining({ slug: 'inverter-diagnostics' })],
+          schemaVersion: 'public-business-catalog-api:v2',
+          offerings: [expect.objectContaining({ name: 'Inverter diagnostics' })],
         }),
       ],
     })
@@ -123,7 +121,7 @@ describe('developer discovery generated artifact parity', () => {
           route: 'https://ae.example/api/businesses',
           status: 'available',
           httpStatus: 200,
-          schemaVersion: 'public-business-catalog-api:v1',
+          schemaVersion: 'public-business-catalog-api:v2',
         }),
       ])
     )
@@ -196,34 +194,50 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
     stateTerritory: 'WA',
     publicUrl: '/route-derived-solar-repair',
     trustTier: 'claimed',
-    publicStatus: 'published',
-    indexStatus: 'indexed',
-    discoveryStatus: 'available',
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: 6_000,
+    observedAt: 6_000,
+    disposition: 'current',
     photos: [],
-    services: [
+    offerings: [
       {
-        slug: 'inverter-diagnostics',
+        offeringRef: 'offering:route-derived-solar-repair:inverter-diagnostics',
+        revision: 1,
         name: 'Inverter diagnostics',
         category: 'Solar repair',
         summary: 'Read-only diagnostics listing.',
-        serviceArea: 'Fremantle',
-        hoursOrUnknown: 'Owner supplied hours',
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicDisclosure: 'This business has not published a request path.',
-          publicChannel: 'not_available',
-          noContactReason: 'Owner has not supplied public contact instructions.',
+        serviceAreaSummary: 'Fremantle',
+        availabilitySummary: 'Owner supplied hours',
+        accessPaths: [
+          {
+            accessPathRef: 'access:route-derived-solar-repair:inverter-diagnostics',
+            kind: 'human_request',
+            channel: 'phone',
+            disclosure: 'This business has not published a request path.',
+          },
+        ],
+        support: {
+          integrated: false,
+          aeSupportedAction: false,
         },
-        status: 'published',
-        capabilities: [{ kind: 'phone_inquiry', status: 'unavailable' }],
       },
     ],
+    accessSummary: {
+      humanRequest: true,
+      externalOperation: false,
+      aeSupportedAction: false,
+    },
+    schemaVersion: 'public-business-catalog-api:v2',
   } as const
   const page = {
     kind: 'ok',
-    schemaVersion: 'public-business-catalog-api:v1',
+    schemaVersion: 'public-business-catalog-api:v2',
+    page: [business],
+    isDone: true,
+    continueCursor: '1',
+  } as const
+  const searchPage = {
+    kind: 'ok',
+    schemaVersion: 'public-business-catalog-api:v2',
+    query: 'solar repair',
     items: [business],
     pagination: { limit: 20, total: 1, hasMore: false },
   } as const
@@ -235,8 +249,8 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
       ok: true,
       checkedAt: 6_000,
       httpStatus: 200,
-      schemaVersion: 'public-business-catalog-api:v1',
-      expectedSchemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
+      expectedSchemaVersion: 'public-business-catalog-api:v2',
       body: page,
     },
     search: {
@@ -245,9 +259,9 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
       ok: true,
       checkedAt: 6_000,
       httpStatus: 200,
-      schemaVersion: 'public-business-catalog-api:v1',
-      expectedSchemaVersion: 'public-business-catalog-api:v1',
-      body: { ...page, query: 'solar repair' },
+      schemaVersion: 'public-business-catalog-api:v2',
+      expectedSchemaVersion: 'public-business-catalog-api:v2',
+      body: searchPage,
     },
     detail: {
       route: 'https://ae.example/api/businesses/route-derived-solar-repair',
@@ -255,9 +269,9 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
       ok: true,
       checkedAt: 6_000,
       httpStatus: 200,
-      schemaVersion: 'public-business-catalog-api:v1',
-      expectedSchemaVersion: 'public-business-catalog-api:v1',
-      body: { kind: 'found', schemaVersion: 'public-business-catalog-api:v1', business },
+      schemaVersion: 'public-business-catalog-api:v2',
+      expectedSchemaVersion: 'public-business-catalog-api:v2',
+      body: { kind: 'found', schemaVersion: 'public-business-catalog-api:v2', business },
     },
     routeExecutions: [
       {
@@ -266,8 +280,8 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
         ok: true,
         checkedAt: 6_000,
         httpStatus: 200,
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: 'https://ae.example/api/businesses/search?q=Solar%20repair',
@@ -275,8 +289,8 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
         ok: true,
         checkedAt: 6_000,
         httpStatus: 200,
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: 'https://ae.example/api/businesses/route-derived-solar-repair',
@@ -284,8 +298,8 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
         ok: true,
         checkedAt: 6_000,
         httpStatus: 200,
-        schemaVersion: 'public-business-catalog-api:v1',
-        expectedSchemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
+        expectedSchemaVersion: 'public-business-catalog-api:v2',
       },
       {
         route: 'https://ae.example/route-derived-solar-repair/ucp',

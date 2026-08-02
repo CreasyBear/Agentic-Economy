@@ -1,6 +1,4 @@
 import type {
-  CapabilityBindingRow,
-  CapabilityOfferingRow,
   OperationLedgerPorts,
   OperationKeyRecord,
   SupplyAuditEventRow,
@@ -8,6 +6,7 @@ import type {
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
+import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 
 export function capabilitySupplyOperationPorts(
   db: MutationCtx['db'],
@@ -84,19 +83,19 @@ export function capabilitySupplyOperationPorts(
     loadOfferingByOfferingId: async (offeringId) => {
       const offering = await db.query('capabilityOfferings')
         .withIndex('by_offeringId', (query) => query.eq('offeringId', offeringId)).unique()
-      return offering === null ? null : toOfferingRow(offering)
+      return offering === null ? null : toCapabilityOfferingRow(offering)
     },
     loadBindingByBindingId: async (bindingId) => {
       const binding = await db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId)).unique()
-      return binding === null ? null : toBindingRow(binding)
+      return binding === null ? null : toCapabilityBindingRow(binding)
     },
     listAdmittedConformantBindings: async (offeringId, limit) => {
       const rows = await db.query('capabilityTransportBindings')
         .withIndex('by_offeringId_and_admission_and_conformance', (index) => (
           index.eq('offeringId', offeringId).eq('admission', 'admitted').eq('conformance', 'conformant')
         )).take(limit)
-      return rows.map(toBindingRow)
+      return rows.map(toCapabilityBindingRow)
     },
     patchOfferingQuarantineParent: async (offeringId, patch) => {
       const offering = await db.query('capabilityOfferings')
@@ -155,52 +154,4 @@ function toAuditRow(doc: Doc<'auditEvents'>): SupplyAuditEventRow {
   }
 }
 
-function toOfferingRow(doc: Doc<'capabilityOfferings'>): CapabilityOfferingRow {
-  return {
-    offeringId: doc.offeringId,
-    businessId: doc.businessId,
-    networkId: doc.networkId,
-    capabilityId: doc.capabilityId,
-    version: doc.version,
-    contractDigest: doc.contractDigest,
-    ...(doc.origin === undefined ? {} : { origin: doc.origin }),
-    presentation: doc.presentation,
-    searchTerms: doc.searchTerms,
-    registrationEvidenceRefs: doc.registrationEvidenceRefs,
-    registrationHash: doc.registrationHash,
-    status: doc.status,
-    admissionEvidenceRefs: doc.admissionEvidenceRefs,
-    eligibilityHash: doc.eligibilityHash,
-    registeredAt: doc.registeredAt,
-    updatedAt: doc.updatedAt,
-  }
-}
 
-function toBindingRow(doc: Doc<'capabilityTransportBindings'>): CapabilityBindingRow {
-  return {
-    _id: doc._id,
-    _creationTime: doc._creationTime,
-    bindingId: doc.bindingId,
-    offeringId: doc.offeringId,
-    networkId: doc.networkId,
-    capabilityId: doc.capabilityId,
-    version: doc.version,
-    contractDigest: doc.contractDigest,
-    endpointUrl: doc.endpointUrl,
-    credentialRef: doc.credentialRef,
-    continuation: doc.continuation,
-    cancellation: doc.cancellation,
-    adapterId: doc.adapterId,
-    configJson: doc.configJson,
-    configDigest: doc.configDigest,
-    registrationEvidenceRefs: doc.registrationEvidenceRefs,
-    registrationHash: doc.registrationHash,
-    admission: doc.admission,
-    conformance: doc.conformance,
-    admissionEvidenceRefs: doc.admissionEvidenceRefs,
-    conformanceEvidenceRefs: doc.conformanceEvidenceRefs,
-    eligibilityHash: doc.eligibilityHash,
-    registeredAt: doc.registeredAt,
-    updatedAt: doc.updatedAt,
-  }
-}

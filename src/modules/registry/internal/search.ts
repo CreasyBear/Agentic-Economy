@@ -2,145 +2,76 @@ import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtur
 import {
   claimBusiness,
   createEmptyBusinessSourceState,
-  isPubliclyDiscoverable,
 } from '@/modules/business/public'
 import {
-  buildPublicCatalogDto,
   createEmptyCatalogSourceState,
-  publishBusinessCatalog,
-} from '@/modules/catalog/public'
-import type {
-  FirstRequestMode,
-  PublicCatalogContract,
-  PublicFirstRequestChannel,
-  ServiceCatalogInput,
+  getPublicBusinessCatalog,
 } from '@/modules/catalog/public'
 import { publicOwnerDefaultClaimInput } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { matchingCsrf } from '@/modules/common/matching-csrf'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   BusinessId,
   CorrelationId,
+  OfferingRef,
   OperationKey,
-  ServiceId,
   Slug,
 } from '@/modules/common/ids'
+import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 import type {
   IndexStatus,
   RegistrySourceState,
 } from '@/modules/registry/public'
-import {
-  buildRegistrySearchDocumentsForCatalog,
-  documentMatchesRegistryQuery,
-  normalizeRegistrySearchText,
-} from './search-documents'
 
-const apiSchemaVersion = 'public-business-catalog-api:v1' as const
+import {
+  PublicBusinessCatalogApiSchemaVersion,
+  type PublicBusinessCatalogApiV2Dto,
+  type PublicBusinessCatalogApiV2Page,
+  type PublicBusinessCatalogApiV2SearchPage,
+  type PublicBusinessCatalogV2DetailResult,
+} from './offering-api-projection'
 const defaultLimit = 20
 const maxLimit = 50
 const fixturePublishedAt = Date.now()
 
 export type PublicBusinessCatalogQueryInput = {
+  paginationOpts: {
+    numItems: number
+    cursor: string | null
+  }
+}
+
+export type PublicBusinessCatalogSearchInput = {
   cursor?: string
   limit?: number
+  query: string
+  mode?: 'near_me' | 'whole_catalogue'
+  location?: string
+  maxPriceMinor?: number
+  hasPrice?: boolean
 }
 
-export type PublicBusinessCatalogSearchInput =
-  PublicBusinessCatalogQueryInput & {
-    query: string
-    mode?: 'near_me' | 'whole_catalogue'
-    location?: string
-    /**
-     * Upper bound in minor units. Applied only to Offerings that published a
-     * comparable ceiling; `quote_only` and unpriced supply are never removed.
-     */
-    maxPriceMinor?: number
-    /** `true` keeps only businesses publishing at least one structured price. */
-    hasPrice?: boolean
-  }
+export type PublishedInquiryTargetResolution =
+  | { kind: 'resolved'; businessId: BusinessId; offeringRef: OfferingRef }
+  | { kind: 'not_found'; reason: string }
 
-export type PublicBusinessCatalogApiDto = {
-  slug: string
-  name: string
-  category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
-  postcode?: string
-  publicUrl: string
-  trustTier: PublicCatalogContract['trustTier']
-  publicStatus: Extract<PublicCatalogContract['publicStatus'], 'published'>
-  indexStatus: IndexStatus
-  discoveryStatus: PublicCatalogContract['discoveryStatus']
-  schemaVersion: typeof apiSchemaVersion
-  updatedAt: number
-  photos: readonly { url: string; alt: string }[]
-  responseTimeMinutes?: number
-  services: readonly {
-    slug: string
-    name: string
-    category: string
-    summary: string
-    serviceArea: string
-    hoursOrUnknown: string
-    firstRequest: {
-      mode: PublicCatalogContract['services'][number]['firstRequest']['mode']
-      publicDisclosure: string
-      publicChannel: PublicCatalogContract['services'][number]['firstRequest']['publicChannel']
-      noContactReason?: string
-    }
-    status: Extract<
-      PublicCatalogContract['services'][number]['status'],
-      'published'
-    >
-    capabilities: readonly {
-      kind: PublicCatalogContract['services'][number]['capabilities'][number]['kind']
-      status: PublicCatalogContract['services'][number]['capabilities'][number]['status']
-    }[]
-  }[]
-}
-
-export type PublicBusinessCatalogApiPage = {
-  kind: 'ok'
-  schemaVersion: typeof apiSchemaVersion
-  query?: string
-  items: readonly PublicBusinessCatalogApiDto[]
-  pagination: {
-    cursor?: string
-    nextCursor?: string
-    limit: number
-    total: number
-    hasMore: boolean
-  }
-}
-
-export type PublicBusinessCatalogDetailResult =
-  | {
-      kind: 'found'
-      schemaVersion: typeof apiSchemaVersion
-      business: PublicBusinessCatalogApiDto
-    }
-  | {
-      kind: 'not_found'
-      code: 'business_not_found'
-      reason: string
-    }
-
-export function listPublicBusinessCatalog(
+export function listPublicBusinessOfferingSupply(
   state: RegistrySourceState,
-  input: PublicBusinessCatalogQueryInput = {},
-): PublicBusinessCatalogApiPage {
-  return paginateCatalogs(readPublicCatalogs(state).map(toPublicApiDto), input)
+  input: PublicBusinessCatalogQueryInput,
+): PublicBusinessCatalogApiV2Page {
+  return paginateCatalogs(readPublicCatalogs(state), input)
 }
 
-export function searchPublicBusinessCatalog(
+export function searchPublicBusinessOfferingSupply(
   state: RegistrySourceState,
   input: PublicBusinessCatalogSearchInput,
-): PublicBusinessCatalogApiPage {
-  const query = normalizeRegistrySearchText(input.query)
+): PublicBusinessCatalogApiV2SearchPage {
+  const query = normalizeSearchText(input.query)
   if (query.length === 0) {
     return {
       kind: 'ok',
-      schemaVersion: apiSchemaVersion,
+      schemaVersion: PublicBusinessCatalogApiSchemaVersion,
       query: '',
       items: [],
       pagination: {
@@ -152,73 +83,88 @@ export function searchPublicBusinessCatalog(
     }
   }
 
-  const matches = readPublicCatalogs(state).filter((catalog) => {
-    const documents = buildRegistrySearchDocumentsForCatalog(toPublicApiDto(catalog))
-    return documents.some((document) => documentMatchesRegistryQuery(document, input))
-  })
+  const tokens = query.split(' ')
+  const searchableCatalogs = readPublicCatalogs(state)
+  const location = input.mode === 'near_me' ? input.location : undefined
+  const scopedCatalogs = location === undefined
+    ? searchableCatalogs
+    : searchableCatalogs.filter((item) => matchesSearchLocation(item, location))
+  const matches = scopedCatalogs
+    .map((item, index) => ({
+      item,
+      index,
+      matches: tokens.filter((token) => matchesNativeSearch(item, token)).length,
+    }))
+    .filter(({ matches }) => matches === tokens.length)
+    .sort((left, right) => right.matches - left.matches || left.index - right.index)
+    .map(({ item }) => item)
 
-  return paginateCatalogs(matches.map(toPublicApiDto), input, query)
+  return paginateSearchCatalogs(matches, input, query)
 }
 
-export function getPublicBusinessCatalogBySlug(
+function matchesNativeSearch(item: PublicBusinessCatalogApiV2Dto, token: string): boolean {
+  return normalizeSearchText([
+    item.slug,
+    item.name,
+    item.category,
+    item.suburb,
+    item.stateTerritory,
+    ...item.offerings.flatMap((offering) => [
+      offering.name,
+      offering.category,
+      offering.summary,
+      offering.serviceAreaSummary ?? '',
+    ]),
+  ].join(' ')).includes(token)
+}
+function matchesSearchLocation(item: PublicBusinessCatalogApiV2Dto, location: string): boolean {
+  const normalized = normalizeSearchText(location)
+  if (normalized.length === 0) return false
+  const searchable = normalizeSearchText([
+    item.suburb,
+    item.stateTerritory,
+    ...item.offerings.map((offering) => offering.serviceAreaSummary ?? ''),
+  ].join(' '))
+  return normalized.split(' ').every((token) => searchable.includes(token))
+}
+
+export function getPublicBusinessOfferingSupplyBySlug(
   state: RegistrySourceState,
   input: { slug: Slug | string },
-): PublicBusinessCatalogDetailResult {
-  const slug = String(input.slug)
-  const catalog = readPublicCatalogs(state).find(
-    (candidate) => candidate.slug === slug,
-  )
+): PublicBusinessCatalogV2DetailResult {
+  const business = readPublicCatalogs(state)
+    .find((candidate) => candidate.slug === String(input.slug))
 
-  if (catalog === undefined) {
-    return {
-      kind: 'not_found',
-      code: 'business_not_found',
-      reason: 'No public business catalog exists for this slug.',
-    }
-  }
-
-  return {
-    kind: 'found',
-    schemaVersion: apiSchemaVersion,
-    business: toPublicApiDto(catalog),
-  }
+  return business === undefined
+    ? {
+        kind: 'not_found',
+        code: 'business_not_found',
+        reason: 'No public business catalog exists for this slug.',
+      }
+    : {
+        kind: 'found',
+        schemaVersion: PublicBusinessCatalogApiSchemaVersion,
+        business,
+      }
 }
-
-export type PublishedInquiryTargetResolution =
-  | { kind: 'resolved'; businessId: BusinessId; serviceId: ServiceId }
-  | { kind: 'not_found'; reason: string }
 
 export function resolvePublishedInquiryTarget(
   state: RegistrySourceState,
-  input: { businessSlug: Slug | string; serviceSlug: Slug | string },
+  input: { businessSlug: Slug | string; offeringRef: OfferingRef | string },
 ): PublishedInquiryTargetResolution {
-  const businessSlug = String(input.businessSlug)
-  const serviceSlug = String(input.serviceSlug)
-  const catalog = readPublicCatalogs(state).find(
-    (candidate) => candidate.slug === businessSlug,
-  )
-  if (catalog === undefined) {
+  const business = readPublicCatalogs(state)
+    .find((candidate) => candidate.slug === String(input.businessSlug))
+  const offering = business?.offerings.find((candidate) => candidate.offeringRef === String(input.offeringRef))
+  if (business === undefined || offering === undefined) {
     return {
       kind: 'not_found',
-      reason: 'No published business is discoverable for this slug.',
+      reason: 'No published Offering is discoverable for this slug on the business.',
     }
   }
-
-  const service = catalog.services.find(
-    (candidate) => candidate.serviceSlug === serviceSlug,
-  )
-  if (service === undefined) {
-    return {
-      kind: 'not_found',
-      reason:
-        'No published service is discoverable for this slug on the business.',
-    }
-  }
-
   return {
     kind: 'resolved',
-    businessId: catalog.businessId,
-    serviceId: service.serviceId,
+    businessId: brandNonEmpty(business.businessId, 'BusinessId'),
+    offeringRef: brandNonEmpty(offering.offeringRef, 'OfferingRef'),
   }
 }
 
@@ -231,7 +177,6 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     registryProjectionItems: [],
     registryProjectionAttempts: [],
     registrySearchDocuments: [],
-    registrySearchSyncAttempts: [],
     discoveryManifestAttempts: [],
     indexStatus: [],
     suppressionRules: [],
@@ -255,29 +200,15 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
         {
           label: publicOwnerDefaultClaimInput.sourceLabel,
           evidenceRef: `private:evidence:${publicOwnerDefaultClaimInput.requestedSlug}`,
-          sourceHash: brandNonEmpty(
-            `hash:source:${publicOwnerDefaultClaimInput.requestedSlug}`,
-            'SourceHash',
-          ),
+          sourceHash: canonicalDigest(`source:${publicOwnerDefaultClaimInput.requestedSlug}`),
         },
       ],
     },
     security: {
       csrf: matchingCsrf('claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `registry:${publicOwnerDefaultClaimInput.requestedSlug}`,
-        now: publishedAt - 1,
-        limit: 5,
-        windowMs: 60_000,
-      },
     },
-    operationKey: operationKey(
-      `claim:${publicOwnerDefaultClaimInput.requestedSlug}`,
-    ),
-    correlationId: correlationId(
-      `claim:${publicOwnerDefaultClaimInput.requestedSlug}`,
-    ),
+    operationKey: operationKey(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
+    correlationId: correlationId(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
     now: publishedAt - 1,
   })
 
@@ -285,27 +216,24 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     throw new Error(`Default registry claim failed: ${claim.reason}`)
   }
 
-  const published = publishBusinessCatalog(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: 'source-owned-owner-session',
-      displayName: 'Sam',
+  claim.business.publicStatus = 'published'
+  claim.business.claimStatus = 'published'
+  claim.business.updatedAt = publishedAt
+  claim.claim.status = 'published'
+  claim.claim.updatedAt = publishedAt
+
+  appendPublishedOffering(state, {
+    businessId: claim.business.businessId,
+    offeringRef: brandNonEmpty(`offering:${claim.business.businessId}:emergency-pipe-repair`, 'OfferingRef'),
+    facts: {
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+      availabilitySummary: publicOwnerDefaultClaimInput.hoursOrUnknown,
     },
-    claimId: claim.claim.claimId,
-    services: [toServiceCatalogInput(publicOwnerDefaultClaimInput)],
-    security: { csrf: matchingCsrf('publish') },
-    operationKey: operationKey(
-      `publish:${publicOwnerDefaultClaimInput.requestedSlug}`,
-    ),
-    correlationId: correlationId(
-      `publish:${publicOwnerDefaultClaimInput.requestedSlug}`,
-    ),
     now: publishedAt,
   })
-
-  if (published.kind === 'error') {
-    throw new Error(`Default registry publish failed: ${published.reason}`)
-  }
 
   return state
 }
@@ -313,7 +241,11 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
 export function createLocalE2eRegistrySourceState(): RegistrySourceState {
   const state = createDefaultRegistrySourceState()
 
-  for (const [index, fixture] of LOCAL_E2E_BUSINESS_FIXTURES.entries()) {
+  for (const fixture of LOCAL_E2E_BUSINESS_FIXTURES) {
+    const offering = fixture.offerings[0]
+    if (offering === undefined) {
+      throw new Error(`Local e2e fixture offering missing for ${fixture.requestedSlug}`)
+    }
     const actor = {
       kind: 'authenticated_owner' as const,
       clerkUserId: `owner:${fixture.requestedSlug}`,
@@ -329,22 +261,16 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
         stateTerritory: fixture.stateTerritory,
         requestedSlug: fixture.requestedSlug,
         ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
-        ownerMessage: 'Local e2e owner-supplied service facts.',
+        ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
+        ownerMessage: 'Local e2e owner-supplied Offering facts.',
         sourceRefs: [{
-          label: 'Local e2e service facts',
+          label: 'Local e2e Offering facts',
           evidenceRef: `private:evidence:${fixture.requestedSlug}`,
-          sourceHash: brandNonEmpty(`hash:source:${fixture.requestedSlug}`, 'SourceHash'),
+          sourceHash: canonicalDigest(`source:${fixture.requestedSlug}`),
         }],
       },
       security: {
         csrf: matchingCsrf(`local-e2e-claim:${fixture.requestedSlug}`),
-        rateLimit: {
-          scope: 'claim_submit',
-          key: `registry:${fixture.requestedSlug}`,
-          now: publishedAt - 1,
-          limit: 5,
-          windowMs: 60_000,
-        },
       },
       operationKey: operationKey(`local-e2e-claim:${fixture.requestedSlug}`),
       correlationId: correlationId(`local-e2e-claim:${fixture.requestedSlug}`),
@@ -354,134 +280,147 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
       throw new Error(`Local e2e registry claim failed for ${fixture.requestedSlug}: ${claim.reason}`)
     }
 
-    const published = publishBusinessCatalog(state, {
-      actor,
-      claimId: claim.claim.claimId,
-      services: [toServiceCatalogInput({
-        serviceName: fixture.serviceName,
-        serviceCategory: fixture.serviceCategory,
-        serviceSummary: fixture.serviceSummary,
-        serviceArea: fixture.serviceArea,
-        hoursOrUnknown: fixture.hoursOrUnknown,
-        firstRequestMode: 'inquiry_available',
-        publicDisclosure: 'Use the inquiry form for a first contact.',
-        noContactReason: '',
-      })],
-      security: { csrf: matchingCsrf(`local-e2e-publish:${fixture.requestedSlug}`) },
-      operationKey: operationKey(`local-e2e-publish:${fixture.requestedSlug}`),
-      correlationId: correlationId(`local-e2e-publish:${fixture.requestedSlug}`),
+    claim.business.publicStatus = 'published'
+    claim.business.claimStatus = 'published'
+    claim.business.updatedAt = publishedAt
+    claim.claim.status = 'published'
+    claim.claim.updatedAt = publishedAt
+
+    const offeringSlug = normalizeSearchText(offering.name).replaceAll(' ', '-')
+    appendPublishedOffering(state, {
+      businessId: claim.business.businessId,
+      offeringRef: brandNonEmpty(`offering:${claim.business.businessId}:${offeringSlug}`, 'OfferingRef'),
+      facts: {
+        name: offering.name,
+        category: offering.category,
+        summary: offering.summary,
+        serviceAreaSummary: offering.serviceAreaSummary,
+        ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: offering.availabilitySummary }),
+        ...(offering.pricingSummary === undefined ? {} : { pricingSummary: offering.pricingSummary }),
+      },
+      accessPaths: offering.accessPaths,
       now: publishedAt,
     })
-    if (published.kind === 'error') {
-      throw new Error(`Local e2e registry publish failed for ${fixture.requestedSlug}: ${published.reason}`)
-    }
   }
 
   return state
 }
 
-function readPublicCatalogs(
-  state: RegistrySourceState,
-): readonly PublicCatalogContract[] {
-  const catalogs: PublicCatalogContract[] = []
-  const contextByBusinessId = new Map(
-    state.businessContexts.map((context) => [context.businessId, context] as const)
-  )
-
+function readPublicCatalogs(state: RegistrySourceState): readonly PublicBusinessCatalogApiV2Dto[] {
+  const catalogs: PublicBusinessCatalogApiV2Dto[] = []
   for (const business of state.businesses) {
-    if (!isPubliclyDiscoverable(business, state.suppressionRules)) {
-      continue
-    }
-    const context = contextByBusinessId.get(business.businessId)
-    if (context === undefined) {
-      continue
-    }
-
-    const catalog = buildPublicCatalogDto({
-      business,
-      context,
-      services: state.businessServices.filter(
-        (service) => service.businessId === business.businessId,
-      ),
-      capabilities: state.serviceCapabilities.filter(
-        (capability) => capability.businessId === business.businessId,
-      ),
+    const result = getPublicBusinessCatalog(state, {
+      slug: business.slug,
       indexStatus: indexStatusForBusiness(state, business.businessId),
       discoveryStatus: 'degraded',
     })
-
-    if (catalog.kind === 'available') {
-      catalogs.push(catalog.catalog)
+    if (result.kind === 'available') {
+      catalogs.push(result.catalog)
     }
   }
   return catalogs.sort(compareCatalogs)
 }
 
-function toPublicApiDto(
-  catalog: PublicCatalogContract,
-): PublicBusinessCatalogApiDto {
-  return {
-    slug: catalog.slug,
-    name: catalog.name,
-    category: catalog.category,
-    suburb: catalog.suburb,
-    stateTerritory: catalog.stateTerritory,
-    ...(catalog.publishedPhone === undefined ? {} : { publishedPhone: catalog.publishedPhone }),
-    ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
-    publicUrl: catalog.publicUrl,
-    trustTier: catalog.trustTier,
-    publicStatus: 'published',
-    indexStatus: catalog.indexStatus,
-    discoveryStatus: catalog.discoveryStatus,
-    schemaVersion: apiSchemaVersion,
-    updatedAt: catalog.updatedAt,
-    photos: catalog.photos.map((photo) => ({ url: photo.url, alt: photo.alt })),
-    ...(catalog.responseTimeMinutes === undefined
-      ? {}
-      : { responseTimeMinutes: catalog.responseTimeMinutes }),
-    services: catalog.services.map((service) => ({
-      slug: service.serviceSlug,
-      name: service.name,
-      category: service.category,
-      summary: service.summary,
-      serviceArea: service.serviceArea,
-      hoursOrUnknown: service.hoursOrUnknown,
-      firstRequest: {
-        mode: service.firstRequest.mode,
-        publicDisclosure: service.firstRequest.publicDisclosure,
-        publicChannel: service.firstRequest.publicChannel,
-        ...(service.firstRequest.noContactReason === undefined
-          ? {}
-          : { noContactReason: service.firstRequest.noContactReason }),
-      },
+
+function appendPublishedOffering(
+  state: RegistrySourceState,
+  input: {
+    businessId: BusinessId
+    offeringRef: OfferingRef
+    facts: {
+      name: string
+      category: string
+      summary: string
+      serviceAreaSummary?: string
+      availabilitySummary?: string
+      pricingSummary?: string
+    }
+    accessPaths?: readonly {
+      channel: 'phone' | 'website' | 'ae_inquiry'
+      disclosure: string
+    }[]
+    now: number
+  },
+): void {
+  const sourceHash = canonicalDigest({
+    businessId: input.businessId,
+    offeringRef: input.offeringRef,
+    revision: 1,
+    ...input.facts,
+  })
+  state.offerings.push({
+    offeringRef: input.offeringRef,
+    businessId: input.businessId,
+    currentRevision: 1,
+    status: 'published',
+    createdAt: input.now,
+    updatedAt: input.now,
+  })
+  state.revisions.push({
+    offeringRef: input.offeringRef,
+    businessId: input.businessId,
+    revision: 1,
+    ...input.facts,
+    sourceHash,
+    createdAt: input.now,
+  })
+  for (const [index, accessPath] of (input.accessPaths ?? []).entries()) {
+    const descriptor = {
+      kind: 'human_request' as const,
+      channel: accessPath.channel,
+      disclosure: accessPath.disclosure,
+    }
+    const accessPathRef = `access:${input.offeringRef}:human:${index + 1}`
+    state.accessPaths.push({
+      accessPathRef: brandNonEmpty(accessPathRef, 'AccessPathRef'),
+      businessId: input.businessId,
+      offeringRef: input.offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
       status: 'published',
-      capabilities: service.capabilities.map((capability) => ({
-        kind: capability.kind,
-        status: capability.status,
-      })),
-    })),
+      descriptor,
+      sourceHash: canonicalDigest({
+        accessPathRef,
+        offeringSourceHash: sourceHash,
+        descriptor,
+      }),
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+  }
+}
+function paginateCatalogs(
+  items: readonly PublicBusinessCatalogApiV2Dto[],
+  input: PublicBusinessCatalogQueryInput,
+): PublicBusinessCatalogApiV2Page {
+  const requestedStart = input.paginationOpts.cursor === null ? 0 : Number(input.paginationOpts.cursor)
+  const startIndex = Number.isSafeInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0
+  const page = items.slice(startIndex, startIndex + input.paginationOpts.numItems)
+  const nextIndex = startIndex + page.length
+  return {
+    kind: 'ok',
+    schemaVersion: PublicBusinessCatalogApiSchemaVersion,
+    page,
+    isDone: nextIndex >= items.length,
+    continueCursor: String(nextIndex),
   }
 }
 
-function paginateCatalogs(
-  items: readonly PublicBusinessCatalogApiDto[],
-  input: PublicBusinessCatalogQueryInput,
+function paginateSearchCatalogs(
+  items: readonly PublicBusinessCatalogApiV2Dto[],
+  input: PublicBusinessCatalogSearchInput,
   query?: string,
-): PublicBusinessCatalogApiPage {
+): PublicBusinessCatalogApiV2SearchPage {
   const limit = normalizeLimit(input.limit)
-  const startIndex =
-    input.cursor === undefined
-      ? 0
-      : Math.max(
-          items.findIndex((item) => item.slug === input.cursor),
-          0,
-        )
+  const startIndex = input.cursor === undefined
+    ? 0
+    : Math.max(items.findIndex((item) => item.slug === input.cursor) + 1, 0)
   const pageItems = items.slice(startIndex, startIndex + limit)
-  const next = items.at(startIndex + limit)
+  const next = items.at(startIndex + pageItems.length)
 
   return {
     kind: 'ok',
-    schemaVersion: apiSchemaVersion,
+    schemaVersion: PublicBusinessCatalogApiSchemaVersion,
     ...(query === undefined ? {} : { query }),
     items: pageItems,
     pagination: {
@@ -543,63 +482,14 @@ function indexStatusForBusiness(
 }
 
 function compareCatalogs(
-  left: PublicCatalogContract,
-  right: PublicCatalogContract,
+  left: PublicBusinessCatalogApiV2Dto,
+  right: PublicBusinessCatalogApiV2Dto,
 ): number {
   const byName = left.name.localeCompare(right.name)
   return byName === 0 ? left.slug.localeCompare(right.slug) : byName
 }
 
-function toServiceCatalogInput(input: {
-  serviceName: string
-  serviceCategory: string
-  serviceSummary: string
-  serviceArea: string
-  hoursOrUnknown: string
-  firstRequestMode: FirstRequestMode
-  publicDisclosure: string
-  noContactReason: string
-}): ServiceCatalogInput {
-  return {
-    name: input.serviceName,
-    category: input.serviceCategory,
-    summary: input.serviceSummary,
-    serviceArea: input.serviceArea,
-    hoursOrUnknown: input.hoursOrUnknown,
-    firstRequest:
-      input.firstRequestMode === 'not_available_yet'
-        ? {
-            mode: input.firstRequestMode,
-            publicChannel: 'not_available',
-            publicDisclosure: input.publicDisclosure,
-            noContactReason: input.noContactReason,
-          }
-        : {
-            mode: input.firstRequestMode,
-            publicChannel: publicChannelFor(input.firstRequestMode),
-            publicDisclosure: input.publicDisclosure,
-          },
-  }
-}
 
-function publicChannelFor(
-  mode: Exclude<FirstRequestMode, 'not_available_yet'>,
-): Extract<
-  PublicFirstRequestChannel,
-  'public_business_contact' | 'ae_status_only'
-> {
-  return mode === 'quote_request_available'
-    ? 'ae_status_only'
-    : 'public_business_contact'
-}
-
-function matchingCsrf(key: string) {
-  void key
-  return {
-    origin: 'https://ae.example',
-    allowedOrigins: ['https://ae.example'],
-  }
-}
 
 function operationKey(value: string): OperationKey {
   return brandNonEmpty(`op:registry-default:${value}`, 'OperationKey')

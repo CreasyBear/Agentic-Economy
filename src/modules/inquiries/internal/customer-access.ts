@@ -3,12 +3,13 @@ import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
-import { stableHash, stableStringify } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import type { InquiryCustomerAccessGrant, InquiryThreadId } from './schema'
 
-export const InquiryCustomerAccessScope = 'customer_record' as const
-export const InquiryCustomerAccessVersion = 'inquiry-customer-access:v1' as const
-export const DefaultInquiryCustomerAccessTtlMs = 90 * 24 * 60 * 60 * 1_000
+const InquiryCustomerAccessScope = 'customer_record' as const
+const InquiryCustomerAccessVersion = 'inquiry-customer-access:v1' as const
+const DefaultInquiryCustomerAccessTtlMs = 90 * 24 * 60 * 60 * 1_000
 
 
 export type InquiryCustomerAccessKeyring = Readonly<{

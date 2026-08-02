@@ -1,61 +1,236 @@
-import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash } from '../src/modules/common/stable-hash'
-import {
-  NotificationDispatchStatusValues,
-} from '../src/modules/notification-outbox/public'
-import type {
-  NotificationDispatchRecord,
-  NotificationDispatchStatus,
-  NotificationProviderFamily,
-} from '../src/modules/notification-outbox/public'
-import type { RedactedPayload } from '../src/modules/observability/public'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
-import {
-  booleanField,
-  isRecord,
-  numberField,
-  optionalNumberField,
-  optionalStringField,
-  stringField,
-  upsertByFields,
-} from './inquiryRuntimeDbHelpers'
+import type { GenericDatabaseWriter } from 'convex/server'
 
-export function toDispatchRecord(row: RuntimeDocument): NotificationDispatchRecord {
+import { brandNonEmpty } from '../src/modules/common/ids'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { parseRedactedPayload } from '../src/modules/notification-outbox/operator/parse-payload'
+import type {
+  NotificationDispatchAttemptRecord,
+  NotificationDispatchRecord,
+  NotificationWebhookEventRecord,
+} from '../src/modules/notification-outbox/public'
+import type { DataModel, Doc, Id } from './_generated/dataModel'
+
+type NotificationDispatchRow = Omit<Doc<'notificationDispatches'>, '_id' | '_creationTime'>
+
+type NotificationDispatchAttemptRow = Omit<Doc<'notificationDispatchAttempts'>, '_id' | '_creationTime'>
+
+type NotificationWebhookEventRow = Omit<Doc<'notificationWebhookEvents'>, '_id' | '_creationTime'>
+
+export function toDispatchRecord(row: Doc<'notificationDispatches'>): NotificationDispatchRecord {
   return {
-    dispatchId: brandNonEmpty(stringField(row, 'dispatchId'), 'NotificationDispatchId'),
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    inquiryThreadId: stringField(row, 'inquiryThreadId'),
-    inquiryMessageId: stringField(row, 'inquiryMessageId'),
-    recipientRole: recipientRole(row),
-    providerFamily: notificationProviderFamily(row),
-    status: notificationDispatchStatus(row),
-    providerIdempotencyKey: stringField(row, 'providerIdempotencyKey'),
-    redactedPayload: parseRedactedPayload(stringField(row, 'redactedPayloadJson')),
-    payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
-    ...(optionalStringField(row, 'resendMessageId') === undefined ? {} : { resendMessageId: stringField(row, 'resendMessageId') }),
-    ...(optionalStringField(row, 'novuTransactionId') === undefined ? {} : { novuTransactionId: stringField(row, 'novuTransactionId') }),
-    ...(optionalStringField(row, 'novuWorkflowId') === undefined ? {} : { novuWorkflowId: stringField(row, 'novuWorkflowId') }),
-    ...(optionalStringField(row, 'novuMessageId') === undefined ? {} : { novuMessageId: stringField(row, 'novuMessageId') }),
-    ...(optionalStringField(row, 'novuSubscriberId') === undefined ? {} : { novuSubscriberId: stringField(row, 'novuSubscriberId') }),
-    providerMissing: booleanField(row, 'providerMissing'),
-    orchestratorMissing: booleanField(row, 'orchestratorMissing'),
-    retryCount: numberField(row, 'retryCount'),
-    ...(optionalNumberField(row, 'retryAfter') === undefined ? {} : { retryAfter: numberField(row, 'retryAfter') }),
-    ...(optionalStringField(row, 'lastRedactedError') === undefined ? {} : { lastRedactedError: stringField(row, 'lastRedactedError') }),
-    operationKey: brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
+    dispatchId: brandNonEmpty(row.dispatchId, 'NotificationDispatchId'),
+    businessId: brandNonEmpty(row.businessId, 'BusinessId'),
+    inquiryThreadId: row.inquiryThreadId,
+    inquiryMessageId: row.inquiryMessageId,
+    recipientRole: row.recipientRole,
+    providerFamily: row.providerFamily,
+    status: row.status,
+    providerIdempotencyKey: row.providerIdempotencyKey,
+    redactedPayload: parseRedactedPayload(row.redactedPayloadJson),
+    payloadHash: brandNonEmpty(row.payloadHash, 'SourceHash'),
+    ...(row.resendMessageId === undefined ? {} : { resendMessageId: row.resendMessageId }),
+    ...(row.novuTransactionId === undefined ? {} : { novuTransactionId: row.novuTransactionId }),
+    ...(row.novuWorkflowId === undefined ? {} : { novuWorkflowId: row.novuWorkflowId }),
+    ...(row.novuMessageId === undefined ? {} : { novuMessageId: row.novuMessageId }),
+    ...(row.novuSubscriberId === undefined ? {} : { novuSubscriberId: row.novuSubscriberId }),
+    providerMissing: row.providerMissing,
+    orchestratorMissing: row.orchestratorMissing,
+    retryCount: row.retryCount,
+    ...(row.retryAfter === undefined ? {} : { retryAfter: row.retryAfter }),
+    ...(row.lastRedactedError === undefined ? {} : { lastRedactedError: row.lastRedactedError }),
+    operationKey: brandNonEmpty(row.operationKey, 'OperationKey'),
+    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   }
 }
 
-export async function upsertNotificationDispatch(
-  db: RuntimeDb,
+export async function persistNotificationDispatch(
+  db: GenericDatabaseWriter<DataModel>,
   dispatch: NotificationDispatchRecord,
 ): Promise<void> {
-  await upsertByFields(db, 'notificationDispatches', ['dispatchId'], {
+  const row = notificationDispatchRow(db, dispatch)
+  const existing = await db
+    .query('notificationDispatches')
+    .withIndex('by_dispatchId', (query) => query.eq('dispatchId', dispatch.dispatchId))
+    .unique()
+  if (existing === null) {
+    await db.insert('notificationDispatches', row)
+    return
+  }
+  await db.patch(existing._id, row)
+}
+
+export async function persistNotificationDispatchAttempt(
+  db: GenericDatabaseWriter<DataModel>,
+  attempt: NotificationDispatchAttemptRecord,
+): Promise<void> {
+  const row = notificationDispatchAttemptRow(attempt)
+  const existing = await db
+    .query('notificationDispatchAttempts')
+    .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
+    .unique()
+  if (existing === null) {
+    await db.insert('notificationDispatchAttempts', row)
+    return
+  }
+  await db.patch(existing._id, row)
+}
+
+export async function persistNotificationWebhookEvent(
+  db: GenericDatabaseWriter<DataModel>,
+  webhookEvent: NotificationWebhookEventRecord,
+): Promise<void> {
+  const row = notificationWebhookEventRow(webhookEvent)
+  const existing = await db
+    .query('notificationWebhookEvents')
+    .withIndex('by_webhookEventId', (query) => query.eq('webhookEventId', webhookEvent.webhookEventId))
+    .unique()
+  if (existing === null) {
+    await db.insert('notificationWebhookEvents', row)
+    return
+  }
+  await db.patch(existing._id, row)
+}
+
+/** Enqueue-path reconstruction used by the inquiry notification bridge. */
+export async function persistNotificationDispatchEnqueueReconstruction(
+  db: GenericDatabaseWriter<DataModel>,
+  dispatch: NotificationDispatchRecord,
+): Promise<void> {
+  await Promise.all([
+    persistNotificationOperationKey(db, dispatch),
+    persistNotificationQueuedAuditEvent(db, dispatch),
+    persistNotificationQueuedFunnelEvent(db, dispatch),
+  ])
+}
+
+async function persistNotificationOperationKey(
+  db: GenericDatabaseWriter<DataModel>,
+  dispatch: NotificationDispatchRecord,
+): Promise<void> {
+  const row: Omit<Doc<'operationKeys'>, '_id' | '_creationTime'> = {
+    scope: 'notification',
+    actorKind: 'system',
+    actorRef: 'system:notification-outbox',
+    operationName: 'enqueueInquiryNotification',
+    key: dispatch.operationKey,
+    requestHash: dispatch.payloadHash,
+    sourceHash: dispatch.dispatchId,
+    status: 'succeeded',
+    resultHash: canonicalDigest({ code: 'notification_queued', dispatchId: dispatch.dispatchId }),
+    effectRefs: [
+      'result:notification_queued',
+      `dispatch:${dispatch.dispatchId}`,
+      `inquiryThread:${dispatch.inquiryThreadId}`,
+      `inquiryMessage:${dispatch.inquiryMessageId}`,
+    ],
+    createdAt: dispatch.createdAt,
+    updatedAt: dispatch.updatedAt,
+  }
+  const existing = await db
+    .query('operationKeys')
+    .withIndex('by_scope_key', (query) => query.eq('scope', 'notification').eq('key', dispatch.operationKey))
+    .unique()
+  if (existing === null) {
+    await db.insert('operationKeys', row)
+    return
+  }
+  await db.patch(existing._id, row)
+}
+
+async function persistNotificationQueuedAuditEvent(
+  db: GenericDatabaseWriter<DataModel>,
+  dispatch: NotificationDispatchRecord,
+): Promise<void> {
+  const eventId = `audit:${canonicalDigest({
+    eventType: 'notification.queued',
+    operationKey: dispatch.operationKey,
+    targetRef: dispatch.dispatchId,
+  })}`
+  const businessId = businessIdFromValue(db, dispatch.businessId)
+  const row: Omit<Doc<'auditEvents'>, '_id' | '_creationTime'> = {
+    eventId,
+    eventType: 'notification.queued',
+    actorKind: 'system',
+    actorRef: 'system:notification-outbox',
+    businessId,
+    targetType: 'notification',
+    targetRef: dispatch.dispatchId,
+    beforeState: 'none',
+    afterState: dispatch.status,
+    idempotencyKey: dispatch.operationKey,
+    correlationId: dispatch.correlationId,
+    evidenceRefs: [],
+    redactedPayloadJson: JSON.stringify({
+      dispatchId: dispatch.dispatchId,
+      providerFamily: dispatch.providerFamily,
+      inquiryThreadId: dispatch.inquiryThreadId,
+      inquiryMessageId: dispatch.inquiryMessageId,
+      payloadHash: dispatch.payloadHash,
+    }),
+    payloadHash: canonicalDigest({
+      dispatchId: dispatch.dispatchId,
+      providerFamily: dispatch.providerFamily,
+      inquiryThreadId: dispatch.inquiryThreadId,
+      inquiryMessageId: dispatch.inquiryMessageId,
+      payloadHash: dispatch.payloadHash,
+    }),
+    createdAt: dispatch.createdAt,
+  }
+  const existing = await db
+    .query('auditEvents')
+    .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
+    .unique()
+  if (existing === null) {
+    await db.insert('auditEvents', row)
+    return
+  }
+  await db.patch(existing._id, row)
+}
+async function persistNotificationQueuedFunnelEvent(
+  db: GenericDatabaseWriter<DataModel>,
+  dispatch: NotificationDispatchRecord,
+): Promise<void> {
+  const businessId = businessIdFromValue(db, dispatch.businessId)
+  const row: Omit<Doc<'funnelEvents'>, '_id' | '_creationTime'> = {
+    eventType: 'notification_queued',
+    source: 'notification-outbox',
+    stage: 'published',
+    pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
+    businessId,
+    redactedPayloadJson: JSON.stringify({
+      dispatchId: dispatch.dispatchId,
+      providerFamily: dispatch.providerFamily,
+      status: dispatch.status,
+    }),
+    consentFlag: true,
+    correlationId: dispatch.correlationId,
+    createdAt: dispatch.createdAt,
+  }
+  const existing = await db
+    .query('funnelEvents')
+    .withIndex('by_eventType_business_correlation_createdAt', (builder) =>
+      builder
+        .eq('eventType', 'notification_queued')
+        .eq('businessId', businessId)
+        .eq('correlationId', dispatch.correlationId)
+        .eq('createdAt', dispatch.createdAt)
+    )
+    .first()
+  if (existing === null) {
+    await db.insert('funnelEvents', row)
+    return
+  }
+  await db.patch(existing._id, row)
+}
+function notificationDispatchRow(
+  db: GenericDatabaseWriter<DataModel>,
+  dispatch: NotificationDispatchRecord,
+): NotificationDispatchRow {
+  return {
     dispatchId: dispatch.dispatchId,
-    businessId: dispatch.businessId,
+    businessId: businessIdFromValue(db, dispatch.businessId),
     inquiryThreadId: dispatch.inquiryThreadId,
     inquiryMessageId: dispatch.inquiryMessageId,
     recipientRole: dispatch.recipientRole,
@@ -78,116 +253,53 @@ export async function upsertNotificationDispatch(
     correlationId: dispatch.correlationId,
     createdAt: dispatch.createdAt,
     updatedAt: dispatch.updatedAt,
-  })
-}
-
-/** Enqueue-path reconstruction used by the inquiry notification bridge. */
-export async function upsertNotificationDispatchEnqueueReconstruction(
-  db: RuntimeDb,
-  dispatch: NotificationDispatchRecord,
-): Promise<void> {
-  await Promise.all([
-    upsertByFields(db, 'operationKeys', ['scope', 'key'], {
-      scope: 'notification',
-      actorKind: 'system',
-      actorRef: 'system:notification-outbox',
-      operationName: 'enqueueInquiryNotification',
-      key: dispatch.operationKey,
-      requestHash: dispatch.payloadHash,
-      sourceHash: dispatch.dispatchId,
-      status: 'succeeded',
-      resultHash: stableHash({ code: 'notification_queued', dispatchId: dispatch.dispatchId }),
-      effectRefs: [
-        'result:notification_queued',
-        `dispatch:${dispatch.dispatchId}`,
-        `inquiryThread:${dispatch.inquiryThreadId}`,
-        `inquiryMessage:${dispatch.inquiryMessageId}`,
-      ],
-      createdAt: dispatch.createdAt,
-      updatedAt: dispatch.updatedAt,
-    }),
-    upsertByFields(db, 'auditEvents', ['eventId'], {
-      eventId: `audit:${stableHash({
-        eventType: 'notification.queued',
-        operationKey: dispatch.operationKey,
-        targetRef: dispatch.dispatchId,
-      })}`,
-      eventType: 'notification.queued',
-      actorKind: 'system',
-      actorRef: 'system:notification-outbox',
-      businessId: dispatch.businessId,
-      targetType: 'notification',
-      targetRef: dispatch.dispatchId,
-      beforeState: 'none',
-      afterState: dispatch.status,
-      idempotencyKey: dispatch.operationKey,
-      correlationId: dispatch.correlationId,
-      evidenceRefs: [],
-      redactedPayloadJson: JSON.stringify({
-        dispatchId: dispatch.dispatchId,
-        providerFamily: dispatch.providerFamily,
-        inquiryThreadId: dispatch.inquiryThreadId,
-        inquiryMessageId: dispatch.inquiryMessageId,
-        payloadHash: dispatch.payloadHash,
-      }),
-      payloadHash: stableHash({
-        dispatchId: dispatch.dispatchId,
-        providerFamily: dispatch.providerFamily,
-        inquiryThreadId: dispatch.inquiryThreadId,
-        inquiryMessageId: dispatch.inquiryMessageId,
-        payloadHash: dispatch.payloadHash,
-      }),
-      createdAt: dispatch.createdAt,
-    }),
-    upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
-      eventType: 'notification_queued',
-      source: 'notification-outbox',
-      stage: 'published',
-      pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
-      businessId: dispatch.businessId,
-      redactedPayloadJson: JSON.stringify({
-        dispatchId: dispatch.dispatchId,
-        providerFamily: dispatch.providerFamily,
-        status: dispatch.status,
-      }),
-      consentFlag: true,
-      correlationId: dispatch.correlationId,
-      createdAt: dispatch.createdAt,
-    }),
-  ])
-}
-
-function recipientRole(row: RuntimeDocument) {
-  return stringField(row, 'recipientRole') === 'customer' ? 'customer' : 'owner'
-}
-
-function notificationProviderFamily(row: RuntimeDocument): NotificationProviderFamily {
-  return stringField(row, 'providerFamily') === 'novu' ? 'novu' : 'resend'
-}
-
-function notificationDispatchStatus(row: RuntimeDocument): NotificationDispatchStatus {
-  const value = stringField(row, 'status')
-  return NotificationDispatchStatusValues.find((candidate) => candidate === value) ?? 'queued'
-}
-
-function parseRedactedPayload(value: string): RedactedPayload {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return isRedactedPayload(parsed) ? parsed : null
-  } catch {
-    return null
   }
 }
 
-function isRedactedPayload(value: unknown): value is RedactedPayload {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return true
+function notificationDispatchAttemptRow(attempt: NotificationDispatchAttemptRecord): NotificationDispatchAttemptRow {
+  return {
+    attemptId: attempt.attemptId,
+    dispatchId: attempt.dispatchId,
+    providerFamily: attempt.providerFamily,
+    status: attempt.status,
+    providerIdempotencyKey: attempt.providerIdempotencyKey,
+    requestPayloadHash: attempt.requestPayloadHash,
+    redactedRequestPayloadJson: JSON.stringify(attempt.redactedRequestPayload),
+    ...(attempt.providerResponseHash === undefined ? {} : { providerResponseHash: attempt.providerResponseHash }),
+    ...(attempt.redactedError === undefined ? {} : { redactedError: attempt.redactedError }),
+    ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
+    startedAt: attempt.startedAt,
+    ...(attempt.completedAt === undefined ? {} : { completedAt: attempt.completedAt }),
   }
-  if (Array.isArray(value)) {
-    return value.every(isRedactedPayload)
+}
+
+function notificationWebhookEventRow(webhookEvent: NotificationWebhookEventRecord): NotificationWebhookEventRow {
+  return {
+    webhookEventId: webhookEvent.webhookEventId,
+    providerFamily: webhookEvent.providerFamily,
+    providerEventId: webhookEvent.providerEventId,
+    logicalObjectKey: webhookEvent.logicalObjectKey,
+    ...(webhookEvent.dispatchId === undefined ? {} : { dispatchId: webhookEvent.dispatchId }),
+    status: webhookEvent.status,
+    eventType: webhookEvent.eventType,
+    signatureStatus: webhookEvent.signatureStatus,
+    payloadHash: webhookEvent.payloadHash,
+    redactedPayloadJson: JSON.stringify(webhookEvent.redactedPayload),
+    ...(webhookEvent.reason === undefined ? {} : { reason: webhookEvent.reason }),
+    operationKey: webhookEvent.operationKey,
+    correlationId: webhookEvent.correlationId,
+    receivedAt: webhookEvent.receivedAt,
   }
-  if (!isRecord(value)) {
-    return false
+}
+
+
+function businessIdFromValue(
+  db: GenericDatabaseWriter<DataModel>,
+  value: string,
+): Id<'businesses'> {
+  const id = db.normalizeId('businesses', value)
+  if (id === null) {
+    throw new Error('invalid_business_id')
   }
-  return Object.values(value).every(isRedactedPayload)
+  return id
 }

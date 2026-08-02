@@ -49,23 +49,18 @@ describe('public services API projection', () => {
     })
   })
 
-  it('passes source pagination through and echoes the search query', () => {
+  it('passes source cursor state through', () => {
     const source = page()
     const result = projectPublicServicesPage(source)
 
     expect(result).toMatchObject({
       kind: 'ok',
       schemaVersion: 'public-services-api:v1',
-      query: 'emergency plumbing',
-      pagination: {
-        cursor: 'cursor-in',
-        nextCursor: 'cursor-out',
-        limit: 5,
-        total: 2,
-        hasMore: true,
-      },
+      isDone: false,
+      continueCursor: 'cursor-out',
     })
-    expect(result.pagination).toBe(source.pagination)
+    expect(result.isDone).toBe(source.isDone)
+    expect(result.continueCursor).toBe(source.continueCursor)
   })
 
   it('opens only the exact keyless POST quote path', () => {
@@ -83,8 +78,7 @@ function page(): PublicBusinessCatalogApiV2Page {
   return {
     kind: 'ok',
     schemaVersion: 'public-business-catalog-api:v2',
-    query: 'emergency plumbing',
-    items: [
+    page: [
       {
         schemaVersion: 'public-business-catalog-api:v2',
         businessId: 'business-acme',
@@ -156,6 +150,7 @@ function page(): PublicBusinessCatalogApiV2Page {
         accessSummary: { humanRequest: true, externalOperation: true, aeSupportedAction: false },
       },
     ],
-    pagination: { cursor: 'cursor-in', nextCursor: 'cursor-out', limit: 5, total: 2, hasMore: true },
+    isDone: false,
+    continueCursor: 'cursor-out',
   }
 }

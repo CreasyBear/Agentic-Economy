@@ -169,10 +169,10 @@ export type StructuredPaidOperationProjection = Readonly<{
 export function createPaidOperationSemantics(
   input: Omit<PaidOperationSemantics, 'schema'>,
 ): PaidOperationSemantics {
-  const semantics = structuredClone({
+  const semantics: PaidOperationSemantics = structuredClone({
     ...input,
     schema: PAID_OPERATION_SEMANTICS_SCHEMA,
-  }) as PaidOperationSemantics
+  })
   assertPaidOperationSemantics(semantics)
   return semantics
 }
@@ -310,39 +310,40 @@ export function projectRichPaidOperation(
   input: PaidOperationSemantics,
 ): RichPaidOperationProjection {
   const semantics = cloneAndValidate(input)
+  const sections: RichPaidOperationProjection['sections'] = [
+    {
+      label: 'Operation',
+      value: {
+        provider: semantics.operation.providerName,
+        summary: semantics.presentation.summary,
+        materialInputs: semantics.operation.materialInputs,
+        presentation: semantics.presentation.blocks,
+        maximumAuthorizedCharge: semantics.maximumAuthorizedCharge,
+        environment: semantics.environment,
+      },
+    },
+    {
+      label: 'What happened',
+      value: {
+        queryRelease: semantics.queryRelease,
+        paymentAuthorization: semantics.paymentAuthorization,
+        paymentSubmission: semantics.paymentSubmission,
+        settlement: semantics.settlement,
+        resultDelivery: semantics.resultDelivery,
+      },
+    },
+    {
+      label: 'Safe next action',
+      value: {
+        error: semantics.error,
+        continuations: semantics.continuations,
+      },
+    },
+  ]
   return {
     kind: 'human_rich_paid_operation',
     title: semantics.presentation.title,
-    sections: [
-      {
-        label: 'Operation',
-        value: {
-          provider: semantics.operation.providerName,
-          summary: semantics.presentation.summary,
-          materialInputs: semantics.operation.materialInputs,
-          presentation: semantics.presentation.blocks,
-          maximumAuthorizedCharge: semantics.maximumAuthorizedCharge,
-          environment: semantics.environment,
-        },
-      },
-      {
-        label: 'What happened',
-        value: {
-          queryRelease: semantics.queryRelease,
-          paymentAuthorization: semantics.paymentAuthorization,
-          paymentSubmission: semantics.paymentSubmission,
-          settlement: semantics.settlement,
-          resultDelivery: semantics.resultDelivery,
-        },
-      },
-      {
-        label: 'Safe next action',
-        value: {
-          error: semantics.error,
-          continuations: semantics.continuations,
-        },
-      },
-    ] as unknown as RichPaidOperationProjection['sections'],
+    sections,
     semantics,
     semanticDigest: digest(semantics),
     semanticDigestUse: PAID_OPERATION_SEMANTIC_DIGEST_USE,
@@ -499,5 +500,5 @@ function cloneAndValidate(input: PaidOperationSemantics): PaidOperationSemantics
 
 
 function digest(input: PaidOperationSemantics): string {
-  return canonicalDigest(input as unknown as StableHashValue)
+  return canonicalDigest(input)
 }

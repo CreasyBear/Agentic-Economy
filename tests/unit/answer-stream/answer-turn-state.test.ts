@@ -7,7 +7,6 @@ import {
 } from '@/components/ae/chat/answer-turn-state'
 import type { AnswerEvent, AnswerSource } from '@/modules/answer/public'
 
-import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
 
 const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
   citationIndex: 1,
@@ -102,52 +101,6 @@ describe('reduceAnswerTurnEvent', () => {
     expect(withCompare.artifacts.map((artifact) => artifact.kind)).toEqual(['provider-compare-table'])
   })
 
-  it('projects durable plan progress and the final recommendation', () => {
-    const planned = reduceAnswerTurnEvent(initialAnswerTurnUiState, {
-      type: 'plan-contract',
-      planId: 'plan-1',
-      revision: 1,
-      goalText: 'Find a dentist in Perth',
-      steps: [{ id: 'search', title: 'Search current listings', status: 'pending' }],
-    })
-    const running = reduceAnswerTurnEvent(planned, {
-      type: 'plan-contract',
-      planId: 'plan-1',
-      revision: 1,
-      goalText: 'Find a dentist in Perth',
-      steps: [{ id: 'search', title: 'Search current listings', status: 'in_progress' }],
-    })
-    const recommended = reduceAnswerTurnEvent(running, {
-      type: 'recommendation',
-      summary: 'One current option best matches the stated need.',
-      recommendedSlug: 'dentist-one',
-      nextStep: 'Review the listing.',
-    })
-
-    expect(recommended.enginePlan?.steps[0]?.status).toBe('in_progress')
-    expect(recommended.recommendation).toEqual({
-      summary: 'One current option best matches the stated need.',
-      recommendedSlug: 'dentist-one',
-      nextStep: 'Review the listing.',
-    })
-  })
-  it('carries the acknowledged decision-map snapshot and keeps it authoritative over answer artifacts', () => {
-    const snapshot = {
-      projectId: 'project-1',
-      threadId: 'thread-1',
-    } as unknown as DecisionMapSnapshot
-    const withMap = reduceAnswerTurnEvent(initialAnswerTurnUiState, {
-      type: 'decision-map',
-      snapshot,
-    })
-    const withArtifact = reduceAnswerTurnEvent(withMap, {
-      type: 'one-line',
-      oneLine: 'A generic answer should not replace this map.',
-    })
-
-    expect(withArtifact.decisionMap).toBe(snapshot)
-    expect(withArtifact.oneLineFallback).toBe('A generic answer should not replace this map.')
-  })
 
 
   it('merges provider-card artifacts idempotently by kind', () => {

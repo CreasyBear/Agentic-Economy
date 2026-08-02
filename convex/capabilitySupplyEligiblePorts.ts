@@ -2,13 +2,12 @@ import type {
   EligiblePublicationRow,
   EligiblePublishedBusiness,
   EligibleSupplyPorts,
-  CapabilityBindingRow,
-  CapabilityOfferingRow,
 } from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
   return {
@@ -18,17 +17,17 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
           query.eq('networkId', networkId).eq('admission', 'admitted').eq('conformance', 'conformant')
         ))
         .take(take)
-      return rows.map(toBindingRow)
+      return rows.map(toCapabilityBindingRow)
     },
     loadOfferingByOfferingId: async (offeringId) => {
       const offering = await db.query('capabilityOfferings')
         .withIndex('by_offeringId', (query) => query.eq('offeringId', offeringId)).unique()
-      return offering === null ? null : toOfferingRow(offering)
+      return offering === null ? null : toCapabilityOfferingRow(offering)
     },
     loadBindingByBindingId: async (bindingId) => {
       const binding = await db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId)).unique()
-      return binding === null ? null : toBindingRow(binding)
+      return binding === null ? null : toCapabilityBindingRow(binding)
     },
     loadPublishedBusiness: async (businessId) => {
       const business = await db.get(businessId as Id<'businesses'>)
@@ -50,8 +49,9 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         )).unique()
       if (revision === null || revision.sourceHash !== origin.offeringSourceHash) return false
       if (origin.declaredAccessPathRef === undefined) return true
+      const declaredAccessPathRef = origin.declaredAccessPathRef
       const path = await db.query('offeringAccessPaths')
-        .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', origin.declaredAccessPathRef!)).unique()
+        .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', declaredAccessPathRef)).unique()
       return path !== null && path.status === 'published'
         && path.offeringRef === origin.offeringRef
         && path.offeringRevision === origin.offeringRevision
@@ -85,52 +85,4 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
   }
 }
 
-function toOfferingRow(doc: Doc<'capabilityOfferings'>): CapabilityOfferingRow {
-  return {
-    offeringId: doc.offeringId,
-    businessId: doc.businessId,
-    networkId: doc.networkId,
-    capabilityId: doc.capabilityId,
-    version: doc.version,
-    contractDigest: doc.contractDigest,
-    ...(doc.origin === undefined ? {} : { origin: doc.origin }),
-    presentation: doc.presentation,
-    searchTerms: doc.searchTerms,
-    registrationEvidenceRefs: doc.registrationEvidenceRefs,
-    registrationHash: doc.registrationHash,
-    status: doc.status,
-    admissionEvidenceRefs: doc.admissionEvidenceRefs,
-    eligibilityHash: doc.eligibilityHash,
-    registeredAt: doc.registeredAt,
-    updatedAt: doc.updatedAt,
-  }
-}
 
-function toBindingRow(doc: Doc<'capabilityTransportBindings'>): CapabilityBindingRow {
-  return {
-    _id: doc._id,
-    _creationTime: doc._creationTime,
-    bindingId: doc.bindingId,
-    offeringId: doc.offeringId,
-    networkId: doc.networkId,
-    capabilityId: doc.capabilityId,
-    version: doc.version,
-    contractDigest: doc.contractDigest,
-    endpointUrl: doc.endpointUrl,
-    credentialRef: doc.credentialRef,
-    continuation: doc.continuation,
-    cancellation: doc.cancellation,
-    adapterId: doc.adapterId,
-    configJson: doc.configJson,
-    configDigest: doc.configDigest,
-    registrationEvidenceRefs: doc.registrationEvidenceRefs,
-    registrationHash: doc.registrationHash,
-    admission: doc.admission,
-    conformance: doc.conformance,
-    admissionEvidenceRefs: doc.admissionEvidenceRefs,
-    conformanceEvidenceRefs: doc.conformanceEvidenceRefs,
-    eligibilityHash: doc.eligibilityHash,
-    registeredAt: doc.registeredAt,
-    updatedAt: doc.updatedAt,
-  }
-}

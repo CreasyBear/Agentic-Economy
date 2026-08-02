@@ -1,33 +1,16 @@
+import {
+  JOURNEY_EVENT_NAMES,
+  WAVE_1_JOURNEY_EVENT_NAMES,
+  WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
+} from '@/modules/observability/public'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
+import { createPrefixedRandomId } from '@/modules/common/random-id'
 
-export const WAVE_1_JOURNEY_EVENT_NAMES = [
-  'listing_viewed',
-  'listing_trust_fact_opened',
-  'direct_call_selected',
-  'shortlist_started',
-  'shortlist_ready',
-  'shortlist_reopened',
-  'export_preview_opened',
-  'shortlist_exported',
-  'business_opened',
-  'urgent_call_route_shown',
-  'journey_abandoned',
-] as const
-
-export const WAVE_2_DORMANT_JOURNEY_EVENT_NAMES = [
-  'record_reopened',
-  'record_exported',
-  'record_shared',
-  'record_cited',
-  'dispute_opened',
-  'replay_materially_resolved',
-  'admitted_r1_send',
-] as const
-
-export const JOURNEY_EVENT_NAMES = [
-  ...WAVE_1_JOURNEY_EVENT_NAMES,
-  ...WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
-] as const
+export {
+  JOURNEY_EVENT_NAMES,
+  WAVE_1_JOURNEY_EVENT_NAMES,
+  WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
+}
 
 export type Wave1JourneyEventName = (typeof WAVE_1_JOURNEY_EVENT_NAMES)[number]
 export type DormantWave2JourneyEventName = (typeof WAVE_2_DORMANT_JOURNEY_EVENT_NAMES)[number]
@@ -111,7 +94,7 @@ export function getOrCreatePseudonymousJourneyId(journey: JourneyTag, sourceId: 
     window.localStorage.setItem(storageKey, pseudonymousId)
     return pseudonymousId as PseudonymousJourneyId
   } catch {
-    return `${journey.toLowerCase()}_${Date.now()}-${Math.random().toString(36).slice(2)}` as PseudonymousJourneyId
+    return createPrefixedRandomId(`${journey.toLowerCase()}_${Date.now()}-`) as PseudonymousJourneyId
   }
 }
 

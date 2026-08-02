@@ -3,8 +3,9 @@ import { defaultInquiryOperatorControls, type InquirySourceState } from '../sche
 export function createEmptyInquirySourceState(input: Partial<InquirySourceState> = {}): InquirySourceState {
   return {
     businesses: [],
-    businessServices: [],
-    serviceCapabilities: [],
+    businessOfferings: [],
+    businessOfferingRevisions: [],
+    offeringAccessPaths: [],
     suppressionRules: [],
     owners: [],
     claims: [],

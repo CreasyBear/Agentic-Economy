@@ -3,14 +3,25 @@ import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'),
-  load,
-]))
+import { convexModules as modules } from '../helpers/convex-fixtures'
 
 type SeedBackend = TestConvex<typeof schema>
+
+type CatalogOffering = {
+  availabilitySummary?: string
+  pricingSummary?: string
+  accessPaths: readonly { kind: string; channel?: string }[]
+}
+
+type CatalogPage = {
+  page: readonly {
+    slug: string
+    publishedPhone?: string
+    offerings: readonly CatalogOffering[]
+  }[]
+  isDone: boolean
+  continueCursor: string
+}
 
 type CatalogRow = {
   slug: string
@@ -20,9 +31,6 @@ type CatalogRow = {
   phonePaths: number
 }
 
-type ProjectionSnapshot = {
-  offerings: readonly { offering: { price?: { currency: string; amountMinor?: number } } }[]
-}
 
 /**
  * The Offering API's whole claim over v1 is that it can carry price and
@@ -99,7 +107,7 @@ describe('dev-seeded public catalog decision facts', () => {
     // again: the snapshot is what every public read is served from.
     const projectedPrices = await backend.run(async (ctx) => (
       (await ctx.db.query('businessSupplyProjectionSnapshots').collect()).flatMap((snapshot) => (
-        (JSON.parse(snapshot.projectionJson) as ProjectionSnapshot).offerings.map((item) => item.offering.price ?? null)
+        snapshot.projection?.offerings.map((item) => item.offering.price ?? null) ?? []
       ))
     ))
     expect(projectedPrices.filter((price) => price !== null)).not.toHaveLength(0)
@@ -113,16 +121,21 @@ describe('dev-seeded public catalog decision facts', () => {
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)
 
-    // Stand in for an edited seed fixture: the v1 service row moves, the
-    // Offering revision mirroring it does not.
+    // Stand in for an edited seed fixture: the native Offering revision moves
+    // directly, and the next projection pass must not serve a stale mirror.
     const slug = (await readEveryCatalogRow(backend)).find((row) => row.availabilitySummary !== null)?.slug
     expect(slug).toBeDefined()
     await backend.run(async (ctx) => {
       const business = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug!)).unique()
-      const service = await ctx.db.query('businessServices')
-        .withIndex('by_business_status', (query) => query.eq('businessId', business!._id))
+      const offering = await ctx.db.query('businessOfferings')
+        .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business!._id))
         .first()
-      await ctx.db.patch(service!._id, { hoursOrUnknown: 'Tue–Thu 10am–2pm' })
+      const revision = await ctx.db.query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (query) => (
+          query.eq('offeringRef', offering!.offeringRef).eq('revision', offering!.currentRevision)
+        ))
+        .unique()
+      await ctx.db.patch(revision!._id, { availabilitySummary: 'Tue–Thu 10am–2pm' })
     })
 
     await runOfferingCutover(backend)
@@ -133,8 +146,6 @@ describe('dev-seeded public catalog decision facts', () => {
 })
 
 async function runOfferingCutover(backend: SeedBackend): Promise<void> {
-  // The seed schedules this; convex-test does not drain the scheduler here, so
-  // the pages are walked directly.
   let cursor: string | null = null
   for (let page = 0; page < 40; page += 1) {
     const step: { errors: readonly string[]; done: boolean; nextCursor: string | null } =
@@ -148,24 +159,12 @@ async function runOfferingCutover(backend: SeedBackend): Promise<void> {
 
 async function readEveryCatalogRow(backend: SeedBackend): Promise<readonly CatalogRow[]> {
   const rows: CatalogRow[] = []
-  let cursor: string | undefined
+  let cursor: string | null = null
   for (let page = 0; page < 20; page += 1) {
-    const result = await backend.query(api.registry.listPublicBusinessOfferingSupply, {
-      limit: 50,
-      ...(cursor === undefined ? {} : { cursor }),
-    }) as {
-      items: readonly {
-        slug: string
-        publishedPhone?: string
-        offerings: readonly {
-          availabilitySummary?: string
-          pricingSummary?: string
-          accessPaths: readonly { kind: string; channel?: string }[]
-        }[]
-      }[]
-      pagination: { nextCursor?: string; hasMore: boolean }
-    }
-    for (const item of result.items) {
+    const result: CatalogPage = await backend.query(api.registry.listPublicBusinessOfferingSupply, {
+      paginationOpts: { cursor, numItems: 50 },
+    })
+    for (const item of result.page) {
       rows.push({
         slug: item.slug,
         availabilitySummary: item.offerings[0]?.availabilitySummary ?? null,
@@ -177,8 +176,8 @@ async function readEveryCatalogRow(backend: SeedBackend): Promise<readonly Catal
         ),
       })
     }
-    if (!result.pagination.hasMore || result.pagination.nextCursor === undefined) return rows
-    cursor = result.pagination.nextCursor
+    if (result.isDone) return rows
+    cursor = result.continueCursor
   }
   throw new Error('dev seed catalog paging did not finish')
 }

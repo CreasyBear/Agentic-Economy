@@ -77,11 +77,6 @@ export async function listIntegratedCapabilitySupply(
   return { kind: 'available' as const, supplies }
 }
 
-/**
- * Compatibility name for the pre-reconciliation integrated inventory.
- * New execution callers must use listRouteableCapabilitySupply.
- */
-export const listEligibleCapabilitySupply = listIntegratedCapabilitySupply
 
 export async function listRouteableCapabilitySupply(
   ports: EligibleSupplyPorts,
@@ -97,9 +92,10 @@ export async function listRouteableCapabilitySupply(
   if (integrated.kind === 'unavailable') return integrated
   return {
     kind: 'available' as const,
-    supplies: integrated.supplies.filter((supply) => supply.publication !== undefined).slice(0, input.limit).map((supply) => ({
-      ...supply,
-      publication: supply.publication!,
-    })),
+    supplies: integrated.supplies.flatMap((supply) => (
+      supply.publication === undefined
+        ? []
+        : [{ ...supply, publication: supply.publication }]
+    )).slice(0, input.limit),
   }
 }

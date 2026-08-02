@@ -1,13 +1,8 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import {
-  pricingConfigSchema,
-  type PricingConfig,
-  type PricingResolution,
-  type RakeConfig,
-  type RakeSplit,
-} from '../public'
+import { pricingConfigSchema } from './pricing-contract'
+import type { PricingConfig, PricingResolution, RakeConfig, RakeSplit } from '../public'
 
 export type NormalizePricingConfigResult =
   | Readonly<{ kind: 'valid'; config: PricingConfig }>

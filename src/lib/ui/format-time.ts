@@ -12,6 +12,21 @@
 const TIMESTAMP_LOCALE = 'en-AU'
 const dateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
 const timeFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { hour: 'numeric', minute: '2-digit' })
+const dateOnlyFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { dateStyle: 'medium' })
+const numericDateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric' })
+const clockTimeFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+const recordTimestampFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+const utcTimestampFormatter = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC',
+})
 const relativeFormatter = new Intl.RelativeTimeFormat(TIMESTAMP_LOCALE, { numeric: 'auto' })
 
 const RELATIVE_UNITS: readonly { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
@@ -31,6 +46,30 @@ function toDate(value: number | string | Date): Date {
 export function formatTimestamp(value: number | string | Date): string {
   const date = toDate(value)
   return `${dateFormatter.format(date)}, ${timeFormatter.format(date)}`
+}
+/** Date-only public label, e.g. "2 July 2026". */
+export function formatDate(value: number | string | Date): string {
+  return dateOnlyFormatter.format(toDate(value))
+}
+
+/** Date-only numeric label matching the browser's en-AU date default. */
+export function formatNumericDate(value: number | string | Date): string {
+  return numericDateFormatter.format(toDate(value))
+}
+
+/** Clock-only public label, e.g. "1:14:05 pm". */
+export function formatClockTime(value: number | string | Date): string {
+  return clockTimeFormatter.format(toDate(value))
+}
+
+/** Record timestamps preserve the record surface's two-digit fields. */
+export function formatRecordTimestamp(value: number | string | Date): string {
+  return recordTimestampFormatter.format(toDate(value))
+}
+
+/** UTC timestamp for surfaces whose product contract explicitly uses UTC. */
+export function formatUtcTimestamp(value: number | string | Date): string {
+  return utcTimestampFormatter.format(toDate(value))
 }
 
 /** ISO-8601 for the `dateTime` attribute of a `<time>` element. */

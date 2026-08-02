@@ -25,7 +25,7 @@ const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
     receipt: z.strictObject({
       threadId: z.string(),
       businessId: z.string(),
-      serviceId: z.string(),
+      offeringRef: z.string(),
       status: z.string(),
       version: z.number().int().nonnegative(),
       notificationId: z.string(),
@@ -49,36 +49,22 @@ const submitParameters: readonly ActionParameter[] = [
     name: 'target.businessId',
     type: 'string',
     description:
-      'Identifier of the published business the inquiry is for. Provide with target.serviceId, or use target.businessSlug + target.serviceSlug instead.',
+      'Identifier of the published business the inquiry is for. Provide with target.offeringRef, or use target.businessSlug + target.offeringRef instead.',
     required: false,
   },
   {
-    name: 'target.serviceId',
+    name: 'target.offeringRef',
     type: 'string',
     description:
-      'Identifier of the published service the inquiry is about. Pairs with target.businessId.',
-    required: false,
+      'Logical reference of the published Offering the inquiry is about. Pairs with target.businessId or target.businessSlug.',
+    required: true,
   },
   {
     name: 'target.businessSlug',
     type: 'string',
     description:
-      'Public slug of the business, as read from a listing. Provide with target.serviceSlug when you do not have identifiers.',
+      'Public slug of the business, as read from a listing. Provide with target.offeringRef when you do not have the business identifier.',
     required: false,
-  },
-  {
-    name: 'target.serviceSlug',
-    type: 'string',
-    description:
-      'Public slug of the service on that business, as read from a listing. Pairs with target.businessSlug.',
-    required: false,
-  },
-  {
-    name: 'target.capabilityKind',
-    type: 'enum',
-    description: 'The published contact capability the person is using.',
-    enum: ['phone_inquiry', 'quote_request', 'emergency_callout_interest', 'ae_hosted_discovery'],
-    required: true,
   },
   {
     name: 'body',
@@ -147,8 +133,7 @@ const customerRecordOutputSchema = z.discriminatedUnion('kind', [
         fields: z.array(z.strictObject({
           key: z.enum([
             'businessId',
-            'serviceId',
-            'capabilityKind',
+            'offeringRef',
             'body',
             'contactName',
             'contactEmail',
@@ -204,7 +189,7 @@ export const submitInquiryAction = defineAction({
     'Does not book, charge, dispatch, or auto-fulfil. It records a message for a human owner.',
     'Availability, quote, and job acceptance still need a human reply.',
     'Refuse to call this if the person wants instant booking, payment, or autonomous execution.',
-    'Use one of phone_inquiry / quote_request / emergency_callout_interest / ae_hosted_discovery as the capability kind, matching what the listing publishes.',
+    'Use the published Offering reference from the listing. Admission requires its current published revision and a published human-request access path on channel ae_inquiry.',
     'When the target names a business slug, a refusal returns a handoffUrl to that listing\'s inquiry form, prefilled with the message, so a person can send it for owner review.',
   ],
   schema: agentToolInquirySubmitSchema,
@@ -304,5 +289,15 @@ export const readCustomerRecordAction = defineAction({
     approval: 'none',
   },
   surfaces: ['http', 'agentJson'],
+  invocationContract: {
+    version: 'inquiry.readCustomerRecord:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['threadId', 'accessKey'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['customer_inquiry_record_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'threadId_changed', 'accessKey_changed'],
+  },
   run: async ({ data }) => readCustomerRecordThroughSource(data),
 })

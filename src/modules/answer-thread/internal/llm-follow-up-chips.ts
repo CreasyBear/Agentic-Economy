@@ -53,7 +53,7 @@ async function fetchLlmFollowUpChips(input: GenerateLlmFollowUpChipsInput): Prom
     const result = await generateText({
       maxRetries: 0,
       model: openRouterModel(config, config.model, { structuredOutputs: true }),
-      system: buildFollowUpChipsSystemPrompt(),
+      instructions: buildFollowUpChipsSystemPrompt(),
       prompt: buildFollowUpChipsUserPrompt(input.query, input.providers),
       output: Output.object({ schema: followUpChipsSchema }),
       temperature: 0.2,

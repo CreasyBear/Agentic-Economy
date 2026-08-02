@@ -1,6 +1,5 @@
 export type RouteAttemptState =
   | 'queued'
-  | 'leased'
   | 'dispatched'
   | 'accepted'
   | 'succeeded'
@@ -19,7 +18,6 @@ export type ExportedStepState =
   | 'cancelled'
 
 export function exportState(state: RouteAttemptState): ExportedStepState {
-  if (state === 'leased') return 'ready_to_contact'
   if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
   if (state === 'succeeded') return 'completed'

@@ -1,24 +1,8 @@
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 
-import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
-
 import type { AnswerArtifact } from './answer-schema'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
-/**
- * Provider-agnostic answer synthesizer.
- *
- * Phase 1 ships a deterministic implementation (template prose from real catalog
- * fields, no LLM). The interface is async-iterator shaped so a future LLM provider
- * (Nemotron / Exa / Perplexity Sonar) can drop in by implementing the same
- * `synthesize` method with real token streaming — no route or client rewrite.
- *
- * Contract: every field on {@link AnswerSource} must be derivable from a live
- * {@link PublicBusinessCatalogApiV2Dto}. No hardcoded answer text, no invented
- * availability or price, no booking/payment/dispatch/callable claims, no
- * "verified" claim unless a real trust standard was met. Read-only synthesis
- * over the public, non-suppressed catalog.
- */
 
 export type AnswerSynthesizerFollowUpIntent =
   | 'refine_search'
@@ -148,11 +132,9 @@ export type AnswerSnapshot = {
   compactLayout?: boolean
   /** Generative panel shape for this turn. */
   layoutProfile?: AnswerLayoutProfile
-  /** Persisted marker that rehydrates the canonical decision-map presenter on replay. */
-  decisionMapRevision?: number
 }
 
-export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'error'
+export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'unsupported' | 'error'
 
 export type AnswerProviderBudget = {
   searchLimit: number
@@ -174,34 +156,12 @@ export type AnswerPlanEvent = {
   artifactBudget: AnswerArtifactBudget
 }
 
-export type EnginePlanStreamEvent =
-  | {
-      type: 'plan-contract'
-      planId: string
-      revision: number
-      goalText: string
-      steps: readonly {
-        id: string
-        title: string
-        status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
-      }[]
-    }
-  | { type: 'clarifying-question'; question: string }
-  | { type: 'recommendation'; summary: string; recommendedSlug?: string; nextStep: string }
-export type DecisionMapStreamEvent = {
-  type: 'decision-map'
-  snapshot: DecisionMapSnapshot
-}
-
-
 /** SSE event stream shape. Order: thread? -> work-step* -> plan -> ... -> complete | error. */
 export type AnswerEvent =
   | { type: 'thread'; threadId: string; turnId: string; turnSeq: number }
   | { type: 'work-step'; step: AnswerWorkStep }
   | { type: 'thinking'; step?: 'search' | 'read' | 'write'; label?: string }
   | AnswerPlanEvent
-  | EnginePlanStreamEvent
-  | DecisionMapStreamEvent
   | { type: 'one-line'; oneLine: string }
   | { type: 'sources'; providers: readonly AnswerSource[] }
   | { type: 'summary-delta'; delta: string }
@@ -210,10 +170,6 @@ export type AnswerEvent =
   | { type: 'complete'; answer: AnswerSnapshot }
   | { type: 'error'; code: string; copyId: string }
 
-export type AnswerSynthesizer = {
-  readonly name: string
-  synthesize(input: AnswerSynthesizerInput): AsyncIterable<AnswerEvent>
-}
 
 export function buildAgentJsonUrl(
   query: string,

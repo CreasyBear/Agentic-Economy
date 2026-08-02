@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AnswerEvent } from '@/modules/answer/public'
+vi.mock('@/lib/server/rate-limit', () => ({
+  assertHttpAdmission: async () => ({ ok: true as const }),
+  requestAdmissionKey: () => 'test-admission-key',
+}))
+
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
@@ -9,6 +13,7 @@ import {
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../helpers/answer-thread-test-port'
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 import {
   openRouterProseResponse,
   openRouterToolResponse,
@@ -16,19 +21,9 @@ import {
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
 
-type StreamFrame = { seq: number; event: AnswerEvent }
 
 const SESSION_COOKIE = sessionCookieHeader('session-empty-state')
 
-function parseStream(text: string): StreamFrame[] {
-  return text
-    .split('\n\n')
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.startsWith('data:'))
-    .map(
-      (frame) => JSON.parse(frame.slice('data:'.length).trim()) as StreamFrame,
-    )
-}
 
 function stubThreadPort(turns: unknown[]): void {
   setAnswerThreadPortForTests({
@@ -39,12 +34,33 @@ function stubThreadPort(turns: unknown[]): void {
     },
     listSessionThreads: async () => ({ threads: [] }),
     getPublicThreadProjection: async () => null,
-    getThreadTurns: async () => ({ turns: [] }),
+    getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
   })
 }
 
 describe('POST /api/answer/turn empty-state queries', () => {
+
+  let previousConvexUrl: string | undefined
+  let previousViteConvexUrl: string | undefined
+
+  beforeEach(() => {
+    previousConvexUrl = process.env.CONVEX_URL
+    previousViteConvexUrl = process.env.VITE_CONVEX_URL
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+  })
+
   afterEach(() => {
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousViteConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousViteConvexUrl
+    }
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
@@ -58,7 +74,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       appendTurn: async (args) => ({ turnId: args.turnId }),
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [] }),
+      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
     })
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -74,7 +90,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       expect(frames.slice(0, 3).map((frame) => frame.event.type)).toEqual([
         'thread',
         'work-step',
@@ -88,7 +104,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('No listed businesses match')
       expect(complete.answer.summary).toContain('Brunswick')
-      expect(server.requests).toHaveLength(0)
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -119,7 +136,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -127,8 +144,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
 
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
-        'plumbing-demo',
         'parramatta-emergency-plumbing',
+        'plumbing-demo',
       ])
       expect(complete.answer.summary).toContain('publish service coverage')
 
@@ -196,7 +213,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -217,7 +234,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
         evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
       ).toEqual(['Emergency plumber Brunswick'])
       expect(evidence.timings?.map((timing) => timing.name)).not.toContain('model.agent_total')
-      expect(server.requests).toHaveLength(0)
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -257,7 +275,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -325,7 +343,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -408,7 +426,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
           body: JSON.stringify({ query: 'Emergency plumber Parramatta' }),
         }),
       )
-      const firstFrames = parseStream(await first.text())
+      const firstFrames = await readAnswerTurnStream(first)
       const firstThread = firstFrames.find((frame) => frame.event.type === 'thread')?.event
       if (firstThread?.type !== 'thread') {
         throw new Error('expected thread event')
@@ -433,7 +451,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
           body: JSON.stringify({ threadId, query: 'Emergency plumber Brunswick' }),
         }),
       )
-      const secondFrames = parseStream(await second.text())
+      const secondFrames = await readAnswerTurnStream(second)
       const secondComplete = secondFrames.at(-1)?.event
       expect(secondComplete?.type).toBe('complete')
       if (secondComplete?.type !== 'complete') {
@@ -451,7 +469,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
           body: JSON.stringify({ threadId, query: 'Compare the top two' }),
         }),
       )
-      const compareFrames = parseStream(await compare.text())
+      const compareFrames = await readAnswerTurnStream(compare)
       const compareComplete = compareFrames.at(-1)?.event
       expect(compareComplete?.type).toBe('complete')
       if (compareComplete?.type !== 'complete') {
@@ -499,7 +517,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -563,7 +581,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
       },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ turns: [] }),
+      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
     })
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -579,7 +597,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
       )
 
       expect(response.ok).toBe(true)
-      const frames = parseStream(await response.text())
+      const frames = await readAnswerTurnStream(response)
       expect(
         frames.some(
           (frame) =>

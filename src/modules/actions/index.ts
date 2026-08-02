@@ -39,6 +39,15 @@ import {
 } from '@/modules/registry/registry.actions'
 import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
 import { storefrontEnrichDraftAction, storefrontImportDraftAction, webDiscoverAction } from '@/modules/storefront/storefront.actions'
+import { studyCompleteAction, studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
+import { workTreeCreateAction, workTreeInspectAction } from '@/modules/work-tree/work-tree.actions'
+import { workTreeApplyAction, workTreeDecideAction } from '@/modules/work-tree/work-tree-agent.actions'
+import {
+  workTreeFinalizeRepeatUseAction,
+  workTreeInspectRepeatUseAction,
+  workTreeReconcileRepeatUseAction,
+  workTreeReserveRepeatUseAction,
+} from '@/modules/work-tree/work-tree-repeat.actions'
 
 const actions: readonly AnyAction[] = [
   collectSuppliedCandidateQuoteAction,
@@ -64,8 +73,19 @@ const actions: readonly AnyAction[] = [
   sandboxCheckupQuoteAction,
   storefrontImportDraftAction,
   storefrontEnrichDraftAction,
+  studyStartAction,
+  studyInspectAction,
+  studyCompleteAction,
   webDiscoverAction,
   demandCaptureAction,
+  workTreeCreateAction,
+  workTreeInspectAction,
+  workTreeApplyAction,
+  workTreeDecideAction,
+  workTreeReserveRepeatUseAction,
+  workTreeFinalizeRepeatUseAction,
+  workTreeReconcileRepeatUseAction,
+  workTreeInspectRepeatUseAction,
   updateOwnerNotificationPreferencesAction,
 ]
 
@@ -113,5 +133,4 @@ export {
   type ActionSurface,
   type AgentToolDescriptor,
   type AnyAction,
-  type ResolvedActionInvocationContract,
 } from '@/modules/common/action'

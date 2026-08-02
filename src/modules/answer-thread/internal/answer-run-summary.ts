@@ -11,26 +11,30 @@ import {
   type AnswerToolId,
   type AnswerTurnStatus,
   type FollowUpIntent,
-  type FrozenTurnEvidence,
+  type FrozenTurnEvidenceDraft,
   type PublicAnswerCheckSummary,
 } from '../answer-thread.schema'
+import { sumToolDurationMs } from '@/modules/common/tool-duration'
+import { stableUnique } from '@/modules/common/stable-unique'
+import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import {
   createHarnessRunCollector,
   type HarnessRunReport,
   type HarnessRunStatus,
   type HarnessToolStatus,
 } from '@/modules/harness/public'
+import { readToolSummaryErrorCode } from './tool-summary'
 
 export function buildAnswerRunReport(input: {
   intent: FollowUpIntent
   status: AnswerTurnStatus
   snapshotHash: string
-  evidence: FrozenTurnEvidence
+  evidence: FrozenTurnEvidenceDraft
   gate?: AnswerRunGateSummary
 }): AnswerRunReport {
-  const toolCalls = input.evidence.toolCalls ?? []
-  const timings = input.evidence.timings ?? []
-  const workLog = input.evidence.workLog ?? []
+  const toolCalls = input.evidence.toolCalls
+  const timings = input.evidence.timings
+  const workLog = input.evidence.workLog
   const summary: AnswerRunSummary = {
     schemaVersion: 1,
     turn: {
@@ -41,7 +45,7 @@ export function buildAnswerRunReport(input: {
     evidence: {
       providerCount: input.evidence.providers.length,
       allowedSlugCount: input.evidence.allowedSlugs.length,
-      resultHashes: stableUnique(toolCalls.map((call) => call.resultHash)),
+      resultHashes: stableUnique(toolCalls.map((call) => call.resultHash)).sort((a, b) => a.localeCompare(b)),
       snapshotHash: input.snapshotHash,
     },
     workLog: summarizeWorkLog(workLog),
@@ -60,12 +64,12 @@ export function buildHarnessRunReportForAnswer(input: {
   intent: FollowUpIntent
   status: AnswerTurnStatus
   snapshotHash: string
-  evidence: FrozenTurnEvidence
+  evidence: FrozenTurnEvidenceDraft
   gate?: AnswerRunGateSummary
 }): HarnessRunReport {
-  const toolCalls = input.evidence.toolCalls ?? []
-  const timings = input.evidence.timings ?? []
-  const workLog = input.evidence.workLog ?? []
+  const toolCalls = input.evidence.toolCalls
+  const timings = input.evidence.timings
+  const workLog = input.evidence.workLog
   const collector = createHarnessRunCollector(AnswerToolIdValues)
 
   collector.recordEvent({
@@ -80,8 +84,8 @@ export function buildHarnessRunReportForAnswer(input: {
     collector.recordTool({
       toolId: call.toolId,
       status,
-      durationMs: toolDurationMs(call, timings),
-      ...(status === 'ok' ? {} : { errorCode: toolErrorCode(call) ?? call.status }),
+      durationMs: roundNonNegative2(sumToolDurationMs(call, timings)),
+      ...(status === 'ok' ? {} : { errorCode: readToolSummaryErrorCode(call.resultSummaryJson) ?? call.status }),
     })
   }
 
@@ -143,13 +147,13 @@ export function buildPublicAnswerCheckSummary(report: AnswerRunReport): PublicAn
 
 function summarizeTools(
   toolCalls: readonly AnswerToolCallRecord[],
-  timings: NonNullable<FrozenTurnEvidence['timings']>,
+  timings: FrozenTurnEvidenceDraft['timings'],
 ): AnswerRunSummary['tools'] {
   const totals = emptyToolCounters()
   const byName: Partial<Record<AnswerToolId, AnswerRunToolCounters>> = {}
 
   for (const call of toolCalls) {
-    const durationMs = toolDurationMs(call, timings)
+    const durationMs = roundNonNegative2(sumToolDurationMs(call, timings))
     addToolCounters(totals, call.status, durationMs)
     const existing = byName[call.toolId] ?? emptyToolCounters()
     addToolCounters(existing, call.status, durationMs)
@@ -162,7 +166,7 @@ function summarizeTools(
   }
 }
 
-function summarizeWorkLog(workLog: NonNullable<FrozenTurnEvidence['workLog']>): AnswerRunSummary['workLog'] {
+function summarizeWorkLog(workLog: FrozenTurnEvidenceDraft['workLog']): AnswerRunSummary['workLog'] {
   const counters: AnswerRunSummary['workLog'] = {
     total: workLog.length,
     complete: 0,
@@ -195,7 +199,7 @@ function summarizeWorkLog(workLog: NonNullable<FrozenTurnEvidence['workLog']>): 
   return counters
 }
 
-function summarizeTimings(timings: NonNullable<FrozenTurnEvidence['timings']>): AnswerRunSummary['timings'] {
+function summarizeTimings(timings: FrozenTurnEvidenceDraft['timings']): AnswerRunSummary['timings'] {
   const byName: Record<string, AnswerRunTimingCounters> = {}
   let totalDurationMs = 0
 
@@ -204,29 +208,29 @@ function summarizeTimings(timings: NonNullable<FrozenTurnEvidence['timings']>): 
     const existing = byName[timing.name] ?? { count: 0, totalDurationMs: 0 }
     byName[timing.name] = {
       count: existing.count + 1,
-      totalDurationMs: roundDuration(existing.totalDurationMs + timing.durationMs),
+      totalDurationMs: roundNonNegative2(existing.totalDurationMs + timing.durationMs),
     }
   }
 
   return {
     totalEntries: timings.length,
-    totalDurationMs: roundDuration(totalDurationMs),
+    totalDurationMs: roundNonNegative2(totalDurationMs),
     byName: sortTimingRecord(byName),
   }
 }
 
 function buildCoverage(
   summary: AnswerRunSummary,
-  workLog: NonNullable<FrozenTurnEvidence['workLog']>,
+  workLog: FrozenTurnEvidenceDraft['workLog'],
 ): AnswerRunCoverage {
   const toolsAvailable = [...AnswerToolIdValues]
-  const toolsInvoked = stableUnique(Object.keys(summary.tools.byName)).filter(isAnswerToolId)
+  const toolsInvoked = stableUnique(Object.keys(summary.tools.byName)).sort((a, b) => a.localeCompare(b)).filter(isAnswerToolId)
   const invoked = new Set(toolsInvoked)
   return {
     toolsAvailable,
     toolsInvoked,
     toolsUnused: toolsAvailable.filter((toolId) => !invoked.has(toolId)),
-    workLogPhases: stableUnique(workLog.map((step) => step.phase)),
+    workLogPhases: stableUnique(workLog.map((step) => step.phase)).sort((a, b) => a.localeCompare(b)),
     hasProviders: summary.evidence.providerCount > 0,
     hasAllowedSlugs: summary.evidence.allowedSlugCount > 0,
     hasSnapshotHash: summary.evidence.snapshotHash.length > 0,
@@ -250,24 +254,9 @@ function addToolCounters(
 ): void {
   counters.total += 1
   counters[status] += 1
-  counters.totalDurationMs = roundDuration(counters.totalDurationMs + durationMs)
+  counters.totalDurationMs = roundNonNegative2(counters.totalDurationMs + durationMs)
 }
 
-function toolDurationMs(
-  call: AnswerToolCallRecord,
-  timings: NonNullable<FrozenTurnEvidence['timings']>,
-): number {
-  let total = 0
-  for (const timing of timings) {
-    if (
-      timing.metadata?.toolId === call.toolId &&
-      (timing.metadata.toolSeq === undefined || timing.metadata.toolSeq === call.seq)
-    ) {
-      total += timing.durationMs
-    }
-  }
-  return roundDuration(total)
-}
 
 function answerToolStatusToHarnessStatus(status: AnswerToolCallStatus): HarnessToolStatus {
   switch (status) {
@@ -280,7 +269,7 @@ function answerToolStatusToHarnessStatus(status: AnswerToolCallStatus): HarnessT
   }
 }
 
-function workLogStatusToHarnessStatus(status: NonNullable<FrozenTurnEvidence['workLog']>[number]['status']): HarnessToolStatus {
+function workLogStatusToHarnessStatus(status: FrozenTurnEvidenceDraft['workLog'][number]['status']): HarnessToolStatus {
   switch (status) {
     case 'complete':
       return 'ok'
@@ -307,20 +296,6 @@ function answerTurnStatusToHarnessRunStatus(
   return gate.ok ? 'ok' : 'blocked'
 }
 
-function toolErrorCode(call: AnswerToolCallRecord): string | undefined {
-  const summary = parseToolSummary(call.resultSummaryJson)
-  return summary.errorCode
-}
-
-function parseToolSummary(value: string): { errorCode?: string } {
-  try {
-    const parsed = JSON.parse(value) as { errorCode?: unknown }
-    return typeof parsed.errorCode === 'string' ? { errorCode: parsed.errorCode } : {}
-  } catch {
-    return {}
-  }
-}
-
 function timingPhase(name: string): string {
   return name.includes('.') ? name.slice(0, name.indexOf('.')) : name
 }
@@ -342,13 +317,7 @@ function sortTimingRecord(value: Record<string, AnswerRunTimingCounters>): Recor
   return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
 }
 
-function stableUnique<T extends string>(values: readonly T[]): T[] {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b))
-}
 
-function roundDuration(value: number): number {
-  return Math.max(0, Math.round(value * 100) / 100)
-}
 
 function isAnswerToolId(value: string): value is AnswerToolId {
   return (AnswerToolIdValues as readonly string[]).includes(value)

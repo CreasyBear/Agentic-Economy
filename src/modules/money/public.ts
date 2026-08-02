@@ -1,24 +1,8 @@
-import { z } from 'zod'
+import type { PaginationOptions } from 'convex/server'
+import type { PricingConfig } from './internal/pricing-contract'
+export { moneyRefSchema, currencySchema, minorAmountSchema, pricingConfigSchema } from './internal/pricing-contract'
+export type { PricingConfig, PricingConfigInput } from './internal/pricing-contract'
 
-export const moneyRefSchema = z.string().trim().min(1).max(500)
-export const currencySchema = z.string().trim().regex(/^[A-Z]{3}$/)
-export const minorAmountSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
-
-const freeTierSchema = z.strictObject({
-  maxCalls: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  window: z.enum(['day', 'month']),
-})
-
-export const pricingConfigSchema = z.strictObject({
-  version: z.literal('pricing:v1'),
-  unit: z.literal('call'),
-  currency: currencySchema,
-  paidAmountMinor: minorAmountSchema,
-  freeTier: freeTierSchema.optional(),
-})
-
-export type PricingConfig = z.infer<typeof pricingConfigSchema>
-export type PricingConfigInput = z.input<typeof pricingConfigSchema>
 
 export type PricingResolution =
   | Readonly<{
@@ -41,7 +25,7 @@ export type PricingResolution =
 
 export type MoneyRefusalCode =
   | 'billing_identity_missing'
-  | 'price_unavailable'
+  | 'billing_identity_mismatch'
   | 'pricing_config_invalid'
   | 'currency_mismatch'
   | 'price_changed'
@@ -59,6 +43,10 @@ export type MoneyRefusalCode =
   | 'payout_below_threshold'
   | 'payout_outcome_unknown'
   | 'payout_reconciliation_required'
+  | 'live_money_gate_open'
+  | 'payment_binding_invalid'
+  | 'payment_approval_expired'
+  | 'fresh_approval_required'
 
 export type EntryType = 'topup' | 'charge' | 'refund' | 'payout_accrual' | 'rake'
 export type EntryDirection = 'credit' | 'debit'
@@ -195,6 +183,10 @@ export type MoneyRefusal = Readonly<{
   requiredAmountMinor?: number
   availableAmountMinor?: number
 }>
+export function isMoneyRefusal(value: object): value is MoneyRefusal {
+  return 'kind' in value && value.kind === 'refused'
+}
+
 
 export type MoneyAcceptedCharge = Readonly<{
   kind: 'accepted'
@@ -219,7 +211,8 @@ export type MoneyInvocationChargeInput = Readonly<{
   offeringRef: string
   pricingConfig: PricingConfig
   priceDigest: string
-  authorityMaximumSpend: Readonly<{ currency: string; amountMinor: number }>
+  priceSourceDigest: string
+  authorityMaximumSpendMinor: number
 }>
 
 export type MoneyInvocationPort = Readonly<{
@@ -240,26 +233,18 @@ export type RakeSplit = Readonly<{
 export type CreditAccountQuery = Readonly<{ principalId: string; currency: string }>
 export type CreditActivityQuery = Readonly<{
   principalId: string
-  credentialId?: string
-  currency?: string
-  from?: number
-  to?: number
-  cursor?: string
-  limit: number
+  credentialId: string
+  currency: string
+  paginationOpts: PaginationOptions
 }>
 export type KeyUsageQuery = Readonly<{
   principalId: string
-  credentialId?: string
-  from?: number
-  to?: number
-  cursor?: string
-  limit: number
+  credentialId: string
+  currency: string
 }>
 export type ProviderEarningsQuery = Readonly<{
   businessId: string
   currency: string
-  cursor?: string
-  limit: number
 }>
 export type PayoutStatusQuery = Readonly<{ businessId: string; currency: string }>
 
@@ -296,7 +281,7 @@ export type KeyUsageView = Readonly<{
   paidCallCount: number
   freeCallCount: number
   grossSpendMinor: number
-  currency?: string
+  currency: string
   states: readonly ChargeState[]
 }>
 
@@ -321,31 +306,30 @@ export type PayoutStatusView = Readonly<{
   evidence: 'source' | 'labelled_local_dev'
 }>
 
+export type MoneyPaginationPage<Item> = Readonly<{
+  page: readonly Item[]
+  isDone: boolean
+  continueCursor: string
+}>
+
 export type MoneyQueryPort = Readonly<{
   readCreditAccount: (input: CreditAccountQuery) => Promise<CreditAccountView>
-  listCreditActivity: (input: CreditActivityQuery) => Promise<Readonly<{ items: readonly CreditActivityView[]; nextCursor?: string }>>
-  readKeyUsage: (input: KeyUsageQuery) => Promise<Readonly<{ items: readonly KeyUsageView[]; nextCursor?: string }>>
+  listCreditActivity: (input: CreditActivityQuery) => Promise<MoneyPaginationPage<CreditActivityView>>
+  readKeyUsage: (input: KeyUsageQuery) => Promise<KeyUsageView>
   readProviderEarnings: (input: ProviderEarningsQuery) => Promise<ProviderEarningsView>
   readPayoutStatus: (input: PayoutStatusQuery) => Promise<PayoutStatusView>
 }>
-
-export function assertMoneyQueryLimit(limit: number): number {
-  if (!Number.isSafeInteger(limit) || limit < 1) return 1
-  return Math.min(limit, 100)
-}
 
 export async function readCreditAccount(input: Readonly<{ port: MoneyQueryPort; query: CreditAccountQuery }>): Promise<CreditAccountView> {
   return await input.port.readCreditAccount(input.query)
 }
 
-export async function listCreditActivity(input: Readonly<{ port: MoneyQueryPort; query: CreditActivityQuery }>): Promise<Readonly<{ items: readonly CreditActivityView[]; nextCursor?: string }>> {
-  const query = { ...input.query, limit: assertMoneyQueryLimit(input.query.limit) }
-  return await input.port.listCreditActivity(query)
+export async function listCreditActivity(input: Readonly<{ port: MoneyQueryPort; query: CreditActivityQuery }>): Promise<MoneyPaginationPage<CreditActivityView>> {
+  return await input.port.listCreditActivity(input.query)
 }
 
-export async function readKeyUsage(input: Readonly<{ port: MoneyQueryPort; query: KeyUsageQuery }>): Promise<Readonly<{ items: readonly KeyUsageView[]; nextCursor?: string }>> {
-  const query = { ...input.query, limit: assertMoneyQueryLimit(input.query.limit) }
-  return await input.port.readKeyUsage(query)
+export async function readKeyUsage(input: Readonly<{ port: MoneyQueryPort; query: KeyUsageQuery }>): Promise<KeyUsageView> {
+  return await input.port.readKeyUsage(input.query)
 }
 
 export async function readProviderEarnings(input: Readonly<{ port: MoneyQueryPort; query: ProviderEarningsQuery }>): Promise<ProviderEarningsView> {
@@ -357,13 +341,14 @@ export async function readPayoutStatus(input: Readonly<{ port: MoneyQueryPort; q
 }
 
 export { computeRakeSplit, normalizePricingConfig, pricingConfigDigest, resolveInvocationPrice } from './internal/pricing-config'
-export type { ResolveInvocationPriceInput, NormalizePricingConfigResult } from './internal/pricing-config'
-export { createLedgerState, beginIdempotentTransaction, applyTopup, authorizePaidCharge, appendRefundReversal, markOutcomeUnknown, reconcileCharge, releasePayoutAccrual, accountRefForOperator, accountRefForProvider, accountRefForRake, buildChargeIdempotencyKey } from './internal/ledger'
+export { createLedgerState, beginIdempotentTransaction, validateChargeAccounts, applyTopup, authorizePaidCharge, appendRefundReversal, markOutcomeUnknown, reconcileCharge, releasePayoutAccrual, accountRefForOperator, accountRefForProvider, accountRefForRake, buildChargeIdempotencyKey } from './internal/ledger'
 export type { LedgerState, LedgerOperationResult, BeginTransactionInput, TopupInput, PaidChargeInput, RefundInput, OutcomeUnknownInput, ReconcileChargeInput, ReleasePayoutInput } from './internal/ledger'
 export { transitionPayoutAccount, transitionPayout, payoutReviewWindow } from './internal/payout-policy'
 export type { PayoutPolicyResult, PayoutAccountTransitionInput, PayoutTransitionInput } from './internal/payout-policy'
-export type { CreditPaymentPort, CreditPaymentRequest, CreditPaymentEvidence, ConnectAccountPort, ConnectAccountRequest, OnboardingLinkRequest, ProviderTransferPort, ProviderTransferRequest, ProviderTransferEvidence } from './internal/ports'
+export type { CreditPaymentPort, CreditPaymentRequest, CreditPaymentEvidence, ConnectAccountPort, ConnectAccountRequest, OnboardingLinkRequest } from './internal/ports'
 export { createTopupState, beginCreditTopup, applyCreditTopup, markCreditTopupOutcomeUnknown, setAutoRecharge, fixtureUsdTopupConfig } from './internal/topup'
+export { LIVE_MONEY_COUNSEL_DECISIONS, LIVE_MONEY_GATE_POLICY, evaluateLiveMoneyGate, liveMoneyGatePolicySchema, paymentBindingSchema, validatePaymentBinding } from './internal/live-money-gate'
+export type { LiveMoneyCounselDecision, LiveMoneyCounselSignoff, LiveMoneyGatePolicy, LiveMoneyGateResult, PaymentBinding, PaymentBindingValidation } from './internal/live-money-gate'
 export type { CreditTopupConfig, AutoRechargeSettings, CreditTopupCommand, TopupState, BeginTopupResult } from './internal/topup'
 export { createInMemoryMoneyQueryPort } from './internal/query-projections'
 export { handleStripeWebhookRequest } from './internal/stripe-webhook'

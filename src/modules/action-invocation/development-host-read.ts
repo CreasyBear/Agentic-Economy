@@ -70,9 +70,19 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
 }>): DevelopmentHostReadReceipt {
   assertDynamicPublishedSnapshotShape(input.snapshot)
   const snapshot = input.snapshot
-  const source = snapshot.sourceRows[0]!
-  const control = snapshot.controls[0]!
-  const attempt = snapshot.attempts[0]!.rows.at(-1)
+  const source = snapshot.sourceRows[0]
+  const control = snapshot.controls[0]
+  const attemptGroup = snapshot.attempts[0]
+  const historyGroup = snapshot.history[0]
+  if (
+    source === undefined
+    || control === undefined
+    || attemptGroup === undefined
+    || historyGroup === undefined
+  ) {
+    throw new Error('dynamic_published_snapshot_schema_invalid')
+  }
+  const attempt = attemptGroup.rows.at(-1)
   const claim = snapshot.semanticClaims[0]
   const operation = source.operation
   const accepted = control.control.acceptedAuthority
@@ -94,8 +104,8 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
       publicationRevision: operation.identity.publicationRevision,
       materialDigest: operation.materialDigest,
       transportConfigDigest: operation.identity.transportConfigDigest,
-      paymentIdentity: operation.identity.payment as unknown as StableHashValue,
-      price: operation.identity.price as unknown as StableHashValue,
+      paymentIdentity: operation.identity.payment,
+      price: operation.identity.price,
     },
     prepared: {
       inputDigest: source.input.inputDigest,
@@ -125,7 +135,7 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
       attemptRef: attempt.attemptRef,
       leaseOwner: attempt.lease.owner,
       effectGeneration: attempt.effectGeneration,
-      idempotency: attempt.idempotency as unknown as StableHashValue,
+      idempotency: attempt.idempotency,
     },
     resolution: {
       controlState: control.control.control.state,
@@ -133,15 +143,15 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
       semanticStatus: claim?.status ?? null,
       semanticOutcomeDigest: claim?.outcome === undefined
         ? null
-        : canonicalDigest(claim.outcome as unknown as StableHashValue),
-      release: attempt?.release as unknown as StableHashValue ?? null,
-      evidenceDigest: canonicalDigest(snapshot.history[0]!.rows as unknown as StableHashValue),
-      resultIdentity: source.resultIdentity as unknown as StableHashValue ?? null,
+        : canonicalDigest(claim.outcome),
+      release: attempt?.release ?? null,
+      evidenceDigest: canonicalDigest(historyGroup.rows),
+      resultIdentity: source.resultIdentity ?? null,
       sourceResultDigest: control.sourceResultDigest ?? null,
     },
   })
-  const snapshotDigest = canonicalDigest(snapshot as unknown as StableHashValue)
-  const semanticDigest = canonicalDigest(semanticRead as unknown as StableHashValue)
+  const snapshotDigest = canonicalDigest(snapshot)
+  const semanticDigest = canonicalDigest(semanticRead)
   const readRef = `host-read:${canonicalDigest({
     host: input.host,
     invocationRef: semanticRead.identity.invocationRef,
@@ -160,16 +170,16 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
   }
   return Object.freeze({
     ...material,
-    receiptDigest: canonicalDigest(material as unknown as StableHashValue),
+    receiptDigest: canonicalDigest(material),
   })
 }
 
 export function verifyDevelopmentHostReadReceipt(receipt: DevelopmentHostReadReceipt): void {
   const { receiptDigest, ...material } = receipt
-  if (canonicalDigest(material as unknown as StableHashValue) !== receiptDigest) {
+  if (canonicalDigest(material) !== receiptDigest) {
     throw new Error('host_read_receipt_digest_invalid')
   }
-  if (canonicalDigest(receipt.semanticRead as unknown as StableHashValue) !== receipt.semanticDigest) {
+  if (canonicalDigest(receipt.semanticRead) !== receipt.semanticDigest) {
     throw new Error('host_read_semantic_digest_invalid')
   }
   const expectedReadRef = `host-read:${canonicalDigest({

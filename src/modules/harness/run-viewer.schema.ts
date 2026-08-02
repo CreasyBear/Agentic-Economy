@@ -37,13 +37,7 @@ export type HarnessRunViewerFilters = {
   hasRunEvidence?: HarnessRunViewerEvidenceFilter | undefined
 }
 
-export type HarnessRunViewerSourceState =
-  | { kind: 'configured' }
-  | {
-      kind: 'disabled'
-      reason: 'admin_source_port_missing'
-      publicMessage: string
-    }
+export type HarnessRunViewerSourceState = { kind: 'configured' }
 
 export type HarnessRunViewerDeniedReason =
   | 'missing_membership'
@@ -60,12 +54,11 @@ export type HarnessRunViewerAccessDenied = {
   rows: readonly []
 }
 
-export type HarnessRunViewerRunSource = 'harnessRun' | 'legacyAnswerRun' | 'missing'
+export type HarnessRunViewerRunSource = 'harnessRun' | 'missing'
 
 export type HarnessRunViewerSummary = {
   turns: number
   withHarnessRun: number
-  legacyBackfilled: number
   missingRunEvidence: number
   attention: number
 }

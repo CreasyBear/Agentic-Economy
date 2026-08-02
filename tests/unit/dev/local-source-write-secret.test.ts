@@ -37,6 +37,17 @@ describe('local source-write secret provisioning', () => {
     expect(result).toMatchObject({ secret: 'shared-local-secret', source: 'existing' })
   })
 
+  it('reads standard dotenv quoting, comments, and export prefixes', () => {
+    const result = resolveLocalSourceWriteSecret({
+      env: { VITE_CONVEX_URL: 'http://127.0.0.1:3210' },
+      dotenvFiles: [
+        { path: '.env', content: 'export AE_SOURCE_WRITE_SECRET=\"quoted local secret\" # local only\n' },
+      ],
+    })
+
+    expect(result).toMatchObject({ secret: 'quoted local secret', source: 'existing' })
+  })
+
   it('refuses to auto-configure a production process', () => {
     expect(() => resolveLocalSourceWriteSecret({
       env: { NODE_ENV: 'production', VITE_CONVEX_URL: 'https://example.convex.cloud' },

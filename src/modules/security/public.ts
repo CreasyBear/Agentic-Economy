@@ -6,7 +6,6 @@ import {
   assertCsrf as assertCsrfImpl,
   detectDuplicateClaim as detectDuplicateClaimImpl,
   normalizeClaimFingerprint as normalizeClaimFingerprintImpl,
-  rateLimitClaim as rateLimitClaimImpl,
 } from './internal/duplicates'
 import {
   createEmptyDisputeSourceState as createEmptyDisputeSourceStateImpl,
@@ -24,6 +23,7 @@ import { readAdminRouteShell as readAdminRouteShellImpl } from './internal/admin
 import type {
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
+  AdminAuthorityResult,
   AdminAuthorityState,
   AdminBootstrapCommand,
   AdminGrantMembershipCommand,
@@ -80,6 +80,9 @@ export type SuppressionRuleStatus = (typeof SuppressionRuleStatusValues)[number]
 
 export const DisputeStatusValues = ['opened', 'updated', 'closed', 'contested'] as const
 export type DisputeStatus = (typeof DisputeStatusValues)[number]
+export const AbuseBucketStateValues = ['open', 'limited', 'blocked'] as const
+export type AbuseBucketState = (typeof AbuseBucketStateValues)[number]
+
 
 export const RemovalDisputeReasonCodeValues = [
   'privacy_removal_requested',
@@ -92,15 +95,13 @@ export type RemovalDisputeReasonCode = (typeof RemovalDisputeReasonCodeValues)[n
 export const DisputeEvidenceMediaTypeValues = ['text/plain', 'image/jpeg', 'image/png', 'application/pdf'] as const
 export type DisputeEvidenceMediaType = (typeof DisputeEvidenceMediaTypeValues)[number]
 
-export const AbuseBucketStateValues = ['open', 'limited', 'blocked'] as const
-export type AbuseBucketState = (typeof AbuseBucketStateValues)[number]
 
 export const ClaimFingerprintStatusValues = ['clear', 'duplicate_suspected', 'contested'] as const
 export type ClaimFingerprintStatus = (typeof ClaimFingerprintStatusValues)[number]
 
 export type AdminMembership = {
   clerkUserId: string
-  tokenIdentifier?: string
+  tokenIdentifier: string
   role: AdminRole
   state: AdminMembershipState
   grantedBy: string
@@ -119,6 +120,7 @@ export type ClaimFingerprintRecord = {
   createdAt: number
   updatedAt: number
 }
+
 
 export type AbuseRateLimitBucketRecord = {
   scope: string
@@ -157,23 +159,6 @@ export type CsrfDecision =
   | { kind: 'accepted'; mode: 'csrf_token' | 'same_site_origin' }
   | { kind: 'rejected'; reason: 'missing_csrf' | 'foreign_origin' }
 
-export type RateLimitClaimInput = {
-  scope:
-    | 'claim_submit'
-    | 'dispute_open'
-    | 'inquiry_submit'
-    | 'answer_turn_submit'
-    | 'answer_follow_up_chips'
-    | 'answer_stream'
-  key: string
-  now: number
-  limit: number
-  windowMs: number
-}
-
-export type RateLimitDecision =
-  | { kind: 'accepted'; bucket: AbuseRateLimitBucketRecord }
-  | { kind: 'limited'; bucket: AbuseRateLimitBucketRecord; retryAfter: number }
 
 export type ClaimFingerprintInput = {
   name: string
@@ -227,7 +212,6 @@ export type DisputeRecord = {
 
 export type DisputeSourceState = AuditEventSink & {
   disputes: DisputeRecord[]
-  abuseRateLimitBuckets: AbuseRateLimitBucketRecord[]
 }
 
 export type DisputeOpenCommand = {
@@ -244,7 +228,6 @@ export type DisputeOpenCommand = {
   publicMessage?: string
   security: {
     csrf: CsrfCheckInput
-    rateLimit: RateLimitClaimInput
   }
   operationKey: OperationKey
   correlationId: CorrelationId
@@ -274,7 +257,6 @@ export type DisputeOpenResult =
       kind: 'error'
       code:
         | 'dispute_csrf_rejected'
-        | 'dispute_rate_limited'
         | 'dispute_invalid_contact'
         | 'dispute_invalid_target'
         | 'dispute_invalid_reason'
@@ -287,6 +269,7 @@ export type {
   AdminAllowedReadback,
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
+  AdminAuthorityResult,
   AdminAuthorityState,
   AdminBootstrapCommand,
   AdminDeniedReadback,
@@ -312,7 +295,6 @@ export const detectDuplicateClaim = detectDuplicateClaimImpl
 
 export const normalizeClaimFingerprint = normalizeClaimFingerprintImpl
 
-export const rateLimitClaim = rateLimitClaimImpl
 
 export const requireAdminAuthority = requireAdminAuthorityImpl
 

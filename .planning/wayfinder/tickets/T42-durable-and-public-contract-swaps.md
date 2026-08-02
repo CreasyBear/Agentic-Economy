@@ -49,4 +49,35 @@ statement of what happens to data written by the previous implementation.
 
 ## Resolution
 
-(pending)
+**Closed 2026-08-01.** (An interim status block written mid-session by a concurrent observer was
+superseded — it read the tree while the executing batch was still landing; its "ES2024 NO-GO" and
+"slugify already unified" rows described in-flight work, not prior state.)
+
+1. **Workpool/workflow** — landed this session (MAP checkpoint "GSD-stance audit + adoption wiring"):
+   lease/claim/requeue/recovery deleted; `@convex-dev/workpool` schedules with `maxParallelism: 32`,
+   `retryActionsByDefault` + bounded backoff (d.ts + README cited on the checkpoint); journal rows
+   remain truth (IDs only). In-flight jobs at deploy: none exist (no hosted deployment); dev outbox
+   rows are re-driven on next transition. Rollback: revert worker/journal/dispatch-port edits.
+2. **Convex `.paginate()`** — registry `listPublicBusinessCatalog`/`listPublicBusinessOfferingSupply`
+   and money `listCreditActivity`/`readKeyUsage` on native pagination. Public contract preserved via
+   dual-format cursors: new cursors are `native:<continueCursor>`; legacy unprefixed cursors detected
+   and served by the old path for a deprecation window (STATE.md could not prove zero external cursor
+   holders). In-memory search endpoints stay legacy — computed arrays, not indexed scans.
+   Differential proof: 4×1000-row page-walks, same order/count/no repeats. Rollback: revert branches;
+   `native:` cursors die at rollback (callers restart from null cursor).
+3. **Slugify** — unified on `@sindresorhus/slugify` (installed this session) under the founder's
+   common-sense mandate: both sites delegate to the library; catalog keeps the 72 cap, storefront the
+   80 cap + `business` fallback (caps/fallbacks are contract, not algorithm). Drift only affects
+   names with diacritics/`&`/over-cap length; zero hosted URL holders (STATE.md claim ceiling), dev
+   data reseeds. Founder veto stays cheap until first hosted publish. 27 tests green.
+4. **ES2024** — GO, split by runtime. Evidence: live local Convex `typeof Object.groupBy` and
+   `typeof Map.groupBy` both returned `"function"`; TS lib citations lib.es2024.object.d.ts:17-26.
+   Root lib ES2023→ES2024 + convex lib ES2022→ES2024. Server sites converted (openrouter-models
+   `Object.groupBy`, proven absent from the client bundle by post-`vite build` grep; observability
+   `Map.groupBy`; `groupByStringField` deleted). **Recorded adoption limit:** the one true browser
+   site (`AeRouteCommandMenu.tsx`) keeps its loop — no declared browser floor means Vite's default
+   Chrome 111 target, below `Object.groupBy`'s Chrome 117 runtime floor. Rollback: both lib lines +
+   three sites.
+
+Full-tree evidence after all four: `tsc --noEmit` clean; unit 2709/2711 (two documented baseline
+failures); integration failure set byte-identical to committed HEAD (pre-existing drift only).

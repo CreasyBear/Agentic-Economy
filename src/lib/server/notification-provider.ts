@@ -1,8 +1,13 @@
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 
 import { encodePrivateRecordFragment } from '@/lib/observability/private-route-safety'
 import { base64Codec } from '@/modules/common/base64-codec'
-import { stableHash } from '@/modules/common/stable-hash'
+import { isRecord } from '@/modules/common/is-record'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { RedactedPayload } from '@/modules/observability/public'
 
@@ -91,7 +96,7 @@ export type SendOwnerInquiryResendEmailInput = {
     inquiryThreadId: string
     businessName?: string
     businessSlug?: string
-    serviceName?: string
+    offeringName?: string
     customerMessageFirstLine?: string
     isFirstInquiryForBusiness?: boolean
   }
@@ -235,9 +240,15 @@ const resendSignatureToleranceMs = 5 * 60 * 1000
 const clerkApiBaseUrl = 'https://api.clerk.com/v1'
 const resendApiBaseUrl = 'https://api.resend.com'
 const novuApiBaseUrl = 'https://api.novu.co'
+const MAX_CLERK_RESPONSE_BYTES = 64 * 1024
+const MAX_RESEND_RESPONSE_BYTES = 64 * 1024
+const MAX_NOVU_RESPONSE_BYTES = 64 * 1024
+const CLERK_REQUEST_TIMEOUT_MS = 10_000
+const RESEND_REQUEST_TIMEOUT_MS = 10_000
+const NOVU_REQUEST_TIMEOUT_MS = 10_000
 
 export function readNotificationOutboxSystemKey(env: Env = process.env): string {
-  const value = readEnv(env, 'AE_NOTIFICATION_OUTBOX_SECRET')
+  const value = readTrimmedEnv(env, 'AE_NOTIFICATION_OUTBOX_SECRET')
   if (value === undefined) {
     throw new NotificationProviderError(
       'missing_notification_outbox_secret',
@@ -250,7 +261,7 @@ export function readNotificationOutboxSystemKey(env: Env = process.env): string 
 }
 
 export function readClerkSecretKey(env: Env = process.env): string {
-  const value = readEnv(env, 'CLERK_SECRET_KEY')
+  const value = readTrimmedEnv(env, 'CLERK_SECRET_KEY')
   if (value === undefined) {
     throw new NotificationProviderError(
       'missing_clerk_secret',
@@ -263,7 +274,7 @@ export function readClerkSecretKey(env: Env = process.env): string {
 }
 
 export function readResendClientConfig(env: Env = process.env): ResendClientConfig {
-  const apiKey = readEnv(env, 'RESEND_API_KEY')
+  const apiKey = readTrimmedEnv(env, 'RESEND_API_KEY')
   if (apiKey === undefined) {
     throw new NotificationProviderError(
       'missing_resend_api_key',
@@ -272,7 +283,7 @@ export function readResendClientConfig(env: Env = process.env): ResendClientConf
     )
   }
 
-  const from = readEnv(env, 'RESEND_FROM')
+  const from = readTrimmedEnv(env, 'RESEND_FROM')
   if (from === undefined) {
     throw new NotificationProviderError(
       'missing_resend_from',
@@ -284,12 +295,12 @@ export function readResendClientConfig(env: Env = process.env): ResendClientConf
   return {
     apiKey,
     from,
-    apiBaseUrl: readEnv(env, 'RESEND_API_BASE_URL') ?? resendApiBaseUrl,
+    apiBaseUrl: readTrimmedEnv(env, 'RESEND_API_BASE_URL') ?? resendApiBaseUrl,
   }
 }
 
 export function readResendWebhookSecret(env: Env = process.env): string {
-  const value = readEnv(env, 'RESEND_WEBHOOK_SECRET')
+  const value = readTrimmedEnv(env, 'RESEND_WEBHOOK_SECRET')
   if (value === undefined) {
     throw new NotificationProviderError(
       'missing_resend_webhook_secret',
@@ -302,7 +313,7 @@ export function readResendWebhookSecret(env: Env = process.env): string {
 }
 
 export function readNovuClientConfig(env: Env = process.env): NovuClientConfig {
-  const secretKey = readEnv(env, 'NOVU_SECRET_KEY')
+  const secretKey = readTrimmedEnv(env, 'NOVU_SECRET_KEY')
   if (secretKey === undefined) {
     throw new NotificationProviderError(
       'missing_novu_secret_key',
@@ -311,7 +322,7 @@ export function readNovuClientConfig(env: Env = process.env): NovuClientConfig {
     )
   }
 
-  const ownerInquiryWorkflowId = readEnv(env, 'NOVU_WORKFLOW_INQUIRY_OWNER')
+  const ownerInquiryWorkflowId = readTrimmedEnv(env, 'NOVU_WORKFLOW_INQUIRY_OWNER')
   if (ownerInquiryWorkflowId === undefined) {
     throw new NotificationProviderError(
       'missing_novu_workflow',
@@ -320,11 +331,11 @@ export function readNovuClientConfig(env: Env = process.env): NovuClientConfig {
     )
   }
 
-  const customerInquiryWorkflowId = readEnv(env, 'NOVU_WORKFLOW_INQUIRY_CUSTOMER')
+  const customerInquiryWorkflowId = readTrimmedEnv(env, 'NOVU_WORKFLOW_INQUIRY_CUSTOMER')
   return {
     secretKey,
     ownerInquiryWorkflowId,
-    apiBaseUrl: readEnv(env, 'NOVU_API_BASE_URL') ?? novuApiBaseUrl,
+    apiBaseUrl: readTrimmedEnv(env, 'NOVU_API_BASE_URL') ?? novuApiBaseUrl,
     ...(customerInquiryWorkflowId === undefined ? {} : { customerInquiryWorkflowId }),
   }
 }
@@ -342,11 +353,25 @@ export async function resolveClerkOwnerDeliveryAddress(
   }
 
   const fetcher = input.fetch ?? globalThis.fetch
-  const response = await fetcher(`${trimTrailingSlash(input.apiBaseUrl ?? clerkApiBaseUrl)}/users/${encodeURIComponent(clerkUserId)}`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${input.secretKey}`,
+  const { response, responseBody } = await runWithAbortAndTimeout({
+    timeoutMs: CLERK_REQUEST_TIMEOUT_MS,
+    timeoutError: () => new NotificationProviderError(
+      'clerk_owner_lookup_failed',
+      'Clerk owner delivery address lookup timed out.',
+      502
+    ),
+    run: async (signal) => {
+      const response = await fetcher(`${trimTrailingSlashes(input.apiBaseUrl ?? clerkApiBaseUrl)}/users/${encodeURIComponent(clerkUserId)}`, {
+        method: 'GET',
+        redirect: 'error',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${input.secretKey}`,
+        },
+        ...(signal === undefined ? {} : { signal }),
+      })
+      const bounded = await readBoundedRequestText(response, MAX_CLERK_RESPONSE_BYTES)
+      return { response, responseBody: bounded.ok ? bounded.text : undefined }
     },
   })
 
@@ -358,7 +383,7 @@ export async function resolveClerkOwnerDeliveryAddress(
     )
   }
 
-  const user = await readJsonResponseObject(response, 'clerk_owner_lookup_failed')
+  const user = readJsonResponseObject(responseBody, 'clerk_owner_lookup_failed')
   const email = selectClerkPrimaryEmail(user)
   if (email === undefined) {
     throw new NotificationProviderError(
@@ -371,7 +396,7 @@ export async function resolveClerkOwnerDeliveryAddress(
   return {
     clerkUserId,
     email,
-    addressHash: stableHash({ provider: 'clerk', clerkUserId, email }),
+    addressHash: canonicalDigest({ provider: 'clerk', clerkUserId, email }),
     redactedAddress: '[redacted]',
   }
 }
@@ -380,11 +405,11 @@ export async function sendOwnerInquiryResendEmail(
   input: SendOwnerInquiryResendEmailInput
 ): Promise<ResendProviderSendResult> {
   const businessName = truncateLine(input.dispatch.businessName ?? 'your business', 80)
-  const serviceName = truncateLine(input.dispatch.serviceName ?? 'new service request', 80)
+  const offeringName = truncateLine(input.dispatch.offeringName ?? 'new Offering request', 80)
   const messageFirstLine = firstMessageLine(input.dispatch.customerMessageFirstLine) ?? 'The customer sent a written inquiry.'
   const ownerLink = ownerInquiryLink(input.appBaseUrl, input.dispatch.inquiryThreadId)
   const text = [
-    `${serviceName} inquiry: ${messageFirstLine}`,
+    `${offeringName} inquiry: ${messageFirstLine}`,
     input.dispatch.isFirstInquiryForBusiness === true
       ? `This is the first inquiry for ${businessName} through Agentic Economy.`
       : undefined,
@@ -424,17 +449,30 @@ async function sendResendNotificationEmail(
     text: input.text,
     ...(input.html === undefined ? {} : { html: input.html }),
   }
-  const response = await fetcher(`${trimTrailingSlash(input.config.apiBaseUrl)}/emails`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${input.config.apiKey}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': input.idempotencyKey,
+  const { response, responseBody } = await runWithAbortAndTimeout({
+    timeoutMs: RESEND_REQUEST_TIMEOUT_MS,
+    timeoutError: () => new NotificationProviderError(
+      'resend_send_failed',
+      'Resend send request timed out.',
+      502
+    ),
+    run: async (signal) => {
+      const response = await fetcher(`${trimTrailingSlashes(input.config.apiBaseUrl)}/emails`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          Authorization: `Bearer ${input.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': input.idempotencyKey,
+        },
+        body: JSON.stringify(payload),
+        ...(signal === undefined ? {} : { signal }),
+      })
+      const bounded = await readBoundedRequestText(response, MAX_RESEND_RESPONSE_BYTES)
+      return { response, responseBody: bounded.ok ? bounded.text : undefined }
     },
-    body: JSON.stringify(payload),
   })
 
-  const responseBody = await response.text()
   if (!response.ok) {
     throw new NotificationProviderError(
       'resend_send_failed',
@@ -443,7 +481,7 @@ async function sendResendNotificationEmail(
     )
   }
 
-  const parsed = parseOptionalJsonObject(responseBody)
+  const parsed = parseOptionalJsonObject(responseBody ?? '')
   const data = isRecord(parsed?.data) ? parsed.data : {}
   const resendMessageId = readString(parsed?.id) ?? readString(data.id)
   if (resendMessageId === undefined) {
@@ -458,7 +496,7 @@ async function sendResendNotificationEmail(
     kind: 'ok',
     status: 'sent',
     resendMessageId,
-    providerResponseHash: stableHash({
+    providerResponseHash: canonicalDigest({
       providerFamily: 'resend',
       status: response.status,
       resendMessageId,
@@ -497,17 +535,30 @@ export async function triggerInquiryNovuWorkflow(input: SendInquiryNovuInput): P
   }
 
   const fetcher = input.fetch ?? globalThis.fetch
-  const response = await fetcher(`${trimTrailingSlash(input.config.apiBaseUrl)}/v1/events/trigger`, {
-    method: 'POST',
-    headers: {
-      Authorization: `ApiKey ${input.config.secretKey}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': idempotencyKey,
+  const { response, responseBody } = await runWithAbortAndTimeout({
+    timeoutMs: NOVU_REQUEST_TIMEOUT_MS,
+    timeoutError: () => new NotificationProviderError(
+      'novu_trigger_failed',
+      'Novu trigger request timed out.',
+      502
+    ),
+    run: async (signal) => {
+      const response = await fetcher(`${trimTrailingSlashes(input.config.apiBaseUrl)}/v1/events/trigger`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          Authorization: `ApiKey ${input.config.secretKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify(requestPayload),
+        ...(signal === undefined ? {} : { signal }),
+      })
+      const bounded = await readBoundedRequestText(response, MAX_NOVU_RESPONSE_BYTES)
+      return { response, responseBody: bounded.ok ? bounded.text : undefined }
     },
-    body: JSON.stringify(requestPayload),
   })
 
-  const responseBody = await response.text()
   if (!response.ok) {
     throw new NotificationProviderError(
       'novu_trigger_failed',
@@ -516,7 +567,7 @@ export async function triggerInquiryNovuWorkflow(input: SendInquiryNovuInput): P
     )
   }
 
-  const parsed = parseOptionalJsonObject(responseBody)
+  const parsed = parseOptionalJsonObject(responseBody ?? '')
   const responseTransactionId = readString(parsed.transactionId) ?? transactionId
   const responseStatus = readString(parsed.status)
   if (parsed.acknowledged === false || responseStatus === 'error') {
@@ -535,7 +586,7 @@ export async function triggerInquiryNovuWorkflow(input: SendInquiryNovuInput): P
     novuWorkflowId: workflowId,
     novuSubscriberId: subscriberId,
     ...(novuMessageId === undefined ? {} : { novuMessageId }),
-    providerResponseHash: stableHash({
+    providerResponseHash: canonicalDigest({
       providerFamily: 'novu',
       status: response.status,
       transactionId: responseTransactionId,
@@ -568,7 +619,7 @@ export function mapNovuReadbackToProviderResult(
       kind: 'error',
       status: 'failed',
       redactedError: 'novu_delivery_error',
-      providerResponseHash: stableHash({
+      providerResponseHash: canonicalDigest({
         providerFamily: 'novu',
         deliveryStatus: 'failed',
         triggerResponseHash: triggerResult.providerResponseHash,
@@ -581,7 +632,7 @@ export function mapNovuReadbackToProviderResult(
     return {
       ...triggerResult,
       status: 'sent',
-      providerResponseHash: stableHash({
+      providerResponseHash: canonicalDigest({
         providerFamily: 'novu',
         deliveryStatus: 'sent',
         triggerResponseHash: triggerResult.providerResponseHash,
@@ -592,7 +643,7 @@ export function mapNovuReadbackToProviderResult(
 
   return {
     ...triggerResult,
-    providerResponseHash: stableHash({
+    providerResponseHash: canonicalDigest({
       providerFamily: 'novu',
       deliveryStatus: 'triggered',
       triggerResponseHash: triggerResult.providerResponseHash,
@@ -600,7 +651,6 @@ export function mapNovuReadbackToProviderResult(
     }),
   }
 }
-
 
 export async function readNovuTransactionMessages(
   input: ReadNovuTransactionMessagesInput
@@ -610,7 +660,7 @@ export async function readNovuTransactionMessages(
     'invalid_novu_readback_payload',
     'Novu transaction id is required for readback.'
   )
-  const url = new URL('/v1/messages', `${trimTrailingSlash(input.config.apiBaseUrl)}/`)
+  const url = new URL('/v1/messages', `${trimTrailingSlashes(input.config.apiBaseUrl)}/`)
   url.searchParams.set('transactionId', transactionId)
   url.searchParams.set('limit', '10')
   if (input.subscriberId !== undefined) {
@@ -618,15 +668,28 @@ export async function readNovuTransactionMessages(
   }
 
   const fetcher = input.fetch ?? globalThis.fetch
-  const response = await fetcher(url.toString(), {
-    method: 'GET',
-    headers: {
-      Authorization: `ApiKey ${input.config.secretKey}`,
-      Accept: 'application/json',
+  const { response, responseBody } = await runWithAbortAndTimeout({
+    timeoutMs: NOVU_REQUEST_TIMEOUT_MS,
+    timeoutError: () => new NotificationProviderError(
+      'novu_readback_failed',
+      'Novu message readback request timed out.',
+      502
+    ),
+    run: async (signal) => {
+      const response = await fetcher(url.toString(), {
+        method: 'GET',
+        redirect: 'error',
+        headers: {
+          Authorization: `ApiKey ${input.config.secretKey}`,
+          Accept: 'application/json',
+        },
+        ...(signal === undefined ? {} : { signal }),
+      })
+      const bounded = await readBoundedRequestText(response, MAX_NOVU_RESPONSE_BYTES)
+      return { response, responseBody: bounded.ok ? bounded.text : undefined }
     },
   })
 
-  const responseBody = await response.text()
   if (!response.ok) {
     throw new NotificationProviderError(
       'novu_readback_failed',
@@ -635,7 +698,7 @@ export async function readNovuTransactionMessages(
     )
   }
 
-  const parsed = parseOptionalJsonObject(responseBody)
+  const parsed = parseOptionalJsonObject(responseBody ?? '')
   const messages = readArray(parsed.data)?.map((message) => normalizeNovuMessage(message, transactionId)) ?? []
   const totalCount = readNumber(parsed.totalCount) ?? messages.length
   const hasMore = typeof parsed.hasMore === 'boolean' ? parsed.hasMore : false
@@ -646,7 +709,7 @@ export async function readNovuTransactionMessages(
     totalCount,
     hasMore,
     messages,
-    providerResponseHash: stableHash({
+    providerResponseHash: canonicalDigest({
       providerFamily: 'novu',
       transactionId,
       totalCount,
@@ -681,7 +744,7 @@ function normalizeResendWebhookPayload(rawBody: string, svixId: string): ResendV
   const data = isRecord(payload.data) ? payload.data : {}
   const eventType = readString(payload.type) ?? readString(payload.event) ?? 'email.unknown'
   const logicalObjectKey = readString(data.email_id) ?? readString(data.id) ?? readString(payload.email_id) ?? svixId
-  const payloadHash = stableHash(payload as StableHashValue)
+  const payloadHash = canonicalDigest(payload as StableHashValue)
   const redactedPayload: RedactedPayload = {
     providerEventId: svixId,
     logicalObjectKey,
@@ -757,12 +820,12 @@ function parseJsonObject(rawBody: string): Record<string, unknown> {
   throw new NotificationProviderError('invalid_resend_webhook_payload', 'Resend webhook payload must be a JSON object.', 400)
 }
 
-async function readJsonResponseObject(
-  response: Response,
+function readJsonResponseObject(
+  rawBody: string | undefined,
   errorCode: Extract<NotificationProviderErrorCode, 'clerk_owner_lookup_failed'>
-): Promise<Record<string, unknown>> {
+): Record<string, unknown> {
   try {
-    const parsed = (await response.json()) as unknown
+    const parsed = JSON.parse(rawBody ?? '') as unknown
     if (isRecord(parsed)) {
       return parsed
     }
@@ -933,22 +996,8 @@ function truncateLine(value: string, maxLength: number): string {
   return line.length <= maxLength ? line : `${line.slice(0, Math.max(0, maxLength - 1))}...`
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
-}
 
-function readEnv(env: Env, name: string): string | undefined {
-  const value = env[name]
-  if (value === undefined || value.trim().length === 0) {
-    return undefined
-  }
 
-  return value.trim()
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined

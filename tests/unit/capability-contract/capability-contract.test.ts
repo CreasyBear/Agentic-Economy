@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
+import { objectSchema } from '../../fixtures/capability-contract-v2'
 
 const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema' as const
 
@@ -360,15 +361,6 @@ describe('function-agnostic capability contract', () => {
   })
 })
 
-function objectSchema(properties: Record<string, unknown>, required: string[]) {
-  return {
-    $schema: JSON_SCHEMA_2020_12,
-    type: 'object',
-    properties,
-    required,
-    additionalProperties: false,
-  } as const
-}
 
 function minimalContract() {
   return {

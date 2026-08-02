@@ -28,6 +28,35 @@ export const OperatorControlKeyValues = [
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 
 export const InvalidationIntentStatusValues = ['queued', 'applied'] as const
+export const WAVE_1_JOURNEY_EVENT_NAMES = [
+  'listing_viewed',
+  'listing_trust_fact_opened',
+  'direct_call_selected',
+  'shortlist_started',
+  'shortlist_ready',
+  'shortlist_reopened',
+  'export_preview_opened',
+  'shortlist_exported',
+  'business_opened',
+  'urgent_call_route_shown',
+  'journey_abandoned',
+] as const
+
+export const WAVE_2_DORMANT_JOURNEY_EVENT_NAMES = [
+  'record_reopened',
+  'record_exported',
+  'record_shared',
+  'record_cited',
+  'dispute_opened',
+  'replay_materially_resolved',
+  'admitted_r1_send',
+] as const
+
+export const JOURNEY_EVENT_NAMES = [
+  ...WAVE_1_JOURNEY_EVENT_NAMES,
+  ...WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
+] as const
+
 
 export const FunnelEventTypeValues = [
   'visitor_attributed',
@@ -53,24 +82,7 @@ export const FunnelEventTypeValues = [
   'registry_search',
   'service_registry_result_clicked',
   'ucp_manifest_fetched',
-  'listing_viewed',
-  'listing_trust_fact_opened',
-  'direct_call_selected',
-  'shortlist_started',
-  'shortlist_ready',
-  'shortlist_reopened',
-  'export_preview_opened',
-  'shortlist_exported',
-  'business_opened',
-  'urgent_call_route_shown',
-  'journey_abandoned',
-  'record_reopened',
-  'record_exported',
-  'record_shared',
-  'record_cited',
-  'replay_materially_resolved',
-  'admitted_r1_send',
-  'dispute_opened',
+  ...JOURNEY_EVENT_NAMES,
   'suppression_applied',
   'inquiry_available_seen',
   'inquiry_attempted',

@@ -57,7 +57,6 @@ const agentContentNegotiationMiddleware = createMiddleware().server((ctx) => {
   return negotiation.kind === 'serve_html'
     ? ctx.next()
     : respondWithAgentPageMarkdown(
-        ctx.request,
         negotiation.path,
         resolveCanonicalBaseUrl(ctx.request).baseUrl,
       )

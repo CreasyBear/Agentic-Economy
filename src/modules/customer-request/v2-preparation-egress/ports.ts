@@ -56,7 +56,7 @@ export type CustomerRequestV2PreparationEgressPorts = Readonly<{
     requestRevision: number
   }>) => Promise<CustomerRequestV2Aggregate | null>
 
-  listEligibleSupplies: (input: Readonly<{
+  listRouteableSupplies: (input: Readonly<{
     networkId: string
     limit: number
   }>) => Promise<readonly EligibleSupply[] | null>

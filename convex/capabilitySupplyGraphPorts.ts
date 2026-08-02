@@ -2,8 +2,6 @@ import type {
   CapabilityGraphPorts,
   GraphPublicationRow,
   GraphPublishedBusiness,
-  CapabilityBindingRow,
-  CapabilityOfferingRow,
 } from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
@@ -12,6 +10,7 @@ import {
   getActiveExactCapabilityContract,
   getExactRegisteredCapabilityContract,
 } from './capabilityContractDocuments'
+import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 
 export function capabilitySupplyGraphPorts(
   db: QueryCtx['db'] | MutationCtx['db'],
@@ -34,12 +33,12 @@ export function capabilitySupplyGraphPorts(
     loadOfferingByOfferingId: async (offeringId) => {
       const offering = await db.query('capabilityOfferings')
         .withIndex('by_offeringId', (query) => query.eq('offeringId', offeringId)).unique()
-      return offering === null ? null : toOfferingRow(offering)
+      return offering === null ? null : toCapabilityOfferingRow(offering)
     },
     loadBindingByBindingId: async (bindingId) => {
       const binding = await db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId)).unique()
-      return binding === null ? null : toBindingRow(binding)
+      return binding === null ? null : toCapabilityBindingRow(binding)
     },
     loadPublishedBusiness: async (businessId) => {
       const business = await db.get(businessId as Id<'businesses'>)
@@ -102,52 +101,4 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
   }
 }
 
-function toOfferingRow(doc: Doc<'capabilityOfferings'>): CapabilityOfferingRow {
-  return {
-    offeringId: doc.offeringId,
-    businessId: doc.businessId,
-    networkId: doc.networkId,
-    capabilityId: doc.capabilityId,
-    version: doc.version,
-    contractDigest: doc.contractDigest,
-    ...(doc.origin === undefined ? {} : { origin: doc.origin }),
-    presentation: doc.presentation,
-    searchTerms: doc.searchTerms,
-    registrationEvidenceRefs: doc.registrationEvidenceRefs,
-    registrationHash: doc.registrationHash,
-    status: doc.status,
-    admissionEvidenceRefs: doc.admissionEvidenceRefs,
-    eligibilityHash: doc.eligibilityHash,
-    registeredAt: doc.registeredAt,
-    updatedAt: doc.updatedAt,
-  }
-}
 
-function toBindingRow(doc: Doc<'capabilityTransportBindings'>): CapabilityBindingRow {
-  return {
-    _id: doc._id,
-    _creationTime: doc._creationTime,
-    bindingId: doc.bindingId,
-    offeringId: doc.offeringId,
-    networkId: doc.networkId,
-    capabilityId: doc.capabilityId,
-    version: doc.version,
-    contractDigest: doc.contractDigest,
-    endpointUrl: doc.endpointUrl,
-    credentialRef: doc.credentialRef,
-    continuation: doc.continuation,
-    cancellation: doc.cancellation,
-    adapterId: doc.adapterId,
-    configJson: doc.configJson,
-    configDigest: doc.configDigest,
-    registrationEvidenceRefs: doc.registrationEvidenceRefs,
-    registrationHash: doc.registrationHash,
-    admission: doc.admission,
-    conformance: doc.conformance,
-    admissionEvidenceRefs: doc.admissionEvidenceRefs,
-    conformanceEvidenceRefs: doc.conformanceEvidenceRefs,
-    eligibilityHash: doc.eligibilityHash,
-    registeredAt: doc.registeredAt,
-    updatedAt: doc.updatedAt,
-  }
-}

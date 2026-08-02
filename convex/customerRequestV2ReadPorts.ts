@@ -1,4 +1,7 @@
-import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import {
+  writableCustomerRequestV2Aggregate,
+  type CustomerRequestV2Aggregate,
+} from '@/modules/customer-request/compiler'
 import {
   routePlanGenerationIsInternallyConsistent,
   routePlanGenerationMatchesAggregate,
@@ -10,7 +13,6 @@ import {
 } from '@/modules/customer-request/runtime'
 import {
   aggregateIsInternallyConsistent,
-  legacyAggregateIsInternallyConsistent,
   type GenerationCommandRow,
   type GenerationRefreshResult,
   type RequestHeadSnapshot,
@@ -87,7 +89,7 @@ export function customerRequestV2ReadPorts(ctx: DbCtx): CustomerRequestV2ReadPor
         ...(command.retryReason === undefined ? {} : { retryReason: command.retryReason }),
         ...(command.resultAggregate === undefined
           ? {}
-          : { resultAggregate: command.resultAggregate as unknown as Aggregate }),
+          : { resultAggregate: writableCustomerRequestV2Aggregate(command.resultAggregate) }),
         ...(command.resultingGeneration === undefined
           ? {}
           : { resultingGeneration: command.resultingGeneration }),
@@ -100,14 +102,6 @@ export function customerRequestV2ReadPorts(ctx: DbCtx): CustomerRequestV2ReadPor
       })
     ),
 
-    hasHistoricalRequest: async (requestId) => {
-      const historicalSnapshot = await db.query('customerRequestHeads')
-        .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-      if (historicalSnapshot !== null) return true
-      const historicalRequest = await db.query('customerRequests')
-        .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-      return historicalRequest !== null
-    },
   }
 }
 
@@ -121,19 +115,12 @@ export async function readVerifiedCommandReplay(
     resultingRouteGenerationRef?: string
     noEffect?: boolean
   }>,
-): Promise<Readonly<{ kind: 'legacy' } | { kind: 'current'; aggregate: Aggregate }>> {
+): Promise<Readonly<{ kind: 'current'; aggregate: Aggregate }>> {
   const revision = await db.query('customerRequestV2Revisions')
     .withIndex('by_requestId_and_requestRevision', (query) => (
       query.eq('requestId', command.requestId).eq('requestRevision', command.resultingRevision)
     )).unique()
   if (revision === null) throw new Error('customer_request_v2_command_integrity_failure')
-  if ('routes' in revision.aggregate.plan) {
-    if (revision.aggregate.aggregateDigest !== command.aggregateDigest
-      || !legacyAggregateIsInternallyConsistent(revision.aggregate)) {
-      throw new Error('customer_request_v2_legacy_command_integrity_failure')
-    }
-    return { kind: 'legacy' }
-  }
   if (revision.aggregate.aggregateDigest !== command.aggregateDigest
     || !aggregateIsInternallyConsistent(
       domainAggregate(revision.aggregate),
@@ -258,7 +245,7 @@ export async function readCurrentDecisionAggregate(
     || result.aggregate.snapshot.principalId !== principalId) {
     throw new Error('customer_request_v2_current_decision_integrity_failure')
   }
-  return { commandKey: command.commandKey, aggregate: result.aggregate as unknown as Aggregate }
+  return { commandKey: command.commandKey, aggregate: writableCustomerRequestV2Aggregate(result.aggregate) }
 }
 
 export async function readExactRoutePlanGeneration(
@@ -285,7 +272,7 @@ export async function readExactRoutePlanGeneration(
   return { kind: 'found' as const, routeGeneration: row.routeGeneration }
 }
 
-function toGenerationCommandRow(row: Readonly<{
+export function toGenerationCommandRow(row: Readonly<{
   commandKey: string
   commandDigest: string
   principalId: string
@@ -331,7 +318,7 @@ function toGenerationCommandRow(row: Readonly<{
   }
 }
 
-function toRequestHead(head: Readonly<{
+export function toRequestHead(head: Readonly<{
   _id: Id<'customerRequestV2Heads'>
   requestId: string
   principalId: string
@@ -349,7 +336,7 @@ function toRequestHead(head: Readonly<{
   }
 }
 
-function toRoutePlanHead(head: Readonly<{
+export function toRoutePlanHead(head: Readonly<{
   _id: Id<'customerRequestV2RoutePlanHeads'>
   requestId: string
   currentGeneration: number
@@ -379,13 +366,16 @@ function toRoutePlanHead(head: Readonly<{
   }
 }
 
-function domainRouteGeneration(value: RouteGeneration): CustomerRequestRoutePlanGeneration
-function domainRouteGeneration(value: undefined): undefined
-function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined
-function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined {
+export function domainRouteGeneration(value: RouteGeneration): CustomerRequestRoutePlanGeneration
+export function domainRouteGeneration(value: undefined): undefined
+export function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined
+export function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined {
   return value as CustomerRequestRoutePlanGeneration | undefined
 }
 
-function domainAggregate(value: unknown): CustomerRequestV2Aggregate {
+export function domainAggregate(value: unknown): CustomerRequestV2Aggregate {
   return value as CustomerRequestV2Aggregate
 }
+
+/** Alias for WritePorts composition; the thinness contract reserves the `domainAggregate` name for this module. */
+export const asDomainAggregate = domainAggregate

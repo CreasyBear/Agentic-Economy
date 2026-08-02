@@ -1,6 +1,7 @@
 import { withTemporaryClerkApiKey } from './customer-request-production-credential'
 import { verifyHostedCustomerRequestRelease } from './verify-customer-request-release'
 import { pathToFileURL } from 'node:url'
+import { resolveVercelProtectionBypassSecret } from './work-tree-parity-release'
 
 export async function main(env: Record<string, string | undefined> = process.env): Promise<void> {
   await withTemporaryClerkApiKey({
@@ -10,14 +11,15 @@ export async function main(env: Record<string, string | undefined> = process.env
     fetch: globalThis.fetch,
     keyNamePrefix: 'AE hosted release readback',
     run: async (apiKey) => {
+      const bypass = resolveVercelProtectionBypassSecret(env)
       const result = await verifyHostedCustomerRequestRelease({
         baseUrl: required(env, 'AE_CUSTOMER_REQUEST_BASE_URL'),
         apiKey,
         expectedRevision: required(env, 'AE_RELEASE_SOURCE_REVISION'),
         expectedDeploymentId: required(env, 'AE_RELEASE_DEPLOYMENT_ID'),
-        ...(env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET?.trim() === undefined
+        ...(bypass === undefined
           ? {}
-          : { deploymentProtectionBypass: env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET.trim() }),
+          : { deploymentProtectionBypass: bypass }),
       })
       process.stdout.write(`${JSON.stringify(result)}\n`)
     },

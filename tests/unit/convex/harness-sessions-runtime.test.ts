@@ -244,6 +244,7 @@ describe('Convex harness session journal source', () => {
         {
           _id: 'adminMemberships:1',
           clerkUserId: 'admin-user',
+          tokenIdentifier: 'clerk|admin-user',
           role: 'support',
           state: 'active',
           grantedBy: 'system',
@@ -433,7 +434,7 @@ function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {
 function identity(subject: string): UserIdentity {
   return {
     subject,
-    tokenIdentifier: `token:${subject}`,
+    tokenIdentifier: `clerk|${subject}`,
     issuer: 'https://clerk.test',
   } as UserIdentity
 }

@@ -1,4 +1,4 @@
-import { createFileRoute, useSearch } from '@tanstack/react-router'
+import { createFileRoute, Link, useSearch } from '@tanstack/react-router'
 import { ExternalLinkIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -70,7 +70,7 @@ function ClaimSuccessRoute() {
         actions={(
           <div className="flex flex-wrap gap-2">
             {search.source === 'supply' ? <Button asChild variant="default"><a href="/owner/supply">List an API service</a></Button> : null}
-            <Button asChild variant="default"><a href={`/owner/status?slug=${encodeURIComponent(catalog.slug)}`}>Manage your page</a></Button>
+            <Button asChild variant="default"><Link to="/owner/status" search={{ slug: catalog.slug }}>Manage your page</Link></Button>
           </div>
         )}
       />

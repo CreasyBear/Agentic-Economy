@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { handleCustomerRequestAuthorizationPost } from '@/lib/server/customer-request-authorization-api'
+import { postJsonRequest } from '../../helpers/http'
 
 describe('customer Request preparation authorization API', () => {
   it('records explicit permission against one Request revision without protocol input', async () => {
@@ -8,7 +9,7 @@ describe('customer Request preparation authorization API', () => {
       kind: 'request', requestRef: 'request:1', revision: 3, state: 'ready_to_compare',
       summary: 'Compare parcel services', nextAction: 'prepare_options', missingFields: [], criteria: [], options: [],
     })
-    const response = await handleCustomerRequestAuthorizationPost(request({
+    const response = await handleCustomerRequestAuthorizationPost(postJsonRequest('/api/requests/request%3A1/authorization', {
       revision: 3, preparationRef: 'action-preparation:1', idempotencyKey: 'authorize:request:1:3',
     }), 'request:1', { authorize })
 
@@ -21,15 +22,10 @@ describe('customer Request preparation authorization API', () => {
   })
 
   it('does not convert missing authentication into permission', async () => {
-    const response = await handleCustomerRequestAuthorizationPost(request({
+    const response = await handleCustomerRequestAuthorizationPost(postJsonRequest('/api/requests/request%3A1/authorization', {
       revision: 1, preparationRef: 'action-preparation:1', idempotencyKey: 'authorize:1',
     }), 'request:1', { authorize: async () => ({ kind: 'refused', reason: 'authentication_required' }) })
     expect(response.status).toBe(401)
   })
 })
 
-function request(body: unknown): Request {
-  return new Request('https://ae.test/api/requests/request%3A1/authorization', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  })
-}

@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
-import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
@@ -29,7 +28,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
 import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
-import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OauthTokenRouteImport } from './routes/oauth.token'
 import { Route as OauthRegisterRouteImport } from './routes/oauth.register'
@@ -85,6 +83,8 @@ import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as SlugToolsToolIdRouteImport } from './routes/$slug.tools.$toolId'
+import { Route as ApiV1WorkTreeSetupRouteImport } from './routes/api.v1.work-tree.setup'
+import { Route as ApiV1WorkTreeOperationRouteImport } from './routes/api.v1.work-tree.$operation'
 import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
@@ -141,11 +141,6 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   id: '/robots.txt',
   path: '/robots.txt',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RegistryRoute = RegistryRouteImport.update({
-  id: '/registry',
-  path: '/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -225,11 +220,6 @@ const SignUpSplatRoute = SignUpSplatRouteImport.update({
 const SignInSplatRoute = SignInSplatRouteImport.update({
   id: '/sign-in/$',
   path: '/sign-in/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const QAnswerIdRoute = QAnswerIdRouteImport.update({
-  id: '/q/$answerId',
-  path: '/q/$answerId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
@@ -520,6 +510,16 @@ const SlugToolsToolIdRoute = SlugToolsToolIdRouteImport.update({
   path: '/tools/$toolId',
   getParentRoute: () => SlugRoute,
 } as any)
+const ApiV1WorkTreeSetupRoute = ApiV1WorkTreeSetupRouteImport.update({
+  id: '/api/v1/work-tree/setup',
+  path: '/api/v1/work-tree/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1WorkTreeOperationRoute = ApiV1WorkTreeOperationRouteImport.update({
+  id: '/api/v1/work-tree/$operation',
+  path: '/api/v1/work-tree/$operation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1ServicesSearchRoute = ApiV1ServicesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -789,7 +789,6 @@ export interface FileRoutesByFullPath {
   '/llms.txt': typeof LlmsDottxtRoute
   '/mcp': typeof McpRoute
   '/privacy': typeof PrivacyRouteWithChildren
-  '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
@@ -810,7 +809,6 @@ export interface FileRoutesByFullPath {
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
@@ -877,6 +875,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
+  '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
+  '/api/v1/work-tree/setup': typeof ApiV1WorkTreeSetupRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -908,7 +908,6 @@ export interface FileRoutesByTo {
   '/llms.txt': typeof LlmsDottxtRoute
   '/mcp': typeof McpRoute
   '/privacy': typeof PrivacyRouteWithChildren
-  '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
@@ -929,7 +928,6 @@ export interface FileRoutesByTo {
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
@@ -996,6 +994,8 @@ export interface FileRoutesByTo {
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
+  '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
+  '/api/v1/work-tree/setup': typeof ApiV1WorkTreeSetupRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -1029,7 +1029,6 @@ export interface FileRoutesById {
   '/llms.txt': typeof LlmsDottxtRoute
   '/mcp': typeof McpRoute
   '/privacy': typeof PrivacyRouteWithChildren
-  '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
@@ -1050,7 +1049,6 @@ export interface FileRoutesById {
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
@@ -1117,6 +1115,8 @@ export interface FileRoutesById {
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
+  '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
+  '/api/v1/work-tree/setup': typeof ApiV1WorkTreeSetupRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -1150,7 +1150,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/mcp'
     | '/privacy'
-    | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
@@ -1171,7 +1170,6 @@ export interface FileRouteTypes {
     | '/oauth/register'
     | '/oauth/token'
     | '/privacy/remove-business'
-    | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
@@ -1238,6 +1236,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/v1/services/search'
+    | '/api/v1/work-tree/$operation'
+    | '/api/v1/work-tree/setup'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1269,7 +1269,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/mcp'
     | '/privacy'
-    | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
@@ -1290,7 +1289,6 @@ export interface FileRouteTypes {
     | '/oauth/register'
     | '/oauth/token'
     | '/privacy/remove-business'
-    | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
@@ -1357,6 +1355,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/v1/services/search'
+    | '/api/v1/work-tree/$operation'
+    | '/api/v1/work-tree/setup'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1389,7 +1389,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/mcp'
     | '/privacy'
-    | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
@@ -1410,7 +1409,6 @@ export interface FileRouteTypes {
     | '/oauth/register'
     | '/oauth/token'
     | '/privacy/remove-business'
-    | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
@@ -1477,6 +1475,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/v1/services/search'
+    | '/api/v1/work-tree/$operation'
+    | '/api/v1/work-tree/setup'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1510,7 +1510,6 @@ export interface RootRouteChildren {
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   McpRoute: typeof McpRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
-  RegistryRoute: typeof RegistryRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
@@ -1525,7 +1524,6 @@ export interface RootRouteChildren {
   OauthDevice_authorizationRoute: typeof OauthDevice_authorizationRoute
   OauthRegisterRoute: typeof OauthRegisterRoute
   OauthTokenRoute: typeof OauthTokenRoute
-  QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
   TThreadIdRoute: typeof TThreadIdRoute
@@ -1553,6 +1551,8 @@ export interface RootRouteChildren {
   ApiSandboxProvidersRouteQuoterRoute: typeof ApiSandboxProvidersRouteQuoterRoute
   ApiSandboxProvidersRouteResolverRoute: typeof ApiSandboxProvidersRouteResolverRoute
   ApiSandboxProvidersWorkflowRoute: typeof ApiSandboxProvidersWorkflowRoute
+  ApiV1WorkTreeOperationRoute: typeof ApiV1WorkTreeOperationRoute
+  ApiV1WorkTreeSetupRoute: typeof ApiV1WorkTreeSetupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1576,13 +1576,6 @@ declare module '@tanstack/react-router' {
       path: '/robots.txt'
       fullPath: '/robots.txt'
       preLoaderRoute: typeof RobotsDottxtRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/registry': {
-      id: '/registry'
-      path: '/registry'
-      fullPath: '/registry'
-      preLoaderRoute: typeof RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1695,13 +1688,6 @@ declare module '@tanstack/react-router' {
       path: '/sign-in/$'
       fullPath: '/sign-in/$'
       preLoaderRoute: typeof SignInSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/q/$answerId': {
-      id: '/q/$answerId'
-      path: '/q/$answerId'
-      fullPath: '/q/$answerId'
-      preLoaderRoute: typeof QAnswerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/remove-business': {
@@ -2088,6 +2074,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/$slug/tools/$toolId'
       preLoaderRoute: typeof SlugToolsToolIdRouteImport
       parentRoute: typeof SlugRoute
+    }
+    '/api/v1/work-tree/setup': {
+      id: '/api/v1/work-tree/setup'
+      path: '/api/v1/work-tree/setup'
+      fullPath: '/api/v1/work-tree/setup'
+      preLoaderRoute: typeof ApiV1WorkTreeSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/work-tree/$operation': {
+      id: '/api/v1/work-tree/$operation'
+      path: '/api/v1/work-tree/$operation'
+      fullPath: '/api/v1/work-tree/$operation'
+      preLoaderRoute: typeof ApiV1WorkTreeOperationRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/v1/services/search': {
       id: '/api/v1/services/search'
@@ -2783,7 +2783,6 @@ const rootRouteChildren: RootRouteChildren = {
   LlmsDottxtRoute: LlmsDottxtRoute,
   McpRoute: McpRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
-  RegistryRoute: RegistryRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
@@ -2801,7 +2800,6 @@ const rootRouteChildren: RootRouteChildren = {
   OauthDevice_authorizationRoute: OauthDevice_authorizationRoute,
   OauthRegisterRoute: OauthRegisterRoute,
   OauthTokenRoute: OauthTokenRoute,
-  QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
   TThreadIdRoute: TThreadIdRoute,
@@ -2829,6 +2827,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSandboxProvidersRouteQuoterRoute: ApiSandboxProvidersRouteQuoterRoute,
   ApiSandboxProvidersRouteResolverRoute: ApiSandboxProvidersRouteResolverRoute,
   ApiSandboxProvidersWorkflowRoute: ApiSandboxProvidersWorkflowRoute,
+  ApiV1WorkTreeOperationRoute: ApiV1WorkTreeOperationRoute,
+  ApiV1WorkTreeSetupRoute: ApiV1WorkTreeSetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

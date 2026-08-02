@@ -2,10 +2,6 @@ export {
   startOrResume,
 } from './start-or-resume'
 
-export {
-  leaseNextDispatch,
-  MAX_PENDING_DISPATCH_SCAN,
-} from './lease-next-dispatch'
 
 export {
   recordOutcome,
@@ -23,13 +19,7 @@ export {
   resolveCancellationAttempt,
 } from './cancel-resolve-attempt'
 
-export {
-  openLeasedDispatch,
-} from './open-leased-dispatch'
 
-export {
-  recoverExpiredDispatch,
-} from './recover-expired-dispatch'
 
 export {
   markDispatched,
@@ -39,13 +29,7 @@ export {
   recordNotReleased,
 } from './record-not-released'
 
-export {
-  markAccepted,
-} from './mark-accepted'
 
-export {
-  currentLeasedInvocation,
-} from './current-leased-invocation'
 
 export {
   reportProblem,
@@ -91,28 +75,21 @@ export type {
   CancellationAttemptSnapshot,
   CancellationInvocation,
   CancellationObservation,
-  DispatchLease,
   DispatchPublicationSnapshot,
   DispatchRecordSnapshot,
-  LeaseCommand,
-  LeaseResult,
-  LeasedInvocation,
+  DispatchInvocation,
+  OpenDispatchCommand,
+  OpenDispatchResult,
   MandateLoadResult,
-  MarkAcceptedCommand,
-  MarkAcceptedResult,
   MarkDispatchedCommand,
   MarkDispatchedResult,
   OpenCancellationResult,
-  OpenLeasedDispatchCommand,
-  OpenLeasedDispatchResult,
   OutcomeCommand,
   OutcomeResult,
   PriorCancelCommand,
   PriorRunCommand,
   RecordNotReleasedCommand,
   RecordNotReleasedResult,
-  RecoverExpiredDispatchCommand,
-  RecoverExpiredDispatchResult,
   ResolveCancellationCommand,
   ResolveCancellationResult,
   RouteBusinessSnapshot,

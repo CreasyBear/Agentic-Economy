@@ -112,7 +112,7 @@ export type ConsumerPlanResult = Readonly<
     }>
   | Readonly<{
       kind: 'unavailable'
-      reason: 'no_current_supply' | 'preview_unavailable' | 'options_changed'
+      reason: 'no_current_supply' | 'preview_unavailable' | 'options_changed' | 'rate_limited'
       destination: ConsumerDestination
       decisions: readonly ConsumerDecisionRecord[]
     }>
@@ -175,7 +175,7 @@ export function projectConsumerPlan(
   }
 
   const byRef = new Map(supplies.map((supply) => [supply.optionRef, supply]))
-  const steps = preview.steps.slice().sort((left, right) => left.step - right.step)
+  const steps = preview.steps.toSorted((left, right) => left.step - right.step)
   if (!validStepOrder(steps)) return unavailable(preview.destination, 'preview_unavailable')
   const stepOptions = steps.map((step) => step.offeringRefs
     .map((ref) => byRef.get(ref))
@@ -282,7 +282,10 @@ function uniqueActions(actions: readonly ConsumerNextAction[]): readonly Consume
   })
 }
 
-function unavailable(destination: ConsumerDestination, reason: 'no_current_supply' | 'preview_unavailable' | 'options_changed'): ConsumerPlanResult {
+function unavailable(
+  destination: ConsumerDestination,
+  reason: 'no_current_supply' | 'preview_unavailable' | 'options_changed' | 'rate_limited',
+): ConsumerPlanResult {
   return { kind: 'unavailable', reason, destination, decisions: [] }
 }
 

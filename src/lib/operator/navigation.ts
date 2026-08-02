@@ -101,12 +101,7 @@ const developerNavGroups: readonly OperatorNavGroup[] = [
     items: [{ href: '/developers/discovery', label: 'Discovery', icon: ScrollText, tier: 'core' }],
   },
 ] as const
-/**
- * `/` is the only discovery surface (MAP.md "one-feature product"), so nothing
- * here offers a catalog. `/registry` stays a legacy 301 for inbound links; it is
- * never minted internally, because routing through a redirect to reach the page
- * we already have is a hop that only shows up as a slower, mislabelled link.
- */
+/** `/` is the only public browse and Ask entry point. */
 const publicCommandDestinations: readonly OperatorCommandDestination[] = [
   { href: '/', label: 'Ask', icon: Search, tier: 'core', hint: 'Public' },
 ] as const

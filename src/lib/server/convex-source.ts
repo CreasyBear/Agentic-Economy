@@ -1,5 +1,6 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { ConvexHttpClient } from 'convex/browser'
 import { anyApi, makeFunctionReference } from 'convex/server'
 import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
@@ -202,7 +203,7 @@ export async function callSourceAction<Action extends FunctionReference<'action'
 }
 
 export function readRequiredConvexUrl(env: Env = process.env): string {
-  const value = readEnv(env, 'CONVEX_URL') ?? readEnv(env, 'VITE_CONVEX_URL')
+  const value = readTrimmedEnv(env, 'CONVEX_URL') ?? readTrimmedEnv(env, 'VITE_CONVEX_URL')
   if (value === undefined) {
     throw new ConvexSourceError('missing_convex_url', 'CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.', 500)
   }
@@ -223,11 +224,3 @@ export async function readRequiredConvexAuthToken(authObject: ConvexSourceAuth, 
   return token
 }
 
-function readEnv(env: Env, name: string): string | undefined {
-  const value = env[name]
-  if (value === undefined || value.trim().length === 0) {
-    return undefined
-  }
-
-  return value.trim()
-}

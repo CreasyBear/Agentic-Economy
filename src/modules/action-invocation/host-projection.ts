@@ -4,6 +4,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { dynamicPublishedSourceDigest } from './dynamic-published-contract'
 import { inspectUserInputContract } from './input-work'
+import { assertDynamicPublishedSnapshotShape } from './dynamic-published-snapshot-verifier'
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
 export {
   projectRichPaidOperation,
@@ -13,10 +14,6 @@ export type {
   RichPaidOperationProjection,
   StructuredPaidOperationProjection,
 } from './paid-operation-semantics'
-
-export type InvocationProjectionResolver = Readonly<{
-  resolve(invocationRef: string): unknown
-}>
 
 export type InvocationTaskSemantics = Readonly<{
   identity: Readonly<{
@@ -68,7 +65,7 @@ export type StructuredInvocationTaskProjection = Readonly<{
 export function projectRichInvocationTask(input: Readonly<{
   invocationRef: string
   expectedInvocationVersion: number
-  resolver: InvocationProjectionResolver
+  snapshot: unknown
 }>): RichInvocationTaskProjection {
   const semantics = resolveSemantics(input)
   return {
@@ -89,35 +86,30 @@ export function projectRichInvocationTask(input: Readonly<{
       } },
     ],
     semantics,
-    semanticDigest: canonicalDigest(semantics as unknown as StableHashValue),
+    semanticDigest: canonicalDigest(semantics),
   }
 }
 
 export function projectStructuredInvocationTask(input: Readonly<{
   invocationRef: string
   expectedInvocationVersion: number
-  resolver: InvocationProjectionResolver
+  snapshot: unknown
 }>): StructuredInvocationTaskProjection {
   const semantics = resolveSemantics(input)
   return {
     kind: 'external_agent_task',
     semantics,
-    semanticDigest: canonicalDigest(semantics as unknown as StableHashValue),
+    semanticDigest: canonicalDigest(semantics),
   }
 }
 
 function resolveSemantics(input: Readonly<{
   invocationRef: string
   expectedInvocationVersion: number
-  resolver: InvocationProjectionResolver
+  snapshot: unknown
 }>): InvocationTaskSemantics {
-  const snapshot = JSON.parse(JSON.stringify(input.resolver.resolve(input.invocationRef))) as {
-    operations?: any[]
-    controls: any[]
-    inputWork?: any[]
-    sourceRows: any[]
-    attempts: any[]
-  }
+  const snapshot = structuredClone(input.snapshot)
+  assertDynamicPublishedSnapshotShape(snapshot)
   const operation = snapshot.operations?.[0]
   const control = snapshot.controls.find((row) => row.invocationRef === input.invocationRef)
   const work = snapshot.inputWork?.find((row) => row.invocationRef === input.invocationRef)
@@ -134,8 +126,8 @@ function resolveSemantics(input: Readonly<{
     || work.operationVersion !== descriptor.version) {
     throw new Error('invocation_projection_source_invalid')
   }
-  if (canonicalDigest(work.requiredFields as unknown as StableHashValue)
-    !== canonicalDigest(inputContract.requiredFields as unknown as StableHashValue)) {
+  if (canonicalDigest(work.requiredFields)
+    !== canonicalDigest(inputContract.requiredFields)) {
     throw new Error('invocation_projection_input_contract_invalid')
   }
   const source = snapshot.sourceRows.find((row) => row.invocationRef === input.invocationRef)
@@ -143,19 +135,19 @@ function resolveSemantics(input: Readonly<{
     throw new Error('invocation_projection_prepared_source_missing')
   }
   if (source !== undefined
-    && (canonicalDigest(source.operation as unknown as StableHashValue)
-      !== canonicalDigest(operation as unknown as StableHashValue)
+    && (canonicalDigest(source.operation)
+      !== canonicalDigest(operation)
       || source.input.inputDigest !== canonicalDigest(source.input.input)
-      || canonicalDigest(work.origin as StableHashValue)
-        !== canonicalDigest(control.control.origin as StableHashValue)
-      || canonicalDigest(work.owner as StableHashValue)
-        !== canonicalDigest(control.control.owner as StableHashValue)
+      || canonicalDigest(work.origin)
+        !== canonicalDigest(control.control.origin)
+      || canonicalDigest(work.owner)
+        !== canonicalDigest(control.control.owner)
       || (source.origin !== undefined
-        && canonicalDigest(source.origin as StableHashValue)
-          !== canonicalDigest(control.control.origin as StableHashValue))
+        && canonicalDigest(source.origin)
+          !== canonicalDigest(control.control.origin))
       || (source.owner !== undefined
-        && canonicalDigest(source.owner as StableHashValue)
-          !== canonicalDigest(control.control.owner as StableHashValue)))) {
+        && canonicalDigest(source.owner)
+          !== canonicalDigest(control.control.owner)))) {
     throw new Error('invocation_projection_source_invalid')
   }
   const attempts = snapshot.attempts.find((group) => group.invocationRef === input.invocationRef)?.rows ?? []
@@ -184,11 +176,11 @@ function resolveSemantics(input: Readonly<{
     information: {
       required: work.requiredFields,
       missing: work.missingFields,
-      knownDigest: canonicalDigest(work.knownInput as unknown as StableHashValue),
+      knownDigest: canonicalDigest(work.knownInput),
     },
-    consequence: descriptor.effects as unknown as StableHashValue,
-    price: descriptor.price as unknown as StableHashValue,
-    dataRelease: descriptor.dataUse as unknown as StableHashValue,
+    consequence: toStableHashValue(descriptor.effects),
+    price: toStableHashValue(descriptor.price),
+    dataRelease: toStableHashValue(descriptor.dataUse),
     suitability: {
       sourceCurrent: source === undefined || source.input.sourceSnapshotDigest === work.sourceMaterialDigest,
       readinessValidUntil: operation.readiness.validUntil,
@@ -197,16 +189,16 @@ function resolveSemantics(input: Readonly<{
       required: descriptor.authorityRequirement,
       accepted: control.control.acceptedAuthority !== undefined,
       reference: control.control.authority?.reference ?? null,
-      bounds: control.authorityBinding as unknown as StableHashValue ?? null,
+      bounds: toStableHashValue(control.authorityBinding ?? null),
     },
     attempt: {
-      idempotency: attempt?.idempotency as unknown as StableHashValue ?? null,
-      release: attempt?.release as unknown as StableHashValue ?? null,
+      idempotency: toStableHashValue(attempt?.idempotency ?? null),
+      release: toStableHashValue(attempt?.release ?? null),
       retry,
     },
     evidence: {
       expected: descriptor.evidence.map(({ evidenceId }) => evidenceId),
-      observed: result as unknown as StableHashValue ?? null,
+      observed: toStableHashValue(result ?? null),
     },
     disposition: {
       state: control.control.control.state,
@@ -217,4 +209,20 @@ function resolveSemantics(input: Readonly<{
       ? ['answer_missing_information']
       : [...descriptor.safeContinuations],
   }
+}
+
+function toStableHashValue(value: unknown): StableHashValue {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  if (Array.isArray(value)) return value.map(toStableHashValue)
+  if (typeof value === 'object') {
+    const record: { [key: string]: StableHashValue } = {}
+    for (const [key, entry] of Object.entries(value)) {
+      record[key] = toStableHashValue(entry)
+    }
+    return record
+  }
+  throw new Error('invocation_projection_value_invalid')
 }

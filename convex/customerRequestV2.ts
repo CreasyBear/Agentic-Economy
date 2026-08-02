@@ -2,6 +2,11 @@ import { v, type Infer } from 'convex/values'
 
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
+import {
+  writableCustomerRequestV2Aggregate,
+  type CustomerRequestV2Aggregate,
+} from '@/modules/customer-request/compiler'
 import {
   requestRegistrySnapshotDigest,
   type RegisteredEvaluationBinding,
@@ -12,9 +17,11 @@ import {
 } from '@/modules/customer-request/runtime'
 import {
   routePlanGenerationIsInternallyConsistent,
+  writableCustomerRequestRoutePlanGeneration,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import {
+  aggregateIsInternallyConsistent,
   commitAggregate as commitAggregateMachine,
   recordRoutePlanGenerationRetry as recordRoutePlanGenerationRetryMachine,
   refreshRoutePlanGeneration as refreshRoutePlanGenerationMachine,
@@ -36,10 +43,7 @@ import {
   readVerifiedCommandReplay,
 } from './customerRequestV2ReadPorts'
 
-export {
-  aggregateIsInternallyConsistent,
-  legacyAggregateIsInternallyConsistent,
-} from '@/modules/customer-request/v2-write'
+export { aggregateIsInternallyConsistent } from '@/modules/customer-request/v2-write'
 
 type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
 
@@ -76,10 +80,6 @@ const currentAggregateResult = v.union(
     routeGenerationRef: v.optional(v.string()),
     currentDecisionCommandKey: v.optional(v.string()),
   }),
-  v.object({
-    kind: v.literal('needs_attention'), requestId: v.string(),
-    reason: v.literal('historical_request_resubmit_required'), resumable: v.literal(false),
-  }),
   v.object({ kind: v.literal('not_found') }),
 )
 const routePlanGenerationResult = v.union(
@@ -102,10 +102,6 @@ const routePlanProjectionMaterialResult = v.union(
 const commandReplayResult = v.union(
   v.object({ kind: v.literal('not_found') }),
   v.object({ kind: v.literal('conflict') }),
-  v.object({
-    kind: v.literal('needs_attention'), requestId: v.string(),
-    reason: v.literal('historical_request_resubmit_required'), resumable: v.literal(false),
-  }),
   v.object({
     kind: v.literal('replayed'), aggregate: customerRequestV2AggregateValue,
     routeGenerationRef: v.optional(v.string()),
@@ -209,12 +205,16 @@ export const commitAggregate = internalMutation({
     routeGeneration: v.optional(routePlanGenerationV2Value),
   },
   returns: commitResult,
-  handler: async (ctx, args): Promise<Infer<typeof commitResult>> => (
-    await commitAggregateMachine(
-      args as unknown as Parameters<typeof commitAggregateMachine>[0],
-      customerRequestV2WritePorts(ctx),
-    ) as Infer<typeof commitResult>
-  ),
+  handler: async (ctx, args): Promise<Infer<typeof commitResult>> => {
+    const { aggregate, routeGeneration, ...command } = args
+    return await commitAggregateMachine({
+      ...command,
+      aggregate: domainAggregate(aggregate),
+      ...(routeGeneration === undefined
+        ? {}
+        : { routeGeneration: domainRouteGeneration(routeGeneration) }),
+    }, customerRequestV2WritePorts(ctx))
+  },
 })
 
 export const recordNoopCommand = internalMutation({
@@ -277,12 +277,16 @@ export const refreshRoutePlanGeneration = internalMutation({
     candidateRouteGeneration: v.optional(routePlanGenerationV2Value),
   },
   returns: generationRefreshResult,
-  handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => (
-    await refreshRoutePlanGenerationMachine(
-      args as unknown as Parameters<typeof refreshRoutePlanGenerationMachine>[0],
-      customerRequestV2WritePorts(ctx),
-    ) as Infer<typeof generationRefreshResult>
-  ),
+  handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => {
+    const { candidateAggregate, candidateRouteGeneration, ...command } = args
+    return writableGenerationRefreshResult(await refreshRoutePlanGenerationMachine({
+      ...command,
+      candidateAggregate: domainAggregate(candidateAggregate),
+      ...(candidateRouteGeneration === undefined
+        ? {}
+        : { candidateRouteGeneration: domainRouteGeneration(candidateRouteGeneration) }),
+    }, customerRequestV2WritePorts(ctx)))
+  },
 })
 
 export const recordRoutePlanGenerationRetry = internalMutation({
@@ -300,10 +304,10 @@ export const recordRoutePlanGenerationRetry = internalMutation({
   },
   returns: generationRefreshResult,
   handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => (
-    await recordRoutePlanGenerationRetryMachine(
-      args as unknown as Parameters<typeof recordRoutePlanGenerationRetryMachine>[0],
+    writableGenerationRefreshResult(await recordRoutePlanGenerationRetryMachine(
+      args,
       customerRequestV2WritePorts(ctx),
-    ) as Infer<typeof generationRefreshResult>
+    ))
   ),
 })
 
@@ -319,6 +323,29 @@ export const getRoutePlanGenerationRefreshReplay = internalQuery({
     ) as Infer<typeof generationRefreshReplayResult>
   ),
 })
+
+function domainAggregate(value: unknown): CustomerRequestV2Aggregate {
+  return value as CustomerRequestV2Aggregate
+}
+
+
+function writableGenerationRefreshResult(
+  result: Awaited<ReturnType<typeof refreshRoutePlanGenerationMachine>>,
+): Infer<typeof generationRefreshResult> {
+  if (result.kind === 'unchanged' || result.kind === 'superseded') {
+    return {
+      kind: result.kind,
+      routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
+    }
+  }
+  if (result.kind === 'needs_information' || result.kind === 'unsupported') {
+    return {
+      kind: result.kind,
+      aggregate: writableCustomerRequestV2Aggregate(result.aggregate),
+    }
+  }
+  return result
+}
 
 export const getCurrentAggregate = internalQuery({
   args: { requestId: v.string() },
@@ -388,10 +415,10 @@ export const getCurrentRoutePlanProjectionMaterial = internalQuery({
       domainRouteGeneration(previous), previous.generation - 1,
     )) throw new Error('customer_request_route_plan_projection_history_integrity_failure')
 
-    const businessIds = [...new Set([
+    const businessIds = uniqueSorted([
       ...currentReadback.routeGeneration.routes,
       ...(previous?.routes ?? []),
-    ].flatMap((route) => route.steps.map(({ businessId }) => businessId)))].sort()
+    ].flatMap((route) => route.steps.map(({ businessId }) => businessId)))
     if (businessIds.length > 512) {
       throw new Error('customer_request_route_plan_projection_business_limit_exceeded')
     }
@@ -451,14 +478,6 @@ export const getCommandReplay = internalQuery({
     if (command.commandDigest !== args.commandDigest || command.principalId !== args.principalId
       || command.requestId !== args.requestId) return { kind: 'conflict' as const }
     const verified = await readVerifiedCommandReplay(ctx.db, command)
-    if (verified.kind === 'legacy') {
-      return {
-        kind: 'needs_attention' as const,
-        requestId: command.requestId,
-        reason: 'historical_request_resubmit_required' as const,
-        resumable: false as const,
-      }
-    }
     return {
       kind: 'replayed' as const,
       aggregate: verified.aggregate,
@@ -483,7 +502,12 @@ export async function currentRoutePlanGenerationGraphStatus(
     .withIndex('by_requestId_and_requestRevision', (query) => (
       query.eq('requestId', requestId).eq('requestRevision', head.currentRevision)
     )).unique()
-  if (revision === null || 'routes' in revision.aggregate.plan) return 'invalid'
+  if (revision === null
+    || revision.aggregate.aggregateDigest !== head.currentAggregateDigest
+    || !aggregateIsInternallyConsistent(
+      domainAggregate(revision.aggregate),
+      head.currentRevision - 1,
+    )) return 'invalid'
   const generation = await readExactRoutePlanGeneration(db, requestId, generationRef)
   if (generation.kind !== 'found'
     || generation.routeGeneration.requestRevision !== head.currentRevision) return 'invalid'

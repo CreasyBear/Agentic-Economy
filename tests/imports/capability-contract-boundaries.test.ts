@@ -22,6 +22,7 @@ describe('capability contract boundaries', () => {
       'ajv/dist/refs/json-schema-2020-12/schema.json',
       'zod',
       '@/modules/common/canonical-digest',
+      '@/modules/common/is-record',
       '@/modules/common/deep-freeze',
       '@/modules/common/stable-hash',
     ])

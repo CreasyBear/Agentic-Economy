@@ -1,32 +1,30 @@
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
-import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
-import { customerRequestAgentResultSchema, customerRequestOptionsInputSchema } from '@/modules/customer-request/agent-contract'
-import { response } from '@/lib/server/no-store-response'
+import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
+import { handleCustomerRequestPostBoundary } from '@/lib/server/customer-request-route-action-api'
+import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
+import {
+  customerRequestAgentResultSchema,
+  customerRequestOptionsInputSchema,
+  type CustomerRequestAgentResult,
+} from '@/modules/customer-request/agent-contract'
 
-const bodySchema = customerRequestOptionsInputSchema
-const compareAction = sourceAction<Record<string, unknown>, CustomerOptionsProjection>('customerRequestApplication:compare')
-type HandlerOptions = Readonly<{ compare?: (args: Record<string, unknown>) => Promise<CustomerOptionsProjection> }>
+const compareAction = sourceAction<Record<string, unknown>, CustomerRequestProjection>('customerRequestApplication:compare')
+type HandlerOptions = Readonly<{ compare?: (args: Record<string, unknown>) => Promise<CustomerRequestProjection> }>
 
 export async function handleCustomerOptionsPost(request: Request, requestRef: string, options: HandlerOptions = {}): Promise<Response> {
-  if (requestRef.trim().length === 0 || requestRef.length > 200) return response({ error: 'invalid_request_ref' }, 400)
-  const bounded = await readBoundedRequestText(request, 4 * 1024)
-  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
-  let body: unknown
-  try { body = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
-  const parsed = bodySchema.safeParse(body)
-  if (!parsed.success) return response({ error: 'invalid_request' }, 400)
-  try {
-    const args = { requestRef, ...parsed.data }
-    const result = customerRequestAgentResultSchema.parse(
-      await (options.compare ?? (async (input) => await callSourceAction(compareAction, input)))(args),
-    )
-    if (result.kind === 'refused') return response(result, 401)
-    if (result.kind === 'conflict') return response(result, 409)
-    return response(result, result.state === 'preparing_options' ? 202 : 200)
-  } catch (error) {
-    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-    return response({ error: 'options_unavailable' }, 503)
-  }
+  return handleCustomerRequestPostBoundary({
+    request,
+    requestRef,
+    maxBodyBytes: 4 * 1024,
+    inputSchema: customerRequestOptionsInputSchema,
+    resultSchema: customerRequestAgentResultSchema,
+    run: options.compare ?? (async (args) => await callSourceAction(compareAction, args)),
+    unavailableError: 'options_unavailable',
+    resultToStatus: optionsResultStatus,
+  })
 }
 
+function optionsResultStatus(result: CustomerRequestAgentResult): number {
+  if (result.kind === 'refused') return 401
+  if (result.kind === 'conflict') return 409
+  return result.state === 'preparing_options' ? 202 : 200
+}

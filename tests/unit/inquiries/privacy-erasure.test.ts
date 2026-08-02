@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type {
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+} from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction, type GovernedActionEncoding } from '@/modules/governed-action/public'
 import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import { createEmptyInquirySourceState, submitInquiry } from '@/modules/inquiries/internal/ledger'
@@ -21,7 +25,7 @@ import type {
 const ownerId = brandNonEmpty('owner:privacy-erase', 'OwnerId')
 const claimId = brandNonEmpty('claim:privacy-erase', 'ClaimId')
 const businessId = brandNonEmpty('business:privacy-erase', 'BusinessId')
-const serviceId = brandNonEmpty('service:privacy-erase', 'ServiceId')
+const offeringRef = brandNonEmpty('offering:privacy-erase', 'OfferingRef')
 const now = 1_900_000_000_000
 const customerAccessKeyring = {
   keyId: 'test-inquiry-access-v1',
@@ -34,7 +38,7 @@ const governedSendIntegrityKeyring = {
     'test-governed-send-integrity-v1': 'test-governed-send-integrity-secret-0123456789abcdef',
   },
 } as const
-const target = { businessId, serviceId, capabilityKind: 'phone_inquiry' } as const
+const target = { businessId, offeringRef } as const
 
 describe('inquiry privacy erasure', () => {
   it('redacts message bodies, appends tombstone + erasure lineage, and preserves receipt evidence fields', () => {
@@ -160,12 +164,11 @@ function submitCommand(
   const { expectedDigest, ...commandOverrides } = overrides
   const command = {
     target,
-    body: 'Can a human owner contact me about this service?',
+    body: 'Can a human owner contact me about this offering?',
     contact: { email: 'customer@example.test' },
     operationKey: operationKey(key),
     correlationId: correlationId(key),
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: `ip:${key}`,
     now,
     ...commandOverrides,
     customerAccessKeyring: commandOverrides.customerAccessKeyring ?? customerAccessKeyring,
@@ -195,8 +198,9 @@ function encodeCommand(
 function sourceState(overrides: Partial<InquirySourceState> = {}): InquirySourceState {
   return createEmptyInquirySourceState({
     businesses: [business()],
-    businessServices: [service()],
-    serviceCapabilities: [capability()],
+    businessOfferings: [offering()],
+    businessOfferingRevisions: [offeringRevision()],
+    offeringAccessPaths: [inquiryAccessPath()],
     capabilityLaunchSupportRecords: [supportRecord()],
     suppressionRules: [],
     owners: [owner()],
@@ -219,7 +223,7 @@ function business(): BusinessRecord {
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
-    sourceHash: stableHash({ businessId: 'business:privacy-erase' }),
+    sourceHash: canonicalDigest({ businessId: 'business:privacy-erase' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -242,7 +246,7 @@ function claim(): ClaimRecord {
     businessId,
     slug: brandNonEmpty('privacy-erase', 'Slug'),
     status: 'published',
-    submittedFactsHash: stableHash({ claimId: 'claim:privacy-erase' }),
+    submittedFactsHash: canonicalDigest({ claimId: 'claim:privacy-erase' }),
     createdAt: now,
     updatedAt: now,
   }
@@ -256,39 +260,45 @@ function resolvableOwnerRecipient(): ResolvableOwnerRecipient {
   }
 }
 
-function service(): BusinessServiceRecord {
+function offering(): BusinessOfferingRecord {
   return {
-    serviceId,
-    serviceSlug: brandNonEmpty('privacy-erase', 'Slug'),
+    offeringRef,
     businessId,
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 1,
-    sourceHash: stableHash({ serviceId: 'service:privacy-erase' }),
     createdAt: now,
     updatedAt: now,
   }
 }
 
-function capability(): ServiceCapabilityRecord {
+function offeringRevision(): BusinessOfferingRevisionRecord {
   return {
+    offeringRef,
     businessId,
-    serviceId,
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-      rawContactExcluded: true,
+    revision: 1,
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Human triage for urgent plumbing issues.',
+    sourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    createdAt: now,
+  }
+}
+
+function inquiryAccessPath(): OfferingAccessPathRecord {
+  const sourceHash = canonicalDigest({ offeringRef: String(offeringRef), path: 'ae_inquiry' })
+  return {
+    accessPathRef: brandNonEmpty('access:privacy-erase:inquiry', 'AccessPathRef'),
+    businessId,
+    offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the source-owned inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry' }),
+    sourceHash,
     createdAt: now,
     updatedAt: now,
   }
@@ -316,7 +326,7 @@ function supportRecord(): CapabilityLaunchSupportRecord {
       },
     ],
     evidenceRefs: ['tests/unit/inquiries/privacy-erasure.test.ts'],
-    sourceHash: stableHash({ supportRecord: 'human_inquiry_owner_inbox' }),
+    sourceHash: canonicalDigest({ supportRecord: 'human_inquiry_owner_inbox' }),
     correlationId: correlationId('support-record'),
     lastReviewedAt: now + 1_000,
   }

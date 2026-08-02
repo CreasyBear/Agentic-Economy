@@ -32,7 +32,6 @@ export {
 } from './internal/follow-up-chips'
 export { classifyFollowUpIntent, buildThreadTitle } from './internal/follow-up-intent'
 export {
-  isDeterministicExactSearch,
   planAnswerTurn,
 } from './internal/answer-response-planner'
 export { formatTurnQueryLabel } from './internal/format-turn-query-label'
@@ -44,9 +43,8 @@ export {
 } from './internal/session-cookie'
 export { streamAnswerTurn } from './internal/turn-orchestrator'
 export {
-  checkAnswerFollowUpChipsRateLimit,
-  checkAnswerStreamRateLimit,
-  checkAnswerTurnRateLimit,
+  assertAnswerTurnAccess,
+  claimAnswerTurnIdempotency,
   readAnswerTurnAccessContext,
   type AnswerTurnAccessDecision,
 } from './internal/turn-guard'

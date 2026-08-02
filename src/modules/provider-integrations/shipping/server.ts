@@ -1,4 +1,6 @@
 import { createHmac } from 'node:crypto'
+import { base64Codec } from '@/modules/common/base64-codec'
+import { isRecord } from '@/modules/common/is-record'
 
 import type { ShippingQuoteInput } from './public'
 
@@ -76,12 +78,12 @@ export function createShippoQuoteAdapter(input: Readonly<{
         body: JSON.stringify(shippoShipment(quoteInput, input.carrierAccountId)),
       })
       if (response.kind !== 'ok') return { kind: 'refused', reason: providerReason('shippo_quote', response) }
-      const body = record(response.body)
+      const body = isRecord(response.body) ? response.body : undefined
       const rate = selectShippoRate(body?.rates, input.carrierAccountId, input.serviceLevelToken)
       const shipmentId = text(body?.object_id)
       const rateId = text(rate?.object_id)
       const downstreamCarrier = text(rate?.provider)
-      const serviceLevel = record(rate?.servicelevel)
+      const serviceLevel = isRecord(rate?.servicelevel) ? rate.servicelevel : undefined
       const serviceCode = text(serviceLevel?.token)
       const serviceName = text(serviceLevel?.name)
       const amountMinor = moneyMinor(rate?.amount)
@@ -128,7 +130,7 @@ export function createEasyPostQuoteAdapter(input: Readonly<{
   requireIdentifier(input.carrierAccountId, 'easypost_carrier_account_invalid')
   if (input.service !== undefined) requireIdentifier(input.service, 'easypost_service_invalid')
   const headers = {
-    Authorization: `Basic ${Buffer.from(`${input.apiKey}:`).toString('base64')}`,
+    Authorization: `Basic ${base64Codec.toBase64(new TextEncoder().encode(`${input.apiKey}:`))}`,
     'Content-Type': 'application/json', Accept: 'application/json',
   }
 
@@ -139,7 +141,7 @@ export function createEasyPostQuoteAdapter(input: Readonly<{
         body: JSON.stringify(easyPostShipment(quoteInput, input.carrierAccountId)),
       })
       if (response.kind !== 'ok') return { kind: 'refused', reason: providerReason('easypost_quote', response) }
-      const body = record(response.body)
+      const body = isRecord(response.body) ? response.body : undefined
       const rate = selectEasyPostRate(body?.rates, input.carrierAccountId, input.service)
       const shipmentId = text(body?.id)
       const rateId = text(rate?.id)
@@ -271,8 +273,8 @@ function providerQuote(input: Readonly<{
 }
 
 function issueProviderQuoteRef(material: Readonly<Record<string, string | number>>, signingKey: string): string {
-  const payload = Buffer.from(JSON.stringify(material)).toString('base64url')
-  const signature = createHmac('sha256', signingKey).update(payload).digest('base64url')
+  const payload = base64Codec.toBase64Url(new TextEncoder().encode(JSON.stringify(material)))
+  const signature = base64Codec.toBase64Url(createHmac('sha256', signingKey).update(payload).digest())
   return `ae-provider-quote:v2:${payload}:${signature}`
 }
 
@@ -326,14 +328,15 @@ async function readBoundedBody(response: Response, maximumBytes: number): Promis
 
 function selectShippoRate(value: unknown, carrierAccountId: string, serviceLevelToken?: string): Record<string, unknown> | undefined {
   if (!Array.isArray(value)) return undefined
-  return value.map(record).find((rate) => rate?.carrier_account === carrierAccountId
-    && (serviceLevelToken === undefined || record(rate.servicelevel)?.token === serviceLevelToken))
+  return value.filter(isRecord).find((rate) => rate.carrier_account === carrierAccountId
+    && (serviceLevelToken === undefined
+      || (isRecord(rate.servicelevel) && rate.servicelevel.token === serviceLevelToken)))
 }
 
 function selectEasyPostRate(value: unknown, carrierAccountId: string, service?: string): Record<string, unknown> | undefined {
   if (!Array.isArray(value)) return undefined
-  return value.map(record).find((rate) => rate?.carrier_account_id === carrierAccountId
-    && (service === undefined || rate?.service === service))
+  return value.filter(isRecord).find((rate) => rate.carrier_account_id === carrierAccountId
+    && (service === undefined || rate.service === service))
 }
 
 function compactDelivery(input: Readonly<{
@@ -350,9 +353,6 @@ function compactDelivery(input: Readonly<{
   })
 }
 
-function record(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
-}
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 500 ? value.trim() : undefined

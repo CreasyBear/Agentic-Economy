@@ -2,16 +2,13 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
+import { TrustTierValues } from '@/modules/business/public'
 import {
   BusinessOfferingStatusValues,
-  BusinessServiceStatusValues,
-  CapabilityKindValues,
   ExternalOperationProvenanceValues,
-  FirstRequestModeValues,
   HumanRequestChannelValues,
   OfferingAccessPathStatusValues,
-  PublicFirstRequestChannelValues,
-  ServiceCapabilityStatusValues,
+  PublicSupportReasonValues,
 } from '@/modules/catalog/public'
 
 import {
@@ -51,6 +48,60 @@ const externalOperationAccessPath = v.object({
   authenticationSummary: v.optional(v.string()),
   pricingSummary: v.optional(v.string()),
   provenance: literalUnion(ExternalOperationProvenanceValues),
+})
+const publicAccessPath = v.object({
+  accessPathRef: v.string(),
+  descriptor: v.union(humanRequestAccessPath, externalOperationAccessPath),
+})
+
+const offeringSupportProjection = v.object({
+  integrated: v.boolean(),
+  routeable: v.boolean(),
+  reasons: v.array(literalUnion(PublicSupportReasonValues)),
+  observedAt: v.optional(v.number()),
+  validUntil: v.optional(v.number()),
+})
+
+const businessOfferingProjection = v.object({
+  offeringRef: v.string(),
+  revision: v.number(),
+  name: v.string(),
+  category: v.string(),
+  summary: v.string(),
+  serviceAreaSummary: v.optional(v.string()),
+  availabilitySummary: v.optional(v.string()),
+  pricingSummary: v.optional(v.string()),
+  price: v.optional(offeringPrice),
+})
+
+const publicOfferingSupplyProjection = v.object({
+  offering: businessOfferingProjection,
+  accessPaths: v.array(publicAccessPath),
+  support: offeringSupportProjection,
+})
+
+const publicBusinessProfile = v.object({
+  businessId: v.id('businesses'),
+  slug: v.string(),
+  name: v.string(),
+  category: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  publishedPhone: v.optional(v.string()),
+  postcode: v.optional(v.string()),
+  publicUrl: v.string(),
+  trustTier: literalUnion(TrustTierValues),
+  responseTimeMinutes: v.optional(v.number()),
+  photos: v.optional(v.array(v.object({ url: v.string(), alt: v.string() }))),
+})
+
+export const businessSupplyProjection = v.object({
+  business: publicBusinessProfile,
+  offerings: v.array(publicOfferingSupplyProjection),
+  sourceRevision: v.number(),
+  sourceDigest: v.string(),
+  observedAt: v.number(),
+  disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
 })
 
 export const catalogTables = {
@@ -99,42 +150,6 @@ export const catalogTables = {
     .index('by_offeringRef_and_offeringRevision', ['offeringRef', 'offeringRevision'])
     .index('by_businessId_and_status', ['businessId', 'status']),
 
-  legacyOfferingCrosswalks: defineTable({
-    businessId: v.id('businesses'),
-    serviceId: v.id('businessServices'),
-    serviceSourceHash: v.string(),
-    offeringRef: v.string(),
-    offeringRevision: v.number(),
-    offeringSourceHash: v.string(),
-    accessPathRefs: v.array(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_serviceId', ['serviceId'])
-    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef']),
-
-  catalogSupplyCutovers: defineTable({
-    businessId: v.id('businesses'),
-    mode: v.union(v.literal('legacy'), v.literal('compare'), v.literal('offering')),
-    expectedProjectionDigest: v.optional(v.string()),
-    latestProjectionDigest: v.optional(v.string()),
-    lastCheckStatus: v.union(v.literal('not_run'), v.literal('matched'), v.literal('mismatch')),
-    postCutoverNativeChanges: v.boolean(),
-    updatedAt: v.number(),
-  }).index('by_businessId', ['businessId']),
-
-  catalogProjectionChecks: defineTable({
-    businessId: v.id('businesses'),
-    checkRef: v.string(),
-    mode: v.union(v.literal('legacy'), v.literal('compare'), v.literal('offering')),
-    expectedDigest: v.string(),
-    observedDigest: v.string(),
-    status: v.union(v.literal('matched'), v.literal('mismatch')),
-    errorCode: v.optional(v.string()),
-    observedAt: v.number(),
-  })
-    .index('by_checkRef', ['checkRef'])
-    .index('by_businessId_and_observedAt', ['businessId', 'observedAt']),
 
   businessSupplyProjectionSnapshots: defineTable({
     businessId: v.id('businesses'),
@@ -142,45 +157,10 @@ export const catalogTables = {
     sourceDigest: v.string(),
     observedAt: v.number(),
     disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
-    projectionJson: v.string(),
+    projection: businessSupplyProjection,
     status: v.union(v.literal('current'), v.literal('projection_pending')),
     lastErrorCode: v.optional(v.string()),
     updatedAt: v.number(),
   }).index('by_businessId', ['businessId']),
 
-  businessServices: defineTable({
-    businessId: v.id('businesses'),
-    serviceSlug: v.string(),
-    name: v.string(),
-    category: v.string(),
-    summary: v.string(),
-    serviceArea: v.string(),
-    hoursOrUnknown: v.string(),
-    status: literalUnion(BusinessServiceStatusValues),
-    sortOrder: v.number(),
-    sourceHash: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_business_status', ['businessId', 'status'])
-    .index('by_slug_serviceSlug', ['serviceSlug', 'businessId']),
-
-  serviceCapabilities: defineTable({
-    businessId: v.id('businesses'),
-    serviceId: v.id('businessServices'),
-    kind: literalUnion(CapabilityKindValues),
-    status: literalUnion(ServiceCapabilityStatusValues),
-    firstRequestMode: literalUnion(FirstRequestModeValues),
-    publicDisclosure: v.string(),
-    publicChannel: literalUnion(PublicFirstRequestChannelValues),
-    noContactReason: v.optional(v.string()),
-    callable: v.boolean(),
-    paymentRequired: v.boolean(),
-    reason: v.optional(v.string()),
-    sourceHash: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_business_service_status', ['businessId', 'serviceId', 'status'])
-    .index('by_business_service_kind', ['businessId', 'serviceId', 'kind']),
 } as const

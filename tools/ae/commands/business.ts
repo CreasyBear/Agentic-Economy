@@ -1,5 +1,6 @@
 import type { CliOptions } from '../lib/args'
-import { CliFailure, callJson, heading, isRecord, line, printJson, requireOk, table } from '../lib/output'
+import { isRecord } from '@/modules/common/is-record'
+import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 
 export async function runBusinessCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const slug = args[0]?.trim()

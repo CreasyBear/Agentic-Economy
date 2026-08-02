@@ -14,7 +14,7 @@ import {
 
 export const ANSWER_SEARCH_PROVIDER_LIMIT = 3
 
-export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'error'
+export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'unsupported' | 'error'
 
 export type AnswerProviderBudget = {
   searchLimit: number
@@ -82,6 +82,10 @@ const RESPONSE_MODE_BUDGETS = {
     providerBudget: { searchLimit: 0, visibleLimit: 0 },
     layoutProfile: 'boundary_explain',
   },
+  unsupported: {
+    providerBudget: { searchLimit: 0, visibleLimit: 0 },
+    layoutProfile: 'boundary_explain',
+  },
   error: {
     providerBudget: { searchLimit: 0, visibleLimit: 0 },
     layoutProfile: 'boundary_explain',
@@ -110,13 +114,16 @@ export function planAnswerTurn(input: {
   const requestedLocation = extractAnswerRequestedLocation(query)
   const contextLocation = aeSearchContextLocationQuery(input.searchContext)
   const hasUsableLocation = requestedLocation !== undefined || contextLocation !== undefined
+  const isVagueHelpRequest = /^(?:can\s+you\s+)?help\s+me[.!?]?$|^i\s+need\s+(?:a\s+)?service[.!?]?$|^(?:i\s+)?need\s+help[.!?]?$/i.test(query)
 
   if (!serviceSignal && (
     isBroadLocalBrowseQuery(query)
     || isLocatorOnlyBrowseQuery(query)
-    || /^(?:can\s+you\s+)?help\s+me[.!?]?$|^i\s+need\s+(?:a\s+)?service[.!?]?$|^(?:i\s+)?need\s+help[.!?]?$/i.test(query)
+    || isVagueHelpRequest
   )) {
-    const locationLabel = requestedLocation ?? aeSearchContextLocationLabel(input.searchContext)
+    const locationLabel = isVagueHelpRequest
+      ? aeSearchContextLocationLabel(input.searchContext)
+      : requestedLocation ?? aeSearchContextLocationLabel(input.searchContext)
     return buildClarifyResponsePlan({
       reason: 'missing_service',
       snapshot: buildClarificationSnapshot({
@@ -172,17 +179,6 @@ export function hasAnswerServiceSignal(query: string): boolean {
   return /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|photographer|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i.test(query)
 }
 
-export function isDeterministicExactSearch(input: {
-  query: string
-  priorTurnsCount: number
-  searchContext: AeSearchContext | undefined
-}, responsePlan: AnswerResponsePlan): boolean {
-  if (responsePlan.mode !== 'answer' || input.priorTurnsCount !== 0 || !hasAnswerServiceSignal(input.query)) {
-    return false
-  }
-  return extractAnswerRequestedLocation(input.query) !== undefined
-    || aeSearchContextLocationQuery(input.searchContext) !== undefined
-}
 
 function buildClarificationSnapshot(input: {
   query: string
@@ -190,13 +186,17 @@ function buildClarificationSnapshot(input: {
   locationLabel?: string
 }): AnswerSnapshot {
   if (input.reason === 'missing_service') {
-    const place = input.locationLabel === undefined ? 'your area' : input.locationLabel
+    const place = input.locationLabel
     return {
       query: input.query,
-      oneLine: 'What do you need help with?',
+      oneLine: place === undefined ? 'What do you need help with?' : `What kind of service do you need in ${place}?`,
       providers: [],
-      summary: 'Tell me the service or task you want to get done, and I’ll search listed businesses.',
-      nextStep: `Reply with the service or task; I’ll keep ${place} in the search.`,
+      summary: place === undefined
+        ? 'Tell me the service or task you want to get done, and I’ll search listed businesses.'
+        : `I can search listed businesses in ${place} once I know the service type.`,
+      nextStep: place === undefined
+        ? 'Reply with the service or task; I’ll search your area.'
+        : `Reply with the service you need; I’ll keep the service and place (${place}) together in the search.`,
       agentJsonUrl: buildAgentJsonUrl(input.query, ANSWER_SEARCH_PROVIDER_LIMIT),
       layoutProfile: 'clarification',
     }

@@ -1,16 +1,9 @@
 import type { RouteAttemptState } from './export-state'
-import {
-  routeAttemptIntegrityValid,
-  routeDispatchIntegrityValid,
-  type RouteAttemptIntegritySnapshot,
-  type RouteDispatchIntegritySnapshot,
-} from './integrity'
 
 export type CancelMode = 'current_and_downstream' | 'after_current_step'
 
 export type CancelOutboxState =
   | 'pending'
-  | 'leased'
   | 'delivered'
   | 'failed'
   | 'cancelled'
@@ -20,7 +13,6 @@ export type CancelDisposition = 'cancelled' | 'pending' | 'too_late'
 
 export type CancelReplayKind = 'replayed' | 'pending' | 'too_late'
 
-export type RecoverExpiredDispatchKind = 'requeued' | 'outcome_unknown' | 'unchanged'
 
 export type SucceededOutcomeBranch =
   | 'pending_cancellation_replay'
@@ -102,8 +94,7 @@ export function canPreReleaseCancel(input: Readonly<{
   attemptState: RouteAttemptState
   outboxState: CancelOutboxState
 }>): boolean {
-  return (input.attemptState === 'queued' || input.attemptState === 'leased')
-    && (input.outboxState === 'pending' || input.outboxState === 'leased')
+  return input.attemptState === 'queued' && input.outboxState === 'pending'
 }
 
 export function canRequestAdapterCancellation(input: Readonly<{
@@ -129,66 +120,3 @@ export function cancelDisposition(input: Readonly<{
       : 'too_late'
 }
 
-export function leaseArgsInvalid(args: Readonly<{
-  workerId: string
-  leaseDurationMs: number
-}>): boolean {
-  return args.workerId.trim().length === 0
-    || !Number.isSafeInteger(args.leaseDurationMs)
-    || args.leaseDurationMs < 1_000
-    || args.leaseDurationMs > 60_000
-}
-
-export function leasePendingCandidateValid(input: Readonly<{
-  attempt: (RouteAttemptIntegritySnapshot & Readonly<{
-    state: RouteAttemptState
-  }>) | null
-  dispatch: RouteDispatchIntegritySnapshot & Readonly<{
-    runRef: string
-    operationKeyDigest: string
-  }>
-}>): boolean {
-  const { attempt, dispatch } = input
-  return attempt !== null
-    && routeDispatchIntegrityValid(dispatch)
-    && routeAttemptIntegrityValid(attempt)
-    && attempt.runRef === dispatch.runRef
-    && attempt.state === 'queued'
-    && attempt.operationKeyDigest === dispatch.operationKeyDigest
-}
-
-export function leaseGrantExpired(expiresAt: number, now: number): boolean {
-  return expiresAt <= now
-}
-
-export function recoverDispatchLeaseStillCurrent(
-  dispatch: Readonly<{ leaseExpiresAt?: number }> | null,
-  now: number,
-): boolean {
-  return dispatch === null
-    || dispatch.leaseExpiresAt === undefined
-    || dispatch.leaseExpiresAt > now
-}
-
-export function recoverDispatchAttemptAligned(input: Readonly<{
-  attempt: Readonly<{ runRef: string; operationKeyDigest: string }> | null
-  dispatch: Readonly<{ runRef: string; operationKeyDigest: string }>
-}>): boolean {
-  return input.attempt !== null
-    && input.attempt.runRef === input.dispatch.runRef
-    && input.attempt.operationKeyDigest === input.dispatch.operationKeyDigest
-}
-
-export function recoverExpiredDispatchKind(input: Readonly<{
-  dispatchState: CancelOutboxState
-  attemptState: RouteAttemptState
-}>): RecoverExpiredDispatchKind {
-  if (input.dispatchState === 'leased' && input.attemptState === 'leased') {
-    return 'requeued'
-  }
-  if (input.dispatchState === 'delivered'
-    && (input.attemptState === 'dispatched' || input.attemptState === 'accepted')) {
-    return 'outcome_unknown'
-  }
-  return 'unchanged'
-}

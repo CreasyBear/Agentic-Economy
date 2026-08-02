@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const portsSource = readFileSync('convex/capabilitySupplyPublicationPorts.ts', 'utf8')
@@ -47,9 +48,10 @@ describe('capability-supply publication-commands thinness', () => {
     expect(withdrawBody).not.toContain('capability_publication_supply_integrity_failure')
   })
 
-  it('wires publication ports adapter for writers, ledger, and readiness probe', () => {
-    expect(portsSource).toContain('capabilitySupplyOperationPorts')
-    expect(portsSource).toContain('registerCapabilityContractDocument')
+  it('wires capabilitySupplyPublicationPorts adapter for writers, ledger, and readiness probe', () => {
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
+    expect(portsSource).toContain('capabilitySupplyPublicationPorts')
     expect(portsSource).toContain('scheduleReadinessProbe')
     expect(portsSource).toContain('capabilitySupplyReadiness.probe')
     expect(portsSource).toContain('insertPublication')
@@ -97,14 +99,4 @@ describe('capability-supply publication-commands thinness', () => {
   })
 })
 
-function listTsFiles(directory: string): string[] {
-  const entries = readdirSync(directory)
-  const files: string[] = []
-  for (const entry of entries) {
-    const path = join(directory, entry)
-    const stats = statSync(path)
-    if (stats.isDirectory()) files.push(...listTsFiles(path))
-    else if (entry.endsWith('.ts')) files.push(path)
-  }
-  return files
-}
+

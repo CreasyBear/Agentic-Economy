@@ -7,11 +7,10 @@ import {
   SearchIcon,
   StoreIcon,
 } from 'lucide-react'
-import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -74,14 +73,10 @@ const moments = [
 
 function PrivacyRoute() {
   const location = useLocation()
-  const [selectedMoment, setSelectedMoment] = useState('contact')
 
   if (location.pathname !== '/privacy') {
     return <Outlet />
   }
-
-  const moment = moments.find((item) => item.value === selectedMoment) ?? moments[0]
-  const Icon = moment.icon
 
   return (
     <AePublicShell>
@@ -112,22 +107,26 @@ function PrivacyRoute() {
             </h2>
           </div>
           <div className="grid gap-3">
-            <Tabs value={selectedMoment} onValueChange={setSelectedMoment}>
+            <Tabs defaultValue="contact">
               <TabsList aria-label="Privacy moments" className="w-full">
                 {moments.map(({ value, label }) => (
                   <TabsTrigger key={value} value={value} className="flex-1">{label}</TabsTrigger>
                 ))}
               </TabsList>
-              <Card className="grid gap-4 p-5">
-                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                  <Icon className="size-4 text-foreground" aria-hidden="true" /> {moment.title}
-                </p>
-                <ul className="grid gap-3 text-sm leading-6 text-muted-foreground">
-                  {moment.points.map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
-                </ul>
-              </Card>
+              {moments.map(({ value, icon: Icon, title, points }) => (
+                <TabsContent key={value} value={value}>
+                  <Card className="grid gap-4 p-5">
+                    <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                      <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
+                    </p>
+                    <ul className="grid gap-3 text-sm leading-6 text-muted-foreground">
+                      {points.map((point) => (
+                        <li key={point}>{point}</li>
+                      ))}
+                    </ul>
+                  </Card>
+                </TabsContent>
+              ))}
             </Tabs>
           </div>
         </section>

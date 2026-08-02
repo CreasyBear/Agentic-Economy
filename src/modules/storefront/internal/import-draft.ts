@@ -1,3 +1,4 @@
+import sindreSlugify from '@sindresorhus/slugify'
 import { Agent } from 'undici'
 
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget, type DnsResolver } from '@/modules/network-guard/public'
@@ -109,14 +110,13 @@ export async function importStorefrontDraftFromWebsite(
       }
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), timeoutMs)
       const requestInit: StorefrontImportFetchInit = {
         headers: {
           Accept: 'text/html,application/xhtml+xml',
           'User-Agent': 'AgenticEconomyStorefrontImporter/0.1',
         },
         redirect: 'manual',
-        signal: controller.signal,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(timeoutMs)]),
       }
       if (dispatcher !== undefined) {
         requestInit.dispatcher = dispatcher
@@ -125,29 +125,24 @@ export async function importStorefrontDraftFromWebsite(
       response = await fetchImpl(currentUrl, requestInit)
 
       if (response.status < 300 || response.status >= 400) {
-        try {
-          if (!response.ok) {
-            return {
-              kind: 'error',
-              code: 'storefront_import_fetch_failed',
-              retryable: response.status >= 500,
-              reason: 'The website did not return a readable page.',
-            }
+        if (!response.ok) {
+          return {
+            kind: 'error',
+            code: 'storefront_import_fetch_failed',
+            retryable: response.status >= 500,
+            reason: 'The website did not return a readable page.',
           }
-
-          if (!isHtmlResponse(response)) {
-            return fetchFailed(false)
-          }
-
-          const html = await readResponseTextWithCap(response, maxResponseBytes, controller)
-          const abn = cleanOptionalText(input.abn)
-          return extractStorefrontDraftFromHtml(abn === undefined ? { websiteUrl: currentUrl.toString(), html } : { websiteUrl: currentUrl.toString(), abn, html })
-        } finally {
-          clearTimeout(timeout)
         }
+
+        if (!isHtmlResponse(response)) {
+          return fetchFailed(false)
+        }
+
+        const html = await readResponseTextWithCap(response, maxResponseBytes, controller)
+        const abn = cleanOptionalText(input.abn)
+        return extractStorefrontDraftFromHtml(abn === undefined ? { websiteUrl: currentUrl.toString(), html } : { websiteUrl: currentUrl.toString(), abn, html })
       }
 
-      clearTimeout(timeout)
       const location = response.headers.get('location')
       if (location === null || redirectsFollowed >= maxRedirects) {
         return fetchFailed(false)
@@ -246,7 +241,7 @@ export function extractStorefrontDraftFromHtml(input: StorefrontImportInput & { 
     category,
     suburb: '',
     stateTerritory: '',
-    requestedSlug: slugify(businessName),
+    requestedSlug: normalizeStorefrontSlug(businessName),
     publishedPhone: '',
     ownerMessage: 'Draft imported from the business website for owner review before publication.',
     sourceLabel,
@@ -484,14 +479,9 @@ function readContactHint(text: string): string | undefined {
     : 'A phone contact detail was observed on the source website. Confirm what should appear before publishing.'
 }
 
-function slugify(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replaceAll(/[\u0300-\u036f]/gu, '')
-    .replaceAll(/[^a-z0-9]+/gu, '-')
-    .replaceAll(/^-+|-+$/gu, '')
-    .slice(0, 80)
+/** Storefront drafts delegate to the shared library, then apply an 80-character cap, trailing-dash removal, and business fallback. */
+export function normalizeStorefrontSlug(value: string): string {
+  const slug = sindreSlugify(value).slice(0, 80).replace(/-+$/, '')
   return slug.length === 0 ? 'business' : slug
 }
 

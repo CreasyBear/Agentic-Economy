@@ -220,7 +220,7 @@ export function createInMemoryActionInvocationTracer<
       now: options.now,
       ...(options.developmentReleaseSignal === undefined
         ? {}
-        : { legacyReleaseSignal: options.developmentReleaseSignal }),
+        : { developmentReleaseSignal: options.developmentReleaseSignal }),
       ...(options.developmentTimeoutSignal === undefined
         ? {}
         : { timeoutSignal: options.developmentTimeoutSignal }),

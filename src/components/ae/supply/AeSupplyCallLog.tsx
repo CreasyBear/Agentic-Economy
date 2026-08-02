@@ -1,6 +1,7 @@
 import type { SupplyCallLogRow } from '@/modules/capability-supply/supply-funnel.functions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { formatTimestamp } from '@/lib/ui/format-time'
 
 export function AeSupplyCallLog({ events }: Readonly<{ events: readonly SupplyCallLogRow[] }>) {
   return (
@@ -24,7 +25,7 @@ export function AeSupplyCallLog({ events }: Readonly<{ events: readonly SupplyCa
             {events.map((event) => (
               <li key={event.eventRef} className="grid gap-1 rounded-md border border-border p-3">
                 <p className="block font-semibold text-foreground">{event.outcome === 'filled' ? 'Response received' : humanZeroReason(event.zeroReason)}</p>
-                <p className="block text-sm text-muted-foreground">{new Date(event.observedAt).toLocaleString()} · {event.environment === 'production' ? 'Live service' : event.environment === 'sandbox' ? 'Sandbox test' : 'Development test'} {event.durationMs === undefined ? '' : `· ${event.durationMs} ms`}</p>
+                <p className="block text-sm text-muted-foreground">{formatTimestamp(event.observedAt)} · {event.environment === 'production' ? 'Live service' : event.environment === 'sandbox' ? 'Sandbox test' : 'Development test'} {event.durationMs === undefined ? '' : `· ${event.durationMs} ms`}</p>
               </li>
             ))}
           </ul>

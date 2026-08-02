@@ -1,6 +1,5 @@
+import { isRecord } from '@/modules/common/is-record'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
-
-const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' })
 
 export function activityResponsibility(
   actor: NonNullable<CustomerRequestView['activity']>['actor'],
@@ -15,8 +14,6 @@ export function activityResponsibility(
   return 'AE is handling the next step'
 }
 
-export function formatMoney(currency: string, amountMinor: number): string { return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amountMinor / 100) }
-export function formatOptionTime(timestamp: number): string { return optionTimeFormatter.format(timestamp) }
 export function readableLabel(value: string): string {
   const words = value.replace(/[_-]+/gu, ' ').trim()
   return words.length === 0 ? value : `${words[0]?.toUpperCase() ?? ''}${words.slice(1)}`
@@ -46,7 +43,7 @@ export function uncertaintyLabel(
 }
 export function readableResult(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+  if (isRecord(value)) {
     if ('kind' in value && value.kind === 'partial_result' && 'output' in value) {
       return readableResult(value.output)
     }
@@ -56,6 +53,5 @@ export function readableResult(value: unknown): string {
   return 'Evidence is available for this result.'
 }
 export function isPartialResult(value: unknown): boolean {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    && 'kind' in value && value.kind === 'partial_result' && 'output' in value
+  return isRecord(value) && value.kind === 'partial_result' && 'output' in value
 }

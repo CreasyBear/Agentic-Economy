@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertCsrf, rateLimitClaim } from '@/modules/security/public'
-import type { AbuseRateLimitBucketRecord } from '@/modules/security/public'
+import { assertCsrf } from '@/modules/security/public'
 
 describe('CSRF and rate limit controls', () => {
   it('accepts matching CSRF token/cookie and same-site origin', () => {
@@ -32,23 +31,4 @@ describe('CSRF and rate limit controls', () => {
     })
   })
 
-  it('updates source-owned claim rate-limit buckets', () => {
-    const buckets: AbuseRateLimitBucketRecord[] = []
-    const first = rateLimitClaim(buckets, rateLimit())
-
-    expect(first).toMatchObject({ kind: 'accepted', bucket: { count: 1, state: 'open' } })
-    const second = rateLimitClaim(buckets, rateLimit())
-
-    expect(second).toMatchObject({ kind: 'limited', bucket: { count: 1, state: 'limited' } })
-  })
 })
-
-function rateLimit() {
-  return {
-    scope: 'claim_submit' as const,
-    key: 'actor:1',
-    now: 1_000,
-    limit: 1,
-    windowMs: 60_000,
-  }
-}

@@ -22,3 +22,12 @@ export const base64Codec = {
     return this.fromBase64(`${padded}${pad}`)
   },
 } as const
+
+export function tryDecodeBase64Url(value: string): Uint8Array<ArrayBuffer> | undefined {
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) return undefined
+  try {
+    return base64Codec.fromBase64Url(value)
+  } catch {
+    return undefined
+  }
+}

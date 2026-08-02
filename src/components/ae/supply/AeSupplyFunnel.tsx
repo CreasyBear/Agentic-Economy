@@ -10,6 +10,7 @@ import type { PricingConfig } from '@/modules/money/public'
 import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import type { SupplyFunnelDraft, SupplyFunnelRefusal, SupplyFunnelStep, SupplyFunnelStepCompletion, SupplyFunnelStepState } from '@/modules/capability-supply/supply-funnel.functions'
 import { defaultSupplyPricingConfig } from '@/modules/capability-supply/public'
+import { isRecord } from '@/modules/common/is-record'
 import { AeSupplyEndpointConfigStep, type SupplyEndpointConfigValue } from './AeSupplyEndpointConfigStep'
 
 export const OWNER_SUPPLY_DRAFT_STORAGE_KEY = 'ae.supplyFunnelDraft.v1'
@@ -232,9 +233,6 @@ function isDraft(value: unknown): value is SupplyFunnelDraft {
   return value.version === 'supply-funnel:v1' && typeof value.businessId === 'string' && Array.isArray(value.completedSteps) && typeof value.states === 'object' && value.states !== null
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
 
 export function refusalMessage(refusal: SupplyFunnelRefusal): string {
   switch (refusal) {

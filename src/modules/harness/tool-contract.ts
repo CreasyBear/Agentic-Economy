@@ -7,7 +7,8 @@ import type {
   ActionSurface,
   AnyAction,
 } from '@/modules/common/action'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
 
 import type {
@@ -240,7 +241,7 @@ export function buildHarnessToolSchemaBundle<Input, Output>(input: {
     ...strictViolationDiagnostics('input', inputJsonSchema),
     ...strictViolationDiagnostics('output', outputJsonSchema),
   ]
-  const descriptorHash = stableHash({
+  const descriptorHash = canonicalDigest({
     toolId: input.id,
     inputJsonSchema: stableJsonValue(inputJsonSchema),
     outputJsonSchema: stableJsonValue(outputJsonSchema),

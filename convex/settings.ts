@@ -1,8 +1,9 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import type { Auth } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
-import { runtimeDb, type RuntimeAuth, type RuntimeDb, type RuntimeDocument } from './source_state'
+import type { Doc, Id } from './_generated/dataModel'
+import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 
 const ownerNotificationPreferences = v.object({
   newInquiryEmailEnabled: v.boolean(),
@@ -42,16 +43,16 @@ const ownerNotificationPreferencesMutationResult = v.union(
   }),
 )
 
-type RuntimeCtx = {
-  db: object
-  auth: RuntimeAuth
+type SettingsCtx = {
+  db: QueryCtx['db'] | MutationCtx['db']
+  auth: Auth
 }
 
 type CurrentOwnerResult =
-  | { kind: 'allowed'; ownerId: string }
+  | { kind: 'allowed'; ownerId: Id<'owners'> }
   | { kind: 'denied'; reason: 'missing_auth' | 'owner_not_found' }
 
-export const readCurrentOwnerNotificationPreferences = queryGeneric({
+export const readCurrentOwnerNotificationPreferences = query({
   args: {},
   returns: ownerNotificationPreferencesReadResult,
   handler: async (ctx) => {
@@ -60,7 +61,10 @@ export const readCurrentOwnerNotificationPreferences = queryGeneric({
       return ownerSettingsError(owner.reason)
     }
 
-    const preferences = await readPreferencesDocument(runtimeDb(ctx.db), owner.ownerId)
+    const preferences: Doc<'ownerNotificationPreferences'> | null = await ctx.db
+      .query('ownerNotificationPreferences')
+      .withIndex('by_ownerId', (query) => query.eq('ownerId', owner.ownerId))
+      .unique()
     return {
       kind: 'ok' as const,
       code: 'owner_notification_preferences_read' as const,
@@ -68,14 +72,14 @@ export const readCurrentOwnerNotificationPreferences = queryGeneric({
       preferences: preferences === null
         ? { newInquiryEmailEnabled: true }
         : {
-            newInquiryEmailEnabled: booleanField(preferences, 'newInquiryEmailEnabled'),
-            updatedAt: numberField(preferences, 'updatedAt'),
+            newInquiryEmailEnabled: preferences.newInquiryEmailEnabled,
+            updatedAt: preferences.updatedAt,
           },
     }
   },
 })
 
-export const setCurrentOwnerNotificationPreferences = mutationGeneric({
+export const setCurrentOwnerNotificationPreferences = mutation({
   args: {
     newInquiryEmailEnabled: v.boolean(),
   },
@@ -86,18 +90,20 @@ export const setCurrentOwnerNotificationPreferences = mutationGeneric({
       return ownerSettingsError(owner.reason)
     }
 
-    const db = runtimeDb(ctx.db)
     const now = Date.now()
-    const existing = await readPreferencesDocument(db, owner.ownerId)
+    const existing: Doc<'ownerNotificationPreferences'> | null = await ctx.db
+      .query('ownerNotificationPreferences')
+      .withIndex('by_ownerId', (query) => query.eq('ownerId', owner.ownerId))
+      .unique()
     if (existing === null) {
-      await db.insert('ownerNotificationPreferences', {
+      await ctx.db.insert('ownerNotificationPreferences', {
         ownerId: owner.ownerId,
         newInquiryEmailEnabled: args.newInquiryEmailEnabled,
         createdAt: now,
         updatedAt: now,
       })
     } else {
-      await db.patch(existing._id, {
+      await ctx.db.patch(existing._id, {
         newInquiryEmailEnabled: args.newInquiryEmailEnabled,
         updatedAt: now,
       })
@@ -116,13 +122,13 @@ export const setCurrentOwnerNotificationPreferences = mutationGeneric({
 })
 
 
-async function readCurrentOwner(ctx: RuntimeCtx): Promise<CurrentOwnerResult> {
+async function readCurrentOwner(ctx: SettingsCtx): Promise<CurrentOwnerResult> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') {
     return { kind: 'denied', reason: 'missing_auth' }
   }
 
-  const owner = await runtimeDb(ctx.db)
+  const owner = await ctx.db
     .query('owners')
     .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
     .unique()
@@ -130,12 +136,6 @@ async function readCurrentOwner(ctx: RuntimeCtx): Promise<CurrentOwnerResult> {
   return owner === null ? { kind: 'denied', reason: 'owner_not_found' } : { kind: 'allowed', ownerId: owner._id }
 }
 
-async function readPreferencesDocument(db: RuntimeDb, ownerId: string): Promise<RuntimeDocument | null> {
-  return db
-    .query('ownerNotificationPreferences')
-    .withIndex('by_ownerId', (query) => query.eq('ownerId', ownerId))
-    .unique()
-}
 
 
 function ownerSettingsError(reason: 'missing_auth' | 'owner_not_found') {
@@ -147,12 +147,4 @@ function ownerSettingsError(reason: 'missing_auth' | 'owner_not_found') {
   }
 }
 
-function booleanField(document: RuntimeDocument, field: string): boolean {
-  return document[field] === true
-}
-
-function numberField(document: RuntimeDocument, field: string): number {
-  const value = document[field]
-  return typeof value === 'number' ? value : 0
-}
 

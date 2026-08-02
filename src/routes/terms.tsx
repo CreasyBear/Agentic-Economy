@@ -8,11 +8,10 @@ import {
   SendIcon,
   StoreIcon,
 } from 'lucide-react'
-import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -116,32 +115,24 @@ function TermsRoute() {
 }
 
 function TermsAccordion() {
-  const [openItem, setOpenItem] = useState<string>(termsItems[0]?.title ?? '')
-
   return (
-    <div className="grid gap-2">
-      {termsItems.map(({ icon: Icon, title, body }) => {
-        const isOpen = openItem === title
-
-        return (
-          <Collapsible
-            key={title}
-            className="rounded-sm border bg-card"
-            open={isOpen}
-            onOpenChange={(nextOpen) => setOpenItem(nextOpen ? title : '')}
-          >
-            <CollapsibleTrigger asChild>
-              <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 text-left">
-                <Icon className="size-4 shrink-0 text-foreground" aria-hidden="true" />
-                <span className="text-lg font-medium text-foreground">{title}</span>
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <p className="block px-4 pb-4 pl-11 text-muted-foreground">{body}</p>
-            </CollapsibleContent>
-          </Collapsible>
-        )
-      })}
-    </div>
+    <Accordion
+      type="single"
+      collapsible
+      defaultValue={termsItems[0]?.title ?? ''}
+      className="grid gap-2"
+    >
+      {termsItems.map(({ icon: Icon, title, body }) => (
+        <AccordionItem key={title} value={title} className="rounded-sm border bg-card">
+          <AccordionTrigger className="flex min-h-12 w-full items-center justify-start gap-3 px-4 py-0 text-left hover:no-underline [&>svg:last-child]:hidden [&[data-state=open]>svg]:rotate-0">
+            <Icon className="size-4 shrink-0 text-foreground" aria-hidden="true" />
+            <span className="text-lg font-medium text-foreground">{title}</span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-0">
+            <p className="block px-4 pb-4 pl-11 text-muted-foreground">{body}</p>
+          </AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
   )
 }

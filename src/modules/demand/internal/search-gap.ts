@@ -1,7 +1,5 @@
-import type {
-  PublicBusinessCatalogApiDto,
-  PublicBusinessCatalogApiV2Dto,
-} from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 
 export const SearchGapFactValues = [
   'price',
@@ -22,13 +20,13 @@ export const SearchGapSurfaceValues = [
 
 export type SearchGapSurface = (typeof SearchGapSurfaceValues)[number]
 
-export const FactObservationValues = [
+const factObservationValues = [
   'present',
   'absent',
   'unobservable',
 ] as const
 
-export type FactObservation = (typeof FactObservationValues)[number]
+export type FactObservation = (typeof factObservationValues)[number]
 
 export type SearchGapCandidate = Readonly<{
   slug: string
@@ -84,7 +82,7 @@ export function mergeFactCounts(
 export function rankFactCounts(
   counts: readonly SearchGapFactCount[],
 ): SearchGapFactCount[] {
-  return [...counts].sort((left, right) =>
+  return counts.toSorted((left, right) =>
     right.searches - left.searches
     || SearchGapFactValues.indexOf(left.fact) - SearchGapFactValues.indexOf(right.fact))
 }
@@ -95,14 +93,7 @@ const isNonEmpty = (value: string | undefined): boolean =>
 const observe = (present: boolean): FactObservation => present ? 'present' : 'absent'
 
 export function detectRequiredFacts(queryText: string): readonly SearchGapFact[] {
-  const tokens = new Set(
-    queryText
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean),
-  )
+  const tokens = new Set(normalizeSearchText(queryText).split(' ').filter(Boolean))
   const required = new Set<SearchGapFact>(['service_detail'])
 
   for (const fact of SearchGapFactValues) {
@@ -160,25 +151,4 @@ export function toSearchGapCandidateV2(
   }
 }
 
-export function toSearchGapCandidateV1(
-  dto: PublicBusinessCatalogApiDto,
-): SearchGapCandidate {
-  return {
-    slug: dto.slug,
-    facts: {
-      price: 'unobservable',
-      availability: observe(dto.services.some((service) => {
-        const value = service.hoursOrUnknown.trim()
-        return value.length > 0 && value !== 'Hours supplied by owner'
-      })),
-      location: observe(isNonEmpty(dto.suburb) && isNonEmpty(dto.stateTerritory)),
-      contact: observe(
-        isNonEmpty(dto.publishedPhone)
-        || dto.services.some(
-          (service) => service.firstRequest.publicChannel === 'public_business_contact',
-        ),
-      ),
-      service_detail: observe(dto.services.some((service) => isNonEmpty(service.name))),
-    },
-  }
-}
+

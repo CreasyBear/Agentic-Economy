@@ -1,6 +1,7 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
+
 const definitionVersion = v.union(v.literal('projectSpine_v1'), v.literal('projectSpine_v2'))
 
 export const projectSpineTables = {

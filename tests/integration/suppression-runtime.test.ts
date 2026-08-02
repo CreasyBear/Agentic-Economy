@@ -9,7 +9,7 @@ import {
   closeRemovalDispute,
   openRemovalDispute,
 } from '../../convex/security'
-import { getPublicBusinessCatalogBySlug } from '../../convex/registry'
+import { getPublicBusinessOfferingSupplyBySlug } from '../../convex/registry'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
@@ -29,6 +29,7 @@ type Query = {
 
 type Db = {
   query: (tableName: string) => Query
+  normalizeId: (tableName: string, value: string) => string | null
   get: (id: string) => Promise<Row | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
@@ -37,6 +38,7 @@ type Db = {
 type RuntimeCtx = {
   db: Db
   auth: { getUserIdentity: () => Promise<UserIdentity | null> }
+  runMutation: (_mutation: unknown, _args: unknown) => Promise<{ ok: true }>
 }
 
 type Handler<Args> = (ctx: RuntimeCtx, args: Args) => Promise<unknown>
@@ -85,7 +87,7 @@ const suppressHandler = (suppressBusiness as unknown as { _handler: Handler<Supp
 const unsuppressHandler = (unsuppressBusiness as unknown as { _handler: Handler<SuppressionArgs> })._handler
 const openDisputeHandler = (openRemovalDispute as unknown as { _handler: Handler<OpenDisputeArgs> })._handler
 const closeDisputeHandler = (closeRemovalDispute as unknown as { _handler: Handler<CloseDisputeArgs> })._handler
-const detailHandler = (getPublicBusinessCatalogBySlug as unknown as { _handler: QueryHandler<{ slug: string }> })._handler
+const detailHandler = (getPublicBusinessOfferingSupplyBySlug as unknown as { _handler: QueryHandler<{ slug: string }> })._handler
 
 describe('suppression and removal Convex runtime controls', () => {
   it('suppresses and unsuppresses a published catalog through source-owned owner_admin authority', async () => {
@@ -112,7 +114,6 @@ describe('suppression and removal Convex runtime controls', () => {
       auditEvent: { eventType: 'business.suppressed' },
     })
     expect(db.dump('businesses')[0]).toMatchObject({ publicStatus: 'suppressed', claimStatus: 'suppressed' })
-    expect(db.dump('businessServices')[0]).toMatchObject({ status: 'suppressed' })
     expect(db.dump('suppressionRules')).toHaveLength(1)
 
     const hidden = await detailHandler(queryCtx(db), { slug: 'sam-plumbing' })
@@ -211,6 +212,9 @@ class FakeDb implements Db {
     return new FakeQuery(this.table(tableName))
   }
 
+  normalizeId(tableName: string, value: string): string | null {
+    return value.startsWith(`${tableName}:`) ? value : null
+  }
   async get(id: string): Promise<Row | null> {
     return Object.values(this.tables).flat().find((row) => row._id === id) ?? null
   }
@@ -250,6 +254,7 @@ function seededPublishedDb(): FakeDb {
     _id: 'adminMemberships:owner',
     _creationTime: 1,
     clerkUserId: 'user_owner',
+    tokenIdentifier: 'clerk|user_owner',
     role: 'owner_admin',
     state: 'active',
     grantedBy: 'bootstrap:user_owner',
@@ -260,6 +265,7 @@ function seededPublishedDb(): FakeDb {
     _id: 'adminMemberships:support',
     _creationTime: 2,
     clerkUserId: 'user_support',
+    tokenIdentifier: 'clerk|user_support',
     role: 'support',
     state: 'active',
     grantedBy: 'user_owner',
@@ -293,37 +299,52 @@ function seededPublishedDb(): FakeDb {
     sourceHash: 'source:business:v1',
     approvedAt: 4,
   })
-  db.seed('businessServices', {
-    _id: 'businessServices:1',
-    _creationTime: 5,
+  db.seed('businessSupplyProjectionSnapshots', {
+    _id: 'businessSupplyProjectionSnapshots:1',
+    _creationTime: 7,
     businessId: 'businesses:1',
-    serviceSlug: 'emergency-pipe-repair',
-    name: 'Emergency pipe repair',
-    category: 'Emergency plumbing',
-    summary: 'Burst pipe triage and repair.',
-    serviceArea: 'Parramatta and nearby suburbs',
-    hoursOrUnknown: 'Owner supplied hours',
-    status: 'published',
-    sortOrder: 0,
-    sourceHash: 'source:service:v1',
-    createdAt: 5,
-    updatedAt: 5,
-  })
-  db.seed('serviceCapabilities', {
-    _id: 'serviceCapabilities:1',
-    _creationTime: 6,
-    businessId: 'businesses:1',
-    serviceId: 'businessServices:1',
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Use the public business contact method listed by the owner.',
-    publicChannel: 'public_business_contact',
-    callable: false,
-    paymentRequired: false,
-    sourceHash: 'source:capability:v1',
-    createdAt: 6,
-    updatedAt: 6,
+    sourceRevision: 1,
+    sourceDigest: 'source:projection:v1',
+    observedAt: 7,
+    disposition: 'current',
+    status: 'current',
+    updatedAt: 7,
+    projection: {
+      business: {
+        businessId: 'businesses:1',
+        slug: 'sam-plumbing',
+        name: 'Sam Plumbing',
+        category: 'Emergency plumbing',
+        suburb: 'Parramatta',
+        stateTerritory: 'NSW',
+        publicUrl: '/sam-plumbing',
+        trustTier: 'claimed',
+      },
+      offerings: [{
+        offering: {
+          offeringRef: 'offering:emergency-pipe-repair',
+          revision: 1,
+          name: 'Emergency pipe repair',
+          category: 'Emergency plumbing',
+          summary: 'Burst pipe triage and repair.',
+          serviceAreaSummary: 'Parramatta and nearby suburbs',
+          availabilitySummary: 'Owner supplied hours',
+        },
+        accessPaths: [{
+          accessPathRef: 'access:emergency-pipe-repair:inquiry',
+          descriptor: {
+            kind: 'human_request',
+            channel: 'ae_inquiry',
+            disclosure: 'Use the source-owned inquiry form for a first contact.',
+          },
+        }],
+        support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+      }],
+      sourceRevision: 1,
+      sourceDigest: 'source:projection:v1',
+      observedAt: 7,
+      disposition: 'current',
+    },
   })
   return db
 }
@@ -332,6 +353,7 @@ function authCtx(db: Db, identity: UserIdentity | null): RuntimeCtx {
   return {
     db,
     auth: { getUserIdentity: async () => identity },
+    runMutation: async () => ({ ok: true }),
   }
 }
 

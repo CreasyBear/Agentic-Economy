@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
   defineCapabilityContract,
@@ -58,7 +59,7 @@ describe('exact V2 Action Preparation', () => {
     const secondCandidate = {
       ...aggregate.evaluation.candidates[0]!,
       candidateRef: 'candidate:two', businessId: 'business:two', offeringId: 'offering:two', bindingId: 'binding:two',
-      offeringRegistrationHash: 'offering-hash:two', bindingRegistrationHash: 'binding-hash:two',
+      offeringRegistrationHash: canonicalDigest('offering:two'), bindingRegistrationHash: canonicalDigest('binding:two'),
     }
     const expanded = {
       ...aggregate,
@@ -127,8 +128,8 @@ describe('exact V2 Action Preparation', () => {
       intent: 'Find an option', networkId: 'ae:public', interpreterId: 'test:interpreter',
       bindings: [{
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
-        contractRef: model.contractRef, offeringRegistrationHash: 'offering-hash:one',
-        bindingRegistrationHash: 'binding-hash:one',
+        contractRef: model.contractRef, offeringRegistrationHash: canonicalDigest('offering:one'),
+        bindingRegistrationHash: canonicalDigest('binding:one'),
         cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       }],
       models: [model], now: 1_000,
@@ -191,8 +192,8 @@ function compiledProtectedRequest(document: ReturnType<typeof protectedContract>
   if (destination === undefined) throw new Error('destination input missing')
   const binding = {
     businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
-    contractRef: model.contractRef, offeringRegistrationHash: 'offering-hash:one',
-    bindingRegistrationHash: 'binding-hash:one',
+    contractRef: model.contractRef, offeringRegistrationHash: canonicalDigest('offering:one'),
+    bindingRegistrationHash: canonicalDigest('binding:one'),
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['cancellation:binding:one'] },
   }
   const compiled = compileCustomerRequest({

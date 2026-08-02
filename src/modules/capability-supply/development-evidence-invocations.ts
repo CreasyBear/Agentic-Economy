@@ -25,6 +25,11 @@ import {
 type DurableState = ReturnType<typeof createDevelopmentDurableState<SuppliedCandidateQuoteResult>>
 type DurablePort = ReturnType<typeof createDevelopmentDurablePort<SuppliedCandidateQuoteResult>>
 
+function requireInvocationFixture<T>(value: T | undefined, errorCode: string): T {
+  if (value === undefined) throw new Error(errorCode)
+  return value
+}
+
 export type DevelopmentInvocationEvidence = Readonly<{
   views: readonly ActionInvocationView<SuppliedCandidateQuoteResult>[]
   standalone: Readonly<{
@@ -105,11 +110,17 @@ export async function runDevelopmentInvocations(
       origin, actor, context: source.context, now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    source.prepared = prepared.view.prepared
+    const preparedState = prepared.view.prepared
+    if (preparedState === undefined) throw new Error('prepared_invocation_state_missing')
+    const preparedAuthority = requireInvocationFixture(
+      prepared.view.authority,
+      'prepared_invocation_authority_missing',
+    )
+    source.prepared = preparedState
     const decided = tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
-      authorityRef: prepared.view.authority!.reference, actor, origin, accept: true,
+      authorityRef: preparedAuthority.reference, actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
     events.push({ kind: 'approval_policy', policy: 'prompt', reason: 'exact invocation authority' })
@@ -117,24 +128,27 @@ export async function runDevelopmentInvocations(
     const executed = await tracer.execute({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
-      authorityRef: prepared.view.authority!.reference, actor, origin, materialInput: input,
+      authorityRef: preparedAuthority.reference, actor, origin, materialInput: input,
     })
     if (executed.kind !== 'accepted') throw new Error(executed.code)
     source.observedResolution = executed.view.observedResolution
-    const cold = tracer.coldResume(prepared.view.invocationRef).inspect(prepared.view.invocationRef)!
+    const cold = tracer.coldResume(prepared.view.invocationRef).inspect(prepared.view.invocationRef)
+    if (cold === undefined) throw new Error('cold_resume_invocation_view_missing')
     views.push(cold)
     if (origin.kind === 'standalone') {
       standalone = {
         state, port, result, sourceResultRef: source.resultIdentity.sourceResultRef,
-        sourceInput: input, sourcePrepared: prepared.view.prepared!, effectCalls, events,
+        sourceInput: input, sourcePrepared: preparedState, effectCalls, events,
       }
     }
   }
+  const recoveryOrigin = origins[1]
+  if (recoveryOrigin === undefined) throw new Error('recovery_origin_missing')
   if (standalone === undefined) throw new Error('standalone_scenario_missing')
   return {
     views,
     standalone,
-    recovery: await runRecovery(graph, input, origins[1]!),
+    recovery: await runRecovery(graph, input, recoveryOrigin),
   }
 }
 
@@ -175,23 +189,34 @@ async function runRecovery(
     origin, actor, context: source.context, now: () => nowMs,
   })
   if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-  source.prepared = prepared.view.prepared
+  const recoveryPreparedState = requireInvocationFixture(
+    prepared.view.prepared,
+    'recovery_prepared_invocation_state_missing',
+  )
+  const recoveryPreparedAuthority = requireInvocationFixture(
+    prepared.view.authority,
+    'recovery_prepared_invocation_authority_missing',
+  )
+  source.prepared = recoveryPreparedState
   const decided = first.decide({
     invocationRef: prepared.view.invocationRef,
     expectedInvocationVersion: prepared.view.invocationVersion,
-    authorityRef: prepared.view.authority!.reference, actor, origin, accept: true,
+    authorityRef: recoveryPreparedAuthority.reference, actor, origin, accept: true,
   })
   if (decided.kind !== 'accepted') throw new Error(decided.code)
   const uncertain = await first.execute({
     invocationRef: prepared.view.invocationRef,
     expectedInvocationVersion: decided.view.invocationVersion,
-    authorityRef: prepared.view.authority!.reference, actor, origin, materialInput: input,
+    authorityRef: recoveryPreparedAuthority.reference, actor, origin, materialInput: input,
   })
   if (uncertain.kind !== 'accepted') throw new Error(uncertain.code)
   source.observedResolution = uncertain.view.observedResolution
   const cold = create(uncertain.view.invocationRef)
-  const coldContinuation = structuredClone(cold.inspect(uncertain.view.invocationRef)!.control)
-  const attempt = uncertain.view.attempts[0]!
+  const coldView = cold.inspect(uncertain.view.invocationRef)
+  if (coldView === undefined) throw new Error('recovery_cold_view_missing')
+  const coldContinuation = structuredClone(coldView.control)
+  const attempt = uncertain.view.attempts[0]
+  if (attempt === undefined) throw new Error('recovery_attempt_missing')
   const evidence = verifier.issue({
     kind: 'action_invocation_reconciliation', version: 1,
     evidenceRef: 'mock:evidence:reconciliation',

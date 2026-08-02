@@ -2,11 +2,12 @@ import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestAgentResultSchema,
 } from '../agent-contract'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { HostedCustomerRequestJourneyInput, JourneyDiscovery } from './types'
-import { headers, normalizedBaseUrl } from './runtime'
+import { headers } from './runtime'
 
 export async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise<JourneyDiscovery> {
-  const baseUrl = normalizedBaseUrl(input.baseUrl)
+  const baseUrl = trimTrailingSlashes(input.baseUrl)
   const home = await fetchDiscoveryText(input, new URL('/', baseUrl))
   const assistantIndex = discoverHomeAssistantIndex(home, baseUrl)
   const llms = await fetchDiscoveryText(input, assistantIndex)
@@ -15,7 +16,11 @@ export async function proveDiscovery(input: HostedCustomerRequestJourneyInput): 
   const requestEntrypoint = discoverRequestEntrypoint(llms, baseUrl)
   const discovery = `${llms}\n${skill}`
   for (const marker of [
-    '/api/v1/requests', CUSTOMER_REQUEST_AGENT_SCOPE, 'navigation.actions', 'routes_ready', 'route_confirmed',
+    '/api/v1/requests',
+    CUSTOMER_REQUEST_AGENT_SCOPE,
+    'navigation.actions',
+    'routes_ready',
+    'route_confirmed',
   ]) {
     if (!discovery.includes(marker)) throw new Error(`hosted_journey_discovery_missing:${marker}`)
   }
@@ -64,7 +69,7 @@ export async function proveAnonymousRefusal(
   input: HostedCustomerRequestJourneyInput,
   requestEntrypointPath = '/api/v1/requests',
 ): Promise<void> {
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${requestEntrypointPath}`, {
+  const response = await (input.fetch ?? fetch)(`${trimTrailingSlashes(input.baseUrl)}${requestEntrypointPath}`, {
     method: 'POST', headers: headers(input), body: '{}',
   })
   const value: unknown = await response.json()

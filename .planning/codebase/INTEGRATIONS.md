@@ -20,7 +20,6 @@ The main request path is TanStack Start/Nitro on Vercel, with Clerk-authenticate
 | Clerk | User auth, JWT issuer, owner lookup, agent API keys, conditional UI provider | `src/start.ts`, `src/routes/__root.tsx`, `convex/auth.config.ts`, `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/notification-provider.ts` | Active. `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`. |
 | Convex | Database, queries/mutations/actions, auth-backed source of truth, durable OAuth/notification/search state | `convex/convex.config.ts`, `convex/schema.ts`, `src/lib/server/convex-source.ts` | Active. `VITE_CONVEX_URL`/`CONVEX_URL`, Convex deployment credentials in CI. |
 | OpenRouter | LLM inference, model catalog, structured outputs, web-search plugin | `src/modules/model-gateway/public.ts`, `src/modules/answer/internal/openrouter-models.ts` | Active when `OPENROUTER_API_KEY` is present; deterministic paths remain available without it. |
-| Meilisearch | Optional generated catalog search mirror | `src/modules/registry/internal/catalog-search-port.ts`, `src/modules/registry/registry.functions.ts` | Optional/rollout-controlled. `AE_SEARCH_BACKEND` defaults to Convex; `dual` shadows Meili; failures/empty hits fall back to Convex. |
 | Resend | Owner inquiry email delivery and signed webhook ingestion | `src/lib/server/notification-provider.ts`, `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.resend-webhook.ts` | Active when configured. API `https://api.resend.com`; webhook uses Svix headers/signature. |
 | Novu | Inquiry notification workflow trigger and message-delivery readback | `src/lib/server/notification-provider.ts`, `src/routes/api.notification.novu-dispatch.ts` | Active when configured; owner workflow required, customer workflow optional. API `https://api.novu.co`. |
 | Sentry | Browser/server errors, tracing, release source maps | `src/lib/observability/sentry.client.ts`, `src/lib/observability/sentry.server.ts`, `vite.config.ts` | Optional and fail-closed when DSN/credentials are absent. |
@@ -72,13 +71,6 @@ The main request path is TanStack Start/Nitro on Vercel, with Clerk-authenticate
 - `src/modules/storefront/internal/business-enrichment.ts` enables OpenRouter's web plugin with a bounded result count and accepts a drafted fact only when the model returned a URL citation.
 - `src/routes/api.answer.turn.ts` streams answer events to the browser as `text/event-stream`; the model gateway is upstream of this stream and is not directly exposed to clients.
 
-## Meilisearch catalog mirror
-
-- `src/modules/registry/internal/catalog-search-port.ts` configures a generic Meilisearch HTTP client from `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, and `AE_SEARCH_INDEX_UID` (default `registry-search-documents`). Requests use `Authorization: Bearer`, a 1.5-second default timeout bounded to 250–10,000 ms, and a 50-hit maximum.
-- Search calls `POST /indexes/{indexUid}/search`; index maintenance supports document add/replace, delete-batch, settings PATCH, and task readback (`/tasks/{taskUid}`).
-- `src/modules/registry/registry.functions.ts` treats Convex as source of truth. `AE_SEARCH_BACKEND=convex` bypasses Meili, `dual` performs a shadow search while returning Convex results, and `meilisearch` hydrates Meili-ranked IDs from the Convex Offering projection.
-- A Meili network error or a non-empty query with zero hits falls back to Convex, preventing stale/generated mirror state from being treated as proof of no listings.
-- Registry index status and `meiliTaskUid` are modeled in `src/modules/registry/internal/schema.ts`; the search mirror is generated, not authoritative.
 
 ## Resend email and webhook integration
 

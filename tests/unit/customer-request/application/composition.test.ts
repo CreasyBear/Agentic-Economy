@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
   defineCapabilityContract,
@@ -173,7 +174,7 @@ describe('customer-request application composition', () => {
 
     it('names empty supply as no routeable supply, not an unreadable graph', async () => {
       expect(await loadRequestGraph('ae:public', {
-        listEligible: async () => ({ kind: 'available', supplies: [] }),
+        listRouteable: async () => ({ kind: 'available', supplies: [] }),
         getActiveExact: async () => {
           throw new Error('getActiveExact must not run for empty supply')
         },
@@ -316,7 +317,6 @@ describe('customer-request application composition', () => {
     })
 
     it('maps route progress and failure result predicates', () => {
-      expect(customerProgressState('leased')).toBe('ready_to_contact')
       expect(customerProgressState('accepted')).toBe('awaiting_result')
       expect(isProviderReportedRouteFailure({ reason: 'business_reported_failure' })).toBe(true)
       expect(isProviderReportedRouteFailure({ reason: 'other' })).toBe(false)
@@ -357,8 +357,8 @@ function fixture() {
   if (destination === undefined) throw new Error('destination input missing')
   const binding = {
     businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
-    contractRef: model.contractRef, offeringRegistrationHash: 'offering-hash:one',
-    bindingRegistrationHash: 'binding-hash:one',
+    contractRef: model.contractRef, offeringRegistrationHash: canonicalDigest('offering:one'),
+    bindingRegistrationHash: canonicalDigest('binding:one'),
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['cancellation:binding:one'] },
   }
   const proposal = {

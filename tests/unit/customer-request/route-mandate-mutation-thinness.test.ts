@@ -1,7 +1,8 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { listTsFiles } from '../../helpers/source-files'
 
 const hostSource = readFileSync('convex/customerRequestRouteMandate.ts', 'utf8')
 const portsSource = readFileSync('convex/customerRequestRouteMandatePorts.ts', 'utf8')
@@ -26,16 +27,7 @@ const moduleFiles = [
 ] as const
 
 function collectModuleSources(root: string): string[] {
-  const sources: string[] = []
-  for (const entry of readdirSync(root)) {
-    const path = join(root, entry)
-    if (statSync(path).isDirectory()) {
-      sources.push(...collectModuleSources(path))
-      continue
-    }
-    if (path.endsWith('.ts')) sources.push(readFileSync(path, 'utf8'))
-  }
-  return sources
+  return listTsFiles(root).map((path) => readFileSync(path, 'utf8'))
 }
 
 describe('customer-request route-mandate-mutation thinness', () => {

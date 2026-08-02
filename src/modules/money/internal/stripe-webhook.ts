@@ -1,4 +1,9 @@
-import type { MoneyRefusal } from '../public'
+import { response as jsonResponse } from '@/lib/server/no-store-response'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+
+import { isMoneyRefusal, type MoneyRefusal } from '../public'
+
+const MAX_STRIPE_WEBHOOK_BODY_BYTES = 256 * 1024
 
 export type CreditTopupWebhookEvent = Readonly<{
   stripeEventId: string
@@ -25,7 +30,9 @@ export async function handleStripeWebhookRequest(input: Readonly<{
   verifier: StripeWebhookVerifier
   applier: StripeWebhookApplier
 }>): Promise<Response> {
-  const rawBody = await input.request.text()
+  const boundedBody = await readBoundedRequestText(input.request, MAX_STRIPE_WEBHOOK_BODY_BYTES)
+  if (!boundedBody.ok) return jsonResponse({ kind: 'refused', code: 'request_too_large' }, 413)
+  const rawBody = boundedBody.text
   const signature = input.request.headers.get('stripe-signature')
   if (signature === null || signature.length === 0) return jsonResponse({ kind: 'refused', code: 'stripe_setup_required' }, 503)
   const verified = await input.verifier.verify({ rawBody, signature })
@@ -35,9 +42,3 @@ export async function handleStripeWebhookRequest(input: Readonly<{
   return jsonResponse({ kind: 'accepted', appliedRef: applied.appliedRef }, 200)
 }
 
-function jsonResponse(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
-}
-function isMoneyRefusal(value: CreditTopupWebhookEvent | MoneyRefusal | Readonly<{ kind: 'accepted'; appliedRef: string }>): value is MoneyRefusal {
-  return 'kind' in value && value.kind === 'refused'
-}

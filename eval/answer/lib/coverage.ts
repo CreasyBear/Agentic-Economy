@@ -1,3 +1,6 @@
+import { parse } from 'yaml'
+import { z } from 'zod'
+import { sameStringList } from '../../../src/modules/common/same-string-list'
 import {
   ANSWER_EVAL_COVERAGE_REQUIREMENTS,
   ANSWER_HARNESS_EVAL_ASSERTIONS,
@@ -15,6 +18,7 @@ import {
 import {
   BROAD_ANSWER_EVAL_BUSINESS_FIXTURES,
   BROAD_ANSWER_EVAL_SEED_EXPECTATIONS,
+  requireFirstOffering,
 } from './registry-seed'
 
 export type AnswerEvalCoverageIssue = {
@@ -43,6 +47,15 @@ type PromptfooAnswerEntry = {
   mode: PromptfooAnswerMode
   caseId: string
 }
+
+const promptfooAnswerConfigSchema = z.looseObject({
+  tests: z.array(z.looseObject({
+    vars: z.looseObject({
+      mode: z.string().optional(),
+      caseId: z.string().optional(),
+    }).optional(),
+  })).optional(),
+})
 
 export function auditAnswerEvalCoverage(): AnswerEvalCoverageAudit {
   const issues: AnswerEvalCoverageIssue[] = []
@@ -514,7 +527,7 @@ function auditExpectedShape(
 
 function auditBroadSeed(issues: AnswerEvalCoverageIssue[]): void {
   const fixtures = BROAD_ANSWER_EVAL_BUSINESS_FIXTURES
-  const industries = new Set(fixtures.map((fixture) => fixture.serviceCategory))
+  const industries = new Set(fixtures.map((fixture) => requireFirstOffering(fixture).category))
   const locales = new Set(fixtures.map((fixture) => `${fixture.suburb}:${fixture.stateTerritory}`))
   const slugs = new Set(fixtures.map((fixture) => fixture.requestedSlug))
 
@@ -545,35 +558,21 @@ function auditBroadSeed(issues: AnswerEvalCoverageIssue[]): void {
 }
 
 function parsePromptfooAnswerEntries(configText: string): PromptfooAnswerEntry[] {
-  const entries: PromptfooAnswerEntry[] = []
-  let currentMode: PromptfooAnswerMode | undefined
-
-  for (const rawLine of configText.split(/\r?\n/g)) {
-    const line = rawLine.trim()
-    if (line.startsWith('- description:')) {
-      currentMode = undefined
-      continue
-    }
-
-    const mode = line.match(/^mode:\s*(answer-turn|answer-thread)\s*$/)
-    if (mode?.[1] === 'answer-turn' || mode?.[1] === 'answer-thread') {
-      currentMode = mode[1]
-      continue
-    }
-
-    const caseId = line.match(/^caseId:\s*['"]?([^'"\s]+)['"]?\s*$/)
-    if (caseId?.[1] !== undefined && currentMode !== undefined) {
-      entries.push({ mode: currentMode, caseId: caseId[1] })
-    }
+  try {
+    const parsed = promptfooAnswerConfigSchema.safeParse(parse(configText))
+    if (!parsed.success) return []
+    return (parsed.data.tests ?? []).flatMap(({ vars }) =>
+      (vars?.mode === 'answer-turn' || vars?.mode === 'answer-thread') &&
+      vars.caseId !== undefined
+        ? [{ mode: vars.mode, caseId: vars.caseId }]
+        : [],
+    )
+  } catch {
+    return []
   }
-
-  return entries
 }
 
 function hasLocationSignal(value: string): boolean {
   return /location=/i.test(value)
 }
 
-function sameStringList(actual: readonly string[], expected: readonly string[]): boolean {
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index])
-}

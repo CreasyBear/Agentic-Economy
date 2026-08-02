@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleDeviceAuthorizationPost,
@@ -41,9 +41,9 @@ function storeFixture(): CustomerRequestAgentOAuthStore & { grants: Map<string, 
   }
 }
 
-const formRequest = (url: string, values: Record<string, string>): Request => new Request(url, {
+const formRequest = (url: string, values: Record<string, string>, origin = new URL(url).origin): Request => new Request(url, {
   method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  headers: { 'content-type': 'application/x-www-form-urlencoded', Origin: origin },
   body: new URLSearchParams(values),
 })
 
@@ -79,6 +79,32 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(await replay.json()).toEqual({ error: 'invalid_grant' })
   })
 
+  it('uses the configured canonical base URL for OAuth verification redirects instead of the request host', async () => {
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.agentic.test/')
+    try {
+      const store = storeFixture()
+      await store.insertClient({
+        clientId: 'client-canonical',
+        clientName: 'Canonical assistant',
+        redirectUris: ['http://localhost/callback'],
+        grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'],
+        tokenEndpointAuthMethod: 'none',
+        createdAt: 1_000,
+      })
+      const response = await handleDeviceAuthorizationPost(formRequest('https://spoofed.agentic.test/oauth/device_authorization', {
+        client_id: 'client-canonical',
+        scope: 'customer_requests:create customer_requests:inspect_only',
+      }), { store, now: () => 1_000 })
+      const body = await response.json() as { verification_uri: string }
+
+      expect(response.status).toBe(200)
+      expect(new URL(body.verification_uri).origin).toBe('https://canonical.agentic.test')
+      expect(new URL(body.verification_uri).pathname).toBe('/agent-access/authorize')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('rejects wildcard registration and keeps secrets out of browser consent', async () => {
     const store = storeFixture()
     const rejected = await handleOAuthRegisterPost(new Request('http://localhost/oauth/register', {
@@ -103,13 +129,22 @@ describe('Customer Request OAuth HTTP adapter', () => {
 
   it('binds device consent to the signed-in owner and returns no key secret', async () => {
     const store = storeFixture()
-    const userCode = 'ABCD-EFGH'
-    await store.insertGrant({ grantRef: 'device:1', flow: 'device_code', clientId: 'client-local', requestedScopes: ['customer_requests:create', 'customer_requests:inspect_only'], deviceCodeHash: 'd', userCodeHash: await hashOAuthValue(userCode), status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
-    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { user_code: userCode, decision: 'approve' }), {
-      store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }), issueKey: async () => ({ keyId: 'ak_local' }),
+    await store.insertGrant({ grantRef: 'device:1', flow: 'device_code', clientId: 'client-local', requestedScopes: ['customer_requests:create', 'customer_requests:inspect_only'], deviceCodeHash: 'd', userCodeHash: await hashOAuthValue('ABCD-EFGH'), status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:1', decision: 'approve' }), {
+      store, now: () => 1_000, canonicalBaseUrl: 'http://localhost', authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }), issueKey: async () => ({ keyId: 'ak_local' }),
     })
     expect(response.status).toBe(200)
     expect(await response.text()).not.toContain('ak_local')
     expect(store.grants.get('device:1')?.status).toBe('approved')
   })
+  it('rejects consent from a foreign Origin before changing the grant', async () => {
+    const store = storeFixture()
+    await store.insertGrant({ grantRef: 'device:foreign-origin', flow: 'device_code', clientId: 'client-local', requestedScopes: ['customer_requests:create', 'customer_requests:inspect_only'], deviceCodeHash: 'd-foreign', userCodeHash: 'u-foreign', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:foreign-origin', decision: 'approve' }, 'https://evil.example'), {
+      store, now: () => 1_000, canonicalBaseUrl: 'http://localhost', authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }), issueKey: async () => ({ keyId: 'ak_local' }),
+    })
+    expect(response.status).toBe(403)
+    expect(store.grants.get('device:foreign-origin')?.status).toBe('pending')
+  })
+
 })

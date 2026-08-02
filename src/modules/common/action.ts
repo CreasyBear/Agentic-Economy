@@ -116,7 +116,6 @@ export type ActionConsequenceClass =
   | 'read_only'
   | 'communication'
   | 'external_effect'
-  | 'legacy_unclassified_write'
 
 export type ActionAuthorityRequirement =
   | 'none'
@@ -124,13 +123,11 @@ export type ActionAuthorityRequirement =
   | 'principal'
   | 'owner'
   | 'admin'
-  | 'legacy_unspecified'
 
 export type ActionRetryClass =
   | 'replayable'
   | 'attributable_retry'
   | 'reconcile_before_retry'
-  | 'legacy_unspecified'
 
 export type ActionEffectClass =
   | 'observation'
@@ -191,9 +188,6 @@ type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
   check(input: ActionRunArgs<Input>): Promise<Result | undefined>
 }['check']
 
-export type ResolvedActionInvocationContract = ActionInvocationContract & Readonly<{
-  compatibility: 'explicit' | 'derived_from_legacy_read_only_flag'
-}>
 
 export type ActionDefinition<
   Input,
@@ -209,11 +203,7 @@ export type ActionDefinition<
   readonly effect: ActionEffectMetadata
   readonly surfaces: readonly ActionSurface[]
   readonly outputSchema: z.ZodType<Result>
-  /**
-   * Optional only for compatibility with actions registered before invocation
-   * contracts existed. New classified actions declare this explicitly.
-   */
-  readonly invocationContract?: ActionInvocationContract
+  readonly invocationContract: ActionInvocationContract
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
   /** Action-owned interpretation of its returned business result. */
   readonly classifyInvocationResult?: ActionResultClassifier<Result>
@@ -233,31 +223,9 @@ export function defineAction<Input, Result extends ActionResult>(
   return def
 }
 
-/**
- * Resolve old registrations without inventing authority, retry, evidence, or
- * continuation semantics. A legacy write remains deliberately unclassified.
- */
-export function resolveActionContract(
-  action: AnyAction,
-): ResolvedActionInvocationContract {
-  if (action.invocationContract !== undefined) {
-    return {
-      ...action.invocationContract,
-      compatibility: 'explicit',
-    }
-  }
-
-  return {
-    version: 'legacy:v1',
-    consequenceClass: action.readOnly ? 'read_only' : 'legacy_unclassified_write',
-    materialInputPaths: [],
-    authorityRequirement: action.readOnly ? 'none' : 'legacy_unspecified',
-    retryClass: action.readOnly ? 'replayable' : 'legacy_unspecified',
-    expectedEvidence: [],
-    safeContinuations: [],
-    invalidationConditions: [],
-    compatibility: 'derived_from_legacy_read_only_flag',
-  }
+/** Return the action's declared invocation contract without deriving metadata. */
+export function resolveActionContract(action: AnyAction): ActionInvocationContract {
+  return action.invocationContract
 }
 
 /** Machine-readable description of an action. */

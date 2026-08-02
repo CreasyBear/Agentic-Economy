@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
+import { parseArgs } from '../ae/lib/args'
 
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
+import { isRecord } from '../../src/modules/common/is-record'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
 import {
   buildDevelopmentAlternatePublishedOperationEvidence,
@@ -21,7 +23,7 @@ function digest(value: unknown) {
 }
 
 function exactKeys(value: unknown, keys: string[], label: string) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${label}_object_required`)
   }
   const actual = Object.keys(value).sort()
@@ -87,7 +89,8 @@ export async function verifyPhase3bProviderConformanceEvidence(path: string, rev
 }
 
 if (basename(process.argv[1] ?? '') === 'verify-phase-3b-provider-conformance-evidence.ts') {
-  const [path, revision] = process.argv.slice(2)
+  const { positionals } = parseArgs(process.argv.slice(2))
+  const [path, revision] = positionals
   if (!path || !revision) throw new Error('usage: verify <path> <revision-or-HEAD>')
   await verifyPhase3bProviderConformanceEvidence(path, revision)
   console.log(JSON.stringify({ verified: true, path, checksum: JSON.parse(await readFile(path, 'utf8')).checksum }))

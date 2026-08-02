@@ -59,7 +59,9 @@ export async function refreshCurrentRouteGeneration(
       intent: current.aggregate.snapshot.intent,
       priorFacts,
       graph,
-      // A propose failure ends the refresh below, so this is always the interpreter's last ask.
+      // Refresh retries only a capability-graph compilation refusal; it does not retry provider failures.
+      // Keep each interpreter call final so provider outages can use deterministic fallback immediately,
+      // instead of running submit's model retry ladder and charging refresh for a second model attempt.
       finalAttempt: true,
       compileBase: {
         commandKey,

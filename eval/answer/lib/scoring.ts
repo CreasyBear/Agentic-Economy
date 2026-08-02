@@ -1,3 +1,5 @@
+import { round2 } from '../../../src/modules/common/round-2'
+
 import type {
   AnswerThreadEvalCase,
   AnswerThreadEvalTurn,
@@ -7,6 +9,7 @@ import type {
   AnswerThreadEvalResult,
   AnswerTurnEvalResult,
 } from './evaluators'
+import { sameStringList } from '../../../src/modules/common/same-string-list'
 
 export const ANSWER_EVAL_SCORE_THRESHOLD = 9
 
@@ -618,9 +621,6 @@ function hasProblem(result: AnswerTurnEvalResult, value: string): boolean {
   return result.problems.some((problem) => problem.includes(value))
 }
 
-function sameStringList(actual: readonly string[], expected: readonly string[]): boolean {
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index])
-}
 
 function findBreakdown(
   breakdown: readonly AnswerEvalScoreBreakdown[],
@@ -680,6 +680,3 @@ function maxForDimension(dimensionName: AnswerEvalScoreDimension): number {
   }
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100
-}

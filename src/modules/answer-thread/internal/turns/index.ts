@@ -24,7 +24,6 @@ export {
 
 export { clarificationTurnPath } from './clarification'
 export { retrievalFirstTurnPath } from './retrieval-first'
-export { proposalTurnPath } from './proposal'
 export { insufficientFrozenTurnPath } from './insufficient-frozen'
 export { frozenKnownTurnPath, selectFrozenProviders } from './frozen-known'
 export { agentTurnPath } from './agent'

@@ -35,7 +35,7 @@ export type EligibleSupply = Readonly<{
     registrationHash: string
     registrationEvidenceRefs: readonly string[]
     presentation: PreparedActionOptionCandidate['offering']['presentation']
-    status: string
+    status: 'active' | 'inactive'
   }> & ContractRefFields
   binding: Readonly<{
     bindingId: string

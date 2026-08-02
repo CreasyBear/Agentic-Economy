@@ -111,24 +111,6 @@ export function aggregateIsInternallyConsistent(
     && canonicalDigest(material as StableHashValue) === aggregate.aggregateDigest
 }
 
-export function legacyAggregateIsInternallyConsistent(
-  aggregate: Readonly<{
-    aggregateDigest: string
-    plan: Readonly<{
-      planRevisionId: string
-      planDigest: string
-      createdAt: number
-      routes?: unknown
-    }> & Record<string, unknown>
-  }> & Record<string, unknown>,
-): boolean {
-  if (!('routes' in aggregate.plan)) return false
-  const { planRevisionId, planDigest, createdAt: _createdAt, ...planMaterial } = aggregate.plan
-  const { aggregateDigest, ...aggregateMaterial } = aggregate
-  return planDigest === canonicalDigest(planMaterial as StableHashValue)
-    && planRevisionId === `plan:${planDigest}`
-    && aggregateDigest === canonicalDigest(aggregateMaterial as StableHashValue)
-}
 
 function planAuthorityIsConsistent(aggregate: CustomerRequestV2Aggregate): boolean {
   const ordinals = new Map([...aggregate.plan.actions]

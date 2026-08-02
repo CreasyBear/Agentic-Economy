@@ -1,58 +1,101 @@
 import { describe, expect, it } from 'vitest'
-import { catalogForBusinessFromLookup, readOfferingSupplyForBusiness } from '../../../convex/registry'
-import type { RuntimeDocument, RuntimeReader } from '../../../convex/source_state'
+import {
+  readOfferingSupplyForBusiness,
+  type OfferingSupplyReadPort,
+  type OfferingSupplySnapshot,
+} from '../../../convex/registry'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { BusinessSupplyProjection } from '@/modules/catalog/public'
+
+type Business = Parameters<typeof readOfferingSupplyForBusiness>[1]
 
 describe('Offering registry runtime guards', () => {
-  it('adapts a published legacy/compare profile with zero services to v2', () => {
-    const business = { _id: 'business:1', slug: 'profile-only', name: 'Profile Only', sourceHash: 'hash:b', updatedAt: 1, trustTier: 'claimed' }
-    const dto = catalogForBusinessFromLookup({
-      contextsByBusinessId: new Map([['business:1', { _id: 'context:1', category: 'Engineering', suburb: 'Perth', stateTerritory: 'WA' }]]),
-      servicesByBusinessId: new Map(), capabilitiesByBusinessId: new Map(), indexStatusByBusinessId: new Map(),
-      latestDiscoveryAttemptByBusinessId: new Map(), activeSuppressedBusinessIds: new Set(),
-    } as never, business)
-    expect(dto).toMatchObject({ slug: 'profile-only', services: [] })
-  })
-
-  it('live-refuses active suppression before legacy or snapshot projection for list, search and detail consumers', async () => {
+  it('refuses active suppression before reading the Offering snapshot', async () => {
     const db = new SuppressedReader()
-    const business = { _id: 'business:1', slug: 'hidden', publicStatus: 'published' }
-    expect(await readOfferingSupplyForBusiness(db as unknown as RuntimeReader, business)).toBeUndefined()
+    const business = businessRow('hidden')
+
+    expect(await readOfferingSupplyForBusiness(db, business)).toBeUndefined()
     expect(db.tablesRead).toEqual(['suppressionRules'])
   })
 
-  it('hydrates a greenfield native Offering snapshot through the shared list/search/detail read seam', async () => {
+  it('hydrates a current native Offering snapshot through the shared read seam', async () => {
     const db = new NativeReader()
-    const item = await readOfferingSupplyForBusiness(db as unknown as RuntimeReader, { _id: 'business:1', slug: 'native', publicStatus: 'published' })
-    expect(item).toMatchObject({ slug: 'native', offerings: [{ name: 'Native advisory' }] })
+    const business = businessRow('native')
+
+    const item = await readOfferingSupplyForBusiness(db, business)
+
+    expect(item).toMatchObject({
+      slug: 'native',
+      offerings: [{ name: 'Native advisory' }],
+    })
   })
 })
 
-class SuppressedReader {
-  tablesRead: string[] = []
-  query(table: string) {
-    this.tablesRead.push(table)
-    const query = {
-      withIndex: (_: string, select: (builder: any) => unknown) => { const builder = { eq: () => builder }; select(builder); return query },
-      unique: async () => ({ _id: 'suppression:1', status: 'active' } as RuntimeDocument),
-      collect: async () => [],
-    }
-    return query
+function businessRow(slug: string): Business {
+  return {
+    _id: 'business:1',
+    slug,
+    publicStatus: 'published',
   }
 }
 
-class NativeReader {
-  query(table: string) {
-    const rows: Record<string, RuntimeDocument[]> = {
-      suppressionRules: [],
-      catalogSupplyCutovers: [{ _id: 'cutover', businessId: 'business:1', mode: 'offering' }],
-      businessSupplyProjectionSnapshots: [{ _id: 'snapshot', businessId: 'business:1', status: 'current', projectionJson: JSON.stringify({
-        business: { businessId: 'business:1', slug: 'native', name: 'Native Co', category: 'Advisory', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/native' },
-        offerings: [{ offering: { offeringRef: 'offering:1', revision: 1, name: 'Native advisory', category: 'Advisory', summary: 'Native Offering.' }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }],
-        sourceRevision: 1, sourceDigest: 'hash:projection', observedAt: Date.now(), disposition: 'current',
-      }) }],
-    }
-    let selected = [...(rows[table] ?? [])]
-    const query = { withIndex: (_: string, select: (builder: any) => unknown) => { const builder = { eq: (field: string, value: unknown) => { selected = selected.filter((row) => row[field] === value); return builder } }; select(builder); return query }, unique: async () => selected.length === 1 ? selected[0]! : null, collect: async () => selected }
-    return query
+class SuppressedReader implements OfferingSupplyReadPort {
+  readonly tablesRead: string[] = []
+
+  hasActiveBusinessSuppression(_businessId: string): Promise<boolean> {
+    this.tablesRead.push('suppressionRules')
+    return Promise.resolve(true)
+  }
+
+  readBusinessSupplyProjectionSnapshot(_businessId: string): Promise<OfferingSupplySnapshot | null> {
+    this.tablesRead.push('businessSupplyProjectionSnapshots')
+    return Promise.resolve(null)
+  }
+}
+
+class NativeReader implements OfferingSupplyReadPort {
+  hasActiveBusinessSuppression(_businessId: string): Promise<boolean> {
+    return Promise.resolve(false)
+  }
+
+  readBusinessSupplyProjectionSnapshot(_businessId: string): Promise<OfferingSupplySnapshot | null> {
+    return Promise.resolve({
+      status: 'current',
+      projection: nativeProjection(),
+    })
+  }
+}
+
+function nativeProjection(): BusinessSupplyProjection {
+  const businessId = brandNonEmpty('business:1', 'BusinessId')
+  const offeringRef = brandNonEmpty('offering:1', 'OfferingRef')
+  const sourceDigest = canonicalDigest('projection')
+  return {
+    business: {
+      businessId,
+      slug: 'native',
+      name: 'Native Co',
+      category: 'Advisory',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/native',
+      trustTier: 'claimed',
+    },
+    offerings: [{
+      offering: {
+        offeringRef,
+        revision: 1,
+        name: 'Native advisory',
+        category: 'Advisory',
+        summary: 'Native Offering.',
+      },
+      accessPaths: [],
+      support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+    }],
+    sourceRevision: 1,
+    sourceDigest,
+    observedAt: 1,
+    disposition: 'current',
   }
 }

@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -37,11 +38,11 @@ export function AeServiceList({ services, query, plan, canonicalBaseUrl, importe
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-              <Button asChild variant="default" data-variant="primary" className="min-h-11 w-full sm:w-auto">
-              <a href="/claim?source=supply">List your business</a>
+            <Button asChild variant="default" data-variant="primary" className="min-h-11 w-full sm:w-auto">
+              <Link to="/claim" search={{ source: 'supply' }}>List your business</Link>
             </Button>
             <Button asChild variant="secondary" className="min-h-11 w-full sm:w-auto">
-              <a href="/">Try another ask</a>
+              <Link to="/">Try another ask</Link>
             </Button>
           </div>
         </Card>

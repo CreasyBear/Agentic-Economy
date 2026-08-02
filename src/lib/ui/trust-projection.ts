@@ -1,4 +1,4 @@
-import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 import { plainHoursLabel } from './status-presentation'
 
@@ -43,28 +43,18 @@ export type ListingTrustProjection = {
     | typeof NO_CONTACT_EXPLAINER
 }
 
-type TrustProjectionCatalogSource = {
-  updatedAt: number
-  publishedPhone?: string
-  services: readonly {
-    hoursOrUnknown: string
-    serviceArea: string
-  }[]
-}
 
-export function buildListingTrustProjection(catalog: PublicRouteCatalogContract, inquiryAvailable?: boolean): ListingTrustProjection
-export function buildListingTrustProjection(catalog: TrustProjectionCatalogSource, inquiryAvailable?: boolean): ListingTrustProjection
 export function buildListingTrustProjection(
-  catalog: TrustProjectionCatalogSource,
+  catalog: PublicBusinessCatalogApiV2Dto,
   inquiryAvailable = true,
 ): ListingTrustProjection {
-  const primaryService = catalog.services.at(0)
-  const phone = publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.updatedAt)
+  const primaryOffering = catalog.offerings.at(0)
+  const phone = publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.observedAt)
 
   return {
     phone,
-    hours: publishedHours(primaryService?.hoursOrUnknown, catalog.updatedAt),
-    serviceArea: publishedFact(primaryService?.serviceArea, 'Service area not published here', catalog.updatedAt),
+    hours: publishedHours(primaryOffering?.availabilitySummary, catalog.observedAt),
+    serviceArea: publishedFact(primaryOffering?.serviceAreaSummary, 'Service area not published here', catalog.observedAt),
     replyPosture: { kind: 'no_history', label: NO_REPLY_HISTORY },
     explainer: inquiryAvailable
       ? phone.kind === 'published' ? AE_EXPLAINER_FULL : AE_EXPLAINER_NO_PHONE
@@ -72,18 +62,18 @@ export function buildListingTrustProjection(
   }
 }
 
-const NON_PUBLISHED_HOURS_LABELS: Record<string, true> = {
-  'check hours': true,
-  'hours supplied by owner': true,
-  'hours unknown': true,
-  'owner supplied hours': true,
-  'owner confirmed hours are not listed yet': true,
-  'after-hours availability supplied by owner': true,
-}
+const NON_PUBLISHED_HOURS_LABELS = new Set([
+  'check hours',
+  'hours supplied by owner',
+  'hours unknown',
+  'owner supplied hours',
+  'owner confirmed hours are not listed yet',
+  'after-hours availability supplied by owner',
+])
 
 function publishedHours(value: string | undefined, updatedAt: number): TrustFact {
   const label = plainHoursLabel(value)
-  return NON_PUBLISHED_HOURS_LABELS[label.toLowerCase()] === true
+  return NON_PUBLISHED_HOURS_LABELS.has(label.toLowerCase())
     ? { kind: 'not_published', label: 'Hours not published here' }
     : { kind: 'published', value: label, updatedAt }
 }

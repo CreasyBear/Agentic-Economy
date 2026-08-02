@@ -4,52 +4,48 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Route as AboutRoute } from '@/routes/about'
 import { Route as AgentsRoute } from '@/routes/for-agents'
 import { Route as HelpRoute } from '@/routes/help'
-import { Route as RegistryRoute } from '@/routes/registry'
-import { loadServicesRouteReadback } from '@/routes/index'
+import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
 import type { PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 import { projectPublicServicesPage } from '@/modules/registry/public'
-import { registryServicesSearchAction } from '@/modules/registry/registry.actions'
+import { registryServicesListAction } from '@/modules/registry/registry.actions'
 
-describe('services one-view route', () => {
+describe('services public route', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('does not load a directory before the visitor asks', async () => {
-    const run = vi.spyOn(registryServicesSearchAction, 'run')
+  it('lists the V2 catalog through /api/v1/services', async () => {
+    const expected = projectPublicServicesPage(page())
+    const run = vi.spyOn(registryServicesListAction, 'run').mockResolvedValue(expected)
+    const request = new Request('https://ae.example/api/v1/services?limit=5')
 
-    await expect(loadServicesRouteReadback({})).resolves.toBeUndefined()
-    expect(run).not.toHaveBeenCalled()
+    const response = await handleDurableListServicesRequest(request)
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    await expect(response.json()).resolves.toEqual(expected)
+    expect(run).toHaveBeenCalledWith({
+      data: { limit: 5 },
+      context: { caller: 'http', request },
+    })
   })
 
-  it('trims q and invokes the registered search action', async () => {
-    const sourcePage = page()
-    const expected = projectPublicServicesPage(sourcePage)
-    const run = vi.spyOn(registryServicesSearchAction, 'run').mockResolvedValue(expected)
+  it('refuses a search query on the list route', async () => {
+    const run = vi.spyOn(registryServicesListAction, 'run')
+    const response = await handleDurableListServicesRequest(
+      new Request('https://ae.example/api/v1/services?q=emergency+plumbing'),
+    )
 
-    await expect(loadServicesRouteReadback({ q: '  emergency plumbing  ' })).resolves.toEqual(expected)
-    expect(run).toHaveBeenCalledWith({
-      data: { query: 'emergency plumbing', limit: 10 },
-      context: { caller: 'ui' },
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'refused',
+      reason: 'unsupported_query_parameter',
+      unsupported: ['q'],
+      supported: ['cursor', 'limit'],
     })
+    expect(run).not.toHaveBeenCalled()
   })
 })
 
 describe('legacy human route redirects', () => {
-  it('/registry permanently redirects to / and keeps q', () => {
-    const beforeLoad = RegistryRoute.options.beforeLoad
-    if (beforeLoad === undefined) throw new Error('registry redirect is unavailable')
-
-    let thrown: unknown
-    try {
-      beforeLoad({ search: { q: 'dental' } } as never)
-    } catch (error) {
-      thrown = error
-    }
-
-    expect(isRedirect(thrown)).toBe(true)
-    if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/', statusCode: 301, search: { q: 'dental' } })
-  })
-
   it.each([
     ['about', AboutRoute],
     ['help', HelpRoute],
@@ -69,6 +65,7 @@ describe('legacy human route redirects', () => {
     expect(thrown.options).toMatchObject({ to: '/', statusCode: 301 })
   })
 
+
   /** `/for-agents` is advertised in the sitemap and llms.txt, so it has to serve
    *  the agent door itself rather than bounce a reader back to home. */
   it('for-agents serves the agent door instead of redirecting', () => {
@@ -81,8 +78,7 @@ function page(): PublicBusinessCatalogApiV2Page {
   return {
     kind: 'ok',
     schemaVersion: 'public-business-catalog-api:v2',
-    query: 'emergency plumbing',
-    items: [
+    page: [
       {
         schemaVersion: 'public-business-catalog-api:v2',
         businessId: 'business-acme',
@@ -129,6 +125,7 @@ function page(): PublicBusinessCatalogApiV2Page {
         accessSummary: { humanRequest: true, externalOperation: true, aeSupportedAction: false },
       },
     ],
-    pagination: { cursor: 'cursor-in', nextCursor: 'cursor-out', limit: 5, total: 1, hasMore: true },
+    isDone: true,
+    continueCursor: 'cursor-out',
   }
 }

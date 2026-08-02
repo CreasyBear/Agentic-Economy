@@ -1,3 +1,5 @@
+import type { OfferingRef } from '@/modules/common/ids'
+
 /**
  * Business tool calling.
  *
@@ -46,8 +48,8 @@ export type BusinessToolDescriptor = Readonly<{
   authorityRequirement: string
   contractVersion: string
   invocation: BusinessToolInvocationStyle
-  /** The caller does not choose the target; the URL already names the business. */
-  boundTarget: Readonly<{ businessSlug: string; capabilityKind: string }>
+  /** The URL names the business; the descriptor binds the exact Offering it targets. */
+  boundTarget: Readonly<{ businessSlug: string; offeringRef: OfferingRef }>
   prepareInputJsonSchema?: unknown
   invokeInputJsonSchema?: unknown
   outputJsonSchema?: unknown

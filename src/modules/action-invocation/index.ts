@@ -25,7 +25,7 @@ export type {
 export function roundTripControlSnapshot<Input, Result extends ActionResult>(
   snapshot: InMemoryControlSnapshot<Input, Result>,
 ): InMemoryControlSnapshot<Input, Result> {
-  return JSON.parse(JSON.stringify(snapshot)) as InMemoryControlSnapshot<Input, Result>
+  return structuredClone(snapshot)
 }
 export {
   createDevelopmentDurablePort,
@@ -33,7 +33,6 @@ export {
   createDurableActionInvocationTracer,
   readCompletedResultIdentity,
 } from './durable'
-export { createAsyncDurableActionInvocationTracer } from './async-durable'
 export {
   authorityUseIntegrityValid,
   issueStandingMandate,
@@ -58,7 +57,6 @@ export {
 } from './dynamic-published-contract'
 export {
   createDevelopmentDynamicPublishedSource,
-  dynamicPublishedOperationSlot,
 } from './dynamic-published-source'
 export {
   assertDynamicPublishedSnapshotShape,
@@ -109,12 +107,10 @@ export type {
   DynamicPublishedAdapterSnapshot,
 } from './dynamic-published-adapter'
 export type {
-  DynamicPublishedAuthorityTarget,
   DynamicPublishedInvocationInput,
   DynamicPublishedInvocationResult,
 } from './dynamic-published-contract'
 export type {
-  DynamicPublishedSourcePort,
   DynamicPublishedSourceRow,
 } from './dynamic-published-source'
 export type { DynamicPublishedSnapshotAnchors } from './dynamic-published-snapshot-verifier'
@@ -134,7 +130,6 @@ export type {
 } from './development-host-read'
 export type { DevelopmentInvocationHost as DevelopmentActionInvocationHostSeam } from './application-service'
 export type {
-  InvocationProjectionResolver,
   InvocationTaskSemantics,
   RichInvocationTaskProjection,
   StructuredInvocationTaskProjection,
@@ -197,9 +192,4 @@ export type {
   DurableActionInvocationTracer,
   DurableTracerOptions,
   CompletedResultIdentity,
-  AsyncDurableActionInvocationPort,
 } from './durable'
-export type {
-  AsyncDurableActionInvocationTracer,
-  AsyncDurableTracerOptions,
-} from './async-durable'

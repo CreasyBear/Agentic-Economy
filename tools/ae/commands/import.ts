@@ -1,5 +1,6 @@
 import type { CliOptions } from '../lib/args'
-import { CliFailure, callJson, heading, isRecord, line, printJson, table } from '../lib/output'
+import { isRecord } from '@/modules/common/is-record'
+import { CliFailure, callJson, heading, line, printJson, table } from '../lib/output'
 
 /**
  * The API also accepts an optional `abn`, deliberately not exposed here:

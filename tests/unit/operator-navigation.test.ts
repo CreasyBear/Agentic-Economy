@@ -110,17 +110,6 @@ describe('operator navigation', () => {
       .toEqual(['/', '/for-agents', '/privacy/remove-business'])
   })
 
-  /** `/registry` is a legacy 301 to `/`. Minting it internally sends a person
-   *  through a redirect to a page that never shows a catalog. */
-  it('never advertises the legacy registry redirect', () => {
-    const advertised = [
-      ...operatorUtilityItemsForRole('owner').map((item) => item.href),
-      ...operatorRoles.flatMap((role) =>
-        listOperatorCommandDestinations(role).flatMap((group) => group.items.map((item) => item.href))),
-    ]
-
-    expect(advertised.filter((href) => href.startsWith('/registry'))).toEqual([])
-  })
 
   it('formats operator nav badges without showing empty counts', () => {
     expect(formatOperatorNavBadge(undefined)).toBeUndefined()

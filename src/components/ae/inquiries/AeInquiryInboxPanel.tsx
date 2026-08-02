@@ -8,8 +8,14 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { notificationVariant } from '@/lib/ui/inquiry-notification'
 import { cn } from '@/lib/utils'
-import type { InquiryNotificationStatus, OwnerInboxBucket, OwnerInboxInquiryProjection, OwnerInboxReadback } from '@/modules/inquiries/public'
+import type {
+  InquiryNotificationStatus,
+  OwnerInboxBucket,
+  OwnerInboxInquiryProjection,
+  OwnerInboxReadback,
+} from '@/modules/inquiries/public'
 
 type InboxFilter = 'all' | OwnerInboxBucket | 'delivery_attention'
 type InboxBadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline'
@@ -178,9 +184,9 @@ function AeInquiryInboxRow({ inquiry }: { inquiry: OwnerInboxInquiryProjection }
     <a href={href} className="grid gap-3 rounded-md border border-border bg-card p-4 text-foreground">
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span>{inquiry.serviceName}</span>
+          <span>{inquiry.offeringName}</span>
           <Badge variant={bucketVariant(inquiry.bucket)}>{bucketLabel(inquiry.bucket)}</Badge>
-          <Badge variant={notificationVariant(inquiry.notificationStatus)}>{inquiry.notificationLabel}</Badge>
+          <Badge variant={notificationVariant(inquiry.notificationStatus, { held: 'secondary' })}>{inquiry.notificationLabel}</Badge>
           {inquiry.origin === undefined ? null : <Badge variant="secondary">{inquiry.origin.label}</Badge>}
           {needsDeliveryAttention ? <Badge variant="secondary">Delivery attention</Badge> : null}
         </div>
@@ -224,7 +230,7 @@ function inquiryMatchesQuery(inquiry: OwnerInboxInquiryProjection, query: string
 
   return [
     inquiry.businessName,
-    inquiry.serviceName,
+    inquiry.offeringName,
     inquiry.preview,
     inquiry.origin?.label ?? '',
     inquiry.status,
@@ -303,15 +309,3 @@ function nextActionLabel(inquiry: OwnerInboxInquiryProjection): string {
   }
 }
 
-function notificationVariant(status: InquiryNotificationStatus): InboxBadgeVariant {
-  switch (status) {
-    case 'queued':
-      return 'outline'
-    case 'sent':
-      return 'secondary'
-    case 'failed':
-      return 'destructive'
-    case 'held':
-      return 'secondary'
-  }
-}

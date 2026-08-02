@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, globSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { kernelRetirementManifest } from './kernel-retirement-manifest.mjs'
 
@@ -12,6 +13,8 @@ export function verifyKernelRetirement(root = process.cwd()) {
     .filter((path) => !path.endsWith('tests/imports/routing-authority-retirement.test.ts'))
     .filter((path) => !path.endsWith('tests/imports/routing-kernel-boundaries.test.ts'))
     .filter((path) => !path.endsWith('tests/imports/kernel-retirement-manifest.test.ts'))
+    .filter((path) => !path.endsWith('tests/imports/legacy-engine-retirement.test.ts'))
+    .filter((path) => !path.startsWith('convex/_generated/'))
     .filter((path) => !path.endsWith('tools/release/kernel-retirement-manifest.mjs'))
     .filter((path) => !path.endsWith('tools/release/verify-kernel-retirement.mjs'))
   const activeText = activeFiles.map((path) => [path, readFileSync(join(root, path), 'utf8')])
@@ -64,19 +67,23 @@ function hasExactRouteReference(source, route) {
 }
 
 function sourceFiles(root, directories) {
-  return directories.flatMap((directory) => walk(join(root, directory)))
+  return directories
+    .flatMap((directory) => {
+      const target = join(root, directory)
+      return globSync([
+        target,
+        join(target, '**/*'),
+        join(target, '**/.*'),
+        join(target, '**/.*/**/*'),
+      ], { withFileTypes: true })
+    })
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(root, join(entry.parentPath, entry.name)))
     .filter((path) => /\.(?:ts|tsx|mts|cts|js|mjs|cjs|json|md)$/.test(path))
-    .map((path) => relative(root, path))
     .filter((path) => !path.includes('/node_modules/') && !path.includes('/.git/'))
-}
 
-function walk(path) {
-  if (!existsSync(path)) return []
-  if (!statSync(path).isDirectory()) return [path]
-  return readdirSync(path).flatMap((entry) => walk(join(path, entry)))
 }
-
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = verifyKernelRetirement()
   if (!result.ok) {
     console.error(JSON.stringify({ kind: 'kernel_retirement_refused', errors: result.errors }))

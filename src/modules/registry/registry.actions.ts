@@ -21,11 +21,14 @@ import {
   PublicServicesApiSchemaVersion,
   type PublicBusinessCatalogApiV2Dto,
   type PublicBusinessCatalogApiV2Page,
+  type PublicBusinessCatalogApiV2SearchPage,
   type PublicBusinessCatalogQueryInput,
   type PublicBusinessCatalogSearchInput,
   type PublicBusinessCatalogV2DetailResult,
   type PublicServicesApiPage,
+  type PublicServicesSearchPage,
   projectPublicServicesPage,
+  projectPublicServicesSearchPage,
 } from '@/modules/registry/public'
 
 /**
@@ -170,6 +173,13 @@ const publicBusinessCatalogApiV2DtoOutputSchema = z.strictObject({
 const registryPageOutputSchema = z.strictObject({
   kind: z.literal('ok'),
   schemaVersion: z.literal(PublicBusinessCatalogApiSchemaVersion),
+  page: z.array(publicBusinessCatalogApiV2DtoOutputSchema),
+  isDone: z.boolean(),
+  continueCursor: z.string(),
+}) as z.ZodType<PublicBusinessCatalogApiV2Page>
+const registrySearchPageOutputSchema = z.strictObject({
+  kind: z.literal('ok'),
+  schemaVersion: z.literal(PublicBusinessCatalogApiSchemaVersion),
   query: z.string().optional(),
   items: z.array(publicBusinessCatalogApiV2DtoOutputSchema),
   pagination: z.strictObject({
@@ -179,7 +189,7 @@ const registryPageOutputSchema = z.strictObject({
     total: z.number().int().nonnegative(),
     hasMore: z.boolean(),
   }),
-}) as z.ZodType<PublicBusinessCatalogApiV2Page>
+}) as z.ZodType<PublicBusinessCatalogApiV2SearchPage>
 const serviceEndpointOutputSchema = z.strictObject({
   url: z.string().describe('Callable external operation URL'),
   method: z.string().optional().describe('HTTP method when published'),
@@ -221,6 +231,13 @@ const serviceOutputSchema = z.strictObject({
 const servicesPageOutputSchema = z.strictObject({
   kind: z.literal('ok').describe('Successful services response'),
   schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
+  services: z.array(serviceOutputSchema).describe('Published offerings flattened into services'),
+  isDone: z.boolean(),
+  continueCursor: z.string(),
+}) as z.ZodType<PublicServicesApiPage>
+const servicesSearchPageOutputSchema = z.strictObject({
+  kind: z.literal('ok').describe('Successful services response'),
+  schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
   query: z.string().optional().describe('Echo of the supplied search query'),
   services: z.array(serviceOutputSchema).describe('Published offerings flattened into services'),
   pagination: z
@@ -231,8 +248,8 @@ const servicesPageOutputSchema = z.strictObject({
       total: z.number().int().nonnegative().describe('Total source catalog items'),
       hasMore: z.boolean().describe('Whether another source catalog page exists'),
     })
-    .describe('Source catalog pagination passthrough'),
-}) as z.ZodType<PublicServicesApiPage>
+    .describe('Computed search pagination'),
+}) as z.ZodType<PublicServicesSearchPage>
 
 
 const registryDetailOutputSchema = z.discriminatedUnion('kind', [
@@ -333,7 +350,7 @@ export const registryListAction = defineAction({
     'Returns only public supply facts for published listings.',
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
-  schema: registryListInputSchema as z.ZodType<PublicBusinessCatalogQueryInput>,
+  schema: registryListInputSchema as z.ZodType<RegistryListActionInput>,
   outputSchema: registryPageOutputSchema,
   parameters: listParameters,
   readOnly: true,
@@ -346,8 +363,18 @@ export const registryListAction = defineAction({
     approval: 'none',
   },
   surfaces: ['http', 'agentJson'],
+  invocationContract: {
+    version: 'registry.list:v2',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['cursor', 'limit'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_registry_list_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
+  },
   run: async ({ data }) => projectCurrentOfferingInquiryPage(await readPublicOfferingRegistryPage(
-    normalizeRegistryReadInput(data),
+    normalizeRegistryListInput(data),
   )),
 })
 
@@ -368,7 +395,7 @@ export const registrySearchAction = defineAction({
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
   schema: registrySearchInputSchema,
-  outputSchema: registryPageOutputSchema,
+  outputSchema: registrySearchPageOutputSchema,
   parameters: searchParameters,
   readOnly: true,
   effect: {
@@ -380,8 +407,27 @@ export const registrySearchAction = defineAction({
     approval: 'none',
   },
   surfaces: ['http', 'agentJson', 'answerThread'],
+  invocationContract: {
+    version: 'registry.search:v2',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['query', 'limit', 'cursor', 'mode', 'location', 'maxPriceMinor', 'hasPrice'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_registry_search_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: [
+      'action_contract_version_changed',
+      'query_changed',
+      'limit_changed',
+      'cursor_changed',
+      'mode_changed',
+      'location_changed',
+      'maxPriceMinor_changed',
+      'hasPrice_changed',
+    ],
+  },
   run: async ({ data, context }) => projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
-    normalizeRegistryReadInput(data),
+    normalizeRegistrySearchInput(data),
     { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: 'registry_action' },
   )),
 })
@@ -397,7 +443,7 @@ export const registryServicesListAction = defineAction({
     'Returns only public supply facts for published offerings and their external operation paths.',
     'An open endpoint is an AE sandbox operation, not proof of provider fulfilment or payment.',
   ],
-  schema: registryListInputSchema as z.ZodType<PublicBusinessCatalogQueryInput>,
+  schema: registryListInputSchema as z.ZodType<RegistryListActionInput>,
   outputSchema: servicesPageOutputSchema,
   parameters: listParameters,
   readOnly: true,
@@ -410,9 +456,19 @@ export const registryServicesListAction = defineAction({
     approval: 'none',
   },
   surfaces: ['http', 'agentJson', 'mcp'],
+  invocationContract: {
+    version: 'registry.services_list:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['cursor', 'limit'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_services_list_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
+  },
   run: async ({ data }) => projectPublicServicesPage(
     await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistryPage(
-      normalizeRegistryReadInput(data),
+      normalizeRegistryListInput(data),
     )),
   ),
 })
@@ -429,7 +485,7 @@ export const registryServicesSearchAction = defineAction({
     'An open endpoint is an AE sandbox operation, not proof of provider fulfilment or payment.',
   ],
   schema: registrySearchInputSchema,
-  outputSchema: servicesPageOutputSchema,
+  outputSchema: servicesSearchPageOutputSchema,
   parameters: searchParameters,
   readOnly: true,
   effect: {
@@ -441,10 +497,29 @@ export const registryServicesSearchAction = defineAction({
     approval: 'none',
   },
   surfaces: ['http', 'agentJson', 'mcp'],
+  invocationContract: {
+    version: 'registry.services_search:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['query', 'limit', 'cursor', 'mode', 'location', 'maxPriceMinor', 'hasPrice'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_services_search_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: [
+      'action_contract_version_changed',
+      'query_changed',
+      'limit_changed',
+      'cursor_changed',
+      'mode_changed',
+      'location_changed',
+      'maxPriceMinor_changed',
+      'hasPrice_changed',
+    ],
+  },
   run: async ({ data, context }) => {
-    const page = projectPublicServicesPage(
+    const page = projectPublicServicesSearchPage(
       await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
-        normalizeRegistryReadInput(data),
+        normalizeRegistrySearchInput(data),
         { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: 'registry_action' },
       )),
     )
@@ -452,9 +527,12 @@ export const registryServicesSearchAction = defineAction({
     return { ...page, query: data.query }
   },
 })
-type RegistryReadInput = {
+type RegistryListActionInput = {
   cursor?: string | undefined
   limit?: number | undefined
+}
+
+type RegistryReadInput = RegistryListActionInput & {
   query?: string | undefined
   mode?: PublicBusinessCatalogSearchInput['mode'] | undefined
   location?: string | undefined
@@ -462,24 +540,34 @@ type RegistryReadInput = {
   hasPrice?: boolean | undefined
 }
 
-function normalizeRegistryReadInput(data: RegistryReadInput & { query: string }): PublicBusinessCatalogSearchInput
-function normalizeRegistryReadInput(data: RegistryReadInput): PublicBusinessCatalogQueryInput
-function normalizeRegistryReadInput(
-  data: RegistryReadInput,
-): PublicBusinessCatalogSearchInput | PublicBusinessCatalogQueryInput {
-  const shared: PublicBusinessCatalogQueryInput = {
+function normalizeRegistryListInput(
+  data: RegistryListActionInput,
+): PublicBusinessCatalogQueryInput {
+  return {
+    paginationOpts: {
+      numItems: normalizeActionLimit(data.limit),
+      cursor: data.cursor?.trim() ?? null,
+    },
+  }
+}
+
+function normalizeRegistrySearchInput(
+  data: RegistryReadInput & { query: string },
+): PublicBusinessCatalogSearchInput {
+  return {
+    query: data.query.trim(),
     ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
     ...(data.limit === undefined ? {} : { limit: data.limit }),
-  }
-  if (data.query === undefined) return shared
-  return {
-    ...shared,
-    query: data.query.trim(),
     ...(data.mode === undefined ? {} : { mode: data.mode }),
     ...(data.location === undefined ? {} : { location: data.location.trim() }),
     ...(data.maxPriceMinor === undefined ? {} : { maxPriceMinor: data.maxPriceMinor }),
     ...(data.hasPrice === undefined ? {} : { hasPrice: data.hasPrice }),
   }
+}
+
+function normalizeActionLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return 20
+  return Math.min(Math.max(Math.trunc(limit), 1), 50)
 }
 
 export const registryDetailAction = defineAction({

@@ -4,17 +4,15 @@ import { classifyFollowUpIntent } from './follow-up-intent'
 export { isNarrowToChipQuery, parseNarrowToSuburb }
 
 export function findThreadNeedQuery(priorTurns: readonly { query: string }[]): string | undefined {
-  for (let index = priorTurns.length - 1; index >= 0; index -= 1) {
-    const query = priorTurns[index]?.query.trim()
-    if (
+  const matchingTurn = priorTurns.findLast((turn, index) => {
+    const query = turn?.query.trim()
+    return (
       query !== undefined &&
       query.length > 0 &&
       !isFollowUpChipLabel(query, hasEarlierQuery(priorTurns, index))
-    ) {
-      return query
-    }
-  }
-  return undefined
+    )
+  })
+  return matchingTurn?.query.trim()
 }
 
 export function resolveThreadRegistryQuery(turns: readonly { query: string }[]): string | undefined {

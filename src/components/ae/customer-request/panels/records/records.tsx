@@ -12,10 +12,12 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
+import { isRecord } from '@/modules/common/is-record'
 import {
   customerRequestEvidenceResultSchema,
   type CustomerRequestEvidenceExport,
 } from '@/modules/customer-request/agent-contract'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { isPartialResult, readableResult } from '../shared'
 
 export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
@@ -85,7 +87,7 @@ export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
         }),
       })
       const result: unknown = await response.json()
-      if (!response.ok || typeof result !== 'object' || result === null
+      if (!response.ok || !isRecord(result)
         || !('kind' in result) || result.kind !== 'problem_reported'
         || !('reportRef' in result) || typeof result.reportRef !== 'string') {
         setError('AE could not record that problem. Your Request is unchanged.')
@@ -146,10 +148,10 @@ export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
                 : problem.nextActor === 'none'
                   ? 'This record is closed without deciding cause, responsibility, or remedy.'
                   : problem.state === 'update_due' && problem.nextUpdateDueAt !== undefined
-                    ? `AE’s status update was due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`
+                    ? `AE’s status update was due ${formatTimestamp(problem.nextUpdateDueAt)}. No reviewer or remedy authority has been assigned.`
                     : problem.nextUpdateDueAt === undefined
                       ? 'AE owns the next status update. No reviewer or remedy authority has been assigned.'
-                      : `AE owns the next status update, due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`}
+                      : `AE owns the next status update, due ${formatTimestamp(problem.nextUpdateDueAt)}. No reviewer or remedy authority has been assigned.`}
             </p>
             <p className="text-sm text-muted-foreground">
               {problem.visibility === 'customer_and_ae_only'
@@ -193,7 +195,7 @@ export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
                   ? 'provide the requested information'
                   : problem.nextAction === 'none'
                     ? 'no further action is requested'
-                    : 'wait for the next status update'}. Reported {new Date(problem.reportedAt).toLocaleString()}.
+                    : 'wait for the next status update'}. Reported {formatTimestamp(problem.reportedAt)}.
             </p>
             {problem.state !== 'waiting_for_customer' ? null : <ProblemReplyForm
               requestRef={requestRef}
@@ -203,7 +205,7 @@ export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
           </li>)}
         </ol>
       </div>}
-      <p className="text-sm text-muted-foreground">Generated {new Date(evidence.generatedAt).toLocaleString()}.</p>
+      <p className="text-sm text-muted-foreground">Generated {formatTimestamp(evidence.generatedAt)}.</p>
     </section>}
     {evidenceError === undefined ? null : <p className="text-sm text-muted-foreground">{evidenceError}</p>}
     {reporting ? <form onSubmit={(event) => { event.preventDefault(); void reportProblem() }}>
@@ -313,7 +315,7 @@ export function ProblemReplyForm({
         },
       )
       const result: unknown = await response.json()
-      if (!response.ok || typeof result !== 'object' || result === null
+      if (!response.ok || !isRecord(result)
         || !('kind' in result) || result.kind !== 'problem_reply_recorded') {
         setStatus('error')
         return

@@ -1,117 +1,107 @@
 import { describe, expect, it } from 'vitest'
 
+import { getPublicBusinessCatalog, type PublicCatalogReadState } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { buildPublicCatalogDto } from '@/modules/catalog/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+
+const businessId = brandNonEmpty('business:parramatta', 'BusinessId')
+const slug = brandNonEmpty('parramatta-emergency-plumbing', 'Slug')
+const offeringRef = brandNonEmpty('offering:parramatta-emergency-plumbing:pipe-repair', 'OfferingRef')
+const revisionSourceHash = canonicalDigest('offering-revision')
+
+const business = {
+  businessId,
+  ownerId: brandNonEmpty('owner:sam', 'OwnerId'),
+  slug,
+  name: 'Parramatta Emergency Plumbing',
+  normalizedName: 'parramatta emergency plumbing',
+  category: 'Emergency plumbing',
+  suburb: 'Parramatta',
+  stateTerritory: 'NSW',
+  publishedPhone: '0412 345 678',
+  publicStatus: 'published' as const,
+  trustTier: 'claimed' as const,
+  claimStatus: 'published' as const,
+  sourceHash: canonicalDigest('business'),
+  createdAt: 1,
+  updatedAt: 2,
+}
+
+const context = {
+  businessId,
+  category: 'Emergency plumbing',
+  suburb: 'Parramatta',
+  stateTerritory: 'NSW',
+  sourceRefs: [],
+  sourceHash: canonicalDigest('business-context'),
+  approvedAt: 2,
+}
+
+const offering = {
+  offeringRef,
+  businessId,
+  currentRevision: 1,
+  status: 'published' as const,
+  createdAt: 3,
+  updatedAt: 3,
+}
+
+const revision = {
+  offeringRef,
+  businessId,
+  revision: 1,
+  name: 'Emergency pipe repair',
+  category: 'Emergency plumbing',
+  summary: 'Burst pipe triage and repair.',
+  serviceAreaSummary: 'Parramatta and nearby suburbs',
+  availabilitySummary: 'Hours supplied by owner',
+  sourceHash: revisionSourceHash,
+  createdAt: 3,
+}
+
+const accessPath = {
+  accessPathRef: brandNonEmpty('access:parramatta:pipe-repair:human', 'AccessPathRef'),
+  businessId,
+  offeringRef,
+  offeringRevision: 1,
+  offeringSourceHash: revisionSourceHash,
+  status: 'published' as const,
+  descriptor: {
+    kind: 'human_request' as const,
+    channel: 'ae_inquiry' as const,
+    disclosure: 'Ask the business to begin a safe request.',
+  },
+  sourceHash: canonicalDigest('access-path'),
+  createdAt: 3,
+  updatedAt: 3,
+}
+
+function readState(overrides: Partial<Pick<PublicCatalogReadState, 'offerings' | 'revisions' | 'accessPaths'>> = {}): PublicCatalogReadState {
+  return {
+    owners: [],
+    businesses: [business],
+    businessContexts: [context],
+    claims: [],
+    claimFingerprints: [],
+    offerings: overrides.offerings ?? [offering],
+    revisions: overrides.revisions ?? [revision],
+    accessPaths: overrides.accessPaths ?? [accessPath],
+    suppressionRules: [],
+  }
+}
 
 describe('public catalog DTO', () => {
-  it('keeps a published business visible before it publishes an offering', () => {
-    const result = buildPublicCatalogDto({
-      business: {
-        businessId: brandNonEmpty('business:visible-only', 'BusinessId'),
-        ownerId: brandNonEmpty('owner:visible-only', 'OwnerId'),
-        slug: brandNonEmpty('visible-only', 'Slug'),
-        name: 'Visible Only',
-        normalizedName: 'visible only',
-        category: 'Engineering services',
-        suburb: 'Perth',
-        stateTerritory: 'WA',
-        publicStatus: 'published',
-        trustTier: 'claimed',
-        claimStatus: 'published',
-        sourceHash: brandNonEmpty('hash:visible-only', 'SourceHash'),
-        createdAt: 1,
-        updatedAt: 2,
-      },
-      context: {
-        businessId: brandNonEmpty('business:visible-only', 'BusinessId'),
-        category: 'Engineering services',
-        suburb: 'Perth',
-        stateTerritory: 'WA',
-        sourceRefs: [],
-        sourceHash: brandNonEmpty('hash:visible-only', 'SourceHash'),
-        approvedAt: 2,
-      },
-      services: [],
-      capabilities: [],
+  it('hides a published business until a current published Offering exists', () => {
+    expect(getPublicBusinessCatalog(readState({ offerings: [], revisions: [], accessPaths: [] }), {
+      slug,
       indexStatus: 'queued',
       discoveryStatus: 'degraded',
-    })
-
-    expect(result).toMatchObject({
-      kind: 'available',
-      catalog: {
-        slug: 'visible-only',
-        services: [],
-      },
-    })
+    })).toEqual({ kind: 'hidden', reason: 'not_published' })
   })
 
-  it('returns only allowlisted public service fields', () => {
-    const result = buildPublicCatalogDto({
-      business: {
-        businessId: brandNonEmpty('business:parramatta', 'BusinessId'),
-        ownerId: brandNonEmpty('owner:sam', 'OwnerId'),
-        slug: brandNonEmpty('parramatta-emergency-plumbing', 'Slug'),
-        name: 'Parramatta Emergency Plumbing',
-        normalizedName: 'parramatta emergency plumbing',
-        category: 'Emergency plumbing',
-        suburb: 'Parramatta',
-        stateTerritory: 'NSW',
-        publishedPhone: '0412 345 678',
-        publicStatus: 'published',
-        trustTier: 'claimed',
-        claimStatus: 'published',
-        sourceHash: brandNonEmpty('hash:business', 'SourceHash'),
-        createdAt: 1,
-        updatedAt: 2,
-      },
-      context: {
-        businessId: brandNonEmpty('business:parramatta', 'BusinessId'),
-        category: 'Emergency plumbing',
-        suburb: 'Parramatta',
-        stateTerritory: 'NSW',
-        sourceRefs: [],
-        sourceHash: brandNonEmpty('hash:business', 'SourceHash'),
-        approvedAt: 2,
-      },
-      services: [
-        {
-          serviceId: brandNonEmpty('service:pipe', 'ServiceId'),
-          serviceSlug: brandNonEmpty('pipe-repair', 'Slug'),
-          businessId: brandNonEmpty('business:parramatta', 'BusinessId'),
-          name: 'Emergency pipe repair',
-          category: 'Emergency plumbing',
-          summary: 'Burst pipe triage and repair.',
-          serviceArea: 'Parramatta and nearby suburbs',
-          hoursOrUnknown: 'Hours supplied by owner',
-          status: 'published',
-          sortOrder: 0,
-          sourceHash: brandNonEmpty('hash:service', 'SourceHash'),
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ],
-      capabilities: [
-        {
-          businessId: brandNonEmpty('business:parramatta', 'BusinessId'),
-          serviceId: brandNonEmpty('service:pipe', 'ServiceId'),
-          kind: 'phone_inquiry',
-          status: 'unavailable',
-          firstRequest: {
-            mode: 'not_available_yet',
-            publicDisclosure: 'This business has not published a request path.',
-            publicChannel: 'not_available',
-            noContactReason: 'Owner has not supplied public contact instructions.',
-            rawContactExcluded: true,
-          },
-          callable: false,
-          paymentRequired: false,
-          reason: 'Owner has not supplied public contact instructions.',
-          sourceHash: brandNonEmpty('hash:capability', 'SourceHash'),
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ],
+  it('projects current Offering facts and public access paths without private owner data', () => {
+    const result = getPublicBusinessCatalog(readState(), {
+      slug,
       indexStatus: 'queued',
       discoveryStatus: 'degraded',
     })
@@ -119,20 +109,25 @@ describe('public catalog DTO', () => {
     expect(result).toMatchObject({
       kind: 'available',
       catalog: {
+        schemaVersion: 'public-business-catalog-api:v2',
         slug: 'parramatta-emergency-plumbing',
         stateTerritory: 'NSW',
         publishedPhone: '0412 345 678',
-        publicStatus: 'published',
         photos: [],
-        services: [
+        disposition: 'partial',
+        offerings: [
           {
-            firstRequest: { mode: 'not_available_yet', rawContactExcluded: true },
-            capabilities: [{ status: 'unavailable', callable: false, paymentRequired: false }],
+            offeringRef,
+            revision: 1,
+            name: 'Emergency pipe repair',
+            summary: 'Burst pipe triage and repair.',
+            accessPaths: [{ kind: 'human_request', channel: 'ae_inquiry' }],
           },
         ],
       },
     })
     expect(JSON.stringify(result)).not.toContain('ownerId')
+    expect(JSON.stringify(result)).not.toContain('sourceHash')
     expect(JSON.stringify(result)).not.toContain('sam-owner@example.test')
   })
 })

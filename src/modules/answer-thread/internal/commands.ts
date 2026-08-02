@@ -1,3 +1,4 @@
+import type { PaginationOptions, PaginationResult } from 'convex/server'
 import {
   callPublicSourceMutation,
   callPublicSourceQuery,
@@ -49,21 +50,32 @@ export type AppendAnswerToolCallsArgs = {
 type AppendAnswerToolCallsMutationArgs =
   Omit<AppendAnswerToolCallsArgs, 'sourceWriteRequest'> & AnswerToolCallSourceWriteMutationArgs
 
-export type ReadTurnToolCallsResult = {
-  toolCalls: readonly AnswerToolCallRecord[]
-}
+export type ReadTurnToolCallsResult = Readonly<
+  Pick<PaginationResult<AnswerToolCallRecord>, 'page' | 'isDone' | 'continueCursor'>
+>
 
 const appendAnswerToolCallsMutation = sourceMutation<AppendAnswerToolCallsMutationArgs, { inserted: number }>(
   'answerThreads:appendAnswerToolCalls',
 )
 
-const readTurnToolCallsQuery = sourceQuery<{ turnId: string }, ReadTurnToolCallsResult>(
+const readTurnToolCallsQuery = sourceQuery<
+  {
+    turnId: string
+    pseudonymousSessionId: string
+    paginationOpts: PaginationOptions
+  },
+  ReadTurnToolCallsResult
+>(
   'answerThreads:readTurnToolCalls',
 )
 
 type AnswerToolCallPort = {
   appendToolCalls(args: AppendAnswerToolCallsArgs): Promise<{ inserted: number }>
-  readTurnToolCalls(turnId: string): Promise<ReadTurnToolCallsResult>
+  readTurnToolCalls(
+    turnId: string,
+    pseudonymousSessionId: string,
+    paginationOpts: PaginationOptions,
+  ): Promise<ReadTurnToolCallsResult>
 }
 
 let testPort: AnswerToolCallPort | undefined
@@ -88,11 +100,15 @@ export async function appendAnswerToolCalls(
   )
 }
 
-export async function readTurnToolCalls(turnId: string): Promise<ReadTurnToolCallsResult> {
+export async function readTurnToolCalls(
+  turnId: string,
+  pseudonymousSessionId: string,
+  paginationOpts: PaginationOptions,
+): Promise<ReadTurnToolCallsResult> {
   if (testPort !== undefined) {
-    return testPort.readTurnToolCalls(turnId)
+    return testPort.readTurnToolCalls(turnId, pseudonymousSessionId, paginationOpts)
   }
-  return callPublicSourceQuery(readTurnToolCallsQuery, { turnId })
+  return callPublicSourceQuery(readTurnToolCallsQuery, { turnId, pseudonymousSessionId, paginationOpts })
 }
 
 async function withAnswerToolCallSourceWrite(

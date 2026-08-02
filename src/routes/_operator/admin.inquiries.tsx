@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { stringSearch } from '@/lib/operator/string-search'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   readInquiryOperatorReconstructionServer,
@@ -211,7 +212,7 @@ function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQue
     ],
     facts: [
       { label: 'Business', value: row.businessId },
-      { label: 'Service', value: row.serviceId },
+      { label: 'Offering', value: row.offeringRef },
       { label: 'Updated', value: formatTimestamp(row.updatedAt) },
       { label: 'Correlation', value: row.correlationIds.join(', ') || 'none' },
     ],
@@ -278,10 +279,3 @@ function compactSearch(threadId: string | undefined, correlationId: string | und
   }
 }
 
-function stringSearch(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const trimmed = value.trim()
-  return trimmed.length === 0 ? undefined : trimmed
-}

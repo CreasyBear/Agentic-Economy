@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  invokePreparedRouteTransport,
   invokeRegisteredRouteCancellation,
-  invokeRegisteredRouteTransport,
+  prepareRegisteredRouteTransportInvocation,
   type RouteTransportCancellationInvocation,
   type RouteTransportFetch,
   type RouteTransportInvocation,
+  type RouteTransportRuntime,
+  type X402PaymentSignatureRequest,
+  type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -40,6 +44,20 @@ function invocation(overrides: Partial<RouteTransportInvocation> = {}): RouteTra
   }
 }
 
+async function invokeRouteTransport(
+  routeInvocation: RouteTransportInvocation,
+  runtime: RouteTransportRuntime,
+) {
+  const preparation = prepareRegisteredRouteTransportInvocation(
+    routeInvocation,
+    runtime.resolveCredential,
+    runtime.x402PaymentSigningAvailable,
+  )
+  return preparation.kind === 'refused'
+    ? preparation.observation
+    : await invokePreparedRouteTransport(preparation.prepared, runtime)
+}
+
 function registeredBinding(
   adapterId: string,
   endpointUrl: string,
@@ -49,6 +67,47 @@ function registeredBinding(
   return {
     adapterId, endpointUrl, credentialRef,
     configJson: JSON.stringify(config), configDigest: canonicalDigest(config as StableHashValue),
+  }
+}
+function preparedX402Custody(
+  create: (request: X402PaymentSignatureRequest) => Promise<string | undefined>,
+): Pick<
+  X402RouteTransportRuntime,
+  'prepareX402PaymentAuthorization'
+  | 'readX402PaymentAuthorization'
+  | 'readX402PaymentAuthorizationByDigest'
+> {
+  const custody = new Map<string, Readonly<{
+    authorizationDigest: string
+    paymentSignature: string
+  }>>()
+  return {
+    prepareX402PaymentAuthorization: async (request) => {
+      const paymentSignature = await create(request)
+      if (paymentSignature === undefined || paymentSignature.length === 0) return undefined
+      const custodyRef = canonicalDigest({
+        kind: 'test-x402-custody:v1',
+        paymentIdentifier: request.paymentIdentifier,
+        challengeDigest: request.challengeDigest,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      })
+      const authorizationDigest = canonicalDigest(paymentSignature)
+      custody.set(custodyRef, { authorizationDigest, paymentSignature })
+      return { custodyRef, authorizationDigest }
+    },
+    readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) => {
+      const prepared = custody.get(custodyRef)
+      return prepared?.authorizationDigest === authorizationDigest
+        ? prepared.paymentSignature
+        : undefined
+    },
+    readX402PaymentAuthorizationByDigest: async ({ custodyRef, authorizationDigest }) => {
+      const prepared = custody.get(custodyRef)
+      return prepared?.authorizationDigest === authorizationDigest
+        ? prepared.paymentSignature
+        : undefined
+    },
   }
 }
 
@@ -88,7 +147,6 @@ describe('registered route transport runtime', () => {
     await expect(invokeRegisteredRouteCancellation(cancellation, {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })).resolves.toEqual({
       disposition: 'accepted',
       providerReference: 'provider-cancel:123',
@@ -108,7 +166,6 @@ describe('registered route transport runtime', () => {
     }, {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })).resolves.toMatchObject({
       disposition: 'unsupported',
       failureCode: 'cancellation_not_registered',
@@ -130,7 +187,6 @@ describe('registered route transport runtime', () => {
     }, {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })).resolves.toMatchObject({
       disposition: 'unknown',
       failureCode: 'cancellation_response_invalid',
@@ -159,7 +215,6 @@ describe('registered route transport runtime', () => {
     }, {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })).resolves.toMatchObject({
       disposition: 'rejected',
       reason: 'work_already_completed',
@@ -184,7 +239,6 @@ describe('registered route transport runtime', () => {
     }, {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })).resolves.toMatchObject({
       disposition: 'unknown',
       failureCode: 'provider_http_503',
@@ -208,10 +262,9 @@ describe('registered route transport runtime', () => {
       })
     })
 
-    const observed = await invokeRegisteredRouteTransport(invocation(), {
+    const observed = await invokeRouteTransport(invocation(), {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })
 
     expect(observed).toMatchObject({
@@ -233,7 +286,7 @@ describe('registered route transport runtime', () => {
       return Response.json({ serviceReference: 'service:public-123' })
     })
 
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'http-json:v1', 'https://provider.example/run', 'none',
         { method: 'POST', requestTimeoutMs: 5_000 },
@@ -241,7 +294,6 @@ describe('registered route transport runtime', () => {
     }), {
       send: fetch,
       resolveCredential,
-      createX402PaymentSignature: async () => undefined,
     })
 
     expect(observed).toMatchObject({
@@ -269,7 +321,7 @@ describe('registered route transport runtime', () => {
       expect(init?.body).toBeUndefined()
       return Response.json({ price: 100_000 })
     })
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'http-json:v1',
         'https://provider.example/x402/v3/cryptocurrency/quotes/latest',
@@ -285,7 +337,6 @@ describe('registered route transport runtime', () => {
     }), {
       send: fetch,
       resolveCredential: () => 'provider-secret',
-      createX402PaymentSignature: async () => undefined,
     })
 
     expect(observed).toMatchObject({ transport: 'http', disposition: 'succeeded' })
@@ -323,7 +374,7 @@ describe('registered route transport runtime', () => {
         headers: { 'Payment-Required': challenge },
       }))
       .mockRejectedValueOnce(Object.assign(new Error('lost'), { name: 'MockLostAfterRelease' }))
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'x402-fetch:v2',
         'https://provider.example/x402/v3/cryptocurrency/quotes/latest',
@@ -339,7 +390,7 @@ describe('registered route transport runtime', () => {
     }), {
       send: fetch,
       resolveCredential: () => 'payment-credential',
-      createX402PaymentSignature: async () => 'mock-payment-signature',
+      ...preparedX402Custody(async () => 'mock-payment-signature'),
     })
 
     expect(observed).toMatchObject({
@@ -369,7 +420,7 @@ describe('registered route transport runtime', () => {
         result: { structuredContent: { serviceReference: 'service:mcp' } },
       }))
 
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'mcp-jsonrpc:v1', 'https://provider.example/mcp', 'env:MCP_KEY', {
           protocolVersion: '2025-11-25', toolName: 'resolve_service', requestTimeoutMs: 5_000,
@@ -383,7 +434,6 @@ describe('registered route transport runtime', () => {
     }), {
       send: fetch,
       resolveCredential: () => 'mcp-secret',
-      createX402PaymentSignature: async () => undefined,
     })
 
     expect(observed).toMatchObject({
@@ -422,7 +472,7 @@ describe('registered route transport runtime', () => {
     const submissionEvents: unknown[] = []
     const observationEvents: unknown[] = []
 
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'x402-fetch:v2', 'https://provider.example/paid', 'env:EVM_PRIVATE_KEY', {
           method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
@@ -434,7 +484,7 @@ describe('registered route transport runtime', () => {
     }), {
       send: fetch,
       resolveCredential: () => '0xprivate-key',
-      createX402PaymentSignature: createPayment,
+      ...preparedX402Custody(createPayment),
       markX402PaymentPossiblySubmitted: (event) => { submissionEvents.push(event) },
       observeX402PaymentAttempt: (event) => { observationEvents.push(event) },
     })
@@ -459,7 +509,7 @@ describe('registered route transport runtime', () => {
     expect(observationEvents).toEqual([
       expect.objectContaining({
         state: 'observed',
-        custodyRef: expect.stringMatching(/^legacy:sha256:/),
+        custodyRef: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
         authorizationDigest: expect.stringMatching(/^sha256:/),
       }),
     ])
@@ -480,7 +530,7 @@ describe('registered route transport runtime', () => {
     }
     const challenge = Buffer.from(JSON.stringify(requirement)).toString('base64')
     const states: string[] = []
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'x402-fetch:v2', requirement.resource.url, 'env:EVM_PRIVATE_KEY', {
           method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
@@ -500,7 +550,7 @@ describe('registered route transport runtime', () => {
         }))
         .mockRejectedValueOnce(new Error('lost_after_send')),
       resolveCredential: () => 'private-material',
-      createX402PaymentSignature: async () => 'must-not-be-persisted',
+      ...preparedX402Custody(async () => 'must-not-be-persisted'),
       markX402PaymentPossiblySubmitted: () => { states.push('possibly_submitted') },
       observeX402PaymentAttempt: (event) => { states.push(event.state) },
     })
@@ -531,7 +581,7 @@ describe('registered route transport runtime', () => {
     }))
     const createPayment = vi.fn(async () => 'must-not-be-created')
 
-    const observed = await invokeRegisteredRouteTransport(invocation({
+    const observed = await invokeRouteTransport(invocation({
       binding: registeredBinding(
         'x402-fetch:v2', 'https://provider.example/paid', 'env:EVM_PRIVATE_KEY', {
           method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
@@ -542,7 +592,8 @@ describe('registered route transport runtime', () => {
       ),
     }), {
       send: fetch,
-      resolveCredential: () => '0xprivate-key', createX402PaymentSignature: createPayment,
+      resolveCredential: () => '0xprivate-key',
+      ...preparedX402Custody(createPayment),
     })
 
     expect(observed).toMatchObject({
@@ -582,7 +633,7 @@ describe('registered route transport runtime', () => {
       }))
       .mockResolvedValueOnce(Response.json({ price: 100_000 }))
     const exactSigner = vi.fn(async () => 'one-cent-signature')
-    const exact = await invokeRegisteredRouteTransport(invocation({
+    const exact = await invokeRouteTransport(invocation({
       binding,
       authority: {
         ...authority,
@@ -592,7 +643,7 @@ describe('registered route transport runtime', () => {
     }), {
       send: exactFetch,
       resolveCredential: () => 'credential',
-      createX402PaymentSignature: exactSigner,
+      ...preparedX402Custody(exactSigner),
     })
     expect(exact).toMatchObject({ disposition: 'succeeded' })
     expect(exactSigner).toHaveBeenCalledTimes(1)
@@ -602,7 +653,7 @@ describe('registered route transport runtime', () => {
       status: 402, headers: { 'Payment-Required': challengeFor('10001') },
     }))
     const aboveSigner = vi.fn(async () => 'must-not-sign')
-    const above = await invokeRegisteredRouteTransport(invocation({
+    const above = await invokeRouteTransport(invocation({
       binding,
       authority: {
         ...authority,
@@ -612,7 +663,7 @@ describe('registered route transport runtime', () => {
     }), {
       send: aboveFetch,
       resolveCredential: () => 'credential',
-      createX402PaymentSignature: aboveSigner,
+      ...preparedX402Custody(aboveSigner),
     })
     expect(above).toMatchObject({
       disposition: 'refused',

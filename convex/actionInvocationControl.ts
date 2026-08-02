@@ -204,14 +204,6 @@ export const readAttempt = internalQuery({
     .unique(),
 })
 
-export const readHistory = internalQuery({
-  args: { invocationRef: v.string(), paginationOpts: paginationOptsValidator },
-  handler: (ctx, args) => ctx.db.query('actionInvocationHistory')
-    .withIndex('by_invocationRef_and_invocationVersion', (q) =>
-      q.eq('invocationRef', args.invocationRef))
-    .paginate(args.paginationOpts),
-})
-
 export const readHistoryCommand = internalQuery({
   args: { invocationRef: v.string(), commandId: v.string() },
   handler: (ctx, args) => ctx.db.query('actionInvocationHistory')

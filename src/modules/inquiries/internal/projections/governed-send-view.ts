@@ -1,5 +1,7 @@
 import type { BusinessRecord } from '@/modules/business/public'
-import { stableHash, stableStringify } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
+import { base64Codec } from '@/modules/common/base64-codec'
 import type { InquiryThreadId, InquiryCustomerRecordReadback, InquirySourceState } from '../schema'
 import {
   GOVERNED_ACTION_WIRE_FORMAT,
@@ -62,7 +64,7 @@ export function governedSendRecordProjection(
     const expectedMaterial = tombstone.appliedAt === undefined
       ? undefined
       : {
-          erasureEventId: `governed-send-erasure:${stableHash({ receiptOperationKey: String(receipt.operationKey), privacyOperationKey: String(tombstone.operationKey), keyRef })}`,
+          erasureEventId: `governed-send-erasure:${canonicalDigest({ receiptOperationKey: String(receipt.operationKey), privacyOperationKey: String(tombstone.operationKey), keyRef })}`,
           receiptOperationKey: receipt.operationKey,
           privacyOperationKey: tombstone.operationKey,
           threadId: receipt.threadId,
@@ -70,11 +72,11 @@ export function governedSendRecordProjection(
           keyRef,
           reasonCode: tombstone.reasonCode,
           destroyedAt: tombstone.appliedAt,
-          priorReceiptCommitment: stableHash({ operationKey: String(receipt.operationKey), threadId: String(receipt.threadId), digest: receipt.digest, schemaVersion: receipt.schemaVersion, recipientRef: receipt.recipientRef, keyRef }),
+          priorReceiptCommitment: canonicalDigest({ operationKey: String(receipt.operationKey), threadId: String(receipt.threadId), digest: receipt.digest, schemaVersion: receipt.schemaVersion, recipientRef: receipt.recipientRef, keyRef }),
         }
     const expectedLineage = expectedMaterial === undefined
       ? undefined
-      : { ...expectedMaterial, lineageHash: stableHash(expectedMaterial) }
+      : { ...expectedMaterial, lineageHash: canonicalDigest(expectedMaterial) }
     const uniqueErasureEventIds = new Set(tombstone.erasureEventIds)
     if (
       expectedLineage === undefined ||
@@ -100,8 +102,7 @@ export function governedSendRecordProjection(
   if (appliedTombstone) return invalidGovernedSendProjection
 
   try {
-    const binary = atob(receipt.canonicalBytesBase64)
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const bytes = base64Codec.fromBase64(receipt.canonicalBytesBase64)
     if (!verifyGovernedActionBytes(bytes, receipt.digest)) return invalidGovernedSendProjection
     const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     const envelope: unknown = JSON.parse(decoded)
@@ -133,9 +134,7 @@ export function governedSendRecordProjection(
       return invalidGovernedSendProjection
     }
     if (
-      payloadRecord.businessId !== String(commitment.targetBinding.businessId) ||
-      payloadRecord.serviceId !== String(commitment.targetBinding.serviceId) ||
-      payloadRecord.capabilityKind !== commitment.targetBinding.capabilityKind
+      payloadRecord.offeringRef !== String(commitment.targetBinding.offeringRef)
     ) return invalidGovernedSendProjection
 
     const fields: { key: GovernedSendCanonicalFieldKey; label: string; value: string | null }[] = []

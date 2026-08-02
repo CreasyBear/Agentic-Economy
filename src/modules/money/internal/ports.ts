@@ -46,28 +46,3 @@ export type ConnectAccountPort = Readonly<{
   createOnboardingLink: (input: OnboardingLinkRequest) => Promise<Readonly<{ provider: 'stripe'; url: string; evidenceRef: string }> | MoneyRefusal>
 }>
 
-export type ProviderTransferRequest = Readonly<{
-  payoutRef: string
-  businessId: string
-  stripeAccountId: string
-  currency: string
-  amountMinor: number
-  idempotencyKey: string
-}>
-
-export type ProviderTransferEvidence = Readonly<{
-  provider: 'stripe'
-  externalRef: string
-  payoutRef: string
-  currency: string
-  amountMinor: number
-  status: 'pending' | 'paid' | 'failed' | 'outcome_unknown'
-  evidenceRef: string
-}>
-
-export type ProviderTransferPort = Readonly<{
-  createProviderTransfer: (input: ProviderTransferRequest) => Promise<ProviderTransferEvidence | MoneyRefusal>
-  readProviderTransfer: (input: Readonly<{ externalRef?: string; idempotencyKey: string }>) => Promise<ProviderTransferEvidence | MoneyRefusal>
-}>
-
-export type MoneyProviderPorts = CreditPaymentPort & ConnectAccountPort & ProviderTransferPort

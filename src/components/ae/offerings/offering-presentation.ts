@@ -4,6 +4,7 @@ import type {
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { formatDate } from '@/lib/ui/format-time'
 
 export type PublicOfferingSupplyView = Readonly<{
   offerings: readonly PublicOfferingSupplyProjection[]
@@ -122,7 +123,7 @@ export function offeringSupportCopy(
       label: 'An AI assistant can start this service',
       detail: support.validUntil === undefined
         ? 'An assistant can send this request now.'
-        : `An assistant can send this request until ${formatPublicDate(support.validUntil)}.`,
+        : `An assistant can send this request until ${formatDate(support.validUntil)}.`,
     }
   }
   if (!support.integrated) {
@@ -132,7 +133,7 @@ export function offeringSupportCopy(
     label: 'An AI assistant cannot start this service right now',
     detail: support.observedAt === undefined
       ? 'Use the phone or website listed above instead.'
-      : `Last checked ${formatPublicDate(support.observedAt)}. Use the phone or website listed above instead.`,
+      : `Last checked ${formatDate(support.observedAt)}. Use the phone or website listed above instead.`,
   }
 }
 
@@ -159,6 +160,3 @@ function externalOperationTechnicalFacts(
   ]
 }
 
-function formatPublicDate(timestamp: number): string {
-  return new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(new Date(timestamp))
-}

@@ -1,45 +1,33 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
-import { buildDevSeedCatalogState } from '@/modules/dev/public'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
+import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import type { ActionTimingSink } from '@/modules/common/action'
 import { recordSearchGaps } from '@/modules/demand/demand.functions'
-import type { SearchGapSurface } from '@/modules/demand/public'
-import { toSearchGapCandidateV2 } from '@/modules/demand/public'
+import { toSearchGapCandidateV2, type SearchGapSurface } from '@/modules/demand/public'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 import {
-  createDefaultRegistrySourceState,
-  createLocalE2eRegistrySourceState,
-  adaptLegacyCatalogToOfferingApi,
-  getPublicBusinessCatalogBySlug,
-  listPublicBusinessCatalog,
-  resolvePublishedInquiryTarget,
-  searchPublicBusinessCatalog,
-} from '@/modules/registry/public'
+  buildRegistrySearchDocumentsFromCatalogs,
+  documentMatchesRegistryQuery,
+} from './internal/search-documents'
 import type {
-  PublicBusinessCatalogApiDto,
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
+  PublicBusinessCatalogApiV2Dto,
   PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
   PublishedInquiryTargetResolution,
 } from '@/modules/registry/public'
-import {
-  createConfiguredMeiliCatalogSearchPort,
-  readCatalogSearchBackend,
-  type CatalogSearchBackend,
-  type CatalogSearchPort,
-  type CatalogSearchResult,
-} from './internal/catalog-search-port'
-import { normalizeRegistrySearchText } from './internal/search-documents'
 
 export type PublicRegistrySourcePort = {
-  list: (input: PublicBusinessCatalogQueryInput) => Promise<PublicBusinessCatalogApiPage>
-  search: (input: PublicBusinessCatalogSearchInput) => Promise<PublicBusinessCatalogApiPage>
-  detail: (input: { slug: string }) => Promise<PublicBusinessCatalogDetailResult>
+  list: (input: PublicBusinessCatalogQueryInput) => Promise<PublicBusinessCatalogApiV2Page>
+  search: (input: PublicBusinessCatalogSearchInput) => Promise<PublicBusinessCatalogApiV2SearchPage>
+  detail: (input: { slug: string }) => Promise<PublicBusinessCatalogV2DetailResult>
   resolveInquiryTarget: (input: {
     businessSlug: string
-    serviceSlug: string
+    offeringRef: string
   }) => Promise<PublishedInquiryTargetResolution>
 }
 
@@ -48,64 +36,44 @@ export type PublicRegistryReadOptions = {
   surface?: SearchGapSurface
 }
 
-const listPublicBusinessCatalogQuery = sourceQuery<PublicBusinessCatalogQueryInput, PublicBusinessCatalogApiPage>(
-  'registry:listPublicBusinessCatalog'
-)
-const searchPublicBusinessCatalogQuery = sourceQuery<PublicBusinessCatalogSearchInput, PublicBusinessCatalogApiPage>(
-  'registry:searchPublicBusinessCatalog'
-)
-const getPublicBusinessCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogDetailResult>(
-  'registry:getPublicBusinessCatalogBySlug'
-)
 const listPublicBusinessOfferingSupplyQuery = sourceQuery<PublicBusinessCatalogQueryInput, PublicBusinessCatalogApiV2Page>(
   'registry:listPublicBusinessOfferingSupply'
 )
-const searchPublicBusinessOfferingSupplyQuery = sourceQuery<PublicBusinessCatalogSearchInput, PublicBusinessCatalogApiV2Page>(
+const searchPublicBusinessOfferingSupplyQuery = sourceQuery<PublicBusinessCatalogSearchInput, PublicBusinessCatalogApiV2SearchPage>(
   'registry:searchPublicBusinessOfferingSupply'
 )
 const getPublicBusinessOfferingSupplyBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogV2DetailResult>(
   'registry:getPublicBusinessOfferingSupplyBySlug'
 )
 const resolvePublishedInquiryTargetQuery = sourceQuery<
-  { businessSlug: string; serviceSlug: string },
+  { businessSlug: string; offeringRef: string },
   PublishedInquiryTargetResolution
 >('registry:resolvePublishedInquiryTargetBySlug')
 
-let catalogSearchPortForTests: CatalogSearchPort | undefined
-let catalogSearchBackendForTests: CatalogSearchBackend | undefined
+let publicRegistrySourcePortForTests: PublicRegistrySourcePort | undefined
 
-export function setCatalogSearchPortForTests(port: CatalogSearchPort | undefined): () => void {
-  const previous = catalogSearchPortForTests
-  catalogSearchPortForTests = port
+export function setPublicRegistrySourcePortForTests(port: PublicRegistrySourcePort | undefined): () => void {
+  const previous = publicRegistrySourcePortForTests
+  publicRegistrySourcePortForTests = port
   return () => {
-    catalogSearchPortForTests = previous
+    publicRegistrySourcePortForTests = previous
   }
 }
 
-export function setCatalogSearchBackendForTests(backend: CatalogSearchBackend | undefined): () => void {
-  const previous = catalogSearchBackendForTests
-  catalogSearchBackendForTests = backend
-  return () => {
-    catalogSearchBackendForTests = previous
-  }
-}
 
 export async function readPublicOfferingRegistryPage(
   input: PublicBusinessCatalogQueryInput,
 ): Promise<PublicBusinessCatalogApiV2Page> {
-  if (useLocalRegistryFixture()) {
-    return adaptLegacyPage(await createLegacyRegistrySourcePort().list(input))
+  if (publicRegistrySourcePortForTests !== undefined || useLocalRegistryFixture()) {
+    return getPublicRegistrySourcePort().list(input)
   }
-  return queryRegistryWithLegacyFallback(
-    () => callPublicSourceQuery(listPublicBusinessOfferingSupplyQuery, input),
-    () => adaptLegacyPage(legacyPublicRegistryList(input)),
-  )
+  return callPublicSourceQuery(listPublicBusinessOfferingSupplyQuery, input)
 }
 
 export async function readPublicOfferingRegistrySearchPage(
   input: PublicBusinessCatalogSearchInput,
   options: PublicRegistryReadOptions = {},
-): Promise<PublicBusinessCatalogApiV2Page> {
+): Promise<PublicBusinessCatalogApiV2SearchPage> {
   const page = await readOfferingSearchPageUninstrumented(input, options)
   if (options.surface !== undefined && input.cursor === undefined) {
     await recordSearchGaps({
@@ -117,294 +85,327 @@ export async function readPublicOfferingRegistrySearchPage(
   return page
 }
 
-/**
- * The external search backend is selected here, on the Offering projection.
- * It used to be reachable only from the legacy projection, which meant
- * choosing Meilisearch also meant choosing the weaker set of facts.
- */
 async function readOfferingSearchPageUninstrumented(
   input: PublicBusinessCatalogSearchInput,
   options: PublicRegistryReadOptions,
-): Promise<PublicBusinessCatalogApiV2Page> {
-  const timing = options.timing
-  const backend = catalogSearchBackendForTests ?? readCatalogSearchBackend()
-  const searchPort = backend === 'convex'
-    ? undefined
-    : catalogSearchPortForTests ?? createConfiguredMeiliCatalogSearchPort()
-
-  if (searchPort === undefined) {
-    const label = backend === 'convex' ? 'registry.search.convex' : 'registry.search.convex_fallback'
-    return withTiming(timing, label, { backend }, () => readOfferingSearchPageFromSource(input))
-  }
-
-  if (backend === 'dual') {
-    void withTiming(timing, 'registry.search.meili_shadow', { backend }, () =>
-      searchPort.search(input),
-    ).catch(() => undefined)
-    return withTiming(timing, 'registry.search.convex', { backend }, () =>
-      readOfferingSearchPageFromSource(input))
-  }
-
-  let result: CatalogSearchResult | undefined
-  try {
-    result = await withTiming(timing, 'registry.search.meili', { backend }, () =>
-      searchPort.search(input),
-    )
-  } catch {
-    result = undefined
-  }
-  if (result?.processingTimeMs !== undefined) {
-    timing?.record('registry.search.meili_processing', result.processingTimeMs, { backend })
-  }
-
-  // A stale, empty, or not-yet-indexed Meili index answers a real query with zero hits.
-  // That is a miss in the index, not evidence that the registry holds nothing.
-  if (
-    result === undefined
-    || (result.hits.length === 0 && normalizeRegistrySearchText(input.query).length > 0)
-  ) {
-    return withTiming(timing, 'registry.search.convex_fallback', { backend }, () =>
-      readOfferingSearchPageFromSource(input))
-  }
-
-  const searchResult = result
-  return withTiming(timing, 'registry.search.hydration', {
-    backend,
-    hits: searchResult.hits.length,
-  }, () => hydrateOfferingSearchResult(input, searchResult))
+): Promise<PublicBusinessCatalogApiV2SearchPage> {
+  return withTiming(options.timing, 'registry.search.convex', { backend: 'convex' }, () =>
+    readOfferingSearchPageFromSource(input))
 }
 
 function readOfferingSearchPageFromSource(
   input: PublicBusinessCatalogSearchInput,
-): Promise<PublicBusinessCatalogApiV2Page> {
-  if (useLocalRegistryFixture()) {
-    return createLegacyRegistrySourcePort().search(input).then(adaptLegacyPage)
+): Promise<PublicBusinessCatalogApiV2SearchPage> {
+  if (publicRegistrySourcePortForTests !== undefined || useLocalRegistryFixture()) {
+    return getPublicRegistrySourcePort().search(input)
   }
-  return queryRegistryWithLegacyFallback(
-    () => callPublicSourceQuery(searchPublicBusinessOfferingSupplyQuery, input),
-    () => adaptLegacyPage(legacyPublicRegistrySearch(input)),
-  )
+  return callPublicSourceQuery(searchPublicBusinessOfferingSupplyQuery, input)
 }
 
-/** Meilisearch returns ranked slugs; the Offering projection supplies the facts. */
-async function hydrateOfferingSearchResult(
-  input: PublicBusinessCatalogSearchInput,
-  result: CatalogSearchResult,
-): Promise<PublicBusinessCatalogApiV2Page> {
-  const uniqueSlugs = [...new Set(result.hits.map((hit) => hit.businessSlug))]
-  const details = await Promise.all(
-    uniqueSlugs.map((slug) => readPublicOfferingRegistryBusinessDetail({ slug })),
-  )
-  const items = details.flatMap((detail) => detail.kind === 'found' ? [detail.business] : [])
-  const limit = normalizePublicLimit(input.limit)
-  const startIndex = input.cursor === undefined
-    ? 0
-    : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
-  const pageItems = items.slice(startIndex, startIndex + limit)
-  const nextItem = items[startIndex + limit]
-
-  return {
-    kind: 'ok',
-    schemaVersion: 'public-business-catalog-api:v2',
-    query: input.query,
-    items: pageItems,
-    pagination: {
-      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-      ...(nextItem === undefined ? {} : { nextCursor: nextItem.slug }),
-      limit,
-      total: result.estimatedTotalHits ?? items.length,
-      hasMore: nextItem !== undefined,
-    },
-  }
-}
 
 export async function readPublicOfferingRegistryBusinessDetail(
   input: { slug: string },
 ): Promise<PublicBusinessCatalogV2DetailResult> {
-  if (useLocalRegistryFixture()) {
-    const legacy = await createLegacyRegistrySourcePort().detail(input)
-    return legacy.kind === 'not_found'
-      ? legacy
-      : {
-          kind: 'found',
-          schemaVersion: 'public-business-catalog-api:v2',
-          business: adaptLegacyCatalogToOfferingApi(legacy.business),
-        }
+  if (publicRegistrySourcePortForTests !== undefined || useLocalRegistryFixture()) {
+    return getPublicRegistrySourcePort().detail(input)
   }
-  return queryRegistryWithLegacyFallback(
-    () => callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input),
-    () => {
-      const legacy = legacyPublicRegistryDetail(input)
-      return legacy.kind === 'not_found'
-        ? legacy
-        : {
-            kind: 'found' as const,
-            schemaVersion: 'public-business-catalog-api:v2' as const,
-            business: adaptLegacyCatalogToOfferingApi(legacy.business),
-          }
-    },
-  )
+  return callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input)
 }
 
 export async function resolvePublicRegistryInquiryTarget(input: {
   businessSlug: string
-  serviceSlug: string
+  offeringRef: string
 }): Promise<PublishedInquiryTargetResolution> {
   return getPublicRegistrySourcePort().resolveInquiryTarget(input)
 }
 
-function legacyPublicRegistryList(
-  input: PublicBusinessCatalogQueryInput = {}
-): PublicBusinessCatalogApiPage {
-  return listPublicBusinessCatalog(createDefaultRegistrySourceState(), input)
-}
-
-function legacyPublicRegistrySearch(input: PublicBusinessCatalogSearchInput): PublicBusinessCatalogApiPage {
-  return searchPublicBusinessCatalog(createDefaultRegistrySourceState(), input)
-}
-
-function legacyPublicRegistryDetail(input: { slug: string }): PublicBusinessCatalogDetailResult {
-  return getPublicBusinessCatalogBySlug(createDefaultRegistrySourceState(), input)
-}
-
 function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
-
-
+  if (publicRegistrySourcePortForTests !== undefined) {
+    return publicRegistrySourcePortForTests
+  }
   if (useLocalRegistryFixture()) {
-    return createLegacyRegistrySourcePort()
+    return createLocalRegistrySourcePort()
   }
   return {
-    list: (input) => queryRegistryWithLegacyFallback(() => callPublicSourceQuery(listPublicBusinessCatalogQuery, input), () => legacyPublicRegistryList(input)),
-    search: (input) =>
-      queryRegistryWithLegacyFallback(() => callPublicSourceQuery(searchPublicBusinessCatalogQuery, input), () =>
-        legacyPublicRegistrySearch(input),
-      ),
-    detail: (input) =>
-      queryRegistryWithLegacyFallback(() => callPublicSourceQuery(getPublicBusinessCatalogBySlugQuery, input), () =>
-        legacyPublicRegistryDetail(input),
-      ),
-    resolveInquiryTarget: (input) =>
-      queryRegistryWithLegacyFallback(
-        () => callPublicSourceQuery(resolvePublishedInquiryTargetQuery, input),
-        () => resolvePublishedInquiryTarget(createDefaultRegistrySourceState(), input),
-      ),
+    list: (input) => callPublicSourceQuery(listPublicBusinessOfferingSupplyQuery, input),
+    search: (input) => callPublicSourceQuery(searchPublicBusinessOfferingSupplyQuery, input),
+    detail: (input) => callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input),
+    resolveInquiryTarget: (input) => callPublicSourceQuery(resolvePublishedInquiryTargetQuery, input),
   }
 }
 
-function createLegacyRegistrySourcePort(): PublicRegistrySourcePort {
-  const state = createLocalRegistrySourceState()
+type NativeFixtureAccessPath = Readonly<{
+  kind: 'human_request'
+  channel: 'phone' | 'website' | 'ae_inquiry'
+  disclosure: string
+}>
 
+type NativeFixtureOffering = Readonly<{
+  name: string
+  category: string
+  summary: string
+  serviceAreaSummary: string
+  availabilitySummary?: string
+  pricingSummary?: string
+  accessPaths: readonly NativeFixtureAccessPath[]
+}>
+
+type NativeFixtureInput = Readonly<{
+  requestedSlug: string
+  businessName: string
+  category: string
+  suburb: string
+  stateTerritory: string
+  publishedPhone?: string
+  offerings: readonly NativeFixtureOffering[]
+  responseTimeMinutes?: number
+}>
+
+const DEFAULT_NATIVE_FIXTURE: NativeFixtureInput = {
+  requestedSlug: 'parramatta-emergency-plumbing',
+  businessName: 'Parramatta Emergency Plumbing',
+  category: 'Emergency plumbing',
+  suburb: 'Parramatta',
+  stateTerritory: 'NSW',
+  offerings: [{
+    name: 'Emergency pipe repair',
+    category: 'Emergency plumbing',
+    summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
+    serviceAreaSummary: 'Parramatta and nearby suburbs',
+    accessPaths: [],
+  }],
+}
+
+function createLocalRegistrySourcePort(): PublicRegistrySourcePort {
+  const items = createLocalNativeOfferingFixtures()
   return {
-    list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
-    search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
-    detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
-    resolveInquiryTarget: (input) =>
-      Promise.resolve(resolvePublishedInquiryTarget(state, input)),
+    list: (input) => Promise.resolve(nativeOfferingListPage(items, input)),
+    search: (input) => Promise.resolve(searchNativeOfferings(items, input)),
+    detail: (input) => Promise.resolve(nativeOfferingDetail(items, input.slug)),
+    resolveInquiryTarget: (input) => Promise.resolve(resolveNativeInquiryTarget(items, input)),
   }
 }
 
-function createLocalRegistrySourceState() {
+function createLocalNativeOfferingFixtures(): PublicBusinessCatalogApiV2Dto[] {
   const seed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-  if (seed === 'default') {
-    return createDefaultRegistrySourceState()
-  }
-  if (seed === 'broad') {
-    return buildDevSeedCatalogState().state
-  }
-  return createLocalE2eRegistrySourceState()
+  const fixtures: readonly NativeFixtureInput[] = seed === 'broad'
+    ? DEV_SEED_BUSINESS_FIXTURES.map(nativeFixtureFromDevSeed)
+    : [DEFAULT_NATIVE_FIXTURE, ...LOCAL_E2E_BUSINESS_FIXTURES.map(nativeFixtureFromLocal)]
+  const observedAt = 1_735_689_600_000
+  return fixtures.map((fixture, index) => nativeOfferingForFixture(fixture, observedAt + index * 1_000))
 }
 
-function normalizePublicLimit(limit: number | undefined): number {
-  if (limit === undefined || !Number.isFinite(limit)) {
-    return 20
+function nativeFixtureFromLocal(
+  fixture: (typeof LOCAL_E2E_BUSINESS_FIXTURES)[number],
+): NativeFixtureInput {
+  const offerings = fixture.offerings.map((offering) => ({
+    name: offering.name,
+    category: offering.category,
+    summary: offering.summary,
+    serviceAreaSummary: offering.serviceAreaSummary,
+    ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: offering.availabilitySummary }),
+    ...(offering.pricingSummary === undefined ? {} : { pricingSummary: offering.pricingSummary }),
+    accessPaths: offering.accessPaths.map((path) => ({
+      kind: path.kind,
+      channel: path.channel,
+      disclosure: path.disclosure,
+    })),
+  }))
+  if (offerings.length === 0) {
+    throw new Error(`local_registry_fixture_offering_missing:${fixture.requestedSlug}`)
   }
-
-  return Math.min(Math.max(Math.trunc(limit), 1), 50)
-}
-
-function adaptLegacyPage(page: PublicBusinessCatalogApiPage): PublicBusinessCatalogApiV2Page {
   return {
-    ...page,
+    requestedSlug: fixture.requestedSlug,
+    businessName: fixture.businessName,
+    category: fixture.category,
+    suburb: fixture.suburb,
+    stateTerritory: fixture.stateTerritory,
+    ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+    offerings,
+    ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
+  }
+}
+
+function nativeFixtureFromDevSeed(
+  fixture: (typeof DEV_SEED_BUSINESS_FIXTURES)[number],
+): NativeFixtureInput {
+  const offerings = fixture.offerings.map((offering) => {
+    const explicitAccessPaths = offering.accessPaths.map((path) => ({
+      kind: path.kind,
+      channel: path.channel,
+      disclosure: path.disclosure,
+    }))
+    return {
+      name: offering.name,
+      category: offering.category,
+      summary: offering.summary,
+      serviceAreaSummary: offering.serviceAreaSummary,
+      ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: offering.availabilitySummary }),
+      ...(offering.pricingSummary === undefined ? {} : { pricingSummary: offering.pricingSummary }),
+      accessPaths: explicitAccessPaths,
+    }
+  })
+  if (offerings.length === 0) {
+    throw new Error(`dev_seed_fixture_offering_missing:${fixture.requestedSlug}`)
+  }
+  return {
+    requestedSlug: fixture.requestedSlug,
+    businessName: fixture.businessName,
+    category: fixture.category,
+    suburb: fixture.suburb,
+    stateTerritory: fixture.stateTerritory,
+    ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+    offerings,
+    ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
+  }
+}
+
+function nativeOfferingForFixture(
+  fixture: NativeFixtureInput,
+  observedAt: number,
+): PublicBusinessCatalogApiV2Dto {
+  const offerings = fixture.offerings.map((offering) => {
+    const offeringSlug = normalizeSearchText(offering.name).replaceAll(' ', '-')
+    const offeringRef = `offering:${fixture.requestedSlug}:${offeringSlug}`
+    const accessPaths = offering.accessPaths.map((path, index) => ({
+      accessPathRef: `${offeringRef}:${path.channel}:${index + 1}`,
+      kind: path.kind,
+      channel: path.channel,
+      disclosure: path.disclosure,
+    }))
+    const availabilitySummary = publicAvailability(offering.availabilitySummary)
+    return {
+      offeringRef,
+      revision: 1,
+      name: offering.name,
+      category: offering.category,
+      summary: offering.summary,
+      serviceAreaSummary: offering.serviceAreaSummary,
+      ...(availabilitySummary === undefined ? {} : { availabilitySummary }),
+      ...(offering.pricingSummary === undefined ? {} : { pricingSummary: offering.pricingSummary }),
+      accessPaths,
+      support: { integrated: false, aeSupportedAction: false, observedAt },
+    }
+  })
+  if (offerings.length === 0) {
+    throw new Error(`native_registry_fixture_offering_missing:${fixture.requestedSlug}`)
+  }
+  return {
     schemaVersion: 'public-business-catalog-api:v2',
-    items: page.items.map(adaptLegacyCatalogToOfferingApi),
-  }
-}
-
-export async function filterPublicRegistryPage(
-  pagePromise: Promise<PublicBusinessCatalogApiPage>,
-): Promise<PublicBusinessCatalogApiPage> {
-  const page = await pagePromise
-  const items = page.items.filter(isPublicRegistryDtoAllowed)
-  const removed = page.items.length - items.length
-  if (removed === 0) {
-    return page
-  }
-
-  const total = Math.max(items.length, page.pagination.total - removed)
-  return {
-    ...page,
-    items,
-    pagination: {
-      ...page.pagination,
-      total,
-      hasMore: page.pagination.hasMore || total > items.length,
+    businessId: `business:${fixture.requestedSlug}`,
+    slug: fixture.requestedSlug,
+    name: fixture.businessName,
+    category: fixture.category,
+    suburb: fixture.suburb,
+    stateTerritory: fixture.stateTerritory,
+    ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+    publicUrl: `/${fixture.requestedSlug}`,
+    trustTier: 'claimed',
+    ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
+    photos: [],
+    observedAt,
+    disposition: 'current',
+    offerings,
+    accessSummary: {
+      humanRequest: offerings.some((offering) => offering.accessPaths.length > 0),
+      externalOperation: false,
+      aeSupportedAction: false,
     },
   }
 }
 
-export async function filterPublicRegistryDetail(
-  detailPromise: Promise<PublicBusinessCatalogDetailResult>,
-): Promise<PublicBusinessCatalogDetailResult> {
-  const detail = await detailPromise
-  if (detail.kind === 'not_found' || isPublicRegistryDtoAllowed(detail.business)) {
-    return detail
-  }
+function publicAvailability(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase() ?? ''
+  return normalized === '' || normalized === 'unknown' || normalized === 'hours unknown' || normalized === 'hours supplied by owner'
+    ? undefined
+    : value
+}
 
+function normalizePublicLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return 20
+  return Math.min(Math.max(Math.trunc(limit), 1), 50)
+}
+
+function nativeOfferingListPage(
+  items: readonly PublicBusinessCatalogApiV2Dto[],
+  input: PublicBusinessCatalogQueryInput,
+): PublicBusinessCatalogApiV2Page {
+  const requestedStart = input.paginationOpts.cursor === null
+    ? 0
+    : Number(input.paginationOpts.cursor)
+  const start = Number.isSafeInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0
+  const page = items.slice(start, start + input.paginationOpts.numItems)
+  const next = start + page.length
   return {
-    kind: 'not_found',
-    code: 'business_not_found',
-    reason: 'No public business catalog exists for this slug.',
+    kind: 'ok',
+    schemaVersion: 'public-business-catalog-api:v2',
+    page,
+    isDone: next >= items.length,
+    continueCursor: String(next),
   }
 }
 
-function isPublicRegistryDtoAllowed(item: PublicBusinessCatalogApiDto): boolean {
-  return !isAgenticEconomySmokeCatalog(item)
-}
-
-function isAgenticEconomySmokeCatalog(item: PublicBusinessCatalogApiDto): boolean {
-  const identity = normalizeRegistrySearchText(`${item.slug} ${item.name}`)
-  if (!identity.includes('agentic economy')) {
-    return false
-  }
-
-  const searchableText = normalizeRegistrySearchText(
-    [
-      item.slug,
-      item.name,
-      item.category,
-      ...item.services.flatMap((service) => [
-        service.slug,
-        service.name,
-        service.category,
-        service.summary,
-        service.serviceArea,
-      ]),
-    ].join(' '),
-  )
-
-  return /\b(?:smoke|r10|readback)\b/.test(searchableText)
-}
-
-async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallback: () => T): Promise<T> {
-  try {
-    return await query()
-  } catch (error) {
-    if (useLocalRegistryFixture()) {
-      return fallback()
+function searchNativeOfferings(
+  items: readonly PublicBusinessCatalogApiV2Dto[],
+  input: PublicBusinessCatalogSearchInput,
+): PublicBusinessCatalogApiV2SearchPage {
+  const query = normalizeSearchText(input.query)
+  const matchedSlugs = new Set<string>()
+  for (const document of buildRegistrySearchDocumentsFromCatalogs(items)) {
+    if (documentMatchesRegistryQuery(document, input)) {
+      matchedSlugs.add(document.businessSlug)
     }
-    throw new Error('registry_source_query_failed', { cause: error })
+  }
+  const ranked = items
+    .filter((item) => matchedSlugs.has(item.slug))
+    .slice()
+    .sort((left, right) => left.slug.localeCompare(right.slug))
+  const limit = normalizePublicLimit(input.limit)
+  const start = input.cursor === undefined
+    ? 0
+    : Math.max(ranked.findIndex((item) => item.slug === input.cursor) + 1, 0)
+  const page = ranked.slice(start, start + limit)
+  const next = ranked[start + page.length]
+  return {
+    kind: 'ok',
+    schemaVersion: 'public-business-catalog-api:v2',
+    query,
+    items: page,
+    pagination: {
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(next === undefined ? {} : { nextCursor: next.slug }),
+      limit,
+      total: ranked.length,
+      hasMore: next !== undefined,
+    },
   }
 }
+
+function nativeOfferingDetail(
+  items: readonly PublicBusinessCatalogApiV2Dto[],
+  slug: string,
+): PublicBusinessCatalogV2DetailResult {
+  const business = items.find((item) => item.slug === slug)
+  return business === undefined
+    ? { kind: 'not_found', code: 'business_not_found', reason: 'No public business catalog exists for this slug.' }
+    : { kind: 'found', schemaVersion: 'public-business-catalog-api:v2', business }
+}
+
+function resolveNativeInquiryTarget(
+  items: readonly PublicBusinessCatalogApiV2Dto[],
+  input: { businessSlug: string; offeringRef: string },
+): PublishedInquiryTargetResolution {
+  const business = items.find((item) => item.slug === input.businessSlug)
+  const offering = business?.offerings.find((item) => item.offeringRef === input.offeringRef)
+  return business === undefined || offering === undefined
+    ? { kind: 'not_found', reason: 'No published Offering is discoverable for this slug and reference.' }
+    : {
+        kind: 'resolved',
+        businessId: brandNonEmpty(business.businessId, 'BusinessId'),
+        offeringRef: brandNonEmpty(offering.offeringRef, 'OfferingRef'),
+      }
+}
+
 
 function useLocalRegistryFixture(): boolean {
   const convexUrl = process.env.CONVEX_URL?.trim() || process.env.VITE_CONVEX_URL?.trim()

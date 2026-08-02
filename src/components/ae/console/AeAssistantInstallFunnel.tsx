@@ -7,22 +7,21 @@ import {
   CodeBlockTitle,
 } from '@/components/ai-elements/code-block'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export type AeAssistantInstallFunnelProps = Readonly<{
   canonicalBaseUrl: string
 }>
 
 export function AeAssistantInstallFunnel({ canonicalBaseUrl }: AeAssistantInstallFunnelProps) {
-  const baseUrl = canonicalBaseUrl.replace(/\/+$/u, '')
+  const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
   const commands = [
     { id: 'claude', label: 'Claude', command: `claude mcp add --transport http agentic-economy ${baseUrl}/mcp` },
     { id: 'codex', label: 'Codex', command: `codex mcp add agentic-economy --url ${baseUrl}/mcp` },
   ] as const
-  const [copiedId, setCopiedId] = useState<string>()
   const [copyNotice, setCopyNotice] = useState<string>()
 
-  function handleCopy(id: string, label: string) {
-    setCopiedId(id)
+  function handleCopy(label: string) {
     setCopyNotice(`${label} command copied.`)
   }
 
@@ -54,9 +53,9 @@ export function AeAssistantInstallFunnel({ canonicalBaseUrl }: AeAssistantInstal
                 <CodeBlockActions>
                   <CodeBlockCopyButton
                     className="min-h-11 min-w-11"
-                    aria-label={copiedId === id ? 'Copied' : `Copy ${label} command`}
-                    title={copiedId === id ? 'Copied' : `Copy ${label} command`}
-                    onCopy={() => handleCopy(id, label)}
+                    aria-label={`Copy ${label} command`}
+                    title={`Copy ${label} command`}
+                    onCopy={() => handleCopy(label)}
                     onError={() => handleCopyError(label)}
                   />
                 </CodeBlockActions>

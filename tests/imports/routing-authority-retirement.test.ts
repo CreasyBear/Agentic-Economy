@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, globSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -56,7 +56,7 @@ describe('routing authority retirement', () => {
     expect(source).not.toMatch(/\.collect\s*\(/)
     expect(source).not.toMatch(/ctx\.db\.(?:insert|patch|replace|delete)\s*\(/)
     expect(source).not.toMatch(/ctx\.scheduler|\bfetch\s*\(/)
-    expect(source).not.toMatch(/createRegisteredRoutingKernel|listEligible|routingKernelTransport|providerTransport|dispatchProvider/)
+    expect(source).not.toMatch(/createRegisteredRoutingKernel|listIntegrated|listRouteable|routingKernelTransport|providerTransport|dispatchProvider/)
   })
 
   it('deploys no V1 routing module except the bounded history readback', () => {
@@ -116,14 +116,5 @@ describe('routing authority retirement', () => {
 })
 
 function sourceFiles(base: string, directories: readonly string[]): string[] {
-  return directories.flatMap((directory) => walk(join(base, directory)))
-}
-
-function walk(directory: string): string[] {
-  if (!existsSync(directory)) return []
-  return readdirSync(directory).flatMap((entry) => {
-    const path = join(directory, entry)
-    if (statSync(path).isDirectory()) return walk(path)
-    return /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/.test(path) ? [path] : []
-  })
+  return globSync(directories.map((directory) => join(base, directory, '**/*.{ts,tsx,mts,cts,js,mjs,cjs}'))).sort()
 }

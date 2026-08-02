@@ -8,7 +8,8 @@ import {
   stableAeSearchContextKey,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   appendHarnessSessionEntryToSourceFromRequest,
   type AppendHarnessSessionEntryResult,
@@ -30,6 +31,7 @@ import type {
   AnswerTurnTimingEntry,
   FollowUpIntent,
   FrozenTurnEvidence,
+  FrozenTurnEvidenceDraft,
   FrozenTurnProse,
 } from '../answer-thread.schema'
 import {
@@ -46,13 +48,18 @@ import { parseFrozenEvidence } from './public-projection'
 
 export type AnswerTurnRecordLite = Pick<AnswerTurnRecord, 'evidenceJson' | 'query' | 'seq' | 'status'>
 
-export async function readPriorCompleteTurns(threadId: string | undefined): Promise<AnswerTurnRecordLite[]> {
+export async function readPriorCompleteTurns(
+  threadId: string | undefined,
+  pseudonymousSessionId: string,
+): Promise<AnswerTurnRecordLite[]> {
   if (threadId === undefined) {
     return []
   }
 
   try {
-    return (await getThreadTurns(threadId)).turns.filter((turn) => turn.status === 'complete')
+    // Answer-thread writes cap a thread at 25 turns, so one bounded native page is complete.
+    const page = await getThreadTurns(threadId, pseudonymousSessionId, { cursor: null, numItems: 25 })
+    return page.page.filter((turn) => turn.status === 'complete')
   } catch {
     return []
   }
@@ -146,7 +153,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
     ? buildFrozenEvidence(input.captured, input.allowedSlugs, input.toolCalls, input.searchContext, input.timings, input.workLog)
     : emptyEvidence(input.searchContext, input.timings, input.workLog)
   const prose = input.captured !== undefined ? buildFrozenProse(input.captured) : emptyProse()
-  const snapshotHash = stableHash({
+  const snapshotHash = canonicalDigest({
     query: input.query,
     intent: input.intent,
     ...(input.searchContext === undefined ? {} : { searchContext: stableAeSearchContextKey(input.searchContext) }),
@@ -154,10 +161,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
     prose,
     ...(input.toolCalls.length === 0 ? {} : { toolCalls: input.toolCalls.map((call) => call.resultHash) }),
   }).toString()
-  const evidenceForSummary: FrozenTurnEvidence =
-    baseEvidence.toolCalls !== undefined || input.toolCalls.length === 0
-      ? baseEvidence
-      : { ...baseEvidence, toolCalls: input.toolCalls }
+  const evidenceForSummary: FrozenTurnEvidenceDraft = baseEvidence
   const answerRun = buildAnswerRunReport({
     intent: input.intent,
     status,
@@ -327,13 +331,13 @@ function buildAnswerHarnessFinalizationHash(input: {
   harnessRun: HarnessRunReport
   entries: readonly AppendHarnessSessionEntrySourceInput[]
 }): string {
-  return stableHash({
+  return canonicalDigest({
     schemaVersion: 1,
     turnId: input.input.turnId,
     threadId: input.input.threadId,
     sessionId: input.input.sessionId,
     snapshotHash: input.persistResult.snapshotHash,
-    run: stableHashValue(input.harnessRun),
+    run: cloneStableValue(input.harnessRun),
     entries: input.entries.map((entry) => ({
       entryId: entry.entryId,
       idempotencyKey: entry.idempotencyKey ?? entry.entryId,
@@ -347,7 +351,7 @@ function buildAnswerHarnessFinalizationHash(input: {
   }).toString()
 }
 
-function stableHashValue(value: unknown): StableHashValue {
+function cloneStableValue(value: unknown): StableHashValue {
   return structuredClone(value) as StableHashValue
 }
 
@@ -361,12 +365,12 @@ export function collectLatestFrozenAllowedSlugs(priorTurns: readonly AnswerTurnR
 }
 
 function readLatestFrozenEvidence(priorTurns: readonly AnswerTurnRecordLite[]): FrozenTurnEvidence | undefined {
-  const sorted = priorTurns.slice().sort((left, right) => right.seq - left.seq)
+  const sorted = priorTurns.toSorted((left, right) => right.seq - left.seq)
   for (const turn of sorted) {
     try {
       return parseFrozenEvidence(turn.evidenceJson)
     } catch {
-      // Skip malformed legacy evidence and keep looking for the latest usable turn.
+      // Skip malformed evidence and keep looking for the latest usable turn.
     }
   }
   return undefined
@@ -379,7 +383,7 @@ function buildFrozenEvidence(
   searchContext: AeSearchContext | undefined,
   timings: readonly AnswerTurnTimingEntry[],
   workLog: readonly AnswerWorkStep[],
-): FrozenTurnEvidence {
+): FrozenTurnEvidenceDraft {
   return {
     providers: snapshot.providers,
     ...(snapshot.importedClaims === undefined || snapshot.importedClaims.length === 0
@@ -388,9 +392,9 @@ function buildFrozenEvidence(
     allowedSlugs: [...allowedSlugs],
     agentJsonUrl: snapshot.agentJsonUrl,
     ...(searchContext === undefined ? {} : { searchContext }),
-    ...(toolCalls.length === 0 ? {} : { toolCalls }),
-    ...(timings.length === 0 ? {} : { timings }),
-    ...(workLog.length === 0 ? {} : { workLog }),
+    toolCalls,
+    timings,
+    workLog,
   }
 }
 
@@ -401,7 +405,6 @@ function buildFrozenProse(snapshot: AnswerSnapshot): FrozenTurnProse {
     nextStep: snapshot.nextStep,
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
-    ...(snapshot.decisionMapRevision === undefined ? {} : { decisionMapRevision: snapshot.decisionMapRevision }),
   }
 }
 
@@ -409,14 +412,15 @@ function emptyEvidence(
   searchContext?: AeSearchContext,
   timings: readonly AnswerTurnTimingEntry[] = [],
   workLog: readonly AnswerWorkStep[] = [],
-): FrozenTurnEvidence {
+): FrozenTurnEvidenceDraft {
   return {
     providers: [],
     allowedSlugs: [],
     agentJsonUrl: '',
     ...(searchContext === undefined ? {} : { searchContext }),
-    ...(timings.length === 0 ? {} : { timings }),
-    ...(workLog.length === 0 ? {} : { workLog }),
+    toolCalls: [],
+    timings,
+    workLog,
   }
 }
 
@@ -458,7 +462,7 @@ function buildAnswerHarnessSessionJournalEntries(args: {
   const createdAt = Date.now()
   const ownerKey = answerHarnessSessionOwnerKey(args.input.sessionId)
   const runStatus = args.harnessRun.summary.run.status
-  const queryHash = stableHash(args.input.query).toString()
+  const queryHash = canonicalDigest(args.input.query).toString()
   const gate = args.input.gate ?? { ok: args.status === 'complete', source: 'turn_status' }
   const shared = {
     ownerKey,
@@ -654,7 +658,7 @@ function mapRuntimeEventToJournalEntry(
           turnSeq: context.input.turnSeq,
           isNewThread: context.input.isNewThread,
           intent: context.input.intent,
-          queryHash: stableHash(context.input.query).toString(),
+          queryHash: canonicalDigest(context.input.query).toString(),
         },
         publicSummary: {
           turn: context.input.turnSeq,

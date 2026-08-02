@@ -5,6 +5,7 @@ import {
   type JsonValue,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
@@ -502,7 +503,4 @@ function boundedTrimmed(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= maximum && value === value.trim()
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 

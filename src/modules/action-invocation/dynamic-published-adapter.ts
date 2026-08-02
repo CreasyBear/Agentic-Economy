@@ -7,6 +7,7 @@ import type { RouteTransportRuntime } from '@/modules/capability-supply/route-tr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { stableUnique } from '@/modules/common/stable-unique'
 import type { ActionContext } from '@/modules/common/action'
 
 import {
@@ -62,6 +63,7 @@ import type {
   DynamicPublishedSourceRow,
 } from './dynamic-published-source'
 import {
+  copyDynamicPublishedSnapshot,
   verifyDynamicPublishedSnapshot,
   type DynamicPublishedSnapshotAnchors,
 } from './dynamic-published-snapshot-verifier'
@@ -375,6 +377,17 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           currency: fixedPrice.currency,
           paidAmountMinor: fixedPrice.amountMinor,
         }
+        if (pricingConfig.currency !== fixedPrice.currency) {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: 'currency_mismatch',
+          }
+        }
+        const priceDigest = pricingConfigDigest(pricingConfig)
         const existingCharge = row.moneyCharge
         const charge = existingCharge === undefined
           ? await input.moneyPort.authorizeInvocationCharge({
@@ -387,8 +400,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
               businessId: input.operation.identity.businessId,
               offeringRef: input.operation.identity.offeringId,
               pricingConfig,
-              priceDigest: pricingConfigDigest(pricingConfig),
-              authorityMaximumSpend: fixedPrice,
+              priceDigest,
+              priceSourceDigest: priceDigest,
+              authorityMaximumSpendMinor: fixedPrice.amountMinor,
             })
           : { kind: 'accepted' as const, chargeState: existingCharge.chargeState, currency: existingCharge.currency, amountMinor: existingCharge.amountMinor, priceDigest: existingCharge.priceDigest, transactionRef: existingCharge.transactionRef }
         if (charge.kind === 'refused') {
@@ -451,13 +465,16 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           now: input.now,
         })
         if (result.kind === 'published_operation_refused' && charge !== undefined && charge.chargeState === 'paid') {
-          await input.moneyPort?.refundCharge?.({
+          const refund = await input.moneyPort?.refundCharge?.({
             transactionRef: charge.transactionRef,
             principalId: charge.principalId,
             invocationRef: execution.invocationRef,
             attemptRef: execution.attemptRef,
             effectGeneration: execution.effectGeneration,
           })
+          if (refund !== undefined && refund.kind === 'refused') {
+            throw new Error('published_operation_payment_reconciliation_required:refund_refused')
+          }
         }
         return result
       } catch (error) {
@@ -517,7 +534,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       const resultIdentity = reusedIdentity ?? {
         sourceResultRef: `published-result:${claim?.semanticIdentityDigest ?? view.invocationRef}`,
         resultDigest: canonicalDigest(
-          view.observedResolution.result as unknown as StableHashValue,
+          view.observedResolution.result,
         ),
       }
       input.source.write({
@@ -743,12 +760,12 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         attemptRef: request.attemptRef,
         effectGeneration: request.effectGeneration,
         authorityRef: view.authority.reference,
-        mandateDigest: canonicalDigest(view.acceptedAuthority as unknown as StableHashValue),
+        mandateDigest: canonicalDigest(view.acceptedAuthority),
         grantDigest: canonicalDigest({
           acceptedAuthority: view.acceptedAuthority,
           owner: view.owner,
           origin: view.origin,
-        } as unknown as StableHashValue),
+        }),
         expiresAt: Date.parse(view.authority.expiresAt),
       })
       try {
@@ -841,7 +858,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         ...current,
         state: evidence.resolution,
         observedAt: Date.parse(evidence.observedAt),
-        evidenceRefs: [...new Set([evidence.evidenceRef, ...evidence.evidenceRefs])],
+        evidenceRefs: stableUnique([evidence.evidenceRef, ...evidence.evidenceRefs]),
         reconciliationEvidenceRef: evidence.evidenceRef,
         reconciliationEvidenceDigest: evidence.digest,
         ...(evidence.settledAmount === undefined ? {} : { settledAmount: evidence.settledAmount }),
@@ -894,7 +911,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         paymentAttempts: paymentAttemptPort.list(),
         paymentAuthorizationEvents: paymentAttemptPort.listAuthorizationEvents(),
       }
-      return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot
+      return copyDynamicPublishedSnapshot(snapshot)
     },
   }
 }
@@ -911,8 +928,7 @@ export function loadDynamicPublishedAdapterSnapshot(
   paymentAttempts: readonly X402PaymentAttempt[]
   paymentAuthorizationEvents: readonly X402PaymentAuthorizationEvent[]
 }> {
-  verifyDynamicPublishedSnapshot({ snapshot, anchors })
-  const verified = snapshot as DynamicPublishedAdapterSnapshot
+  const verified = verifyDynamicPublishedSnapshot({ snapshot, anchors })
   const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   for (const row of verified.controls) durableState.controls.set(row.invocationRef, row)
   for (const group of verified.attempts) {

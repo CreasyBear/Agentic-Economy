@@ -5,6 +5,7 @@ import {
   toolCallRecordsToGateInput,
 } from '@/modules/answer-thread/internal/tool-runner'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const TURN_ID = 'turn-1'
 const BASE_SEQ = 0
@@ -34,7 +35,7 @@ describe('runAnswerToolCall', () => {
       expect(result.record.toolId).toBe('registry.search')
       expect(result.record.turnId).toBe(TURN_ID)
       expect(result.record.seq).toBe(BASE_SEQ)
-      expect(result.record.resultHash).toMatch(/^hash:/)
+      expect(result.record.resultHash).toMatch(/^sha256:[0-9a-f]{64}$/)
 
       const summary = JSON.parse(result.record.resultSummaryJson)
       expect(summary.slugs).toContain('parramatta-emergency-plumbing')
@@ -331,7 +332,7 @@ function buildRecord(
     inputJson: '{}',
     resultSummaryJson: JSON.stringify(summary),
     resultJson: JSON.stringify({ kind: 'ok', items: summary.slugs.map((slug) => ({ slug })) }),
-    resultHash: 'hash:test',
+    resultHash: canonicalDigest('test'),
     status: 'complete',
     createdAt: 1_000,
   }

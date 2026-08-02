@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { readFile } from 'node:fs/promises'
+import { parseArgs } from '../ae/lib/args'
 
 import { runDevelopmentProviderOperationEvidence } from './fixtures/provider-operation/development-provider-operation-evidence'
 import { readAndVerifyProviderOperationPacket, writeEvidencePacket } from './action-invocation-evidence-packet'
@@ -8,7 +9,8 @@ import {
   verifyOfficialEvidenceProvenance,
 } from './evidence-provenance'
 
-const [command, rawPath, expectedRevision] = process.argv.slice(2)
+const { command, positionals } = parseArgs(process.argv.slice(2))
+const [rawPath, expectedRevision] = positionals
 if (
   (command !== 'run' && command !== 'verify')
   || rawPath === undefined

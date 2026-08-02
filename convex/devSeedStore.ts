@@ -1,15 +1,14 @@
+import type { GenericDatabaseWriter } from 'convex/server'
+import type { DataModel, Id } from './_generated/dataModel'
 import type { BusinessRecord } from '../src/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '../src/modules/catalog/public'
 import type { DevSeedCatalogBundle } from '../src/modules/dev/public'
 import type { CapabilityLaunchSupportRecord } from '../src/modules/inquiries/public'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
-
 export type DevSeedPersistResult = {
   seededSlugs: readonly string[]
   ownerClerkUserId: string
-  ownerId: string
+  ownerId: Id<'owners'>
   supportRecordId: string
-  businessIdsBySlug: Record<string, string>
+  businessIdsBySlug: Record<string, Id<'businesses'>>
 }
 
 const DEV_SEED_SUPPORT_RECORD_ID = 'support:dev-seed:human-inquiry-owner-inbox'
@@ -19,19 +18,19 @@ const RETIRED_DEV_SEED_SLUGS = [
   'agentic-economy-r10-smoke',
 ] as const
 
-export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedCatalogBundle): Promise<DevSeedPersistResult> {
+export async function persistDevSeedCatalogState(
+  db: GenericDatabaseWriter<DataModel>,
+  bundle: DevSeedCatalogBundle,
+): Promise<DevSeedPersistResult> {
   const owner = bundle.state.owners.find((candidate) => candidate.clerkUserId === bundle.ownerClerkUserId)
   if (owner === undefined) {
     throw new Error('Dev seed owner was not found in module state.')
   }
 
   const ownerId = await upsertOwner(db, owner)
-  const businessIdsBySlug: Record<string, string> = {}
+  const businessIdsBySlug: Record<string, Id<'businesses'>> = {}
   const contextByBusinessId = new Map(bundle.state.businessContexts.map((context) => [context.businessId, context] as const))
   const claimByBusinessId = new Map(bundle.state.claims.map((claim) => [claim.businessId, claim] as const))
-  const capabilityByBusinessAndServiceId = new Map(
-    bundle.state.serviceCapabilities.map((capability) => [`${capability.businessId}:${capability.serviceId}`, capability] as const)
-  )
 
   for (const business of bundle.state.businesses) {
     const convexBusinessId = await upsertBusiness(db, ownerId, business)
@@ -53,14 +52,14 @@ export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedC
       await upsertClaimFingerprint(db, ownerId, convexBusinessId, convexClaimId, fingerprint)
     }
 
-    const services = bundle.state.businessServices.filter((service) => service.businessId === business.businessId)
-    for (const service of services) {
-      const convexServiceId = await upsertBusinessService(db, convexBusinessId, service)
-      const capability = capabilityByBusinessAndServiceId.get(`${business.businessId}:${service.serviceId}`)
-      if (capability === undefined) {
-        throw new Error(`Dev seed capability missing for ${business.slug}/${service.serviceSlug}.`)
-      }
-      await upsertServiceCapability(db, convexBusinessId, convexServiceId, capability)
+    for (const offering of bundle.state.offerings.filter((candidate) => candidate.businessId === business.businessId)) {
+      await upsertBusinessOffering(db, convexBusinessId, offering)
+    }
+    for (const revision of bundle.state.revisions.filter((candidate) => candidate.businessId === business.businessId)) {
+      await upsertBusinessOfferingRevision(db, convexBusinessId, revision)
+    }
+    for (const accessPath of bundle.state.accessPaths.filter((candidate) => candidate.businessId === business.businessId)) {
+      await upsertOfferingAccessPath(db, convexBusinessId, accessPath)
     }
   }
 
@@ -82,7 +81,7 @@ export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedC
   }
 }
 
-async function suppressRetiredDevSeedBusinesses(db: RuntimeDb): Promise<void> {
+async function suppressRetiredDevSeedBusinesses(db: GenericDatabaseWriter<DataModel>): Promise<void> {
   const now = Date.now()
   for (const slug of RETIRED_DEV_SEED_SLUGS) {
     const existing = await db
@@ -101,7 +100,10 @@ async function suppressRetiredDevSeedBusinesses(db: RuntimeDb): Promise<void> {
   }
 }
 
-async function upsertOwner(db: RuntimeDb, owner: DevSeedCatalogBundle['state']['owners'][number]): Promise<string> {
+async function upsertOwner(
+  db: GenericDatabaseWriter<DataModel>,
+  owner: DevSeedCatalogBundle['state']['owners'][number],
+): Promise<Id<'owners'>> {
   const existing = await db
     .query('owners')
     .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', owner.clerkUserId))
@@ -120,8 +122,11 @@ async function upsertOwner(db: RuntimeDb, owner: DevSeedCatalogBundle['state']['
   await db.patch(existing._id, patch)
   return existing._id
 }
-
-async function upsertBusiness(db: RuntimeDb, ownerId: string, business: BusinessRecord): Promise<string> {
+async function upsertBusiness(
+  db: GenericDatabaseWriter<DataModel>,
+  ownerId: Id<'owners'>,
+  business: BusinessRecord,
+): Promise<Id<'businesses'>> {
   const existing = await db
     .query('businesses')
     .withIndex('by_slug', (query) => query.eq('slug', business.slug))
@@ -134,7 +139,7 @@ async function upsertBusiness(db: RuntimeDb, ownerId: string, business: Business
     category: business.category,
     suburb: business.suburb,
     stateTerritory: business.stateTerritory,
-    publishedPhone: business.publishedPhone,
+    ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
     publicStatus: business.publicStatus,
     trustTier: business.trustTier,
     claimStatus: business.claimStatus,
@@ -152,9 +157,9 @@ async function upsertBusiness(db: RuntimeDb, ownerId: string, business: Business
 }
 
 async function upsertBusinessContext(
-  db: RuntimeDb,
-  businessId: string,
-  context: DevSeedCatalogBundle['state']['businessContexts'][number]
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  context: DevSeedCatalogBundle['state']['businessContexts'][number],
 ): Promise<void> {
   const existing = await db
     .query('businessContexts')
@@ -167,7 +172,7 @@ async function upsertBusinessContext(
     stateTerritory: context.stateTerritory,
     ...(context.postcode === undefined ? {} : { postcode: context.postcode }),
     ...(context.ownerMessage === undefined ? {} : { ownerMessage: context.ownerMessage }),
-    sourceRefs: context.sourceRefs,
+    sourceRefs: [...context.sourceRefs],
     sourceHash: context.sourceHash,
     approvedAt: context.approvedAt,
   }
@@ -181,11 +186,11 @@ async function upsertBusinessContext(
 }
 
 async function upsertClaim(
-  db: RuntimeDb,
-  ownerId: string,
-  businessId: string,
-  claim: DevSeedCatalogBundle['state']['claims'][number]
-): Promise<string> {
+  db: GenericDatabaseWriter<DataModel>,
+  ownerId: Id<'owners'>,
+  businessId: Id<'businesses'>,
+  claim: DevSeedCatalogBundle['state']['claims'][number],
+): Promise<Id<'claims'>> {
   const existing = await db
     .query('claims')
     .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', claim.status))
@@ -208,11 +213,11 @@ async function upsertClaim(
 }
 
 async function upsertClaimFingerprint(
-  db: RuntimeDb,
-  ownerId: string,
-  businessId: string,
-  claimId: string,
-  fingerprint: DevSeedCatalogBundle['state']['claimFingerprints'][number]
+  db: GenericDatabaseWriter<DataModel>,
+  ownerId: Id<'owners'>,
+  businessId: Id<'businesses'>,
+  claimId: Id<'claims'>,
+  fingerprint: DevSeedCatalogBundle['state']['claimFingerprints'][number],
 ): Promise<void> {
   const existing = await db
     .query('claimFingerprints')
@@ -237,100 +242,113 @@ async function upsertClaimFingerprint(
   await db.patch(existing._id, patch)
 }
 
-async function upsertBusinessService(db: RuntimeDb, businessId: string, service: BusinessServiceRecord): Promise<string> {
-  const existing = await db
-    .query('businessServices')
-    .withIndex('by_slug_serviceSlug', (query) =>
-      query.eq('serviceSlug', service.serviceSlug).eq('businessId', businessId),
-    )
-    .unique()
-  const patch = {
-    businessId,
-    serviceSlug: service.serviceSlug,
-    name: service.name,
-    category: service.category,
-    summary: service.summary,
-    serviceArea: service.serviceArea,
-    hoursOrUnknown: service.hoursOrUnknown,
-    status: service.status,
-    sortOrder: service.sortOrder,
-    sourceHash: service.sourceHash,
-    updatedAt: service.updatedAt,
-  }
-
-  if (existing === null) {
-    return db.insert('businessServices', { ...patch, createdAt: service.createdAt })
-  }
-
-  await db.patch(existing._id, patch)
-  return existing._id
-}
-
-async function upsertServiceCapability(
-  db: RuntimeDb,
-  businessId: string,
-  serviceId: string,
-  capability: ServiceCapabilityRecord
+async function upsertBusinessOffering(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  offering: DevSeedCatalogBundle['state']['offerings'][number],
 ): Promise<void> {
-  const existing = await firstByIndex(
-    db,
-    'serviceCapabilities',
-    'by_business_service_kind',
-    [
-      ['businessId', businessId],
-      ['serviceId', serviceId],
-      ['kind', capability.kind],
-    ],
-  )
+  const existing = await db
+    .query('businessOfferings')
+    .withIndex('by_offeringRef', (query) => query.eq('offeringRef', offering.offeringRef))
+    .unique()
+  const currentRevision = existing === null
+    ? offering.currentRevision
+    : Math.max(existing.currentRevision, offering.currentRevision)
   const patch = {
+    offeringRef: offering.offeringRef,
     businessId,
-    serviceId,
-    kind: capability.kind,
-    status: capability.status,
-    firstRequestMode: capability.firstRequest.mode,
-    publicDisclosure: capability.firstRequest.publicDisclosure,
-    publicChannel: capability.firstRequest.publicChannel,
-    ...(capability.firstRequest.mode === 'not_available_yet'
-      ? { noContactReason: capability.firstRequest.noContactReason, reason: capability.firstRequest.noContactReason }
-      : {}),
-    callable: false,
-    paymentRequired: false,
-    sourceHash: capability.sourceHash,
-    updatedAt: capability.updatedAt,
+    currentRevision,
+    status: offering.status,
+    updatedAt: existing !== null && existing.currentRevision > offering.currentRevision
+      ? existing.updatedAt
+      : offering.updatedAt,
   }
 
   if (existing === null) {
-    await db.insert('serviceCapabilities', { ...patch, createdAt: capability.createdAt })
+    await db.insert('businessOfferings', { ...patch, createdAt: offering.createdAt })
     return
   }
 
   await db.patch(existing._id, patch)
 }
 
-async function firstByIndex(
-  db: RuntimeDb,
-  tableName: string,
-  indexName: string,
-  fields: readonly (readonly [string, unknown])[]
-): Promise<RuntimeDocument | null> {
-  const indexed = db
-    .query(tableName)
-    .withIndex(indexName, (query) => fields.reduce((builder, [field, value]) => builder.eq(field, value), query))
-  return indexed.first === undefined ? indexed.unique() : indexed.first()
+async function upsertBusinessOfferingRevision(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  revision: DevSeedCatalogBundle['state']['revisions'][number],
+): Promise<void> {
+  const existing = await db
+    .query('businessOfferingRevisions')
+    .withIndex('by_offeringRef_and_revision', (query) => (
+      query.eq('offeringRef', revision.offeringRef).eq('revision', revision.revision)
+    ))
+    .unique()
+  const patch = {
+    offeringRef: revision.offeringRef,
+    businessId,
+    revision: revision.revision,
+    name: revision.name,
+    summary: revision.summary,
+    category: revision.category,
+    ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
+    ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
+    ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
+    ...(revision.price === undefined ? {} : { price: revision.price }),
+    sourceHash: revision.sourceHash,
+  }
+
+  if (existing === null) {
+    await db.insert('businessOfferingRevisions', { ...patch, createdAt: revision.createdAt })
+    return
+  }
+
+  await db.patch(existing._id, patch)
 }
 
-async function upsertHumanInquirySupportRecord(
-  db: RuntimeDb,
-  businessId: string,
-  ownerId: string,
-  record: CapabilityLaunchSupportRecord
+async function upsertOfferingAccessPath(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  accessPath: DevSeedCatalogBundle['state']['accessPaths'][number],
 ): Promise<void> {
-  const existing = await firstByIndex(
-    db,
-    'capabilityLaunchSupportRecords',
-    'by_supportRecordId',
-    [['supportRecordId', DEV_SEED_SUPPORT_RECORD_ID]]
-  )
+  const existing = await db
+    .query('offeringAccessPaths')
+    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPath.accessPathRef))
+    .unique()
+  if (existing !== null && existing.businessId !== businessId) {
+    throw new Error('Dev seed access path belongs to another business.')
+  }
+  if (existing !== null && existing.offeringRevision > accessPath.offeringRevision) {
+    return
+  }
+  const patch = {
+    accessPathRef: accessPath.accessPathRef,
+    businessId,
+    offeringRef: accessPath.offeringRef,
+    offeringRevision: accessPath.offeringRevision,
+    offeringSourceHash: accessPath.offeringSourceHash,
+    status: accessPath.status,
+    descriptor: accessPath.descriptor,
+    sourceHash: accessPath.sourceHash,
+    updatedAt: accessPath.updatedAt,
+  }
+
+  if (existing === null) {
+    await db.insert('offeringAccessPaths', { ...patch, createdAt: accessPath.createdAt })
+    return
+  }
+
+  await db.patch(existing._id, patch)
+}
+async function upsertHumanInquirySupportRecord(
+  db: GenericDatabaseWriter<DataModel>,
+  businessId: Id<'businesses'>,
+  ownerId: Id<'owners'>,
+  record: CapabilityLaunchSupportRecord,
+): Promise<void> {
+  const existing = await db
+    .query('capabilityLaunchSupportRecords')
+    .withIndex('by_supportRecordId', (query) => query.eq('supportRecordId', DEV_SEED_SUPPORT_RECORD_ID))
+    .unique()
   const now = record.lastReviewedAt
   const patch = {
     supportRecordId: DEV_SEED_SUPPORT_RECORD_ID,

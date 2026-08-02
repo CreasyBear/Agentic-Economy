@@ -8,12 +8,13 @@ import {
 import type {
   AnswerToolCallRecord,
   AnswerTurnTimingEntry,
-  FrozenTurnEvidence,
+  FrozenTurnEvidenceDraft,
 } from '@/modules/answer-thread/tooling'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('answer run summary', () => {
   it('summarizes complete, error, refused, timings, evidence, and coverage', () => {
-    const evidence: FrozenTurnEvidence = {
+    const evidence: FrozenTurnEvidenceDraft = {
       providers: [
         provider('alpha-plumbing'),
         provider('beta-plumbing'),
@@ -21,9 +22,9 @@ describe('answer run summary', () => {
       allowedSlugs: ['alpha-plumbing'],
       agentJsonUrl: '/api/businesses/search?q=plumber',
       toolCalls: [
-        toolCall('tc-1', 1, 'registry.search', 'complete', 'hash:search'),
-        toolCall('tc-2', 2, 'registry.detail', 'error', 'hash:detail-error'),
-        toolCall('tc-3', 3, 'registry.detail', 'refused', 'hash:detail-refused'),
+        toolCall('tc-1', 1, 'registry.search', 'complete', canonicalDigest('search')),
+        toolCall('tc-2', 2, 'registry.detail', 'error', canonicalDigest('detail-error')),
+        toolCall('tc-3', 3, 'registry.detail', 'refused', canonicalDigest('detail-refused')),
       ],
       timings: [
         timing('tool.run', 12, { toolId: 'registry.search', toolSeq: 1 }),
@@ -40,7 +41,7 @@ describe('answer run summary', () => {
     const report = buildAnswerRunReport({
       intent: 'refine_search',
       status: 'complete',
-      snapshotHash: 'hash:snapshot',
+      snapshotHash: canonicalDigest('snapshot'),
       evidence,
       gate: { ok: false, source: 'answer_gate', code: 'grounding_failed' },
     })
@@ -61,8 +62,12 @@ describe('answer run summary', () => {
     expect(report.summary.evidence).toEqual({
       providerCount: 2,
       allowedSlugCount: 1,
-      resultHashes: ['hash:detail-error', 'hash:detail-refused', 'hash:search'],
-      snapshotHash: 'hash:snapshot',
+      resultHashes: [
+        canonicalDigest('detail-error'),
+        canonicalDigest('detail-refused'),
+        canonicalDigest('search'),
+      ].sort((a, b) => a.localeCompare(b)),
+      snapshotHash: canonicalDigest('snapshot'),
     })
     expect(report.summary.workLog).toMatchObject({
       total: 3,
@@ -102,7 +107,7 @@ describe('answer run summary', () => {
       runId: 'turn-1',
       intent: 'refine_search',
       status: 'complete',
-      snapshotHash: 'hash:snapshot',
+      snapshotHash: canonicalDigest('snapshot'),
       evidence,
       gate: { ok: false, source: 'answer_gate', code: 'grounding_failed' },
     })
@@ -134,6 +139,9 @@ describe('answer run summary', () => {
         providers: [],
         allowedSlugs: [],
         agentJsonUrl: '',
+        toolCalls: [],
+        timings: [],
+        workLog: [],
       },
     })
 
@@ -161,6 +169,9 @@ describe('answer run summary', () => {
         providers: [],
         allowedSlugs: [],
         agentJsonUrl: '',
+        toolCalls: [],
+        timings: [],
+        workLog: [],
       },
     })
     expect(harnessReport.summary.run.status).toBe('error')

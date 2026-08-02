@@ -1,8 +1,8 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, SourceHash } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
-import type { PublicCatalogContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type {
   DiscoveryHealthReadback,
   DiscoveryManifestAttemptContract,
@@ -37,16 +37,13 @@ export function regenerateDiscoveryManifest(
     }
   }
 
-  const existing = latestAttemptForBusiness(state.discoveryManifestAttempts, catalogResult.catalog.businessId)
+  const existing = latestAttemptForBusiness(state.discoveryManifestAttempts, brandNonEmpty(catalogResult.catalog.businessId, 'BusinessId'))
   const retryCount = existing?.status === 'failed' ? existing.retryCount + 1 : existing?.retryCount ?? 0
-  const catalogForManifest: PublicCatalogContract = {
-    ...catalogResult.catalog,
-    discoveryStatus: 'available',
-  }
   const manifestResult = buildCatalogDiscoveryManifest({
-    catalog: catalogForManifest,
+    catalog: catalogResult.catalog,
     canonicalBaseUrl: options.canonicalBaseUrl,
     now: options.now,
+    sourceHash: catalogResult.sourceHash,
   })
   if (manifestResult.kind === 'hidden') {
     return {
@@ -57,7 +54,10 @@ export function regenerateDiscoveryManifest(
     }
   }
 
-  const manifest = manifestResult.manifest
+  const manifest = {
+    ...manifestResult.manifest,
+    sourceHash: catalogResult.sourceHash,
+  }
   const baseAttempt = ensureDiscoveryAttempt(state.discoveryManifestAttempts, {
     attemptId: attemptId(manifest.businessId, manifest.sourceHash),
     businessId: manifest.businessId,
@@ -103,7 +103,7 @@ export function regenerateDiscoveryManifest(
   }
 
   const replayed = baseAttempt.status === 'succeeded' && baseAttempt.generatedHash === manifest.generatedHash
-  const readback = buildReadback(manifest, options.now)
+  const readback = buildReadback(manifest, options.now, catalogResult.sourceHash)
   const {
     failureCode: _failureCode,
     failureMessageRedacted: _failureMessageRedacted,
@@ -148,7 +148,7 @@ export function invalidateDiscoveryManifest(
     }
     const next: DiscoveryManifestContract = {
       ...manifest,
-      status: 'stale',
+      disposition: 'stale',
       degradedReason: input.reasonCode,
       suppressedAt: input.now,
     }
@@ -181,9 +181,9 @@ export function invalidateDiscoveryManifest(
       }
     }
     if (
-      intent.businessId === input.businessId &&
-      intent.status === 'queued' &&
-      includesDiscoveryManifest
+      intent.businessId === input.businessId
+      && intent.status === 'queued'
+      && includesDiscoveryManifest
     ) {
       intent.status = 'applied'
     }
@@ -201,7 +201,7 @@ export function readDiscoveryHealth(state: DiscoverySourceState, businessId: Bus
   const catalogResult = readSourceCatalog(state, { businessId })
   const latestAttempt = latestAttemptForBusiness(state.discoveryManifestAttempts, businessId)
   const latestManifest = latestManifestForBusiness(state.discoveryManifests, businessId)
-  const sourceHash = catalogResult.kind === 'available' ? catalogResult.catalog.sourceHash : undefined
+  const sourceHash = catalogResult.kind === 'available' ? catalogResult.sourceHash : undefined
   const status = healthStatus(catalogResult.kind, latestAttempt, sourceHash)
 
   return {
@@ -220,7 +220,7 @@ function readSourceCatalog(
   state: DiscoverySourceState,
   input: RegenerateDiscoveryManifestInput
 ):
-  | { kind: 'available'; catalog: PublicCatalogContract }
+  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto; sourceHash: SourceHash }
   | { kind: 'hidden'; reason: 'not_public' | 'missing_business' | 'no_public_catalog' } {
   const business =
     'businessId' in input
@@ -232,23 +232,17 @@ function readSourceCatalog(
   }
 
   const registryHealth = readCatalogHealth(state, business.businessId)
-  const latestAttempt = latestAttemptForBusiness(state.discoveryManifestAttempts, business.businessId)
-  const discoveryStatus = healthStatus(
-    registryHealth.sourceState === 'published' ? 'available' : 'hidden',
-    latestAttempt,
-    business.sourceHash
-  )
   const result = getPublicBusinessCatalog(state, {
     slug: business.slug,
     indexStatus: registryHealth.indexStatus,
-    discoveryStatus,
+    discoveryStatus: 'available',
   })
 
   if (result.kind === 'hidden') {
     return { kind: 'hidden', reason: 'no_public_catalog' }
   }
 
-  return result
+  return { kind: 'available', catalog: result.catalog, sourceHash: business.sourceHash }
 }
 
 function healthStatus(
@@ -357,13 +351,17 @@ const defaultAdapter = {
   readManifest: () => ({ kind: 'ok' as const }),
 }
 
-function buildReadback(manifest: DiscoveryManifestContract, readAt: number): DiscoveryManifestReadback {
+function buildReadback(
+  manifest: DiscoveryManifestContract,
+  readAt: number,
+  sourceHash: SourceHash,
+): DiscoveryManifestReadback {
   return {
     businessId: manifest.businessId,
     slug: manifest.slug,
     manifestUrl: manifest.manifestUrl,
     sourceVersion: manifest.sourceVersion,
-    sourceHash: manifest.sourceHash,
+    sourceHash,
     generatedHash: manifest.generatedHash,
     bodyHash: manifest.bodyHash,
     urlHash: manifest.urlHash,
@@ -374,7 +372,7 @@ function buildReadback(manifest: DiscoveryManifestContract, readAt: number): Dis
 
 function ensureDiscoveryAuditEvent(
   state: DiscoverySourceState,
-  manifest: DiscoveryManifestContract,
+  manifest: DiscoveryManifestContract & { sourceHash: SourceHash },
   input: {
     eventType: 'discovery.generated' | 'discovery.degraded'
     failureCode?: string
@@ -410,7 +408,7 @@ function ensureDiscoveryAuditEvent(
     afterState: input.eventType === 'discovery.generated' ? 'available' : 'degraded',
     evidenceRefs: [],
     redactedPayload,
-    payloadHash: stableHash(redactedPayload),
+    payloadHash: canonicalDigest(redactedPayload),
     ...(input.failureCode === undefined ? {} : { failureCode: input.failureCode }),
     createdAt: input.now,
   })

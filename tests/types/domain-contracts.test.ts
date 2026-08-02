@@ -1,15 +1,10 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 
-import type { ClaimStatus, PublicStatus, TrustTier } from '@/modules/business/public'
+import type { PublicStatus } from '@/modules/business/public'
 import { ClaimStatusValues, PublicStatusValues, TrustTierValues } from '@/modules/business/public'
-import { ClaimStatusSchema, PublicStatusSchema, TrustTierSchema } from '@/modules/business/internal/validators'
-import type { FirstRequestMode, ServiceCapabilityStatus } from '@/modules/catalog/public'
-import { FirstRequestModeSchema, ServiceCapabilityStatusSchema } from '@/modules/catalog/internal/validators'
-import type { DiscoveryStatus } from '@/modules/discovery/public'
-import { DiscoveryStatusSchema } from '@/modules/discovery/internal/validators'
-import type { IndexStatus } from '@/modules/registry/public'
-import { IndexStatusSchema } from '@/modules/registry/internal/validators'
+import type { BusinessOfferingStatus, OfferingAccessPathStatus } from '@/modules/catalog/public'
+import { BusinessOfferingStatusValues, OfferingAccessPathStatusValues } from '@/modules/catalog/public'
 import type { AdminRole } from '@/modules/security/public'
 import { AdminRoleSchema } from '@/modules/security/internal/validators'
 import type { AuditEventType, AuditTargetType, FunnelEventType, OperatorControlKey } from '@/modules/observability/public'
@@ -26,15 +21,13 @@ import {
   OperatorControlKeySchema,
 } from '@/modules/observability/internal/validators'
 
+const BusinessOfferingStatusSchema = z.enum(BusinessOfferingStatusValues)
+const OfferingAccessPathStatusSchema = z.enum(OfferingAccessPathStatusValues)
+
 describe('domain-owned state contracts', () => {
   it('keeps validators equal to exported domain unions', () => {
-    expectTypeOf<z.infer<typeof ClaimStatusSchema>>().toEqualTypeOf<ClaimStatus>()
-    expectTypeOf<z.infer<typeof PublicStatusSchema>>().toEqualTypeOf<PublicStatus>()
-    expectTypeOf<z.infer<typeof TrustTierSchema>>().toEqualTypeOf<TrustTier>()
-    expectTypeOf<z.infer<typeof FirstRequestModeSchema>>().toEqualTypeOf<FirstRequestMode>()
-    expectTypeOf<z.infer<typeof ServiceCapabilityStatusSchema>>().toEqualTypeOf<ServiceCapabilityStatus>()
-    expectTypeOf<z.infer<typeof DiscoveryStatusSchema>>().toEqualTypeOf<DiscoveryStatus>()
-    expectTypeOf<z.infer<typeof IndexStatusSchema>>().toEqualTypeOf<IndexStatus>()
+    expectTypeOf<z.infer<typeof BusinessOfferingStatusSchema>>().toEqualTypeOf<BusinessOfferingStatus>()
+    expectTypeOf<z.infer<typeof OfferingAccessPathStatusSchema>>().toEqualTypeOf<OfferingAccessPathStatus>()
     expectTypeOf<z.infer<typeof AdminRoleSchema>>().toEqualTypeOf<AdminRole>()
     expectTypeOf<z.infer<typeof AuditEventTypeSchema>>().toEqualTypeOf<AuditEventType>()
     expectTypeOf<z.infer<typeof OperatorControlKeySchema>>().toEqualTypeOf<OperatorControlKey>()
@@ -47,9 +40,8 @@ describe('domain-owned state contracts', () => {
   })
 
   it('rejects invalid status strings at runtime', () => {
-    expect(ClaimStatusSchema.safeParse('active').success).toBe(false)
-    expect(PublicStatusSchema.safeParse('live').success).toBe(false)
-    expect(IndexStatusSchema.safeParse('ready').success).toBe(false)
+    expect(BusinessOfferingStatusSchema.safeParse('live').success).toBe(false)
+    expect(OfferingAccessPathStatusSchema.safeParse('active').success).toBe(false)
   })
 
   it('accepts representative P2-P5 observability substrate literals at runtime', () => {

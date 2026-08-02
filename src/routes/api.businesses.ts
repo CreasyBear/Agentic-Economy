@@ -1,11 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { registryListAction } from '@/modules/registry/registry.actions'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 
+import { optionalHasPrice, optionalMaxPriceMinor, optionalSearchLocation, optionalSearchMode } from '@/lib/http/search-query'
+import type { Action, ActionResult } from '@/modules/common/action'
 export const Route = createFileRoute('/api/businesses')({
   server: {
     handlers: {
-      GET: ({ request }) => handleDurableListBusinessesRequest(request),
+      GET: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleDurableListBusinessesRequest(request)),
     },
   },
 })
@@ -19,20 +23,50 @@ const LIST_QUERY_PARAMS = new Set(['cursor', 'limit'])
  * unsupported parameter and point at the endpoint that does search.
  */
 export async function handleDurableListBusinessesRequest(request: Request): Promise<Response> {
+  return runRegistryListRequest(request, { collection: 'businesses', action: registryListAction })
+}
+
+type RegistryCollection = 'businesses' | 'services'
+type RegistryRouteAction<Input, Result extends ActionResult> = Pick<Action<Input, Result>, 'schema' | 'run'>
+
+export async function runRegistryListRequest<Input, Result extends ActionResult>(
+  request: Request,
+  options: Readonly<{ collection: RegistryCollection; action: RegistryRouteAction<Input, Result> }>,
+): Promise<Response> {
   const url = new URL(request.url)
-  const unsupported = [...new Set(url.searchParams.keys())].filter((key) => !LIST_QUERY_PARAMS.has(key)).sort()
+  const unsupported = uniqueSorted([...url.searchParams.keys()].filter((key) => !LIST_QUERY_PARAMS.has(key)))
   if (unsupported.length > 0) {
+    const searchPath = options.collection === 'businesses' ? '/api/businesses/search?q=' : '/api/v1/services/search?q='
     return jsonResponse({
       kind: 'refused',
       reason: 'unsupported_query_parameter',
       unsupported,
       supported: [...LIST_QUERY_PARAMS],
-      detail: 'This endpoint lists businesses and does not accept a search term. Use /api/businesses/search?q= to search.',
+      detail: `This endpoint lists ${options.collection} and does not accept a search term. Use ${searchPath} to search.`,
     }, { status: 400 })
   }
 
-  return jsonResponse(await registryListAction.run({
-    data: registryListAction.schema.parse({
+  return jsonResponse(await options.action.run({
+    data: options.action.schema.parse({
+      ...optionalCursor(url.searchParams.get('cursor')),
+      ...optionalLimit(url.searchParams.get('limit')),
+    }),
+    context: { caller: 'http', request },
+  }))
+}
+
+export async function runRegistrySearchRequest<Input, Result extends ActionResult>(
+  request: Request,
+  action: RegistryRouteAction<Input, Result>,
+): Promise<Response> {
+  const url = new URL(request.url)
+  return jsonResponse(await action.run({
+    data: action.schema.parse({
+      query: url.searchParams.get('q') ?? '',
+      ...optionalSearchMode(url.searchParams.get('mode')),
+      ...optionalSearchLocation(url.searchParams.get('location')),
+      ...optionalMaxPriceMinor(url.searchParams.get('max_price_minor')),
+      ...optionalHasPrice(url.searchParams.get('has_price')),
       ...optionalCursor(url.searchParams.get('cursor')),
       ...optionalLimit(url.searchParams.get('limit')),
     }),

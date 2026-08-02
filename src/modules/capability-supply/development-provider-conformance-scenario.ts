@@ -10,7 +10,6 @@ import {
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { presentDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
 import {
@@ -24,7 +23,11 @@ import {
   buildDevelopmentPublishedOperationEvidence,
 } from './development-published-operation-evidence'
 import type { PublishedOperation } from './public'
-import type { RouteTransportRuntime } from './route-transport-runtime'
+import type {
+  RouteTransportRuntime,
+  X402RouteTransportRuntime,
+} from './route-transport-runtime'
+import { encodeX402PaymentRequiredHeader } from './server'
 
 type ProviderKey = 'A' | 'B'
 type Counters = { authorizations: number; signatures: number; sends: number }
@@ -53,6 +56,11 @@ const rawPayloads = {
     },
   },
 } as const
+
+function requireProviderFixture<T>(value: T | undefined, errorCode: string): T {
+  if (value === undefined) throw new Error(errorCode)
+  return value
+}
 
 export async function runDevelopmentProviderConformanceScenario() {
   const fixtureA = buildDevelopmentPublishedOperationEvidence()
@@ -88,11 +96,15 @@ export async function runDevelopmentProviderConformanceScenario() {
     uncertainB,
     aEvidence,
   )
+  const uncertainAPaymentAttempt = requireProviderFixture(
+    uncertainA.paymentAttempt,
+    'provider_a_payment_attempt_missing',
+  )
   const restoreRefusals = [
     restoreSnapshot('A-as-B', uncertainA, fixtureB, uncertainA.snapshot),
     restoreSnapshot('B-as-A', uncertainB, fixtureA, uncertainB.snapshot),
     restorePayeeTamper(uncertainA),
-    restorePaymentIdentifierCollision(uncertainB, uncertainA.paymentAttempt!.paymentIdentifier),
+    restorePaymentIdentifierCollision(uncertainB, uncertainAPaymentAttempt.paymentIdentifier),
   ]
 
   return {
@@ -194,7 +206,7 @@ async function runSelected(
     executed,
     view,
     snapshot,
-    snapshotDigest: canonicalDigest(snapshot as unknown as StableHashValue),
+    snapshotDigest: canonicalDigest(snapshot),
     counters,
     paymentAttempt: snapshot.paymentAttempts[0],
     normalized: key === 'A'
@@ -248,7 +260,7 @@ function paymentRuntime(
   payload: unknown,
   counters: Counters,
   mode: 'success' | 'uncertain',
-): RouteTransportRuntime {
+): X402RouteTransportRuntime {
   const config = JSON.parse(operation.transport.configJson)
   const query = config.query.map((entry: { parameter: string }) =>
     `${entry.parameter}=${entry.parameter === 'base' ? 'BTC' : entry.parameter === 'quote' ? 'USD' : input[entry.parameter as keyof typeof input]}`,
@@ -274,10 +286,6 @@ function paymentRuntime(
   return {
     resolveCredential: () => `mock:credential:${operation.identity.businessId}`,
     x402PaymentSigningAvailable: () => true,
-    createX402PaymentSignature: async () => {
-      counters.signatures += 1
-      return `mock:signature:${operation.identity.businessId}`
-    },
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         provider: operation.identity.businessId,
@@ -287,16 +295,24 @@ function paymentRuntime(
         effectGeneration: request.effectGeneration,
       })
       const prior = custody.get(identity)
-      if (prior !== undefined) return prior
+      if (prior !== undefined) {
+        return {
+          custodyRef: prior.custodyRef,
+          authorizationDigest: prior.authorizationDigest,
+        }
+      }
       counters.authorizations += 1
       counters.signatures += 1
       const paymentSignature = `mock:signature:${operation.identity.businessId}:${identity}`
       const prepared = {
-        custodyRef: `development-custody:${operation.identity.businessId}:${identity}`,
+        custodyRef: canonicalDigest({
+          kind: 'development-x402-custody:v1',
+          provider: operation.identity.businessId,
+          identity,
+        }),
         authorizationDigest: canonicalDigest(paymentSignature),
-        paymentSignature,
       }
-      custody.set(identity, prepared)
+      custody.set(identity, { ...prepared, paymentSignature })
       return prepared
     },
     readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
@@ -306,15 +322,19 @@ function paymentRuntime(
       [...custody.values()].find((value) => value.authorizationDigest === authorizationDigest)?.paymentSignature,
     send: async (_url, init) => {
       if (init?.headers?.['Payment-Signature'] === undefined) {
-        return response(402, '', {
-          'payment-required': Buffer.from(JSON.stringify(challenge)).toString('base64'),
+        return new Response('', {
+          status: 402,
+          headers: { 'payment-required': encodeX402PaymentRequiredHeader(challenge) },
         })
       }
       counters.sends += 1
       if (mode === 'uncertain') throw new Error(`lost_response:${operation.identity.businessId}`)
-      return response(200, JSON.stringify(payload), {
-        'payment-response': `mock:payment-proof:${operation.identity.businessId}`,
-        'provider-receipt': `mock:receipt:${operation.identity.businessId}`,
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: {
+          'payment-response': `mock:payment-proof:${operation.identity.businessId}`,
+          'provider-receipt': `mock:receipt:${operation.identity.businessId}`,
+        },
       })
     },
   }
@@ -415,33 +435,37 @@ function snapshotAnchors(
     descriptor: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>['descriptor']
   }> = run,
 ) {
+  const preparedAuthority = requireProviderFixture(
+    run.prepared.authority,
+    'provider_prepared_authority_missing',
+  )
   return {
-      operation: fixture.operation,
-      descriptor: fixture.descriptor,
-      actor,
-      origin: {
-        kind: 'standalone' as const,
-        callerRef: actor.callerRef,
-        principalRef: actor.principalRef,
-      },
-      issuedAuthority: {
-        reference: run.prepared.authority!.reference,
-        accepted: { kind: 'approve_each' as const, authorityRef: run.prepared.authority!.reference },
-        materialInputDigest: materialDigest(buildDynamicPublishedInput({
-          operation: run.operation,
-          descriptor: run.descriptor,
-          value: input,
-        }), ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target']),
-      },
-      expectedEffectCount: 1,
-      ...(run.paymentAttempt === undefined
-        ? {}
-        : { expectedChallengeDigest: run.paymentAttempt.challengeDigest }),
-      expectedSemanticClaim: {
-        ownerInvocationRef: run.prepared.invocationRef,
-        status: run.view.control.state === 'terminal' ? 'completed' as const : 'uncertain' as const,
-      },
-    }
+    operation: fixture.operation,
+    descriptor: fixture.descriptor,
+    actor,
+    origin: {
+      kind: 'standalone' as const,
+      callerRef: actor.callerRef,
+      principalRef: actor.principalRef,
+    },
+    issuedAuthority: {
+      reference: preparedAuthority.reference,
+      accepted: { kind: 'approve_each' as const, authorityRef: preparedAuthority.reference },
+      materialInputDigest: materialDigest(buildDynamicPublishedInput({
+        operation: run.operation,
+        descriptor: run.descriptor,
+        value: input,
+      }), ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target']),
+    },
+    expectedEffectCount: 1,
+    ...(run.paymentAttempt === undefined
+      ? {}
+      : { expectedChallengeDigest: run.paymentAttempt.challengeDigest }),
+    expectedSemanticClaim: {
+      ownerInvocationRef: run.prepared.invocationRef,
+      status: run.view.control.state === 'terminal' ? 'completed' as const : 'uncertain' as const,
+    },
+  }
 }
 
 function restorePayeeTamper(run: Awaited<ReturnType<typeof runSelected>>) {
@@ -529,16 +553,7 @@ function liveState(run: Awaited<ReturnType<typeof runSelected>>) {
   const snapshot = run.live.adapter.exportSnapshot()
   return {
     snapshot,
-    snapshotDigest: canonicalDigest(snapshot as unknown as StableHashValue),
+    snapshotDigest: canonicalDigest(snapshot),
     counters: { ...run.counters },
-  }
-}
-
-function response(status: number, body: string, headers: Record<string, string>) {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
-    text: async () => body,
   }
 }

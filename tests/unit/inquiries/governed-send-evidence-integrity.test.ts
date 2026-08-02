@@ -3,9 +3,13 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type {
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  OfferingAccessPathRecord,
+} from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction, type GovernedActionEncoding } from '@/modules/governed-action/public'
 import * as inquiries from '@/modules/inquiries/public'
 import {
@@ -23,7 +27,7 @@ import type {
 const ownerId = brandNonEmpty('owner:evidence-integrity', 'OwnerId')
 const claimId = brandNonEmpty('claim:evidence-integrity', 'ClaimId')
 const businessId = brandNonEmpty('business:evidence-integrity', 'BusinessId')
-const serviceId = brandNonEmpty('service:evidence-integrity', 'ServiceId')
+const offeringRef = brandNonEmpty('offering:evidence-integrity', 'OfferingRef')
 const otherOwnerId = brandNonEmpty('owner:evidence-integrity-other', 'OwnerId')
 const otherClaimId = brandNonEmpty('claim:evidence-integrity-other', 'ClaimId')
 const otherBusinessId = brandNonEmpty('business:evidence-integrity-other', 'BusinessId')
@@ -40,8 +44,7 @@ const governedSendIntegrityKeyring = {
 
 const target = {
   businessId,
-  serviceId,
-  capabilityKind: 'phone_inquiry',
+  offeringRef,
 } as const
 
 type GovernedSendReceipt = InquirySourceState['governedSendReceipts'][number]
@@ -255,12 +258,11 @@ function submitAdmittedInquiry(
   const { expectedDigest, ...commandOverrides } = overrides
   const baseCommand = {
     target,
-    body: 'Can a human owner contact me about this service?',
+    body: 'Can a human owner contact me about this offering?',
     contact: { name: 'Casey Customer', email: 'casey@example.test' },
     operationKey: brandNonEmpty(`inquiry:${key}`, 'OperationKey'),
     correlationId: brandNonEmpty(`correlation:inquiry:${key}`, 'CorrelationId'),
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: `ip:${key}`,
     customerAccessKeyring,
     governedSendIntegrityKeyring,
     now,
@@ -330,8 +332,9 @@ function encodeCommand(
 function admittedSourceState(overrides: Partial<InquirySourceState> = {}): InquirySourceState {
   return inquiries.createEmptyInquirySourceState({
     businesses: [business()],
-    businessServices: [service()],
-    serviceCapabilities: [capability()],
+    businessOfferings: [offering()],
+    businessOfferingRevisions: [offeringRevision()],
+    offeringAccessPaths: [inquiryAccessPath()],
     capabilityLaunchSupportRecords: [supportRecord()],
     owners: [owner()],
     claims: [claim()],
@@ -353,7 +356,7 @@ function business(): BusinessRecord {
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
-    sourceHash: stableHash({ businessId: String(businessId) }),
+    sourceHash: canonicalDigest({ businessId: String(businessId) }),
     createdAt: now,
     updatedAt: now,
   }
@@ -367,7 +370,7 @@ function otherBusiness(): BusinessRecord {
     slug: brandNonEmpty('evidence-integrity-other', 'Slug'),
     name: 'Other Evidence Business',
     normalizedName: 'other evidence business',
-    sourceHash: stableHash({ businessId: String(otherBusinessId) }),
+    sourceHash: canonicalDigest({ businessId: String(otherBusinessId) }),
   }
 }
 
@@ -396,7 +399,7 @@ function claim(): ClaimRecord {
     businessId,
     slug: brandNonEmpty('evidence-integrity', 'Slug'),
     status: 'published',
-    submittedFactsHash: stableHash({ claimId: String(claimId) }),
+    submittedFactsHash: canonicalDigest({ claimId: String(claimId) }),
     createdAt: now,
     updatedAt: now,
   }
@@ -409,7 +412,7 @@ function otherClaim(): ClaimRecord {
     businessId: otherBusinessId,
     slug: brandNonEmpty('evidence-integrity-other', 'Slug'),
     status: 'published',
-    submittedFactsHash: stableHash({ claimId: String(otherClaimId) }),
+    submittedFactsHash: canonicalDigest({ claimId: String(otherClaimId) }),
     createdAt: now,
     updatedAt: now,
   }
@@ -431,39 +434,45 @@ function otherRecipient(): ResolvableOwnerRecipient {
   }
 }
 
-function service(): BusinessServiceRecord {
+function offering(): BusinessOfferingRecord {
   return {
-    serviceId,
-    serviceSlug: brandNonEmpty('evidence-integrity', 'Slug'),
+    offeringRef,
     businessId,
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    currentRevision: 1,
     status: 'published',
-    sortOrder: 1,
-    sourceHash: stableHash({ serviceId: String(serviceId) }),
     createdAt: now,
     updatedAt: now,
   }
 }
 
-function capability(): ServiceCapabilityRecord {
+function offeringRevision(): BusinessOfferingRevisionRecord {
   return {
+    offeringRef,
     businessId,
-    serviceId,
-    kind: 'phone_inquiry',
-    status: 'available',
-    firstRequest: {
-      mode: 'inquiry_available',
-      publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the inquiry form for a first contact.',
-      rawContactExcluded: true,
+    revision: 1,
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Human triage for urgent plumbing issues.',
+    sourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    createdAt: now,
+  }
+}
+
+function inquiryAccessPath(): OfferingAccessPathRecord {
+  const sourceHash = canonicalDigest({ offeringRef: String(offeringRef), path: 'ae_inquiry' })
+  return {
+    accessPathRef: brandNonEmpty('access:evidence-integrity:inquiry', 'AccessPathRef'),
+    businessId,
+    offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash: canonicalDigest({ offeringRef: String(offeringRef), revision: 1 }),
+    status: 'published',
+    descriptor: {
+      kind: 'human_request',
+      channel: 'ae_inquiry',
+      disclosure: 'Use the inquiry form for a first contact.',
     },
-    callable: false,
-    paymentRequired: false,
-    sourceHash: stableHash({ capability: 'phone_inquiry' }),
+    sourceHash,
     createdAt: now,
     updatedAt: now,
   }
@@ -495,7 +504,7 @@ function supportRecord(): CapabilityLaunchSupportRecord {
       action: 'Hide positive inquiry availability until an operator review.',
     }],
     evidenceRefs: ['tests/unit/inquiries/governed-send-evidence-integrity.test.ts'],
-    sourceHash: stableHash({ supportRecord: 'evidence-integrity' }),
+    sourceHash: canonicalDigest({ supportRecord: 'evidence-integrity' }),
     correlationId: brandNonEmpty('correlation:inquiry:evidence-integrity-support', 'CorrelationId'),
     lastReviewedAt: now + 1_000,
   }

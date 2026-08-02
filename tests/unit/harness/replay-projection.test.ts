@@ -6,6 +6,7 @@ import {
   createHarnessSessionEntry,
 } from '@/modules/harness/public'
 import type { HarnessSessionEntry } from '@/modules/harness/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('harness replay projection', () => {
   it('projects the active root-to-leaf path and marks off-path terminal entries stale', () => {
@@ -77,7 +78,7 @@ function branchedEntries(): readonly HarnessSessionEntry[] {
         toolId: 'registry.search',
         inputJson: '{"q":"plumber"}',
         outputJson: '{"providers":["raw catalog dto"]}',
-        resultHash: 'hash:private',
+        resultHash: canonicalDigest('private'),
       },
       privatePayload: { providerEvidence: 'raw catalog dto' },
       publicSummary: { kind: 'catalog-search', count: 1 },

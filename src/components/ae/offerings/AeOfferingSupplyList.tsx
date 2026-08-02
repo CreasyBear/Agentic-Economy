@@ -1,7 +1,8 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   CalendarClockIcon,
   Code2Icon,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react'
 
 import { formatOfferingPrice, type PublicOfferingSupplyProjection } from '@/modules/catalog/public'
+import { formatNumericDate } from '@/lib/ui/format-time'
 import { offeringSupportCopy, plainLanguageCopy, presentOfferingAccessPath } from './offering-presentation'
 
 export type AeOfferingSupplyListProps = Readonly<{
@@ -38,7 +40,7 @@ export function AeOfferingSupplyList({ offerings, disposition = 'current', obser
             {disposition === 'partial' ? 'Some listed details are still updating' : 'These are the last safely listed details'}
           </p>
           <p className="block text-sm text-muted-foreground">
-            {observedAt === undefined ? 'Check before relying on the price or availability.' : `Last updated ${new Date(observedAt).toLocaleDateString('en-AU')}.`}
+            {observedAt === undefined ? 'Check before relying on the price or availability.' : `Last updated ${formatNumericDate(observedAt)}.`}
           </p>
         </Card>
       )}
@@ -130,8 +132,7 @@ function OptionalFact({ icon, label, value }: { icon: ReactNode; label: string; 
 }
 
 function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingSupplyProjection['accessPaths'][number]; showTechnicalDetails: boolean }) {
-  const detailsId = useId()
-  const [expanded, setExpanded] = useState(false)
+  const [technicalExpanded, setTechnicalExpanded] = useState(false)
   const presentation = presentOfferingAccessPath(path)
   return (
     <li className="grid min-w-0 gap-3 py-4 first:pt-1 last:pb-0">
@@ -154,18 +155,18 @@ function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingSu
         </Button>
       )}
       {presentation.technical === undefined || !showTechnicalDetails ? null : (
-        <div className="grid gap-2">
-          <button
-            type="button"
-            className="min-h-11 justify-self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-            aria-expanded={expanded}
-            aria-controls={detailsId}
-            onClick={() => setExpanded((current) => !current)}
-          >
-            {expanded ? 'Hide page information' : 'More page information'}
-          </button>
-          {expanded ? (
-            <dl id={detailsId} className="grid min-w-0 gap-2 border-l border-border pl-4 text-sm">
+        <Collapsible className="grid gap-2" open={technicalExpanded} onOpenChange={setTechnicalExpanded}>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto min-h-11 justify-self-start px-0 text-muted-foreground hover:text-foreground"
+            >
+              {technicalExpanded ? 'Hide page information' : 'More page information'}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <dl className="grid min-w-0 gap-2 border-l border-border pl-4 text-sm">
               {presentation.technical.map((fact) => (
                 <div key={fact.label} className="grid min-w-0 gap-1">
                   <dt className="text-muted-foreground">{fact.label}</dt>
@@ -173,8 +174,8 @@ function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingSu
                 </div>
               ))}
             </dl>
-          ) : null}
-        </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </li>
   )

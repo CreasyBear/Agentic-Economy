@@ -11,6 +11,8 @@ import {
 import type { CustomerRequestAgentKeyInventoryItem } from '@/modules/customer-request/agent-access'
 import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
 
+import { formatTimestamp } from '@/lib/ui/format-time'
+import { formatMoney } from '@/lib/ui/format-money'
 import { AeCreditTopUpPanel } from './AeCreditTopUpPanel'
 
 export type AgentOperatorKeyReadback = Readonly<{
@@ -46,7 +48,7 @@ export function AeAgentOperatorConsole({ items, loading, onRevoke, revokingKeyId
           <Card className="border border-border bg-card">
             <CardContent className="grid gap-2">
               <p className="text-sm font-semibold text-muted-foreground">AVAILABLE CREDIT</p>
-              <p className="text-lg font-semibold text-foreground">{hasUnavailableData ? 'Balance unavailable' : formatMoney(balanceMinor, currency)}</p>
+              <p className="text-lg font-semibold text-foreground">{hasUnavailableData ? 'Balance unavailable' : formatMoney(currency, balanceMinor)}</p>
               <p className="text-sm text-muted-foreground">{hasUnavailableData ? 'Some balance details are temporarily unavailable.' : 'Keep credit separate for each assistant.'}</p>
             </CardContent>
           </Card>
@@ -112,9 +114,9 @@ function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback;
     <li className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="grid gap-1">
         <p className="font-semibold text-foreground">{activityLabel(entry)}</p>
-        <p className="text-sm text-muted-foreground">{item.key.name} · {new Date(entry.observedAt).toLocaleString()}</p>
+        <p className="text-sm text-muted-foreground">{item.key.name} · {formatTimestamp(entry.observedAt)}</p>
       </div>
-      <p className="font-semibold text-foreground">{formatMoney(entry.grossAmountMinor, entry.currency)}</p>
+      <p className="font-semibold text-foreground">{formatMoney(entry.currency, entry.grossAmountMinor)}</p>
     </li>
   )
 }
@@ -133,7 +135,7 @@ function KeyCard({ item, revoking, disabled, onRevoke }: Readonly<{ item: AgentO
           <Metric label="Calls" value={String(usage?.callCount ?? 0)} />
           <Metric label="Free calls" value={String(usage?.freeCallCount ?? 0)} />
           <Metric label="Paid calls" value={String(usage?.paidCallCount ?? 0)} />
-          <Metric label="Spend" value={formatMoney(usage?.grossSpendMinor ?? 0, usage?.currency ?? item.account?.currency ?? 'USD')} />
+          <Metric label="Spend" value={formatMoney(usage?.currency ?? item.account?.currency ?? 'USD', usage?.grossSpendMinor ?? 0)} />
         </dl>
         <div className="grid gap-1">
           <p className="text-sm text-muted-foreground">What this assistant can do: {scopeLabel(item.key.authorityMode)}.</p>
@@ -184,6 +186,3 @@ function dataLabel(state: AgentOperatorKeyReadback['dataState']): string {
   return 'Usage details are temporarily unavailable'
 }
 
-function formatMoney(minor: number, currency: string): string {
-  return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(minor / 100)
-}

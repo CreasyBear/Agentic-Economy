@@ -10,18 +10,16 @@ import {
 } from '@/modules/inquiries/public'
 
 const businessId = 'business:admission-test' as InquiryTargetRef['businessId']
-const serviceId = 'service:admission-test' as InquiryTargetRef['serviceId']
+const offeringRef = 'offering:admission-test' as InquiryTargetRef['offeringRef']
 const ownerId = 'owner:admission-test' as InquirySourceState['owners'][number]['ownerId']
 const slug = 'admission-test' as InquirySourceState['businesses'][number]['slug']
-const serviceSlug = 'inquiry' as InquirySourceState['businessServices'][number]['serviceSlug']
 const claimId = 'claim:admission-test' as InquirySourceState['claims'][number]['claimId']
 const sourceHash = 'source:admission-test' as InquirySourceState['businesses'][number]['sourceHash']
 const correlationId = 'correlation:admission-test' as CapabilityLaunchSupportRecord['correlationId']
 
 const targetRef: InquiryTargetRef = {
   businessId,
-  serviceId,
-  capabilityKind: 'phone_inquiry',
+  offeringRef,
 }
 
 const business = {
@@ -41,39 +39,43 @@ const business = {
   updatedAt: 1,
 } satisfies InquirySourceState['businesses'][number]
 
-const service = {
-  serviceId,
-  serviceSlug,
+const offering = {
+  offeringRef,
   businessId,
+  currentRevision: 1,
+  status: 'published',
+  createdAt: 1,
+  updatedAt: 1,
+} satisfies InquirySourceState['businessOfferings'][number]
+
+const offeringRevision = {
+  offeringRef,
+  businessId,
+  revision: 1,
   name: 'Plumbing inquiry',
   category: 'Plumbing',
   summary: 'Owner-handled plumbing inquiries.',
-  serviceArea: 'Parramatta',
-  hoursOrUnknown: 'Owner supplied hours',
-  status: 'published',
-  sortOrder: 0,
   sourceHash,
   createdAt: 1,
-  updatedAt: 1,
-} satisfies InquirySourceState['businessServices'][number]
+} satisfies InquirySourceState['businessOfferingRevisions'][number]
 
-const capability = {
+const inquiryAccessPath = {
+  accessPathRef: 'access:admission-test' as InquirySourceState['offeringAccessPaths'][number]['accessPathRef'],
   businessId,
-  serviceId,
-  kind: 'phone_inquiry',
-  status: 'available',
-  firstRequest: {
-    mode: 'inquiry_available',
-    publicChannel: 'public_business_contact',
-    publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
-    rawContactExcluded: true,
+  offeringRef,
+  offeringRevision: 1,
+  offeringSourceHash: sourceHash,
+  status: 'published',
+  descriptor: {
+    kind: 'human_request',
+    channel: 'ae_inquiry',
+    disclosure: 'Use the source-owned inquiry form for a first contact.',
   },
-  callable: false,
-  paymentRequired: false,
   sourceHash,
   createdAt: 1,
   updatedAt: 1,
-} satisfies InquirySourceState['serviceCapabilities'][number]
+} satisfies InquirySourceState['offeringAccessPaths'][number]
+
 
 const owner = {
   ownerId,
@@ -147,8 +149,9 @@ const suppressionRule = {
 function admissionState(overrides: Partial<InquirySourceState> = {}): InquirySourceState {
   return createEmptyInquirySourceState({
     businesses: [business],
-    businessServices: [service],
-    serviceCapabilities: [capability],
+    businessOfferings: [offering],
+    businessOfferingRevisions: [offeringRevision],
+    offeringAccessPaths: [inquiryAccessPath],
     owners: [owner],
     claims: [claim],
     resolvableOwnerRecipients: [recipient],
@@ -168,6 +171,21 @@ const independentBlockerCases = [
   {
     name: 'an unpublished business page',
     overrides: { businesses: [{ ...business, publicStatus: 'unpublished' }] },
+    blocker: { kind: 'not_published', ownerLabel: 'Publish this business page' },
+  },
+  {
+    name: 'an unpublished Offering',
+    overrides: { businessOfferings: [{ ...offering, status: 'draft' }] },
+    blocker: { kind: 'not_published', ownerLabel: 'Publish this business page' },
+  },
+  {
+    name: 'a stale current Offering revision',
+    overrides: { businessOfferings: [{ ...offering, currentRevision: 2 }] },
+    blocker: { kind: 'not_published', ownerLabel: 'Publish this business page' },
+  },
+  {
+    name: 'a missing published ae_inquiry access path',
+    overrides: { offeringAccessPaths: [] },
     blocker: { kind: 'not_published', ownerLabel: 'Publish this business page' },
   },
   {

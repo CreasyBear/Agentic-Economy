@@ -1,6 +1,9 @@
+import { convertSchemaToJsonSchema } from '@tanstack/ai'
 import { z } from 'zod'
 
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { constantTimeStringEqual } from '@/lib/server/constant-time'
+import { response as json } from '@/lib/server/no-store-response'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   SANDBOX_PROVIDER_PROFILES,
@@ -85,7 +88,7 @@ export async function readSandboxRouteProviderDiscovery(
       'This endpoint returns deterministic sandbox evidence only.',
       'It does not prove real supply, booking, payment, dispatch, or fulfilment.',
     ],
-  })
+  }, 200)
 }
 
 export async function handleSandboxRouteProviderRequest(
@@ -95,11 +98,13 @@ export async function handleSandboxRouteProviderRequest(
 ): Promise<Response> {
   const authenticationFailure = authenticateSandboxProvider(request, options)
   if (authenticationFailure !== undefined) return authenticationFailure
-  const body = await readBoundedRequestText(request, MAX_BODY_BYTES)
-  if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
-  let parsedJson: unknown
-  try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
-  return await routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], parsedJson, request, options)
+  const body = await readBoundedRequestJson(request, MAX_BODY_BYTES)
+  if (!body.ok) {
+    return body.code === 'payload_too_large'
+      ? json({ kind: 'refused', reason: 'request_too_large' }, 413)
+      : json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  }
+  return await routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], body.value, request, options)
 }
 
 export async function readSandboxWorkflowProviderDiscovery(
@@ -132,7 +137,7 @@ export async function readSandboxWorkflowProviderDiscovery(
       'This endpoint returns deterministic sandbox workflow evidence only.',
       'It does not prove independent supply, booking, payment, dispatch, or fulfilment.',
     ],
-  })
+  }, 200)
 }
 
 export async function handleSandboxWorkflowProviderRequest(
@@ -144,11 +149,13 @@ export async function handleSandboxWorkflowProviderRequest(
   if (authenticationFailure !== undefined) return authenticationFailure
   const profile = workflowProfile(providerKey)
   if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
-  const body = await readBoundedRequestText(request, MAX_BODY_BYTES)
-  if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
-  let parsed: unknown
-  try { parsed = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
-  const probe = requestBody.safeParse(parsed)
+  const body = await readBoundedRequestJson(request, MAX_BODY_BYTES)
+  if (!body.ok) {
+    return body.code === 'payload_too_large'
+      ? json({ kind: 'refused', reason: 'request_too_large' }, 413)
+      : json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  }
+  const probe = requestBody.safeParse(body.value)
   if (probe.success && probe.data.operation === 'quote') {
     if (
       probe.data.bindingId !== profile.bindingId
@@ -168,10 +175,10 @@ export async function handleSandboxWorkflowProviderRequest(
       disclosures: [],
       providerQuoteRef: `sandbox-workflow-quote:${providerKey}:${quoteDigest}`,
       providerQuoteExpiresAt: SANDBOX_OFFER_EXPIRES_AT,
-    })
+    }, 200)
   }
   const input = exactWorkflowInput(
-    parsed,
+    body.value,
     profile.inputField,
     profile.decisionInputs ?? [],
     profile.optionalInputs?.map(({ field }) => field) ?? [],
@@ -394,10 +401,13 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   const scenarioResult = scenarioValue.safeParse(url.searchParams.get('scenario') ?? 'success')
   if (!scenarioResult.success) return json({ kind: 'refused', reason: 'sandbox_scenario_unknown' }, 400)
   const scenario = scenarioResult.data
-  const body = await readBoundedRequestText(request, MAX_BODY_BYTES)
-  if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
-  let parsedJson: unknown
-  try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
+  const body = await readBoundedRequestJson(request, MAX_BODY_BYTES)
+  if (!body.ok) {
+    return body.code === 'payload_too_large'
+      ? json({ kind: 'refused', reason: 'request_too_large' }, 413)
+      : json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  }
+  const parsedJson = body.value
   if (routeKey !== null && routeProfile !== undefined) return routeProviderResponse(routeKey, routeProfile, parsedJson)
   if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
   const preparationEgress = preparationEgressBody.safeParse(parsedJson)
@@ -419,7 +429,7 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)
   }
   if (scenario === 'refusal' && (parsed.data.operation === 'quote' || parsed.data.operation === 'structured_quote')) {
-    return json({ kind: 'refused', reason: 'sandbox_deterministic_refusal' })
+    return json({ kind: 'refused', reason: 'sandbox_deterministic_refusal' }, 200)
   }
   if (scenario === 'timeout' && parsed.data.operation === 'structured_quote') {
     await (options.wait ?? waitForDelay)(10_100, request.signal)
@@ -429,16 +439,16 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
     kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
     expectedLatencyMs: profile.latencyMs, dataFields: [], disclosures: [],
     providerQuoteRef: quoteRef(profile, parsed.data), providerQuoteExpiresAt: expiresAt(scenario),
-  })
+  }, 200)
   if (parsed.data.operation === 'structured_quote' || parsed.data.operation === 'structured_quote_reconcile') {
     return structuredQuote(profile, parsed.data, scenario)
   }
   if (parsed.data.operation === 'execute') return json({
     kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects',
     providerReference: quoteRef(profile, parsed.data),
-  })
-  if (parsed.data.operation === 'reconcile') return json({ kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects' })
-  return json({ kind: 'cancellation_rejected', reason: 'sandbox_provider_has_no_real_world_effect' })
+  }, 200)
+  if (parsed.data.operation === 'reconcile') return json({ kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects' }, 200)
+  return json({ kind: 'cancellation_rejected', reason: 'sandbox_provider_has_no_real_world_effect' }, 200)
 }
 
 function authenticateSandboxProvider(request: Request, options: HandlerOptions): Response | undefined {
@@ -446,7 +456,8 @@ function authenticateSandboxProvider(request: Request, options: HandlerOptions):
   if (expectedKey === undefined || expectedKey.length === 0) {
     return json({ kind: 'refused', reason: 'sandbox_provider_unconfigured' }, 503)
   }
-  if (request.headers.get('Authorization') !== `Bearer ${expectedKey}`) {
+  const presented = request.headers.get('Authorization')
+  if (presented === null || !constantTimeStringEqual(presented, `Bearer ${expectedKey}`)) {
     return json({ kind: 'refused', reason: 'authentication_required' }, 401)
   }
   return undefined
@@ -475,7 +486,7 @@ async function routeProviderResponse(
     kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
     expectedLatencyMs: 50, dataFields: [], disclosures: [],
     providerQuoteRef: `sandbox-route-quote:${routeKey}`, providerQuoteExpiresAt: SANDBOX_OFFER_EXPIRES_AT,
-  })
+  }, 200)
   if (routeKey === 'resolver') {
     const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
     if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
@@ -505,7 +516,7 @@ async function routeProviderResponse(
     await (options.wait ?? waitForDelay)(10_100, request?.signal ?? new AbortController().signal)
   }
   if (parsed.data.serviceReference.startsWith(MALFORMED_EVIDENCE_REFERENCE_PREFIX)) {
-    return json({ malformedSandboxEvidence: true })
+    return json({ malformedSandboxEvidence: true }, 200)
   }
   if (parsed.data.serviceReference.startsWith(PROVIDER_DENIAL_REFERENCE_PREFIX)) {
     const denialRef = `sandbox-quoter-denial:${canonicalDigest(parsed.data).slice(7, 31)}`
@@ -561,16 +572,16 @@ function sandboxCancellationResponse(input: z.infer<typeof cancellationBody>): R
   }
   const providerReference = `sandbox-cancellation:${outcome}:${canonicalDigest(input).slice(7, 31)}`
   if (outcome === 'accepted') {
-    return json({ kind: 'cancellation_accepted', providerReference })
+    return json({ kind: 'cancellation_accepted', providerReference }, 200)
   }
   if (outcome === 'rejected') {
     return json({
       kind: 'cancellation_rejected',
       reason: 'sandbox_provider_kept_current_work',
       providerReference,
-    })
+    }, 200)
   }
-  return json({ kind: 'cancellation_unknown' })
+  return json({ kind: 'cancellation_unknown' }, 200)
 }
 
 function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>, scenario: z.infer<typeof scenarioValue>): Response {
@@ -589,7 +600,7 @@ function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>,
     priceComponents: [{ label: 'Sandbox quoted amount', amountMinor: profile.amountMinor }],
     materialTerms: [{ key: 'sandbox', label: 'Supply status', value: 'Verification only; no real service or fulfilment.' }],
     cancellation: { kind: 'unsupported', summary: 'No cancellation is needed because this sandbox cannot create an effect.' },
-  })
+  }, 200)
 }
 
 function providerOption(
@@ -614,7 +625,7 @@ function providerOption(
     assertedAt,
     validUntil: SANDBOX_OFFER_EXPIRES_AT,
     output: { optionSummary: `${profile.label} — sandbox verification only` },
-  })
+  }, 200)
 }
 
 function quoteRef(profile: SandboxProfile, body: Record<string, unknown>): string {
@@ -625,12 +636,21 @@ function expiresAt(scenario: z.infer<typeof scenarioValue>): number {
   return scenario === 'expired' ? 1 : SANDBOX_OFFER_EXPIRES_AT
 }
 
-async function waitForDelay(milliseconds: number, signal: AbortSignal): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(resolve, milliseconds)
-    const abort = () => { clearTimeout(timeout); reject(new DOMException('Sandbox timeout aborted.', 'AbortError')) }
-    if (signal.aborted) abort()
-    else signal.addEventListener('abort', abort, { once: true })
+function waitForDelay(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'))
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, milliseconds)
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
   })
 }
 
@@ -640,26 +660,33 @@ function workflowProfile(providerKey: string) {
   return SANDBOX_WORKFLOW_PROVIDER_PROFILES[providerKey as SandboxWorkflowProviderKey]
 }
 
+function workflowInputSchema(
+  field: string,
+  requiredInputs: readonly Readonly<{ field: string; pattern: string }>[] = [],
+  optionalFields: readonly string[] = [],
+) {
+  const shape: Record<string, z.ZodType> = {
+    [field]: z.string().min(1),
+  }
+  for (const { field: requiredField, pattern } of requiredInputs) {
+    shape[requiredField] = z.string().regex(new RegExp(pattern, 'u'))
+  }
+  for (const optionalField of optionalFields) {
+    shape[optionalField] = z.string().min(1).optional()
+  }
+  return z.strictObject(shape)
+}
+
 function workflowObjectSchema(
   field: string,
   requiredInputs: readonly Readonly<{ field: string; pattern: string }>[] = [],
   optionalFields: readonly string[] = [],
 ) {
-  const requiredFields = requiredInputs.map(({ field: requiredField }) => requiredField)
+  const schema = convertSchemaToJsonSchema(workflowInputSchema(field, requiredInputs, optionalFields))
+  if (schema === undefined) throw new Error('sandbox_workflow_schema_conversion_failed')
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    type: 'object',
-    properties: {
-      [field]: { type: 'string', minLength: 1 },
-      ...Object.fromEntries(requiredInputs.map(({ field: name, pattern }) => [
-        name, { type: 'string', pattern },
-      ])),
-      ...Object.fromEntries(optionalFields.map((name) => [
-        name, { type: 'string', minLength: 1 },
-      ])),
-    },
-    required: [field, ...requiredFields],
-    additionalProperties: false,
+    ...schema,
   }
 }
 
@@ -669,19 +696,10 @@ function exactWorkflowInput(
   requiredInputs: readonly Readonly<{ field: string; pattern: string }>[],
   optionalFields: readonly string[],
 ): Readonly<Record<string, string>> | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  const record = value as Record<string, unknown>
-  const requiredFields = requiredInputs.map(({ field }) => field)
-  const allowed = new Set([requiredField, ...requiredFields, ...optionalFields])
-  if (typeof record[requiredField] !== 'string' || record[requiredField].length === 0
-    || requiredInputs.some(({ field, pattern }) => (
-      typeof record[field] !== 'string' || !new RegExp(pattern, 'u').test(record[field])
-    ))
-    || Object.entries(record).some(([field, entry]) => (
-      !allowed.has(field) || typeof entry !== 'string' || entry.length === 0
-    ))) return undefined
+  const parsed = workflowInputSchema(requiredField, requiredInputs, optionalFields).safeParse(value)
+  if (!parsed.success) return undefined
   const input: Record<string, string> = {}
-  for (const [field, entry] of Object.entries(record).sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [field, entry] of Object.entries(parsed.data).sort(([left], [right]) => left.localeCompare(right))) {
     if (typeof entry !== 'string') return undefined
     input[field] = entry
   }
@@ -692,6 +710,3 @@ function workflowInputSummary(input: Readonly<Record<string, string>>): string {
   return Object.entries(input).map(([field, value]) => `${field}: ${value}`).join(' | ')
 }
 
-function json(body: unknown, status = 200, headers: Readonly<Record<string, string>> = {}): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } })
-}

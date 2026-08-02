@@ -30,9 +30,6 @@ export async function prepareActionPreparation(
   }
 
   const current = await ports.loadCurrentAggregate(args.requestId)
-  if (current.kind === 'historical') {
-    return { kind: 'needs_attention', reason: 'historical_request_resubmit_required' }
-  }
   if (current.kind === 'not_found' || current.aggregate.snapshot.principalId !== args.principalId) {
     return { kind: 'refused', reason: 'request_not_found' }
   }

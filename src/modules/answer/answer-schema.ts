@@ -116,7 +116,7 @@ const consumerPlanResultSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
-    reason: z.enum(['no_current_supply', 'preview_unavailable', 'options_changed']),
+    reason: z.enum(['no_current_supply', 'preview_unavailable', 'options_changed', 'rate_limited']),
     destination: z.strictObject({ label: z.string(), request: z.string() }),
     decisions: z.array(consumerDecisionRecordSchema),
   }),

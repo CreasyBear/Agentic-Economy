@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { OperationKeyRecord } from '@/modules/observability/public'
 import { markOperationSucceeded, reserveOperationKey } from '@/modules/observability/internal/operation-keys'
 
@@ -14,7 +15,7 @@ describe('operation key contract', () => {
     expect(first.code).toBe('operation_reserved')
 
     if (first.kind === 'ok') {
-      store.save(markOperationSucceeded(first.record, brandNonEmpty('hash:result', 'SourceHash'), ['audit:1'], 20))
+      store.save(markOperationSucceeded(first.record, canonicalDigest('result'), ['audit:1'], 20))
     }
 
     const replay = reserveOperationKey(store, input, store)
@@ -22,7 +23,7 @@ describe('operation key contract', () => {
     expect(replay).toMatchObject({
       kind: 'ok',
       code: 'operation_replayed',
-      record: { resultHash: 'hash:result', effectRefs: ['audit:1'] },
+      record: { resultHash: canonicalDigest('result'), effectRefs: ['audit:1'] },
     })
   })
 
@@ -32,7 +33,7 @@ describe('operation key contract', () => {
 
     const conflict = reserveOperationKey(
       store,
-      { ...operationInput(), requestHash: brandNonEmpty('hash:changed', 'SourceHash') },
+      { ...operationInput(), requestHash: canonicalDigest('changed') },
       store
     )
 
@@ -66,7 +67,7 @@ function operationInput() {
     actorRef: 'owner:1',
     operationName: 'publish',
     key: brandNonEmpty('op:publish:1', 'OperationKey'),
-    requestHash: brandNonEmpty('hash:request', 'SourceHash'),
+    requestHash: canonicalDigest('request'),
     now: 10_000,
   } as const
 }

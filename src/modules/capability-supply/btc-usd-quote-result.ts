@@ -57,18 +57,14 @@ export type BtcUsdQuoteProjectionDecision =
 
 const DEVELOPMENT_QUOTE_FRESHNESS_MS = 300_000
 
-/**
- * Operation-owned interpretation of the labelled Phase 3A provider fixture.
- *
- * The provider payload stays behind this adapter. Shared hosts receive only the
- * normalized result and a digest reference to the raw evidence.
- */
-export function projectDevelopmentBtcUsdQuoteResult(input: Readonly<{
+type ParsedBtcUsdQuote = Readonly<{ price: number; observedAt: string }>
+
+export function projectBtcUsdQuoteResult(input: Readonly<{
   payload: unknown
   receivedAt: string
-}>): BtcUsdQuoteProjectionDecision {
-  const payload = providerPayloadSchema.safeParse(input.payload)
-  if (!payload.success) {
+}>, parsePayload: (payload: unknown) => ParsedBtcUsdQuote | undefined, source: BtcUsdQuoteResult['source']): BtcUsdQuoteProjectionDecision {
+  const parsedPayload = parsePayload(input.payload)
+  if (parsedPayload === undefined) {
     return { kind: 'refused', code: 'btc_usd_quote_payload_invalid' }
   }
   const receivedAt = isoTimestamp.safeParse(input.receivedAt)
@@ -76,8 +72,7 @@ export function projectDevelopmentBtcUsdQuoteResult(input: Readonly<{
     return { kind: 'refused', code: 'btc_usd_quote_received_at_invalid' }
   }
 
-  const observedAt = payload.data.data.BTC.quote.USD.last_updated
-  const observedTime = Date.parse(observedAt)
+  const observedTime = Date.parse(parsedPayload.observedAt)
   const receivedTime = Date.parse(receivedAt.data)
   if (observedTime > receivedTime) {
     return { kind: 'refused', code: 'btc_usd_quote_observed_after_receipt' }
@@ -88,17 +83,33 @@ export function projectDevelopmentBtcUsdQuoteResult(input: Readonly<{
     result: {
       base: 'BTC',
       quote: 'USD',
-      price: payload.data.data.BTC.quote.USD.price,
-      source: developmentBtcUsdQuoteSource,
-      observedAt,
+      price: parsedPayload.price,
+      source,
+      observedAt: parsedPayload.observedAt,
       receivedAt: receivedAt.data,
-      freshness:
-        receivedTime - observedTime <= DEVELOPMENT_QUOTE_FRESHNESS_MS
-          ? 'fresh'
-          : 'stale',
+      freshness: receivedTime - observedTime <= DEVELOPMENT_QUOTE_FRESHNESS_MS ? 'fresh' : 'stale',
       rawEvidenceRef: canonicalDigest(input.payload as StableHashValue),
     },
   }
+}
+
+
+/**
+ * Operation-owned interpretation of the labelled Phase 3A provider fixture.
+ *
+ * The provider payload stays behind this adapter. Shared hosts receive only the
+ * normalized result and a digest reference to the raw evidence.
+ */
+export function projectDevelopmentBtcUsdQuoteResult(input: Readonly<{
+  payload: unknown
+  receivedAt: string
+}>): BtcUsdQuoteProjectionDecision {
+  return projectBtcUsdQuoteResult(input, (payload) => {
+    const parsed = providerPayloadSchema.safeParse(payload)
+    return parsed.success
+      ? { price: parsed.data.data.BTC.quote.USD.price, observedAt: parsed.data.data.BTC.quote.USD.last_updated }
+      : undefined
+  }, developmentBtcUsdQuoteSource)
 }
 
 /**

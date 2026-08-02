@@ -1,6 +1,7 @@
 import { expect, request, test } from '@playwright/test'
 import { existsSync } from 'node:fs'
 import { newVercelBypassedRequestContext } from './vercel-bypass'
+import { parseHttpsUrl, resolvePath } from '../helpers/deployed-smoke'
 
 type SmokeConfig = {
   baseUrl: URL
@@ -63,20 +64,12 @@ const publicRoutes: readonly RouteExpectation[] = [
     mustNotMatch: privateSurfacePattern,
   },
   {
-    path: '/registry',
-    status: 200,
-    contentType: /text\/html/i,
-    securityHeaders: true,
-    mustContain: ['Find local service details before you contact a business.', config.businessSlug],
-    mustNotMatch: privateSurfacePattern,
-  },
-  {
     path: '/api/businesses',
     status: 200,
     contentType: /application\/json/i,
     securityHeaders: true,
     cache: 'no-store',
-    mustContain: ['public-business-catalog-api:v1', config.businessSlug],
+    mustContain: ['public-business-catalog-api:v2', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
   },
   {
@@ -94,7 +87,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     contentType: /application\/json/i,
     securityHeaders: true,
     cache: 'no-store',
-    mustContain: ['public-business-catalog-api:v1', config.businessSlug],
+    mustContain: ['public-business-catalog-api:v2', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
   },
   {
@@ -149,7 +142,7 @@ test.describe('Phase 1 deployed readback smoke', () => {
     const api = await newVercelBypassedRequestContext(request, config.baseUrl)
     try {
       for (const route of publicRoutes) {
-        const response = await api.get(resolvePath(route.path))
+        const response = await api.get(resolvePath(route.path, config.baseUrl))
         const body = await response.text()
 
         expect(response.status(), route.path).toBe(route.status)
@@ -183,18 +176,18 @@ test.describe('Phase 1 deployed readback smoke', () => {
   test('published public page is indexable and private/admin pages are not discoverable', async () => {
     const api = await newVercelBypassedRequestContext(request, config.baseUrl)
     try {
-      const publicPage = await api.get(resolvePath(`/${config.businessSlug}`))
+      const publicPage = await api.get(resolvePath(`/${config.businessSlug}`, config.baseUrl))
       const publicBody = await publicPage.text()
       expect(publicPage.status()).toBe(200)
       expect(publicBody).toMatch(/<meta[^>]+name=["']robots["'][^>]+content=["']index["']/i)
       expect(publicBody).toMatch(new RegExp(`rel=["']canonical["'][^>]+/${escapeRegExp(config.businessSlug)}`, 'i'))
 
-      const missingPage = await api.get(resolvePath('/missing-business-smoke-slug'))
+      const missingPage = await api.get(resolvePath('/missing-business-smoke-slug', config.baseUrl))
       const missingBody = await missingPage.text()
       expect(missingPage.status()).toBe(200)
       expect(missingBody).toMatch(/<meta[^>]+name=["']robots["'][^>]+content=["']noindex["']/i)
 
-      const sitemap = await api.get(resolvePath('/sitemap.xml'))
+      const sitemap = await api.get(resolvePath('/sitemap.xml', config.baseUrl))
       const sitemapBody = await sitemap.text()
       expect(sitemapBody).not.toMatch(/\/admin\/|\/claim\/success|\/owner\/status|missing-business-smoke-slug/i)
     } finally {
@@ -209,7 +202,7 @@ test.describe('Phase 1 deployed readback smoke', () => {
 
     try {
       for (const route of ['/admin/claims', '/admin/audit-events', '/admin/index-health']) {
-        const response = await ownerContext.get(resolvePath(route))
+        const response = await ownerContext.get(resolvePath(route, config.baseUrl))
         const body = await response.text()
 
         expect(response.status(), route).toBe(200)
@@ -229,7 +222,7 @@ test.describe('Phase 1 deployed readback smoke', () => {
     })
 
     try {
-      const indexHealth = await adminContext.get(resolvePath('/admin/index-health'))
+      const indexHealth = await adminContext.get(resolvePath('/admin/index-health', config.baseUrl))
       const indexBody = await indexHealth.text()
       expect(indexHealth.status()).toBe(200)
       expect(indexBody).toContain('Index readback')
@@ -237,12 +230,12 @@ test.describe('Phase 1 deployed readback smoke', () => {
       expect(indexBody).toMatch(/Public surfaces|Readback|Repair result/)
       expect(indexBody).not.toMatch(/Access denied|Private rows returned<\/span>\s*<span[^>]*>0/i)
 
-      const claims = await adminContext.get(resolvePath('/admin/claims'))
+      const claims = await adminContext.get(resolvePath('/admin/claims', config.baseUrl))
       const claimsBody = await claims.text()
       expect(claims.status()).toBe(200)
       expect(claimsBody).toMatch(/Claim recovery readback|Review claim/)
 
-      const audit = await adminContext.get(resolvePath('/admin/audit-events'))
+      const audit = await adminContext.get(resolvePath('/admin/audit-events', config.baseUrl))
       const auditBody = await audit.text()
       expect(audit.status()).toBe(200)
       expect(auditBody).toMatch(/Audit readback|Inspect audit/)
@@ -302,8 +295,8 @@ function readSmokeConfig(): SmokeConfig {
     )
   }
 
-  const baseUrl = parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string)
-  const convexUrl = parseHttpsUrl('DEPLOY_CONVEX_URL', required.DEPLOY_CONVEX_URL as string)
+  const baseUrl = parseHttpsUrl('DEPLOY_BASE_URL', required.DEPLOY_BASE_URL as string, 'deployed readback smoke')
+  const convexUrl = parseHttpsUrl('DEPLOY_CONVEX_URL', required.DEPLOY_CONVEX_URL as string, 'deployed readback smoke')
   const businessSlug = (required.SMOKE_BUSINESS_SLUG as string).trim()
 
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(businessSlug)) {
@@ -317,30 +310,6 @@ function readSmokeConfig(): SmokeConfig {
     ownerStorageState,
     businessSlug,
   }
-}
-
-function parseHttpsUrl(name: string, rawValue: string): URL {
-  let parsed: URL
-
-  try {
-    parsed = new URL(rawValue)
-  } catch {
-    throw new Error(`${name} must be a valid HTTPS URL.`)
-  }
-
-  if (parsed.protocol !== 'https:') {
-    throw new Error(`${name} must use https:// for deployed readback smoke.`)
-  }
-
-  if (/^(localhost|127\.0\.0\.1)$/.test(parsed.hostname) || parsed.hostname.endsWith('.local')) {
-    throw new Error(`${name} must point at a deployed environment, not localhost.`)
-  }
-
-  return parsed
-}
-
-function resolvePath(path: string): string {
-  return new URL(path, config.baseUrl).toString()
 }
 
 function assertSecurityHeaders(path: string, headers: Record<string, string>): void {

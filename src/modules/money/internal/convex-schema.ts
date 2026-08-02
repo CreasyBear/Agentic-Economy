@@ -61,7 +61,8 @@ export const moneyTables = {
     .index('by_idempotencyKey', ['idempotencyKey'])
     .index('by_transactionRef', ['transactionRef'])
     .index('by_principalId_and_createdAt', ['principalId', 'createdAt'])
-    .index('by_externalRef', ['externalRef']),
+    .index('by_externalRef', ['externalRef'])
+    .index('by_reversalOf', ['reversalOf']),
   moneyUsageEvents: defineTable({
     usageRef: identifier,
     principalId: identifier,
@@ -79,10 +80,21 @@ export const moneyTables = {
     transactionRef: v.optional(identifier),
     observedAt: v.number(),
   })
-    .index('by_principalId_and_observedAt', ['principalId', 'observedAt'])
-    .index('by_principalId_and_credentialId_and_observedAt', ['principalId', 'credentialId', 'observedAt'])
+    .index('by_principalId_and_credentialId_and_currency_and_observedAt', ['principalId', 'credentialId', 'currency', 'observedAt'])
     .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
-    .index('by_invocationRef', ['invocationRef']),
+    .index('by_invocationRef', ['invocationRef'])
+    .index('by_usageRef', ['usageRef']),
+  moneyCredentialUsageSummaries: defineTable({
+    principalId: identifier,
+    credentialId: identifier,
+    currency,
+    callCount: v.number(),
+    paidCallCount: v.number(),
+    freeCallCount: v.number(),
+    grossSpendMinor: amountMinor,
+    states: v.array(v.union(v.literal('free_tier'), v.literal('paid'), v.literal('insufficient_credit'), v.literal('outcome_unknown'), v.literal('refunded'))),
+    updatedAt: v.number(),
+  }).index('by_principalId_and_credentialId_and_currency', ['principalId', 'credentialId', 'currency']),
   moneyFreeTierCounters: defineTable({
     counterRef: identifier,
     principalId: identifier,
@@ -95,6 +107,24 @@ export const moneyTables = {
   })
     .index('by_principalId_and_offeringRef_and_windowStart', ['principalId', 'offeringRef', 'windowStart'])
     .index('by_offeringRef_and_windowStart', ['offeringRef', 'windowStart']),
+  moneyTopupCommands: defineTable({
+    commandRef: identifier,
+    principalId: identifier,
+    accountRef: identifier,
+    currency,
+    amountMinor,
+    processingFeeMinor: amountMinor,
+    chargeAmountMinor: amountMinor,
+    idempotencyKey: identifier,
+    inputDigest: identifier,
+    state: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed'), v.literal('outcome_unknown')),
+    externalRef: v.optional(identifier),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_commandRef', ['commandRef'])
+    .index('by_idempotencyKey', ['idempotencyKey'])
+    .index('by_externalRef', ['externalRef']),
   moneyStripeEvents: defineTable({
     stripeEventId: identifier,
     eventType: identifier,
@@ -133,7 +163,9 @@ export const moneyTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index('by_businessId_and_currency_and_state', ['businessId', 'currency', 'state'])
-    .index('by_periodStart_and_state', ['periodStart', 'state'])
-    .index('by_stripeTransferId', ['stripeTransferId']),
+ .index('by_businessId_and_currency_and_state', ['businessId', 'currency', 'state'])
+ .index('by_periodStart_and_state', ['periodStart', 'state'])
+ .index('by_stripeTransferId', ['stripeTransferId'])
+ .index('by_payoutRef', ['payoutRef'])
+ .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt']),
 } as const

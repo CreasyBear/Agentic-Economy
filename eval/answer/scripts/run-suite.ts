@@ -4,7 +4,8 @@ import { dirname, resolve } from 'node:path'
 
 import { runAnswerEvalSuite } from '../lib/suite'
 
-const outputPath = resolve(readOutputPath())
+const { values: outputValues } = parseArgs({ options: { output: { type: 'string' } }, strict: false })
+const outputPath = resolve(typeof outputValues.output === 'string' ? outputValues.output : 'output/eval/answer-suite-report.json')
 const report = await runAnswerEvalSuite()
 
 mkdirSync(dirname(outputPath), { recursive: true })
@@ -39,7 +40,3 @@ if (!report.ok) {
   process.exit(1)
 }
 
-function readOutputPath(): string {
-  const { values } = parseArgs({ options: { output: { type: 'string' } }, strict: false })
-  return typeof values.output === 'string' ? values.output : 'output/eval/answer-suite-report.json'
-}

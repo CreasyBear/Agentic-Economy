@@ -4,11 +4,19 @@ import {
   customerRequestFactInputSchema,
   customerRequestMessageInputSchema,
   customerRequestViewSchema,
+  workTreeScopeAllowedForMode,
 } from '@/modules/customer-request/agent-contract'
 import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 import { projectCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
 describe('Customer Request agent contract', () => {
+  it('allows inspect-only agents to inspect WorkTree repeat uses without granting repeat writes', () => {
+    expect(workTreeScopeAllowedForMode('work_trees:inspect', 'inspect_only')).toBe(true)
+    expect(workTreeScopeAllowedForMode('work_trees:repeat_inspect', 'inspect_only')).toBe(true)
+    expect(workTreeScopeAllowedForMode('work_trees:repeat_reserve', 'inspect_only')).toBe(false)
+    expect(workTreeScopeAllowedForMode('work_trees:repeat_finalize', 'inspect_only')).toBe(false)
+    expect(workTreeScopeAllowedForMode('work_trees:repeat_reconcile', 'inspect_only')).toBe(false)
+  })
   it('requires an exact source-owned replacement target for append supersession only', () => {
     expect(customerRequestMessageInputSchema.parse({
       idempotencyKey: 'amend:one',

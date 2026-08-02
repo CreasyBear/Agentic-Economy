@@ -1,13 +1,14 @@
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
-import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+
 type AeCapabilityListProps = {
-  catalog: PublicRouteCatalogContract
+  catalog: PublicBusinessCatalogApiV2Dto
 }
 
-/** One AeProviderCard (capability variant) per published service. */
+/** One Offering card per published Offering. */
 export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
-  if (catalog.services.length === 0) {
+  if (catalog.offerings.length === 0) {
     return (
       <Empty className="border border-border bg-card p-5">
         <EmptyHeader>
@@ -20,9 +21,9 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
 
   return (
     <ul className="m-0 grid list-none gap-4 p-0">
-      {catalog.services.map((service) => (
-        <li key={service.serviceId}>
-          <AeProviderCard variant="capability" service={service} />
+      {catalog.offerings.map((offering) => (
+        <li key={offering.offeringRef}>
+          <AeProviderCard variant="offering" offering={offering} />
         </li>
       ))}
     </ul>

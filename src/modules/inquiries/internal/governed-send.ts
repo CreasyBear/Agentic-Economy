@@ -3,8 +3,7 @@ import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
-import type { CapabilityKind } from '@/modules/catalog/public'
-import type { BusinessId, OperationKey, OwnerId, ServiceId } from '@/modules/common/ids'
+import type { BusinessId, OfferingRef, OperationKey, OwnerId } from '@/modules/common/ids'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type {
   GenericGovernedActionIntent,
@@ -74,8 +73,7 @@ export function resolveGovernedSendIntegrityKeyring(
  */
 export const GOVERNED_SEND_CANONICAL_FIELDS = Object.freeze([
   Object.freeze({ key: 'businessId', label: 'Business' }),
-  Object.freeze({ key: 'serviceId', label: 'Service' }),
-  Object.freeze({ key: 'capabilityKind', label: 'Request type' }),
+  Object.freeze({ key: 'offeringRef', label: 'Offering' }),
   Object.freeze({ key: 'body', label: 'Request' }),
   Object.freeze({ key: 'contactName', label: 'Name' }),
   Object.freeze({ key: 'contactEmail', label: 'Email' }),
@@ -101,8 +99,7 @@ export function buildGovernedSendIntent(
 ): GenericGovernedActionIntent<GovernedSendPayload> {
   const values: Record<GovernedSendCanonicalFieldKey, string | null> = {
     businessId: String(input.target.businessId),
-    serviceId: String(input.target.serviceId),
-    capabilityKind: input.target.capabilityKind,
+    offeringRef: String(input.target.offeringRef),
     body: input.body,
     contactName: input.contact.name ?? null,
     contactEmail: input.contact.email ?? null,
@@ -151,8 +148,7 @@ export type GovernedSendReceiptRecord = GovernedSendReceiptBase & (
 export type GovernedSendIntegrityTargetBinding = Readonly<{
   businessId: BusinessId
   ownerId: OwnerId
-  serviceId: ServiceId
-  capabilityKind: CapabilityKind
+  offeringRef: OfferingRef
   claimRef: string
   recipientRef: string
 }>

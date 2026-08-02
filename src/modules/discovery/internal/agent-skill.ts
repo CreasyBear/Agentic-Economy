@@ -3,11 +3,13 @@ import {
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
+  WORK_TREE_AGENT_SCOPE_VALUES,
 } from '@/modules/customer-request/agent-contract'
 // The leaf module, not the barrel: `answer-thread/public` drags the turn
 // orchestrator and its Node-only transport into every Convex function that
 // reaches discovery, which breaks Convex bundling.
 import { AGENT_KEY_ISSUANCE_PATH, ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export const PublicAgentSkillPath = '/SKILL.md' as const
 
@@ -16,7 +18,7 @@ export function buildPublicAgentSkillMarkdown(options: {
   routingBaseUrl?: string
   mcpToolNames: readonly string[]
 }): string {
-  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
   const entry = ANSWER_THREAD_AGENT_ENTRYPOINT
   return [
     '# Agentic Economy — assistant setup',
@@ -98,10 +100,15 @@ export function buildPublicAgentSkillMarkdown(options: {
     '## Confirming and starting an option (the key-gated escalation)',
     '',
     `3. Request a scoped credential with \`POST ${base}/oauth/device_authorization\` using \`${CUSTOMER_REQUEST_AGENT_SCOPE}\` and one exact mode (\`${CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.join('`, `')}\`). Show \`verification_uri\` and \`user_code\` to the signed-in owner; the owner approves at \`${base}${AGENT_KEY_ISSUANCE_PATH}/authorize?user_code=...\`. Poll \`POST ${base}/oauth/token\` at the returned interval. Send the returned bearer key (valid for seven days) only to \`${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}\`; never paste secrets.`,
-    'Without that key AE can compare options, but it cannot confirm or start anything.',
+    'Without that key AE can compare options, but it cannot confirm or start anything. The owner can revoke a key at any time.',
     '',
-    `1. Read \`GET ${base}/llms.txt\` for the current public surface index.`,
-    `4. \`POST ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}\` with an idempotency key, requestRef, and natural-language request.`,
+    '## WorkTree parity (authenticated)',
+    '',
+    `WorkTree host: \`${base}/api/v1/work-tree/{create|inspect|apply|decide|reserveRepeatUse|finalizeRepeatUse|reconcileRepeatUse|inspectRepeatUse}\`; core scopes: \`work_trees:create\`, \`work_trees:inspect\`, \`work_trees:apply\`, \`work_trees:decide\`.`,
+    'Repeat scopes: `work_trees:repeat_reserve`, `work_trees:repeat_finalize`, `work_trees:repeat_reconcile` (approve-each writes); `work_trees:repeat_inspect` (inspect-only). Exact fences; MCP read-only.',
+    '',
+    `${base}/llms.txt indexes the public surface.`,
+    `POST ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path} with idempotency key, requestRef, and request.`,
     '5. Follow only one matching `navigation.actions` relation and its displayed input template.',
     '6. Never construct a later path, sequence, business, limit, recipient, effect, or authority field.',
     '7. Answer clarification only with the customer answer or displayed typed value.',
@@ -137,6 +144,3 @@ export function buildPublicAgentSkillMarkdown(options: {
   ].join('\n')
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value.slice(0, -1) : value
-}

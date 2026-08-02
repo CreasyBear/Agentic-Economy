@@ -1,19 +1,16 @@
-import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { convexTest, type TestConvex } from 'convex-test'
+import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 
 import { api } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
 import schema from '../../../convex/schema'
-import { brandNonEmpty } from '@/modules/common/ids'
-import { stableHash } from '@/modules/common/stable-hash'
+import { brandNonEmpty, type BusinessId, type OfferingRef } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction } from '@/modules/governed-action/public'
 import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import { withSourceWrite } from '../../helpers/source-write-admission'
-
-const discoveredModules = import.meta.glob('../../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(
-  Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../../convex/', './'), load]),
-)
+import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 const now = 1_900_000_000_000
 const receiptKek = 'test-inquiry-receipt-kek-0123456789abcdef'
@@ -22,9 +19,8 @@ const customerAccessSecret = 'test-inquiry-access-secret-0123456789abcdef'
 const governedSendIntegritySecret = 'test-governed-send-integrity-secret-0123456789abcdef'
 type Backend = TestConvex<typeof schema>
 type SeededTarget = Readonly<{
-  businessId: string
-  serviceId: string
-  capabilityKind: 'phone_inquiry'
+  businessId: BusinessId
+  offeringRef: OfferingRef
 }>
 type StoredEvidence = Readonly<{
   receipt: Doc<'governedSendReceipts'>
@@ -48,7 +44,7 @@ describe('Convex governed-send receipt persistence', () => {
   })
 
   it('accepts an exact pre-existing immutable receipt without inserting another receipt or key', async () => {
-    const source = convexTest(schema, modules)
+    const source = createBackend()
     const target = await seedAdmittedTarget(source)
     const args = submissionArgs(target, 'exact-preexisting')
     await expect(source.mutation(api.inquiries.submitPublicInquiry, args)).resolves.toMatchObject({
@@ -57,7 +53,7 @@ describe('Convex governed-send receipt persistence', () => {
     })
     const evidence = await storedEvidence(source)
 
-    const destination = convexTest(schema, modules)
+    const destination = createBackend()
     await seedAdmittedTarget(destination)
     await copyStoredEvidence(destination, evidence, 1)
 
@@ -74,7 +70,7 @@ describe('Convex governed-send receipt persistence', () => {
   })
 
   it('rejects a conflicting immutable receipt with a typed integrity error and rolls back inquiry effects', async () => {
-    const source = convexTest(schema, modules)
+    const source = createBackend()
     const target = await seedAdmittedTarget(source)
     const args = submissionArgs(target, 'conflicting-preexisting')
     await source.mutation(api.inquiries.submitPublicInquiry, args)
@@ -90,7 +86,7 @@ describe('Convex governed-send receipt persistence', () => {
       },
     }
 
-    const destination = convexTest(schema, modules)
+    const destination = createBackend()
     await seedAdmittedTarget(destination)
     await copyStoredEvidence(destination, { receipt: conflictingReceipt, key: evidence.key }, 1)
 
@@ -107,13 +103,13 @@ describe('Convex governed-send receipt persistence', () => {
   })
 
   it('rejects duplicate physical receipt rows with a typed integrity error and rolls back inquiry effects', async () => {
-    const source = convexTest(schema, modules)
+    const source = createBackend()
     const target = await seedAdmittedTarget(source)
     const args = submissionArgs(target, 'duplicate-preexisting')
     await source.mutation(api.inquiries.submitPublicInquiry, args)
     const evidence = await storedEvidence(source)
 
-    const destination = convexTest(schema, modules)
+    const destination = createBackend()
     await seedAdmittedTarget(destination)
     await copyStoredEvidence(destination, evidence, 2)
 
@@ -129,7 +125,7 @@ describe('Convex governed-send receipt persistence', () => {
     expect(rows.operations).toHaveLength(0)
   })
   it('deletes a surviving wrapped key when exact erasure lineage already exists', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = createBackend()
     const target = await seedAdmittedTarget(backend)
     const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, submissionArgs(target, 'erasure-repair'))
     if (submitted.kind !== 'ok') throw new Error(submitted.code)
@@ -179,7 +175,7 @@ describe('Convex governed-send receipt persistence', () => {
   })
 
   it('rejects conflicting same-event erasure lineage and preserves the transaction', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = createBackend()
     const target = await seedAdmittedTarget(backend)
     const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, submissionArgs(target, 'erasure-conflict'))
     if (submitted.kind !== 'ok') throw new Error(submitted.code)
@@ -203,7 +199,7 @@ describe('Convex governed-send receipt persistence', () => {
       const conflictingMaterial = { ...lineageMaterial, reasonCode: 'tampered_reason' }
       await ctx.db.patch(lineage._id, {
         reasonCode: conflictingMaterial.reasonCode,
-        lineageHash: stableHash(conflictingMaterial),
+        lineageHash: canonicalDigest(conflictingMaterial),
       })
     })
     await reinsertWrappedKey(backend, evidence.key)
@@ -224,7 +220,7 @@ describe('Convex governed-send receipt persistence', () => {
   it.each([false, true])(
     'rejects valid plus conflicting duplicate lineage transactionally when wrapped key present=%s',
     async (restoreKey) => {
-      const backend = convexTest(schema, modules)
+      const backend = createBackend()
       const target = await seedAdmittedTarget(backend)
       const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, submissionArgs(target, `duplicate-lineage-${restoreKey}`))
       if (submitted.kind !== 'ok') throw new Error(submitted.code)
@@ -247,7 +243,7 @@ describe('Convex governed-send receipt persistence', () => {
         const conflictingMaterial = { ...lineageMaterial, erasureEventId: `${lineage.erasureEventId}:conflict` }
         await ctx.db.insert('governedSendErasureLineage', {
           ...conflictingMaterial,
-          lineageHash: stableHash(conflictingMaterial),
+          lineageHash: canonicalDigest(conflictingMaterial),
         })
       })
       if (restoreKey) await reinsertWrappedKey(backend, evidence.key)
@@ -265,6 +261,12 @@ describe('Convex governed-send receipt persistence', () => {
   )
 
 })
+
+function createBackend(): Backend {
+  const backend = convexTest(schema, modules)
+  registerRateLimiter(backend)
+  return backend
+}
 
 async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
   return backend.run(async (ctx) => {
@@ -299,36 +301,44 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
       createdAt: now,
       updatedAt: now,
     })
-    const serviceId = await ctx.db.insert('businessServices', {
+    await ctx.db.insert('businessOfferings', {
+      offeringRef: 'offering:evidence-integrity',
       businessId,
-      serviceSlug: 'emergency-plumbing',
-      name: 'Emergency plumbing',
-      category: 'Emergency plumbing',
-      summary: 'Human triage for urgent plumbing issues.',
-      serviceArea: 'Parramatta',
-      hoursOrUnknown: 'Hours supplied by owner',
+      currentRevision: 1,
       status: 'published',
-      sortOrder: 1,
-      sourceHash: 'sha256:evidence-integrity-service',
       createdAt: now,
       updatedAt: now,
     })
-    await ctx.db.insert('serviceCapabilities', {
+    await ctx.db.insert('businessOfferingRevisions', {
+      offeringRef: 'offering:evidence-integrity',
       businessId,
-      serviceId,
-      kind: 'phone_inquiry',
-      status: 'available',
-      firstRequestMode: 'inquiry_available',
-      publicDisclosure: 'Use the inquiry form for a first contact.',
-      publicChannel: 'public_business_contact',
-      callable: false,
-      paymentRequired: false,
-      sourceHash: 'sha256:evidence-integrity-capability',
+      revision: 1,
+      name: 'Emergency plumbing',
+      category: 'Emergency plumbing',
+      summary: 'Human triage for urgent plumbing issues.',
+      serviceAreaSummary: 'Parramatta',
+      availabilitySummary: 'Hours supplied by owner',
+      sourceHash: 'sha256:evidence-integrity-offering',
+      createdAt: now,
+    })
+    await ctx.db.insert('offeringAccessPaths', {
+      accessPathRef: 'access:evidence-integrity:inquiry',
+      businessId,
+      offeringRef: 'offering:evidence-integrity',
+      offeringRevision: 1,
+      offeringSourceHash: 'sha256:evidence-integrity-offering',
+      status: 'published',
+      descriptor: {
+        kind: 'human_request',
+        channel: 'ae_inquiry',
+        disclosure: 'Use the inquiry form for a first contact.',
+      },
+      sourceHash: 'sha256:evidence-integrity-access',
       createdAt: now,
       updatedAt: now,
     })
     await ctx.db.insert('capabilityLaunchSupportRecords', {
-      supportRecordId: 'support:evidence-integrity',
+      supportRecordId: 'human_inquiry_owner_inbox',
       businessId,
       capability: 'human_inquiry_owner_inbox',
       status: 'open',
@@ -350,7 +360,7 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
         privacyDeletes: 0,
       }),
       supportEscalationPath: 'Evidence integrity owner inbox support queue.',
-      claimDisablePath: 'Disable inquiries or remove inquiry availability.',
+      claimDisablePath: 'Disable the published Offering inquiry access path.',
       perChannelKillRulesJson: JSON.stringify([{
         channel: 'public_claim',
         trigger: 'Evidence integrity support capacity is exceeded.',
@@ -364,9 +374,8 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
       updatedAt: now,
     })
     return {
-      businessId: String(businessId),
-      serviceId: String(serviceId),
-      capabilityKind: 'phone_inquiry',
+      businessId: brandNonEmpty(String(businessId), 'BusinessId'),
+      offeringRef: brandNonEmpty('offering:evidence-integrity', 'OfferingRef'),
     }
   })
 }
@@ -378,8 +387,7 @@ function submissionArgs(target: SeededTarget, key: string) {
   const contact = { name: 'Casey Customer', email: 'casey@example.test' }
   const targetRef = {
     businessId: brandNonEmpty(target.businessId, 'BusinessId'),
-    serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
-    capabilityKind: target.capabilityKind,
+    offeringRef: brandNonEmpty(target.offeringRef, 'OfferingRef'),
   }
   const encoded = encodeGovernedAction(buildGovernedSendIntent({ target: targetRef, body, contact }))
   if (encoded.kind !== 'encoded') throw new Error(`governed encoding failed: ${encoded.code}`)
@@ -389,7 +397,6 @@ function submissionArgs(target: SeededTarget, key: string) {
     body,
     contact,
     pseudonymousSessionId: `session:${key}`,
-    abuseBucketKey: `ip:${key}`,
     operationKey,
     expectedDigest: encoded.digest,
     correlationId,

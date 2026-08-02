@@ -5,16 +5,19 @@ import {
   openRouterModel,
   type OpenRouterGatewayConfig,
 } from '@/modules/model-gateway/public'
+import { stableUnique } from '@/modules/common/stable-unique'
 
 import {
   StorefrontEnrichmentSourceLabel,
   StorefrontImportConfirmationState,
+  normalizeStorefrontSlug,
   type StorefrontImportDraft,
   type StorefrontImportedFact,
   type StorefrontImportedFactField,
 } from './import-draft'
 
 
+import { emptyPublicOwnerClaimInput } from '@/modules/catalog/claim-draft'
 import type { PublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 
 /**
@@ -143,26 +146,6 @@ const draftedFieldLabels: readonly {
   { key: 'hoursOrUnknown', field: 'hoursOrUnknown', label: 'Hours' },
 ]
 
-const emptyClaimProfile: PublicOwnerClaimFlowInput = {
-  businessName: '',
-  category: '',
-  suburb: '',
-  stateTerritory: '',
-  requestedSlug: '',
-  publishedPhone: '',
-  ownerMessage: '',
-  sourceLabel: '',
-  serviceName: '',
-  serviceCategory: '',
-  serviceSummary: '',
-  serviceArea: '',
-  hoursOrUnknown: '',
-  photoUrl: '',
-  responseTimeMinutes: '',
-  firstRequestMode: 'not_available_yet',
-  publicDisclosure: '',
-  noContactReason: '',
-}
 
 export async function enrichBusinessFromWebSearch(
   input: BusinessEnrichmentInput,
@@ -287,7 +270,7 @@ async function requestCompletion<Result extends BusinessEnrichmentResult | WebDi
       // One retry, so a transient provider status still gets two attempts.
       maxRetries: MAX_ENRICHMENT_ATTEMPTS - 1,
       temperature: 0,
-      system: request.system,
+      instructions: request.system,
       prompt: request.prompt,
       abortSignal: timeoutSignal,
     })
@@ -296,12 +279,10 @@ async function requestCompletion<Result extends BusinessEnrichmentResult | WebDi
     }
     // OpenRouter's web plugin returns its citations as URL sources; a claim is
     // only admissible when one of them backs it.
-    const citations: string[] = []
-    for (const source of result.sources) {
-      if (source.sourceType === 'url' && source.url.trim().length > 0 && !citations.includes(source.url)) {
-        citations.push(source.url)
-      }
-    }
+    const citations = stableUnique(result.sources.flatMap((source) => {
+      if (source.sourceType !== 'url' || source.url.trim().length === 0) return []
+      return [source.url]
+    }))
     return { kind: 'ok', content: result.text, citations }
   } catch (error) {
     return { kind: 'failed', result: failure(enrichmentFailureReason(error, timeoutSignal)) }
@@ -382,12 +363,12 @@ function buildEnrichmentDraft(
 
   const businessName = fields.businessName?.trim() || requestedBusinessName
   const profile: PublicOwnerClaimFlowInput = {
-    ...emptyClaimProfile,
+    ...emptyPublicOwnerClaimInput,
     businessName,
     category: fields.category?.trim() ?? '',
     suburb: fields.suburb?.trim() ?? '',
     stateTerritory: fields.stateTerritory?.trim() ?? '',
-    requestedSlug: businessName.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 80),
+    requestedSlug: normalizeStorefrontSlug(businessName),
     sourceLabel: 'Gathered from a web search. Review before publishing.',
     serviceName: fields.serviceName?.trim() ?? '',
     serviceCategory: fields.serviceCategory?.trim() ?? '',
