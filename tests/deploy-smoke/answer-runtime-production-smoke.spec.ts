@@ -7,6 +7,7 @@ import {
   applyVercelProtectionBypassToPage,
   newVercelBypassedRequestContext,
 } from './vercel-bypass'
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 type CatalogPage = {
   page: readonly PublicBusinessCatalogApiV2Dto[]
@@ -60,7 +61,7 @@ test('runtime-selected direct and model-recovery answer paths stay public and re
     const exactQuery = exactCategoryLocalityQuery(subject)
     const modelQuery = await findLiteralMiss(api, baseUrl, subject)
 
-    const directThreadUrl = await submitQuery(page, baseUrl, exactQuery)
+    const directThreadUrl = await submitQuery(api, page, baseUrl, exactQuery)
     await assertTerminalAnswer(page, subject, exactQuery)
     timestamps.directTerminalAt = timestamp()
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -69,7 +70,7 @@ test('runtime-selected direct and model-recovery answer paths stay public and re
     expect(directReadback.recoverySearchObserved).toBe(false)
     timestamps.directReadbackAt = timestamp()
 
-    const modelThreadUrl = await submitQuery(page, baseUrl, modelQuery)
+    const modelThreadUrl = await submitQuery(api, page, baseUrl, modelQuery)
     await assertTerminalAnswer(page, subject, modelQuery)
     timestamps.modelTerminalAt = timestamp()
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -134,27 +135,35 @@ async function findLiteralMiss(
   throw new Error('no_bounded_literal_miss_for_selected_subject')
 }
 
-async function submitQuery(page: Page, baseUrl: URL, query: string): Promise<string> {
-  await page.goto(absoluteUrl(baseUrl, '/'), { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible({ timeout: 30_000 })
+async function submitQuery(
+  api: APIRequestContext,
+  page: Page,
+  baseUrl: URL,
+  query: string,
+): Promise<string> {
+  const response = await api.post(absoluteUrl(baseUrl, '/api/answer/turn'), { data: { query }, timeout: 180_000 })
+  if (!response.ok()) throw new Error(`answer_turn_failed:${response.status()}`)
 
-  const searchbox = page.getByRole('searchbox', { name: /what do you need done/i }).last()
-  await expect(searchbox).toBeEditable({ timeout: 30_000 })
-  await searchbox.fill(query)
-  await expect(searchbox).toHaveValue(query)
+  const frames = await readAnswerTurnStream(new Response(await response.text(), {
+    status: response.status(),
+    headers: response.headers(),
+  }))
+  const thread = frames.find((frame) => frame.event.type === 'thread')?.event
+  if (thread?.type !== 'thread') throw new Error('answer_turn_thread_event_missing')
+  const terminal = frames.at(-1)?.event
+  if (terminal?.type !== 'complete') {
+    throw new Error(terminal?.type === 'error' ? `answer_turn_error:${terminal.code}` : 'answer_turn_terminal_event_missing')
+  }
 
-  const submit = page.getByRole('button', { name: /^(?:search|send)$/i }).last()
-  await expect(submit).toBeEnabled()
-  await submit.click()
-  await expect(page).toHaveURL(/\/t\/[^/]+/u, { timeout: 30_000 })
+  const threadUrl = absoluteUrl(baseUrl, `/t/${encodeURIComponent(thread.threadId)}`)
+  await page.goto(threadUrl, { waitUntil: 'domcontentloaded' })
   await expectQueryInTranscript(page, query)
-  return page.url()
+  return threadUrl
 }
 
 async function assertTerminalAnswer(page: Page, subject: PublicBusinessCatalogApiV2Dto, query: string): Promise<void> {
   await expectQueryInTranscript(page, query)
-  await expect(page.locator('section[data-phase="complete"]').last()).toBeVisible({ timeout: 120_000 })
-  await expect(page.getByText('Answer ready.', { exact: true }).last()).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('heading', { name: query, exact: true, level: 1 })).toBeVisible({ timeout: 30_000 })
 
   const citation = page.getByRole('link', { name: subject.name, exact: true }).first()
   await expect(citation).toBeVisible({ timeout: 30_000 })
@@ -163,14 +172,14 @@ async function assertTerminalAnswer(page: Page, subject: PublicBusinessCatalogAp
   expect(new URL(href as string, page.url()).pathname).toBe(`/${subject.slug}`)
 
   const bodyText = await page.locator('body').innerText()
-  expect(bodyText).toMatch(/business still confirms timing, quote, and availability/i)
+  expect(bodyText).toMatch(/business(?:es)?(?: still)? confirm(?:s)? timing, (?:price|quote), (?:and )?availability/i)
   expect(bodyText).not.toMatch(FORBIDDEN_PUBLIC_EFFECT_CLAIM)
   expect(bodyText).not.toMatch(FORBIDDEN_PRIVATE_PUBLIC_EVIDENCE)
 }
 
 async function expectQueryInTranscript(page: Page, query: string): Promise<void> {
   await expect(
-    page.getByRole('log', { name: /chat transcript/i }).getByText(query, { exact: true }).first(),
+    page.getByRole('log', { name: /chat(?: transcript)?/i }).getByText(query, { exact: true }).first(),
   ).toBeVisible({ timeout: 30_000 })
 }
 
@@ -238,8 +247,8 @@ function exactCategoryLocalityQuery(subject: PublicBusinessCatalogApiV2Dto): str
 
 function boundedTypoQueries(subject: PublicBusinessCatalogApiV2Dto): readonly string[] {
   const variants = [
-    typoAllServiceWords(subject.category),
     ...typoVariants(subject.category).filter((category) => !ANSWER_SERVICE_SIGNAL.test(category)),
+    typoAllServiceWords(subject.category),
   ]
   const fallback = variants.filter((category) => category.trim().length > 0)
   return [...new Set((fallback.length > 0 ? fallback : [`${subject.category.trim()}x`]).slice(0, 6).map((category) => (

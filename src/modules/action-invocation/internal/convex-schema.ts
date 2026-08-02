@@ -40,10 +40,15 @@ export const durableAttemptOutcomeValue = v.union(
   v.object({
     state: v.literal('failed'), retry: v.literal('safe_before_release'),
     errorDigest: v.optional(v.string()),
+    /** @deprecated Legacy rows only; current writes intentionally omit this field. */
+    message: v.optional(v.string()),
   }),
   v.object({
     state: v.literal('uncertain'), retry: v.literal('reconcile_before_retry'),
-    errorDigest: v.optional(v.string()), reconciliationRequiredAt: v.string(),
+    errorDigest: v.optional(v.string()),
+    /** @deprecated Legacy rows only; current writes intentionally omit this field. */
+    message: v.optional(v.string()),
+    reconciliationRequiredAt: v.string(),
   }),
   v.object({
     state: v.literal('timed_out'), timeoutMs: v.number(),

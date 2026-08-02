@@ -61,11 +61,19 @@ export function actionToOpenRouterTool(action: AnyAction): OpenRouterToolSpec {
   return {
     type: 'function',
     function: {
-      name: action.id,
+      name: openRouterToolName(action.id),
       description,
       parameters,
     },
   }
+}
+
+export function openRouterToolName(actionId: string): string {
+  const name = actionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(name)) {
+    throw new Error(`Action ${actionId} cannot be represented as an OpenRouter tool name`)
+  }
+  return name
 }
 
 function openRouterParametersFromActionParameters(

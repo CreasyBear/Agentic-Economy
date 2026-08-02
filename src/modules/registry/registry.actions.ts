@@ -49,7 +49,7 @@ import {
  */
 
 const registryListInputSchema = z.strictObject({
-  cursor: z.string().max(200).optional().describe('Pagination cursor from a previous catalog page'),
+  cursor: z.string().max(512).optional().describe('Pagination cursor from a previous catalog page'),
   limit: z
     .number()
     .int()
@@ -68,7 +68,7 @@ const registrySearchInputSchema = z.strictObject({
     .max(50)
     .optional()
     .describe('Maximum providers to return'),
-  cursor: z.string().max(200).optional().describe('Pagination cursor from a previous search page'),
+  cursor: z.string().max(512).optional().describe('Pagination cursor from a previous search page'),
   mode: z
     .enum(['near_me', 'whole_catalogue'])
     .optional()

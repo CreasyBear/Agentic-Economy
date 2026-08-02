@@ -1,7 +1,14 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import schema from '../../../convex/schema'
+
+const convexModules = Object.fromEntries(
+  Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
+    .map(([path, load]) => [path.replace('../../../convex/', './'), load]),
+)
 
 const IndexSchema = z.object({
   indexDescriptor: z.string(),
@@ -525,5 +532,89 @@ describe('Convex schema', () => {
         }),
       ]),
     )
+  })
+
+  it('validates current and legacy action invocation attempts', async () => {
+    const backend = convexTest(schema, convexModules)
+    const currentAttempt = {
+      invocationRef: 'invocation:schema-regression',
+      attemptRef: 'attempt:current',
+      attemptNumber: 1,
+      effectGeneration: 1,
+      actor: { callerRef: 'caller:schema-regression', principalRef: 'principal:schema-regression' },
+      idempotency: {
+        operationKey: 'operation:schema-regression',
+        materialInputDigest: 'digest:schema-regression',
+        effectIdentity: 'effect:schema-regression',
+      },
+      lease: { owner: 'worker:schema-regression', expiresAt: '2026-08-02T00:00:00.000Z' },
+      release: { state: 'not_released' },
+      outcome: {
+        state: 'uncertain',
+        retry: 'reconcile_before_retry',
+        errorDigest: 'digest:schema-regression',
+        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
+      },
+      recordedAt: '2026-08-02T00:00:00.000Z',
+    } as const
+    const legacyUncertainAttempt = {
+      ...currentAttempt,
+      attemptNumber: 2,
+      attemptRef: 'attempt:legacy-uncertain',
+      outcome: {
+        state: 'uncertain',
+        retry: 'reconcile_before_retry',
+        message: 'legacy uncertain attempt message',
+        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
+      },
+    } as const
+    const legacyFailedAttempt = {
+      ...currentAttempt,
+      attemptNumber: 3,
+      attemptRef: 'attempt:legacy-failed',
+      outcome: {
+        state: 'failed',
+        retry: 'safe_before_release',
+        message: 'legacy failed attempt message',
+      },
+    } as const
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('actionInvocationAttempts', currentAttempt)
+      await ctx.db.insert('actionInvocationAttempts', legacyUncertainAttempt)
+      await ctx.db.insert('actionInvocationAttempts', legacyFailedAttempt)
+    })
+
+    const rows = await backend.run(async (ctx) => (
+      ctx.db.query('actionInvocationAttempts').take(10)
+    ))
+    const currentRow = rows.find(({ attemptRef }) => attemptRef === 'attempt:current')
+    const legacyUncertainRow = rows.find(({ attemptRef }) => attemptRef === 'attempt:legacy-uncertain')
+    const legacyFailedRow = rows.find(({ attemptRef }) => attemptRef === 'attempt:legacy-failed')
+
+    expect(currentRow).toEqual(expect.objectContaining({
+      outcome: {
+        state: 'uncertain',
+        retry: 'reconcile_before_retry',
+        errorDigest: 'digest:schema-regression',
+        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
+      },
+    }))
+    expect(currentRow?.outcome).not.toHaveProperty('message')
+    expect(legacyUncertainRow).toEqual(expect.objectContaining({
+      outcome: expect.objectContaining({
+        message: 'legacy uncertain attempt message',
+        state: 'uncertain',
+        retry: 'reconcile_before_retry',
+        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
+      }),
+    }))
+    expect(legacyFailedRow).toEqual(expect.objectContaining({
+      outcome: expect.objectContaining({
+        message: 'legacy failed attempt message',
+        state: 'failed',
+        retry: 'safe_before_release',
+      }),
+    }))
   })
 })

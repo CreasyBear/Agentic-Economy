@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { json } from 'node:stream/consumers'
+import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 
 export type OpenRouterContractRequest = {
   messages: { role: string; content: string; tool_call_id?: string }[]
@@ -99,7 +100,7 @@ export function openRouterToolResponse(
             id: toolCall.id ?? `call-${index + 1}`,
             type: 'function',
             function: {
-              name: toolCall.toolId,
+              name: openRouterToolName(toolCall.toolId),
               arguments: JSON.stringify(toolCall.input),
             },
           })),

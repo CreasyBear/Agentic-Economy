@@ -26,6 +26,13 @@ describe('action registry', () => {
     expect(ids).toContain('registry.detail')
   })
 
+  it('accepts opaque Convex pagination cursors without making them unbounded', () => {
+    const cursor = 'x'.repeat(304)
+    expect(findAction('registry.list')?.schema.safeParse({ cursor }).success).toBe(true)
+    expect(findAction('registry.search')?.schema.safeParse({ query: 'plumber', cursor }).success).toBe(true)
+    expect(findAction('registry.list')?.schema.safeParse({ cursor: 'x'.repeat(513) }).success).toBe(false)
+  })
+
   it('registers route confirmation as one bounded cross-surface action', () => {
     const action = findAction('customerRequest.confirm')
     expect(action).toBeDefined()

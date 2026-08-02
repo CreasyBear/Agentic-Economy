@@ -197,7 +197,7 @@ Prerequisites:
 
 - A fresh deployment/process built from the verified artifact, with deployed
   Clerk/session and registry configuration.
-- A deployed `OPENROUTER_API_KEY`; `AE_LLM_MODEL` is optional.
+- A deployed `OPENROUTER_API_KEY` and a configured model that supports tool calling plus structured output in the same request. `AE_LLM_MODEL` is optional only when the source default satisfies that provider contract.
 - `PLAYWRIGHT_BASE_URL` set to the target. It must be HTTPS (HTTP is accepted
   only for localhost/127.0.0.1) and must not contain credentials, a query, or a
   hash.
@@ -212,7 +212,7 @@ Run it with:
 PLAYWRIGHT_BASE_URL=https://<deployment> \
 AE_SMOKE_SELECTION_SEED=<recorded-seed> \
   npx playwright test --config=playwright.deploy-smoke.config.ts \
-  tests/deploy-smoke/answer-runtime-production-smoke.spec.ts
+  answer-runtime-production-smoke.spec.ts
 ```
 
 The smoke fetches and paginates `/api/businesses`, then filters published
@@ -228,8 +228,13 @@ For both queries it uses the public UI and real `/api/answer/turn` path,
 observes a terminal answer and a citation for the selected subject, reloads for
 fresh public readback, and checks that public copy makes no consequential
 booking/payment/dispatch claim or private-evidence leak. The model-path
-readback also requires the sanitized recovery-search work-log step. A receipt
-prints the seed as `AE_SMOKE_SELECTION_SEED=<value>` and JSON fields for
+readback also requires the sanitized recovery-search work-log step.
+
+Model-facing tool names use provider-safe aliases such as `registry_search`;
+the deterministic runner maps each alias back to the canonical action ID such
+as `registry.search` before validation, execution, and evidence persistence.
+
+A receipt prints the seed as `AE_SMOKE_SELECTION_SEED=<value>` and JSON fields for
 `selectedSlug`, `catalogUrl`, both thread URLs, and timestamps.
 
 ### Hosted Evidence Ceiling

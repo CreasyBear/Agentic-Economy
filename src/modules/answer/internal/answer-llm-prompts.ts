@@ -4,9 +4,12 @@ import {
   aeSearchContextLocationLabel,
   type AeSearchContext,
 } from '../search-context'
+import { openRouterToolName } from './action-to-tool-spec'
 
 const CATALOG_DATA_OPEN = '<catalog_data>'
 const CATALOG_DATA_CLOSE = '</catalog_data>'
+const REGISTRY_SEARCH_TOOL_NAME = openRouterToolName('registry.search')
+const MODEL_READ_TOOL_NAMES = ANSWER_READ_TOOL_IDS.map(openRouterToolName)
 
 function buildCatalogDataBlock(
   providers: readonly AnswerSource[],
@@ -42,8 +45,8 @@ export function buildToolUseAgentSystemPrompt(): string {
   return [
     'You are the Agentic Economy answer agent, a catalog-grounded local service guide.',
     'Decide first: answer only when the request is specific enough to produce useful listed-business evidence. If it is broad or ambiguous, ask one plain follow-up question instead of browsing the catalog.',
-    `You have read-only tools: ${ANSWER_READ_TOOL_IDS.join(', ')}. Call registry.search before naming any provider, but do not call it for broad category-less browsing such as "businesses in Perth".`,
-    'registry.search accepts query, limit, mode, and location. Keep limit small; use mode="near_me" with location when an active search place applies; use mode="whole_catalogue" only when the person explicitly asks to search all listings.',
+    `You have read-only tools: ${MODEL_READ_TOOL_NAMES.join(', ')}. Call ${REGISTRY_SEARCH_TOOL_NAME} before naming any provider, but do not call it for broad category-less browsing such as "businesses in Perth".`,
+    `${REGISTRY_SEARCH_TOOL_NAME} accepts query, limit, mode, and location. Keep limit small; use mode="near_me" with location when an active search place applies; use mode="whole_catalogue" only when the person explicitly asks to search all listings.`,
     'The registry is literal. If a query looks misspelled (e.g. "paramata"), choose better search arguments (e.g. "Parramatta emergency plumber") rather than assuming the registry will correct you.',
     'Provider facts come only from tool results. Never invent slugs, providers, booking, payment, dispatch, or unqualified verified claims.',
     'Price and opening hours: a source carries them only as its pricingSummary and availabilitySummary fields. State one only by reproducing that exact published string word for word, attributed to the provider it came from. When a provider has no such string, say that detail is not published rather than reasoning about it. Never invent, estimate, round, convert, average, or otherwise derive a price or opening hours, and never present either as live, current, or guaranteed.',
@@ -74,13 +77,13 @@ export function buildToolUseAgentUserPrompt(input: {
   }
   if (input.priorProviders !== undefined && input.priorProviders.length > 0) {
     parts.push(buildCatalogDataBlock(input.priorProviders))
-    parts.push('These providers are frozen from the prior turn. You may filter or compare them without calling registry.search again.')
+    parts.push(`These providers are frozen from the prior turn. You may filter or compare them without calling ${REGISTRY_SEARCH_TOOL_NAME} again.`)
   }
   if (input.followUpIntent !== undefined) {
     parts.push(`Follow-up intent: ${input.followUpIntent}.`)
   }
   parts.push(`User query: ${input.query}`)
-  parts.push('If the request is broad or missing the decision needed for a useful answer, return a concise clarification question. Otherwise call registry.search with explicit arguments, then return AnswerProse JSON.')
+  parts.push(`If the request is broad or missing the decision needed for a useful answer, return a concise clarification question. Otherwise call ${REGISTRY_SEARCH_TOOL_NAME} with explicit arguments, then return AnswerProse JSON.`)
   return parts.join('\n\n')
 }
 
@@ -92,7 +95,7 @@ function describeSearchScope(searchContext: AeSearchContext | undefined): string
   if (searchContext.mode === 'whole_catalogue') {
     return [
       'Search scope: whole Agentic Economy catalog.',
-      'Call registry.search with mode="whole_catalogue". If the user names a place, keep that place in registry.search query.',
+      `Call ${REGISTRY_SEARCH_TOOL_NAME} with mode="whole_catalogue". If the user names a place, keep that place in the tool query.`,
     ].join(' ')
   }
 
@@ -104,7 +107,7 @@ function describeSearchScope(searchContext: AeSearchContext | undefined): string
   return [
     `Search scope: near ${locationLabel}.`,
     'If the user query names a different place, use the user-named place.',
-    `If the user query does not name a place, call registry.search with mode="near_me" and location="${locationLabel}".`,
+    `If the user query does not name a place, call ${REGISTRY_SEARCH_TOOL_NAME} with mode="near_me" and location="${locationLabel}".`,
     'Do not present listings outside the active place as local matches.',
   ].join(' ')
 }

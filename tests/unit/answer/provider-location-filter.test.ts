@@ -42,6 +42,7 @@ describe('provider location filtering', () => {
     expect(extractRequestedLocation('plumber in Brunswick VIC')).toBe('Brunswick')
     expect(extractRequestedLocation('emergency plumbing')).toBeUndefined()
     expect(extractRequestedLocation('plumber')).toBeUndefined()
+    expect(extractRequestedLocation('Emergency pumbing Parramatta NSW')).toBe('Parramatta')
   })
 
   it('does not treat filter follow-up wording as a place', () => {

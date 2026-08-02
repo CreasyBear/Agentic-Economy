@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 import { runAnswerToolUseAgent } from '@/modules/answer/internal/answer-tool-use-agent'
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
-import { actionToOpenRouterTool } from '@/modules/answer/internal/action-to-tool-spec'
+import { actionToOpenRouterTool, openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import { findAction } from '@/modules/actions'
 import { buildHarnessRunReport } from '@/modules/harness/public'
 import { buildToolUseAgentSystemPrompt } from '@/modules/answer/internal/answer-llm-prompts'
@@ -53,7 +53,7 @@ describe('actionToOpenRouterTool', () => {
   it('maps registry.search into an OpenRouter function tool spec with required query', () => {
     const spec = actionToOpenRouterTool(findAction('registry.search')!)
     expect(spec.type).toBe('function')
-    expect(spec.function.name).toBe('registry.search')
+    expect(spec.function.name).toBe('registry_search')
     expect(spec.function.parameters.type).toBe('object')
     expect(spec.function.parameters.properties.query?.type).toBe('string')
     expect(spec.function.parameters.properties.limit?.type).toBe('number')
@@ -68,7 +68,7 @@ describe('actionToOpenRouterTool', () => {
 
   it('maps registry.detail with a required slug', () => {
     const spec = actionToOpenRouterTool(findAction('registry.detail')!)
-    expect(spec.function.name).toBe('registry.detail')
+    expect(spec.function.name).toBe('registry_detail')
     expect(spec.function.parameters.properties.slug?.type).toBe('string')
     expect(spec.function.parameters.required).toContain('slug')
   })
@@ -298,7 +298,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
     expect(requests[0]?.response_format?.type).toBe('json_schema')
     expect(buildToolUseAgentSystemPrompt()).toContain(
-      `You have read-only tools: ${ANSWER_READ_TOOL_IDS.join(', ')}`,
+      `You have read-only tools: ${ANSWER_READ_TOOL_IDS.map(openRouterToolName).join(', ')}`,
     )
     expect(requests[0]?.tool_choice).toBe('auto')
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
@@ -537,7 +537,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
 
     expect(server.requests).toHaveLength(2)
-    expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual(ANSWER_READ_TOOL_IDS)
+    expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual(
+      ANSWER_READ_TOOL_IDS.map(openRouterToolName),
+    )
     expect(server.requests[0]?.tool_choice).toBe('auto')
     expect(server.requests[1]?.tools).toBeUndefined()
     expect(server.requests[1]?.response_format?.type).toBe('json_schema')

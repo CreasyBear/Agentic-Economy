@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
+  testDir: './tests/deploy-smoke',
   retries: 0,
   reporter: [
     ['list'],

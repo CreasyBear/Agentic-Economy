@@ -194,10 +194,10 @@ function normalizeLocationCandidate(candidate: string): string | undefined {
     .filter(Boolean)
     .filter((word) => !STATE_WORDS.has(word.toLowerCase()))
 
-  while (words.length > 0 && SERVICE_WORDS.has(words[0]!.toLowerCase())) {
+  while (words.length > 0 && isServiceWord(words[0])) {
     words.shift()
   }
-  while (words.length > 0 && SERVICE_WORDS.has(words.at(-1)!.toLowerCase())) {
+  while (words.length > 0 && isServiceWord(words.at(-1))) {
     words.pop()
   }
 
@@ -217,15 +217,34 @@ function trimServiceWords(tokens: readonly string[]): readonly string[] {
   let start = 0
   let end = tokens.length
 
-  while (start < end && SERVICE_WORDS.has(tokens[start]!.toLowerCase())) {
+  while (start < end && isServiceWord(tokens[start])) {
     start += 1
   }
 
-  while (end > start && SERVICE_WORDS.has(tokens[end - 1]!.toLowerCase())) {
+  while (end > start && isServiceWord(tokens[end - 1])) {
     end -= 1
   }
 
   return tokens.slice(start, end)
+}
+
+function isServiceWord(word: string | undefined): boolean {
+  if (word === undefined) return false
+  const normalized = word.toLowerCase()
+  if (SERVICE_WORDS.has(normalized)) {
+    return true
+  }
+  if (normalized.length < 5) {
+    return false
+  }
+  for (const serviceWord of SERVICE_WORDS) {
+    if (serviceWord.length >= 5 && Math.abs(serviceWord.length - normalized.length) <= 1) {
+      if (levenshteinDistance(serviceWord, normalized) <= 1) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 function providerMatchesLocation(provider: AnswerSource, location: string): boolean {

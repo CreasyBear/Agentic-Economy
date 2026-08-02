@@ -368,9 +368,15 @@ function buildAnswerAgentTools(
   runToolCall: (toolId: string, rawInput: unknown, toolCallId: string) => Promise<string>,
 ): ToolSet {
   const tools: Record<string, Tool> = {}
+  const toolNames = new Set<string>()
   for (const action of listAnswerModelToolActions()) {
     const spec = actionToOpenRouterTool(action)
-    tools[action.id] = tool({
+    const toolName = spec.function.name
+    if (toolNames.has(toolName)) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    toolNames.add(toolName)
+    tools[toolName] = tool({
       description: spec.function.description,
       inputSchema: jsonSchema<unknown>(
         {
