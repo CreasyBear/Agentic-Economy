@@ -45,6 +45,8 @@ jobs:
             > output/release/source-metadata.json
 
       - name: Run source release contract
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: npm run gate:release
 
       - name: Upload sanitized source release evidence
