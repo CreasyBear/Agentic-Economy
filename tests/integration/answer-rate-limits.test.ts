@@ -1,13 +1,34 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { resetAnswerTurnGuardForTests } from '@/modules/answer-thread/testing'
 import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { setHttpRateLimitAdmissionForTests, type RateLimitName } from '@/lib/server/rate-limit'
 import { sessionCookieHeader } from '../helpers/answer-thread-test-port'
 
 const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const ANSWER_TURN_RATE_LIMIT = 30
 const ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT = 60
+const RATE_LIMITS: Readonly<Record<RateLimitName, number>> = {
+  'public-read': Number.POSITIVE_INFINITY,
+  'public-mutation': Number.POSITIVE_INFINITY,
+  'oauth-issuance': Number.POSITIVE_INFINITY,
+  'answer-turn-submit': ANSWER_TURN_RATE_LIMIT,
+  'answer-follow-up-chips': ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT,
+  'answer-stream': Number.POSITIVE_INFINITY,
+  'inquiry-submit': Number.POSITIVE_INFINITY,
+}
+
+beforeEach(() => {
+  const counts = new Map<string, number>()
+  setHttpRateLimitAdmissionForTests(async ({ name, key }) => {
+    const countKey = `${name}:${key}`
+    const count = counts.get(countKey) ?? 0
+    if (count >= RATE_LIMITS[name]) return { ok: false, retryAfter: 1_000 }
+    counts.set(countKey, count + 1)
+    return { ok: true }
+  })
+})
 
 describe('answer HTTP rate limits', () => {
   afterEach(() => {

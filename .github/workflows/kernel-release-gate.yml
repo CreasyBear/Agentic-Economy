@@ -44,10 +44,13 @@ jobs:
             '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
             > output/release/source-metadata.json
 
-      - name: Run source release contract
+      - name: Verify committed Convex generated source
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npm run gate:release
+        run: npm run check:convex-codegen
+
+      - name: Run source release contract without deployment credentials
+        run: npm run test:release:source:after-codegen
 
       - name: Upload sanitized source release evidence
         if: always()

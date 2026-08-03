@@ -27,6 +27,17 @@ export type RateLimitAdmission = (input: Readonly<{
   key?: string
   keySuffix?: string
 }>) => Promise<RateLimitResult>
+export type HttpRateLimitAdmissionForTests = (input: Readonly<{
+  request: Request
+  name: RateLimitName
+  key: string
+}>) => Promise<RateLimitResult>
+
+let admissionForTests: HttpRateLimitAdmissionForTests | undefined
+
+export function setHttpRateLimitAdmissionForTests(admission: HttpRateLimitAdmissionForTests | undefined): void {
+  admissionForTests = admission
+}
 
 export async function assertHttpAdmission(
   request: Request,
@@ -34,6 +45,7 @@ export async function assertHttpAdmission(
   options: Readonly<{ key?: string; keySuffix?: string }> = {},
 ): Promise<RateLimitResult> {
   const key = options.key ?? requestAdmissionKey(request, options.keySuffix)
+  if (admissionForTests !== undefined) return await admissionForTests({ request, name, key })
   return await callPublicSourceMutation(admitMutation, { name, key })
 }
 

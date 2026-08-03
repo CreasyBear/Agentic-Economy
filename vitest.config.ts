@@ -11,6 +11,7 @@ export default defineConfig({
       './tests/setup/web-storage.ts',
       './tests/setup/no-search-gap-writes.ts',
       './tests/setup/resize-observer.ts',
+      './tests/setup/http-rate-limit.ts',
     ],
     globals: false,
     watch: false,
