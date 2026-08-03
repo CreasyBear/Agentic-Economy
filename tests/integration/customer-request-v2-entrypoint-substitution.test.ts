@@ -429,13 +429,13 @@ async function observeAllPublishedSupplyReady(backend: Backend) {
 function registeredProviderFor(endpoint: URL) {
   const profile = endpoint.searchParams.get('profile')
   if (profile === 'one') return {
-    offeringId: 'offering:sandbox-option-one:reference-lookup:v3',
-    bindingId: 'binding:sandbox-option-one:http-json:v4',
+    offeringId: 'offering:sandbox-option-one:reference-lookup:v4',
+    bindingId: 'binding:sandbox-option-one:http-json:v5',
     credential: 'sandbox-provider-test-key',
   }
   if (profile === 'two') return {
-    offeringId: 'offering:sandbox-option-two:reference-lookup:v3',
-    bindingId: 'binding:sandbox-option-two:http-json:v4',
+    offeringId: 'offering:sandbox-option-two:reference-lookup:v4',
+    bindingId: 'binding:sandbox-option-two:http-json:v5',
     credential: 'sandbox-provider-test-key',
   }
   if (endpoint.hostname === 'sandbox-three.example.test') return {

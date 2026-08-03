@@ -18,6 +18,7 @@ import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
   SANDBOX_ROUTE_PROVIDER_PROFILES,
+  SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
 } from '@/modules/sandbox-supply/public'
@@ -245,12 +246,12 @@ describe('labelled sandbox V2 capability supply', () => {
         'sandbox-progress-synthesis',
       ],
       sandboxV2Bindings: [
-        'binding:sandbox-option-one:http-json:v4',
-        'binding:sandbox-option-two:http-json:v4',
+        'binding:sandbox-option-one:http-json:v5',
+        'binding:sandbox-option-two:http-json:v5',
       ],
       sandboxCapabilityPublicationRefs: [
-        'offering:sandbox-option-one:reference-lookup:v3',
-        'offering:sandbox-option-two:reference-lookup:v3',
+        'offering:sandbox-option-one:reference-lookup:v4',
+        'offering:sandbox-option-two:reference-lookup:v4',
       ],
       sandboxRouteBindings: [
         'binding:sandbox-route-resolver:http-json:v6',
@@ -302,13 +303,13 @@ describe('labelled sandbox V2 capability supply', () => {
     const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
     expect(publications).toMatchObject([
       {
-        publicationRef: 'offering:sandbox-option-one:reference-lookup:v3',
-        bindingId: 'binding:sandbox-option-one:http-json:v4',
+        publicationRef: 'offering:sandbox-option-one:reference-lookup:v4',
+        bindingId: 'binding:sandbox-option-one:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
-        bindingId: 'binding:sandbox-option-two:http-json:v4',
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v4',
+        bindingId: 'binding:sandbox-option-two:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
@@ -411,8 +412,8 @@ describe('labelled sandbox V2 capability supply', () => {
     })
 
     expect(result.retiredSandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
     ])
     const eligible = await backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public', limit: 32,
@@ -475,8 +476,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
     ])
   })
 
@@ -491,11 +492,11 @@ describe('labelled sandbox V2 capability supply', () => {
       ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', first.ownerClerkUserId)).unique()
     ))
     expect(first.sandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
     ])
     expect(replay.sandboxV2Bindings).toEqual(first.sandboxV2Bindings)
-    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v3')
+    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v4')
     expect(replay.sandboxCapabilityPublicationRef).toBe(first.sandboxCapabilityPublicationRef)
     expect(ownerAfterReplay).toEqual(ownerBeforeReplay)
 
@@ -520,12 +521,12 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(state.publications).toMatchObject([
       {
         publicationRef: first.sandboxCapabilityPublicationRef,
-        bindingId: 'binding:sandbox-option-one:http-json:v4',
+        bindingId: 'binding:sandbox-option-one:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
-        publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
-        bindingId: 'binding:sandbox-option-two:http-json:v4',
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v4',
+        bindingId: 'binding:sandbox-option-two:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
@@ -596,8 +597,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [
-        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v4' } },
-        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v4' } },
+        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v5' } },
+        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v5' } },
         { binding: { bindingId: 'binding:sandbox-route-quoter:http-json:v5' } },
         { binding: { bindingId: 'binding:sandbox-route-resolver:http-json:v6' } },
       ],
@@ -646,8 +647,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
       'binding:sandbox-route-quoter:http-json:v5',
       'binding:sandbox-route-resolver:http-json:v6',
     ])
@@ -668,6 +669,7 @@ describe('labelled sandbox V2 capability supply', () => {
       await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerLegacySandboxSupply(ctx.db)
       await registerPriorV2SandboxSupply(ctx.db)
+      await registerSupersededV3SandboxSupply(ctx.db)
       await retireOriginalLegacySandboxBindings(ctx.db)
     })
     const priorRetirement = await backend.run(async (ctx) => ({
@@ -705,6 +707,8 @@ describe('labelled sandbox V2 capability supply', () => {
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
         || audit.targetRef === 'binding:sandbox-option-one:http-json:v3'
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v3'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v4'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v4'
       )),
     }))
     const replay = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -719,6 +723,8 @@ describe('labelled sandbox V2 capability supply', () => {
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
         || audit.targetRef === 'binding:sandbox-option-one:http-json:v3'
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v3'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v4'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v4'
       )),
     }))
     expect(replay).toEqual(migrated)
@@ -730,19 +736,19 @@ describe('labelled sandbox V2 capability supply', () => {
       admission: binding.admission, conformance: binding.conformance,
     })
     expect(bindings.filter((binding) => (
-      binding.bindingId.includes('sandbox-option-') && binding.bindingId.endsWith(':v4')
+      binding.bindingId.includes('sandbox-option-') && binding.bindingId.endsWith(':v5')
     )).map(bindingState)).toEqual([
       {
-        bindingId: 'binding:sandbox-option-one:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-one:http-json:v5', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
       {
-        bindingId: 'binding:sandbox-option-two:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-two:http-json:v5', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
     ])
     expect(bindings.filter((binding) => (
-      binding.bindingId.includes('sandbox-option-') && !binding.bindingId.endsWith(':v4')
+      binding.bindingId.includes('sandbox-option-') && !binding.bindingId.endsWith(':v5')
     )).map(bindingState)).toEqual([
       {
         bindingId: 'binding:sandbox-option-one:http-json', credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
@@ -766,6 +772,14 @@ describe('labelled sandbox V2 capability supply', () => {
       },
       {
         bindingId: 'binding:sandbox-option-two:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-one:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-two:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',
       },
     ])
@@ -1253,6 +1267,99 @@ async function registerPriorV2SandboxSupply(
       },
     }, 2_800)
     if (admitted.kind !== 'eligible') throw new Error(`prior V2 admission failed: ${admitted.kind}`)
+  }
+}
+
+async function registerSupersededV3SandboxSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+): Promise<void> {
+  const encoded = encodeCapabilityContractDocument(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
+  const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_900)
+  if (contract.kind !== 'registered') throw new Error(`superseded V3 contract registration failed: ${contract.reason}`)
+  for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
+    if (business === null) throw new Error(`superseded V3 business missing: ${profile.slug}`)
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:superseded-v3-offering:${profile.priorV3OfferingId}`,
+        correlationId: `test:superseded-v3-supply:${profile.slug}`,
+        reasonCode: 'test_superseded_v3_registration',
+        evidenceRefs: ['test:superseded-v3-supply'],
+      },
+      registration: {
+        offeringId: profile.priorV3OfferingId,
+        businessId: business._id,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.label,
+          summary: 'Superseded labelled sandbox supply.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only.' }],
+          commercialRelationship: {
+            kind: 'none',
+            summary: 'No commercial relationship.',
+            influencesEligibility: false,
+            influencesInclusion: false,
+            influencesOrder: false,
+            evidenceRefs: ['test:superseded-v3-supply'],
+          },
+        },
+        searchTerms: [...profile.queryTerms],
+        registrationEvidenceRefs: ['test:superseded-v3-supply'],
+      },
+    }, 3_000)
+    if (offering.kind !== 'registered') {
+      throw new Error(`superseded V3 offering registration failed: ${offering.reason}`)
+    }
+    const binding = await registerCapabilityBindingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:superseded-v3-binding:${profile.priorV3BindingId}`,
+        correlationId: `test:superseded-v3-supply:${profile.slug}`,
+        reasonCode: 'test_superseded_v3_registration',
+        evidenceRefs: ['test:superseded-v3-supply'],
+      },
+      registration: {
+        bindingId: profile.priorV3BindingId,
+        offeringId: profile.priorV3OfferingId,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        endpointUrl: `https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=${profileKey}&binding=v4`,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+      },
+    }, 3_100)
+    if (binding.kind !== 'registered') {
+      throw new Error(`superseded V3 binding registration failed: ${binding.reason}`)
+    }
+    const admitted = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:superseded-v3-admission:${profile.priorV3BindingId}`,
+        correlationId: `test:superseded-v3-supply:${profile.slug}`,
+        reasonCode: 'test_superseded_v3_admission',
+        evidenceRefs: ['test:superseded-v3-supply'],
+      },
+      eligibility: {
+        offeringId: profile.priorV3OfferingId,
+        bindingId: profile.priorV3BindingId,
+        contractRef: contract.ref,
+        decision: 'admit',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['test:superseded-v3-supply'],
+        conformanceEvidenceRefs: ['test:superseded-v3-supply'],
+      },
+    }, 3_200)
+    if (admitted.kind !== 'eligible') {
+      throw new Error(`superseded V3 admission failed: ${admitted.kind}`)
+    }
   }
 }
 
