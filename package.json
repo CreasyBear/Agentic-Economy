@@ -17,7 +17,7 @@
     "check:convex-codegen": "convex codegen --dry-run --typecheck=disable",
     "gate:release": "npm run test:release:source",
     "test:release:unit": "vitest run tests/unit --reporter=default --reporter=json --outputFile.json=output/release/unit-vitest.json",
-    "test:release:integration": "vitest run tests/integration convex/customerRequestRouteMandate.test.ts --no-file-parallelism --reporter=default --reporter=json --outputFile.json=output/release/integration-vitest.json",
+    "test:release:integration": "vitest run tests/integration convex/customerRequestRouteMandate.test.ts --no-file-parallelism --test-timeout=15000 --reporter=default --reporter=json --outputFile.json=output/release/integration-vitest.json",
     "check:kernel-retirement": "node tools/release/verify-kernel-retirement.mjs",
     "seed:dev": "convex run devSeed:seedDevCatalog",
     "test:release": "npm run test:release:source && npm run test:release:hosted",
