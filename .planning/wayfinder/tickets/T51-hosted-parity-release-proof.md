@@ -1,7 +1,7 @@
 # T51 — Hosted parity release proof
 
 Labels: `wayfinder:task`, `tdd:red`, `hosted-evidence`. Parent: [T43](T43-human-agent-framework-parity-spec.md). Source tickets: T27, T37.
-Status: framework cutover and T51 harness are merged on `main` through `b95737a4b5d124560b46dc1a6002423344007ffe`; the workflow fails closed instead of skipping hosted proof. GitHub Actions run `30777998420` exposed and fixed two timezone-dependent cancellation-copy assertions. Run `30778697065` then passed all 2,816 unit tests and reached integration, where two correct loop-heavy contracts exceeded Vitest's 5-second per-test default on the slower Ubuntu runner; the release integration command now gives each test a bounded 15 seconds, and both affected files pass locally (2 files / 42 tests). No hosted parity claim is made until a new exact-SHA run passes the production deploy/readback job and retains the sanitized T51 packet.
+Status: framework cutover and T51 harness are merged on `main` through `c848e3f7ae1f358eb7d61f5a6f171f8555677cb6`; the workflow fails closed instead of skipping hosted proof. GitHub Actions run `30779242519` passed the complete credential-free source job and exact-revision Vercel deploy, then the production Convex deploy found two stricter bundle-time type errors before any hosted mutation: optional current/legacy inquiry target narrowing and incompatible duplicate `undici` dispatcher declarations. Both source seams are narrowed without changing runtime behavior; local typecheck, lint, storefront tests (29), and inquiry runtime tests (15) pass. No hosted parity claim is made until a new exact-SHA run deploys Convex, passes the production lifecycle and T51 parity jobs, and retains the sanitized packet.
 
 Blocked by: T44, T47, T49, T50.
 

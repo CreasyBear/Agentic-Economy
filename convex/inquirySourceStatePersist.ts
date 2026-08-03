@@ -70,7 +70,7 @@ export async function persistInquirySourceState(db: GenericDatabaseWriter<DataMo
         throw new Error('inquiry_thread_target_shape_conflict')
       }
     }
-    const patch = 'offeringRef' in thread
+    const patch = thread.offeringRef !== undefined
       ? { ...shared, offeringRef: thread.offeringRef }
       : {
           ...shared,
