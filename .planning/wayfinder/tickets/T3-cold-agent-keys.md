@@ -11,7 +11,7 @@ Options to grill:
 - Self-serve keyless trial scope (create inspect_only Requests without a key; keys only for effectful modes).
 - Keep operator-issued keys (status quo; the cold journey stays read-only).
 
-The answer bounds every "an external agent can use AE" claim (see `ae-agent-identity-and-mandates`).
+The answer bounds every "an external agent can use AE" claim by the actual credential and authority path.
 
 ## Prepared brief (2026-07-30, agent recommendation — decision stays with founder)
 

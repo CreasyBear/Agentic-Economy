@@ -1,6 +1,6 @@
 # HITL runbook — Stripe + production Clerk (10-minute human path)
 
-Written 2026-07-30. Everything below is human-only; the dev slices (T3/T12) are implemented and tested behind injected ports. Do these in order; each step names its readback proof. No live-money claim may ship before every readback passes (`ae-agentic-payments-stack` ceiling).
+Written 2026-07-30. Everything below is human-only; the dev slices (T3/T12) are implemented and tested behind injected ports. Do these in order; each step names its readback proof. No live-money claim may ship before every readback passes; this is the project's payment-boundary ceiling.
 
 ## A. Stripe (test mode first — no live money)
 

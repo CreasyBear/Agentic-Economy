@@ -6,7 +6,7 @@ Labels: `wayfinder:task` (plan AFK, rails HITL: Stripe account, rake %). Status:
 
 Implement the money loop: agent operator tops up prepaid credit → each paid service call decrements credit at the business-set price → business balance accrues → AE takes rake on paid calls only → business gets paid out. Decisions needed in the plan: metering ledger (Stripe Meters vs Lago/OpenMeter vs module-owned — prefer borrowed per research doc), payout rail (Stripe Connect Express + application_fee is the default candidate; AU availability verified), rake % (founder decision, informed by Gurley's rake framework in the flywheel research), free-call tier accounting, overage/insufficient-credit refusal semantics, and how billing identity binds to T3's scoped keys (`principalId: clerk_api_key:<id>`).
 
-Constraints: `ae-agentic-payments-stack` boundaries — credentials server-side, exact amount/currency ceilings, outcome-unknown requires reconciliation, no customer-reachable-payment claim until the intended surface is proven. No crypto rail (inbound x402 rejected in T2).
+Constraints: project-owned payment boundaries — credentials server-side, exact amount/currency ceilings, outcome-unknown requires reconciliation, no customer-reachable-payment claim until the intended surface is proven. No crypto rail (inbound x402 rejected in T2).
 
 ## Resolution
 

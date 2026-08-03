@@ -12,7 +12,7 @@ Charted: 2026-07-31. Successor effort to [the parity map](MAP.md), whose destina
 - Execution is in scope up to the destination (this map carries the build, like waves 1–5), not beyond it.
 - Governing evidence, consult before designing: `.planning/research/2026-07-31-agent-engine-verdict.md` (adjudicated D1–D6), `2026-07-31-eval-stack-bet.md` (stack: AI SDK v7 transport-only + OR provider v3 + convex workflow/workpool later + oh-my-pi patterns), `2026-07-31-agent-engine-authority.md` (approval seam), `2026-07-31-agent-engine-loops.md`, `-durability.md`, `-commerce.md`, `-counterevidence.md`.
 - Hard invariants: kernel owns action selection/budgets/stages/approval/idempotency; model emits typed proposals only; Convex is the single source of truth; candidate menus ≤ ~7; deterministic fast path for predictable asks stays zero-model; disclosure is an effect; business replies are quarantined (fog-relevant).
-- Skills every session must consult: `ae-actions-and-modules`, `ae-agent-surfaces`, `ae-verification-gates`, `wayfinder`.
+- Every session must consult: `wayfinder`.
 - Standing preference (founder, after ~30 pivots): stop re-architecting. The verdict docs are the architecture; tickets refine within it, they do not reopen it.
 
 ## Decisions so far

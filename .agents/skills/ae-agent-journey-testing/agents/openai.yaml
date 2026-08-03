@@ -1,4 +1,0 @@
-interface:
-  display_name: "AE Agent Journey Testing"
-  short_description: "Test AE through a cold external agent"
-  default_prompt: "Use $ae-agent-journey-testing to test AE from ordinary-language Request through customer-visible recovery."

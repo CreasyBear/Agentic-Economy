@@ -6,7 +6,7 @@ Labels: `wayfinder:task` (plan AFK, copy HITL review). Status: open, unclaimed. 
 
 Build the supply side of the marketplace: a dedicated landing page carrying the compelling offer ("List your API free. Agents pay your price per call. You keep X%.") and a self-serve onboarding funnel that takes an API-native business from landing → registered capability → priced listing → first agent call, without an operator in the loop. Rails exist: capability publish/promotion (ADR-026 lineage), T5 keyless sentinel, readiness probes, `/api/v1/services` + MCP distribution. Missing: the landing, the funnel UX, per-call pricing config (free tier allowed), and the earnings view (stub until T12 pays out).
 
-Constraints: flywheel copy and funnel mechanics must borrow named documented patterns — `research/2026-07-30-marketplace-pattern-borrow.md` (Apify publish flow, Shopify-style landing, RapidAPI plan matrix) and `research/2026-07-30-flywheel-patterns.md` (atomic network, hard-side/single-player mode, liquidity metrics) — no invented growth mechanics. Copy per `ae-public-copy-guardrails`: claims track evidence; time-to-first-successful-call is the onboarding metric.
+Constraints: flywheel copy and funnel mechanics must borrow named documented patterns — `research/2026-07-30-marketplace-pattern-borrow.md` (Apify publish flow, Shopify-style landing, RapidAPI plan matrix) and `research/2026-07-30-flywheel-patterns.md` (atomic network, hard-side/single-player mode, liquidity metrics) — no invented growth mechanics. Project copy rules require claims to track evidence; time-to-first-successful-call is the onboarding metric.
 
 ## Resolution
 

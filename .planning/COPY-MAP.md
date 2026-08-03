@@ -9,7 +9,7 @@ Inventory sources: `history://HumanCopyInventory`, `history://MachineCopyInvento
 2. Brand-core strings live in `src/content/brand-copy.ts` (typed, one place, tests import it).
    Surfaces render from it; hardcoding brand voice in a component is a defect.
 3. Machine descriptors (action `name`/`summary`/`boundaries`, llms/SKILL/UCP output) are
-   **exactness-governed** (`ae-public-copy-guardrails`), never restyled during a rebrand — semantic
+  **governed by project-owned exactness rules**, never restyled during a rebrand — semantic
    alignment only.
 4. Everything else (functional labels, admin/operator copy, errors) changes with its feature, not with
    the brand.
