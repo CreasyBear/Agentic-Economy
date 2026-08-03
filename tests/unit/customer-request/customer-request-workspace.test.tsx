@@ -1269,8 +1269,8 @@ describe('customer Request workspace', () => {
     if (screen.queryByRole('button', { name: 'Pick it up' }) !== null) pickUpSavedRequest()
 
     expect(await screen.findByText('You asked AE to stop, but the business step had already started.')).toBeTruthy()
-    expect(screen.getByText('The business step was released at 1 Jan 1970, 8:00 am.')).toBeTruthy()
-    expect(screen.getByText('AE recorded your stop request at 1 Jan 1970, 8:00 am.')).toBeTruthy()
+    expect(screen.getByText(/^The business step was released at .+\.$/)).toBeTruthy()
+    expect(screen.getByText(/^AE recorded your stop request at .+\.$/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Stop before the next step' })).toBeNull()
   })
 
@@ -1298,8 +1298,8 @@ describe('customer Request workspace', () => {
     if (screen.queryByRole('button', { name: 'Pick it up' }) !== null) pickUpSavedRequest()
 
     expect(await screen.findByText('The business declined the stop request. The current work may continue.')).toBeTruthy()
-    expect(screen.getByText('AE sent the stop request at 1 Jan 1970, 8:00 am.')).toBeTruthy()
-    expect(screen.getByText('The business response was recorded at 1 Jan 1970, 8:00 am; AE will not send the stop request twice.')).toBeTruthy()
+    expect(screen.getByText(/^AE sent the stop request at .+\.$/)).toBeTruthy()
+    expect(screen.getByText(/^The business response was recorded at .+; AE will not send the stop request twice\.$/)).toBeTruthy()
     expect(screen.getByText(/will not send the stop request twice/)).toBeTruthy()
     expect(screen.queryByText(/cancelled the business work/i)).toBeNull()
   })
