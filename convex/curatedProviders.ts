@@ -16,10 +16,15 @@ import {
   publishCuratedCapability,
   registerCuratedMapping,
   setCapabilitySupplyEligibilityCommand,
+  withdrawCuratedCapability,
 } from './capabilitySupply'
 import { registerSandboxBusinesses } from './devSeed'
 
 const PROVIDER_SLUGS = [EXA_BUSINESS_SLUG, FRANKFURTER_BUSINESS_SLUG] as const
+const LEGACY_EXA_PUBLICATION_REFS = [
+  'offering:agentic-market-exa:search:v1',
+  'offering:agentic-market-exa:contents:v1',
+] as const
 const publicationResult = v.object({
   businessSlug: v.string(),
   capabilityId: v.string(),
@@ -185,5 +190,37 @@ export const seed = internalMutation({
       publications,
       mappingRef: mappingResult.mappingRef,
     }
+  },
+})
+
+export const retireLegacyExaV1 = internalMutation({
+  args: {},
+  returns: v.array(v.object({
+    publicationRef: v.string(),
+    status: v.union(v.literal('withdrawn'), v.literal('already_retired')),
+  })),
+  handler: async (ctx) => {
+    const now = Date.now()
+    const results = []
+    for (const [index, publicationRef] of LEGACY_EXA_PUBLICATION_REFS.entries()) {
+      const result = await withdrawCuratedCapability(ctx, {
+        publicationRef,
+        expectedRevision: 1,
+        evidenceRefs: ['source:migration:curated-exa-v2'],
+        now: now + index,
+      })
+      if (result.kind === 'refused' && (
+        result.reason === 'publication_not_found'
+        || result.reason === 'revision_changed'
+      )) {
+        results.push({ publicationRef, status: 'already_retired' as const })
+        continue
+      }
+      if (result.kind !== 'withdrawn') {
+        throw new Error(`curated_exa_v1_retirement_${result.reason}`)
+      }
+      results.push({ publicationRef, status: 'withdrawn' as const })
+    }
+    return results
   },
 })

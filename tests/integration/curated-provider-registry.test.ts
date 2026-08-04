@@ -9,6 +9,10 @@ describe('curated provider operation registry', () => {
   it('seeds, discovers, and inspects the exact Exa to Frankfurter scenario without authority', async () => {
     const backend = convexTest(schema, modules)
     const seeded = await backend.mutation(internal.curatedProviders.seed, {})
+    expect(await backend.mutation(internal.curatedProviders.retireLegacyExaV1, {})).toEqual([
+      { publicationRef: 'offering:agentic-market-exa:search:v1', status: 'already_retired' },
+      { publicationRef: 'offering:agentic-market-exa:contents:v1', status: 'already_retired' },
+    ])
 
     for (const publication of seeded.publications) {
       const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {

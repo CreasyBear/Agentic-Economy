@@ -1875,6 +1875,43 @@ export async function publishCuratedCapability(
     actor: { kind: 'system', ref: 'system:curated-provider-bootstrap' },
   }, publicationPorts(ctx))
 }
+export async function withdrawCuratedCapability(
+  ctx: MutationCtx,
+  input: Readonly<{
+    publicationRef: string
+    expectedRevision: number
+    evidenceRefs: readonly string[]
+    now: number
+  }>,
+) {
+  const ports = publicationPorts(ctx)
+  const publication = await ports.loadPublicationAtRevision(
+    input.publicationRef,
+    input.expectedRevision,
+  )
+  if (publication === null) {
+    return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+  }
+  if (
+    publication.publisherRef !== 'system:curated-provider-bootstrap'
+    || publication.authorityMode !== 'ae_curated_external'
+  ) {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+  }
+  const result = await withdrawCapabilityCommand({
+    publication,
+    evidenceRefs: input.evidenceRefs,
+    now: input.now,
+  }, ports)
+  if (result.kind === 'withdrawn') {
+    await rebuildCapabilityOriginSupplyProjection(
+      ctx,
+      publication.businessId as Id<'businesses'>,
+      input.now,
+    )
+  }
+  return result
+}
 export const authorizeOwnerSupplyAction = internalQuery({
   args: { businessId: v.id('businesses') },
   returns: v.boolean(),

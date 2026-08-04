@@ -211,7 +211,7 @@ export const frankfurterOutputSchema = {
 
 const exaSearchContract: CapabilityContractMetadata = {
   capabilityId: 'exa.search',
-  version: 1,
+  version: 2,
   name: 'Exa web search',
   description: 'Searches the public web through Exa and returns bounded result links for further inspection.',
   customerAnnotations: [
@@ -266,7 +266,7 @@ const exaSearchContract: CapabilityContractMetadata = {
 
 const exaContentsContract: CapabilityContractMetadata = {
   capabilityId: 'exa.contents',
-  version: 1,
+  version: 2,
   name: 'Exa web contents',
   description: 'Retrieves bounded contents for URLs selected from a public Exa search result.',
   customerAnnotations: [
@@ -405,7 +405,7 @@ export const exaSearchPublicationImport: CapabilityPublicationImport = {
   contract: exaSearchContract,
   commercial: {
     offering: {
-      offeringId: 'offering:agentic-market-exa:search:v1',
+      offeringId: 'offering:agentic-market-exa:search:v2',
       networkId: AE_PUBLIC_NETWORK,
       presentation: {
         label: 'Exa web search',
@@ -428,7 +428,7 @@ export const exaSearchPublicationImport: CapabilityPublicationImport = {
       searchTerms: ['exa', 'web search', 'search the web', 'research', 'search results'],
       registrationEvidenceRefs: [...EXA_SEARCH_EVIDENCE],
     },
-    bindingId: 'binding:agentic-market-exa:search:api-key:v1',
+    bindingId: 'binding:agentic-market-exa:search:api-key:v2',
     credentialRef: EXA_CREDENTIAL_REF,
     registrationEvidenceRefs: [...EXA_SEARCH_EVIDENCE],
     requestTimeoutMs: 30_000,
@@ -443,7 +443,7 @@ export const exaContentsPublicationImport: CapabilityPublicationImport = {
   contract: exaContentsContract,
   commercial: {
     offering: {
-      offeringId: 'offering:agentic-market-exa:contents:v1',
+      offeringId: 'offering:agentic-market-exa:contents:v2',
       networkId: AE_PUBLIC_NETWORK,
       presentation: {
         label: 'Exa web contents',
@@ -466,7 +466,7 @@ export const exaContentsPublicationImport: CapabilityPublicationImport = {
       searchTerms: ['exa', 'web contents', 'page contents', 'retrieve web pages', 'research sources'],
       registrationEvidenceRefs: [...EXA_CONTENTS_EVIDENCE],
     },
-    bindingId: 'binding:agentic-market-exa:contents:api-key:v1',
+    bindingId: 'binding:agentic-market-exa:contents:api-key:v2',
     credentialRef: EXA_CREDENTIAL_REF,
     registrationEvidenceRefs: [...EXA_CONTENTS_EVIDENCE],
     requestTimeoutMs: 30_000,
