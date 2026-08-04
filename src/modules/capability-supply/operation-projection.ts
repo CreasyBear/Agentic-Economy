@@ -184,6 +184,7 @@ const MAX_SCHEMA_DEPTH = 24
 const MAX_SCHEMA_PROPERTIES = 128
 const MAX_SCHEMA_REFS = 64
 const SCHEMA_KEYS = new Set(['$defs', '$ref', '$schema', 'additionalItems', 'additionalProperties', 'allOf', 'anyOf', 'const', 'contains', 'default', 'dependentRequired', 'dependentSchemas', 'deprecated', 'description', 'enum', 'examples', 'exclusiveMaximum', 'exclusiveMinimum', 'format', 'if', 'items', 'maxContains', 'maxItems', 'maxLength', 'maxProperties', 'maximum', 'minContains', 'minItems', 'minLength', 'minProperties', 'minimum', 'multipleOf', 'not', 'oneOf', 'pattern', 'patternProperties', 'prefixItems', 'properties', 'propertyNames', 'readOnly', 'required', 'then', 'title', 'type', 'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems', 'writeOnly'])
+const SEARCH_STOP_WORDS = new Set(['a', 'an', 'and', 'for', 'from', 'how', 'in', 'into', 'is', 'of', 'on', 'or', 'please', 'that', 'the', 'this', 'to', 'what', 'when', 'where', 'which', 'who', 'with'])
 const SEARCH_NAVIGATION: PublicOperationNavigationRelation = { relation: 'search', method: 'POST', actionId: 'registry.operations.search', authentication: 'none' }
 const DETAIL_NAVIGATION: PublicOperationNavigationRelation = { relation: 'detail', method: 'POST', actionId: 'registry.operations.detail', authentication: 'none' }
 const COMPARE_NAVIGATION: PublicOperationNavigationRelation = { relation: 'compare', method: 'POST', actionId: 'registry.operations.compare', authentication: 'none' }
@@ -211,7 +212,10 @@ export async function searchCapabilityOperations(port: CapabilityOperationSource
   if (source.operations.length > MAX_SOURCE) return searchUnavailable('source_capacity_exceeded')
   const cursor = decodeCursor(normalized.cursor, normalized.query, normalized.filters, source.snapshotKey)
   if (normalized.cursor !== undefined && cursor === undefined) return searchUnavailable('query_invalid')
-  const matches = source.operations.map((record) => projectCapabilityOperation(record, now)).filter((operation) => matchesFilters(operation, normalized)).sort((a, b) => score(b, normalized.query) - score(a, normalized.query) || a.operationRef.localeCompare(b.operationRef))
+  const matches = source.operations.map((record) => ({
+    operation: projectCapabilityOperation(record, now),
+    searchTerms: record.searchTerms,
+  })).filter(({ operation, searchTerms }) => matchesFilters(operation, searchTerms, normalized)).sort((a, b) => score(b.operation, b.searchTerms, normalized.query) - score(a.operation, a.searchTerms, normalized.query) || a.operation.operationRef.localeCompare(b.operation.operationRef)).map(({ operation }) => operation)
   const start = cursor?.lastOperationRef === undefined ? 0 : Math.max(0, matches.findIndex((item) => item.operationRef === cursor.lastOperationRef) + 1)
   const items = matches.slice(start, start + normalized.limit)
   const lastItem = items.at(-1)
@@ -767,7 +771,7 @@ function normalizeSearch(input: OperationSearchInput): Readonly<{ query: string;
   if (filters.maximumPriceMinor !== undefined && (!Number.isSafeInteger(filters.maximumPriceMinor) || filters.maximumPriceMinor < 0)) return undefined
   return { query: input.query.trim().toLowerCase(), limit, ...(input.cursor === undefined ? {} : { cursor: input.cursor }), filters: { ...(filters.networkId === undefined ? {} : { networkId: filters.networkId.trim() }), ...(filters.location === undefined ? {} : { location: filters.location.trim().toLowerCase() }), ...(filters.effects === undefined ? {} : { effects: [...new Set(filters.effects)] }), ...(filters.dataUse === undefined ? {} : { dataUse: [...new Set(filters.dataUse)] }), ...(filters.availability === undefined ? {} : { availability: [...new Set(filters.availability)] }), ...(filters.currency === undefined ? {} : { currency: filters.currency }), ...(filters.maximumPriceMinor === undefined ? {} : { maximumPriceMinor: filters.maximumPriceMinor }) } }
 }
-function matchesFilters(operation: PublicOperationDescriptor, input: Readonly<{ query: string; filters: OperationSearchFilters }>): boolean {
+function matchesFilters(operation: PublicOperationDescriptor, searchTerms: readonly string[], input: Readonly<{ query: string; filters: OperationSearchFilters }>): boolean {
   const filters = input.filters
   if (filters.effects !== undefined && !filters.effects.some((effect) => operation.effects.some((candidate) => candidate.class === effect))) return false
   if (filters.dataUse !== undefined && !filters.dataUse.some((classification) => operation.dataUse.some((candidate) => candidate.classification === classification))) return false
@@ -775,15 +779,14 @@ function matchesFilters(operation: PublicOperationDescriptor, input: Readonly<{ 
   if (filters.currency !== undefined && (operation.commercial.price.kind === 'on_request' || operation.commercial.price.currency !== filters.currency)) return false
   if (filters.maximumPriceMinor !== undefined && !priceWithin(operation.commercial.price, filters.maximumPriceMinor)) return false
   if (filters.location !== undefined && !`${operation.business.slug} ${operation.business.name}`.toLowerCase().includes(filters.location)) return false
-  if (input.query.length === 0) return true
-  const terms = searchableText(operation)
-  return input.query.split(/\s+/).every((token) => terms.some((term) => term.includes(token)))
+  const tokens = searchTokens(input.query)
+  return tokens.length === 0 || tokens.some((token) => searchableText(operation, searchTerms).some((term) => term === token || term.startsWith(token)))
 }
-function score(operation: PublicOperationDescriptor, query: string): number {
-  if (query.length === 0) return 0
-  return query.split(/\s+/).reduce((total, token) => total + searchableText(operation).reduce((best, term) => term === token ? Math.max(best, 4) : term.startsWith(token) ? Math.max(best, 2) : term.includes(token) ? Math.max(best, 1) : best, 0), 0)
+function score(operation: PublicOperationDescriptor, searchTerms: readonly string[], query: string): number {
+  return searchTokens(query).reduce((total, token) => total + searchableText(operation, searchTerms).reduce((best, term) => term === token ? Math.max(best, 4) : term.startsWith(token) ? Math.max(best, 2) : term.includes(token) ? Math.max(best, 1) : best, 0), 0)
 }
-function searchableText(operation: PublicOperationDescriptor): string[] { return [operation.operationId, operation.contract.capabilityId, operation.summary, operation.business.slug, operation.business.name, operation.offering.label, operation.offering.summary, ...operation.contract.customerAnnotations.map((annotation) => annotation.label)].join(' ').toLowerCase().split(/\s+/).filter(Boolean) }
+function searchTokens(query: string): string[] { return (query.match(/[a-z0-9]+/g) ?? []).filter((token) => !SEARCH_STOP_WORDS.has(token)) }
+function searchableText(operation: PublicOperationDescriptor, searchTerms: readonly string[]): string[] { return ([operation.operationId, operation.contract.capabilityId, operation.summary, operation.business.slug, operation.business.name, operation.offering.label, operation.offering.summary, ...operation.contract.customerAnnotations.map((annotation) => annotation.label), ...searchTerms].join(' ').toLowerCase().match(/[a-z0-9]+/g) ?? []) }
 function priceWithin(price: PublicCommercialTerms['price'], maximum: number): boolean { return price.kind !== 'on_request' && (price.kind === 'fixed' ? price.amountMinor : price.minimumAmountMinor) <= maximum }
 function normalizeRefs(values: readonly string[], max: number): PublicOperationRef[] | undefined { return values.length >= 1 && values.length <= max && new Set(values).size === values.length && values.every(isPublicOperationRef) ? values as PublicOperationRef[] : undefined }
 function mappingRefIsValid(value: string): value is RegisteredOperationMappingRef { return /^mapping:v1:[0-9a-f]{64}$/.test(value) }

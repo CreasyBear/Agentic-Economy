@@ -26,7 +26,7 @@ describe('curated provider operation registry', () => {
     }
 
     const exa = await backend.query(api.capabilitySupplyOperations.search, {
-      query: 'Exa web',
+      query: 'Research the latest official guidance on AI agent payments and summarize the sources',
       limit: 10,
     })
     const frankfurter = await backend.query(api.capabilitySupplyOperations.search, {
@@ -37,6 +37,8 @@ describe('curated provider operation registry', () => {
       expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'exa.search' }) }),
       expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'exa.contents' }) }),
     ]) })
+    if (exa.kind !== 'ok') throw new Error('curated_exa_search_failed')
+    expect(exa.items.map(({ contract }) => contract.capabilityId).sort()).toEqual(['exa.contents', 'exa.search'])
     expect(frankfurter).toMatchObject({ kind: 'ok', items: [
       expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'frankfurter.single-rate' }) }),
     ] })
