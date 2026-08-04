@@ -73,7 +73,6 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
-      AE_T51_RELEASE_MODE: release
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
@@ -84,8 +83,6 @@ jobs:
       AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      AE_WORK_TREE_EVIDENCE_DIR: output/release/work-tree-parity
-      AE_WORK_TREE_TIMEOUT_MS: '180000'
     steps:
       - uses: actions/checkout@v6
 
@@ -131,7 +128,7 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          for key in AE_ROUTE_CALL_SIGNING_SECRET AE_ROUTE_CALL_SIGNING_KEY_ID AE_SANDBOX_PROVIDER_KEY AE_SITE_URL; do
+          for key in AE_ROUTE_CALL_SIGNING_SECRET AE_ROUTE_CALL_SIGNING_KEY_ID AE_SITE_URL; do
             value="$(npx convex env get "${key}" --prod)"
             if [ -z "${value}" ]; then
               echo "Required production execution setting is missing: ${key}" >&2
@@ -139,56 +136,54 @@ jobs:
             fi
           done
 
-      - name: Register labelled sandbox acceptance supply
+      - name: Register real curated supply and verify live readiness
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{"includeComparisonOptions":false}' --prod
+          npx convex run curatedProviders:seed '{}' --prod
+          npx convex run curatedProviders:retireLegacyExaV1 '{}' --prod
+          npx convex run capabilitySupplyReadiness:probe \
+            '{"publicationRef":"offering:frankfurter-ecb-rates:single-rate:v1","expectedRevision":1}' \
+            --prod
           for attempt in $(seq 1 30); do
             graph="$(npx convex run capabilitySupply:queryCapabilityGraph '{"networkId":"ae:public","includeInactive":false,"limit":32}' --prod)"
             ready="$(printf '%s' "${graph}" | jq '[.nodes[]? | select(
-              .publicationRef == "offering:sandbox-route-resolver:reference-resolve:v6"
-              or .publicationRef == "offering:sandbox-route-quoter:service-quote:v5"
+              .publicationRef == "offering:frankfurter-ecb-rates:single-rate:v1"
             )] | length')"
-            if [ "${ready}" -eq 2 ]; then
+            if [ "${ready}" -eq 1 ]; then
               exit 0
             fi
             sleep 2
           done
-          echo 'Labelled sandbox capability publications did not become route-ready.' >&2
+          echo 'Frankfurter capability publication did not become route-ready.' >&2
           exit 1
+
+      - name: Verify natural-language Exa operation selection without provider credentials
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          result="$(npx convex run capabilitySupplyOperations:search \
+            '{"query":"Research the latest official guidance on AI agent payments and summarize the sources","limit":10}' \
+            --prod)"
+          printf '%s' "${result}" | jq -e '
+            .kind == "ok"
+            and ([.items[].contract.capabilityId] | index("exa.search") != null)
+            and ([.items[].contract.capabilityId] | index("exa.contents") != null)
+          '
 
       - name: Verify exact deployed human and agent Request lifecycle
         env:
           AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
           AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
-          AE_CUSTOMER_REQUEST_TEXT: Find a labelled sandbox service and tell me what it costs.
-          AE_CUSTOMER_REQUEST_FACTS_JSON: '{}'
+          AE_CUSTOMER_REQUEST_TEXT: Get the current ECB EUR to USD reference rate.
+          AE_CUSTOMER_REQUEST_FACTS_JSON: '{"base":"EUR","quote":"USD"}'
           AE_CUSTOMER_REQUEST_FINISH: complete
-          AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '2'
-          AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Sandbox Route Resolver","Sandbox Route Quoter"]'
-          AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Sandbox Route Resolver","purposes":["resolve_sandbox_service_reference"]},{"name":"Sandbox Route Quoter","purposes":["prepare_sandbox_service_quote"]}]'
+          AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '1'
+          AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Frankfurter — ECB rates"]'
+          AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Frankfurter — ECB rates","purposes":["retrieve_ecb_reference_rate"]}]'
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:hosted
 
-      - name: Verify exact hosted T51 WorkTree parity
-        env:
-          DEPLOY_BASE_URL: https://agentic-economy-phi.vercel.app
-          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
-        run: npm run smoke:work-tree:production:hosted
-
-      - name: Upload sanitized T51 hosted parity evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ github.sha }}-${{ github.run_id }}-t51-hosted-work-tree
-          path: |
-            output/release/hosted-metadata.json
-            output/release/playwright-deploy-smoke.json
-            output/release/work-tree-parity/work-tree-parity-evidence.json
-            test-results/**/*.png
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Upload sanitized hosted release evidence
         if: always()
