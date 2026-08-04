@@ -9,6 +9,7 @@ type ReleaseScriptMap = Record<string, string>
 type WorkflowStep = {
   if?: string
   name?: string
+  env?: Record<string, string>
   run?: string
   uses?: string
   with?: Record<string, string>
@@ -73,9 +74,15 @@ describe('green release baseline', () => {
     expect(events).toHaveProperty('pull_request')
     expect(events).toHaveProperty('merge_group')
     expect(events.push).toEqual({ branches: ['main'] })
-
     const steps = workflowSteps(workflow)
-    expect(steps.filter((step) => step.run === 'npm run gate:release')).toHaveLength(1)
+
+    const source = workflow.jobs?.['source-proof']
+    const codegen = source?.steps?.find((step) => step.name === 'Verify committed Convex generated source')
+    expect(codegen?.run).toBe('npm run check:convex-codegen')
+    expect(codegen?.env?.CONVEX_DEPLOY_KEY).toBe('${{ secrets.CONVEX_DEPLOY_KEY }}')
+    const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
+    expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
+    expect(sourceGate?.env).toBeUndefined()
 
     const hosted = workflow.jobs?.['hosted-proof']
     expect(hosted).toBeDefined()

@@ -65,9 +65,6 @@ type StorefrontFetchInit = NonNullable<Parameters<typeof fetch>[1]>
 
 export type StorefrontImportFetch = (input: StorefrontFetchInput, init?: StorefrontFetchInit) => Promise<Response>
 
-type StorefrontImportFetchInit = Omit<StorefrontFetchInit, 'dispatcher'> & {
-  dispatcher?: Agent
-}
 
 type StorefrontImportWebsiteOptions = {
   fetch?: StorefrontImportFetch
@@ -113,7 +110,7 @@ export async function importStorefrontDraftFromWebsite(
       }
 
       const controller = new AbortController()
-      const requestInit: StorefrontImportFetchInit = {
+      const requestInit: StorefrontFetchInit = {
         headers: {
           Accept: 'text/html,application/xhtml+xml',
           'User-Agent': 'AgenticEconomyStorefrontImporter/0.1',
@@ -122,7 +119,7 @@ export async function importStorefrontDraftFromWebsite(
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(timeoutMs)]),
       }
       if (dispatcher !== undefined) {
-        requestInit.dispatcher = dispatcher
+        Reflect.set(requestInit, 'dispatcher', dispatcher)
       }
 
       response = await fetchImpl(currentUrl, requestInit)

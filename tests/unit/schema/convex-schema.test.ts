@@ -540,14 +540,15 @@ describe('Convex schema', () => {
       ]),
     )
   })
-  it('rejects the exact historical aggregate registry search document shape after narrow', async () => {
+
+
+  it('accepts the aggregate registry search document stored before the per-Offering cutover', async () => {
     const backend = convexTest(schema, convexModules)
-    const observedAt = 1_784_764_800_000
     const businessId = await backend.run(async (ctx) => {
       const ownerId = await ctx.db.insert('owners', {
         clerkUserId: 'user_registry_schema_compatibility',
-        createdAt: observedAt,
-        updatedAt: observedAt,
+        createdAt: 1_784_764_800_000,
+        updatedAt: 1_784_764_800_000,
       })
       return ctx.db.insert('businesses', {
         ownerId,
@@ -561,11 +562,12 @@ describe('Convex schema', () => {
         trustTier: 'listed',
         claimStatus: 'published',
         sourceHash: 'hash:business',
-        createdAt: observedAt,
-        updatedAt: observedAt,
+        createdAt: 1_784_764_800_000,
+        updatedAt: 1_784_764_800_000,
       })
     })
-    const historicalAggregateDocument = {
+    const observedAt = 1_784_764_800_000
+    const document = {
       businessCategory: 'Website development',
       businessId,
       businessName: 'Phase 5 Demo Website Starter',
@@ -576,7 +578,6 @@ describe('Convex schema', () => {
       offerings: [{
         category: 'Website development',
         comparison: {
-          schemaVersion: 'offering-comparison:v1',
           profile: {
             priceBasis: {
               kind: 'known',
@@ -609,6 +610,7 @@ describe('Convex schema', () => {
               value: 'About three weeks after content is ready',
             },
           },
+          schemaVersion: 'offering-comparison:v1',
         },
         name: 'Labelled demo website starter',
         offeringRef: 'offering:phase5-demo:website-starter:v1',
@@ -626,11 +628,18 @@ describe('Convex schema', () => {
       updatedAt: observedAt,
     } as const
 
-    await expect(backend.run(async (ctx) => (
-      ctx.db.insert('registrySearchDocuments', historicalAggregateDocument as never)
-    ))).rejects.toThrow()
-  })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('registrySearchDocuments', document as never)
+    })
+    const [stored] = await backend.run(async (ctx) => (
+      ctx.db.query('registrySearchDocuments').take(1)
+    ))
 
+    expect(stored).toEqual(expect.objectContaining({
+      documentId: document.documentId,
+      schemaVersion: 'registry-search-document:v2',
+    }))
+  })
 
   it('validates current and legacy action invocation attempts', async () => {
     const backend = convexTest(schema, convexModules)

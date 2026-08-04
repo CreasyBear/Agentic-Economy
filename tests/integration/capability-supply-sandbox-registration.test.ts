@@ -20,6 +20,7 @@ import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
   SANDBOX_ROUTE_PROVIDER_PROFILES,
+  SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
 } from '@/modules/sandbox-supply/public'
@@ -230,7 +231,6 @@ describe('labelled sandbox V2 capability supply', () => {
   it('seeds labelled comparison and composite-route businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
-    await seedHealthyCurrentSandboxPublications(backend)
 
     expect(result).toMatchObject({
       seededSlugs: [
@@ -249,12 +249,12 @@ describe('labelled sandbox V2 capability supply', () => {
         'sandbox-progress-synthesis',
       ],
       sandboxV2Bindings: [
-        'binding:sandbox-option-one:http-json:v4',
-        'binding:sandbox-option-two:http-json:v4',
+        'binding:sandbox-option-one:http-json:v5',
+        'binding:sandbox-option-two:http-json:v5',
       ],
       sandboxCapabilityPublicationRefs: [
-        'offering:sandbox-option-one:reference-lookup:v3',
-        'offering:sandbox-option-two:reference-lookup:v3',
+        'offering:sandbox-option-one:reference-lookup:v4',
+        'offering:sandbox-option-two:reference-lookup:v4',
       ],
       sandboxRouteBindings: [
         'binding:sandbox-route-resolver:http-json:v6',
@@ -306,104 +306,104 @@ describe('labelled sandbox V2 capability supply', () => {
     const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
     expect(publications).toMatchObject([
       {
-        publicationRef: 'offering:sandbox-option-one:reference-lookup:v3',
-        bindingId: 'binding:sandbox-option-one:http-json:v4',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        publicationRef: 'offering:sandbox-option-one:reference-lookup:v4',
+        bindingId: 'binding:sandbox-option-one:http-json:v5',
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
-        bindingId: 'binding:sandbox-option-two:http-json:v4',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v4',
+        bindingId: 'binding:sandbox-option-two:http-json:v5',
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v6',
         bindingId: 'binding:sandbox-route-resolver:http-json:v6',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-route-quoter:service-quote:v5',
         bindingId: 'binding:sandbox-route-quoter:http-json:v5',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-procurement-brief:v3',
         bindingId: 'binding:sandbox-procurement-brief:http-json:v3',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-supplier-options:v2',
         bindingId: 'binding:sandbox-supplier-options:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-procurement-recommendation:v2',
         bindingId: 'binding:sandbox-procurement-recommendation:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-trip-constraints:v2',
         bindingId: 'binding:sandbox-trip-constraints:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-accessible-transfer:v2',
         bindingId: 'binding:sandbox-accessible-transfer:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-accessible-hotel:v2',
         bindingId: 'binding:sandbox-accessible-hotel:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-meeting-schedule:v2',
         bindingId: 'binding:sandbox-meeting-schedule:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-dinner-plan:v2',
         bindingId: 'binding:sandbox-dinner-plan:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-itinerary-builder:v3',
         bindingId: 'binding:sandbox-itinerary-builder:http-json:v3',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-itinerary-readiness:v2',
         bindingId: 'binding:sandbox-itinerary-readiness:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-event-requirements:v6',
         bindingId: 'binding:sandbox-event-requirements:http-json:v6',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-event-site-evidence:v3',
         bindingId: 'binding:sandbox-event-site-evidence:http-json:v3',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-event-business-readiness:v4',
         bindingId: 'binding:sandbox-event-business-readiness:http-json:v4',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-journey-case:v2',
         bindingId: 'binding:sandbox-journey-case:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-milestone-plan:v2',
         bindingId: 'binding:sandbox-milestone-plan:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
         publicationRef: 'offering:sandbox-progress-synthesis:v2',
         bindingId: 'binding:sandbox-progress-synthesis:http-json:v2',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        credentialState: 'unobserved', healthState: 'unobserved',
       },
     ])
   })
@@ -416,8 +416,8 @@ describe('labelled sandbox V2 capability supply', () => {
     await seedHealthyCurrentSandboxPublications(backend)
 
     expect(result.retiredSandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
     ])
     const eligible = await backend.query(internal.capabilitySupply.listIntegrated, {
       networkId: 'ae:public', limit: 32,
@@ -486,8 +486,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
     ])
   })
 
@@ -502,14 +502,13 @@ describe('labelled sandbox V2 capability supply', () => {
       ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', first.ownerClerkUserId)).unique()
     ))
     expect(first.sandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
     ])
     expect(replay.sandboxV2Bindings).toEqual(first.sandboxV2Bindings)
-    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v3')
+    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v4')
     expect(replay.sandboxCapabilityPublicationRef).toBe(first.sandboxCapabilityPublicationRef)
     expect(ownerAfterReplay).toEqual(ownerBeforeReplay)
-    await seedHealthyCurrentSandboxPublications(backend)
 
     const state = await backend.run(async (ctx) => ({
       contracts: await ctx.db.query('capabilityContractDocuments').collect(),
@@ -532,19 +531,23 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(state.publications).toMatchObject([
       {
         publicationRef: first.sandboxCapabilityPublicationRef,
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        bindingId: 'binding:sandbox-option-one:http-json:v5',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
-        publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v4',
+        bindingId: 'binding:sandbox-option-two:http-json:v5',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
         publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v6',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        bindingId: 'binding:sandbox-route-resolver:http-json:v6',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
         publicationRef: 'offering:sandbox-route-quoter:service-quote:v5',
-        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
+        bindingId: 'binding:sandbox-route-quoter:http-json:v5',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
     ])
     expect(state.bindings.find((binding) => binding.bindingId === state.publications[0]?.bindingId))
@@ -553,12 +556,7 @@ describe('labelled sandbox V2 capability supply', () => {
       networkId: 'ae:public', includeInactive: false, limit: 10,
     })).resolves.toMatchObject({
       kind: 'available',
-      nodes: expect.arrayContaining([
-        expect.objectContaining({ publicationRef: 'offering:sandbox-option-one:reference-lookup:v3' }),
-        expect.objectContaining({ publicationRef: 'offering:sandbox-option-two:reference-lookup:v3' }),
-        expect.objectContaining({ publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v6' }),
-        expect.objectContaining({ publicationRef: 'offering:sandbox-route-quoter:service-quote:v5' }),
-      ]),
+      nodes: [],
     })
     expect(state.contracts).toHaveLength(3)
     expect(state.contracts.map(({ capabilityId, version, status }) => ({ capabilityId, version, status }))).toEqual([
@@ -605,12 +603,14 @@ describe('labelled sandbox V2 capability supply', () => {
       audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
     ))).toHaveLength(20)
 
+    await seedHealthyCurrentSandboxPublications(backend)
+
     const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [
-        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v4' } },
-        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v4' } },
+        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v5' } },
+        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v5' } },
         { binding: { bindingId: 'binding:sandbox-route-quoter:http-json:v5' } },
         { binding: { bindingId: 'binding:sandbox-route-resolver:http-json:v6' } },
       ],
@@ -660,8 +660,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v4',
-      'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-option-one:http-json:v5',
+      'binding:sandbox-option-two:http-json:v5',
       'binding:sandbox-route-quoter:http-json:v5',
       'binding:sandbox-route-resolver:http-json:v6',
     ])
@@ -682,6 +682,7 @@ describe('labelled sandbox V2 capability supply', () => {
       await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       await registerLegacySandboxSupply(ctx.db)
       await registerPriorV2SandboxSupply(ctx.db)
+      await registerSupersededV3SandboxSupply(ctx.db)
       await retireOriginalLegacySandboxBindings(ctx.db)
     })
     const priorRetirement = await backend.run(async (ctx) => ({
@@ -719,6 +720,8 @@ describe('labelled sandbox V2 capability supply', () => {
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
         || audit.targetRef === 'binding:sandbox-option-one:http-json:v3'
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v3'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v4'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v4'
       )),
     }))
     const replay = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -733,6 +736,8 @@ describe('labelled sandbox V2 capability supply', () => {
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
         || audit.targetRef === 'binding:sandbox-option-one:http-json:v3'
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v3'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v4'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v4'
       )),
     }))
     expect(replay).toEqual(migrated)
@@ -744,19 +749,19 @@ describe('labelled sandbox V2 capability supply', () => {
       admission: binding.admission, conformance: binding.conformance,
     })
     expect(bindings.filter((binding) => (
-      binding.bindingId.includes('sandbox-option-') && binding.bindingId.endsWith(':v4')
+      binding.bindingId.includes('sandbox-option-') && binding.bindingId.endsWith(':v5')
     )).map(bindingState)).toEqual([
       {
-        bindingId: 'binding:sandbox-option-one:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-one:http-json:v5', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
       {
-        bindingId: 'binding:sandbox-option-two:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-two:http-json:v5', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
     ])
     expect(bindings.filter((binding) => (
-      binding.bindingId.includes('sandbox-option-') && !binding.bindingId.endsWith(':v4')
+      binding.bindingId.includes('sandbox-option-') && !binding.bindingId.endsWith(':v5')
     )).map(bindingState)).toEqual([
       {
         bindingId: 'binding:sandbox-option-one:http-json', credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
@@ -780,6 +785,14 @@ describe('labelled sandbox V2 capability supply', () => {
       },
       {
         bindingId: 'binding:sandbox-option-two:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-one:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-two:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',
       },
     ])
@@ -1288,6 +1301,99 @@ async function registerPriorV2SandboxSupply(
       },
     }, 2_800)
     if (admitted.kind !== 'eligible') throw new Error(`prior V2 admission failed: ${admitted.kind}`)
+  }
+}
+
+async function registerSupersededV3SandboxSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+): Promise<void> {
+  const encoded = encodeCapabilityContractDocument(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
+  const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_900)
+  if (contract.kind !== 'registered') throw new Error(`superseded V3 contract registration failed: ${contract.reason}`)
+  for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
+    if (business === null) throw new Error(`superseded V3 business missing: ${profile.slug}`)
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:superseded-v3-offering:${profile.priorV3OfferingId}`,
+        correlationId: `test:superseded-v3-supply:${profile.slug}`,
+        reasonCode: 'test_superseded_v3_registration',
+        evidenceRefs: ['test:superseded-v3-supply'],
+      },
+      registration: {
+        offeringId: profile.priorV3OfferingId,
+        businessId: business._id,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.label,
+          summary: 'Superseded labelled sandbox supply.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only.' }],
+          commercialRelationship: {
+            kind: 'none',
+            summary: 'No commercial relationship.',
+            influencesEligibility: false,
+            influencesInclusion: false,
+            influencesOrder: false,
+            evidenceRefs: ['test:superseded-v3-supply'],
+          },
+        },
+        searchTerms: [...profile.queryTerms],
+        registrationEvidenceRefs: ['test:superseded-v3-supply'],
+      },
+    }, 3_000)
+    if (offering.kind !== 'registered') {
+      throw new Error(`superseded V3 offering registration failed: ${offering.reason}`)
+    }
+    const binding = await registerCapabilityBindingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:superseded-v3-binding:${profile.priorV3BindingId}`,
+        correlationId: `test:superseded-v3-supply:${profile.slug}`,
+        reasonCode: 'test_superseded_v3_registration',
+        evidenceRefs: ['test:superseded-v3-supply'],
+      },
+      registration: {
+        bindingId: profile.priorV3BindingId,
+        offeringId: profile.priorV3OfferingId,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        endpointUrl: `https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=${profileKey}&binding=v4`,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+      },
+    }, 3_100)
+    if (binding.kind !== 'registered') {
+      throw new Error(`superseded V3 binding registration failed: ${binding.reason}`)
+    }
+    const admitted = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:superseded-v3-admission:${profile.priorV3BindingId}`,
+        correlationId: `test:superseded-v3-supply:${profile.slug}`,
+        reasonCode: 'test_superseded_v3_admission',
+        evidenceRefs: ['test:superseded-v3-supply'],
+      },
+      eligibility: {
+        offeringId: profile.priorV3OfferingId,
+        bindingId: profile.priorV3BindingId,
+        contractRef: contract.ref,
+        decision: 'admit',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['test:superseded-v3-supply'],
+        conformanceEvidenceRefs: ['test:superseded-v3-supply'],
+      },
+    }, 3_200)
+    if (admitted.kind !== 'eligible') {
+      throw new Error(`superseded V3 admission failed: ${admitted.kind}`)
+    }
   }
 }
 
