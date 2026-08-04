@@ -132,14 +132,47 @@ describe('capability readiness probe', () => {
     expect(result.outcome).toBe('healthy')
   })
 
-  it('uses a non-effecting HEAD check for imported HTTP descriptions', async () => {
+  it('uses the declared read-only GET with fixed query parameters for imported HTTP descriptions', async () => {
     const send = vi.fn(async (request: Request) => {
-      expect(request.method).toBe('HEAD')
+      expect(request.method).toBe('GET')
+      expect(request.url).toBe('https://provider.example.test/capability?providers=ECB')
       return new Response(null, { status: 204 })
     })
-    const result = await runCapabilityReadinessProbe({ ...target, probeKind: 'openapi_http' }, {
+    const result = await runCapabilityReadinessProbe({
+      ...target,
+      probeKind: 'openapi_http',
+      probeQuery: [{ parameter: 'providers', value: 'ECB' }],
+      probeMethod: 'GET',
+    }, {
       resolveCredential: async () => 'test-secret', validateTarget: async () => true, send, now: () => 10_000,
     })
     expect(result.outcome).toBe('healthy')
+  })
+
+  it('uses an unpaid POST to verify an x402 payment challenge', async () => {
+    const send = vi.fn(async (request: Request) => {
+      expect(request.method).toBe('POST')
+      await expect(request.json()).resolves.toEqual({})
+      expect(request.headers.has('Payment-Signature')).toBe(false)
+      return new Response(null, { status: 402 })
+    })
+    const result = await runCapabilityReadinessProbe({
+      ...target,
+      adapterId: 'x402-fetch:v2',
+      probeKind: 'x402',
+    }, {
+      resolveCredential: async () => 'funded-private-key',
+      validateTarget: async () => true,
+      send,
+      now: () => 10_000,
+    })
+
+    expect(result).toEqual({
+      outcome: 'healthy',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: 310_000,
+      evidenceRefs: ['probe:credential_resolved', 'probe:target_public', 'probe:x402_payment_required'],
+    })
   })
 })

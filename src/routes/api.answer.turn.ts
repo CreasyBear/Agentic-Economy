@@ -38,7 +38,10 @@ const admitAnswerTurn: RateLimitAdmission = ({ request, key, keySuffix }) =>
     ...(keySuffix === undefined ? {} : { keySuffix }),
   })
 
-type AnswerTurnHandlerOptions = Readonly<{ admit?: RateLimitAdmission }>
+type AnswerTurnHandlerOptions = Readonly<{
+  admit?: RateLimitAdmission
+  stream?: typeof streamAnswerTurn
+}>
 
 export async function handleAnswerTurnRequest(
   request: Request,
@@ -105,7 +108,7 @@ export async function handleAnswerTurnRequest(
       }
 
       try {
-        await streamAnswerTurn(
+        await (options.stream ?? streamAnswerTurn)(
           {
             sessionId,
             query: parsed.data.query,

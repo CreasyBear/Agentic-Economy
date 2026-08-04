@@ -8,6 +8,23 @@ export type RouteAttemptState =
   | 'outcome_unknown'
   | 'cancelled'
 
+export type RouteDispatchState =
+  | 'pending'
+  | 'leased'
+  | 'delivered'
+  | 'failed'
+  | 'cancelled'
+  | 'outcome_unknown'
+
+export function effectiveRouteAttemptState(
+  state: RouteAttemptState,
+  dispatchState?: RouteDispatchState,
+): RouteAttemptState {
+  return dispatchState === 'leased' && (state === 'queued' || state === 'leased')
+    ? 'leased'
+    : state
+}
+
 export type ExportedStepState =
   | 'queued'
   | 'leased'

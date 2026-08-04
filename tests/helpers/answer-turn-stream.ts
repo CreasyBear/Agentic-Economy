@@ -1,4 +1,4 @@
-import { readAnswerTurnFrames, type AnswerTurnFrame } from '@/modules/answer/public'
+import { readAnswerTurnFrames, type AnswerTurnFrame } from '@/modules/answer/answer-ui-stream'
 
 /**
  * Drains an `/api/answer/turn` response through the same reader the browser

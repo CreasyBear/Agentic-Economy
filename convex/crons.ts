@@ -26,4 +26,11 @@ crons.interval(
   {}
 )
 
+crons.interval(
+  'refresh due capability provider readiness',
+  { minutes: 1 },
+  internal.capabilitySupply.scheduleDueCapabilityProbes,
+  {},
+)
+
 export default crons

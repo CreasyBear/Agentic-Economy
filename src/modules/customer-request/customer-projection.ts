@@ -409,8 +409,8 @@ export function projectLegacyResubmitRequired(input: Readonly<{
     requestRef: input.requestRef,
     revision: input.revision,
     state: 'needs_attention',
-    summary: 'This saved Request uses an older route format. Submit it again to continue.',
-    nextAction: 'revise_request',
+    summary: 'This saved Request uses an older route format. Start a new Request to continue.',
+    nextAction: 'none',
   })
 }
 

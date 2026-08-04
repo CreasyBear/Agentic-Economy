@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { isRecord } from '@/modules/common/is-record'
 
-import type { AnswerEvent } from './answer-synthesizer'
+type AnswerEvent = import('./answer-synthesizer').AnswerEvent
 
 /**
  * Re-exported so route handlers reach abort detection through this seam rather

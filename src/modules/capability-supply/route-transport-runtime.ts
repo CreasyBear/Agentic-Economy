@@ -207,6 +207,7 @@ type AuxiliaryExchange = Readonly<{ path: string; requestTimeoutMs: number }>
 type HttpConfiguration = Readonly<{
   method: 'GET' | 'POST'
   query?: readonly QueryParameterMapping[]
+  fixedQuery?: readonly FixedQueryParameter[]
   requestTimeoutMs: number
   reconciliation?: AuxiliaryExchange
   cancellation?: AuxiliaryExchange
@@ -228,6 +229,7 @@ type X402Configuration = Readonly<{
   asset: string
   payTo: string
 }>
+type FixedQueryParameter = Readonly<{ parameter: string; value: string }>
 type QueryParameterMapping = Readonly<{ inputPointer: string; parameter: string }>
 
 type RegisteredConfiguration = HttpConfiguration | McpConfiguration | X402Configuration
@@ -239,6 +241,17 @@ const amountExponent = z.number().int().min(0).max(18)
 const queryParameter = z.strictObject({
   inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
   parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+})
+const fixedQueryParameter = z.strictObject({
+  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+  value: nonBlankString.max(200),
+})
+const fixedQueryParameters = z.array(fixedQueryParameter).max(64).superRefine((items, context) => {
+  const seen = new Set<string>()
+  for (const [index, item] of items.entries()) {
+    if (seen.has(item.parameter)) context.addIssue({ code: 'custom', path: [index], message: 'fixed_query_duplicate' })
+    seen.add(item.parameter)
+  }
 })
 const queryParameters = z.array(queryParameter).min(1).max(64).superRefine((items, context) => {
   const pointers = new Set<string>()
@@ -258,6 +271,7 @@ const auxiliaryExchange = z.strictObject({
 const httpConfiguration = z.strictObject({
   method: z.enum(['GET', 'POST']),
   query: queryParameters.optional(),
+  fixedQuery: fixedQueryParameters.optional(),
   requestTimeoutMs: requestTimeout,
   reconciliation: auxiliaryExchange.optional(),
   cancellation: auxiliaryExchange.optional(),
@@ -436,6 +450,9 @@ export function prepareRegisteredRouteTransportInvocation(
         endpoint,
         (typedConfiguration as HttpConfiguration | X402Configuration).method,
         (typedConfiguration as HttpConfiguration | X402Configuration).query,
+        invocation.binding.adapterId === 'http-json:v1'
+          ? (typedConfiguration as HttpConfiguration).fixedQuery
+          : undefined,
         invocation.inputJson,
       )
     : undefined
@@ -823,19 +840,21 @@ function isX402RouteTransportRuntime(
   const candidate = runtime as Partial<X402RouteTransportRuntime>
   return typeof candidate.prepareX402PaymentAuthorization === 'function'
     && typeof candidate.readX402PaymentAuthorization === 'function'
-    && typeof candidate.readX402PaymentAuthorizationByDigest === 'function'
 }
-
 function requestTarget(
   endpoint: URL,
   method: 'GET' | 'POST',
   query: readonly QueryParameterMapping[] | undefined,
+  fixedQuery: readonly FixedQueryParameter[] | undefined,
   inputJson: string,
 ): URL | undefined {
   if (method === 'POST') return new URL(endpoint)
   const input = parseBoundedJson(inputJson)
   if (!isRecord(input) || query === undefined) return undefined
   const target = new URL(endpoint)
+  if (fixedQuery !== undefined) {
+    for (const mapping of fixedQuery) target.searchParams.append(mapping.parameter, mapping.value)
+  }
   for (const mapping of query) {
     const value = readJsonPointer(input, mapping.inputPointer)
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return undefined

@@ -1,4 +1,5 @@
 import { bindingIntegrityIsValid } from '../binding'
+import { readHttpJsonProbeConfiguration } from '../transport-adapters'
 import { contractRefFromRow, offeringIntegrityIsValid } from '../offering'
 
 import type { CapabilityGraphPorts } from './ports'
@@ -13,6 +14,8 @@ export type CapabilityProbeTarget = Readonly<{
   credentialRef: string
   adapterId: string
   probeKind: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'
+  probeQuery: Array<{ parameter: string; value: string }>
+  probeMethod: 'GET' | 'HEAD'
   targetDigest: string
 }>
 
@@ -52,6 +55,7 @@ export async function readCapabilityProbeTarget(
   ) {
     return { kind: 'unavailable' as const }
   }
+  const probeConfiguration = readHttpJsonProbeConfiguration(binding.adapterId, binding.configJson)
   return {
     kind: 'available' as const,
     target: {
@@ -66,6 +70,8 @@ export async function readCapabilityProbeTarget(
         : publication.sourceKind === 'openapi_http' ? 'openapi_http' as const
         : publication.sourceKind === 'x402' ? 'x402' as const
         : 'ae_quote' as const,
+      probeQuery: [...probeConfiguration.fixedQuery],
+      probeMethod: probeConfiguration.method,
       targetDigest: probeTargetDigest(publication, offering, binding),
     },
   }

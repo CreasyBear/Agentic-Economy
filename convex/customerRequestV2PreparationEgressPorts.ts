@@ -366,9 +366,17 @@ function toEligibleSupply(supply: {
     conformance: string
     registrationHash: string
   }
+  publication: EligibleSupply['publication']
 }): EligibleSupply {
-  const { offering, binding } = supply
+  const { offering, binding, publication } = supply
   return {
+    publication: {
+      ...publication,
+      admittedOperation: {
+        ...publication.admittedOperation,
+        contractRef: { ...publication.admittedOperation.contractRef },
+      },
+    },
     offering: {
       businessId: String(offering.businessId),
       offeringId: offering.offeringId,

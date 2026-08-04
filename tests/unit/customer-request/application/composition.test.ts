@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { createTestOperationLineage } from '../../../helpers/customer-request-lineage'
 
 import {
   defineCapabilityContract,
@@ -175,6 +176,7 @@ describe('customer-request application composition', () => {
     it('names empty supply as no routeable supply, not an unreadable graph', async () => {
       expect(await loadRequestGraph('ae:public', {
         listRouteable: async () => ({ kind: 'available', supplies: [] }),
+        listMappings: async () => [],
         getActiveExact: async () => {
           throw new Error('getActiveExact must not run for empty supply')
         },
@@ -325,7 +327,6 @@ describe('customer-request application composition', () => {
     })
   })
 })
-
 function fixture() {
   const model = openCapabilityDecisionModel(defineCapabilityContract({
     contractFormat: 'ae.capability-contract:v2', capabilityId: 'test.destination.lookup', version: 1,
@@ -355,7 +356,9 @@ function fixture() {
   }))
   const destination = model.inputs.find((input) => input.annotationId === 'destination')
   if (destination === undefined) throw new Error('destination input missing')
+  const lineage = createTestOperationLineage(model.contractRef, 'composition:binding:one')
   const binding = {
+    ...lineage,
     businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
     contractRef: model.contractRef, offeringRegistrationHash: canonicalDigest('offering:one'),
     bindingRegistrationHash: canonicalDigest('binding:one'),
@@ -364,6 +367,7 @@ function fixture() {
   const proposal = {
     kind: 'capability_candidates' as const,
     selections: [{
+      operationRef: lineage.operationRef,
       selectionKey: model.selectionKey, contractRef: model.contractRef,
       facts: [{
         contractRef: model.contractRef, selectionKey: model.selectionKey,
@@ -378,6 +382,7 @@ function fixture() {
     models: [model],
     descriptors: [],
     bindings: [binding],
+    mappings: [],
     registrySnapshotDigest: 'reg:test',
   }
   const compileInput: CompileCommitInput = {
@@ -407,6 +412,7 @@ function fixture() {
     interpreterId: compileInput.interpreterId,
     bindings: graph.bindings,
     models: graph.models,
+    mappings: graph.mappings,
     now: 1_000,
     expectedRouteGeneration: compileInput.expectedRouteGeneration,
   })

@@ -50,6 +50,8 @@ type RouteMandateDataScope = Readonly<{
 
 export type RouteMandateStep = Readonly<{
   position: number
+  operationRef: RouteStep['operationRef']
+  admittedOperation: RouteStep['admittedOperation']
   actionId: string
   candidateRef: string
   businessId: string
@@ -316,6 +318,8 @@ function routeAuthorityMaterial(
   }
   const steps = route.steps.map((step, index): RouteMandateStep => ({
     position: index + 1,
+    operationRef: step.operationRef,
+    admittedOperation: step.admittedOperation,
     actionId: step.actionId,
     candidateRef: step.candidateRef,
     businessId: step.businessId,

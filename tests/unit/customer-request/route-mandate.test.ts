@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { createRegisteredOperationMappingRef } from '@/modules/capability-supply/public'
+import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { CustomerRequestRoutePlan } from '@/modules/customer-request/compiler'
 import {
@@ -685,21 +687,32 @@ function step(input: Readonly<{
   recovery: RouteStep['recovery']['recovery']
 }>): RouteStep {
   const suffix = input.businessId.replaceAll(':', '-')
-  return {
-    actionId: input.actionId,
-    candidateRef: `candidate:${suffix}`,
+  const contractRef = {
+    capabilityId: input.capabilityId,
+    version: input.version,
+    contractDigest: digest(`contract:${input.capabilityId}:${input.version}`),
+  }
+  const lineage = createTestOperationLineage(contractRef, `route-mandate:${suffix}`, {
+    operationId: input.actionId,
     businessId: input.businessId,
     offeringId: `offering:${suffix}`,
     bindingId: `binding:${input.businessId.split(':').at(-1)}`,
-    contractRef: {
-      capabilityId: input.capabilityId,
-      version: input.version,
-      contractDigest: digest(`contract:${input.capabilityId}:${input.version}`),
-    },
     offeringRegistrationHash: digest(`offering:${suffix}`),
     bindingRegistrationHash: digest(`binding:${suffix}`),
     publicationRef: `publication:${suffix}`,
-    publicationRevision: 1,
+  })
+  return {
+    ...lineage,
+    actionId: input.actionId,
+    candidateRef: `candidate:${suffix}`,
+    businessId: lineage.admittedOperation.businessId,
+    offeringId: lineage.admittedOperation.offeringId,
+    bindingId: lineage.admittedOperation.bindingId,
+    contractRef,
+    offeringRegistrationHash: lineage.admittedOperation.offeringRegistrationHash,
+    bindingRegistrationHash: lineage.admittedOperation.bindingRegistrationHash,
+    publicationRef: lineage.admittedOperation.publicationRef,
+    publicationRevision: lineage.admittedOperation.publicationRevision,
     resolvedInputs: [],
     deferredInputs: [],
     price: { kind: 'fixed', currency: 'AUD', amountMinor: input.amountMinor },
@@ -733,8 +746,20 @@ function step(input: Readonly<{
 }
 
 function routeDraft(suffix: string, steps: readonly RouteStep[]): RouteDraft {
+  const mappingRef = createRegisteredOperationMappingRef({
+    kind: 'field',
+    sourceContractRef: steps[0]!.contractRef,
+    targetContractRef: steps[1]!.contractRef,
+    sourceSchemaIdentity: steps[0]!.evidence[0]!.schemaIdentity,
+    targetSchemaIdentity: steps[1]!.evidence[0]!.schemaIdentity,
+    sourceOutputPointer: '/result',
+    targetInputPointer: '/result',
+    authority: 'registered_contract_semantics',
+  })
   const edges = [{
-    mappingId: `mapping:${suffix}`,
+    mappingRef,
+    kind: 'field' as const,
+    mappingId: mappingRef,
     semanticIdentity: 'ae.result:v1',
     source: {
       actionId: steps[0]!.actionId,
@@ -743,7 +768,7 @@ function routeDraft(suffix: string, steps: readonly RouteStep[]): RouteDraft {
       outputPointer: '/result',
     },
     target: { annotationId: 'result', inputKey: 'result' as never, inputPointer: '/result' },
-    schemaIdentity: digest('schema:result') as never,
+    schemaIdentity: steps[1]!.evidence[0]!.schemaIdentity,
     authority: 'registered_contract_semantics' as const,
     fromStep: steps[0]!.actionId,
     toStep: steps[1]!.actionId,

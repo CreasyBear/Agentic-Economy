@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/server/rate-limit', () => ({
   assertHttpAdmission: async () => ({ ok: true as const }),
@@ -20,12 +20,31 @@ import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 const SESSION_COOKIE = sessionCookieHeader('session-boundary')
 
-
 describe('POST /api/answer/turn boundary follow-up', () => {
+  let previousConvexUrl: string | undefined
+  let previousPublicConvexUrl: string | undefined
+
+  beforeEach(() => {
+    previousConvexUrl = process.env.CONVEX_URL
+    previousPublicConvexUrl = process.env.VITE_CONVEX_URL
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+  })
+
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousPublicConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+    }
   })
 
   it('returns boundary copy for the AE chip even when prior turns fail to load', async () => {

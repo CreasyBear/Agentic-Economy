@@ -1,6 +1,7 @@
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
 import { readFileSync } from 'node:fs'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   ANSWER_THREAD_EVAL_CASES,
@@ -9,13 +10,17 @@ import {
   type AnswerTurnEvalCase,
 } from '../../eval/answer/lib/cases'
 import {
+  ANSWER_TURN_DATA_PART,
   assembleAnswerEvidence,
   runAnswerToolUseAgent,
   runAnswerGate,
+  type AnswerTurnFrame,
+  type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
 import {
   runAnswerThreadEvalCase,
   runAnswerTurnEvalCase,
+  type AnswerTurnEvalResult,
 } from '../../eval/answer/lib/evaluators'
 import { runAnswerEvalSuite } from '../../eval/answer/lib/suite'
 import {
@@ -26,6 +31,7 @@ import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 const QUERY = 'emergency plumber parramatta'
 
@@ -81,10 +87,33 @@ describe('answer pipeline eval', () => {
     expect(issues, issues.map((issue) => issue.message).join('; ')).toEqual([])
   })
 
+  it('invokes onFrame for each parsed answer frame', async () => {
+    const sent: AnswerTurnFrame[] = [
+      { seq: 0, event: { type: 'thread', threadId: 'thread:eval', turnId: 'turn:eval', turnSeq: 1 } },
+      { seq: 1, event: { type: 'one-line', oneLine: 'A listed business matches.' } },
+    ]
+    const stream = createUIMessageStream<AnswerTurnUIMessage>({
+      execute: ({ writer }) => {
+        for (const frame of sent) {
+          writer.write({ type: ANSWER_TURN_DATA_PART, data: frame, transient: true })
+        }
+      },
+      onError: () => 'answer_turn_failed',
+    })
+    const observed: AnswerTurnFrame[] = []
+    const frames = await readAnswerTurnStream(
+      createUIMessageStreamResponse({ stream }),
+      (frame) => observed.push(frame),
+    )
+
+    expect(frames).toEqual(sent)
+    expect(observed).toEqual(sent)
+  })
+
   it('produces a failure-explaining suite report from the shared catalog', async () => {
     const report = await runAnswerEvalSuite()
-    expect(report.ok).toBe(true)
     expect(report.schemaVersion).toBe('answer-eval-suite-report:v3')
+    expect(report.schemaVersion).not.toBe('answer-eval-suite-report:v2')
     expect(report.summary.caseCount).toBe(ANSWER_TURN_EVAL_CASES.length + ANSWER_THREAD_EVAL_CASES.length)
     expect(report.summary.failedCaseCount).toBe(0)
     expect(report.summary.failedScoreCaseCount).toBe(0)
@@ -102,15 +131,13 @@ describe('answer pipeline eval', () => {
 
     const turns = report.cases.flatMap((testCase) => {
       if (testCase.kind === 'turn') {
-        return [{ artifactKinds: testCase.artifactKinds, nextStep: testCase.diagnostics.nextStep }]
+        return [{ artifactKinds: testCase.artifactKinds }]
       }
       return testCase.turns.map((turn) => ({
         artifactKinds: turn.artifactKinds,
-        nextStep: turn.diagnostics.nextStep,
       }))
     })
     expect(turns.every((turn) => turn.artifactKinds.includes('one-line'))).toBe(true)
-    expect(turns.every((turn) => turn.nextStep === undefined || turn.artifactKinds.includes('what-to-do-now'))).toBe(true)
     const reportTurns = report.cases.flatMap((testCase) => {
       if (testCase.kind === 'turn') {
         return [{
@@ -143,6 +170,8 @@ describe('answer pipeline eval', () => {
     }
     expect(Number.isFinite(report.summary.modelRequestCount)).toBe(true)
     expect(report.summary.modelRequestCount).toBeGreaterThanOrEqual(0)
+    expect(Number.isFinite(report.summary.modelToolRunCount)).toBe(true)
+    expect(report.summary.modelToolRunCount).toBeGreaterThanOrEqual(0)
     expect(Number.isFinite(report.summary.toolRunCount)).toBe(true)
     expect(report.summary.toolRunCount).toBeGreaterThanOrEqual(0)
     expect(Object.values(report.summary.usage).every((value) => Number.isFinite(value) && value >= 0)).toBe(true)
@@ -158,10 +187,12 @@ describe('answer pipeline eval', () => {
     const directReport = report.cases.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
     expect(directReport?.kind).toBe('turn')
     expect(directReport?.kind === 'turn' ? directReport.modelRequestCount : undefined).toBe(0)
+    expect(directReport?.kind === 'turn' ? directReport.modelToolRunCount : undefined).toBe(0)
 
     const paramataReport = report.cases.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
     expect(paramataReport?.kind).toBe('turn')
     expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(2)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.modelToolRunCount : undefined).toBe(1)
     expect(paramataReport?.kind === 'turn' ? paramataReport.toolRunCount : undefined).toBe(2)
     expect(paramataReport?.kind === 'turn' ? paramataReport.costUnavailableReasons : undefined).toEqual([
       'price_table_missing',
@@ -174,6 +205,9 @@ describe('answer pipeline eval', () => {
 
     const { keys, strings } = readSerializedReportValues(JSON.stringify(report))
     const forbiddenPrivateKeys: Record<string, true> = {
+      diagnostics: true,
+      oneLine: true,
+      nextStep: true,
       harnessRun: true,
       harnessFinalization: true,
       modelRequests: true,
@@ -198,8 +232,12 @@ describe('answer pipeline eval', () => {
       responseText: true,
     }
     expect(keys.some((key) => forbiddenPrivateKeys[key] === true)).toBe(false)
-    const forbiddenPrivateContent = /(?:harnessRun|harnessFinalization|modelRequests|toolId|inputJson|resultSummaryJson|resultJson|rawToolPayload|rawToolInput|rawToolOutput|resultHash|snapshotHash|sourceHash|descriptorHash|requestId|responseId|providerRequestId|providerResponseId|runId|modelResponse|responseText|private:evidence:)/i
+    const forbiddenPrivateContent = /(?:harnessRun|harnessFinalization|modelRequests|toolId|inputJson|resultSummaryJson|resultJson|rawToolPayload|rawToolInput|rawToolOutput|resultHash|snapshotHash|sourceHash|descriptorHash|requestId|responseId|providerRequestId|providerResponseId|runId|modelResponse|responseText|private:evidence:)|(?<![\w-])prompt(?![\w-])/i
+    expect(forbiddenPrivateContent.test('recovery-prompts')).toBe(false)
+    expect(forbiddenPrivateContent.test('raw prompt content')).toBe(true)
     expect(strings.filter((value) => forbiddenPrivateContent.test(value))).toEqual([])
+    expect(strings).not.toContain('Two listed businesses match this need.')
+    expect(strings).not.toContain('The listings publish emergency pipe repair in Parramatta.')
   })
 
   it('rejects impossible model and tool count expectations', async () => {
@@ -214,13 +252,102 @@ describe('answer pipeline eval', () => {
       expected: {
         ...sourceCase.expected,
         expectedModelRequests: 0,
+        expectedModelToolRuns: 0,
+        maxModelToolRuns: 0,
         maxToolRuns: 0,
       },
     }
     const result = await runAnswerTurnEvalCase(impossibleCase)
     expect(result.ok).toBe(false)
     expect(result.problems).toContain('expected 0 model requests, got 2')
+    expect(result.problems).toContain('expected 0 model tool runs, got 1')
+    expect(result.problems).toContain('model tool run count 1 exceeds 0')
     expect(result.problems).toContain('tool run count 2 exceeds 0')
+  })
+
+  it('enforces persisted tool statuses without leaking tool identities', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-paramata-visible-recovery eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-paramata-wrong-tool-status',
+      expected: {
+        ...sourceCase.expected,
+        toolStatuses: ['refused', 'complete'],
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('tool status expectation failed (2 expected, 2 observed)')
+    expect(result.problems.join('; ')).not.toContain('registry.search')
+  })
+
+  it('rejects a model request on a deterministic case', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-direct-parramatta-fast-path eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-direct-parramatta-model-request',
+      expected: {
+        ...sourceCase.expected,
+        expectedModelRequests: 1,
+        expectedModelToolRuns: 1,
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('expected 1 model requests, got 0')
+    expect(result.problems).toContain('expected 1 model tool runs, got 0')
+  })
+
+  it('rejects wrong model request and model-tool counts', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-paramata-visible-recovery eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-paramata-wrong-model-counts',
+      expected: {
+        ...sourceCase.expected,
+        expectedModelRequests: 1,
+        maxModelRequests: 1,
+        expectedModelToolRuns: 2,
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('expected 1 model requests, got 2')
+    expect(result.problems).toContain('expected 2 model tool runs, got 1')
+    expect(result.problems).toContain('model request count 2 exceeds 1')
+  })
+
+  it('rejects nonfinite wall-clock latency', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-direct-parramatta-fast-path eval case')
+    }
+
+    const now = vi.spyOn(performance, 'now').mockReturnValue(Number.NaN)
+    let result: AnswerTurnEvalResult
+    try {
+      result = await runAnswerTurnEvalCase({
+        ...sourceCase,
+        id: 'turn-direct-parramatta-nonfinite-latency',
+      })
+    } finally {
+      now.mockRestore()
+    }
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('request wall-clock timings must be finite and non-negative')
   })
   it('redacts private tool identities from failed eval expectations', async () => {
     const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
@@ -270,6 +397,73 @@ describe('answer pipeline eval', () => {
       expect(evidence).toBeDefined()
       expect(evidence?.providers.map((provider) => provider.slug)).toEqual(['parramatta-emergency-plumbing', 'plumbing-demo'])
     } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousEvalSeed === undefined) {
+        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+      } else {
+        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousViteConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousViteConvexUrl
+      }
+    }
+  })
+
+  it('keeps frozen prose on the tool-disabled path with one model request and no tool runs', async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [],
+      prose: {
+        oneLine: 'Two listed businesses match this need.',
+        summary:
+          'The listings publish emergency pipe repair in Parramatta. The businesses handle timing, price, and availability.',
+        whatToDoNow:
+          'Open a provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+
+    try {
+      const evidence = await assembleAnswerEvidence({ query: QUERY, limit: 10 })
+      if (evidence === undefined) {
+        throw new Error('expected frozen provider evidence')
+      }
+      const result = await runAnswerToolUseAgent({
+        query: 'which provider should I compare?',
+        priorProviders: evidence.providers,
+        priorAllowedSlugs: evidence.providers.map((provider) => provider.slug),
+        followUpIntent: 'filter_known',
+        disableTools: true,
+      })
+
+      expect(result.modelRequests).toHaveLength(1)
+      expect(result.toolCalls).toHaveLength(0)
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
+      expect(result.snapshot.providers.map((provider) => provider.slug)).toEqual(
+        evidence.providers.map((provider) => provider.slug),
+      )
+    } finally {
+      restoreOpenRouter()
+      await server.close()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {

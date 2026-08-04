@@ -78,7 +78,7 @@ export function publicationLifecycle(
   if (publication.credentialState === 'unavailable') reasons.push('credential_unavailable')
   if (publication.healthState === 'unobserved') reasons.push('health_unobserved')
   if (publication.healthState === 'unhealthy') reasons.push('health_unhealthy')
-  if (publication.readinessValidUntil !== undefined && publication.readinessValidUntil < now) {
+  if (publication.readinessValidUntil !== undefined && publication.readinessValidUntil <= now) {
     reasons.push('health_stale')
   }
   return { state: reasons.length === 0 ? 'active' as const : 'inactive' as const, reasons }

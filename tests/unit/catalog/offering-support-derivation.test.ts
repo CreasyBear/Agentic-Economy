@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { deriveBusinessOfferingSupportFromCapabilitySupply, rebuildBusinessSupplyProjectionSnapshotCommand } from '../../../convex/capabilitySupplyProjection'
 import schema from '../../../convex/schema'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { capabilityOperationId, createPublicOperationRef } from '../../../src/modules/capability-supply/public'
 
 describe('catalogue support derivation', () => {
   it('removes routeability when current capability readiness or eligibility transitions', async () => {
@@ -29,8 +30,16 @@ describe('catalogue support derivation', () => {
         eligibilityHash: 'eligibility:1', registeredAt: 1, updatedAt: 1,
       })
       const publicationId = await ctx.db.insert('capabilityPublications', {
+        operationRef: createPublicOperationRef({
+          operationId: capabilityOperationId('test.lookup'),
+          publicationRef: 'publication:1',
+          publicationRevision: 1,
+          contractRef: { capabilityId: 'test.lookup', version: 1, contractDigest: 'contract:1' },
+        }),
         publicationRef: 'publication:1', revision: 1, businessId, networkId: 'ae:public', sourceKind: 'ae_envelope',
-        sourceDigest: 'source:1', capabilityId: 'test.lookup', version: 1, contractDigest: 'contract:1', offeringId: 'co:1', bindingId: 'binding:1',
+        sourceRevision: 'source-revision:1', sourceDigest: 'source:1',
+        publisherRef: 'owner:test', authorityMode: 'provider_owned', provenanceDigest: 'provenance:1',
+        capabilityId: 'test.lookup', version: 1, contractDigest: 'contract:1', offeringId: 'co:1', bindingId: 'binding:1',
         disposition: 'current', credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: [], readinessObservedAt: 90,
         readinessValidUntil: 200, registrationEvidenceRefs: [], createdAt: 1, updatedAt: 1,
       })

@@ -97,6 +97,7 @@ export type AnswerEvalUsage = {
 type AnswerEvalHarnessMetrics = {
   performancePath: AnswerEvalPerformancePath
   modelRequestCount: number
+  modelToolRunCount: number
   toolRunCount: number
   usage: AnswerEvalUsage
   estimatedUsd?: number
@@ -107,6 +108,7 @@ function emptyAnswerEvalHarnessMetrics(): AnswerEvalHarnessMetrics {
   return {
     performancePath: 'deterministic',
     modelRequestCount: 0,
+    modelToolRunCount: 0,
     toolRunCount: 0,
     usage: emptyAnswerEvalUsage(),
     costUnavailableReasons: [],
@@ -128,6 +130,7 @@ function readAnswerEvalHarnessMetrics(
   harnessRun: FrozenTurnEvidence['harnessRun'],
 ): AnswerEvalHarnessMetrics {
   const modelRequestCount = finiteCount(harnessRun?.summary.models?.total)
+  const modelToolRunCount = readModelToolRunCount(harnessRun)
   const toolRunCount = finiteCount(harnessRun?.summary.tools.total)
   const usage = harnessRun?.summary.usage
   const cost = harnessRun?.summary.cost
@@ -135,6 +138,7 @@ function readAnswerEvalHarnessMetrics(
   return {
     performancePath: modelRequestCount > 0 ? 'model' : 'deterministic',
     modelRequestCount,
+    modelToolRunCount,
     toolRunCount,
     usage: {
       inputTokens: finiteCount(usage?.inputTokens),
@@ -149,6 +153,17 @@ function readAnswerEvalHarnessMetrics(
       (cost?.unavailableReasons ?? []).filter((reason): reason is string => typeof reason === 'string' && reason.length > 0),
     )].sort((left, right) => left.localeCompare(right)),
   }
+}
+
+function readModelToolRunCount(harnessRun: FrozenTurnEvidence['harnessRun']): number {
+  return (harnessRun?.privateTelemetry?.modelRequests ?? []).reduce(
+    (count, request) => count + (isToolCallStopReason(request.stopReason) ? 1 : 0),
+    0,
+  )
+}
+
+function isToolCallStopReason(stopReason: string | undefined): boolean {
+  return stopReason?.toLowerCase().replace(/[-_]/g, '') === 'toolcalls'
 }
 
 function finiteCount(value: number | undefined): number {
@@ -168,7 +183,9 @@ function performanceMetrics(start: number, firstProgress: number | undefined, co
   requestToCompletionMs: number
 } {
   return {
-    requestToFirstProgressMs: elapsedMs(start, firstProgress ?? completion),
+    requestToFirstProgressMs: firstProgress === undefined
+      ? Number.NaN
+      : elapsedMs(start, firstProgress),
     requestToCompletionMs: elapsedMs(start, completion),
   }
 }
@@ -188,6 +205,7 @@ export type AnswerTurnEvalResult = {
   requestToFirstProgressMs: number
   requestToCompletionMs: number
   modelRequestCount: number
+  modelToolRunCount: number
   toolRunCount: number
   usage: AnswerEvalUsage
   estimatedUsd?: number
@@ -673,6 +691,7 @@ function evaluateAnswerTurnExpectations(input: {
   requestToFirstProgressMs: number
   requestToCompletionMs: number
   modelRequestCount: number
+  modelToolRunCount: number
   toolRunCount: number
   usage: AnswerEvalUsage
   estimatedUsd?: number
@@ -698,6 +717,7 @@ function evaluateAnswerTurnExpectations(input: {
     requestToFirstProgressMs,
     requestToCompletionMs,
     modelRequestCount,
+    modelToolRunCount,
     toolRunCount,
     usage,
     estimatedUsd,
@@ -729,8 +749,17 @@ function evaluateAnswerTurnExpectations(input: {
   if (requestToFirstProgressMs > requestToCompletionMs) {
     problems.push('first progress cannot occur after stream completion')
   }
-  if (Object.values(usage).some((value) => !Number.isFinite(value) || value < 0)) {
-    problems.push('aggregate usage must be finite and non-negative')
+  if (
+    !Number.isFinite(modelToolRunCount) ||
+    modelToolRunCount < 0 ||
+    !Number.isInteger(modelToolRunCount)
+  ) {
+    problems.push('model tool run count must be a finite non-negative integer')
+  }
+  if (expected.toolStatuses !== undefined && !sameStringList(toolStatuses, expected.toolStatuses)) {
+    problems.push(
+      `tool status expectation failed (${expected.toolStatuses.length} expected, ${toolStatuses.length} observed)`,
+    )
   }
   if (estimatedUsd !== undefined && (!Number.isFinite(estimatedUsd) || estimatedUsd < 0)) {
     problems.push('estimated cost must be finite and non-negative')
@@ -785,8 +814,14 @@ function evaluateAnswerTurnExpectations(input: {
   if (expected.expectedModelRequests !== undefined && modelRequestCount !== expected.expectedModelRequests) {
     problems.push(`expected ${expected.expectedModelRequests} model requests, got ${modelRequestCount}`)
   }
+  if (expected.expectedModelToolRuns !== undefined && modelToolRunCount !== expected.expectedModelToolRuns) {
+    problems.push(`expected ${expected.expectedModelToolRuns} model tool runs, got ${modelToolRunCount}`)
+  }
   if (expected.maxModelRequests !== undefined && modelRequestCount > expected.maxModelRequests) {
     problems.push(`model request count ${modelRequestCount} exceeds ${expected.maxModelRequests}`)
+  }
+  if (expected.maxModelToolRuns !== undefined && modelToolRunCount > expected.maxModelToolRuns) {
+    problems.push(`model tool run count ${modelToolRunCount} exceeds ${expected.maxModelToolRuns}`)
   }
   if (expected.maxToolRuns !== undefined && toolRunCount > expected.maxToolRuns) {
     problems.push(`tool run count ${toolRunCount} exceeds ${expected.maxToolRuns}`)

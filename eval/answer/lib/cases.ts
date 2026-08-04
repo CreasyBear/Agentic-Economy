@@ -181,7 +181,9 @@ export type AnswerTurnEvalCase = {
     harnessPhases?: readonly string[]
     maxTotalTimingMs?: number
     expectedModelRequests?: number
+    expectedModelToolRuns?: number
     maxModelRequests?: number
+    maxModelToolRuns?: number
     maxToolRuns?: number
   }
 }
@@ -217,6 +219,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['emergency plumber parramatta'],
       includeTimingNames: [
@@ -264,6 +267,9 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 2,
+      maxModelRequests: 2,
+      expectedModelToolRuns: 1,
+      maxModelToolRuns: 1,
       maxToolRuns: 2,
       slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['paramata', 'parramatta'],
@@ -295,6 +301,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: ['Emergency plumber Brunswick', 'Emergency plumber Brunswick'],
       toolIds: ['registry.search', 'web.discover'],
@@ -326,6 +333,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: [],
       includeTimingNames: [
@@ -371,6 +379,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: ['emergency plumber', 'emergency plumber'],
       toolIds: ['registry.search', 'web.discover'],
@@ -400,6 +409,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: [],
       includeTimingNames: ['turn.context_parse', 'sse.emit_snapshot', 'turn.persistence_prepare'],
@@ -430,6 +440,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: ['coburg-dental-clinic'],
       toolQueries: ['dentist coburg'],
       includeTimingNames: [
@@ -477,6 +488,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: ['perth-emergency-plumbing'],
       toolQueries: ['emergency plumber'],
       includeTimingNames: [
@@ -512,6 +524,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: ['parramatta-family-law'],
       toolQueries: ['family lawyer in Parramatta'],
       includeTimingNames: [
@@ -547,6 +560,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     expected: {
       status: 'complete',
       expectedModelRequests: 0,
+      expectedModelToolRuns: 0,
       slugs: ['geelong-locksmith'],
       toolQueries: ['locksmith near Geelong'],
       includeTimingNames: [
@@ -584,6 +598,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         expected: {
           status: 'complete',
           expectedModelRequests: 0,
+          expectedModelToolRuns: 0,
           slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: ['emergency plumber parramatta'],
           includeTimingNames: ['retrieval.initial_search', 'sse.emit_snapshot'],
@@ -598,6 +613,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         expected: {
           status: 'complete',
           expectedModelRequests: 0,
+          expectedModelToolRuns: 0,
           slugs: [],
           toolQueries: [],
           includeTimingNames: ['sse.emit_snapshot'],
@@ -626,6 +642,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         expected: {
           status: 'complete',
           expectedModelRequests: 0,
+          expectedModelToolRuns: 0,
           slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: ['emergency plumber parramatta'],
           includeTimingNames: ['retrieval.initial_search', 'sse.emit_snapshot'],
@@ -640,6 +657,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         expected: {
           status: 'complete',
           expectedModelRequests: 0,
+          expectedModelToolRuns: 0,
           slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: [],
           includeTimingNames: ['turn.context_parse', 'sse.emit_snapshot', 'turn.persistence_prepare'],

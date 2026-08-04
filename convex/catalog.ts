@@ -195,6 +195,35 @@ const auditEventResult = v.object({
   createdAt: v.number(),
 })
 
+const registryAttemptReadbackResult = v.object({
+  businessId: v.string(),
+  slug: v.string(),
+  publicUrl: v.string(),
+  sourceVersion: v.literal('public-catalog:v1'),
+  sourceHash: v.string(),
+  generatedHash: v.optional(v.string()),
+  offeringCount: v.number(),
+  publicSurfaces: v.array(v.union(
+    v.literal('/api/businesses'),
+    v.literal('/api/businesses/search'),
+    v.literal('/api/businesses/{slug}'),
+  )),
+  readAt: v.number(),
+})
+
+const discoveryAttemptReadbackResult = v.object({
+  businessId: v.string(),
+  slug: v.string(),
+  manifestUrl: v.string(),
+  sourceVersion: v.literal('public-catalog:v1'),
+  sourceHash: v.string(),
+  generatedHash: v.string(),
+  bodyHash: v.string(),
+  urlHash: v.string(),
+  routeUrls: v.array(v.string()),
+  readAt: v.number(),
+})
+
 const registryAttemptResult = v.object({
   businessId: v.string(),
   offeringRef: v.optional(v.string()),
@@ -209,6 +238,7 @@ const registryAttemptResult = v.object({
   lastErrorRedacted: v.optional(v.string()),
   startedAt: v.number(),
   finishedAt: v.optional(v.number()),
+  latestReadback: v.optional(registryAttemptReadbackResult),
   staleThresholdAt: v.optional(v.number()),
   repairAction: v.union(v.literal('retry_projection'), v.literal('rebuild_projection'), v.literal('no_repair')),
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
@@ -223,12 +253,19 @@ const discoveryAttemptResult = v.object({
   sourceVersion: v.literal('public-catalog:v1'),
   status: v.union(v.literal('queued'), v.literal('succeeded'), v.literal('failed'), v.literal('stale')),
   retryCount: v.number(),
+  failureCode: v.optional(v.string()),
+  failureMessageRedacted: v.optional(v.string()),
   startedAt: v.number(),
   finishedAt: v.optional(v.number()),
+  generatedHash: v.optional(v.string()),
+  bodyHash: v.optional(v.string()),
+  urlHash: v.optional(v.string()),
+  latestReadback: v.optional(discoveryAttemptReadbackResult),
   staleThresholdAt: v.optional(v.number()),
   repairAction: v.union(v.literal('regenerate_manifest'), v.literal('invalidate_manifest'), v.literal('no_repair')),
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
 })
+
 const catalogOfferingPriceValue = v.object({
   kind: v.union(v.literal('fixed'), v.literal('from'), v.literal('range'), v.literal('quote_only')),
   currency: v.string(),
@@ -476,14 +513,38 @@ export async function publishBusinessCatalogCommand(
         return undefined
       }
     })()
+    const replaySnapshotSourceHash = await (async () => {
+      try {
+        return (await db
+          .query('businessSupplyProjectionSnapshots')
+          .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
+          .unique())?.sourceDigest
+      } catch {
+        return undefined
+      }
+    })()
+    const registryEffectPrefix = `registry:business:${businessId}:`
+    const registryEffectRef = existingOperation.effectRefs.find((ref) => ref.startsWith(registryEffectPrefix))
+    const replayProjectionSourceHash = registryEffectRef?.slice(registryEffectPrefix.length)
+    const discoveryEffectRef = replayProjectionSourceHash === undefined
+      ? undefined
+      : `discovery:manifest:${businessId}:${replayProjectionSourceHash}:v1`
     if (existingOperation.sourceHash !== business.sourceHash) {
       return catalogError('catalog_publish_operation_conflict', 'Published operation source no longer matches this business.')
     }
     const replayAudit = await findPublishAuditEvent(db, businessId, command.operationKey)
-    const replayRegistryAttempts = await registryAttemptsForBusiness(db, businessId, business.sourceHash, business.slug)
-    const replayDiscoveryAttempts = await discoveryAttemptsForBusiness(db, businessId, business.sourceHash, business.slug)
+    const replayRegistryAttempts = replayProjectionSourceHash === undefined
+      ? undefined
+      : await registryAttemptsForBusiness(db, businessId, replayProjectionSourceHash, business.slug)
+    const replayDiscoveryAttempts = replayProjectionSourceHash === undefined
+      || discoveryEffectRef === undefined
+      || !existingOperation.effectRefs.includes(discoveryEffectRef)
+      ? undefined
+      : await discoveryAttemptsForBusiness(db, businessId, replayProjectionSourceHash, business.slug)
     if (
       replayCatalog === undefined
+      || replayProjectionSourceHash === undefined
+      || replaySnapshotSourceHash !== replayProjectionSourceHash
       || replayAudit === undefined
       || replayRegistryAttempts === undefined
       || replayRegistryAttempts.length !== 1
@@ -551,9 +612,9 @@ export async function publishBusinessCatalogCommand(
   }
 
   const auditEvent = await ensurePublishAuditEvent(db, businessId, claim.ownerId, business.slug, command, now)
-  const registryAttempts = await ensureRegistryAttempts(db, businessId, business.sourceHash, now)
-  const discoveryAttempts = await ensureDiscoveryAttempt(db, businessId, business.sourceHash, now)
-  await upsertBusinessIndexStatus(db, businessId, business.sourceHash, now)
+  const registryAttempts = await ensureRegistryAttempts(db, businessId, rebuilt.sourceDigest, business.slug, now)
+  const discoveryAttempts = await ensureDiscoveryAttempt(db, businessId, rebuilt.sourceDigest, business.slug, now)
+  await upsertBusinessIndexStatus(db, businessId, rebuilt.sourceDigest, now)
   await db.patch(operationId, {
     status: 'succeeded',
     resultHash: canonicalDigest({ auditEventId: auditEvent.eventId, businessId, slug: business.slug }),
@@ -1278,12 +1339,32 @@ export const getCurrentOwnerOfferingSupply = queryGeneric({
     const snapshot = await ctx.db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (query) => query.eq('businessId', business._id)).unique()
     const projection = snapshot === null
       ? { status: 'projection_pending' as const }
-      : {
-          status: snapshot.status,
-          observedAt: snapshot.observedAt,
-          disposition: snapshot.disposition,
-          ...(snapshot.lastErrorCode === undefined ? {} : { lastErrorCode: snapshot.lastErrorCode }),
-        }
+      : (() => {
+          try {
+            const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
+            readBusinessSupplyProjectionSnapshot(
+              projectionValue,
+              'catalog',
+              String(business._id),
+              business.slug,
+              {
+                businessId: String(snapshot.businessId),
+                sourceRevision: snapshot.sourceRevision,
+                sourceDigest: snapshot.sourceDigest,
+                observedAt: snapshot.observedAt,
+                ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
+              },
+            )
+            return {
+              status: snapshot.status,
+              observedAt: snapshot.observedAt,
+              disposition: snapshot.disposition,
+              ...(snapshot.lastErrorCode === undefined ? {} : { lastErrorCode: snapshot.lastErrorCode }),
+            }
+          } catch {
+            return { status: 'projection_pending' as const }
+          }
+        })()
     const offerings = state.offerings.map((offering) => {
       const revision = state.revisions.find((candidate) => candidate.offeringRef === offering.offeringRef && candidate.revision === offering.currentRevision)
       return {
@@ -1347,6 +1428,18 @@ type AuditEvent = {
   createdAt: number
 }
 
+type RegistryAttemptReadback = {
+  businessId: Id<'businesses'>
+  slug: string
+  publicUrl: string
+  sourceVersion: 'public-catalog:v1'
+  sourceHash: string
+  generatedHash?: string
+  offeringCount: number
+  publicSurfaces: Array<'/api/businesses' | '/api/businesses/search' | '/api/businesses/{slug}'>
+  readAt: number
+}
+
 type RegistryAttempt = {
   businessId: Id<'businesses'>
   offeringRef?: string
@@ -1354,15 +1447,34 @@ type RegistryAttempt = {
   projectionKind: 'business_catalog' | 'offering_catalog'
   sourceHash: string
   sourceVersion: 'public-catalog:v1'
-  status: 'queued'
+  status: 'queued' | 'succeeded' | 'failed' | 'stale'
   retryCount: number
+  retryAfter?: number
+  lastErrorCode?: string
+  lastErrorRedacted?: string
   startedAt: number
-  repairAction: 'rebuild_projection'
-  repairResult: 'not_run'
+  finishedAt?: number
+  latestReadback?: RegistryAttemptReadback
+  staleThresholdAt?: number
+  repairAction: 'retry_projection' | 'rebuild_projection' | 'no_repair'
+  repairResult: 'not_run' | 'succeeded' | 'failed'
 }
 
 type CurrentRegistryAttempt = RegistryAttempt & {
   attemptVersion: 'current'
+}
+
+type DiscoveryAttemptReadback = {
+  businessId: Id<'businesses'>
+  slug: string
+  manifestUrl: string
+  sourceVersion: 'public-catalog:v1'
+  sourceHash: string
+  generatedHash: string
+  bodyHash: string
+  urlHash: string
+  routeUrls: string[]
+  readAt: number
 }
 
 type DiscoveryAttempt = {
@@ -1372,12 +1484,183 @@ type DiscoveryAttempt = {
   pathKind: 'ae_hosted_fallback'
   sourceHash: string
   sourceVersion: 'public-catalog:v1'
-  status: 'queued'
+  status: 'queued' | 'succeeded' | 'failed' | 'stale'
   retryCount: number
+  failureCode?: string
+  failureMessageRedacted?: string
   startedAt: number
-  repairAction: 'regenerate_manifest'
-  repairResult: 'not_run'
+  finishedAt?: number
+  generatedHash?: string
+  bodyHash?: string
+  urlHash?: string
+  latestReadback?: DiscoveryAttemptReadback
+  staleThresholdAt?: number
+  repairAction: 'regenerate_manifest' | 'invalidate_manifest' | 'no_repair'
+  repairResult: 'not_run' | 'succeeded' | 'failed'
 }
+function publicRegistryAttempt(
+  attempt: CurrentRegistryAttempt,
+  expectedBusinessId: Id<'businesses'>,
+  expectedSourceHash: string,
+  expectedSlug: string,
+): RegistryAttempt {
+  if (
+    attempt.businessId !== expectedBusinessId
+    || attempt.offeringRef !== undefined
+    || attempt.logicalKey !== `registry:business:${expectedBusinessId}:${expectedSourceHash}`
+    || attempt.projectionKind !== 'business_catalog'
+    || attempt.sourceHash !== expectedSourceHash
+    || attempt.sourceVersion !== 'public-catalog:v1'
+    || (attempt.status === 'succeeded' && attempt.latestReadback === undefined)
+  ) {
+    throw new Error('registry_attempt_identity_invalid')
+  }
+  const latestReadback = attempt.latestReadback
+  if (latestReadback !== undefined) {
+    const expectedSurfaces = ['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'] as const
+    if (
+      latestReadback.businessId !== expectedBusinessId
+      || latestReadback.slug !== expectedSlug
+      || latestReadback.publicUrl !== `/${expectedSlug}`
+      || latestReadback.sourceVersion !== 'public-catalog:v1'
+      || latestReadback.sourceHash !== expectedSourceHash
+      || latestReadback.publicSurfaces.length !== expectedSurfaces.length
+      || expectedSurfaces.some((surface) => !latestReadback.publicSurfaces.includes(surface))
+    ) {
+      throw new Error('registry_attempt_readback_invalid')
+    }
+  }
+  return {
+    businessId: attempt.businessId,
+    logicalKey: attempt.logicalKey,
+    projectionKind: attempt.projectionKind,
+    sourceHash: attempt.sourceHash,
+    sourceVersion: attempt.sourceVersion,
+    status: attempt.status,
+    retryCount: attempt.retryCount,
+    ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
+    ...(attempt.lastErrorCode === undefined ? {} : { lastErrorCode: attempt.lastErrorCode }),
+    ...(attempt.lastErrorRedacted === undefined ? {} : { lastErrorRedacted: attempt.lastErrorRedacted }),
+    startedAt: attempt.startedAt,
+    ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
+    ...(latestReadback === undefined ? {} : { latestReadback }),
+    ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
+    repairAction: attempt.repairAction,
+    repairResult: attempt.repairResult,
+  }
+}
+
+function publicDiscoveryAttempt(
+  attempt: Doc<'discoveryManifestAttempts'>,
+  expectedBusinessId: Id<'businesses'>,
+  expectedSourceHash: string,
+  expectedSlug: string,
+): DiscoveryAttempt {
+  const pathKind = attempt.pathKind
+  const sourceVersion = attempt.sourceVersion
+  const expectedAttemptId = `discovery:manifest:${expectedBusinessId}:${expectedSourceHash}:v1`
+  if (
+    attempt.attemptId !== expectedAttemptId
+    || attempt.businessId !== expectedBusinessId
+    || attempt.sourceHash !== expectedSourceHash
+    || attempt.ucpVersion !== 'v1'
+    || pathKind !== 'ae_hosted_fallback'
+    || sourceVersion !== 'public-catalog:v1'
+  ) {
+    throw new Error('discovery_attempt_identity_invalid')
+  }
+  const persistedReadback = attempt.latestReadback
+  let latestReadback: DiscoveryAttemptReadback | undefined
+  if (persistedReadback !== undefined) {
+    const readbackSourceVersion = persistedReadback.sourceVersion
+    const canonicalBaseUrl = (() => {
+      try {
+        const parsed = new URL(persistedReadback.manifestUrl)
+        const manifestPathSuffix = `/${expectedSlug}/ucp`
+        if (
+          (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
+          || parsed.username.length > 0
+          || parsed.password.length > 0
+          || parsed.search.length > 0
+          || parsed.hash.length > 0
+          || !parsed.pathname.endsWith(manifestPathSuffix)
+        ) return undefined
+        const basePath = parsed.pathname.slice(0, -manifestPathSuffix.length)
+        const baseUrl = `${parsed.origin}${basePath}`
+        if (persistedReadback.manifestUrl !== `${baseUrl}${manifestPathSuffix}`) return undefined
+        return baseUrl
+      } catch {
+        return undefined
+      }
+    })()
+    const publicUrl = canonicalBaseUrl === undefined
+      ? undefined
+      : `${canonicalBaseUrl}/${expectedSlug}`
+    const expectedApiUrl = canonicalBaseUrl === undefined
+      ? undefined
+      : `${canonicalBaseUrl}/api/businesses/${expectedSlug}`
+    const expectedRoutes = publicUrl === undefined || expectedApiUrl === undefined
+      ? []
+      : [publicUrl, persistedReadback.manifestUrl, expectedApiUrl]
+    if (
+      persistedReadback.businessId !== expectedBusinessId
+      || persistedReadback.slug !== expectedSlug
+      || readbackSourceVersion !== 'public-catalog:v1'
+      || persistedReadback.sourceHash !== expectedSourceHash
+      || attempt.generatedHash !== persistedReadback.generatedHash
+      || attempt.bodyHash !== persistedReadback.bodyHash
+      || attempt.urlHash !== persistedReadback.urlHash
+      || canonicalBaseUrl === undefined
+      || expectedRoutes.length !== 3
+      || persistedReadback.routeUrls.length !== expectedRoutes.length
+      || expectedRoutes.some((route) => !persistedReadback.routeUrls.includes(route))
+    ) {
+      throw new Error('discovery_attempt_readback_invalid')
+    }
+    latestReadback = {
+      businessId: persistedReadback.businessId,
+      slug: persistedReadback.slug,
+      manifestUrl: persistedReadback.manifestUrl,
+      sourceVersion: readbackSourceVersion,
+      sourceHash: persistedReadback.sourceHash,
+      generatedHash: persistedReadback.generatedHash,
+      bodyHash: persistedReadback.bodyHash,
+      urlHash: persistedReadback.urlHash,
+      routeUrls: persistedReadback.routeUrls,
+      readAt: persistedReadback.readAt,
+    }
+  }
+  if (attempt.status === 'succeeded' && (
+    latestReadback === undefined
+    || attempt.generatedHash === undefined
+    || attempt.bodyHash === undefined
+    || attempt.urlHash === undefined
+  )) {
+    throw new Error('discovery_attempt_readback_missing')
+  }
+  return {
+    attemptId: attempt.attemptId,
+    businessId: attempt.businessId,
+    ucpVersion: attempt.ucpVersion,
+    pathKind,
+    sourceHash: attempt.sourceHash,
+    sourceVersion,
+    status: attempt.status,
+    retryCount: attempt.retryCount,
+    ...(attempt.failureCode === undefined ? {} : { failureCode: attempt.failureCode }),
+    ...(attempt.failureMessageRedacted === undefined ? {} : { failureMessageRedacted: attempt.failureMessageRedacted }),
+    startedAt: attempt.startedAt,
+    ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
+    ...(attempt.generatedHash === undefined ? {} : { generatedHash: attempt.generatedHash }),
+    ...(attempt.bodyHash === undefined ? {} : { bodyHash: attempt.bodyHash }),
+    ...(attempt.urlHash === undefined ? {} : { urlHash: attempt.urlHash }),
+    ...(latestReadback === undefined ? {} : { latestReadback }),
+    ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
+    repairAction: attempt.repairAction,
+    repairResult: attempt.repairResult,
+  }
+}
+
 
 function catalogError(
   code:
@@ -1567,24 +1850,31 @@ async function publicCatalogForBusiness(
     .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
     .unique()
   if (snapshot === null) return undefined
-  const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
-  const projection = readBusinessSupplyProjectionSnapshot(
-    projectionValue,
-    'catalog',
-    String(businessId),
-    business.slug,
-    {
-      businessId: String(snapshot.businessId),
-      sourceRevision: snapshot.sourceRevision,
-      sourceDigest: snapshot.sourceDigest,
-      observedAt: snapshot.observedAt,
-      disposition: snapshot.disposition,
-    },
-  )
-  const projected = projectBusinessSupplyToPublicApi(projection)
-  const catalog = snapshot.status === 'projection_pending'
-    ? { ...projected, disposition: 'stale' as const }
-    : projected
+  const catalog = (() => {
+    try {
+      const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
+      const projection = readBusinessSupplyProjectionSnapshot(
+        projectionValue,
+        'catalog',
+        String(businessId),
+        business.slug,
+        {
+          businessId: String(snapshot.businessId),
+          sourceRevision: snapshot.sourceRevision,
+          sourceDigest: snapshot.sourceDigest,
+          observedAt: snapshot.observedAt,
+          ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
+        },
+      )
+      const projected = projectBusinessSupplyToPublicApi(projection)
+      return snapshot.status === 'projection_pending'
+        ? { ...projected, disposition: 'stale' as const }
+        : projected
+    } catch {
+      return undefined
+    }
+  })()
+  if (catalog === undefined) return undefined
   return {
     ...catalog,
     photos: catalog.photos.map((photo) => ({ ...photo })),
@@ -1673,6 +1963,7 @@ async function ensureRegistryAttempts(
   db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
   businessSourceHash: string,
+  expectedSlug: string,
   now: number,
 ): Promise<RegistryAttempt[]> {
   const persisted = await upsertRegistryAttempt(db, {
@@ -1688,19 +1979,7 @@ async function ensureRegistryAttempts(
     repairAction: 'rebuild_projection',
     repairResult: 'not_run',
   })
-  return [{
-    businessId: persisted.businessId,
-    ...(persisted.offeringRef === undefined ? {} : { offeringRef: persisted.offeringRef }),
-    logicalKey: persisted.logicalKey,
-    projectionKind: persisted.projectionKind,
-    sourceHash: persisted.sourceHash,
-    sourceVersion: persisted.sourceVersion,
-    status: persisted.status,
-    retryCount: persisted.retryCount,
-    startedAt: persisted.startedAt,
-    repairAction: persisted.repairAction,
-    repairResult: persisted.repairResult,
-  }]
+  return [publicRegistryAttempt(persisted, businessId, businessSourceHash, expectedSlug)]
 }
 
 async function upsertRegistryAttempt(
@@ -1720,11 +1999,11 @@ async function upsertRegistryAttempt(
   }
   return attempt
 }
-
 async function ensureDiscoveryAttempt(
   db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
   sourceHash: string,
+  expectedSlug: string,
   now: number
 ): Promise<DiscoveryAttempt[]> {
   const attempt = {
@@ -1744,9 +2023,17 @@ async function ensureDiscoveryAttempt(
     .query('discoveryManifestAttempts')
     .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
     .unique()
-  if (existing === null) await db.insert('discoveryManifestAttempts', attempt)
-  else await db.patch(existing._id, attempt)
-  return [attempt]
+  if (existing === null) {
+    await db.insert('discoveryManifestAttempts', attempt)
+    return [attempt]
+  }
+  await db.patch(existing._id, attempt)
+  const refreshed = await db
+    .query('discoveryManifestAttempts')
+    .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
+    .unique()
+  if (refreshed === null) throw new Error('discovery_attempt_persist_failed')
+  return [publicDiscoveryAttempt(refreshed, businessId, sourceHash, expectedSlug)]
 }
 
 async function upsertBusinessIndexStatus(db: GenericDatabaseWriter<DataModel>, businessId: Id<'businesses'>, sourceHash: string, now: number): Promise<void> {
@@ -1774,6 +2061,14 @@ function isLegacyRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): bo
   const readback = attempt.latestReadback
   return readback !== undefined && 'serviceCount' in readback
 }
+type CurrentRegistryAttemptDocument = CurrentRegistryAttempt & Pick<Doc<'registryProjectionAttempts'>, '_id' | '_creationTime'>
+
+function isCurrentRegistryAttempt(
+  attempt: Doc<'registryProjectionAttempts'>,
+): attempt is CurrentRegistryAttemptDocument {
+  return !isLegacyRegistryAttempt(attempt)
+}
+
 
 function isLegacyIndexStatus(status: Doc<'indexStatus'>): boolean {
   return 'serviceId' in status || status.targetType === 'service' || status.targetType === 'capability'
@@ -1790,7 +2085,7 @@ async function registryAttemptsForBusiness(
     .query('registryProjectionAttempts')
     .withIndex('by_logicalKey', (query) => query.eq('logicalKey', logicalKey))
     .unique()
-  if (attempt === null || isLegacyRegistryAttempt(attempt)) return undefined
+  if (attempt === null || !isCurrentRegistryAttempt(attempt)) return undefined
   if (
     attempt.businessId !== businessId
     || attempt.logicalKey !== logicalKey
@@ -1813,23 +2108,11 @@ async function registryAttemptsForBusiness(
   ) {
     return undefined
   }
-  const offeringRef =
-    'offeringRef' in attempt && typeof attempt.offeringRef === 'string'
-      ? attempt.offeringRef
-      : undefined
-  return [{
-    businessId: attempt.businessId,
-    ...(offeringRef === undefined ? {} : { offeringRef }),
-    logicalKey: attempt.logicalKey,
-    projectionKind: attempt.projectionKind,
-    sourceHash: attempt.sourceHash,
-    sourceVersion: 'public-catalog:v1',
-    status: 'queued',
-    retryCount: attempt.retryCount,
-    startedAt: attempt.startedAt,
-    repairAction: 'rebuild_projection',
-    repairResult: 'not_run',
-  }]
+  try {
+    return [publicRegistryAttempt(attempt, businessId, businessSourceHash, expectedSlug)]
+  } catch {
+    return undefined
+  }
 }
 
 async function discoveryAttemptsForBusiness(
@@ -1866,19 +2149,11 @@ async function discoveryAttemptsForBusiness(
   ) {
     return undefined
   }
-  return [{
-    attemptId: attempt.attemptId,
-    businessId: attempt.businessId,
-    ucpVersion: attempt.ucpVersion,
-    pathKind: 'ae_hosted_fallback',
-    sourceHash: attempt.sourceHash,
-    sourceVersion: 'public-catalog:v1',
-    status: 'queued',
-    retryCount: attempt.retryCount,
-    startedAt: attempt.startedAt,
-    repairAction: 'regenerate_manifest',
-    repairResult: 'not_run',
-  }]
+  try {
+    return [publicDiscoveryAttempt(attempt, businessId, sourceHash, expectedSlug)]
+  } catch {
+    return undefined
+  }
 }
 
 function publishedBusinessContract(businessId: Id<'businesses'>, business: Doc<'businesses'>, updatedAt: number) {

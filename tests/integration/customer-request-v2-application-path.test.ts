@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   defineCapabilityContract,
   openCapabilityDecisionModel,
+  type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
+import type { ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { sandboxWorkflowCapabilityContractDocument } from '@/modules/sandbox-supply/workflow-cohorts'
@@ -27,11 +29,61 @@ import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 const identity = { subject: 'customer-v2', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
+const operationRefsBySelectionKey = new Map<string, string>()
 
 function modelResponse(content: unknown): Response {
+  const normalized = normalizeModelResponse(content)
   return new Response(JSON.stringify({
-    choices: [{ message: { role: 'assistant', content: JSON.stringify(content) }, finish_reason: 'stop' }],
+    choices: [{ message: { role: 'assistant', content: JSON.stringify(normalized) }, finish_reason: 'stop' }],
   }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+
+function normalizeModelResponse(content: unknown): unknown {
+  if (typeof content !== 'object' || content === null || Array.isArray(content)) return content
+  const proposal = content as Record<string, unknown>
+  const canonicalStatements = Array.isArray(proposal.canonicalStatements) ? proposal.canonicalStatements : []
+  const supersededStatements = Array.isArray(proposal.supersededStatements) ? proposal.supersededStatements : []
+  if (proposal.kind === 'capability_candidates' && Array.isArray(proposal.selections)) {
+    return {
+      ...proposal,
+      canonicalStatements,
+      supersededStatements,
+      selections: proposal.selections.map((selection) => {
+        if (typeof selection !== 'object' || selection === null || Array.isArray(selection)) return selection
+        const candidate = selection as Record<string, unknown>
+        const operationRef = typeof candidate.operationRef === 'string'
+          ? candidate.operationRef
+          : typeof candidate.selectionKey === 'string'
+            ? operationRefsBySelectionKey.get(candidate.selectionKey)
+            : undefined
+        if (operationRef === undefined) throw new Error('model fixture operationRef missing')
+        return { ...candidate, operationRef }
+      }),
+    }
+  }
+  if (proposal.kind === 'needs_intent_direction' || proposal.kind === 'unsupported_request') {
+    return { ...proposal, canonicalStatements, supersededStatements }
+  }
+  return proposal
+}
+
+async function rememberModelOperationRef(
+  backend: ConvexFixtureBackend,
+  model: CapabilityDecisionModel,
+) {
+  const supply = await backend.query(internal.capabilitySupply.listIntegrated, {
+    networkId: 'ae:public',
+    limit: 64,
+  })
+  if (supply.kind !== 'available') throw new Error(`model fixture supply unavailable: ${supply.reason}`)
+  const matching = supply.supplies.find(({ binding }) => (
+    binding.capabilityId === model.contractRef.capabilityId
+      && binding.version === model.contractRef.version
+      && binding.contractDigest === model.contractRef.contractDigest
+  ))
+  const operationRef = matching?.publication?.operationRef
+  if (operationRef === undefined) throw new Error('model fixture publication operationRef missing')
+  operationRefsBySelectionKey.set(model.selectionKey, operationRef)
 }
 
 describe('current V2 Customer Request application path', () => {
@@ -40,19 +92,18 @@ describe('current V2 Customer Request application path', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+    operationRefsBySelectionKey.clear()
   })
 
   it('preserves the unsupported Request data disposition through the durable application projection', async () => {
     const backend = await convexTestWithWorkers()
     await seedSandboxV2Supply(backend)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'unsupported_request',
-        reason: 'requested_result_not_available',
-        prompt: '',
-        selections: [],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'unsupported_request',
+      reason: 'requested_result_not_available',
+      prompt: '',
+      selections: [],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
 
@@ -111,13 +162,14 @@ describe('current V2 Customer Request application path', () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
     const requestRef = 'request:v2:legacy-embedded-route'
-    const submitted = await customer.action(api.customerRequestApplication.submit, {
+    const initialSubmitArgs = {
       compilationKey: 'submit:v2:legacy-embedded-route',
       requestId: requestRef,
       delegatedAgentId: 'agent:external:v2',
       customerJob: 'Legacy route recovery',
       routing: { networkId: 'ae:public' },
-    })
+    }
+    const submitted = await customer.action(api.customerRequestApplication.submit, initialSubmitArgs)
     expect(submitted).toMatchObject({
       kind: 'request', requestRef, revision: 1, state: 'ready_to_compare',
     })
@@ -142,6 +194,39 @@ describe('current V2 Customer Request application path', () => {
       ...legacyAggregateMaterial,
       aggregateDigest: canonicalDigest(legacyAggregateMaterial),
     }
+    const delegatedPrincipalId = `${identity.issuer}|legacy-assistant`
+    const initialSubmitCommandKey = `submit:${canonicalDigest({
+      principalId,
+      requestRef,
+      callerKey: initialSubmitArgs.compilationKey,
+    })}`
+    const delegatedSubmitCommandKey = `submit:${canonicalDigest({
+      principalId: delegatedPrincipalId,
+      requestRef,
+      callerKey: initialSubmitArgs.compilationKey,
+    })}`
+    const oldRefineCommand = {
+      requestRef,
+      expectedRevision: 1,
+      idempotencyKey: 'refine:legacy-old',
+      message: 'Change the legacy request',
+    }
+    const oldRefineCommandKey = `refine:${canonicalDigest({
+      principalId: delegatedPrincipalId,
+      requestRef,
+      callerKey: oldRefineCommand.idempotencyKey,
+    })}`
+    const oldRefineCommandDigest = canonicalDigest(oldRefineCommand)
+    const mismatchedCommand = {
+      ...oldRefineCommand,
+      idempotencyKey: 'refine:legacy-mismatch',
+    }
+    const mismatchedCommandKey = `refine:${canonicalDigest({
+      principalId: delegatedPrincipalId,
+      requestRef,
+      callerKey: mismatchedCommand.idempotencyKey,
+    })}`
+    const mismatchedCommandDigest = canonicalDigest(mismatchedCommand)
     await backend.run(async (ctx) => {
       const revision = await ctx.db.query('customerRequestV2Revisions')
         .withIndex('by_requestId_and_requestRevision', (query) => (
@@ -150,8 +235,50 @@ describe('current V2 Customer Request application path', () => {
       const head = await ctx.db.query('customerRequestV2Heads')
         .withIndex('by_requestId', (query) => query.eq('requestId', requestRef)).unique()
       if (revision === null || head === null) throw new Error('legacy request rows missing')
+      const initialSubmitCommand = await ctx.db.query('customerRequestV2Commands')
+        .withIndex('by_commandKey', (query) => query.eq('commandKey', initialSubmitCommandKey)).unique()
+      if (initialSubmitCommand === null) throw new Error('legacy submit command missing')
+      await ctx.db.patch(initialSubmitCommand._id, {
+        commandKey: delegatedSubmitCommandKey,
+        principalId: delegatedPrincipalId,
+        aggregateDigest: legacyAggregate.aggregateDigest,
+      })
       await ctx.db.patch(revision._id, { aggregate: legacyAggregate })
-      await ctx.db.patch(head._id, { currentAggregateDigest: legacyAggregate.aggregateDigest })
+      await ctx.db.patch(head._id, {
+        currentAggregateDigest: legacyAggregate.aggregateDigest,
+        principalId: delegatedPrincipalId,
+      })
+      await ctx.db.insert('customerRequestAgentPrincipals', {
+        principalId: delegatedPrincipalId,
+        ownerId: identity.subject,
+        ownerTokenIdentifier: principalId,
+        credentialId: 'credential:legacy-assistant',
+        scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
+        recordedAt: 1_000,
+        lastSeenAt: 1_000,
+      })
+      await ctx.db.insert('customerRequestV2Commands', {
+        commandKey: oldRefineCommandKey,
+        commandDigest: oldRefineCommandDigest,
+        principalId: delegatedPrincipalId,
+        requestId: requestRef,
+        expectedRevision: 1,
+        resultingRevision: 1,
+        aggregateDigest: legacyAggregate.aggregateDigest,
+        noEffect: false,
+        committedAt: 1_000,
+      })
+      await ctx.db.insert('customerRequestV2Commands', {
+        commandKey: mismatchedCommandKey,
+        commandDigest: mismatchedCommandDigest,
+        principalId: delegatedPrincipalId,
+        requestId: requestRef,
+        expectedRevision: 1,
+        resultingRevision: 1,
+        aggregateDigest: 'aggregate:different',
+        noEffect: false,
+        committedAt: 1_001,
+      })
     })
 
     await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
@@ -163,9 +290,83 @@ describe('current V2 Customer Request application path', () => {
       requestRef,
     })).resolves.toMatchObject({
       kind: 'request', requestRef, revision: 1, state: 'needs_attention',
-      nextAction: 'revise_request',
+      nextAction: 'none',
       summary: expect.stringContaining('older route format'),
     })
+
+    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
+      commandKey: oldRefineCommandKey,
+      commandDigest: oldRefineCommandDigest,
+      principalId: delegatedPrincipalId,
+      requestId: requestRef,
+    })).resolves.toEqual({
+      kind: 'resubmit_required',
+      requestId: requestRef,
+      revision: 1,
+      reason: 'legacy_embedded_route',
+    })
+
+    const beforeMismatch = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Commands').collect()
+    ))
+    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
+      commandKey: mismatchedCommandKey,
+      commandDigest: mismatchedCommandDigest,
+      principalId: delegatedPrincipalId,
+      requestId: requestRef,
+    })).rejects.toThrow('customer_request_v2_command_integrity_failure')
+    const afterMismatch = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Commands').collect()
+    ))
+    expect(afterMismatch).toEqual(beforeMismatch)
+
+    const beforeSubmitReplay = await backend.run(async (ctx) => ({
+      revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      commands: await ctx.db.query('customerRequestV2Commands').collect(),
+    }))
+    await expect(customer.action(api.customerRequestApplication.submit, initialSubmitArgs))
+      .resolves.toMatchObject({
+        kind: 'request', requestRef, revision: 1,
+        state: 'needs_attention', nextAction: 'none',
+        summary: expect.stringContaining('older route format'),
+      })
+    const afterSubmitReplay = await backend.run(async (ctx) => ({
+      revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      commands: await ctx.db.query('customerRequestV2Commands').collect(),
+    }))
+    expect(afterSubmitReplay).toEqual(beforeSubmitReplay)
+
+    const beforeReplay = await backend.run(async (ctx) => ({
+      revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      commands: await ctx.db.query('customerRequestV2Commands').collect(),
+    }))
+    const oldRefineArgs = {
+      requestRef,
+      expectedRevision: oldRefineCommand.expectedRevision,
+      idempotencyKey: oldRefineCommand.idempotencyKey,
+      message: oldRefineCommand.message,
+    }
+    await expect(customer.action(api.customerRequestApplication.refine, oldRefineArgs))
+      .resolves.toMatchObject({
+        kind: 'request', requestRef, revision: 1,
+        state: 'needs_attention', nextAction: 'none',
+        summary: expect.stringContaining('older route format'),
+      })
+    const samePrincipal = backend.withIdentity({
+      subject: 'legacy-assistant',
+      issuer: identity.issuer,
+    })
+    await expect(samePrincipal.action(api.customerRequestApplication.refine, oldRefineArgs))
+      .resolves.toMatchObject({
+        kind: 'request', requestRef, revision: 1,
+        state: 'needs_attention', nextAction: 'none',
+      })
+    const afterReplay = await backend.run(async (ctx) => ({
+      revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      commands: await ctx.db.query('customerRequestV2Commands').collect(),
+    }))
+    expect(afterReplay.revisions).toEqual(beforeReplay.revisions)
+    expect(afterReplay.commands).toEqual(beforeReplay.commands)
   })
 
 
@@ -175,15 +376,13 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const generate = vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
+      }],
+    }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -522,21 +721,20 @@ describe('current V2 Customer Request application path', () => {
     })
     const document = sandboxWorkflowCapabilityContractDocument('procurement-brief')
     const model = openCapabilityDecisionModel(defineCapabilityContract(document))
+    await rememberModelOperationRef(backend, model)
     const requestInput = model.inputs.find(({ inputPointer }) => inputPointer === '/request')
     const dimensionsInput = model.inputs.find(({ inputPointer }) => inputPointer === '/packageDimensions')
     if (requestInput === undefined || dimensionsInput === undefined) {
       throw new Error('procurement decision inputs missing')
     }
     const customerJob = 'Source 500 food-safe custom cartons within 21 days under AUD 4,000.'
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: requestInput.key, value: customerJob }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: requestInput.key, value: customerJob }],
+      }],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
 
@@ -604,15 +802,13 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: requestInput.key, value: 'Compare labelled sandbox options' }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: requestInput.key, value: 'Compare labelled sandbox options' }],
+      }],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
@@ -658,17 +854,16 @@ describe('current V2 Customer Request application path', () => {
     }
     const model = openCapabilityDecisionModel(defineCapabilityContract(disclosureContract))
     await registerDisclosureSupply(backend, disclosureContract, businessId)
+    await rememberModelOperationRef(backend, model)
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('disclosure request input missing')
-    const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: requestInput.key, value: 'Compare a private request safely' }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const generate = vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: requestInput.key, value: 'Compare a private request safely' }],
+      }],
+    }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -883,15 +1078,13 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: input.key, value: 'Find an option' }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: 'Find an option' }],
+      }],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
@@ -956,12 +1149,13 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Protected request' }] }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: 'Protected request' }],
+      }],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
@@ -1166,15 +1360,13 @@ describe('current V2 Customer Request application path', () => {
     const generate = vi.fn()
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { role: 'assistant', content: JSON.stringify({
-          kind: 'capability_candidates',
-          selections: [{
-            selectionKey: model.selectionKey,
-            facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
-          }],
-        }) }, finish_reason: 'stop' }],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(modelResponse({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
+        }],
+      }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
 
@@ -1200,15 +1392,13 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: input.key, value: 'Find the cheapest sandbox option' }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: 'Find the cheapest sandbox option' }],
+      }],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const serviceKey = 'external-agent-readback-key-that-is-long-enough'
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
@@ -1444,25 +1634,21 @@ describe('current V2 Customer Request application path', () => {
     const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (requestInput === undefined) throw new Error('sandbox request input missing')
     const generate = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { role: 'assistant', content: JSON.stringify({
-          kind: 'capability_candidates',
-          selections: [{
-            selectionKey: model.selectionKey,
-            facts: [{ inputKey: requestInput.key, value: 'Find an option' }],
-          }],
-        }) }, finish_reason: 'stop' }],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { role: 'assistant', content: JSON.stringify({
-          kind: 'unsupported_request',
-          reason: 'requested_result_not_available',
-          canonicalStatements: [
-            { source: 'prior', quote: 'Find an option' },
-            { source: 'amendment', quote: 'Tighten the hard total budget to AUD 1.' },
-          ],
-        }) }, finish_reason: 'stop' }],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(modelResponse({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: requestInput.key, value: 'Find an option' }],
+        }],
+      }))
+      .mockResolvedValueOnce(modelResponse({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an option' },
+          { source: 'amendment', quote: 'Tighten the hard total budget to AUD 1.' },
+        ],
+      }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -1506,9 +1692,7 @@ describe('current V2 Customer Request application path', () => {
     await seedSandboxV2Supply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
-    const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify(response) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const generate = vi.fn().mockResolvedValue(modelResponse(response))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -1572,6 +1756,7 @@ describe('durable Customer Request submission recovery', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+    operationRefsBySelectionKey.clear()
   })
 
   it('answers without a provider account, replays the command, and still reaches comparison with a model', async () => {
@@ -1621,15 +1806,13 @@ describe('durable Customer Request submission recovery', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({
-        kind: 'capability_candidates',
-        selections: [{
-          selectionKey: model.selectionKey,
-          facts: [{ inputKey: input.key, value: command.customerJob }],
-        }],
-      }) }, finish_reason: 'stop' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: command.customerJob }],
+      }],
+    })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
 
     // The already-committed command replays; a fresh one takes the model path to comparison.
@@ -1765,6 +1948,9 @@ async function seedSandboxV2Supply(backend: ReturnType<typeof convexTest>) {
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
   await observeSandboxPublications(backend, true)
+  await rememberModelOperationRef(backend, openCapabilityDecisionModel(
+    defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT),
+  ))
 }
 
 async function observeSandboxPublications(backend: ReturnType<typeof convexTest>, drainProbe = false) {

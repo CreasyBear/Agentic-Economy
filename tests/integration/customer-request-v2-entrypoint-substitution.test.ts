@@ -290,10 +290,24 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
   const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
   const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
   if (input === undefined) throw new Error('sandbox request input missing')
+  const supply = await backend.query(internal.capabilitySupply.listIntegrated, {
+    networkId: 'ae:public',
+    limit: 16,
+  })
+  if (supply.kind !== 'available') throw new Error(`sandbox supply unavailable: ${supply.reason}`)
+  const publication = supply.supplies.find(({ binding }) => (
+    binding.capabilityId === model.contractRef.capabilityId
+      && binding.version === model.contractRef.version
+      && binding.contractDigest === model.contractRef.contractDigest
+  ))?.publication
+  if (publication === undefined) throw new Error('sandbox publication operationRef missing')
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
     choices: [{ message: { role: 'assistant', content: JSON.stringify({
       kind: 'capability_candidates',
+      canonicalStatements: [],
+      supersededStatements: [],
       selections: [{
+        operationRef: publication.operationRef,
         selectionKey: model.selectionKey,
         facts: [{ inputKey: input.key, value: 'Find the cheapest labelled sandbox option' }],
       }],

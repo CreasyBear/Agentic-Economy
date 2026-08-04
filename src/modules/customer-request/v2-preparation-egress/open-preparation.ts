@@ -53,7 +53,9 @@ export async function openReadyPreparation(
     limit: 64,
   })
   if (live === null) return { kind: 'needs_attention', reason: 'capability_graph_changed' }
-  const registryBindings = live.map(({ offering, binding }) => ({
+  const registryBindings = live.map(({ publication, offering, binding }) => ({
+    operationRef: publication.operationRef,
+    admittedOperation: publication.admittedOperation,
     businessId: String(offering.businessId),
     offeringId: offering.offeringId,
     bindingId: binding.bindingId,

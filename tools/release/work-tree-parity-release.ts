@@ -10,6 +10,7 @@ import {
   assertMetadata,
   type WorkTreeParityEvidenceMetadata,
 } from './work-tree-parity-evidence'
+import { resolveVercelProtectionBypassSecret } from './vercel-protection-bypass'
 
 export const WORK_TREE_AGENT_PATH = '/api/v1/work-tree' as const
 export const WORK_TREE_PARITY_DEFAULT_CHARTER = 'My BAS is overdue and my books are a mess' as const
@@ -149,12 +150,6 @@ export function isT51ReleaseMode(env: Record<string, string | undefined> = proce
   return mode === 'release' || mode === 'true' || mode === '1'
 }
 
-export function resolveVercelProtectionBypassSecret(
-  env: Record<string, string | undefined>,
-): string | undefined {
-  return optional(env, 'VERCEL_AUTOMATION_BYPASS_SECRET')
-    ?? optional(env, 'AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET')
-}
 
 export function metadataFromWorkTreeParityConfig(config: WorkTreeParityReleaseConfig): WorkTreeParityEvidenceMetadata {
   return {

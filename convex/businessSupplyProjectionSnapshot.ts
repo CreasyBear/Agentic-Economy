@@ -46,7 +46,6 @@ export function readBusinessSupplyProjectionSnapshot(
     ...(expectedSlug === undefined ? {} : { expectedSlug }),
     ...(envelope === undefined ? {} : { envelope }),
   }
-  const isLegacyProjectionJson = typeof value === 'string'
   const decoded = decodeProjectionValue(value, context)
   const projection = errorPrefix === 'discovery'
     ? readDiscoveryProjection(decoded, context)
@@ -65,7 +64,7 @@ export function readBusinessSupplyProjectionSnapshot(
           disposition: readDisposition(row.disposition, context),
         }
       })()
-  if (isLegacyProjectionJson) validateProjectionEnvelope(projection, context)
+  validateProjectionEnvelope(projection, context)
   return projection
 }
 

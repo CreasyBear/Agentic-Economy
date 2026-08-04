@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-
+import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
 import {
   defineCapabilityContract,
   openCapabilityDecisionModel,
@@ -103,7 +103,7 @@ describe('deterministic customer request interpretation', () => {
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: BURST_PIPE_JOB, networkId: 'ae:public',
       proposal, interpreterId: DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID,
-      bindings: [supply('binding:plumbing', plumbing.model)], models: [plumbing.model], now: 1,
+      bindings: [supply('binding:plumbing', plumbing.model)], models: [plumbing.model], mappings: [], now: 1,
     })
 
     expect(compiled).toMatchObject({ kind: 'compiled' })
@@ -207,6 +207,7 @@ function capability(capabilityId: string, name: string, description: string) {
   return {
     model,
     descriptor: bindCustomerCapabilityDescriptor({
+      operationRef: createTestOperationLineage(model.contractRef).operationRef,
       contractRef: model.contractRef,
       selectionKey: model.selectionKey,
       name,
@@ -228,9 +229,9 @@ function requestInputSchema() {
     required: ['request'], additionalProperties: false,
   }
 }
-
 function supply(bindingId: string, model: CapabilityDecisionModel) {
   return {
+    ...createTestOperationLineage(model.contractRef),
     businessId: `business:${bindingId}`, offeringId: `offering:${bindingId}`, bindingId,
     contractRef: model.contractRef, offeringRegistrationHash: `sha256:offering:${bindingId}`,
     bindingRegistrationHash: `sha256:binding:${bindingId}`,

@@ -151,14 +151,6 @@ function buildAgentResult(
     providers.length > 0 ? (locationFiltered?.providers ?? providers) : (input.priorProviders ?? [])
 
   const mapped = snapshotProseFromAnswer(prose)
-  const snapshotProse =
-    locationFiltered.filtered === true || (locationFiltered.location !== undefined && finalProviders.length === 0)
-      ? buildLocationScopedProse({
-          query: input.query,
-          location: locationFiltered.location,
-          providers: finalProviders,
-        })
-      : mapped
   // The agent JSON URL points at the search that actually grounded the answer.
   // When the model chose a corrected `registry.search` argument (e.g.
   // "parramatta" for a misspelled "paramata"), the URL reflects that chosen
@@ -169,17 +161,48 @@ function buildAgentResult(
       : locationFiltered.filtered === true && locationFiltered.locationSource === 'user'
       ? input.query
       : agentQueryFromTools
+  const agentJsonUrl = buildAgentJsonUrl(
+    agentQuery,
+    DEFAULT_LIMIT,
+    resolveAgentJsonScope(toolCalls, input.searchContext),
+  )
+  const rawSnapshot: AnswerSnapshot = {
+    query: input.query,
+    oneLine: mapped.oneLine,
+    providers: finalProviders,
+    summary: mapped.summary,
+    nextStep: mapped.nextStep,
+    agentJsonUrl,
+  }
+  const rawGate = runAnswerGate({ snapshot: rawSnapshot, allowedSlugs })
+  if (!rawGate.ok) {
+    return {
+      prose,
+      providers: finalProviders,
+      allowedSlugs,
+      toolCalls: [...toolCalls],
+      modelRequests: [...modelRequests],
+      timings: [...timings],
+      snapshot: rawSnapshot,
+      gate: rawGate,
+    }
+  }
+
+  const snapshotProse =
+    locationFiltered.filtered === true || (locationFiltered.location !== undefined && finalProviders.length === 0)
+      ? buildLocationScopedProse({
+          query: input.query,
+          location: locationFiltered.location,
+          providers: finalProviders,
+        })
+      : mapped
   const snapshot: AnswerSnapshot = {
     query: input.query,
     oneLine: snapshotProse.oneLine,
     providers: finalProviders,
     summary: snapshotProse.summary,
     nextStep: snapshotProse.nextStep,
-    agentJsonUrl: buildAgentJsonUrl(
-      agentQuery,
-      DEFAULT_LIMIT,
-      resolveAgentJsonScope(toolCalls, input.searchContext),
-    ),
+    agentJsonUrl,
   }
 
   const gate = runAnswerGate({ snapshot, allowedSlugs })

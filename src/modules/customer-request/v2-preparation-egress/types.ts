@@ -1,4 +1,5 @@
 import type { CapabilityDecisionModel } from '@/modules/capability-contract/public'
+import type { AdmittedOperationRef, PublicOperationRef } from '@/modules/capability-supply/public'
 import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import type {
   ActionPreparationLineage,
@@ -29,6 +30,13 @@ export type ContractRefFields = Readonly<{
 }>
 
 export type EligibleSupply = Readonly<{
+  publication: Readonly<{
+    publicationRef: string
+    revision: number
+    readinessValidUntil: number
+    operationRef: PublicOperationRef
+    admittedOperation: AdmittedOperationRef
+  }>
   offering: Readonly<{
     businessId: string
     offeringId: string

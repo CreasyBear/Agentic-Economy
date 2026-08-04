@@ -138,6 +138,32 @@ describe('customer Request workspace', () => {
     expect(localStorage.getItem('ae.customer-request.active:v1')).toBeNull()
   })
 
+  it('does not advertise editing a legacy Request that must be resubmitted', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:legacy-ui',
+      summary: 'Legacy saved Request',
+      savedAt: Date.now(),
+    }))
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      kind: 'request',
+      requestRef: 'request:legacy-ui',
+      revision: 7,
+      state: 'needs_attention',
+      summary: 'This saved Request uses an older route format. Start a new Request to continue.',
+      nextAction: 'none',
+      missingFields: [],
+      options: [],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AeCustomerRequestWorkspace />)
+    pickUpSavedRequest()
+
+    expect(await screen.findByRole('button', { name: 'Start a new Request' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Edit this Request' })).toBeNull()
+    expect(screen.getByText(/older route format/)).toBeTruthy()
+  })
+
   it('uses the same Request and options projections as the machine API', async () => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })

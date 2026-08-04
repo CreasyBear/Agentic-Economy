@@ -66,6 +66,7 @@ function aggregate(): CustomerRequestV2Aggregate {
     interpreterId: 'interpreter:development',
     bindings: [],
     models: [],
+    mappings: [],
     now: NOW,
   })
   if (compiled.kind !== 'compiled') throw new Error('development aggregate did not compile')

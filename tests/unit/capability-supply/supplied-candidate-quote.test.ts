@@ -490,6 +490,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       interpreterId: 'dev:interpreter:transfer',
       bindings: [],
       models: [],
+      mappings: [],
       now: nowMs,
     })
     if (compiledRequest.kind !== 'compiled') throw new Error('Expected development aggregate.')

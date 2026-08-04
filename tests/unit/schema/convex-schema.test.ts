@@ -60,6 +60,7 @@ const durableTables = [
   'capabilityPublications',
   'capabilityTransportBindings',
   'capabilityCallEvents',
+  'registeredOperationMappings',
   'customerRequestAgentPrincipals',
   'customerRequestAgentOAuthClients',
   'customerRequestAgentOAuthGrants',
@@ -472,6 +473,7 @@ const requiredIndexes = {
     'by_networkId_admission_conformance',
   ],
   capabilityCallEvents: ['by_businessId_and_observedAt', 'by_taskDigest_and_observedAt', 'by_eventRef'],
+  registeredOperationMappings: ['by_networkId_and_mappingRef'],
   routingKernelAgentGrants: ['by_grantId', 'by_agentId_status'],
   routingKernelBindingEvidenceSnapshots: ['by_snapshotDigest', 'by_networkId_observedAt', 'by_bindingId_observedAt'],
   routingKernelBindings: ['by_bindingId', 'by_networkId_admission_conformance', 'by_businessId'],
@@ -538,6 +540,97 @@ describe('Convex schema', () => {
       ]),
     )
   })
+  it('rejects the exact historical aggregate registry search document shape after narrow', async () => {
+    const backend = convexTest(schema, convexModules)
+    const observedAt = 1_784_764_800_000
+    const businessId = await backend.run(async (ctx) => {
+      const ownerId = await ctx.db.insert('owners', {
+        clerkUserId: 'user_registry_schema_compatibility',
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      })
+      return ctx.db.insert('businesses', {
+        ownerId,
+        slug: 'sandbox-phase5-web-starter',
+        name: 'Phase 5 Demo Website Starter',
+        normalizedName: 'phase 5 demo website starter',
+        category: 'Website development',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+        publicStatus: 'published',
+        trustTier: 'listed',
+        claimStatus: 'published',
+        sourceHash: 'hash:business',
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      })
+    })
+    const historicalAggregateDocument = {
+      businessCategory: 'Website development',
+      businessId,
+      businessName: 'Phase 5 Demo Website Starter',
+      businessSlug: 'sandbox-phase5-web-starter',
+      documentId: 'offering-v2__mx70wew6em0t0jwp35zsv4thd58b2fj4',
+      generatedHash: 'hash:6643888a',
+      observedAt,
+      offerings: [{
+        category: 'Website development',
+        comparison: {
+          schemaVersion: 'offering-comparison:v1',
+          profile: {
+            priceBasis: {
+              kind: 'known',
+              observedAt,
+              source: { kind: 'business_supplied' },
+              value: {
+                amountMinor: 85_000,
+                currency: 'AUD',
+                description: 'Labelled demo fixed scope',
+                unit: 'total',
+              },
+            },
+            profileId: 'professional_service:v1',
+            scopeBasis: {
+              kind: 'known',
+              observedAt,
+              source: { kind: 'business_supplied' },
+              value: 'Five-page website, contact form, and launch handover',
+            },
+            serviceArea: {
+              kind: 'known',
+              observedAt,
+              source: { kind: 'business_supplied' },
+              value: 'Perth and remote',
+            },
+            timingBasis: {
+              kind: 'known',
+              observedAt,
+              source: { kind: 'business_supplied' },
+              value: 'About three weeks after content is ready',
+            },
+          },
+        },
+        name: 'Labelled demo website starter',
+        offeringRef: 'offering:phase5-demo:website-starter:v1',
+        revision: 1,
+        summary: 'A labelled demonstration of a small-business website delivery option.',
+      }],
+      placeKeys: ['perth', 'perth and remote', 'perth wa', 'wa'],
+      publicStatus: 'published',
+      schemaVersion: 'registry-search-document:v2',
+      searchText: 'phase 5 demo website starter',
+      sourceDigest: 'hash:7ce338ec',
+      sourceRevision: observedAt + 500,
+      stateTerritory: 'WA',
+      suburb: 'Perth',
+      updatedAt: observedAt,
+    } as const
+
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('registrySearchDocuments', historicalAggregateDocument as never)
+    ))).rejects.toThrow()
+  })
+
 
   it('validates current and legacy action invocation attempts', async () => {
     const backend = convexTest(schema, convexModules)

@@ -28,6 +28,8 @@ export type CapabilityProbeTarget = Readonly<{
   credentialRef: string
   adapterId: string
   probeKind?: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'
+  probeQuery?: readonly Readonly<{ parameter: string; value: string }>[]
+  probeMethod?: 'GET' | 'HEAD'
 }>
 
 export type CapabilityProbeObservation = Readonly<{
@@ -126,18 +128,21 @@ function probeRequest(target: CapabilityProbeTarget, endpoint: URL, credential: 
   const probeKind = target.probeKind ?? (target.adapterId === 'mcp-jsonrpc:v1' ? 'mcp' : 'ae_quote')
   const body = probeKind === 'mcp'
     ? { jsonrpc: '2.0', id: 'ae-readiness-probe', method: 'tools/list', params: {} }
-    : {
-        protocolVersion: 'ae-capability:v1', operation: 'quote',
-        bindingId: target.bindingId, capabilityContractId: target.capabilityId,
-      }
+    : probeKind === 'x402'
+      ? {}
+      : {
+          protocolVersion: 'ae-capability:v1', operation: 'quote',
+          bindingId: target.bindingId, capabilityContractId: target.capabilityId,
+        }
+  for (const query of target.probeQuery ?? []) endpoint.searchParams.append(query.parameter, query.value)
   return new Request(endpoint, {
-    method: probeKind === 'openapi_http' || probeKind === 'x402' ? 'HEAD' : 'POST',
+    method: probeKind === 'openapi_http' ? target.probeMethod ?? 'HEAD' : 'POST',
     redirect: 'manual', signal: AbortSignal.timeout(10_000),
     headers: {
       ...(credential === undefined ? {} : { Authorization: `Bearer ${credential}` }),
       'Content-Type': 'application/json', Accept: 'application/json',
     },
-    ...(probeKind === 'openapi_http' || probeKind === 'x402' ? {} : { body: JSON.stringify(body) }),
+    ...(probeKind === 'openapi_http' ? {} : { body: JSON.stringify(body) }),
   })
 }
 

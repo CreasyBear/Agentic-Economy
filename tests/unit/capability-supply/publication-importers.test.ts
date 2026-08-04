@@ -84,6 +84,63 @@ describe('capability publication importers', () => {
     }
   })
 
+  it('maps an admitted OpenAPI query name to a distinct contract input name', () => {
+    const document = openApiDocument()
+    document.paths['/lookup'] = {
+      get: {
+        parameters: [
+          {
+            in: 'query',
+            name: 'quotes',
+            'x-ae-input-name': 'quote',
+            required: true,
+            schema: { type: 'string', pattern: '^[A-Z]{3}$' },
+          },
+        ],
+        responses: { '200': { content: { 'application/json': { schema: outputSchema() } } } },
+      },
+    } as never
+    const result = importOpenApiHttpCapability({
+      kind: 'openapi_http',
+      document: JSON.parse(JSON.stringify(document)) as unknown,
+      contract: {
+        ...contractMetadata('independent.lookup-query-alias'),
+        customerAnnotations: [
+          { annotationId: 'request', document: 'input', pointer: '/quote', label: 'Quote', role: 'request' },
+          { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
+        ] as const,
+        dataUse: [{
+          effectId: 'release-query', inputPointer: '/quote', classification: 'public',
+          phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['lookup'],
+        }] as const,
+      },
+      operation: { path: '/lookup', method: 'get' },
+      commercial: commercialInput(),
+      evidenceRefs: ['source:openapi:query-alias'],
+    })
+
+    expect(result).toMatchObject({
+      kind: 'normalized',
+      draft: {
+        binding: {
+          adapter: {
+            config: {
+              query: [{ inputPointer: '/quote', parameter: 'quotes' }],
+            },
+          },
+        },
+      },
+    })
+    if (result.kind === 'normalized') {
+      expect(JSON.parse(result.draft.documentJson)).toMatchObject({
+        inputSchema: {
+          properties: { quote: { type: 'string', pattern: '^[A-Z]{3}$' } },
+          required: ['quote'],
+        },
+      })
+    }
+  })
+
   it('normalizes one MCP tool with a distinct admitted JSON-RPC transport', () => {
     const result = importMcpCapability({
       kind: 'mcp',

@@ -12,7 +12,7 @@ import {
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 
-import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
+import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
 describe('V2 capability supply registration', () => {
   it('refuses anonymous and missing-contract registration without a supply write', async () => {
@@ -39,7 +39,7 @@ describe('V2 capability supply registration', () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref),
       ...operationContext('offering'),
@@ -63,6 +63,7 @@ describe('V2 capability supply registration', () => {
       kind: 'registered', bindingId: 'binding:supply-one:http', registrationHash: expect.stringMatching(/^sha256:/),
     })
     if (binding.kind !== 'registered') throw new Error('binding registration failed')
+    await publishAndObserveCapability(backend, owner, businessId, offeringArgs.registration, bindingArgs.registration, 'single')
 
     await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
@@ -247,7 +248,7 @@ describe('V2 capability supply registration', () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -278,6 +279,7 @@ describe('V2 capability supply registration', () => {
       ...eligibilityBase, bindingId: second.bindingId,
       expectedBindingRegistrationHash: second.registrationHash, ...operationContext('admit-two'),
     })
+    await publishAndObserveCapability(backend, owner, businessId, offeringRegistration(businessId, ref), secondRegistration, 'sibling')
     const revokeFirst = {
       ...eligibilityBase,
       bindingId: first.bindingId,
@@ -416,7 +418,7 @@ describe('V2 capability supply registration', () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
-    const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -495,6 +497,12 @@ describe('V2 capability supply registration', () => {
       conformanceEvidenceRefs: ['review:http-adapter-contract'],
       ...operationContext('healthy-eligibility'),
     })
+    await publishAndObserveCapability(backend, owner, businessId, offeringArgs.registration, {
+      ...bindingRegistration(ref),
+      bindingId: healthyBinding.bindingId,
+      endpointUrl: 'https://healthy.example.test/capability',
+      credentialRef: 'env:AE_SUPPLY_HEALTHY_SECRET',
+    }, 'healthy')
     await backend.run(async (ctx) => {
       const row = await ctx.db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', binding.bindingId)).unique()
@@ -778,6 +786,58 @@ function bindingRegistration(contractRef: ReturnType<typeof missingRef>) {
     registrationEvidenceRefs: ['adapter:production-registration'],
   } satisfies CapabilityTransportBindingRegistration
 }
+
+async function publishAndObserveCapability(
+  backend: ConvexFixtureBackend,
+  owner: ConvexFixtureAdmin,
+  businessId: Id<'businesses'>,
+  offering: ReturnType<typeof offeringRegistration>,
+  binding: ReturnType<typeof bindingRegistration>,
+  suffix: string,
+) {
+  const published = await owner.mutation(api.capabilitySupply.publishCapability, {
+    businessId,
+    source: { kind: 'ae_envelope', documentJson: JSON.stringify(capabilityContractV2()) },
+    offering: {
+      offeringId: offering.offeringId,
+      networkId: offering.networkId,
+      presentation: offering.presentation,
+      searchTerms: offering.searchTerms,
+      registrationEvidenceRefs: offering.registrationEvidenceRefs,
+    },
+    binding: {
+      bindingId: binding.bindingId,
+      endpointUrl: binding.endpointUrl,
+      credentialRef: binding.credentialRef,
+      continuation: binding.continuation,
+      cancellation: binding.cancellation,
+      adapter: binding.adapter,
+      registrationEvidenceRefs: binding.registrationEvidenceRefs,
+    },
+    ...operationContext(`publication:${suffix}`),
+  })
+  if (published.kind !== 'published') throw new Error(`publication failed: ${published.reason}`)
+  await backend.finishInProgressScheduledFunctions()
+  const publications = await backend.run(async (ctx) => (
+    await ctx.db.query('capabilityPublications').collect()
+  ))
+  for (const publication of publications) {
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: publication.revision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      evidenceRefs: ['test:capability-supply-readiness'],
+      operationKey: `readiness:${publication.publicationRef}`,
+      correlationId: `readiness:${publication.publicationRef}`,
+      reasonCode: 'source_test_readiness',
+      validUntil: Date.now() + 3_600_000,
+    })
+  }
+  if (publications.length === 0) throw new Error('publication readiness missing')
+  return published
+}
+
 
 function operationContext(suffix: string) {
   return {

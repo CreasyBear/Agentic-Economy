@@ -321,7 +321,7 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(endpointDeploy)
 
     const packageJson = readFileSync('package.json', 'utf8')
-    expect(packageJson).toContain('"test:release:hosted:readback": "tsx tools/release/verify-customer-request-release-credential.ts"')
+    expect(packageJson).toContain('"test:release:hosted:readback": "node tools/dev/run-with-cleanup.mjs tsx tools/release/verify-customer-request-release-credential.ts"')
     expect(packageJson).toContain('"gate:release": "npm run test:release:source"')
     expect(packageJson).toContain('npm run check:convex-codegen')
     expect(packageJson).toContain('npm run test:eval:report')

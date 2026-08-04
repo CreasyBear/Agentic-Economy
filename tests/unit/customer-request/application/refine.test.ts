@@ -14,6 +14,7 @@ const NOW = Date.now()
 const contractRef = { capabilityId: 'cap:ride', version: 1, contractDigest: 'digest:1' }
 const routePlanId = 'route:1'
 const generationRef = 'gen:1'
+const operationRef = `operation:v1:${'a'.repeat(64)}` as const
 const routeRef = customerRouteRef(generationRef, routePlanId)
 
 const aggregate = {
@@ -38,6 +39,7 @@ const aggregate = {
   plan: {
     actions: [{
       actionId: 'action:1',
+      operationRef,
       selectionKey: 'sel:1',
       semanticDigest: 'sem:1',
       contractRef,
@@ -80,6 +82,7 @@ const graph = {
   models: [model],
   descriptors: [],
   bindings: [],
+  mappings: [],
   registrySnapshotDigest: 'registry:1',
 }
 

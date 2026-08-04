@@ -1777,6 +1777,9 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
     listRouteable: async (id) => await ctx.runQuery(
       internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
     ) as EligibleSupplyResult,
+    listMappings: async (id) => await ctx.runQuery(
+      internal.capabilitySupply.listMappings, { networkId: id, limit: 128 },
+    ),
     getActiveExact: async (contractRef) => await ctx.runQuery(
       internal.capabilityContractDocuments.getActiveExactInternal, contractRef,
     ) as ExactContractResult,
@@ -1819,13 +1822,22 @@ async function resolveRequestCaller(
   delegatedAgentId?: string,
 ): Promise<RequestCaller | undefined> {
   const identity = await ctx.auth.getUserIdentity()
+  const requestRef = typeof command.requestRef === 'string'
+    ? command.requestRef
+    : operation === 'submit' && typeof command.requestId === 'string'
+      ? command.requestId
+      : undefined
   if (identity !== null) {
-    const requestRef = typeof command.requestRef === 'string' ? command.requestRef : undefined
     if (requestRef !== undefined) {
       const current = await loadCurrent(ctx, requestRef)
-      if (current.kind === 'current' && current.aggregate.snapshot.principalId !== identity.tokenIdentifier) {
+      const requestPrincipalId = current.kind === 'current'
+        ? current.aggregate.snapshot.principalId
+        : current.kind === 'resubmit_required'
+          ? current.principalId
+          : undefined
+      if (requestPrincipalId !== undefined && requestPrincipalId !== identity.tokenIdentifier) {
         const agentPrincipal = await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
-          principalId: current.aggregate.snapshot.principalId,
+          principalId: requestPrincipalId,
         })
         if (agentPrincipal?.ownerTokenIdentifier === identity.tokenIdentifier) {
           return {
@@ -1858,12 +1870,16 @@ async function resolveRequestCaller(
     scopes: [...assertion.scopes], seenAt: Date.now(),
   })
   if (recorded.kind !== 'recorded') return undefined
-  const requestRef = typeof command.requestRef === 'string' ? command.requestRef : undefined
   if (requestRef !== undefined) {
     const current = await loadCurrent(ctx, requestRef)
-    if (current.kind === 'current' && current.aggregate.snapshot.principalId !== assertion.principalId) {
+    const requestPrincipalId = current.kind === 'current'
+      ? current.aggregate.snapshot.principalId
+      : current.kind === 'resubmit_required'
+        ? current.principalId
+        : undefined
+    if (requestPrincipalId !== undefined && requestPrincipalId !== assertion.principalId) {
       const requestPrincipal = await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
-        principalId: current.aggregate.snapshot.principalId,
+        principalId: requestPrincipalId,
       })
       if (requestPrincipal?.ownerId === assertion.ownerId
         && requestPrincipal.ownerTokenIdentifier === `${clerkIssuer}|${assertion.ownerId}`) {
@@ -1881,6 +1897,7 @@ async function resolveRequestCaller(
     ownerId: assertion.ownerId,
   }
 }
+
 
 function serviceOperationRequiredMode(operation: Parameters<typeof resolveRequestCaller>[1]): CustomerRequestAuthorityMode {
   if (operation === 'confirm' || operation === 'run' || operation === 'authorize') return 'approve_each'

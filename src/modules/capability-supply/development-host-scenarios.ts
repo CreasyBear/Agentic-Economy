@@ -603,6 +603,7 @@ function completedResultReuse(
     interpreterId: 'mock:interpreter',
     bindings: [],
     models: [],
+    mappings: [],
     now: success.context.now,
   })
   if (compiled.kind !== 'compiled') throw new Error('host_result_reuse_request_not_compiled')

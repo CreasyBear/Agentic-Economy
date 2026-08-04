@@ -9,8 +9,11 @@ import {
   type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import type {
+  AdmittedOperationRef,
   CapabilityCancellation,
   CapabilityOfferingRegistration,
+  RegisteredInputMappingRef,
+  PublicOperationRef,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
@@ -39,6 +42,8 @@ export type RequestFact = Readonly<{
 }>
 
 export type RequestEvaluationCandidateInput = Readonly<{
+  operationRef: PublicOperationRef
+  admittedOperation: AdmittedOperationRef
   businessId: string
   offeringId: string
   bindingId: string
@@ -54,6 +59,8 @@ export type RequestEvaluationCandidateInput = Readonly<{
 }>
 
 export type RegisteredEvaluationBinding = Readonly<{
+  operationRef: PublicOperationRef
+  admittedOperation: AdmittedOperationRef
   businessId: string
   offeringId: string
   bindingId: string
@@ -69,6 +76,8 @@ export type RegisteredEvaluationBinding = Readonly<{
 }>
 
 export type RequestEvaluationCandidate = Readonly<{
+  operationRef: PublicOperationRef
+  admittedOperation: AdmittedOperationRef
   candidateRef: string
   businessId: string
   offeringId: string
@@ -149,21 +158,34 @@ export type PreparationDisclosurePreview = Readonly<{
 
 export type ProposedRequestAction = Readonly<{
   actionId: string
+  operationRef: PublicOperationRef
   contractRef: CapabilityContractRef
   selectionKey: CapabilitySelectionKey
   semanticDigest: string
   dependsOn: readonly string[]
   inputs: readonly RequestFact[]
+  mappingRefs: readonly RegisteredInputMappingRef[]
   inputMappings: readonly RequestActionInputMapping[]
 }>
 
 export type RequestActionInputMapping = Readonly<{
+  mappingRef: RegisteredInputMappingRef
+  kind: 'identity' | 'field' | 'array_project' | 'registered_transform'
   mappingId: string
   semanticIdentity: string
   source: Readonly<{ actionId: string; annotationId: string; evidenceId: string; outputPointer: string }>
   target: Readonly<{ annotationId: string; inputKey: CapabilityInputKey; inputPointer: string }>
   schemaIdentity: PointedSchemaIdentity
   authority: 'registered_contract_semantics'
+  sourceArrayPointer?: string
+  sourceItemPointer?: string
+  targetArrayPointer?: string
+  minItems?: number
+  maxItems?: number
+  transformRef?: string
+  transformVersion?: number
+  inputCardinalityMax?: number
+  outputCardinalityMax?: number
 }>
 
 export type RequestCompletionRequirement = Readonly<{
@@ -232,13 +254,15 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
       facts,
     })
     const candidateRef = `candidate:${canonicalDigest({
+      operationRef: candidate.operationRef,
       businessId: candidate.businessId,
       offeringId: candidate.offeringId,
       bindingId: candidate.bindingId,
       contractRef: candidate.model.contractRef,
     })}`
     const proposedAction = input.proposedActions?.find((action) => (
-      sameCapabilityContractRef(action.contractRef, candidate.model.contractRef)
+      action.operationRef === candidate.operationRef
+      && sameCapabilityContractRef(action.contractRef, candidate.model.contractRef)
       && action.selectionKey === candidate.model.selectionKey
     ))
     const mappedInputKeys = new Set(proposedAction?.inputMappings.map((mapping) => mapping.target.inputKey) ?? [])
@@ -246,6 +270,8 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
       ? assessment.missing.filter((semantic) => !mappedInputKeys.has(semantic.key))
       : []
     return Object.freeze({
+      operationRef: candidate.operationRef,
+      admittedOperation: candidate.admittedOperation,
       candidateRef,
       businessId: candidate.businessId,
       offeringId: candidate.offeringId,
@@ -384,12 +410,18 @@ export function evaluateIntentDirectionRequestSnapshot(input: Readonly<{
 
 export function discoverRequestEvaluationCandidates(input: Readonly<{
   selectedCapabilities: readonly Readonly<{
+    operationRef: PublicOperationRef
     selectionKey: CapabilitySelectionKey
     contractRef: CapabilityContractRef
   }>[]
   bindings: readonly RegisteredEvaluationBinding[]
   resolveModel: (ref: CapabilityContractRef) => CapabilityDecisionModel | undefined
 }>): readonly RequestEvaluationCandidateInput[] {
+  if (input.selectedCapabilities.some((selected) => !input.bindings.some((binding) => (
+    selected.operationRef === binding.operationRef
+    && selected.selectionKey === input.resolveModel(binding.contractRef)?.selectionKey
+    && sameCapabilityContractRef(selected.contractRef, binding.contractRef)
+  )))) return Object.freeze([])
   return Object.freeze(input.bindings.flatMap((binding) => {
     const selected = input.selectedCapabilities.find((candidate) => (
       candidate.selectionKey === input.resolveModel(binding.contractRef)?.selectionKey
@@ -400,6 +432,8 @@ export function discoverRequestEvaluationCandidates(input: Readonly<{
     if (model === undefined || model.selectionKey !== selected.selectionKey
       || !sameCapabilityContractRef(model.contractRef, binding.contractRef)) return []
     return [Object.freeze({
+      operationRef: binding.operationRef,
+      admittedOperation: binding.admittedOperation,
       businessId: binding.businessId,
       offeringId: binding.offeringId,
       bindingId: binding.bindingId,
@@ -425,19 +459,28 @@ export function discoverRequestEvaluationCandidates(input: Readonly<{
 }
 
 export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvaluationBinding[]): string {
-  return canonicalDigest([...bindings].map((binding) => ({
-    businessId: binding.businessId,
-    offeringId: binding.offeringId,
-    bindingId: binding.bindingId,
-    contractRef: binding.contractRef,
-    offeringRegistrationHash: binding.offeringRegistrationHash,
-    bindingRegistrationHash: binding.bindingRegistrationHash,
-    ...(binding.price === undefined ? {} : { price: binding.price }),
-    ...(binding.commercialRelationship === undefined ? {} : {
-      commercialRelationship: binding.commercialRelationship,
-    }),
-    cancellation: binding.cancellation,
-  })).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
+  return canonicalDigest([...bindings].map((binding) => {
+    const {
+      readinessValidUntil: _readinessValidUntil,
+      qualificationDigest: _qualificationDigest,
+      ...admissionLineage
+    } = binding.admittedOperation
+    return {
+      operationRef: binding.operationRef,
+      admittedOperation: admissionLineage,
+      businessId: binding.businessId,
+      offeringId: binding.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: binding.contractRef,
+      offeringRegistrationHash: binding.offeringRegistrationHash,
+      bindingRegistrationHash: binding.bindingRegistrationHash,
+      ...(binding.price === undefined ? {} : { price: binding.price }),
+      ...(binding.commercialRelationship === undefined ? {} : {
+        commercialRelationship: binding.commercialRelationship,
+      }),
+      cancellation: binding.cancellation,
+    }
+  }).sort((left, right) => left.operationRef.localeCompare(right.operationRef)))
 }
 
 function factsForModel(facts: readonly RequestFact[], model: CapabilityDecisionModel): readonly CapabilityInputFact[] {

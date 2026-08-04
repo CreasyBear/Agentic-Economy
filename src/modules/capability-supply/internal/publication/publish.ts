@@ -1,6 +1,8 @@
 import {
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
@@ -15,6 +17,12 @@ import {
 } from '../operation-ledger/policy'
 import { ensureSupplyAudit } from '../operation-ledger/replay'
 import type { RegistrationContext, SupplyCommandActor } from '../shared'
+import {
+  capabilityPublicationProvenanceDigest,
+  defineCapabilityPublicationProvenance,
+  type CapabilityPublicationAuthorityMode,
+  type CapabilityPublicationProvenance,
+} from './provenance'
 
 import { admitPublicationDraft } from './draft'
 import { publicationProjection } from './lifecycle'
@@ -27,6 +35,12 @@ export type PublishCapabilityCommandInput = RegistrationContext & Readonly<{
   binding?: CapabilityPublicationBindingDraft | undefined
   actor: SupplyCommandActor
   now: number
+  publicationMetadata?: Readonly<{
+    sourceRevision: string
+    authorityMode: CapabilityPublicationAuthorityMode
+    publisherRef: string
+    provenanceDigest: string
+  }>
 }>
 
 export async function publishCapabilityCommand(
@@ -44,6 +58,28 @@ export async function publishCapabilityCommand(
     return { kind: 'refused' as const, reason: admitted.reason }
   }
   const { draft, encoded, offering, binding, admittedTransport } = admitted
+  const derivedAuthorityMode: CapabilityPublicationAuthorityMode =
+    input.actor.kind === 'owner' ? 'provider_owned' : 'ae_curated_external'
+  const publicationMetadata: CapabilityPublicationProvenance = input.publicationMetadata === undefined
+    ? defineCapabilityPublicationProvenance({
+        actor: input.actor,
+        authorityMode: derivedAuthorityMode,
+        sourceRevision: draft.source.descriptorDigest,
+        sourceDigest: draft.source.descriptorDigest,
+      })
+    : input.publicationMetadata
+  if (
+    publicationMetadata.publisherRef !== input.actor.ref
+    || publicationMetadata.sourceRevision.trim().length === 0
+    || publicationMetadata.provenanceDigest !== capabilityPublicationProvenanceDigest({
+      publisherRef: publicationMetadata.publisherRef,
+      authorityMode: publicationMetadata.authorityMode,
+      sourceRevision: publicationMetadata.sourceRevision,
+      sourceDigest: draft.source.descriptorDigest,
+    })
+  ) {
+    return { kind: 'refused' as const, reason: 'source_invalid' as const }
+  }
 
   const existingContractDigest = await ports.findContractDigest(
     encoded.contract.ref.capabilityId,
@@ -92,19 +128,40 @@ export async function publishCapabilityCommand(
   )) {
     return { kind: 'refused' as const, reason: 'offering_identity_conflict' as const }
   }
-
-  const expected = publicationProjection(
-    encoded.contract.ref,
-    draft.offering.offeringId,
-    draft.binding.bindingId,
-  )
-  // Offering draft carries nested optional fields (origin, access paths) that hash
-  // deterministically via stableStringify but make it non-assignable to StableHashValue directly.
+  const expected = {
+    ...publicationProjection(
+      encoded.contract.ref,
+      draft.offering.offeringId,
+      draft.binding.bindingId,
+    ),
+    ...(input.publicationMetadata === undefined
+      ? {}
+      : {
+        publisherRef: publicationMetadata.publisherRef,
+        authorityMode: publicationMetadata.authorityMode,
+        provenanceDigest: publicationMetadata.provenanceDigest,
+        sourceRevision: publicationMetadata.sourceRevision,
+        sourceDigest: draft.source.descriptorDigest,
+      }),
+  }
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+    publicationRef: draft.offering.offeringId,
+    publicationRevision: 1,
+    contractRef: encoded.contract.ref,
+  })
+  const expectedWithOperationRef = { ...expected, operationRef }
+  if (existingPublication !== null && existingPublication.operationRef !== operationRef) {
+    throw new Error('capability_publication_operation_ref_invalid')
+  }
   const requestMaterial: StableHashValue = {
     businessId: input.businessId,
     source: draft.source,
     offering: draft.offering as StableHashValue,
     binding: draft.binding,
+    ...(input.publicationMetadata === undefined
+      ? {}
+      : { publicationMetadata: publicationMetadata as StableHashValue }),
   }
   const operation = await beginOperation(
     ports,
@@ -117,7 +174,13 @@ export async function publishCapabilityCommand(
   if (operation.kind === 'conflict') {
     return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
   }
-  if (operation.kind === 'replay') return replayOperationResult(operation, expected)
+  if (operation.kind === 'replay') {
+    const replayed = replayOperationResult(operation, expectedWithOperationRef)
+    const { operationRef: _operationRef, ...publicResult } = replayed
+    return input.publicationMetadata === undefined
+      ? publicResult
+      : { ...publicResult, kind: 'replayed' as const, operationId: operation.operationId }
+  }
 
   const contractResult = await ports.registerContractDocument(
     encoded.documentJson,
@@ -136,12 +199,17 @@ export async function publishCapabilityCommand(
   }
   if (existingPublication === null) {
     await ports.insertPublication({
+      operationRef,
       publicationRef: draft.offering.offeringId,
       revision: 1,
       businessId: input.businessId,
       networkId: draft.offering.networkId,
       sourceKind: draft.source.kind,
+      sourceRevision: publicationMetadata.sourceRevision,
       sourceDigest: draft.source.descriptorDigest,
+      publisherRef: publicationMetadata.publisherRef,
+      authorityMode: publicationMetadata.authorityMode,
+      provenanceDigest: publicationMetadata.provenanceDigest,
       ...encoded.contract.ref,
       offeringId: draft.offering.offeringId,
       bindingId: draft.binding.bindingId,
@@ -163,6 +231,7 @@ export async function publishCapabilityCommand(
       sourceKind: draft.source.kind,
       sourceDigest: draft.source.descriptorDigest,
       contractRef: encoded.contract.ref,
+      operationRef,
       offeringId: draft.offering.offeringId,
       bindingId: draft.binding.bindingId,
     },
@@ -170,7 +239,10 @@ export async function publishCapabilityCommand(
     afterState: 'inactive',
     createdAt: input.now,
   })
-  await succeedOperation(ports, operation.operationId, expected, [auditId], input.now)
+  await succeedOperation(ports, operation.operationId, expectedWithOperationRef, [auditId], input.now)
   await ports.scheduleReadinessProbe(draft.offering.offeringId, 1)
-  return expected
+  const { operationRef: _operationRef, ...publicResult } = expectedWithOperationRef
+  return input.publicationMetadata === undefined
+    ? publicResult
+    : { ...publicResult, operationId: operation.operationId }
 }

@@ -108,6 +108,10 @@ describe('MCP host adapter', () => {
       'ae_registry_services_list',
       'ae_registry_services_search',
       'ae_registry_detail',
+      'ae_registry_operations_search',
+      'ae_registry_operations_detail',
+      'ae_registry_operations_compare',
+      'ae_registry_operations_inspectPlan',
       'ae_sandbox_checkup_quote',
     ])
     expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)

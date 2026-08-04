@@ -15,7 +15,7 @@ describe('prompt and data-flow architecture map', () => {
   it('keeps every mapped flow explicit and durable', () => {
     expect(map).not.toContain('history://')
     expect(map.match(/^## Flow [A-C] —/gm)).toHaveLength(3)
-    expect(map.match(/\| stage \| source evidence \| input \| processing \| output \| owner \|/g))
+    expect(map.match(/\| stage \| source evidence \| input → processing → output \| owner\/evidence ceiling \|/g))
       .toHaveLength(3)
     expect(map).toContain('## Maintenance contract')
 

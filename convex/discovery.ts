@@ -333,8 +333,11 @@ export const regenerateDiscoveryManifest = mutationGeneric({
     }
     const now = Date.now()
     const manifest = buildManifest(catalog, canonicalBaseUrl(args.canonicalBaseUrl), now)
-    const existingAttempt = await latestAttemptForBusiness(ctx.db, auth.business._id)
-    const replayed = existingAttempt?.status === 'succeeded' && existingAttempt.generatedHash === manifest.generatedHash
+    const existingAttempt = await latestAttemptForBusiness(ctx.db, auth.business._id, manifest.slug, manifest.sourceHash)
+    const replayed = existingAttempt?.status === 'succeeded'
+      && existingAttempt.sourceHash === manifest.sourceHash
+      && existingAttempt.generatedHash === manifest.generatedHash
+      && existingAttempt.latestReadback !== undefined
     const [, attempt, auditEvent] = await Promise.all([
       upsertManifest(ctx.db, manifest, auth.business._id),
       upsertSucceededAttempt(ctx.db, manifest, auth.business._id, existingAttempt, now),
@@ -359,7 +362,7 @@ export async function seedDiscoveryManifestForBusinessCommand(
   const catalog = await publicCatalogForBusiness(db, business)
   if (catalog === undefined) return 'skipped'
   const manifest = buildManifest(catalog, canonicalBaseUrl(undefined), now)
-  const existingAttempt = await latestAttemptForBusiness(db, business._id)
+  const existingAttempt = await latestAttemptForBusiness(db, business._id, manifest.slug, manifest.sourceHash)
   await upsertManifest(db, manifest, business._id)
   await upsertSucceededAttempt(db, manifest, business._id, existingAttempt, now)
   await ensureDiscoveryAuditEvent(db, manifest, business._id, now)
@@ -936,7 +939,12 @@ async function invalidateDiscoveryManifestBatch(
       .withIndex('by_business_version', (query) => query.eq('businessId', businessId))
       .paginate(paginationOpts)
     for (const manifestDoc of page.page) {
-      const current = manifestFromDoc(manifestDoc)
+      let current: DiscoveryManifestRead | undefined
+      try {
+        current = manifestFromDoc(manifestDoc)
+      } catch {
+        current = undefined
+      }
       if ('services' in manifestDoc) {
         await db.patch(manifestDoc._id, {
           status: 'stale',
@@ -968,17 +976,28 @@ async function invalidateDiscoveryManifestBatch(
     .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
     .paginate(paginationOpts)
   for (const attemptDoc of page.page) {
-    const next = {
-      ...attemptFromDoc(attemptDoc),
-      status: 'stale' as const,
+    await db.patch(attemptDoc._id, {
+      status: 'stale',
       finishedAt: now,
       staleThresholdAt: now,
       failureCode: reasonCode,
-      repairAction: 'invalidate_manifest' as const,
-      repairResult: 'succeeded' as const,
+      repairAction: 'invalidate_manifest',
+      repairResult: 'succeeded',
+    })
+    try {
+      const next = {
+        ...attemptFromDoc(attemptDoc),
+        status: 'stale' as const,
+        finishedAt: now,
+        staleThresholdAt: now,
+        failureCode: reasonCode,
+        repairAction: 'invalidate_manifest' as const,
+        repairResult: 'succeeded' as const,
+      }
+      attempts.push(next)
+    } catch {
+      // The row is still invalidated; malformed legacy evidence is not projected.
     }
-    await db.patch(attemptDoc._id, attemptPatch(next))
-    attempts.push(next)
   }
   return {
     manifests,
@@ -996,8 +1015,10 @@ async function publicCatalogForBusiness(db: DatabaseReader, business: Doc<'busin
   if (snapshot === null) return undefined
   const projection = readDiscoveryProjectionSnapshot(snapshot, business)
   if (projection === undefined) return undefined
+  const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
   return {
-    ...projectBusinessSupplyToPublicApi(projection, Date.now()),
+    ...projected,
+    disposition: snapshot.status === 'projection_pending' ? 'stale' : projected.disposition,
     sourceHash: snapshot.sourceDigest,
   }
 }
@@ -1065,7 +1086,7 @@ function readDiscoveryProjectionSnapshot(
 ): ReturnType<typeof readBusinessSupplyProjectionSnapshot> | undefined {
   const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
   try {
-    return readBusinessSupplyProjectionSnapshot(
+    const projection = readBusinessSupplyProjectionSnapshot(
       projectionValue,
       'discovery',
       String(business._id),
@@ -1075,9 +1096,12 @@ function readDiscoveryProjectionSnapshot(
         sourceRevision: snapshot.sourceRevision,
         sourceDigest: snapshot.sourceDigest,
         observedAt: snapshot.observedAt,
-        disposition: snapshot.disposition,
+        ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
       },
     )
+    return snapshot.status === 'projection_pending'
+      ? { ...projection, disposition: 'stale' as const }
+      : projection
   } catch {
     return undefined
   }
@@ -1189,7 +1213,7 @@ async function readDiscoveryHealthFromDb(
   const business = await db.get(businessId)
   const [catalog, latestAttempt, latestManifest] = await Promise.all([
     business === null ? Promise.resolve<PublicCatalog | undefined>(undefined) : publicCatalogForBusiness(db, business),
-    latestAttemptForBusiness(db, businessId),
+    business === null ? Promise.resolve<DiscoveryAttempt | undefined>(undefined) : latestAttemptForBusiness(db, businessId, business.slug),
     latestManifestForBusiness(db, businessId),
   ])
   const sourceHash = catalog?.sourceHash
@@ -1206,12 +1230,22 @@ async function readDiscoveryHealthFromDb(
   }
 }
 
-async function latestAttemptForBusiness(db: DatabaseReader, businessId: Id<'businesses'>): Promise<DiscoveryAttempt | undefined> {
+async function latestAttemptForBusiness(
+  db: DatabaseReader,
+  businessId: Id<'businesses'>,
+  expectedSlug?: string,
+  expectedSourceHash?: string,
+): Promise<DiscoveryAttempt | undefined> {
   const latest = await db.query('discoveryManifestAttempts')
     .withIndex('by_business_startedAt', (query) => query.eq('businessId', businessId))
     .order('desc')
     .first()
-  return latest === null ? undefined : attemptFromDoc(latest)
+  if (latest === null) return undefined
+  try {
+    return attemptFromDoc(latest, businessId, expectedSlug, expectedSourceHash)
+  } catch {
+    return undefined
+  }
 }
 
 async function latestManifestForBusiness(db: DatabaseReader, businessId: Id<'businesses'>): Promise<DiscoveryManifestRead | undefined> {
@@ -1219,7 +1253,12 @@ async function latestManifestForBusiness(db: DatabaseReader, businessId: Id<'bus
     .withIndex('by_business_generatedAt', (query) => query.eq('businessId', businessId))
     .order('desc')
     .first()
-  return latest === null ? undefined : manifestFromDoc(latest)
+  if (latest === null) return undefined
+  try {
+    return manifestFromDoc(latest)
+  } catch {
+    return undefined
+  }
 }
 
 function healthStatus(
@@ -1282,6 +1321,9 @@ function attemptPatch(attempt: DiscoveryAttempt) {
     ...(attempt.failureMessageRedacted === undefined ? {} : { failureMessageRedacted: attempt.failureMessageRedacted }),
     startedAt: attempt.startedAt,
     ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
+    ...(attempt.generatedHash === undefined ? {} : { generatedHash: attempt.generatedHash }),
+    ...(attempt.bodyHash === undefined ? {} : { bodyHash: attempt.bodyHash }),
+    ...(attempt.urlHash === undefined ? {} : { urlHash: attempt.urlHash }),
     ...(attempt.latestReadback === undefined ? {} : {
       latestReadback: {
         businessId: attempt.businessId,
@@ -1298,6 +1340,7 @@ function attemptPatch(attempt: DiscoveryAttempt) {
       latestManifestUrl: attempt.latestReadback.manifestUrl,
       latestRouteUrls: [...attempt.latestReadback.routeUrls],
     }),
+    ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
     repairAction: attempt.repairAction,
     repairResult: attempt.repairResult,
   }
@@ -1579,12 +1622,12 @@ function readLegacyManifestServices(value: unknown): LegacyUnavailableServices {
         }
       })
     return {
-      slug: requiredString(service.slug, 'discovery_legacy_manifest'),
-      name: requiredString(service.name, 'discovery_legacy_manifest'),
-      category: requiredString(service.category, 'discovery_legacy_manifest'),
-      summary: requiredString(service.summary, 'discovery_legacy_manifest'),
-      serviceArea: requiredString(service.serviceArea, 'discovery_legacy_manifest'),
-      hoursOrUnknown: requiredString(service.hoursOrUnknown, 'discovery_legacy_manifest'),
+      slug: brandNonEmpty(requiredString(service.slug, 'discovery_legacy_manifest'), 'ServiceSlug'),
+      name: brandNonEmpty(requiredString(service.name, 'discovery_legacy_manifest'), 'ServiceName'),
+      category: brandNonEmpty(requiredString(service.category, 'discovery_legacy_manifest'), 'ServiceCategory'),
+      summary: brandNonEmpty(requiredString(service.summary, 'discovery_legacy_manifest'), 'ServiceSummary'),
+      serviceArea: brandNonEmpty(requiredString(service.serviceArea, 'discovery_legacy_manifest'), 'ServiceArea'),
+      hoursOrUnknown: brandNonEmpty(requiredString(service.hoursOrUnknown, 'discovery_legacy_manifest'), 'ServiceHours'),
       status: readLegacyServiceStatus(service.status),
       capabilities,
     }
@@ -1593,17 +1636,30 @@ function readLegacyManifestServices(value: unknown): LegacyUnavailableServices {
 
 function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifestRead | undefined {
   if ('services' in document) {
+    const schemaVersion = brandNonEmpty(document.schemaVersion, 'SchemaVersion')
+    const slug = brandNonEmpty(document.slug, 'Slug')
+    const businessName = brandNonEmpty(document.businessName, 'BusinessName')
+    const category = brandNonEmpty(document.category, 'Category')
+    const suburb = brandNonEmpty(document.suburb, 'Suburb')
+    const stateTerritory = brandNonEmpty(document.stateTerritory, 'StateTerritory')
+    const sourceHash = brandNonEmpty(document.sourceHash, 'SourceHash')
+    const generatedHash = brandNonEmpty(document.generatedHash, 'GeneratedHash')
+    const bodyHash = brandNonEmpty(document.bodyHash, 'BodyHash')
+    const urlHash = brandNonEmpty(document.urlHash, 'UrlHash')
+    if (document.publicUrl !== `/${slug}` || document.manifestUrl !== `/${slug}/.well-known/ucp`) {
+      throw new Error('discovery_legacy_manifest_url_invalid')
+    }
     return {
       kind: 'legacy_unavailable',
       reason: 'offering_identity_unavailable',
-      schemaVersion: document.schemaVersion,
+      schemaVersion,
       businessId: String(document.businessId),
-      slug: document.slug,
-      businessName: document.businessName,
-      category: document.category,
+      slug,
+      businessName,
+      category,
       location: {
-        suburb: document.suburb,
-        stateTerritory: document.stateTerritory,
+        suburb,
+        stateTerritory,
         ...(document.postcode === undefined ? {} : { postcode: document.postcode }),
       },
       publicUrl: document.publicUrl,
@@ -1611,11 +1667,11 @@ function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifest
       ucpVersion: document.ucpVersion,
       pathKind: document.pathKind,
       status: document.status,
-      sourceHash: document.sourceHash,
+      sourceHash,
       sourceVersion: document.sourceVersion,
-      generatedHash: document.generatedHash,
-      bodyHash: document.bodyHash,
-      urlHash: document.urlHash,
+      generatedHash,
+      bodyHash,
+      urlHash,
       generatedAt: document.generatedAt,
       updatedAt: document.updatedAt,
       ...(document.degradedReason === undefined ? {} : { degradedReason: document.degradedReason }),
@@ -1674,8 +1730,75 @@ function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifest
   }
 }
 
-function attemptFromDoc(document: Doc<'discoveryManifestAttempts'>): DiscoveryAttempt {
-  const latestReadback = readbackField(document.latestReadback)
+
+function attemptFromDoc(
+  document: Doc<'discoveryManifestAttempts'>,
+  expectedBusinessId?: Id<'businesses'>,
+  expectedSlug?: string,
+  expectedSourceHash?: string,
+): DiscoveryAttempt {
+  const readback = document.latestReadback
+  const businessId = expectedBusinessId ?? document.businessId
+  const sourceHash = expectedSourceHash ?? document.sourceHash
+  const slug = expectedSlug ?? readback?.slug
+  let readbackRoutes: readonly [string, string, string] | undefined
+  if (readback !== undefined && slug !== undefined) {
+    try {
+      const parsed = new URL(readback.manifestUrl)
+      const manifestPathSuffix = `/${slug}/ucp`
+      if (
+        (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+        && parsed.username === ''
+        && parsed.password === ''
+        && parsed.search === ''
+        && parsed.hash === ''
+        && parsed.pathname.endsWith(manifestPathSuffix)
+      ) {
+        const canonicalBasePath = parsed.pathname.slice(0, -manifestPathSuffix.length)
+        const canonicalBaseUrl = `${parsed.origin}${canonicalBasePath}`
+        readbackRoutes = [
+          `${canonicalBaseUrl}/${slug}`,
+          readback.manifestUrl,
+          `${canonicalBaseUrl}/api/businesses/${slug}`,
+        ]
+      }
+    } catch {
+      readbackRoutes = undefined
+    }
+  }
+  if (
+    document.businessId !== businessId
+    || document.sourceVersion !== 'public-catalog:v1'
+    || document.pathKind !== 'ae_hosted_fallback'
+    || document.attemptId !== `discovery:manifest:${businessId}:${document.sourceHash}:v1`
+    || document.sourceHash !== sourceHash
+    || (document.status === 'succeeded' && (
+      readback === undefined
+      || document.finishedAt === undefined
+      || document.generatedHash === undefined
+      || document.bodyHash === undefined
+      || document.urlHash === undefined
+    ))
+  ) {
+    throw new Error('discovery_attempt_identity_invalid')
+  }
+  if (readback !== undefined) {
+    if (slug === undefined || readbackRoutes === undefined) throw new Error('discovery_attempt_readback_invalid')
+    if (
+      readback.businessId !== businessId
+      || readback.slug !== slug
+      || readback.sourceVersion !== 'public-catalog:v1'
+      || readback.sourceHash !== sourceHash
+      || readback.routeUrls.length !== readbackRoutes.length
+      || readbackRoutes.some((route) => !readback.routeUrls.includes(route))
+      || (document.generatedHash !== undefined && document.generatedHash !== readback.generatedHash)
+      || (document.bodyHash !== undefined && document.bodyHash !== readback.bodyHash)
+      || (document.urlHash !== undefined && document.urlHash !== readback.urlHash)
+    ) {
+      throw new Error('discovery_attempt_readback_invalid')
+    }
+  }
+  const latestReadback = readbackField(readback)
   return {
     attemptId: document.attemptId,
     businessId: document.businessId,

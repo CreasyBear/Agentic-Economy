@@ -37,6 +37,12 @@ import {
   registryServicesListAction,
   registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
+import {
+  registryOperationsCompareAction,
+  registryOperationsDetailAction,
+  registryOperationsInspectPlanAction,
+  registryOperationsSearchAction,
+} from '@/modules/registry/operations.actions'
 import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
 import { storefrontEnrichDraftAction, storefrontImportDraftAction, webDiscoverAction } from '@/modules/storefront/storefront.actions'
 import { studyCompleteAction, studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
@@ -70,6 +76,10 @@ const actions: readonly AnyAction[] = [
   registryServicesSearchAction,
   registrySearchAction,
   registryDetailAction,
+  registryOperationsSearchAction,
+  registryOperationsDetailAction,
+  registryOperationsCompareAction,
+  registryOperationsInspectPlanAction,
   sandboxCheckupQuoteAction,
   storefrontImportDraftAction,
   storefrontEnrichDraftAction,

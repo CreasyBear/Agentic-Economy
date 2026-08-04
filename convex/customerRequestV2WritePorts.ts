@@ -4,11 +4,15 @@ import {
   sameCapabilityContractRef,
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
+import {
+  createRegisteredOperationMappingRef,
+  type RegisteredOperationMapping,
+} from '@/modules/capability-supply/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  compileRoutePlans,
   composeRequestActions,
+  compileRoutePlans,
   writableCustomerRequestV2Aggregate,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
@@ -249,11 +253,13 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
   }
   const facts = rebindAggregateFacts(aggregate.snapshot.facts, models)
   if (facts === undefined) return 'invalid'
+  const domain = asDomainAggregate(aggregate)
   const resolveModel = (ref: Aggregate['plan']['actions'][number]['contractRef']) => (
     models.get(exactContractRefKey(ref))
   )
-  const baseActions = [...aggregate.plan.actions]
+  const storedActions = [...domain.plan.actions]
     .sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
+  const baseActions = storedActions
     .flatMap((action, ordinal) => {
       const model = resolveModel(action.contractRef)
       if (model === undefined || model.selectionKey !== action.selectionKey
@@ -264,22 +270,27 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
         requestId: aggregate.snapshot.requestId,
         requestRevision: aggregate.snapshot.revision,
         ordinal,
+        operationRef: action.operationRef,
         contractRef: model.contractRef,
         selectionKey: model.selectionKey,
         semanticDigest: model.semanticDigest,
       }
       return [{
         actionId: `action:${canonicalDigest(actionMaterial)}`,
+        operationRef: action.operationRef,
         contractRef: model.contractRef,
         selectionKey: model.selectionKey,
         semanticDigest: model.semanticDigest,
-        dependsOn: [],
+        dependsOn: [...action.dependsOn],
         inputs: facts.filter((fact) => fact.selectionKey === model.selectionKey
           && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
-        inputMappings: [],
+        mappingRefs: [...action.mappingRefs],
+        inputMappings: action.inputMappings,
       }]
     })
-  const actions = composeRequestActions(baseActions, models)
+  const registeredMappings = registeredMappingsFromActions(storedActions, models)
+  if (registeredMappings === undefined) return 'invalid'
+  const actions = composeRequestActions(baseActions, models, registeredMappings)
   if (actions === undefined) return 'invalid'
   if (actions.length !== aggregate.plan.actions.length
     || canonicalDigest(actions)
@@ -316,8 +327,8 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
           return criteria.length === 0 ? {} : { derivedCriteria: criteria }
         })(),
         candidates: discoverRequestEvaluationCandidates({
-          selectedCapabilities: actions.map(({ selectionKey, contractRef }) => ({
-            selectionKey, contractRef,
+          selectedCapabilities: actions.map(({ operationRef, selectionKey, contractRef }) => ({
+            operationRef, selectionKey, contractRef,
           })),
           bindings,
           resolveModel,
@@ -374,6 +385,100 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
   return 'current'
 }
 
+type RegisteredOperationMappingMaterial =
+  | Omit<Extract<RegisteredOperationMapping, { kind: 'identity' | 'field' }>, 'mappingRef'>
+  | Omit<Extract<RegisteredOperationMapping, { kind: 'array_project' }>, 'mappingRef'>
+  | Omit<Extract<RegisteredOperationMapping, { kind: 'registered_transform' }>, 'mappingRef'>
+
+function registeredMappingsFromActions(
+  actions: readonly CustomerRequestV2Aggregate['plan']['actions'][number][],
+  models: ReadonlyMap<string, CapabilityDecisionModel>,
+): readonly RegisteredOperationMapping[] | undefined {
+  const actionsById = new Map(actions.map((action) => [action.actionId, action]))
+  const mappings: RegisteredOperationMapping[] = []
+  for (const targetAction of actions) {
+    const targetModel = models.get(exactContractRefKey(targetAction.contractRef))
+    if (targetModel === undefined) return undefined
+    for (const inputMapping of targetAction.inputMappings) {
+      const sourceAction = actionsById.get(inputMapping.source.actionId)
+      const sourceModel = sourceAction === undefined
+        ? undefined
+        : models.get(exactContractRefKey(sourceAction.contractRef))
+      const sourceEvidence = sourceModel?.evidence.find((evidence) => (
+        evidence.annotationId === inputMapping.source.annotationId
+        && evidence.evidenceId === inputMapping.source.evidenceId
+        && evidence.outputPointer === inputMapping.source.outputPointer
+      ))
+      const targetInput = targetModel.inputs.find((input) => (
+        input.annotationId === inputMapping.target.annotationId
+        && input.key === inputMapping.target.inputKey
+        && input.inputPointer === inputMapping.target.inputPointer
+        && input.schemaIdentity === inputMapping.schemaIdentity
+        && input.semanticIdentity === inputMapping.semanticIdentity
+      ))
+      if (
+        sourceAction === undefined
+        || sourceModel === undefined
+        || sourceEvidence === undefined
+        || targetInput === undefined
+        || sourceEvidence.semanticIdentity !== inputMapping.semanticIdentity
+      ) return undefined
+      const common = {
+        sourceContractRef: sourceModel.contractRef,
+        targetContractRef: targetModel.contractRef,
+        sourceSchemaIdentity: sourceEvidence.schemaIdentity,
+        targetSchemaIdentity: inputMapping.schemaIdentity,
+        authority: 'registered_contract_semantics' as const,
+      }
+      let mapping: RegisteredOperationMappingMaterial
+      if (inputMapping.kind === 'array_project') {
+        if (
+          inputMapping.sourceArrayPointer === undefined
+          || inputMapping.sourceItemPointer === undefined
+          || inputMapping.targetArrayPointer === undefined
+          || inputMapping.minItems === undefined
+          || inputMapping.maxItems === undefined
+        ) return undefined
+        mapping = {
+          ...common,
+          kind: 'array_project',
+          sourceArrayPointer: inputMapping.sourceArrayPointer,
+          sourceItemPointer: inputMapping.sourceItemPointer,
+          targetArrayPointer: inputMapping.targetArrayPointer,
+          minItems: inputMapping.minItems,
+          maxItems: inputMapping.maxItems,
+        }
+      } else if (inputMapping.kind === 'registered_transform') {
+        if (
+          inputMapping.transformRef === undefined
+          || inputMapping.transformVersion === undefined
+          || inputMapping.inputCardinalityMax === undefined
+          || inputMapping.outputCardinalityMax === undefined
+        ) return undefined
+        mapping = {
+          ...common,
+          kind: 'registered_transform',
+          transformRef: inputMapping.transformRef,
+          transformVersion: inputMapping.transformVersion,
+          sourceOutputPointer: inputMapping.source.outputPointer,
+          targetInputPointer: inputMapping.target.inputPointer,
+          inputCardinalityMax: inputMapping.inputCardinalityMax,
+          outputCardinalityMax: inputMapping.outputCardinalityMax,
+        }
+      } else {
+        mapping = {
+          ...common,
+          kind: inputMapping.kind,
+          sourceOutputPointer: inputMapping.source.outputPointer,
+          targetInputPointer: inputMapping.target.inputPointer,
+        }
+      }
+      if (createRegisteredOperationMappingRef(mapping) !== inputMapping.mappingRef) return undefined
+      mappings.push({ ...mapping, mappingRef: inputMapping.mappingRef })
+    }
+  }
+  return Object.freeze(mappings)
+}
 
 function evaluationMatchesConservativeReadinessSnapshot(
   current: CustomerRequestV2Aggregate['evaluation'],
@@ -396,6 +501,11 @@ function evaluationMatchesConservativeReadinessSnapshot(
     }
     return [{
       ...candidate,
+      admittedOperation: {
+        ...candidate.admittedOperation,
+        readinessValidUntil: prior.admittedOperation.readinessValidUntil,
+        qualificationDigest: prior.admittedOperation.qualificationDigest,
+      },
       ...(storedReadiness === undefined
         ? {}
         : { readinessValidUntil: storedReadiness }),

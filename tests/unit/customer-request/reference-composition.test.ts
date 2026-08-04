@@ -41,6 +41,7 @@ function aggregate(): CustomerRequestV2Aggregate {
     interpreterId: 'mock:interpreter',
     bindings: [],
     models: [],
+    mappings: [],
     now: 1_753_000_000_000,
   })
   if (compiled.kind !== 'compiled') throw new Error('Expected development aggregate.')

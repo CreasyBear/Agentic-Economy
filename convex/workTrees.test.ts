@@ -13,6 +13,7 @@ import {
   type GardenerVerb,
 } from '../src/modules/work-tree/convex'
 import { createCustomerRequestServiceAssertion } from '../src/modules/customer-request/service-auth-envelope'
+import { createTestOperationLineage } from '../tests/helpers/customer-request-lineage'
 import { customerRouteRef } from '../src/modules/customer-request/route-plan-customer-projection'
 import { mintBrowserGuestAssertion } from '../src/lib/server/browser-guest-assertion'
 import { internal } from './_generated/api'
@@ -160,22 +161,34 @@ async function seedRoutedCustomerRequest(backend: Pick<TestConvex<typeof schema>
     version: 1,
     contractDigest: 'digest:contract:work-tree-lineage',
   }
+  const lineage = createTestOperationLineage(contractRef, 'work-tree-lineage', {
+    operationId: 'operation:work-tree-lineage',
+    businessId: 'business:work-tree-lineage',
+    offeringId: 'offering:work-tree-lineage',
+    bindingId: 'binding:work-tree-lineage',
+    publicationRef: 'publication:work-tree-lineage',
+    publicationRevision: 1,
+    readinessValidUntil: 9_999_999,
+    offeringRegistrationHash: 'hash:offering:work-tree-lineage',
+    bindingRegistrationHash: 'hash:binding:work-tree-lineage',
+  })
   const route = {
     routePlanId: ROUTED_ROUTE_PLAN_ID,
     requestId: ROUTED_REQUEST_REF,
     requestRevision: ROUTED_REVISION,
     registrySnapshotDigest: 'digest:registry:work-tree-lineage',
     steps: [{
+      ...lineage,
       actionId: 'action:work-tree-lineage',
       candidateRef: 'candidate:work-tree-lineage',
-      businessId: 'business:work-tree-lineage',
-      offeringId: 'offering:work-tree-lineage',
-      bindingId: 'binding:work-tree-lineage',
+      businessId: lineage.admittedOperation.businessId,
+      offeringId: lineage.admittedOperation.offeringId,
+      bindingId: lineage.admittedOperation.bindingId,
       contractRef,
-      offeringRegistrationHash: 'hash:offering:work-tree-lineage',
-      bindingRegistrationHash: 'hash:binding:work-tree-lineage',
-      publicationRef: 'publication:work-tree-lineage',
-      publicationRevision: 1,
+      offeringRegistrationHash: lineage.admittedOperation.offeringRegistrationHash,
+      bindingRegistrationHash: lineage.admittedOperation.bindingRegistrationHash,
+      publicationRef: lineage.admittedOperation.publicationRef,
+      publicationRevision: lineage.admittedOperation.publicationRevision,
       resolvedInputs: [],
       deferredInputs: [],
       price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 0 },

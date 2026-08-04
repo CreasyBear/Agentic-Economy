@@ -1,4 +1,12 @@
 import {
+  isPublicOperationRef,
+  isRegisteredOperationMappingRef,
+  validateAdmittedOperationRef,
+  type AdmittedOperationRef,
+  type PublicOperationRef,
+  type RegisteredInputMappingRef,
+} from '@/modules/capability-supply/public'
+import {
   openCapabilityDecisionModel,
   rehydrateCapabilityInputKey,
   rehydrateCapabilitySelectionKey,
@@ -384,14 +392,73 @@ function asDomainCompletionRequirement(value: StoredCompletionRequirement) {
   }
 }
 
+function asDomainOperationRef(value: string): PublicOperationRef {
+  if (!isPublicOperationRef(value)) {
+    throw new Error('customer_request_v2_preparation_operation_ref_invalid')
+  }
+  return value
+}
+
+function asDomainAdmittedOperation(value: unknown): AdmittedOperationRef {
+  if (!validateAdmittedOperationRef(value)) {
+    throw new Error('customer_request_v2_preparation_admitted_operation_invalid')
+  }
+  return value
+}
+
+function asDomainMappingRef(value: string): RegisteredInputMappingRef {
+  if (!isRegisteredOperationMappingRef(value)) {
+    throw new Error('customer_request_v2_preparation_mapping_ref_invalid')
+  }
+  return value
+}
+
 function asDomainInputMapping(value: StoredInputMapping) {
+  if (value.mappingRef === undefined || value.kind === undefined) {
+    throw new Error('customer_request_v2_preparation_mapping_lineage_missing')
+  }
   return {
     ...value,
+    kind: value.kind,
+    mappingRef: asDomainMappingRef(value.mappingRef),
     target: {
       ...value.target,
       inputKey: rehydrateCapabilityInputKey(value.target.inputKey),
     },
     schemaIdentity: rehydratePointedSchemaIdentity(value.schemaIdentity),
+  }
+}
+
+function asDomainCandidate(value: Aggregate['evaluation']['candidates'][number]) {
+  if (value.operationRef === undefined || value.admittedOperation === undefined) {
+    throw new Error('customer_request_v2_preparation_candidate_admission_missing')
+  }
+  return {
+    ...value,
+    operationRef: asDomainOperationRef(value.operationRef),
+    admittedOperation: asDomainAdmittedOperation(value.admittedOperation),
+    selectionKey: rehydrateCapabilitySelectionKey(value.selectionKey),
+    cancellation: asDomainCandidateCancellation(value.cancellation),
+    viability: value.viability.kind === 'blocked_on_information'
+      ? {
+          ...value.viability,
+          inputs: value.viability.inputs.map(asDomainMissingInput),
+        }
+      : value.viability,
+  }
+}
+
+function asDomainAction(value: Aggregate['plan']['actions'][number]) {
+  if (value.operationRef === undefined || value.mappingRefs === undefined) {
+    throw new Error('customer_request_v2_preparation_action_lineage_missing')
+  }
+  return {
+    ...value,
+    operationRef: asDomainOperationRef(value.operationRef),
+    selectionKey: rehydrateCapabilitySelectionKey(value.selectionKey),
+    inputs: value.inputs.map(asDomainFact),
+    inputMappings: value.inputMappings.map(asDomainInputMapping),
+    mappingRefs: value.mappingRefs.map(asDomainMappingRef),
   }
 }
 
@@ -436,17 +503,7 @@ function domainAggregate(aggregate: Aggregate): CustomerRequestV2Aggregate {
         ...criterion,
         inputKey: rehydrateCapabilityInputKey(criterion.inputKey),
       })),
-      candidates: stored.evaluation.candidates.map((candidate) => ({
-        ...candidate,
-        selectionKey: rehydrateCapabilitySelectionKey(candidate.selectionKey),
-        cancellation: asDomainCandidateCancellation(candidate.cancellation),
-        viability: candidate.viability.kind === 'blocked_on_information'
-          ? {
-              ...candidate.viability,
-              inputs: candidate.viability.inputs.map(asDomainMissingInput),
-            }
-          : candidate.viability,
-      })),
+      candidates: stored.evaluation.candidates.map(asDomainCandidate),
       completionRequirements: stored.evaluation.completionRequirements.map(asDomainCompletionRequirement),
       ...(decisionPreference === undefined ? {} : { decisionPreference: { ...decisionPreference } }),
       ...(preparationDisclosure === undefined
@@ -458,12 +515,7 @@ function domainAggregate(aggregate: Aggregate): CustomerRequestV2Aggregate {
     },
     plan: {
       ...stored.plan,
-      actions: stored.plan.actions.map((action) => ({
-        ...action,
-        selectionKey: rehydrateCapabilitySelectionKey(action.selectionKey),
-        inputs: action.inputs.map(asDomainFact),
-        inputMappings: action.inputMappings.map(asDomainInputMapping),
-      })),
+      actions: stored.plan.actions.map(asDomainAction),
       completionRequirements: stored.plan.completionRequirements.map(asDomainCompletionRequirement),
     },
   }

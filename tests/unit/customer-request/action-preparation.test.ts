@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
 
 import {
   defineCapabilityContract,
@@ -53,11 +54,12 @@ describe('exact V2 Action Preparation', () => {
     expect(JSON.stringify(prepared)).not.toContain('permittedFields')
     expect(JSON.stringify(prepared)).not.toContain('capabilityContractId')
   })
-
   it('binds cumulative disclosure capacity to unique viable businesses and exposure units', () => {
     const { aggregate, model, actionId } = compiledProtectedRequest()
+    const secondLineage = createTestOperationLineage(model.contractRef, 'action-preparation:binding:two')
     const secondCandidate = {
       ...aggregate.evaluation.candidates[0]!,
+      ...secondLineage,
       candidateRef: 'candidate:two', businessId: 'business:two', offeringId: 'offering:two', bindingId: 'binding:two',
       offeringRegistrationHash: canonicalDigest('offering:two'), bindingRegistrationHash: canonicalDigest('binding:two'),
     }
@@ -119,23 +121,24 @@ describe('exact V2 Action Preparation', () => {
       },
     })).toThrow('action_preparation_reference_mismatch')
   })
-
   it('keeps commitment information gaps typed and exact', () => {
     const { model } = compiledProtectedRequest()
+    const lineage = createTestOperationLineage(model.contractRef, 'action-preparation:binding:missing')
     const compiled = compileCustomerRequest({
       requestId: 'request:missing:1', expectedRevision: 0,
       principalId: 'principal:customer', delegatedAgentId: 'agent:customer',
       intent: 'Find an option', networkId: 'ae:public', interpreterId: 'test:interpreter',
       bindings: [{
+        ...lineage,
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
         contractRef: model.contractRef, offeringRegistrationHash: canonicalDigest('offering:one'),
         bindingRegistrationHash: canonicalDigest('binding:one'),
-        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
+        cancellation: { kind: 'unsupported' as const, evidenceRefs: ['cancellation:binding:one'] },
       }],
-      models: [model], now: 1_000,
+      models: [model], mappings: [], now: 1_000,
       proposal: {
         kind: 'capability_candidates',
-        selections: [{ selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [] }],
+        selections: [{ operationRef: lineage.operationRef, selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [] }],
       },
     })
     if (compiled.kind !== 'compiled') throw new Error(compiled.reason)
@@ -190,7 +193,9 @@ function compiledProtectedRequest(document: ReturnType<typeof protectedContract>
   const model = openCapabilityDecisionModel(defineCapabilityContract(document))
   const destination = model.inputs.find((input) => input.annotationId === 'destination')
   if (destination === undefined) throw new Error('destination input missing')
+  const lineage = createTestOperationLineage(model.contractRef, 'action-preparation:binding:one')
   const binding = {
+    ...lineage,
     businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
     contractRef: model.contractRef, offeringRegistrationHash: canonicalDigest('offering:one'),
     bindingRegistrationHash: canonicalDigest('binding:one'),
@@ -200,10 +205,11 @@ function compiledProtectedRequest(document: ReturnType<typeof protectedContract>
     requestId: 'request:protected:1', expectedRevision: 0,
     principalId: 'principal:customer', delegatedAgentId: 'agent:customer',
     intent: 'Find an option to Perth', networkId: 'ae:public', interpreterId: 'test:interpreter',
-    bindings: [binding], models: [model], now: 1_000,
+    bindings: [binding], models: [model], mappings: [], now: 1_000,
     proposal: {
       kind: 'capability_candidates',
       selections: [{
+        operationRef: lineage.operationRef,
         selectionKey: model.selectionKey, contractRef: model.contractRef,
         facts: [{
           contractRef: model.contractRef, selectionKey: model.selectionKey,

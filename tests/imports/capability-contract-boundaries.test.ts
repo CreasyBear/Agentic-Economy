@@ -12,14 +12,6 @@ describe('capability contract boundaries', () => {
 
     expect(imports).toEqual([
       '@cfworker/json-schema',
-      'ajv/dist/refs/json-schema-2020-12/meta/applicator.json',
-      'ajv/dist/refs/json-schema-2020-12/meta/content.json',
-      'ajv/dist/refs/json-schema-2020-12/meta/core.json',
-      'ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json',
-      'ajv/dist/refs/json-schema-2020-12/meta/meta-data.json',
-      'ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json',
-      'ajv/dist/refs/json-schema-2020-12/meta/validation.json',
-      'ajv/dist/refs/json-schema-2020-12/schema.json',
       'zod',
       '@/modules/common/canonical-digest',
       '@/modules/common/is-record',

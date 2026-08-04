@@ -1,8 +1,8 @@
 import type { CapabilityBindingRow } from '../binding'
 import type { CapabilityOfferingOrigin } from '../../public'
+import type { PublicOperationRef } from '../../public'
 import type { CapabilityContractRef, CapabilityOfferingRow } from '../offering'
 import type { CapabilityPublicationLifecycleRow } from '../publication'
-
 export type EligiblePublishedBusiness = Readonly<{
   businessId: string
 }>
@@ -10,6 +10,20 @@ export type EligiblePublishedBusiness = Readonly<{
 export type EligiblePublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   publicationRef: string
   revision: number
+  operationRef: PublicOperationRef
+  businessId: string
+  networkId: string
+  capabilityId: string
+  version: number
+  contractDigest: string
+  offeringId: string
+  bindingId: string
+  sourceRevision: string
+  sourceDigest: string
+  publisherRef: string
+  provenanceDigest: string
+  registrationEvidenceRefs: readonly string[]
+  readinessEvidenceRefs: readonly string[]
 }>
 
 export type ActiveExactCapabilityContractResult =

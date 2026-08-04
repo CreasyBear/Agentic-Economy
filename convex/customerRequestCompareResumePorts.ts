@@ -96,6 +96,9 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
       listRouteable: async (id) => await ctx.runQuery(
         internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
       ) as EligibleSupplyResult,
+      listMappings: async (id) => await ctx.runQuery(
+        internal.capabilitySupply.listMappings, { networkId: id, limit: 128 },
+      ),
       getActiveExact: async (contractRef) => await ctx.runQuery(
         internal.capabilityContractDocuments.getActiveExactInternal, contractRef,
       ) as ExactContractResult,

@@ -1,7 +1,7 @@
 import { withTemporaryClerkApiKey } from './customer-request-production-credential'
 import { verifyHostedCustomerRequestRelease } from './verify-customer-request-release'
 import { pathToFileURL } from 'node:url'
-import { resolveVercelProtectionBypassSecret } from './work-tree-parity-release'
+import { resolveVercelProtectionBypassSecret } from './vercel-protection-bypass'
 
 export async function main(env: Record<string, string | undefined> = process.env): Promise<void> {
   await withTemporaryClerkApiKey({

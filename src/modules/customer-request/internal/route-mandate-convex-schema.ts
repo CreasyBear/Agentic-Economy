@@ -6,6 +6,30 @@ const capabilityContractRef = v.object({
   version: v.number(),
   contractDigest: v.string(),
 })
+const admittedOperation = v.object({
+  operationId: v.string(),
+  publisherRef: v.string(),
+  provenanceDigest: v.string(),
+  businessId: v.string(),
+  publicationRef: v.string(),
+  publicationRevision: v.number(),
+  sourceRevision: v.string(),
+  sourceDigest: v.string(),
+  contractRef: capabilityContractRef,
+  catalogOfferingRef: v.string(),
+  catalogOfferingRevision: v.number(),
+  offeringId: v.string(),
+  offeringRegistrationHash: v.string(),
+  offeringEligibilityHash: v.string(),
+  bindingId: v.string(),
+  bindingRegistrationHash: v.string(),
+  bindingEligibilityHash: v.string(),
+  bindingConfigDigest: v.string(),
+  qualificationDigest: v.string(),
+  readinessValidUntil: v.number(),
+  commercialDigest: v.string(),
+  effectDigest: v.string(),
+})
 
 const money = v.object({ currency: v.string(), amountMinor: v.number() })
 
@@ -79,6 +103,9 @@ const routeMandateRecovery = v.object({
 
 const routeMandateStep = v.object({
   position: v.number(),
+  // Optional only for immutable mandates issued before source-owned operation admission.
+  operationRef: v.optional(v.string()),
+  admittedOperation: v.optional(admittedOperation),
   actionId: v.string(),
   candidateRef: v.string(),
   businessId: v.string(),
@@ -212,7 +239,10 @@ export const routeStepGrantValue = v.object({
     routeDigest: v.string(),
   }),
   step: v.object({
-    position: v.number(),
+    position: v.optional(v.number()),
+    // Optional only for immutable grants issued before source-owned operation admission.
+    operationRef: v.optional(v.string()),
+    admittedOperation: v.optional(admittedOperation),
     actionId: v.string(),
     candidateRef: v.string(),
     businessId: v.string(),

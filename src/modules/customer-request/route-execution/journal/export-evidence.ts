@@ -10,7 +10,13 @@ import {
 } from '../problem-support/evidence'
 import { projectCustomerEvidenceProblems } from '../problem-support/projections'
 
-import { exportState, type ExportedStepState, type RouteAttemptState } from './export-state'
+import {
+  effectiveRouteAttemptState,
+  exportState,
+  type ExportedStepState,
+  type RouteAttemptState,
+  type RouteDispatchState,
+} from './export-state'
 import { routeAttemptIntegrityValid } from './integrity'
 
 export type CustomerEvidenceExportRunState =
@@ -47,6 +53,7 @@ export type CustomerEvidenceExportAttemptSnapshot = Readonly<{
   createdAt: number
   attemptDigest: string
   attemptRef: string
+  dispatchState?: RouteDispatchState
   inputJson: string
   outputJson?: string
   outputDigest?: string
@@ -147,7 +154,7 @@ export function projectCustomerEvidenceExport(input: Readonly<{
       .sort((left, right) => left.attempt.position - right.attempt.position)
       .map(({ attempt, binding }) => ({
         step: attempt.position,
-        state: exportState(attempt.state),
+        state: exportState(effectiveRouteAttemptState(attempt.state, attempt.dispatchState)),
         observedAt: attempt.updatedAt,
         business: run.businesses?.[attempt.position - 1]?.name ?? `Business step ${attempt.position}`,
         providerOrigin: new URL(binding!.endpointUrl).origin,

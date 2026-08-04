@@ -11,9 +11,9 @@ import type { FollowUpIntent } from '../answer-thread.schema'
  * - `refine_search` → `tool_search`: the only route that exposes registry
  *   tools to the agent. Misspelling recovery happens here, when the model
  *   chooses better `registry.search` arguments.
- * - `filter_known` / `compare_known` → frozen-evidence routes: the agent
- *   writes prose over frozen prior providers with `disableTools`, and the gate
- *   uses the frozen `allowedSlugs`. No new catalog search.
+ * - `filter_known` / `compare_known` → frozen-evidence routes: deterministic
+ *   compact prose over frozen prior providers, gated by the frozen
+ *   `allowedSlugs`. No model call or catalog search.
  * - `inquiry_handoff` → deterministic provider-resolution route over frozen
  *   prior providers. It opens the existing inquiry path; it does not submit.
  * - `explain_boundary` / `unsupported` → boundary-prose routes: deterministic

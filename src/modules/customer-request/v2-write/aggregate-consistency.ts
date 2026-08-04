@@ -113,29 +113,31 @@ export function aggregateIsInternallyConsistent(
 
 
 function planAuthorityIsConsistent(aggregate: CustomerRequestV2Aggregate): boolean {
-  const ordinals = new Map([...aggregate.plan.actions]
-    .sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
-    .map((action, ordinal) => [action.actionId, ordinal]))
   const expectedActions = aggregate.plan.actions.map((action) => {
-    const ordinal = ordinals.get(action.actionId)
-    if (ordinal === undefined) return undefined
-    const actionMaterial = {
-      requestId: aggregate.snapshot.requestId,
-      requestRevision: aggregate.snapshot.revision,
-      ordinal,
-      contractRef: action.contractRef,
-      selectionKey: action.selectionKey,
-      semanticDigest: action.semanticDigest,
-    }
+    const actionIdIsValid = aggregate.plan.actions.some((_, ordinal) => {
+      const actionMaterial = {
+        requestId: aggregate.snapshot.requestId,
+        requestRevision: aggregate.snapshot.revision,
+        ordinal,
+        operationRef: action.operationRef,
+        contractRef: action.contractRef,
+        selectionKey: action.selectionKey,
+        semanticDigest: action.semanticDigest,
+      }
+      return action.actionId === `action:${canonicalDigest(actionMaterial)}`
+    })
+    if (!actionIdIsValid) return undefined
     const inputs = aggregate.snapshot.facts.filter((fact) => fact.selectionKey === action.selectionKey
       && sameCapabilityContractRef(fact.contractRef, action.contractRef))
     return {
-      actionId: `action:${canonicalDigest(actionMaterial)}`,
+      actionId: action.actionId,
+      operationRef: action.operationRef,
       contractRef: action.contractRef,
       selectionKey: action.selectionKey,
       semanticDigest: action.semanticDigest,
       dependsOn: action.dependsOn,
       inputs,
+      mappingRefs: action.mappingRefs,
       inputMappings: action.inputMappings,
     }
   })

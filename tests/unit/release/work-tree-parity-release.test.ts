@@ -39,7 +39,7 @@ describe('hosted T51 invocation contract', () => {
   it('runs only from the credential-gated hosted job and uploads sanitized artifacts', async () => {
     const packageJson = JSON.parse(await readFile(join(process.cwd(), 'package.json'), 'utf8')) as { scripts?: Record<string, string> }
     const workflow = await readFile(join(process.cwd(), '.github/workflows/kernel-release-gate.yml'), 'utf8')
-    expect(packageJson.scripts?.['smoke:work-tree:production:hosted']).toBe('npx playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/work-tree-parity-release-proof.spec.ts --project=deploy-smoke')
+    expect(packageJson.scripts?.['smoke:work-tree:production:hosted']).toBe('node tools/dev/run-with-cleanup.mjs npx playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/work-tree-parity-release-proof.spec.ts --project=deploy-smoke')
     expect(workflow).toContain('npm run smoke:work-tree:production:hosted')
     expect(workflow).toContain('output/release/work-tree-parity/work-tree-parity-evidence.json')
     expect(workflow).toContain('output/release/playwright-deploy-smoke.json')

@@ -217,7 +217,9 @@ export async function completeHostedJourney(input: Readonly<{
     }
     if (resumed.state === 'completed') break
     if (resumed.state !== 'in_progress') {
-      throw new Error(`hosted_journey_completion_stopped:${resumed.state}`)
+      throw new Error(
+        `hosted_journey_completion_stopped:${resumed.state}:requestRef=${resumed.requestRef}:action=${resumed.action?.state ?? 'none'}`,
+      )
     }
     await (input.input.sleep ?? defaultSleep)(1_000)
   }

@@ -47,6 +47,7 @@ function aggregate(): CustomerRequestV2Aggregate {
     interpreterId: 'interpreter:development',
     bindings: [],
     models: [],
+    mappings: [],
     now: NOW,
   })
   if (compiled.kind !== 'compiled') throw new Error('development aggregate did not compile')
@@ -391,6 +392,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
         models: [],
         descriptors: [],
         bindings: [],
+        mappings: [],
         registrySnapshotDigest: initial.evaluation.registrySnapshotDigest,
       }),
       commitAggregate: async (candidate) => commitAggregate(candidate, writePorts),

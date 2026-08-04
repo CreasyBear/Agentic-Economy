@@ -148,6 +148,16 @@ describe('AI SDK v7 multi-step usage', () => {
   })
 })
 
+describe('runAnswerToolUseAgent — credential boundary', () => {
+  it('fails closed without a provider credential and never fabricates an answer', async () => {
+    delete process.env.OPENROUTER_API_KEY
+
+    await expect(runAnswerToolUseAgent({ query: 'emergency plumber parramatta' }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+    expect(aiSdkTestState.generateTextCalls).toHaveLength(0)
+  })
+})
+
 describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   it('feeds actual tool result JSON back to the model before final prose', async () => {
     const server = await startOpenRouterContractServer([

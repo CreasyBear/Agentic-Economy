@@ -89,7 +89,7 @@ export async function getCurrentAggregate(
   return { kind: 'not_found' as const }
 }
 
-function hasLegacyEmbeddedRoute(value: unknown): boolean {
+export function hasLegacyEmbeddedRoute(value: unknown): boolean {
   if (typeof value !== 'object' || value === null || !('plan' in value)) return false
   const plan = value.plan
   if (typeof plan !== 'object' || plan === null || !('routes' in plan)) return false

@@ -1,3 +1,5 @@
+import { rehydratePointedSchemaIdentity } from '@/modules/capability-contract/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { describe, expect, it } from 'vitest'
 
 import type { CustomerRequestRoutePlan } from '@/modules/customer-request/compiler'
@@ -12,6 +14,7 @@ import {
 } from '@/modules/customer-request/route-plan-customer-projection'
 import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { customerRequestViewSchema } from '@/modules/customer-request/agent-contract'
+import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
 
 describe('RoutePlan customer projection', () => {
   it('gives every repeat-permission refusal a specific safe customer recovery', () => {
@@ -788,22 +791,40 @@ function route(input: Readonly<{
   routePlanId?: string
 }>): CustomerRequestRoutePlan {
   const routePlanId = input.routePlanId ?? 'route:one'
+  const contractRef = {
+    capabilityId: 'generic.result.prepare',
+    version: 1,
+    contractDigest: 'digest:contract',
+  }
+  const lineage = createTestOperationLineage(contractRef, `route-projection:${routePlanId}`, {
+    operationId: 'operation:one',
+    businessId: 'business:one',
+    offeringId: 'offering:one',
+    bindingId: 'binding:one',
+    publicationRef: 'publication:one',
+    offeringRegistrationHash: 'digest:offering',
+    bindingRegistrationHash: 'digest:binding',
+  })
+  const schemaIdentity = rehydratePointedSchemaIdentity(
+    canonicalDigest({ kind: 'route-projection-schema', routePlanId }),
+  )
   return {
     routePlanId,
     requestId: 'request:one',
     requestRevision: 3,
     registrySnapshotDigest: 'digest:registry',
     steps: [{
+      ...lineage,
       actionId: 'action:one',
       candidateRef: 'candidate:one',
-      businessId: 'business:one',
-      offeringId: 'offering:one',
-      bindingId: 'binding:one',
-      contractRef: { capabilityId: 'generic.result.prepare', version: 1, contractDigest: 'digest:contract' },
-      offeringRegistrationHash: 'digest:offering',
-      bindingRegistrationHash: 'digest:binding',
-      publicationRef: 'publication:one',
-      publicationRevision: 1,
+      businessId: lineage.admittedOperation.businessId,
+      offeringId: lineage.admittedOperation.offeringId,
+      bindingId: lineage.admittedOperation.bindingId,
+      contractRef,
+      offeringRegistrationHash: lineage.admittedOperation.offeringRegistrationHash,
+      bindingRegistrationHash: lineage.admittedOperation.bindingRegistrationHash,
+      publicationRef: lineage.admittedOperation.publicationRef,
+      publicationRevision: lineage.admittedOperation.publicationRevision,
       resolvedInputs: [],
       deferredInputs: [],
       price: { kind: 'fixed', currency: 'AUD', amountMinor: input.amountMinor },
@@ -817,7 +838,7 @@ function route(input: Readonly<{
       evidence: [{
         evidenceId: 'result_reference', outputPointer: '/resultReference', purpose: 'completion',
         annotationId: 'result_reference', label: 'Result reference', role: 'completion_evidence',
-        guaranteed: true, schemaIdentity: 'schema:result-reference' as never,
+        guaranteed: true, schemaIdentity,
       }],
       cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       commercialRelationship: {

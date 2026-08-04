@@ -103,6 +103,7 @@ const graph = {
   models: [model],
   descriptors: [],
   bindings: [],
+  mappings: [],
   registrySnapshotDigest: 'registry:1',
 }
 

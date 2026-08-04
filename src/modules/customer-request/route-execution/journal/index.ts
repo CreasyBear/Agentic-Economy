@@ -8,9 +8,11 @@ export {
 } from './integrity'
 
 export {
+  effectiveRouteAttemptState,
   exportState,
   type ExportedStepState,
   type RouteAttemptState,
+  type RouteDispatchState,
 } from './export-state'
 
 export {

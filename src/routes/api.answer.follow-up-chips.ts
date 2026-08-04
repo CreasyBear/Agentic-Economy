@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { jsonError } from '@/lib/server/json-error'
 import { response as jsonResponse } from '@/lib/server/no-store-response'
-import { assertHttpAdmission, rateLimitedResponse, requestAdmissionKey } from '@/lib/server/rate-limit'
+import { assertHttpAdmission, rateLimitedResponse, requestAdmissionKey, type RateLimitAdmission } from '@/lib/server/rate-limit'
 
 import {
   AnswerSourceSchema,
@@ -33,8 +33,15 @@ export const Route = createFileRoute('/api/answer/follow-up-chips')({
 })
 
 const MAX_FOLLOW_UP_CHIPS_BODY_BYTES = 64 * 1024
+const admitFollowUpChips: RateLimitAdmission = ({ request, key }) =>
+  assertHttpAdmission(request, 'answer-follow-up-chips', key === undefined ? {} : { key })
 
-export async function handleFollowUpChipsRequest(request: Request): Promise<Response> {
+type FollowUpChipsHandlerOptions = Readonly<{ admit?: RateLimitAdmission }>
+
+export async function handleFollowUpChipsRequest(
+  request: Request,
+  options: FollowUpChipsHandlerOptions = {},
+): Promise<Response> {
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
   const boundedBody = await readBoundedRequestJson(request, MAX_FOLLOW_UP_CHIPS_BODY_BYTES)
@@ -47,7 +54,10 @@ export async function handleFollowUpChipsRequest(request: Request): Promise<Resp
     return jsonError('invalid_body', 400)
   }
 
-  const admission = await assertHttpAdmission(request, 'answer-follow-up-chips', { key: requestAdmissionKey(request) })
+  const admission = await (options.admit ?? admitFollowUpChips)({
+    request,
+    key: requestAdmissionKey(request),
+  })
   if (!admission.ok) {
     return rateLimitedResponse(admission.retryAfter)
   }

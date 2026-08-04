@@ -3,7 +3,9 @@ import {
   isBoundedJsonValue,
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
+import { isPublicOperationRef } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import type { ProposedRequestAction, RequestFact, RequestFactSource } from '@/modules/customer-request/evaluation'
 import type { ResolvedCapabilitySelection } from '@/modules/customer-request/semantic-interpreter'
 
@@ -96,23 +98,38 @@ export function rebindStoredFacts(
 }
 
 export function rebindPlanSelections(
-  actions: readonly Pick<ProposedRequestAction, 'contractRef' | 'selectionKey' | 'semanticDigest'>[],
+  actions: readonly unknown[],
   facts: readonly RequestFact[],
   models: readonly CapabilityDecisionModel[],
 ): readonly ResolvedCapabilitySelection[] | undefined {
-  const selections = actions.flatMap((action) => {
+  const selections: ResolvedCapabilitySelection[] = []
+  for (const value of actions) {
+    if (!isRecord(value)
+      || !isPublicOperationRef(value.operationRef)
+      || !isRecord(value.contractRef)
+      || typeof value.contractRef.capabilityId !== 'string'
+      || !Number.isSafeInteger(value.contractRef.version)
+      || typeof value.contractRef.contractDigest !== 'string'
+      || typeof value.selectionKey !== 'string'
+      || typeof value.semanticDigest !== 'string') return undefined
+    const contractRef = {
+      capabilityId: value.contractRef.capabilityId,
+      version: Number(value.contractRef.version),
+      contractDigest: value.contractRef.contractDigest,
+    }
     const model = models.find((candidate) => (
-      sameCapabilityContractRef(candidate.contractRef, action.contractRef)
-      && candidate.selectionKey === action.selectionKey
-      && candidate.semanticDigest === action.semanticDigest
+      sameCapabilityContractRef(candidate.contractRef, contractRef)
+      && candidate.selectionKey === value.selectionKey
+      && candidate.semanticDigest === value.semanticDigest
     ))
-    if (model === undefined) return []
-    return [{
+    if (model === undefined) return undefined
+    selections.push({
+      operationRef: value.operationRef,
       selectionKey: model.selectionKey,
       contractRef: model.contractRef,
       facts: facts.filter((fact) => fact.selectionKey === model.selectionKey
         && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
-    }]
-  })
-  return selections.length === actions.length ? selections : undefined
+    })
+  }
+  return selections
 }

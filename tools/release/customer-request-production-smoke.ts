@@ -16,7 +16,7 @@ import {
 } from '../../src/modules/customer-request/hosted-agent-journey'
 
 import { verifyHostedCustomerRequestRelease } from './verify-customer-request-release'
-import { resolveVercelProtectionBypassSecret } from './work-tree-parity-release'
+import { resolveVercelProtectionBypassSecret } from './vercel-protection-bypass'
 
 const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
 

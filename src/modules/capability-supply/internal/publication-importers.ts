@@ -78,6 +78,7 @@ export type CapabilityPublicationImport =
       kind: 'openapi_http'
       document: unknown
       operation: Readonly<{ path: string; method: 'get' | 'post' }>
+      fixedQuery?: readonly Readonly<{ parameter: string; value: string }>[]
       contract: CapabilityContractMetadata
       commercial: CapabilityImporterCommercialInput
       evidenceRefs: readonly string[]
@@ -149,6 +150,12 @@ export function importOpenApiHttpCapability(
   const operation = isRecord(pathItem) ? pathItem[input.operation.method] : undefined
   if (!isRecord(operation)) return { kind: 'refused', reason: 'operation_not_found' }
   const query = input.operation.method === 'get' ? openApiQueryMapping(operation) : undefined
+  const fixedQuery = input.operation.method === 'get'
+    ? fixedQueryMapping(input.fixedQuery, query?.mapping)
+    : input.fixedQuery === undefined ? [] : undefined
+  if (input.operation.method === 'get' && fixedQuery === undefined) {
+    return { kind: 'refused', reason: 'selector_invalid' }
+  }
   const inputSchema = input.operation.method === 'get'
     ? query?.schema
     : jsonContentSchema(isRecord(operation.requestBody) ? operation.requestBody.content : undefined)
@@ -166,7 +173,7 @@ export function importOpenApiHttpCapability(
   if (containsUnsupportedReference(inputSchema) || containsUnsupportedReference(outputSchema)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
-  const endpoint = new URL(input.operation.path, ensureTrailingSlash(baseUrl)).toString()
+  const endpoint = new URL(input.operation.path.replace(/^\/+/, ''), ensureTrailingSlash(baseUrl)).toString()
   return normalizedFromSchemas({
     source: {
       kind: 'openapi_http', descriptorDigest: bounded.digest,
@@ -177,7 +184,12 @@ export function importOpenApiHttpCapability(
     adapter: {
       adapterId: 'http-json:v1',
       config: input.operation.method === 'get'
-        ? { method: 'GET', query: query!.mapping, requestTimeoutMs: input.commercial.requestTimeoutMs }
+        ? {
+          method: 'GET',
+          query: query!.mapping,
+          ...(fixedQuery === undefined || fixedQuery.length === 0 ? {} : { fixedQuery }),
+          requestTimeoutMs: input.commercial.requestTimeoutMs,
+        }
         : { method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs },
     },
   })
@@ -315,9 +327,17 @@ function openApiQueryMapping(operation: Readonly<Record<string, unknown>>): Read
   for (const parameter of operation.parameters) {
     if (!isRecord(parameter) || parameter.in !== 'query' || typeof parameter.name !== 'string'
       || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(parameter.name) || !isRecord(parameter.schema)) return undefined
-    properties[parameter.name] = parameter.schema as Readonly<Record<string, JsonValue>>
-    mapping.push({ inputPointer: `/${parameter.name.replace(/~/g, '~0').replace(/\//g, '~1')}`, parameter: parameter.name })
-    if (parameter.required === true) required.push(parameter.name)
+    const inputName = parameter['x-ae-input-name'] === undefined
+      ? parameter.name
+      : parameter['x-ae-input-name']
+    if (typeof inputName !== 'string' || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(inputName)
+      || Object.hasOwn(properties, inputName)) return undefined
+    properties[inputName] = parameter.schema as Readonly<Record<string, JsonValue>>
+    mapping.push({
+      inputPointer: `/${inputName.replace(/~/g, '~0').replace(/\//g, '~1')}`,
+      parameter: parameter.name,
+    })
+    if (parameter.required === true) required.push(inputName)
   }
   return {
     schema: {
@@ -326,6 +346,27 @@ function openApiQueryMapping(operation: Readonly<Record<string, unknown>>): Read
     },
     mapping,
   }
+}
+
+function fixedQueryMapping(
+  value: readonly Readonly<{ parameter: string; value: string }>[] | undefined,
+  dynamic: readonly Readonly<{ parameter: string }> [] | undefined,
+): readonly Readonly<{ parameter: string; value: string }>[] | undefined {
+  if (value === undefined) return []
+  if (value.length > 64) return undefined
+  const dynamicNames = new Set((dynamic ?? []).map(({ parameter }) => parameter))
+  const seen = new Set<string>()
+  const result: Array<{ parameter: string; value: string }> = []
+  for (const item of value) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(item.parameter)
+      || typeof item.value !== 'string' || item.value.length === 0 || item.value.length > 200
+      || seen.has(item.parameter) || dynamicNames.has(item.parameter)) {
+      return undefined
+    }
+    seen.add(item.parameter)
+    result.push({ parameter: item.parameter, value: item.value })
+  }
+  return result
 }
 
 function sourceQueryMapping(value: unknown): readonly Readonly<{

@@ -245,7 +245,7 @@ describe('compare-resume resumeCustomerRequest', () => {
       requestRef: 'req:legacy',
       revision: 7,
       state: 'needs_attention',
-      nextAction: 'revise_request',
+      nextAction: 'none',
     })
     expect(getSubmissionShell).not.toHaveBeenCalled()
     expect(getCurrentRouteRun).not.toHaveBeenCalled()

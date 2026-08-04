@@ -29,12 +29,16 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
       localStorage.setItem(key, JSON.stringify({ requestRef }))
     }, { key: 'ae.customer-request.active:v1', requestRef })
   }
-  await page.goto(new URL('/engine', baseUrl).href, { waitUntil: 'networkidle' })
+  await page.goto(new URL('/', baseUrl).href, { waitUntil: 'networkidle' })
+  if (existingRequestRef !== undefined && existingRequestRef.length > 0) {
+    await emitHumanObservation(page, existingRequestRef)
+    return
+  }
 
   if (existingRequestRef === undefined || existingRequestRef.length === 0) {
-    await expect(page.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeVisible()
-    await page.getByLabel('What are you looking for?').fill(requestText)
-    await page.getByRole('button', { name: 'Find options' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: '“Where do we even start?”' })).toBeVisible()
+    await page.getByRole('searchbox', { name: 'What do you need done?' }).fill(requestText)
+    await page.getByRole('button', { name: 'Find my options' }).click({ noWaitAfter: true })
     await reachComparableChoice(page)
 
     for (const business of expectedBusinesses) {

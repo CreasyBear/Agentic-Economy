@@ -1144,6 +1144,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       interpreterId: 'mock:interpreter',
       bindings: [],
       models: [],
+      mappings: [],
       now: clock,
     })
     if (compiled.kind !== 'compiled') throw new Error('request not compiled')

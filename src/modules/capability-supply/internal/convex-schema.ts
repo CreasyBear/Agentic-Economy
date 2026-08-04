@@ -35,18 +35,90 @@ const offeringOrigin = v.union(
   }),
   v.object({ kind: v.literal('standalone') }),
 )
+const registeredOperationMappingBaseFields = {
+  authority: v.literal('registered_contract_semantics'),
+  sourceContractRef: v.object(contractRefFields),
+  targetContractRef: v.object(contractRefFields),
+  sourceSchemaIdentity: v.string(),
+  targetSchemaIdentity: v.string(),
+}
+const registeredOperationMappingMaterialValue = v.union(
+  v.object({
+    ...registeredOperationMappingBaseFields,
+    kind: v.union(v.literal('identity'), v.literal('field')),
+    sourceOutputPointer: v.string(),
+    targetInputPointer: v.string(),
+  }),
+  v.object({
+    ...registeredOperationMappingBaseFields,
+    kind: v.literal('array_project'),
+    sourceArrayPointer: v.string(),
+    sourceItemPointer: v.string(),
+    targetArrayPointer: v.string(),
+    minItems: v.number(),
+    maxItems: v.number(),
+  }),
+  v.object({
+    ...registeredOperationMappingBaseFields,
+    kind: v.literal('registered_transform'),
+    transformRef: v.string(),
+    transformVersion: v.number(),
+    sourceOutputPointer: v.string(),
+    targetInputPointer: v.string(),
+    inputCardinalityMax: v.number(),
+    outputCardinalityMax: v.number(),
+  }),
+)
+
+export const registeredOperationMappingValue = v.union(
+  v.object({
+    ...registeredOperationMappingBaseFields,
+    mappingRef: v.string(),
+    kind: v.union(v.literal('identity'), v.literal('field')),
+    sourceOutputPointer: v.string(),
+    targetInputPointer: v.string(),
+  }),
+  v.object({
+    ...registeredOperationMappingBaseFields,
+    mappingRef: v.string(),
+    kind: v.literal('array_project'),
+    sourceArrayPointer: v.string(),
+    sourceItemPointer: v.string(),
+    targetArrayPointer: v.string(),
+    minItems: v.number(),
+    maxItems: v.number(),
+  }),
+  v.object({
+    ...registeredOperationMappingBaseFields,
+    mappingRef: v.string(),
+    kind: v.literal('registered_transform'),
+    transformRef: v.string(),
+    transformVersion: v.number(),
+    sourceOutputPointer: v.string(),
+    targetInputPointer: v.string(),
+    inputCardinalityMax: v.number(),
+    outputCardinalityMax: v.number(),
+  }),
+)
+
+export { registeredOperationMappingMaterialValue }
 
 export const capabilitySupplyTables = {
   capabilityPublications: defineTable({
     publicationRef: v.string(),
+    operationRef: v.string(),
     revision: v.number(),
     businessId: v.id('businesses'),
     networkId: v.string(),
+    ...contractRefFields,
     sourceKind: v.union(
       v.literal('ae_envelope'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402'),
     ),
+    sourceRevision: v.string(),
     sourceDigest: v.string(),
-    ...contractRefFields,
+    publisherRef: v.string(),
+    authorityMode: v.union(v.literal('provider_owned'), v.literal('ae_curated_external')),
+    provenanceDigest: v.string(),
     offeringId: v.string(),
     bindingId: v.string(),
     disposition: v.union(
@@ -66,6 +138,7 @@ export const capabilitySupplyTables = {
     .index('by_publicationRef_and_revision', ['publicationRef', 'revision'])
     .index('by_networkId_and_disposition', ['networkId', 'disposition'])
     .index('by_businessId_and_disposition', ['businessId', 'disposition'])
+    .index('by_disposition_and_readinessValidUntil', ['disposition', 'readinessValidUntil'])
     .index('by_bindingId_and_disposition', ['bindingId', 'disposition']),
 
   capabilityOfferings: defineTable({
@@ -127,6 +200,17 @@ export const capabilitySupplyTables = {
     .index('by_bindingId', ['bindingId'])
     .index('by_offeringId_and_admission_and_conformance', ['offeringId', 'admission', 'conformance'])
     .index('by_networkId_admission_conformance', ['networkId', 'admission', 'conformance']),
+  registeredOperationMappings: defineTable({
+    networkId: v.string(),
+    mappingRef: v.string(),
+    material: registeredOperationMappingMaterialValue,
+    publisherRef: v.string(),
+    authorityMode: v.union(v.literal('provider_owned'), v.literal('ae_curated_external')),
+    registrationEvidenceRefs: v.array(v.string()),
+    registeredAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_networkId_and_mappingRef', ['networkId', 'mappingRef']),
   capabilityCallEvents: defineTable({
     eventRef: v.string(),
     businessId: v.id('businesses'),

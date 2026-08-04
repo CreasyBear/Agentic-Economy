@@ -57,14 +57,18 @@ describe('POST /api/answer/turn gate failure', () => {
 
       expect(response.headers.get('content-type')).toContain('text/event-stream')
       const frames = await readAnswerTurnStream(response)
+      const eventTypes = frames.map((frame) => frame.event.type)
+      expect(eventTypes).not.toContain('complete')
       const lastEvent = frames.at(-1)?.event
       expect(lastEvent?.type).toBe('error')
 
       expect(turns).toHaveLength(1)
-      const turn = turns[0] as { status: string; proseJson: string }
+      const turn = turns[0] as { status: string; errorCopyId?: string; proseJson: string }
       expect(turn.status).toBe('error')
+      expect(turn.errorCopyId).toEqual(expect.any(String))
+      expect(JSON.parse(turn.proseJson)).toEqual({ oneLine: '', summary: '', nextStep: '' })
       // No hallucinated overclaim prose is persisted.
-      expect(turn.proseJson).not.toContain('Book now')
+      expect(turn.proseJson).not.toContain('Ignore previous instructions')
     } finally {
       restoreOpenRouter()
       await server.close()

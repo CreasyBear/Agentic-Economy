@@ -358,6 +358,7 @@ function activityRecordSummary(state: CustomerRequestEvidenceExport['state']): s
 }
 function activityStepState(state: CustomerRequestEvidenceExport['steps'][number]['state']): string {
   if (state === 'outcome_unknown') return 'still being confirmed'
+  if (state === 'leased') return 'working through the active transport handoff'
   if (state === 'awaiting_result') return 'waiting for a result'
   if (state === 'ready_to_contact') return 'preparing business contact'
   if (state === 'contacting') return 'contacting the business'

@@ -10,6 +10,7 @@ import {
   cancelReplayKind,
   cancelRunHeadIntegrityValid,
   cancelRunNotFound,
+  effectiveRouteAttemptState,
   exportState,
   projectCustomerEvidenceExport,
   routeAttemptIntegrityValid,
@@ -192,7 +193,13 @@ describe('exportState', () => {
     expect(exportState('outcome_unknown')).toBe('outcome_unknown')
     expect(exportState('cancelled')).toBe('cancelled')
   })
+  it('treats a leased dispatch with a queued historical attempt as leased', () => {
+    expect(effectiveRouteAttemptState('queued', 'leased')).toBe('leased')
+    expect(effectiveRouteAttemptState('leased', 'leased')).toBe('leased')
+    expect(effectiveRouteAttemptState('queued', 'pending')).toBe('queued')
+  })
 })
+
 
 describe('projectCustomerEvidenceExport', () => {
   const input = { destination: 'Perth' }
@@ -295,6 +302,24 @@ describe('projectCustomerEvidenceExport', () => {
       }],
       problems: [],
     })
+  })
+  it('projects a leased dispatch ahead of a queued historical attempt', () => {
+    const exported = projectCustomerEvidenceExport({
+      run: { state: 'running', totalSteps: 1 },
+      attempts: [validAttempt({
+        state: 'queued',
+        dispatchState: 'leased',
+        evidence: [],
+      })],
+      bindings: [binding],
+      problems: [],
+      updatesByProblem: [],
+      businessReportsByProblem: [],
+      principalId: 'principal:1',
+      generatedAt: 9_000,
+    })
+
+    expect(exported.steps[0]?.state).toBe('leased')
   })
 
   it('rejects attempt, binding, and problem integrity failures', () => {

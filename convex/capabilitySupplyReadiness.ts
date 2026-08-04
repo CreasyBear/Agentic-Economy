@@ -30,7 +30,7 @@ type ProbeRecordResult =
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
 type ProbeResult = ProbeRecordResult | { kind: 'unavailable' }
 type ProbeArgs = { publicationRef: string; expectedRevision: number }
-type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; targetDigest: string }
+type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; probeQuery: Array<{ parameter: string; value: string }>; probeMethod: 'GET' | 'HEAD'; targetDigest: string }
 
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
@@ -97,8 +97,12 @@ async function sendGuarded(request: Request): Promise<Response> {
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   try {
     const response = await guardedFetch(request.url, {
-      method: request.method, headers: Object.fromEntries(request.headers.entries()),
-      body: await request.text(), redirect: 'manual', signal: request.signal, dispatcher,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.text() }),
+      redirect: 'manual',
+      signal: request.signal,
+      dispatcher,
     })
     const body = await readBoundedResponse(response, 64 * 1024)
     return new Response(body.ok ? body.bytes : null, {

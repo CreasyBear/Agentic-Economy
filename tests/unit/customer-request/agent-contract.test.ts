@@ -7,8 +7,14 @@ import {
   customerRequestViewSchema,
   workTreeScopeAllowedForMode,
 } from '@/modules/customer-request/agent-contract'
-import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
-import { projectCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
+import {
+  projectCustomerRequestAgentNavigation,
+} from '@/modules/customer-request/agent-navigation'
+import {
+  projectCustomerCriteria,
+  projectLegacyResubmitRequired,
+  projectRequestEvaluation,
+} from '@/modules/customer-request/customer-projection'
 
 describe('Customer Request agent contract', () => {
   it('allows inspect-only agents to inspect WorkTree repeat uses without granting repeat writes', () => {
@@ -118,6 +124,25 @@ describe('Customer Request agent contract', () => {
         expectedRevision: 1,
         message: '<natural-language change>',
       },
+    }])
+  })
+
+  it('offers only a readable continuation for legacy resubmit-required Requests', () => {
+    const view = projectLegacyResubmitRequired({
+      requestRef: 'request:legacy',
+      revision: 7,
+    })
+
+    expect(view).toMatchObject({
+      state: 'needs_attention',
+      nextAction: 'none',
+      summary: 'This saved Request uses an older route format. Start a new Request to continue.',
+    })
+    expect(projectCustomerRequestAgentNavigation(view).actions).toEqual([{
+      relation: 'inspect_progress',
+      method: 'GET',
+      href: '/api/v1/requests/request%3Alegacy',
+      summary: 'Read this saved Request. Start a new Request to continue.',
     }])
   })
 

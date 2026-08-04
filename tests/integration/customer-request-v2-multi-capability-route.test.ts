@@ -14,11 +14,19 @@ import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { convexTestWithWorkers, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
+import { listRouteableCapabilitySupply } from '../../convex/capabilitySupply'
+import { registeredEvaluationBindingsFromRouteableSupply } from '../../convex/customerRequestEvaluationBindings'
 import { objectSchema } from '../fixtures/capability-contract-v2'
-import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
-import type {
-  CapabilityPublicationBindingDraft,
-  CapabilityPublicationOfferingDraft,
+import {
+  defineCapabilityContract,
+  openCapabilityDecisionModel,
+  type CapabilityDecisionModel,
+} from '@/modules/capability-contract/public'
+import {
+  createRegisteredOperationMappingRef,
+  type CapabilityPublicationBindingDraft,
+  type CapabilityPublicationOfferingDraft,
+  type RegisteredOperationMapping,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
@@ -76,6 +84,30 @@ const downstreamDocument = {
   lifecycle: { idempotency: 'required' as const, recovery: 'reconcile_required' as const },
 }
 
+function routeServiceReferenceMapping(
+  source: CapabilityDecisionModel,
+  target: CapabilityDecisionModel,
+): RegisteredOperationMapping {
+  const output = source.evidence.find((candidate) => target.inputs.some((input) => (
+    input.schemaIdentity === candidate.schemaIdentity
+  )))
+  const input = output === undefined
+    ? undefined
+    : target.inputs.find((candidate) => candidate.schemaIdentity === output.schemaIdentity)
+  if (output === undefined || input === undefined) throw new Error('route mapping semantics missing')
+  const material = {
+    kind: 'field' as const,
+    authority: 'registered_contract_semantics' as const,
+    sourceContractRef: source.contractRef,
+    targetContractRef: target.contractRef,
+    sourceSchemaIdentity: output.schemaIdentity,
+    targetSchemaIdentity: input.schemaIdentity,
+    sourceOutputPointer: output.outputPointer,
+    targetInputPointer: input.inputPointer,
+  }
+  return { ...material, mappingRef: createRegisteredOperationMappingRef(material) }
+}
+
 const validationDocument = {
   contractFormat: 'ae.capability-contract:v2' as const,
   capabilityId: 'route.reference.validate', version: 1,
@@ -130,7 +162,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const admin = await ownerAdmin(backend, 'user_route_admin')
     const first = await publishAndActivate(backend, admin, 'resolver', upstreamDocument, 300)
     const second = await publishAndActivate(backend, admin, 'quoter', downstreamDocument, 700)
-    const supply = await backend.query(internal.capabilitySupply.listRouteable, { networkId: 'ae:public', limit: 16 })
+    await observeReady(backend, first, 'resolver-stable')
+    await observeReady(backend, second, 'quoter-stable')
+    const supply = await backend.run(async (ctx) => (
+      await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    ))
     if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
     const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
     const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
@@ -142,24 +178,26 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       value: 'Find the referenced service and prepare its quote',
       source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
     }
+    const upstreamPublication = supply.supplies.find(({ binding }) => (
+      binding.capabilityId === upstreamModel.contractRef.capabilityId
+    ))?.publication
+    const downstreamPublication = supply.supplies.find(({ binding }) => (
+      binding.capabilityId === downstreamModel.contractRef.capabilityId
+    ))?.publication
+    if (upstreamPublication === undefined || downstreamPublication === undefined) {
+      throw new Error('route publication lineage missing')
+    }
     const result = compileCustomerRequest({
       requestId: 'request:multi-capability:1', expectedRevision: 0, expectedRouteGeneration: 0,
       principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
       intent: 'Find the referenced service and prepare its quote', networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [
-        { selectionKey: upstreamModel.selectionKey, contractRef: upstreamModel.contractRef, facts: [fact] },
-        { selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
+        { operationRef: upstreamPublication.operationRef, selectionKey: upstreamModel.selectionKey, contractRef: upstreamModel.contractRef, facts: [fact] },
+        { operationRef: downstreamPublication.operationRef, selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
       ] },
       interpreterId: 'interpreter:production-route-test',
-      bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
-        businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
-        contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
-        offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
-        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
-        commercialRelationship: offering.presentation.commercialRelationship,
-        cancellation: binding.cancellation,
-      }]),
+      mappings: [routeServiceReferenceMapping(upstreamModel, downstreamModel)],
+      bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
       models: [upstreamModel, downstreamModel], now: Date.now(),
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
@@ -237,19 +275,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       intent: 'Find the referenced service and prepare its quote', networkId: 'ae:public',
       priorFacts: result.aggregate.snapshot.facts,
       proposal: { kind: 'capability_candidates', selections: [
-        { selectionKey: upstreamModel.selectionKey, contractRef: upstreamModel.contractRef, facts: [] },
-        { selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
+        { operationRef: upstreamPublication.operationRef, selectionKey: upstreamModel.selectionKey, contractRef: upstreamModel.contractRef, facts: [] },
+        { operationRef: downstreamPublication.operationRef, selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
       ] },
       interpreterId: 'interpreter:production-route-test',
-      bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
-        businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
-        contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
-        offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
-        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
-        commercialRelationship: offering.presentation.commercialRelationship,
-        cancellation: binding.cancellation,
-      }]),
+      mappings: [routeServiceReferenceMapping(upstreamModel, downstreamModel)],
+      bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
       models: [upstreamModel, downstreamModel], now: Date.now() + 1,
     })
     if (stale.kind !== 'compiled' || stale.routeGeneration === undefined) throw new Error('stale generation setup failed')
@@ -281,15 +312,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         prompt: 'What result should the businesses help you produce?',
       },
       interpreterId: 'interpreter:production-route-test',
-      bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
-        businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
-        contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
-        offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
-        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
-        commercialRelationship: offering.presentation.commercialRelationship,
-        cancellation: binding.cancellation,
-      }]),
+      mappings: [routeServiceReferenceMapping(upstreamModel, downstreamModel)],
+      bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
       models: [upstreamModel, downstreamModel], now: Date.now() + 2,
     })
     if (needsInformation.kind !== 'compiled') throw new Error('needs-information generation setup failed')
@@ -878,7 +902,6 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(current.outbox).not.toHaveProperty('leaseExpiresAt')
 
     await backend.run(async (ctx) => {
-      await ctx.db.patch(current.attempt._id, { state: 'leased' })
       await ctx.db.patch(current.outbox._id, {
         state: 'leased',
         leaseOwner: 'historical-worker',
@@ -886,11 +909,37 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       })
     })
 
+    await expect(backend.query(internal.customerRequestRouteExecution.getCurrent, {
+      requestId: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'found',
+      run: { currentState: 'leased' },
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request',
+      progress: { current: { state: 'leased' } },
+      activity: {
+        cancellation: {
+          state: 'not_available',
+          reason: 'business_step_leased',
+        },
+      },
+    })
+
+
+    await expect(admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'evidence',
+      steps: [{ step: 1, state: 'leased' }],
+    })
     const legacy = await backend.run(async (ctx) => ({
       attempt: await ctx.db.get(current.attempt._id),
       outbox: await ctx.db.get(current.outbox._id),
     }))
-    expect(legacy.attempt).toEqual(expect.objectContaining({ state: 'leased' }))
+    expect(legacy.attempt).toEqual(expect.objectContaining({ state: 'queued' }))
     expect(legacy.outbox).toEqual(expect.objectContaining({
       state: 'leased',
       leaseOwner: 'historical-worker',
@@ -1092,18 +1141,30 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const quoterModel = openCapabilityDecisionModel(defineCapabilityContract(
       SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
     ))
+    const mappingAdmin = await ownerAdmin(backend, 'user_source_route_mapping_admin')
+    await expect(mappingAdmin.mutation(api.capabilitySupply.registerMapping, {
+      networkId: 'ae:public',
+      mapping: routeServiceReferenceMapping(resolverModel, quoterModel),
+      authorityMode: 'ae_curated_external',
+      registrationEvidenceRefs: ['test:source-owned-route-mapping'],
+    })).resolves.toMatchObject({ kind: 'registered' })
+    const resolverOperation = await publishedOperationForModel(backend, resolverModel)
+    const quoterOperation = await publishedOperationForModel(backend, quoterModel)
     const requestInput = resolverModel.inputs.find((input) => input.inputPointer === '/request')
     if (requestInput === undefined) throw new Error('source-owned resolver request input missing')
     const customerJob = 'Resolve a labelled sandbox service and prepare its quote'
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
+        canonicalStatements: [],
+        supersededStatements: [],
         selections: [
           {
+            operationRef: resolverOperation.operationRef,
             selectionKey: resolverModel.selectionKey,
             facts: [{ inputKey: requestInput.key, value: customerJob }],
           },
-          { selectionKey: quoterModel.selectionKey, facts: [] },
+          { operationRef: quoterOperation.operationRef, selectionKey: quoterModel.selectionKey, facts: [] },
         ],
       }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -1544,6 +1605,15 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRef: confirmed.requestRef, idempotencyKey: 'run:recovery-contract',
     })
 
+    await backend.run(async (ctx) => {
+      const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox').first()
+      if (dispatch === null) throw new Error('dispatch row missing')
+      await ctx.db.patch(dispatch._id, {
+        state: 'leased',
+        operationKeyDigest: 'mismatched-operation-key',
+      })
+    })
+
     const command = {
       requestRef: confirmed.requestRef, idempotencyKey: 'problem:recovery-contract',
       category: 'incorrect_result' as const, summary: 'The returned result does not match the confirmed choice.',
@@ -1629,6 +1699,15 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRef: confirmed.requestRef, idempotencyKey: 'run:suspected-duplicate-effect',
     })
 
+    await backend.run(async (ctx) => {
+      const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox').first()
+      if (dispatch === null) throw new Error('dispatch row missing')
+      await ctx.db.patch(dispatch._id, {
+        state: 'leased',
+        operationKeyDigest: 'mismatched-operation-key',
+      })
+    })
+
     const command = {
       requestRef: confirmed.requestRef,
       idempotencyKey: 'problem:suspected-duplicate-effect',
@@ -1707,6 +1786,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       causality: 'unknown',
       resolution: 'not_adjudicated',
       decisionAuthority: 'not_assigned',
+      reconstruction: {
+        execution: {
+          steps: [{ state: 'queued' }, { state: 'blocked' }],
+        },
+      },
     })
     await backend.run(async (ctx) => {
       expect(await ctx.db.query('customerRequestRouteProblemReports').collect()).toHaveLength(1)
@@ -2093,6 +2177,22 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
           },
         ],
       }],
+    })
+
+    const sibling = await backend.run(async (ctx) => {
+      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
+      const attempt = attempts.find((candidate) => candidate.position === 2)
+      if (attempt === undefined) throw new Error('second route attempt missing')
+      return { id: attempt._id, inputDigest: attempt.inputDigest }
+    })
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(sibling.id, { inputDigest: 'corrupt-sibling-input-digest' })
+    })
+    await expect(support.action(api.customerRequestApplication.exportRouteProblemForSupport, {
+      reportRef: reported.reportRef,
+    })).rejects.toThrow('customer_request_route_run_attempt_integrity_failure')
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(sibling.id, { inputDigest: sibling.inputDigest })
     })
     await expect(support.action(api.customerRequestApplication.exportRouteProblemForSupport, {
       reportRef: reported.reportRef,
@@ -2812,12 +2912,16 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     await observeReady(backend, published, 'single-resolver-public')
     const model = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
+    const operation = await publishedOperationForModel(backend, model)
     const requestInput = model.inputs.find((input) => input.inputPointer === '/request')
     if (requestInput === undefined) throw new Error('single route request input missing')
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
+        canonicalStatements: [],
+        supersededStatements: [],
         selections: [{
+          operationRef: operation.operationRef,
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, value: 'Resolve this service reference' }],
         }],
@@ -2923,14 +3027,24 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await observeReady(backend, second, 'public-quoter')
     const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
     const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
+    await expect(admin.mutation(api.capabilitySupply.registerMapping, {
+      networkId: 'ae:public',
+      mapping: routeServiceReferenceMapping(upstreamModel, downstreamModel),
+      authorityMode: 'ae_curated_external',
+      registrationEvidenceRefs: ['test:public-route-mapping'],
+    })).resolves.toMatchObject({ kind: 'registered' })
+    const upstreamOperation = await publishedOperationForModel(backend, upstreamModel)
+    const downstreamOperation = await publishedOperationForModel(backend, downstreamModel)
     const requestInput = upstreamModel.inputs.find((input) => input.inputPointer === '/request')
     if (requestInput === undefined) throw new Error('upstream request input missing')
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
+        canonicalStatements: [],
+        supersededStatements: [],
         selections: [
-          { selectionKey: upstreamModel.selectionKey, facts: [{ inputKey: requestInput.key, value: 'Resolve this service and prepare its quote' }] },
-          { selectionKey: downstreamModel.selectionKey, facts: [] },
+          { operationRef: upstreamOperation.operationRef, selectionKey: upstreamModel.selectionKey, facts: [{ inputKey: requestInput.key, value: 'Resolve this service and prepare its quote' }] },
+          { operationRef: downstreamOperation.operationRef, selectionKey: downstreamModel.selectionKey, facts: [] },
         ],
       }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -3070,6 +3184,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const priceOnly = await refreshAndActivate(
       backend, admin, first, upstreamDocument, 325, 'resolver-price-refresh',
     )
+    const refreshedUpstreamOperation = await publishedOperationForModel(backend, upstreamModel)
+    generate.mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
+        kind: 'capability_candidates',
+        canonicalStatements: [],
+        supersededStatements: [],
+        selections: [
+          { operationRef: refreshedUpstreamOperation.operationRef, selectionKey: upstreamModel.selectionKey, facts: [{ inputKey: requestInput.key, value: 'Resolve this service and prepare its quote' }] },
+          { operationRef: downstreamOperation.operationRef, selectionKey: downstreamModel.selectionKey, facts: [] },
+        ],
+      }) }, finish_reason: 'stop' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const priceClock = vi.spyOn(Date, 'now').mockReturnValue(route.expiresAt + 2)
     await observeReady(backend, second, 'price-quoter')
     const priceRefresh = await customer.action(api.customerRequestApplication.compare, {
@@ -3123,8 +3249,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await observeReady(backend, priceOnly, 'unsafe-resolver')
     await observeReady(backend, second, 'unsafe-quoter')
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({ kind: 'capability_candidates', selections: [
-        { selectionKey: upstreamModel.selectionKey, facts: [
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
+        kind: 'capability_candidates', canonicalStatements: [], supersededStatements: [], selections: [
+        { operationRef: refreshedUpstreamOperation.operationRef, selectionKey: upstreamModel.selectionKey, facts: [
           { inputKey: requestInput.key, value: 'A conflicting request interpretation' },
         ] },
       ] }) }, finish_reason: 'stop' }],
@@ -3163,12 +3290,21 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const upstreamV3Model = openCapabilityDecisionModel(defineCapabilityContract(upstreamV3Document))
     const upstreamV3RequestInput = upstreamV3Model.inputs.find((input) => input.inputPointer === '/request')
     if (upstreamV3RequestInput === undefined) throw new Error('v3 upstream request input missing')
+    const upstreamV3Operation = await publishedOperationForModel(backend, upstreamV3Model)
+    await expect(admin.mutation(api.capabilitySupply.registerMapping, {
+      networkId: 'ae:public',
+      mapping: routeServiceReferenceMapping(upstreamV3Model, downstreamModel),
+      authorityMode: 'ae_curated_external',
+      registrationEvidenceRefs: ['test:public-route-v3-mapping'],
+    })).resolves.toMatchObject({ kind: 'registered' })
     generate.mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
+        canonicalStatements: [],
+        supersededStatements: [],
         selections: [
-          { selectionKey: upstreamV3Model.selectionKey, facts: [{ inputKey: upstreamV3RequestInput.key, value: 'Resolve this service and prepare its quote' }] },
-          { selectionKey: downstreamModel.selectionKey, facts: [] },
+          { operationRef: upstreamV3Operation.operationRef, selectionKey: upstreamV3Model.selectionKey, facts: [{ inputKey: upstreamV3RequestInput.key, value: 'Resolve this service and prepare its quote' }] },
+          { operationRef: downstreamOperation.operationRef, selectionKey: downstreamModel.selectionKey, facts: [] },
         ],
       }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -3207,13 +3343,26 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const validatedQuoter = await publishAndActivate(backend, admin, 'validated-quoter', validatedQuoteDocument, 500)
     const validationModel = openCapabilityDecisionModel(defineCapabilityContract(validationDocument))
     const validatedQuoteModel = openCapabilityDecisionModel(defineCapabilityContract(validatedQuoteDocument))
+    const validationOperation = await publishedOperationForModel(backend, validationModel)
+    const validatedQuoteOperation = await publishedOperationForModel(backend, validatedQuoteModel)
+    for (const [mapping, evidenceRef] of [
+      [routeServiceReferenceMapping(upstreamV3Model, validationModel), 'test:public-route-validation-mapping'],
+      [routeServiceReferenceMapping(validationModel, validatedQuoteModel), 'test:public-route-validated-quote-mapping'],
+    ] as const) {
+      await expect(admin.mutation(api.capabilitySupply.registerMapping, {
+        networkId: 'ae:public', mapping, authorityMode: 'ae_curated_external',
+        registrationEvidenceRefs: [evidenceRef],
+      })).resolves.toMatchObject({ kind: 'registered' })
+    }
     generate.mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
+        canonicalStatements: [],
+        supersededStatements: [],
         selections: [
-          { selectionKey: upstreamV3Model.selectionKey, facts: [{ inputKey: upstreamV3RequestInput.key, value: 'Resolve this service and prepare its quote' }] },
-          { selectionKey: validationModel.selectionKey, facts: [] },
-          { selectionKey: validatedQuoteModel.selectionKey, facts: [] },
+          { operationRef: upstreamV3Operation.operationRef, selectionKey: upstreamV3Model.selectionKey, facts: [{ inputKey: upstreamV3RequestInput.key, value: 'Resolve this service and prepare its quote' }] },
+          { operationRef: validationOperation.operationRef, selectionKey: validationModel.selectionKey, facts: [] },
+          { operationRef: validatedQuoteOperation.operationRef, selectionKey: validatedQuoteModel.selectionKey, facts: [] },
         ],
       }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -3494,6 +3643,21 @@ async function refreshAndActivate(
   }
 }
 
+async function publishedOperationForModel(
+  backend: RouteTestBackend,
+  model: CapabilityDecisionModel,
+) {
+  const supply = await backend.run(async (ctx) => (
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+  ))
+  if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
+  const publication = supply.supplies.find(({ binding }) => (
+    binding.capabilityId === model.contractRef.capabilityId
+  ))?.publication
+  if (publication === undefined) throw new Error(`operation missing: ${model.contractRef.capabilityId}`)
+  return publication
+}
+
 async function confirmedTwoStepRoute(
   backend: ReturnType<typeof convexTest>,
   admin: ConvexFixtureAdmin,
@@ -3526,16 +3690,27 @@ async function committedTwoStepAdmissionRoute(
   admin: ConvexFixtureAdmin,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
-  await publishAndActivate(backend, admin, 'admission-resolver', upstreamDocument, 300, options)
-  await publishAndActivate(backend, admin, 'admission-quoter', downstreamDocument, 700)
-  const supply = await backend.query(internal.capabilitySupply.listRouteable, {
-    networkId: 'ae:public', limit: 16,
-  })
+  const first = await publishAndActivate(backend, admin, 'admission-resolver', upstreamDocument, 300, options)
+  const second = await publishAndActivate(backend, admin, 'admission-quoter', downstreamDocument, 700)
+  await observeReady(backend, first, 'admission-resolver-stable')
+  await observeReady(backend, second, 'admission-quoter-stable')
+  const supply = await backend.run(async (ctx) => (
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+  ))
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
   const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
   const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
   const requestInput = upstreamModel.inputs.find((input) => input.inputPointer === '/request')
   if (requestInput === undefined) throw new Error('upstream request input missing')
+  const upstreamPublication = supply.supplies.find(({ binding }) => (
+    binding.capabilityId === upstreamModel.contractRef.capabilityId
+  ))?.publication
+  const downstreamPublication = supply.supplies.find(({ binding }) => (
+    binding.capabilityId === downstreamModel.contractRef.capabilityId
+  ))?.publication
+  if (upstreamPublication === undefined || downstreamPublication === undefined) {
+    throw new Error('two-step publication lineage missing')
+  }
   const requestId = 'request:two-step-admission'
   const compiled = compileCustomerRequest({
     requestId,
@@ -3549,6 +3724,7 @@ async function committedTwoStepAdmissionRoute(
       kind: 'capability_candidates',
       selections: [
         {
+          operationRef: upstreamPublication.operationRef,
           selectionKey: upstreamModel.selectionKey,
           contractRef: upstreamModel.contractRef,
           facts: [{
@@ -3561,30 +3737,17 @@ async function committedTwoStepAdmissionRoute(
             source: { kind: 'customer', assertionRef: 'customer:two-step-admission' },
           }],
         },
-        { selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
+        {
+          operationRef: downstreamPublication.operationRef,
+          selectionKey: downstreamModel.selectionKey,
+          contractRef: downstreamModel.contractRef,
+          facts: [],
+        },
       ],
     },
     interpreterId: 'interpreter:two-step-admission',
-    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => (
-      publication === undefined ? [] : [{
-        businessId: String(offering.businessId),
-        offeringId: offering.offeringId,
-        bindingId: binding.bindingId,
-        contractRef: {
-          capabilityId: binding.capabilityId,
-          version: binding.version,
-          contractDigest: binding.contractDigest,
-        },
-        offeringRegistrationHash: offering.registrationHash,
-        bindingRegistrationHash: binding.registrationHash,
-        publicationRef: publication.publicationRef,
-        publicationRevision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil,
-        price: offering.presentation.price,
-        commercialRelationship: offering.presentation.commercialRelationship,
-        cancellation: binding.cancellation,
-      }]
-    )),
+    mappings: [routeServiceReferenceMapping(upstreamModel, downstreamModel)],
+    bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
     models: [upstreamModel, downstreamModel],
     now: Date.now(),
   })
@@ -3610,13 +3773,15 @@ async function committedOneStepAdmissionRoute(
   admin: ConvexFixtureAdmin,
 ) {
   await publishAndActivate(backend, admin, 'one-step-resolver', upstreamDocument, 300)
-  const supply = await backend.query(internal.capabilitySupply.listRouteable, {
-    networkId: 'ae:public', limit: 16,
-  })
+  const supply = await backend.run(async (ctx) => (
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+  ))
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
   const model = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
   const requestInput = model.inputs.find((input) => input.inputPointer === '/request')
   if (requestInput === undefined) throw new Error('one-step request input missing')
+  const publication = supply.supplies[0]?.publication
+  if (publication === undefined) throw new Error('one-step publication lineage missing')
   const requestId = 'request:one-step-admission'
   const compiled = compileCustomerRequest({
     requestId,
@@ -3629,6 +3794,7 @@ async function committedOneStepAdmissionRoute(
     proposal: {
       kind: 'capability_candidates',
       selections: [{
+        operationRef: publication.operationRef,
         selectionKey: model.selectionKey,
         contractRef: model.contractRef,
         facts: [{
@@ -3643,8 +3809,11 @@ async function committedOneStepAdmissionRoute(
       }],
     },
     interpreterId: 'interpreter:one-step-admission',
+    mappings: [],
     bindings: supply.supplies.flatMap(({ offering, binding, publication }) => (
       publication === undefined ? [] : [{
+        operationRef: publication.operationRef,
+        admittedOperation: publication.admittedOperation,
         businessId: String(offering.businessId),
         offeringId: offering.offeringId,
         bindingId: binding.bindingId,

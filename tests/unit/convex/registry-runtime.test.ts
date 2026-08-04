@@ -153,6 +153,85 @@ describe('Convex registry public read paths', () => {
     expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
     expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots', 'registrySearchDocuments'].includes(read.tableName))).toBe(true)
   })
+
+  it('does not mistake an unqualified capability query for a location', async () => {
+    const db = new FakeDb()
+    seedBusinesses(db, 1)
+    const business = db.table('businesses')[0]
+    const snapshot = db.table('businessSupplyProjectionSnapshots')[0]
+    if (business === undefined || snapshot === undefined) throw new Error('registry fixture missing')
+    business.name = 'Frankfurter Rates'
+    const projection = snapshot.projection as {
+      business: { name: string }
+      offerings: Array<{ offering: { name: string; category: string; summary: string } }>
+    }
+    projection.business.name = 'Frankfurter Rates'
+    const offering = projection.offerings[0]?.offering
+    if (offering === undefined) throw new Error('registry offering fixture missing')
+    offering.name = 'Currency exchange rates'
+    offering.category = 'Currency data'
+    offering.summary = 'Current European Central Bank reference exchange rates.'
+    db.seed('registrySearchDocuments', {
+      _id: 'registrySearchDocuments:frankfurter',
+      _creationTime: 100,
+      businessSlug: 'business-001',
+      documentId: 'business-001__currency-exchange-rates',
+      schemaVersion: 'registry-search-document:v1',
+      offeringRef: 'offering:001',
+      businessName: 'Frankfurter Rates',
+      name: 'Currency exchange rates',
+      category: 'Currency data',
+      categoryKey: 'currency data',
+      suburb: 'Online',
+      stateTerritory: 'External',
+      trustTier: 'claimed',
+      firstRequestMode: 'not_available_yet',
+      keywords: ['currency', 'exchange', 'rates'],
+      serviceAreaSummary: 'Online',
+      generatedHash: 'hash:registry-search-frankfurter',
+      updatedAt: 100,
+      placeKeys: ['external', 'online'],
+      searchText: 'frankfurter rates currency exchange rates current european central bank reference exchange rates online',
+      publicStatus: 'published',
+    })
+
+    const page = await searchHandler({ db }, { query: 'Frankfurter currency rates', limit: 5 })
+
+    expect(page).toMatchObject({ kind: 'ok', items: [{ slug: 'business-001' }] })
+  })
+
+  it('falls back to the bounded public-status index while search documents backfill', async () => {
+    const db = new FakeDb({ emptySearchIndex: true })
+    seedBusinesses(db, 20)
+    db.seed('registrySearchDocuments', {
+      _id: 'registrySearchDocuments:1',
+      _creationTime: 100,
+      businessSlug: 'business-007',
+      documentId: 'business-007__emergency-pipe-repair',
+      schemaVersion: 'registry-search-document:v1',
+      offeringRef: 'offering:007:emergency-pipe-repair',
+      businessName: 'Business 007',
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      categoryKey: 'emergency plumbing',
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+      trustTier: 'claimed',
+      firstRequestMode: 'not_available_yet',
+      keywords: ['emergency', 'plumber', 'plumbing'],
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+      generatedHash: 'hash:registry-search-007',
+      updatedAt: 100,
+      placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
+      searchText: 'business 007 emergency pipe repair emergency plumbing plumber parramatta nsw',
+      publicStatus: 'published',
+    })
+
+    const page = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 5 })
+
+    expect(page).toMatchObject({ kind: 'ok', items: [{ slug: 'business-007' }] })
+    expect(db.reads.some((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'by_publicStatus_updatedAt' && read.operation === 'take' && read.limit === 250)).toBe(true)
+  })
 })
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -175,12 +254,14 @@ class FakeQuery {
     const end = Math.min(start + options.numItems, rows.length)
     return { page: rows.slice(start, end), isDone: end >= rows.length, continueCursor: `offset:${end}` }
   }
-  private apply(): Row[] { return this.db.table(this.tableName).filter((row) => this.filters.every((filter) => matchesFilter(row, filter))).sort((left, right) => String(left.slug ?? '').localeCompare(String(right.slug ?? ''))) }
+  private apply(): Row[] { return this.db.emptySearchIndex && this.indexName === 'search_searchText_by_publicStatus' ? [] : this.db.table(this.tableName).filter((row) => this.filters.every((filter) => matchesFilter(row, filter))).sort((left, right) => String(left.slug ?? '').localeCompare(String(right.slug ?? ''))) }
 }
 
 class FakeDb {
   readonly reads: ReadTrace[] = []
+  readonly emptySearchIndex: boolean
   private readonly tables: Record<string, Row[]> = {}
+  constructor(options: { emptySearchIndex?: boolean } = {}) { this.emptySearchIndex = options.emptySearchIndex ?? false }
   query(tableName: string): FakeQuery { return new FakeQuery(this, tableName) }
   normalizeId(tableName: string, value: string): string | null { return value.startsWith(`${tableName}:`) ? value : null }
   async get(id: string): Promise<Row | null> { return Object.values(this.tables).flat().find((row) => row._id === id) ?? null }

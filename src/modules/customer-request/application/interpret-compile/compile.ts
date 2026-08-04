@@ -3,7 +3,10 @@ import {
   writableCustomerRequestV2Aggregate,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
-import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
+import {
+  projectLegacyResubmitRequired,
+  projectNeedsAttention,
+} from '@/modules/customer-request/customer-projection'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 
 import type { CustomerRequestActionResult } from '../action-result'
@@ -31,17 +34,18 @@ export function retryableCompileAdmissionFailure(
 export function compileProposal(input: CompileCommitInput) {
   return compileCustomerRequest({
     requestId: input.requestId,
+    interpreterId: input.interpreterId,
     expectedRevision: input.expectedRevision,
+    expectedRouteGeneration: input.expectedRouteGeneration,
     principalId: input.principalId,
     delegatedAgentId: input.delegatedAgentId,
     intent: input.intent,
     networkId: input.networkId,
     proposal: input.proposal,
-    interpreterId: input.interpreterId,
     bindings: input.graph.bindings,
+    mappings: input.graph.mappings,
     models: input.graph.models,
     now: input.now,
-    expectedRouteGeneration: input.expectedRouteGeneration,
     ...(input.priorFacts.length === 0 ? {} : { priorFacts: input.priorFacts }),
     ...(input.routeExclusions === undefined ? {} : { routeExclusions: input.routeExclusions }),
   })
@@ -144,6 +148,12 @@ export async function replayCommittedCommand(
   if (replay.kind === 'not_found') return undefined
   if (replay.kind === 'conflict') {
     return { kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused' }
+  }
+  if (replay.kind === 'resubmit_required') {
+    return projectLegacyResubmitRequired({
+      requestRef: replay.requestId,
+      revision: replay.revision,
+    })
   }
   if (replay.noEffect && input.noEffectReplay !== undefined) return await input.noEffectReplay()
   return projectStoredAggregate(

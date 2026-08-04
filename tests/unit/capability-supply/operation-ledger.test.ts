@@ -114,7 +114,7 @@ describe('capability-supply operation-ledger', () => {
       actor, 'registerCapabilityOffering', context, requestMaterial, 10,
     )
     expect(replay).toEqual({
-      kind: 'replay', resultHash: digest, effectRefs: ['effect:1'],
+      kind: 'replay', operationId: 'op-row-1', resultHash: digest, effectRefs: ['effect:1'],
     })
 
     const marked: string[] = []

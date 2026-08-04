@@ -4,6 +4,7 @@
 **Analysis Date:** 2026-08-04
 
 The repository is a bounded-context TypeScript modular monolith. The maintained prompt and AI execution trace remains [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md); use that map for prompt sites, model calls, stream frames, harness phases, and Flow A/B/C evidence. This document records ownership and boundaries around those flows.
+Any change to a prompt-assembly site, model call, stream frame, durable journal, or scheduler hop MUST update it.
 
 ## System Overview
 

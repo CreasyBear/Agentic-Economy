@@ -19,12 +19,15 @@ import {
   loadProblemBusinessReports,
   loadProblemUpdates,
 } from '@/modules/customer-request/route-execution/evidence-load'
-import { routeAttemptIntegrityValid } from '@/modules/customer-request/route-execution/journal'
-
+import {
+  routeAttemptIntegrityValid,
+  routeDispatchIntegrityValid,
+} from '@/modules/customer-request/route-execution/journal'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
+import { toDispatchRecord } from './customerRequestRouteExecutionSnapshots'
 
 type DbCtx = MutationCtx | QueryCtx
 
@@ -196,19 +199,54 @@ async function loadSupportExportMaterial(
         .order('asc')
         .take(run.totalSteps + 1),
   ])
+  if (run === null) {
+    throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
+  }
+  const seenPositions = new Set<number>()
+  const seenAttemptRefs = new Set<string>()
+  const invalidAttempt = attempts.some((candidate) => {
+    const duplicate = seenPositions.has(candidate.position) || seenAttemptRefs.has(candidate.attemptRef)
+    seenPositions.add(candidate.position)
+    seenAttemptRefs.add(candidate.attemptRef)
+    return duplicate
+      || candidate.runRef !== run.runRef
+      || candidate.requestId !== run.requestId
+      || candidate.mandateRef !== run.mandateRef
+      || !Number.isSafeInteger(candidate.position)
+      || candidate.position < 1
+      || candidate.position > run.totalSteps
+      || !routeAttemptIntegrityValid(candidate)
+  })
+  if (attempts.length > run.totalSteps || invalidAttempt) {
+    throw new Error('customer_request_route_run_attempt_integrity_failure')
+  }
+  const dispatches = await Promise.all(
+    attempts.map(async (candidate) => await ctx.db.query('customerRequestRouteDispatchOutbox')
+      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', candidate.attemptRef))
+      .unique()),
+  )
+  const projectedAttempts = attempts.map((candidate, index) => {
+    const dispatch = dispatches[index]
+    const dispatchSnapshot = dispatch === undefined || dispatch === null
+      ? undefined
+      : toDispatchRecord(dispatch)
+    const dispatchMatchesAttempt = dispatchSnapshot !== undefined
+      && dispatchSnapshot.runRef === candidate.runRef
+      && dispatchSnapshot.attemptRef === candidate.attemptRef
+      && dispatchSnapshot.operationKeyDigest === candidate.operationKeyDigest
+      && routeDispatchIntegrityValid(dispatchSnapshot)
+    return {
+      ...candidate,
+      ...(dispatchMatchesAttempt ? { dispatchState: dispatchSnapshot.state } : {}),
+    }
+  })
   if (attempt !== null && !routeAttemptIntegrityValid(attempt)) {
     throw new Error('customer_request_route_problem_attempt_integrity_failure')
   }
   if (mandateIssue !== null && reservations.length > mandateIssue.mandate.route.steps.length) {
     throw new Error('customer_request_route_step_budget_integrity_failure')
   }
-  if (run !== null && attempts.length > run.totalSteps) {
-    throw new Error('customer_request_route_run_attempt_integrity_failure')
-  }
   const requestRevision = requestRevisionRow ?? undefined
-  if (run === null) {
-    throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
-  }
   const businessNames = new Map<string, string>()
   if (problem.mandateRef !== undefined && mandateIssue !== null) {
     for (const step of mandateIssue.mandate.route.steps) {
@@ -227,7 +265,7 @@ async function loadSupportExportMaterial(
     run,
     revocation,
     reservations,
-    attempts,
+    attempts: projectedAttempts,
     businessNames,
   }
 }

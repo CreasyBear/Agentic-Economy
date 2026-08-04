@@ -1,16 +1,22 @@
 import { DirectedGraph } from 'graphology'
 import { hasCycle, topologicalGenerations } from 'graphology-dag'
-
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   sameCapabilityContractRef,
   type CapabilityContractRef,
   type CapabilityDecisionModel,
   type CapabilityInputSemantic,
 } from '@/modules/capability-contract/public'
-import type { CapabilityCancellation } from '@/modules/capability-supply/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
-import { uniqueSorted } from '@/modules/common/unique-sorted'
+import {
+  isPublicOperationRef,
+  resolveRegisteredOperationMappingRef,
+  type AdmittedOperationRef,
+  type CapabilityCancellation,
+  type PublicOperationRef,
+  type RegisteredOperationMapping,
+} from '@/modules/capability-supply/public'
 
 import { exactContractRefKey } from './contract-ref-key'
 import {
@@ -97,6 +103,8 @@ export type CustomerRequestRoutePlan = Readonly<{
   requestRevision: number
   registrySnapshotDigest: string
   steps: readonly Readonly<{
+    operationRef: PublicOperationRef
+    admittedOperation: AdmittedOperationRef
     actionId: string
     candidateRef: string
     businessId: string
@@ -216,6 +224,7 @@ export type CompileCustomerRequestCommand = Readonly<{
   proposal: CustomerRequestSemanticProposal
   interpreterId: string
   bindings: readonly RegisteredEvaluationBinding[]
+  mappings: readonly RegisteredOperationMapping[]
   models: readonly CapabilityDecisionModel[]
   now: number
 }>
@@ -233,6 +242,15 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     && (command.proposal.selections.length > MAX_SELECTIONS
       || command.proposal.selections.reduce((count, selection) => count + selection.facts.length, 0) > MAX_FACTS)) {
     return { kind: 'refused', reason: 'unsafe_interpretation' }
+  }
+  for (const mapping of command.mappings) {
+    try {
+      if (mapping.mappingRef !== resolveRegisteredOperationMappingRef(mapping)) {
+        return { kind: 'refused', reason: 'capability_graph_invalid' }
+      }
+    } catch {
+      return { kind: 'refused', reason: 'capability_graph_invalid' }
+    }
   }
   const models = exactModelRegistry(command.models)
   if (models === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
@@ -258,29 +276,37 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== undefined)
   const baseActions = selected.map((selection, index): ProposedRequestAction => {
     const model = resolveExactModel(models, selection.contractRef)
-    if (model === undefined || model.selectionKey !== selection.selectionKey) {
+    const binding = command.bindings.find((candidate) => (
+      candidate.operationRef === selection.operationRef
+      && sameCapabilityContractRef(candidate.contractRef, selection.contractRef)
+    ))
+    if (model === undefined || model.selectionKey !== selection.selectionKey
+      || binding === undefined) {
       throw new Error('customer_request_selection_model_missing')
     }
     const actionMaterial = {
       requestId: command.requestId,
       requestRevision: command.expectedRevision + 1,
       ordinal: index,
+      operationRef: selection.operationRef,
       contractRef: model.contractRef,
       selectionKey: model.selectionKey,
       semanticDigest: model.semanticDigest,
     }
     return Object.freeze({
       actionId: `action:${canonicalDigest(actionMaterial)}`,
+      operationRef: selection.operationRef,
       contractRef: model.contractRef,
       selectionKey: model.selectionKey,
       semanticDigest: model.semanticDigest,
       dependsOn: Object.freeze([]),
       inputs: Object.freeze(facts.filter((fact) => fact.selectionKey === model.selectionKey
         && sameCapabilityContractRef(fact.contractRef, model.contractRef))),
+      mappingRefs: Object.freeze([]),
       inputMappings: Object.freeze([]),
     })
   })
-  const actions = composeRequestActions(baseActions, models)
+  const actions = composeRequestActions(baseActions, models, command.mappings)
   if (actions === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const requestRevision = command.expectedRevision + 1
   const evaluation = command.proposal.kind === 'needs_intent_direction'
@@ -305,7 +331,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
           ? {}
           : { derivedCriteria }),
         candidates: discoverRequestEvaluationCandidates({
-          selectedCapabilities: selected.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
+          selectedCapabilities: selected.map(({ operationRef, selectionKey, contractRef }) => ({
+            operationRef, selectionKey, contractRef,
+          })),
           bindings: command.bindings,
           resolveModel: (ref) => resolveExactModel(models, ref),
         }),
@@ -422,6 +450,11 @@ function normalizeInferredFacts(
   if (command.proposal.kind !== 'capability_candidates') return Object.freeze([])
   const normalized = []
   for (const selection of command.proposal.selections) {
+    if (!isPublicOperationRef(selection.operationRef)
+      || !command.bindings.some((binding) => (
+        binding.operationRef === selection.operationRef
+        && sameCapabilityContractRef(binding.contractRef, selection.contractRef)
+      ))) return undefined
     const model = resolveExactModel(models, selection.contractRef)
     if (model === undefined || model.selectionKey !== selection.selectionKey) return undefined
     const accepted: RequestFact[] = []
@@ -486,12 +519,31 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
       candidates: aggregate.evaluation.candidates.map((candidate) => ({
         ...candidate,
         contractRef: { ...candidate.contractRef },
+        admittedOperation: {
+          ...candidate.admittedOperation,
+          contractRef: { ...candidate.admittedOperation.contractRef },
+        },
+        ...(candidate.commercialRelationship === undefined
+          ? {}
+          : {
+              commercialRelationship: {
+                ...candidate.commercialRelationship,
+                evidenceRefs: [...candidate.commercialRelationship.evidenceRefs],
+              },
+            }),
+        cancellation: {
+          ...candidate.cancellation,
+          evidenceRefs: [...candidate.cancellation.evidenceRefs],
+        },
         viability: candidate.viability.kind === 'viable'
           ? { kind: 'viable' as const }
           : candidate.viability.kind === 'blocked_on_information'
             ? {
                 kind: 'blocked_on_information' as const,
-                inputs: candidate.viability.inputs.map((input) => ({ ...input, contractRef: { ...input.contractRef } })),
+                inputs: candidate.viability.inputs.map((input) => ({
+                  ...input,
+                  contractRef: { ...input.contractRef },
+                })),
               }
             : { kind: 'incompatible' as const, issueKeywords: [...candidate.viability.issueKeywords] },
       })),
@@ -515,9 +567,12 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
         ...action,
         contractRef: { ...action.contractRef },
         dependsOn: [...action.dependsOn],
+        mappingRefs: [...action.mappingRefs],
         inputs: action.inputs.map(writableFact),
         inputMappings: action.inputMappings.map((mapping) => ({
-          ...mapping, source: { ...mapping.source }, target: { ...mapping.target },
+          ...mapping,
+          source: { ...mapping.source },
+          target: { ...mapping.target },
         })),
       })),
       completionRequirements: aggregate.plan.completionRequirements.map(writableCompletion),
@@ -587,6 +642,8 @@ export function compileRoutePlans(input: Readonly<{
         effect.class !== 'data_release' || activeDataReleaseEffects.has(effect.effectId)
       ))
       return Object.freeze({
+        operationRef: candidate.operationRef,
+        admittedOperation: candidate.admittedOperation,
         actionId: action.actionId, candidateRef: candidate.candidateRef,
         businessId: candidate.businessId, offeringId: candidate.offeringId, bindingId: candidate.bindingId,
         contractRef: candidate.contractRef, offeringRegistrationHash: candidate.offeringRegistrationHash,
@@ -774,6 +831,7 @@ function compareRoutePlans(
 export function composeRequestActions(
   actions: readonly ProposedRequestAction[],
   models: ReadonlyMap<string, CapabilityDecisionModel>,
+  registeredMappings: readonly RegisteredOperationMapping[],
 ): readonly ProposedRequestAction[] | undefined {
   const composed = actions.map((action): ProposedRequestAction => {
     const model = resolveExactModel(models, action.contractRef)
@@ -781,44 +839,60 @@ export function composeRequestActions(
     const supplied = new Set(action.inputs.map((fact) => fact.inputKey))
     const mappings: RequestActionInputMapping[] = []
     for (const target of model.inputs.filter((input) => !supplied.has(input.key))) {
-      const producers = actions.flatMap((sourceAction) => {
+      const semanticIdentity = target.semanticIdentity
+      if (semanticIdentity === undefined) continue
+      const candidates = actions.flatMap((sourceAction) => {
         if (sourceAction.actionId === action.actionId) return []
         const sourceModel = resolveExactModel(models, sourceAction.contractRef)
         if (sourceModel === undefined) return []
-        const matchingEvidence = []
-        for (const evidence of sourceModel.evidence) {
-          if (evidence.guaranteed
-            && target.semanticIdentity !== undefined
-            && evidence.semanticIdentity === target.semanticIdentity
-            && evidence.schemaIdentity === target.schemaIdentity) {
-            matchingEvidence.push({ sourceAction, evidence })
-          }
-        }
-        return matchingEvidence
+        return sourceModel.evidence.flatMap((evidence) => {
+          if (!evidence.guaranteed || evidence.semanticIdentity !== semanticIdentity) return []
+          return registeredMappings
+            .filter((mapping) => (
+              sameCapabilityContractRef(mapping.sourceContractRef, sourceModel.contractRef)
+              && sameCapabilityContractRef(mapping.targetContractRef, model.contractRef)
+              && mapping.sourceSchemaIdentity === evidence.schemaIdentity
+              && mapping.targetSchemaIdentity === target.schemaIdentity
+              && mappingCompatibleWithPointers(mapping, evidence.outputPointer, target.inputPointer)
+            ))
+            .map((mapping) => ({ sourceAction, sourceModel, evidence, mapping }))
+        })
       })
-      if (producers.length !== 1) continue
-      const producer = producers[0]
-      const semanticIdentity = target.semanticIdentity
-      if (producer === undefined || semanticIdentity === undefined) continue
-      const material = {
-        sourceActionId: producer.sourceAction.actionId, sourceEvidenceId: producer.evidence.evidenceId,
-        targetActionId: action.actionId, targetInputKey: target.key, schemaIdentity: target.schemaIdentity,
-      }
+      if (candidates.length !== 1) continue
+      const candidate = candidates[0]
+      if (candidate === undefined) continue
+      const { sourceAction, evidence, mapping } = candidate
       mappings.push(Object.freeze({
-        mappingId: `mapping:${canonicalDigest(material)}`,
+        mappingRef: mapping.mappingRef,
+        kind: mapping.kind,
+        mappingId: mapping.mappingRef,
         semanticIdentity,
         source: Object.freeze({
-          actionId: producer.sourceAction.actionId, annotationId: producer.evidence.annotationId,
-          evidenceId: producer.evidence.evidenceId, outputPointer: producer.evidence.outputPointer,
+          actionId: sourceAction.actionId, annotationId: evidence.annotationId,
+          evidenceId: evidence.evidenceId, outputPointer: evidence.outputPointer,
         }),
         target: Object.freeze({ annotationId: target.annotationId, inputKey: target.key, inputPointer: target.inputPointer }),
         schemaIdentity: target.schemaIdentity, authority: 'registered_contract_semantics' as const,
+        ...(mapping.kind === 'array_project' ? {
+          sourceArrayPointer: mapping.sourceArrayPointer,
+          sourceItemPointer: mapping.sourceItemPointer,
+          targetArrayPointer: mapping.targetArrayPointer,
+          minItems: mapping.minItems,
+          maxItems: mapping.maxItems,
+        } : {}),
+        ...(mapping.kind === 'registered_transform' ? {
+          transformRef: mapping.transformRef,
+          transformVersion: mapping.transformVersion,
+          inputCardinalityMax: mapping.inputCardinalityMax,
+          outputCardinalityMax: mapping.outputCardinalityMax,
+        } : {}),
       }))
     }
     return Object.freeze({
       ...action,
+      mappingRefs: Object.freeze(mappings.map((mapping) => mapping.mappingRef)),
       dependsOn: Object.freeze(uniqueSorted(mappings.map((mapping) => mapping.source.actionId))),
-      inputMappings: Object.freeze(mappings.sort((left, right) => left.mappingId.localeCompare(right.mappingId))),
+      inputMappings: Object.freeze(mappings.sort((left, right) => left.mappingRef.localeCompare(right.mappingRef))),
     })
   })
   const composedById = new Map(composed.map((action) => [action.actionId, action]))
@@ -838,6 +912,30 @@ export function composeRequestActions(
     }
   }
   return Object.freeze(ordered)
+}
+
+function mappingCompatibleWithPointers(
+  mapping: RegisteredOperationMapping,
+  sourceOutputPointer: string,
+  targetInputPointer: string,
+): boolean {
+  if (mapping.kind === 'array_project') {
+    return mapping.sourceArrayPointer === sourceOutputPointer
+      && mapping.targetArrayPointer === targetInputPointer
+      && Number.isSafeInteger(mapping.minItems)
+      && Number.isSafeInteger(mapping.maxItems)
+      && mapping.minItems >= 0
+      && mapping.maxItems >= mapping.minItems
+  }
+  return mapping.sourceOutputPointer === sourceOutputPointer
+    && mapping.targetInputPointer === targetInputPointer
+    && (mapping.kind !== 'registered_transform'
+      || (Number.isSafeInteger(mapping.transformVersion)
+        && mapping.transformVersion > 0
+        && Number.isSafeInteger(mapping.inputCardinalityMax)
+        && Number.isSafeInteger(mapping.outputCardinalityMax)
+        && mapping.inputCardinalityMax > 0
+        && mapping.outputCardinalityMax > 0))
 }
 
 function exactModelRegistry(models: readonly CapabilityDecisionModel[]): Map<string, CapabilityDecisionModel> | undefined {

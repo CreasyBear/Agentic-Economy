@@ -35,6 +35,7 @@ export function createDeterministicCustomerRequestInterpreter(): CustomerRequest
       const selections: readonly ResolvedCapabilitySelection[] = rankCapabilities(customerJob, capabilities)
         .slice(0, MAXIMUM_SELECTIONS)
         .map((ranked) => Object.freeze({
+          operationRef: ranked.descriptor.operationRef,
           selectionKey: ranked.descriptor.selectionKey,
           contractRef: ranked.descriptor.contractRef,
           // A token match cannot produce a value that a registered input schema would accept, so

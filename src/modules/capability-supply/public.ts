@@ -1,9 +1,230 @@
 import { z } from 'zod'
 
-import { identifier, jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
+import { identifier, jsonValueSchema, type CapabilityContractRef, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
+declare const operationRefBrand: unique symbol
+declare const mappingRefBrand: unique symbol
+
+export type PublicOperationRef = string & Readonly<{ [operationRefBrand]: true }>
+export type RegisteredOperationMappingRef = string & Readonly<{ [mappingRefBrand]: true }>
+export type RegisteredInputMappingRef = RegisteredOperationMappingRef
+
+export const RegisteredOperationMappingKindValues = [
+  'identity',
+  'field',
+  'array_project',
+  'registered_transform',
+] as const
+export type RegisteredOperationMappingKind = (typeof RegisteredOperationMappingKindValues)[number]
+
+type RegisteredOperationMappingContractBinding = Readonly<{
+  sourceContractRef: CapabilityContractRef
+  targetContractRef: CapabilityContractRef
+  sourceSchemaIdentity: string
+  targetSchemaIdentity: string
+}>
+
+type RegisteredOperationMappingBase = RegisteredOperationMappingContractBinding & Readonly<{
+  mappingRef: RegisteredOperationMappingRef
+  authority: 'registered_contract_semantics'
+}>
+
+export type RegisteredOperationMapping = RegisteredOperationMappingBase & (
+  | Readonly<{
+      kind: 'identity' | 'field'
+      sourceOutputPointer: string
+      targetInputPointer: string
+    }>
+  | Readonly<{
+      kind: 'array_project'
+      sourceArrayPointer: string
+      sourceItemPointer: string
+      targetArrayPointer: string
+      minItems: number
+      maxItems: number
+    }>
+  | Readonly<{
+      kind: 'registered_transform'
+      transformRef: string
+      transformVersion: number
+      sourceOutputPointer: string
+      targetInputPointer: string
+      inputCardinalityMax: number
+      outputCardinalityMax: number
+    }>
+)
+
+export function createPublicOperationRef(input: Readonly<{
+  operationId: string
+  publicationRef: string
+  publicationRevision: number
+  contractRef: CapabilityContractRef
+}>): PublicOperationRef {
+  const material = {
+    operationId: input.operationId,
+    publicationRef: input.publicationRef,
+    publicationRevision: input.publicationRevision,
+    contractRef: input.contractRef,
+  } as StableHashValue
+  return `operation:v1:${canonicalDigest(material).slice(7)}` as PublicOperationRef
+}
+export function capabilityOperationId(capabilityId: string): string {
+  return `capability:${capabilityId}`
+}
+
+export function isPublicOperationRef(value: unknown): value is PublicOperationRef {
+  return typeof value === 'string' && /^operation:v1:[0-9a-f]{64}$/.test(value)
+}
+export function isRegisteredOperationMappingRef(value: unknown): value is RegisteredOperationMappingRef {
+  return typeof value === 'string' && /^mapping:v1:[0-9a-f]{64}$/.test(value)
+}
+
+type RegisteredOperationMappingMaterial<Mapping = RegisteredOperationMapping> =
+  Mapping extends Readonly<{ mappingRef: RegisteredOperationMappingRef }> ? Omit<Mapping, 'mappingRef'> : never
+
+export function createRegisteredOperationMappingRef(
+  mapping: RegisteredOperationMappingMaterial,
+): RegisteredOperationMappingRef {
+  return `mapping:v1:${canonicalDigest(mapping as StableHashValue).slice(7)}` as RegisteredOperationMappingRef
+}
+
+export function resolveRegisteredOperationMappingRef(
+  mapping: RegisteredOperationMapping,
+): RegisteredOperationMappingRef {
+  const { mappingRef: _mappingRef, ...material } = mapping
+  const expected = createRegisteredOperationMappingRef(material)
+  if (mapping.mappingRef !== expected) throw new Error('registered_operation_mapping_ref_mismatch')
+  return expected
+}
+export type AdmittedOperationRef = Readonly<{
+  operationId: string
+  publisherRef: string
+  provenanceDigest: string
+  businessId: string
+  publicationRef: string
+  publicationRevision: number
+  sourceRevision: string
+  sourceDigest: string
+  contractRef: CapabilityContractRef
+  catalogOfferingRef: string
+  catalogOfferingRevision: number
+  offeringId: string
+  offeringRegistrationHash: string
+  offeringEligibilityHash: string
+  bindingId: string
+  bindingRegistrationHash: string
+  bindingEligibilityHash: string
+  bindingConfigDigest: string
+  qualificationDigest: string
+  readinessValidUntil: number
+  commercialDigest: string
+  effectDigest: string
+}>
+
+export function createAdmittedOperationRef(input: AdmittedOperationRef): AdmittedOperationRef {
+  if (
+    input.operationId.trim().length === 0
+    || input.publisherRef.trim().length === 0
+    || input.businessId.trim().length === 0
+    || input.publicationRef.trim().length === 0
+    || input.sourceRevision.trim().length === 0
+    || input.sourceDigest.trim().length === 0
+    || input.catalogOfferingRef.trim().length === 0
+    || input.offeringId.trim().length === 0
+    || input.bindingId.trim().length === 0
+    || input.readinessValidUntil <= 0
+    || !Number.isSafeInteger(input.publicationRevision)
+    || !Number.isSafeInteger(input.catalogOfferingRevision)
+  ) throw new Error('admitted_operation_ref_invalid')
+  return Object.freeze({
+    ...input,
+    contractRef: Object.freeze({ ...input.contractRef }),
+  })
+}
+
+export function validateAdmittedOperationRef(input: unknown): input is AdmittedOperationRef {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false
+  const value = input as Partial<AdmittedOperationRef>
+  return typeof value.operationId === 'string'
+    && typeof value.publisherRef === 'string'
+    && typeof value.provenanceDigest === 'string'
+    && typeof value.businessId === 'string'
+    && typeof value.publicationRef === 'string'
+    && Number.isSafeInteger(value.publicationRevision)
+    && typeof value.sourceRevision === 'string'
+    && typeof value.sourceDigest === 'string'
+    && typeof value.contractRef === 'object'
+    && value.contractRef !== null
+    && typeof value.catalogOfferingRef === 'string'
+    && Number.isSafeInteger(value.catalogOfferingRevision)
+    && typeof value.offeringId === 'string'
+    && typeof value.offeringRegistrationHash === 'string'
+    && typeof value.offeringEligibilityHash === 'string'
+    && typeof value.bindingId === 'string'
+    && typeof value.bindingRegistrationHash === 'string'
+    && typeof value.bindingEligibilityHash === 'string'
+    && typeof value.bindingConfigDigest === 'string'
+    && typeof value.qualificationDigest === 'string'
+    && typeof value.readinessValidUntil === 'number'
+    && value.readinessValidUntil > 0
+    && typeof value.commercialDigest === 'string'
+    && typeof value.effectDigest === 'string'
+}
+
+export {
+  PublicOperationRegistrySchemaVersion,
+  searchCapabilityOperations,
+  detailCapabilityOperation,
+  compareCapabilityOperations,
+  inspectCapabilityOperationPlan,
+  projectCapabilityOperation,
+  serializeOperationDescriptor,
+  deserializeOperationDescriptor,
+  serializeOperationSearchResult,
+  deserializeOperationSearchResult,
+  serializeOperationDetailResult,
+  deserializeOperationDetailResult,
+  serializeOperationCompareResult,
+  deserializeOperationCompareResult,
+  serializeInspectPlanResult,
+  deserializeInspectPlanResult,
+} from './operation-projection'
+export type {
+  CapabilityOperationSourcePort,
+  CapabilityOperationSourceRecord,
+  InspectPlanInput,
+  InspectPlanResult,
+  InspectPlanWireResult,
+  OperationCompareInput,
+  OperationCompareResult,
+  OperationComparisonFact,
+  OperationComparisonValue,
+  OperationCompareWireResult,
+  OperationDetailInput,
+  OperationDetailResult,
+  OperationDetailWireResult,
+  OperationSearchFilters,
+  OperationSearchInput,
+  OperationSearchResult,
+  OperationSearchWireResult,
+  OperationSurfaceWireResult,
+  OperationSurfaceWireDescriptor,
+  PublicCapabilityUnavailableReason,
+  PublicCommercialTerms,
+  PublicDataUsePolicy,
+  PublicEffectPolicy,
+  PublicEvidencePolicy,
+  PublicCancellationPolicy,
+  PublicOperationAvailability,
+  PublicOperationBusinessRef,
+  PublicOperationDescriptor,
+  PublicOperationOfferingRef,
+  PublicOperationPrice,
+  PublicOperationNavigationRelation,
+  PublicRecoveryPolicy,
+} from './operation-projection'
 export { admitRegisteredTransport } from './internal/transport-adapters'
 export type { TransportAdmissionInput, TransportAdmissionResult } from './internal/transport-adapters'
 export {
@@ -111,6 +332,8 @@ export {
   type OperationLedgerPorts,
 } from './internal/operation-ledger'
 export {
+  decodeConvexPublicationSource,
+  isDirectPublicationSource,
   publicationLifecycle,
   publicationProjection,
   publishCapabilityCommand,
@@ -119,6 +342,23 @@ export {
   type PublicationCommandPorts,
 } from './internal/publication'
 export {
+  CAPABILITY_PUBLICATION_AUTHORITY_MODES,
+  admitCapabilityPublicationCommand,
+  capabilityPublicationProvenanceDigest,
+  defineCapabilityPublicationProvenance,
+  validCapabilityPublicationAuthority,
+  validCapabilityPublicationSourceRevision,
+  type AdmitCapabilityPublicationInput,
+  type AdmitCapabilityPublicationResult,
+  type CapabilityPublicationAdmissionRefusal,
+  type CapabilityPublicationAdmissionSource,
+  type CapabilityPublicationAuthorityMode,
+  type CapabilityPublicationProvenance,
+  type CapabilityPublicationSourceIdentity,
+} from './internal/publication'
+export {
+  boundedTrimmed,
+  validEvidenceRefs,
   validRegistrationContext,
   type RegistrationContext,
   type SupplyCommandActor,
@@ -126,6 +366,15 @@ export {
 } from './internal/shared'
 export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
 
+export { buildExaSearchContentsMapping } from './curated-provider-mapping'
+export {
+  CURATED_PROVIDER_PUBLICATIONS,
+  EXA_BUSINESS_SLUG,
+  FRANKFURTER_BUSINESS_SLUG,
+  exaContentsPublicationImport,
+  exaSearchPublicationImport,
+  frankfurterSingleRatePublicationImport,
+} from './curated-provider-publications'
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
 const evidenceRefs = z.array(identifier).min(1).max(64)

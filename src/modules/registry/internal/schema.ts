@@ -101,6 +101,26 @@ const currentRegistryProjectionAttempt = v.object({
   repairResult: literalUnion(RegistryRepairResultValues),
 })
 
+const preVersionCurrentRegistryProjectionAttempt = v.object({
+  businessId: v.id('businesses'),
+  offeringRef: v.optional(v.string()),
+  logicalKey: v.string(),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  projectionKind: literalUnion(RegistryProjectionKindValues),
+  status: literalUnion(RegistryProjectionStatusValues),
+  retryCount: v.number(),
+  retryAfter: v.optional(v.number()),
+  lastErrorCode: v.optional(v.string()),
+  lastErrorRedacted: v.optional(v.string()),
+  startedAt: v.number(),
+  finishedAt: v.optional(v.number()),
+  latestReadback: v.optional(registryProjectionReadback),
+  staleThresholdAt: v.optional(v.number()),
+  repairAction: literalUnion(RegistryRepairActionValues),
+  repairResult: literalUnion(RegistryRepairResultValues),
+})
+
 const legacyRegistryProjectionAttempt = v.object({
   businessId: v.id('businesses'),
   serviceId: v.optional(v.id('businessServices')),
@@ -202,7 +222,7 @@ export const registryTables = {
     .index('by_offering', ['offeringRef']),
 
   registryProjectionAttempts: defineTable(
-    v.union(currentRegistryProjectionAttempt, legacyRegistryProjectionAttempt),
+    v.union(currentRegistryProjectionAttempt, preVersionCurrentRegistryProjectionAttempt, legacyRegistryProjectionAttempt),
   )
     .index('by_business_status', ['businessId', 'status'])
     .index('by_business_startedAt', ['businessId', 'startedAt'])

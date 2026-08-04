@@ -12,9 +12,14 @@ const queryMapping = z.array(z.strictObject({
   inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
   parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
 })).min(1).max(64)
+const fixedQueryMapping = z.array(z.strictObject({
+  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+  value: z.string().trim().min(1).max(200),
+})).max(64)
 const httpJsonConfiguration = z.strictObject({
   method: z.enum(['GET', 'POST']),
   query: queryMapping.optional(),
+  fixedQuery: fixedQueryMapping.optional(),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   reconciliation: z.strictObject({
     path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
@@ -89,6 +94,27 @@ export function admitRegisteredTransport(input: TransportAdmissionInput): Transp
   return adapter === undefined
     ? { kind: 'refused', reason: 'adapter_not_registered' }
     : adapter.admit(input)
+}
+
+export function readHttpJsonProbeConfiguration(
+  adapterId: string,
+  configJson: string,
+): Readonly<{
+  method: 'GET' | 'HEAD'
+  fixedQuery: readonly Readonly<{ parameter: string; value: string }>[]
+}> {
+  if (adapterId !== 'http-json:v1') return { method: 'HEAD', fixedQuery: [] }
+  try {
+    const configuration = httpJsonConfiguration.safeParse(JSON.parse(configJson))
+    return configuration.success
+      ? {
+          method: configuration.data.method === 'GET' ? 'GET' : 'HEAD',
+          fixedQuery: configuration.data.fixedQuery ?? [],
+        }
+      : { method: 'HEAD', fixedQuery: [] }
+  } catch {
+    return { method: 'HEAD', fixedQuery: [] }
+  }
 }
 
 function admitHttpJsonTransport(input: TransportAdmissionInput): TransportAdmissionResult {

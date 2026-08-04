@@ -219,6 +219,45 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
     })
     expect(health.latestAttempt).not.toHaveProperty('offeringRef')
   })
+
+  it('reads pre-version offeringCount attempts as current projection evidence', async () => {
+    const backend = convexTest(schema, convexModules)
+    const slug = 'pre-version-current-registry'
+    const { businessId } = await publishedBusinessOwner(backend, slug)
+    const sourceHash = 'source:pre-version-current'
+
+    await backend.run((ctx) => ctx.db.insert('registryProjectionAttempts', {
+      businessId,
+      logicalKey: `registry:business:${businessId}:${sourceHash}`,
+      sourceHash,
+      sourceVersion: 'public-catalog:v1',
+      projectionKind: 'business_catalog',
+      status: 'succeeded',
+      retryCount: 0,
+      startedAt: 1,
+      latestReadback: {
+        businessId,
+        slug,
+        publicUrl: `/${slug}`,
+        sourceVersion: 'public-catalog:v1',
+        sourceHash,
+        offeringCount: 1,
+        publicSurfaces: ['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'],
+        readAt: 2,
+      },
+      repairAction: 'no_repair',
+      repairResult: 'not_run',
+    }))
+
+    const health = await backend.query(api.registry.readCatalogHealth, { businessId: String(businessId) })
+    expect(health.latestAttempt).toMatchObject({
+      businessId: String(businessId),
+      projectionKind: 'business_catalog',
+      sourceHash,
+      latestReadback: { offeringCount: 1 },
+    })
+    expect(health.latestAttempt).not.toHaveProperty('kind')
+  })
   it('refuses replay when registry and discovery attempts are missing', async () => {
     const { backend, fixture } = await publishedReplayFixture()
 
@@ -277,6 +316,128 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
         },
         repairAction: 'no_repair',
         repairResult: 'not_run',
+      })
+    })
+
+    const replayed = await backend.run((ctx) => publishBusinessCatalogCommand(ctx.db, {
+      actor: fixture.actor,
+      claimId: fixture.claimId,
+      operationKey: fixture.operationKey,
+      correlationId: fixture.correlationId,
+      services: fixture.services,
+    }, 3))
+    expect(replayed).toMatchObject({ kind: 'error', code: 'catalog_publish_operation_conflict' })
+  })
+
+  it('refuses replay when discovery readback URLs contain credentials', async () => {
+    const { backend, fixture } = await publishedReplayFixture()
+
+    await backend.run(async (ctx) => {
+      const attempt = await ctx.db
+        .query('discoveryManifestAttempts')
+        .withIndex('by_attemptId', (query) => query.eq('attemptId', `discovery:manifest:${fixture.businessId}:${fixture.sourceHash}:v1`))
+        .unique()
+      if (attempt === null) throw new Error('published replay fixture discovery attempt missing')
+      const origin = 'https://user:secret@ae.example'
+      const generatedHash = 'digest:credential-url-generated'
+      const bodyHash = 'digest:credential-url-body'
+      const urlHash = 'digest:credential-url'
+      await ctx.db.patch(attempt._id, {
+        status: 'succeeded',
+        generatedHash,
+        bodyHash,
+        urlHash,
+        latestReadback: {
+          businessId: fixture.businessId,
+          slug: fixture.slug,
+          manifestUrl: `${origin}/${fixture.slug}/ucp`,
+          sourceVersion: 'public-catalog:v1',
+          sourceHash: fixture.sourceHash,
+          generatedHash,
+          bodyHash,
+          urlHash,
+          routeUrls: [
+            `${origin}/${fixture.slug}`,
+            `${origin}/${fixture.slug}/ucp`,
+            `${origin}/api/businesses/${fixture.slug}`,
+          ],
+          readAt: 2,
+        },
+      })
+    })
+
+    const replayed = await backend.run((ctx) => publishBusinessCatalogCommand(ctx.db, {
+      actor: fixture.actor,
+      claimId: fixture.claimId,
+      operationKey: fixture.operationKey,
+      correlationId: fixture.correlationId,
+      services: fixture.services,
+    }, 3))
+    expect(replayed).toMatchObject({ kind: 'error', code: 'catalog_publish_operation_conflict' })
+  })
+
+  it('replays discovery readbacks below a canonical base path', async () => {
+    const { backend, fixture } = await publishedReplayFixture()
+
+    await backend.run(async (ctx) => {
+      const attempt = await ctx.db
+        .query('discoveryManifestAttempts')
+        .withIndex('by_attemptId', (query) => query.eq('attemptId', `discovery:manifest:${fixture.businessId}:${fixture.sourceHash}:v1`))
+        .unique()
+      if (attempt === null) throw new Error('published replay fixture discovery attempt missing')
+      const origin = 'https://ae.example/tenant'
+      const generatedHash = 'digest:base-path-generated'
+      const bodyHash = 'digest:base-path-body'
+      const urlHash = 'digest:base-path-url'
+      await ctx.db.patch(attempt._id, {
+        status: 'succeeded',
+        generatedHash,
+        bodyHash,
+        urlHash,
+        latestReadback: {
+          businessId: fixture.businessId,
+          slug: fixture.slug,
+          manifestUrl: `${origin}/${fixture.slug}/ucp`,
+          sourceVersion: 'public-catalog:v1',
+          sourceHash: fixture.sourceHash,
+          generatedHash,
+          bodyHash,
+          urlHash,
+          routeUrls: [
+            `${origin}/${fixture.slug}`,
+            `${origin}/${fixture.slug}/ucp`,
+            `${origin}/api/businesses/${fixture.slug}`,
+          ],
+          readAt: 2,
+        },
+      })
+    })
+
+    const replayed = await backend.run((ctx) => publishBusinessCatalogCommand(ctx.db, {
+      actor: fixture.actor,
+      claimId: fixture.claimId,
+      operationKey: fixture.operationKey,
+      correlationId: fixture.correlationId,
+      services: fixture.services,
+    }, 3))
+    expect(replayed).toMatchObject({ kind: 'ok', code: 'catalog_publish_replayed' })
+  })
+
+  it('refuses replay when the current supply snapshot no longer matches the published effects', async () => {
+    const { backend, fixture } = await publishedReplayFixture()
+
+    await backend.run(async (ctx) => {
+      const snapshot = await ctx.db
+        .query('businessSupplyProjectionSnapshots')
+        .withIndex('by_businessId', (query) => query.eq('businessId', fixture.businessId))
+        .unique()
+      if (snapshot === null || !('projection' in snapshot) || snapshot.projection === undefined) {
+        throw new Error('published replay fixture current projection snapshot missing')
+      }
+      const sourceDigest = 'digest:replacement-projection'
+      await ctx.db.patch(snapshot._id, {
+        sourceDigest,
+        projection: { ...snapshot.projection, sourceDigest },
       })
     })
 
@@ -426,6 +587,25 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
         sourceVersion: 'public-catalog:v1',
       },
     })
+    const replayed = await owner.mutation(api.discovery.regenerateDiscoveryManifest, withSourceWrite('discovery_repair', {
+      businessId,
+      canonicalBaseUrl: 'https://ae.example',
+      operationKey: 'op:discovery:legacy-replace:replay',
+      correlationId: 'corr:discovery:legacy-replace:replay',
+    }))
+    expect(replayed).toMatchObject({
+      kind: 'ok',
+      code: 'discovery_manifest_replayed',
+      attempt: {
+        sourceHash: 'digest:projection',
+        status: 'succeeded',
+        latestReadback: {
+          businessId,
+          slug: 'legacy-discovery-replace',
+          sourceVersion: 'public-catalog:v1',
+        },
+      },
+    })
     const stored = await backend.run((ctx) => ctx.db.query('discoveryManifests').collect())
     expect(stored).toHaveLength(1)
     expect(stored[0]).toMatchObject({
@@ -524,6 +704,64 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
     expect(llms.body).not.toContain('legacy-json-foreign')
   })
 
+  it('omits a succeeded attempt with a foreign or non-canonical readback', async () => {
+    const backend = convexTest(schema, convexModules)
+    const { businessId } = await publishedBusinessOwner(backend, 'legacy-discovery-readback')
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('businessSupplyProjectionSnapshots', {
+        businessId,
+        sourceRevision: 1,
+        sourceDigest: 'digest:projection',
+        observedAt: 1,
+        disposition: 'current',
+        status: 'current',
+        projectionJson: JSON.stringify(currentProjection(businessId, 'legacy-discovery-readback')),
+        updatedAt: 1,
+      })
+      await ctx.db.insert('discoveryManifestAttempts', {
+        attemptId: `discovery:manifest:${businessId}:digest:projection:v1`,
+        businessId,
+        ucpVersion: 'v1',
+        pathKind: 'ae_hosted_fallback',
+        sourceHash: 'digest:projection',
+        sourceVersion: 'public-catalog:v1',
+        status: 'succeeded',
+        retryCount: 0,
+        startedAt: 1,
+        finishedAt: 2,
+        generatedHash: 'digest:generated',
+        bodyHash: 'digest:body',
+        urlHash: 'digest:url',
+        latestReadback: {
+          businessId,
+          slug: 'legacy-discovery-readback',
+          manifestUrl: 'https://ae.example/foreign-slug/ucp',
+          sourceVersion: 'public-catalog:v1',
+          sourceHash: 'digest:projection',
+          generatedHash: 'digest:generated',
+          bodyHash: 'digest:body',
+          urlHash: 'digest:url',
+          routeUrls: [
+            'https://ae.example/foreign-slug',
+            'https://ae.example/foreign-slug/ucp',
+            'https://ae.example/api/businesses/foreign-slug',
+          ],
+          readAt: 2,
+        },
+        repairAction: 'no_repair',
+        repairResult: 'succeeded',
+      })
+    })
+
+    const health = await backend.query(api.discovery.readDiscoveryHealth, { businessId })
+    expect(health).toMatchObject({
+      sourceState: 'published',
+      discoveryStatus: 'degraded',
+    })
+    expect(health).not.toHaveProperty('latestAttempt')
+  })
+
   it('reads a historical discovery manifest without converting services into offerings', async () => {
     const backend = convexTest(schema, convexModules)
     const { businessId } = await publishedBusinessOwner(backend, 'legacy-discovery')
@@ -536,6 +774,17 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
       services: [{ slug: 'emergency-pipe-repair', capabilities: [{ kind: 'phone_inquiry', callable: false }] }],
     })
     expect(health.latestManifest).not.toHaveProperty('offerings')
+  })
+
+  it('omits malformed historical discovery manifests from health readback', async () => {
+    const backend = convexTest(schema, convexModules)
+    const { businessId } = await publishedBusinessOwner(backend, 'malformed-legacy-discovery')
+    const malformed = legacyDiscoveryManifestRow(businessId, '')
+
+    await backend.run((ctx) => ctx.db.insert('discoveryManifests', malformed))
+
+    const health = await backend.query(api.discovery.readDiscoveryHealth, { businessId })
+    expect(health).not.toHaveProperty('latestManifest')
   })
 })
 async function publishedReplayFixture(): Promise<{
@@ -627,10 +876,14 @@ async function publishedReplayFixture(): Promise<{
       services,
     }, 2)
     if (catalog.kind !== 'ok') throw new Error(`legacy replay publish failed: ${catalog.code}`)
+    const snapshot = await ctx.db.query('businessSupplyProjectionSnapshots')
+      .withIndex('by_businessId', (query) => query.eq('businessId', catalog.business.businessId))
+      .unique()
+    if (snapshot === null) throw new Error('legacy replay projection snapshot missing')
     return {
       businessId: catalog.business.businessId,
       claimId: catalog.claim.claimId,
-      sourceHash: catalog.business.sourceHash,
+      sourceHash: snapshot.sourceDigest,
     }
   })
 

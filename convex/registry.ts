@@ -155,10 +155,21 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(canonicalTradeToken)
     const locationKey = resolveSearchLocationKey(args)
     const searchText = tokens.length === 0 ? needle : tokens.join(' ')
-    const documents = await ctx.db.query('registrySearchDocuments')
+    const indexedDocuments = await ctx.db.query('registrySearchDocuments')
       .withSearchIndex('search_searchText_by_publicStatus', (search) => search.search('searchText', searchText).eq('publicStatus', 'published'))
       .take(SEARCH_DOCUMENT_CANDIDATE_LIMIT)
-    const candidateSlugs = uniqueBusinessSlugs(documents.filter((document) => matchesSearchDocument(document, tokens, locationKey))).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
+    const indexedMatches = indexedDocuments.filter((document) => matchesSearchDocument(document, tokens, locationKey))
+    // Search-index backfills are asynchronous after a clean production reseed, and
+    // relevance candidates may contain no strict token match. Keep the public
+    // catalogue usable in either bounded case without scanning.
+    const documents = indexedMatches.length > 0
+      ? indexedMatches
+      : (await ctx.db.query('registrySearchDocuments')
+          .withIndex('by_publicStatus_updatedAt', (query) => query.eq('publicStatus', 'published'))
+
+          .take(SEARCH_DOCUMENT_CANDIDATE_LIMIT))
+          .filter((document) => matchesSearchDocument(document, tokens, locationKey))
+    const candidateSlugs = uniqueBusinessSlugs(documents).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
     const businesses = (await Promise.all(candidateSlugs.map((slug) => ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()))).filter((business): business is Doc<'businesses'> => business !== null)
     const offeringSupplyReadPort = createOfferingSupplyReadPort(ctx.db)
     const supply = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(offeringSupplyReadPort, business)))).filter((item): item is OfferingSupplyDto => item !== undefined).filter((item) => matchesOfferingSupply(item, tokens, locationKey))
@@ -258,9 +269,9 @@ function createOfferingSupplyReadPort(db: DatabaseReader): OfferingSupplyReadPor
       const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
       const status = snapshot.status
       if (status !== 'current' && status !== 'projection_pending') return null
-      return {
-        status,
-        projection: readBusinessSupplyProjectionSnapshot(
+      let projection: BusinessSupplyProjection
+      try {
+        projection = readBusinessSupplyProjectionSnapshot(
           projectionValue,
           'registry',
           String(normalizedId),
@@ -270,10 +281,13 @@ function createOfferingSupplyReadPort(db: DatabaseReader): OfferingSupplyReadPor
             sourceRevision: snapshot.sourceRevision,
             sourceDigest: snapshot.sourceDigest,
             observedAt: snapshot.observedAt,
-            disposition: snapshot.disposition,
+            ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
           },
-        ),
+        )
+      } catch {
+        return null
       }
+      return { status, projection }
     },
   }
 }
@@ -379,11 +393,34 @@ async function readCatalogHealthFromDb(db: DatabaseReader, businessId: string): 
     : await db.query('businessSupplyProjectionSnapshots')
       .withIndex('by_businessId', (query) => query.eq('businessId', id))
       .unique()
+  const snapshotValid = snapshot === null || business === null || id === null
+    ? false
+    : (() => {
+      try {
+        const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
+        readBusinessSupplyProjectionSnapshot(
+          projectionValue,
+          'registry',
+          String(id),
+          business.slug,
+          {
+            businessId: String(snapshot.businessId),
+            sourceRevision: snapshot.sourceRevision,
+            sourceDigest: snapshot.sourceDigest,
+            observedAt: snapshot.observedAt,
+            ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
+          },
+        )
+        return true
+      } catch {
+        return false
+      }
+    })()
   const suppressed = id === null || business === null || business.publicStatus !== 'published'
     ? false
     : await hasActiveBusinessSuppression(db, id)
-  const sourceState: CatalogHealth['sourceState'] = business !== null && business.publicStatus === 'published' && !suppressed && snapshot !== null ? 'published' : 'not_public'
-  const latestAttempt = id === null ? undefined : await latestRegistryAttempt(db, id)
+  const sourceState: CatalogHealth['sourceState'] = business !== null && business.publicStatus === 'published' && !suppressed && snapshotValid ? 'published' : 'not_public'
+  const latestAttempt = id === null || business === null ? undefined : await latestRegistryAttempt(db, id, business.slug)
   return {
     businessId,
     sourceState,
@@ -396,18 +433,19 @@ async function readCatalogHealthFromDb(db: DatabaseReader, businessId: string): 
   }
 }
 
-async function latestRegistryAttempt(db: DatabaseReader, businessId: Id<'businesses'>): Promise<RegistryAttempt | undefined> {
+async function latestRegistryAttempt(db: DatabaseReader, businessId: Id<'businesses'>, expectedSlug: string): Promise<RegistryAttempt | undefined> {
   const latest = await db
     .query('registryProjectionAttempts')
     .withIndex('by_business_startedAt', (query) => query.eq('businessId', businessId))
     .order('desc')
     .first()
-  return latest === null ? undefined : toRegistryAttempt(latest)
+  return latest === null ? undefined : toRegistryAttempt(latest, expectedSlug)
 }
 
-function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): RegistryAttempt {
+function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>, expectedSlug: string): RegistryAttempt | undefined {
   const readback = attempt.latestReadback
-  const isCurrent = 'attemptVersion' in attempt && attempt.attemptVersion === 'current'
+  const isCurrent = ('attemptVersion' in attempt && attempt.attemptVersion === 'current')
+    || (readback !== undefined && 'offeringCount' in readback)
   const legacyReadback = !isCurrent && readback !== undefined && 'serviceCount' in readback
     ? {
         ...readback,
@@ -415,6 +453,16 @@ function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): Registry
       }
     : undefined
   if (!isCurrent) {
+    if (
+      legacyReadback !== undefined
+      && (
+        legacyReadback.businessId !== String(attempt.businessId)
+        || legacyReadback.slug !== expectedSlug
+        || legacyReadback.publicUrl !== `/${expectedSlug}`
+        || legacyReadback.sourceVersion !== 'public-catalog:v1'
+        || legacyReadback.sourceHash !== attempt.sourceHash
+      )
+    ) return undefined
     return {
       kind: 'legacy_unavailable',
       reason: 'offering_identity_unavailable',
@@ -437,15 +485,39 @@ function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): Registry
       repairResult: attempt.repairResult,
     }
   }
-  const currentReadback = readback !== undefined && 'offeringCount' in readback
-    ? {
+  if (
+    attempt.projectionKind !== 'business_catalog'
+    || ('offeringRef' in attempt && attempt.offeringRef !== undefined)
+    || attempt.logicalKey !== `registry:business:${attempt.businessId}:${attempt.sourceHash}`
+    || attempt.sourceVersion !== 'public-catalog:v1'
+    || (attempt.status === 'succeeded' && (readback === undefined || !('offeringCount' in readback)))
+    || (readback !== undefined && !('offeringCount' in readback))
+  ) return undefined
+  const currentReadback = readback === undefined
+    ? undefined
+    : {
         ...readback,
         businessId: String(readback.businessId),
       }
-    : undefined
+  const expectedSurfaces = [
+    '/api/businesses',
+    '/api/businesses/search',
+    '/api/businesses/{slug}',
+  ] as const
+  if (
+    currentReadback !== undefined
+    && (
+      currentReadback.businessId !== String(attempt.businessId)
+      || currentReadback.slug !== expectedSlug
+      || currentReadback.publicUrl !== `/${expectedSlug}`
+      || currentReadback.sourceVersion !== 'public-catalog:v1'
+      || currentReadback.sourceHash !== attempt.sourceHash
+      || currentReadback.publicSurfaces.length !== expectedSurfaces.length
+      || !expectedSurfaces.every((surface) => currentReadback.publicSurfaces.includes(surface))
+    )
+  ) return undefined
   return {
     businessId: String(attempt.businessId),
-    ...(!('offeringRef' in attempt) || attempt.offeringRef === undefined ? {} : { offeringRef: attempt.offeringRef }),
     logicalKey: attempt.logicalKey,
     projectionKind: attempt.projectionKind,
     sourceHash: attempt.sourceHash,
@@ -463,8 +535,7 @@ function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): Registry
     repairResult: attempt.repairResult,
   }
 }
-
-function projectionItemValue(item: Doc<'registryProjectionItems'>): ProjectionItem {
+function projectionItemValue(item: Doc<'registryProjectionItems'>): ProjectionItem | undefined {
   if ('serviceCount' in item) {
     return {
       kind: 'legacy_unavailable',
@@ -482,6 +553,12 @@ function projectionItemValue(item: Doc<'registryProjectionItems'>): ProjectionIt
       updatedAt: item.updatedAt,
     }
   }
+  if (
+    (item.projectionKind === 'business_catalog' && item.offeringRef !== undefined)
+    || (item.projectionKind === 'offering_catalog' && (
+      item.offeringRef === undefined || item.offeringRef.trim().length === 0
+    ))
+  ) return undefined
   return {
     businessId: String(item.businessId),
     ...(item.offeringRef === undefined ? {} : { offeringRef: item.offeringRef }),
@@ -499,7 +576,9 @@ function projectionItemValue(item: Doc<'registryProjectionItems'>): ProjectionIt
 
 async function projectionItemsForBusiness(db: DatabaseReader, businessId: Id<'businesses'>) {
   const items = await db.query('registryProjectionItems').withIndex('by_business', (query) => query.eq('businessId', businessId)).take(100)
-  return items.map(projectionItemValue)
+  return items
+    .map(projectionItemValue)
+    .filter((item): item is ProjectionItem => item !== undefined)
 }
 
 async function indexStatusForBusiness(db: DatabaseReader, businessId: string): Promise<CatalogHealth['indexStatus']> {
@@ -514,7 +593,17 @@ const LOCATION_PREPOSITION = /\b(?:in|near|around|at)\s+([a-z][a-z\s'-]{1,80})(?
 
 function matchesQueryTokens(haystack: string, tokens: readonly string[]): boolean { const tradeTokens = tokens.filter((token) => TRADE_CANONICAL_TOKENS.has(token)); if (tradeTokens.length > 0) return tradeTokens.some((token) => haystack.includes(token)); return tokens.every((token) => haystack.includes(token)) }
 function resolveSearchLocationKey(input: { query: string; mode?: string; location?: string }): string | undefined { if (input.mode === 'whole_catalogue') return undefined; const explicit = normalizeLocationLabel(input.location); if (explicit !== undefined) return normalizeSearchText(explicit); const fromQuery = extractLocationFromQuery(input.query); return fromQuery === undefined ? undefined : normalizeSearchText(fromQuery) }
-function extractLocationFromQuery(query: string): string | undefined { const normalized = normalizeLocationLabel(query); if (normalized === undefined) return undefined; const prepositionMatch = normalized.match(LOCATION_PREPOSITION); if (prepositionMatch?.[1] !== undefined) return normalizeLocationLabel(prepositionMatch[1]); const tokens = normalized.split(/\s+/).filter(Boolean); return normalizeLocationLabel(trimServiceWords(dropTrailingState(tokens)).join(' ')) }
+function extractLocationFromQuery(query: string): string | undefined {
+  const prepositionMatch = normalizeSearchText(query).match(LOCATION_PREPOSITION)
+  if (prepositionMatch?.[1] !== undefined) return normalizeLocationLabel(prepositionMatch[1])
+  const normalized = normalizeLocationLabel(query)
+  if (normalized === undefined) return undefined
+  const tokens = dropTrailingState(normalized.split(/\s+/).filter(Boolean))
+  const locationTokens = trimServiceWords(tokens)
+  return locationTokens.length === tokens.length
+    ? undefined
+    : normalizeLocationLabel(locationTokens.join(' '))
+}
 function extractPlaceCandidates(value: string): readonly string[] { const normalized = normalizeSearchText(value); if (normalized.length === 0) return []; return normalized.replace(/\band nearby suburbs\b/g, '|').replace(/\bnearby suburbs\b/g, '|').replace(/\bmetro\b/g, ' metro|').split(/[|,;/]+/g).map((candidate) => trimServiceWords(candidate.split(/\s+/).filter(Boolean)).join(' ')).map((candidate) => candidate.replace(/\bmetro\b/g, '').trim()).filter((candidate) => candidate.length >= 3) }
 function normalizeLocationLabel(value: string | undefined): string | undefined { if (value === undefined) return undefined; const words = value.trim().replace(/[^a-z0-9\s'-]+/gi, ' ').replace(/\s+/g, ' ').split(/\s+/).filter(Boolean).filter((word) => !STATE_WORDS.has(word.toLowerCase())); while (words.length > 0) { const first = words[0]; if (first === undefined || !SERVICE_WORDS.has(first.toLowerCase())) break; words.shift() } while (words.length > 0) { const last = words.at(-1); if (last === undefined || !SERVICE_WORDS.has(last.toLowerCase())) break; words.pop() } const label = words.join(' ').trim(); if (label.length < 3 || /\d/.test(label)) return undefined; return label }
 function dropTrailingState(tokens: readonly string[]): readonly string[] { const last = tokens.at(-1)?.toLowerCase(); return last !== undefined && STATE_WORDS.has(last) ? tokens.slice(0, -1) : tokens }

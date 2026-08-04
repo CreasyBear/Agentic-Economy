@@ -53,7 +53,7 @@ export async function buildDevelopmentContinuityEvidence(
     intent: 'MOCK/DEVELOPMENT ONLY: continue from the completed quote.',
     networkId: 'mock:network',
     proposal: { kind: 'unsupported_request', reason: 'requested_result_not_available' },
-    interpreterId: 'mock:interpreter', bindings: [], models: [], now: nowMs,
+    interpreterId: 'mock:interpreter', bindings: [], models: [], mappings: [], now: nowMs,
   })
   if (compiled.kind !== 'compiled') throw new Error('mock_request_compile_failed')
   const attached = attachCompletedTaskReference({

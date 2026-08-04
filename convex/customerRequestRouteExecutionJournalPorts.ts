@@ -4,11 +4,17 @@ import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 import {
   isBoundedJsonValue,
   openCapabilityDecisionModel,
+  rehydrateCapabilityInputKey,
+  rehydratePointedSchemaIdentity as rehydratePointedSchemaIdentityValue,
   sameCapabilityContractRef,
-  type CapabilityInputKey,
   type JsonValue,
-  type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
+import {
+  isPublicOperationRef,
+  validateAdmittedOperationRef,
+  type AdmittedOperationRef,
+  type PublicOperationRef,
+} from '@/modules/capability-supply/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseBoundedJson } from '@/modules/common/bounded-json'
@@ -21,10 +27,11 @@ import {
 } from '@/modules/customer-request/route-execution/machines'
 import {
   routeAttemptIntegrityValid,
+  routeDispatchIntegrityValid,
   routeRunIdentityDigest,
   decideSucceededOutcomeBranch,
+  effectiveRouteAttemptState,
 } from '@/modules/customer-request/route-execution/journal'
-
 import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
@@ -71,12 +78,20 @@ function toStoredRouteStepGrant(value: RouteStepGrant | StoredRouteStepGrant): S
 
 function toRouteStepGrantSnapshot(value: unknown): RouteStepGrant {
   const stored = value as StoredRouteStepGrant
+  if (
+    stored.step.position === undefined
+    || stored.step.operationRef === undefined
+    || stored.step.admittedOperation === undefined
+  ) throw new Error('customer_request_route_step_grant_admission_missing')
   return {
     ...stored,
     request: { ...stored.request },
     route: { ...stored.route },
     step: {
       ...stored.step,
+      position: stored.step.position,
+      operationRef: asPublicOperationRef(stored.step.operationRef),
+      admittedOperation: asAdmittedOperationRef(stored.step.admittedOperation),
       contractRef: { ...stored.step.contractRef },
       dataScope: stored.step.dataScope.map((scope) => ({
         ...scope,
@@ -86,7 +101,7 @@ function toRouteStepGrantSnapshot(value: unknown): RouteStepGrant {
       effects: stored.step.effects.map((effect) => ({ ...effect })),
       evidence: stored.step.evidence.map((evidence) => ({
         ...evidence,
-        schemaIdentity: rehydratePointedSchemaIdentity(evidence.schemaIdentity),
+        schemaIdentity: rehydratePointedSchemaIdentityValue(evidence.schemaIdentity),
       })),
       cancellation: {
         ...stored.step.cancellation,
@@ -98,10 +113,18 @@ function toRouteStepGrantSnapshot(value: unknown): RouteStepGrant {
     admission: { ...stored.admission },
   }
 }
-
-function rehydratePointedSchemaIdentity(value: string): PointedSchemaIdentity {
-  return value as PointedSchemaIdentity
+function asPublicOperationRef(value: string): PublicOperationRef {
+  if (!isPublicOperationRef(value)) throw new Error('customer_request_route_operation_ref_invalid')
+  return value
 }
+
+function asAdmittedOperationRef(value: unknown): AdmittedOperationRef {
+  if (!validateAdmittedOperationRef(value)) {
+    throw new Error('customer_request_route_admitted_operation_invalid')
+  }
+  return value
+}
+
 
 type DbCtx = MutationCtx | QueryCtx
 const PRE_RELEASE_CANCELLATION_WINDOW_MS = 5_000
@@ -544,6 +567,18 @@ export async function readRunProjection(
     || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
     throw new Error('customer_request_route_run_attempt_integrity_failure')
   }
+  const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
+    .withIndex('by_attemptRef', (query) => query.eq('attemptRef', current.attemptRef))
+    .unique()
+  const dispatchSnapshot = dispatch === null ? undefined : toDispatchRecord(dispatch)
+  const dispatchMatchesCurrent = dispatchSnapshot !== undefined
+    && dispatchSnapshot.runRef === runRef
+    && dispatchSnapshot.attemptRef === current.attemptRef
+    && dispatchSnapshot.operationKeyDigest === current.operationKeyDigest
+    && routeDispatchIntegrityValid(dispatchSnapshot)
+  const currentState = dispatchMatchesCurrent
+    ? effectiveRouteAttemptState(current.state, dispatchSnapshot.state)
+    : current.state
   const cancellationAttempt = await ctx.db.query('customerRequestRouteCancellationAttempts')
     .withIndex('by_runRef_and_attemptRef', (query) => (
       query.eq('runRef', runRef).eq('attemptRef', current.attemptRef)
@@ -560,9 +595,9 @@ export async function readRunProjection(
     totalSteps: run.totalSteps,
     completedSteps: run.completedSteps,
     currentPosition: run.currentPosition,
-    currentState: current.state,
+    currentState,
     ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
-    ...(current.state === 'queued'
+    ...(currentState === 'queued'
       ? { cancellationReleaseMayStartAt: current.createdAt + PRE_RELEASE_CANCELLATION_WINDOW_MS }
       : {}),
     ...(cancellation?.result === 'too_late' || cancellation?.result === 'rejected'
@@ -790,7 +825,7 @@ async function materializeStepInput(
   const mappedFacts = step.deferredInputs.flatMap((mapping) => {
     const value = request.upstreamOutputs.get(mapping.mappingId)
     return value === undefined ? [] : [{
-      input: mapping.target.inputKey as CapabilityInputKey,
+      input: rehydrateCapabilityInputKey(mapping.target.inputKey),
       inputPointer: mapping.target.inputPointer,
       value,
     }]
@@ -802,7 +837,7 @@ async function materializeStepInput(
     stage: 'commitment',
     facts: [
       ...step.resolvedInputs.map((fact) => ({
-        input: fact.inputKey as CapabilityInputKey,
+        input: rehydrateCapabilityInputKey(fact.inputKey),
         inputPointer: fact.inputPointer,
         value: fact.value,
       })),

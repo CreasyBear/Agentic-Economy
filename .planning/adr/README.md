@@ -48,6 +48,10 @@ file's status declaration; the filename disambiguates duplicate numbers.
 | ADR-025 | `ADR-025-commercial-and-usage-ownership.md` | Accepted as Phase 4 planning authority |
 | ADR-026 | `ADR-026-one-business-supply-graph.md` | Accepted |
 | ADR-027 | `ADR-027-comparable-published-price.md` | Accepted |
+| ADR-028 | `ADR-028-executable-capability-registry-admission.md` | Accepted |
+| ADR-029 | `ADR-029-capability-publication-provenance-readiness.md` | Accepted |
+| ADR-030 | `ADR-030-registry-engine-machine-contract.md` | Accepted |
+| ADR-031 | `ADR-031-frankfurter-second-conformance-provider.md` | Accepted |
 
 ## Reconciled gaps and discrepancies
 

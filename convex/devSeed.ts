@@ -190,6 +190,8 @@ export const seedDevCatalog = internalMutation({
   },
 })
 
+
+
 export const seedOfferingSupply = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
   returns: v.object({
@@ -700,34 +702,39 @@ export async function registerSandboxBusinesses(
       throw new Error(`sandbox_business_claim_${claim.code}:${fixture.requestedSlug}:${claim.reason}`)
     }
 
+    const services = fixture.offerings.map((offering) => ({
+      name: offering.name,
+      category: offering.category,
+      summary: offering.summary,
+      serviceArea: offering.serviceAreaSummary,
+      hoursOrUnknown: offering.availabilitySummary,
+      firstRequest: offering.firstRequestMode === 'not_available_yet'
+        ? {
+            mode: offering.firstRequestMode,
+            publicChannel: 'not_available' as const,
+            noContactReason: offering.noContactReason,
+          }
+        : {
+            mode: offering.firstRequestMode,
+            publicChannel: 'ae_status_only' as const,
+            publicDisclosure: offering.publicDisclosure,
+          },
+    }))
+    const catalogOperationKey = `seed:catalog:${fixture.requestedSlug}:${canonicalDigest(services)}`
     const published = await publishBusinessCatalogCommand(db, {
       actor,
       claimId: claim.claim.claimId,
-      operationKey: `seed:catalog:${fixture.requestedSlug}`,
-      correlationId: `seed:catalog:${fixture.requestedSlug}`,
-      services: fixture.offerings.map((offering) => ({
-        name: offering.name,
-        category: offering.category,
-        summary: offering.summary,
-        serviceArea: offering.serviceAreaSummary,
-        hoursOrUnknown: offering.availabilitySummary,
-        firstRequest: offering.firstRequestMode === 'not_available_yet'
-          ? {
-              mode: offering.firstRequestMode,
-              publicChannel: 'not_available',
-              noContactReason: offering.noContactReason,
-            }
-          : {
-              mode: offering.firstRequestMode,
-              publicChannel: 'ae_status_only',
-              publicDisclosure: offering.publicDisclosure,
-            },
-      })),
+      operationKey: catalogOperationKey,
+      correlationId: catalogOperationKey,
+      services,
     }, now + 500)
-    if (published.kind !== 'ok') {
+    if (published.kind === 'ok') {
+      businessIdsBySlug[fixture.requestedSlug] = published.business.businessId
+    } else if (published.code === 'catalog_publish_operation_conflict' && claim.claim.businessId !== undefined) {
+      businessIdsBySlug[fixture.requestedSlug] = claim.claim.businessId
+    } else {
       throw new Error(`sandbox_business_publish_${published.code}:${fixture.requestedSlug}:${published.reason}`)
     }
-    businessIdsBySlug[fixture.requestedSlug] = published.business.businessId
   }
   return { seededSlugs: fixtures.map((fixture) => fixture.requestedSlug), businessIdsBySlug }
 }
@@ -1558,6 +1565,10 @@ export const seedCallableOffering = internalMutation({
     summary: v.string(),
     url: v.string(),
     pricingSummary: v.string(),
+    method: v.optional(v.string()),
+    documentationUrl: v.optional(v.string()),
+    authenticationSummary: v.optional(v.string()),
+    provenance: v.optional(v.union(v.literal('business_declared'), v.literal('publicly_observed'))),
   },
   returns: v.object({ kind: v.string(), accessPathRef: v.optional(v.string()), reason: v.optional(v.string()) }),
   handler: async (ctx, args) => {
@@ -1584,9 +1595,11 @@ export const seedCallableOffering = internalMutation({
       name: args.name,
       summary: args.summary,
       url: args.url,
-      method: 'POST',
+      method: args.method ?? 'POST',
+      ...(args.documentationUrl === undefined ? {} : { documentationUrl: args.documentationUrl }),
+      ...(args.authenticationSummary === undefined ? {} : { authenticationSummary: args.authenticationSummary }),
       pricingSummary: args.pricingSummary,
-      provenance: 'business_declared',
+      provenance: args.provenance ?? 'business_declared',
     }
     const owner = await ctx.db.get(business.ownerId)
     if (owner === null) return { kind: 'error', reason: 'owner_not_found' }

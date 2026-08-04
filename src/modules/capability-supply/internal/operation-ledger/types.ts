@@ -13,7 +13,7 @@ export type OperationKeyRecord = Readonly<{
 
 export type OperationBeginResult =
   | Readonly<{ kind: 'conflict' }>
-  | Readonly<{ kind: 'replay'; resultHash: string | undefined; effectRefs: readonly string[] }>
+  | Readonly<{ kind: 'replay'; operationId: string; resultHash: string | undefined; effectRefs: readonly string[] }>
   | Readonly<{ kind: 'ready'; operationId: string }>
 
 export type RegisterOfferingWriterResult =

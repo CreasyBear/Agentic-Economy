@@ -13,6 +13,7 @@ import {
 } from '@/modules/capability-supply/internal/publication'
 import type { OperationKeyRecord } from '@/modules/capability-supply/internal/operation-ledger'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
+import { capabilityOperationId, createPublicOperationRef } from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'a'.repeat(64)}`
 const actor = { kind: 'owner' as const, ref: 'owner-1' }
@@ -136,6 +137,12 @@ function currentPublication(
   const ref = encodedFor().contract.ref
   return {
     id: 'pub-row-1',
+    operationRef: createPublicOperationRef({
+      operationId: capabilityOperationId(ref.capabilityId),
+      publicationRef: 'offering:demo:lookup',
+      publicationRevision: 1,
+      contractRef: ref,
+    }),
     publicationRef: 'offering:demo:lookup',
     revision: 1,
     businessId: 'business-1',
@@ -146,7 +153,11 @@ function currentPublication(
     version: ref.version,
     contractDigest: ref.contractDigest,
     disposition: 'current',
+    sourceRevision: 'source-revision:demo',
     sourceDigest: digest,
+    publisherRef: 'owner-1',
+    authorityMode: 'provider_owned',
+    provenanceDigest: digest,
     ...overrides,
   }
 }
@@ -251,6 +262,12 @@ describe('capability-supply publication commands', () => {
         ],
       },
     }
+    const operationRef = createPublicOperationRef({
+      operationId: capabilityOperationId(admitted.encoded.contract.ref.capabilityId),
+      publicationRef: 'offering:demo:lookup',
+      publicationRevision: 1,
+      contractRef: admitted.encoded.contract.ref,
+    })
     const requestHash = canonicalDigest({
       requestMaterial: {
         businessId: 'business-1',
@@ -266,7 +283,7 @@ describe('capability-supply publication commands', () => {
       operationId: 'op-row-1',
       requestHash,
       status: 'succeeded',
-      resultHash: canonicalDigest(expected),
+      resultHash: canonicalDigest({ ...expected, operationRef }),
       effectRefs: ['audit:1'],
     }
     const registerContract = vi.fn(async () => {

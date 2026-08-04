@@ -124,6 +124,11 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
         })
       }
     }
+  } else if (view.state === 'needs_attention' && view.nextAction === 'none') {
+    actions.push({
+      relation: 'inspect_progress', method: 'GET', href: current,
+      summary: 'Read this saved Request. Start a new Request to continue.',
+    })
   } else if (view.state === 'needs_attention' || view.state === 'outcome_unknown' || view.state === 'failed') {
     if (view.state !== 'failed') {
       actions.push({

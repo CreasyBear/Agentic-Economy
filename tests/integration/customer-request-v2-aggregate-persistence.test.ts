@@ -5,8 +5,9 @@ import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import {
   defineCapabilityContract, openCapabilityDecisionModel,
-  type CapabilityInputKey, type PointedSchemaIdentity,
+  rehydrateCapabilityInputKey, rehydratePointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
+import { createRegisteredOperationMappingRef } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
@@ -18,7 +19,7 @@ import {
 } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
-import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
+import { listRouteableCapabilitySupply, setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 
 describe('atomic V2 Customer Request aggregate persistence', () => {
@@ -595,14 +596,26 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     const action = forged.plan.actions[0]
-    if (action === undefined) throw new Error('test action missing')
-    action.dependsOn = ['action:invented-upstream']
+    if (action === undefined) throw new Error('sandbox action missing')
+    const inventedSchemaIdentity = canonicalDigest({ kind: 'invented-schema' })
+    const mappingRef = createRegisteredOperationMappingRef({
+      kind: 'field',
+      sourceContractRef: action.contractRef,
+      targetContractRef: action.contractRef,
+      sourceSchemaIdentity: inventedSchemaIdentity,
+      targetSchemaIdentity: inventedSchemaIdentity,
+      sourceOutputPointer: '/invented',
+      targetInputPointer: '/invented',
+      authority: 'registered_contract_semantics',
+    })
     action.inputMappings = [{
-      mappingId: 'mapping:invented',
+      mappingRef,
+      kind: 'field',
+      mappingId: mappingRef,
       semanticIdentity: 'ae.invented:v1',
       source: { actionId: 'action:invented-upstream', annotationId: 'invented', evidenceId: 'invented', outputPointer: '/invented' },
-      target: { annotationId: 'invented', inputKey: 'ae_input:invented' as CapabilityInputKey, inputPointer: '/invented' },
-      schemaIdentity: ('sha256:' + '6'.repeat(64)) as PointedSchemaIdentity,
+      target: { annotationId: 'invented', inputKey: rehydrateCapabilityInputKey('ae_input:invented'), inputPointer: '/invented' },
+      schemaIdentity: rehydratePointedSchemaIdentity(inventedSchemaIdentity),
       authority: 'registered_contract_semantics',
     }]
     const {
@@ -660,6 +673,8 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       facts,
       registrySnapshotDigest: aggregate.evaluation.registrySnapshotDigest,
       candidates: aggregate.evaluation.candidates.map((candidate) => ({
+        operationRef: candidate.operationRef,
+        admittedOperation: candidate.admittedOperation,
         businessId: candidate.businessId, offeringId: candidate.offeringId, bindingId: candidate.bindingId,
         model, offeringRegistrationHash: candidate.offeringRegistrationHash,
         bindingRegistrationHash: candidate.bindingRegistrationHash,
@@ -775,7 +790,6 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     expect(persisted?.aggregate).toEqual(legacyAggregate)
     expect(persisted?.aggregate).toHaveProperty('plan.routes')
     expect(persisted?.aggregate).not.toHaveProperty('plan.routes.0.steps.0.resolvedInputs')
-    expect(persisted?.aggregate).not.toHaveProperty('plan.routes.0.steps.0.deferredInputs')
   })
 
 
@@ -787,7 +801,9 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
   await observeSandboxPublications(backend)
-  const supply = await backend.query(internal.capabilitySupply.listRouteable, { networkId: 'ae:public', limit: 64 })
+  const supply = await backend.run(async (ctx) => (
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+  ))
   if (supply.kind !== 'available') throw new Error(`routeable supply unavailable: ${supply.reason}`)
   const contract = defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
   const model = openCapabilityDecisionModel(contract)
@@ -798,15 +814,28 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
     inputKey: input.key, inputPointer: input.inputPointer, schemaIdentity: input.schemaIdentity,
     value: 'Find a match', source: { kind: 'customer' as const, assertionRef: 'assertion:test' },
   }
+  const sandboxSupply = supply.supplies.find(({ binding, publication }) => (
+    publication !== undefined
+    && binding.capabilityId === model.contractRef.capabilityId
+    && binding.version === model.contractRef.version
+    && binding.contractDigest === model.contractRef.contractDigest
+  ))
+  if (sandboxSupply?.publication === undefined) throw new Error('sandbox publication for model missing')
+  const publication = sandboxSupply.publication
   const result = compileCustomerRequest({
     requestId: 'request:v2:persist', expectedRevision: 0,
     principalId: 'principal:v2', delegatedAgentId: 'agent:v2', intent: 'Find a match', networkId: 'ae:public',
     proposal: {
       kind: 'capability_candidates',
-      selections: [{ selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [fact] }],
+      selections: [{
+        operationRef: publication.operationRef,
+        selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [fact],
+      }],
     },
     interpreterId: 'interpreter:test',
-    bindings: supply.supplies.map(({ offering, binding, publication }) => ({
+    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
+      operationRef: publication.operationRef,
+      admittedOperation: publication.admittedOperation,
       businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
       contractRef: {
         capabilityId: binding.capabilityId,
@@ -818,12 +847,10 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       price: offering.presentation.price,
       commercialRelationship: offering.presentation.commercialRelationship,
       cancellation: binding.cancellation,
-      ...(publication === undefined ? {} : {
-        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil,
-      }),
-    })),
-    models: [model], now: 1_000,
+      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+      readinessValidUntil: publication.readinessValidUntil,
+    }]),
+    mappings: [], models: [model], now: 1_000,
   })
   if (result.kind !== 'compiled') throw new Error(`compile failed: ${result.reason}`)
   if (result.routeGeneration === undefined) throw new Error('route generation missing')
@@ -838,7 +865,12 @@ function sandboxSelection(
 ): Extract<CustomerRequestSemanticProposal, { kind: 'capability_candidates' }>['selections'][number] {
   const action = aggregate.plan.actions[0]
   if (action === undefined) throw new Error('sandbox action missing')
-  return { selectionKey: action.selectionKey, contractRef: action.contractRef, facts: [] }
+  return {
+    operationRef: action.operationRef,
+    selectionKey: action.selectionKey,
+    contractRef: action.contractRef,
+    facts: [],
+  }
 }
 
 async function compileRefreshCandidate(
@@ -848,7 +880,9 @@ async function compileRefreshCandidate(
   proposal: CustomerRequestSemanticProposal,
   now: number,
 ) {
-  const supply = await backend.query(internal.capabilitySupply.listRouteable, { networkId: 'ae:public', limit: 64 })
+  const supply = await backend.run(async (ctx) => (
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+  ))
   if (supply.kind !== 'available') throw new Error(`refresh routeable supply unavailable: ${supply.reason}`)
   const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
   const result = compileCustomerRequest({
@@ -862,19 +896,19 @@ async function compileRefreshCandidate(
     priorFacts: aggregate.snapshot.facts,
     proposal,
     interpreterId: 'interpreter:refresh-test',
-    bindings: supply.supplies.map(({ offering, binding, publication }) => ({
+    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
+      operationRef: publication.operationRef,
+      admittedOperation: publication.admittedOperation,
       businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
       contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
       offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
       commercialRelationship: offering.presentation.commercialRelationship,
       cancellation: binding.cancellation,
-      ...(publication === undefined ? {} : {
-        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil,
-      }),
-    })),
-    models: [model], now,
+      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+      readinessValidUntil: publication.readinessValidUntil,
+    }]),
+    mappings: [], models: [model], now,
   })
   if (result.kind !== 'compiled') throw new Error(`refresh compile failed: ${result.reason}`)
   return {

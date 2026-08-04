@@ -5,15 +5,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import {
+  compileCustomerRequest,
+  writableCustomerRequestV2Aggregate,
+  type CustomerRequestRoutePlan,
+} from '@/modules/customer-request/compiler'
 import type { RouteMandate } from '@/modules/customer-request/route-mandate'
 import { isRecord } from '@/modules/common/is-record'
 import { deriveRouteStepAuthority } from '@/modules/customer-request/route-mandate-admission'
-import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
+import {
+  createCustomerRequestRoutePlanGeneration,
+  writableCustomerRequestRoutePlanGeneration,
+  type CustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { internal } from './_generated/api'
 import schema from './schema'
-import { setCapabilitySupplyEligibility } from './capabilitySupply'
+import { listRouteableCapabilitySupply, setCapabilitySupplyEligibility } from './capabilitySupply'
 
 const modules = import.meta.glob('./**/*.ts')
 const identity = {
@@ -1587,7 +1595,9 @@ async function issuedAdmissionFixture(
   backend: ReturnType<typeof convexTest>,
   suffix: string,
 ) {
-  const current = await committedRequest(backend)
+  const current = await committedRequest(backend, identity.tokenIdentifier, {
+    includeFallback: suffix === 'substitution',
+  })
   const route = current.routeGeneration.routes[0]
   if (route === undefined || route.maximumTotalCost.kind !== 'known') {
     throw new Error('exact route fixture missing')
@@ -1634,6 +1644,7 @@ function admissionCommand(
 async function committedRequest(
   backend: ReturnType<typeof convexTest>,
   principalId = identity.tokenIdentifier,
+  options: Readonly<{ includeFallback?: boolean }> = {},
 ) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await backend.run(async (ctx) => {
@@ -1670,6 +1681,7 @@ async function committedRequest(
     intent: 'Find a governed result',
     now: 1_000,
     principalId,
+    ...(options.includeFallback === undefined ? {} : { includeFallback: options.includeFallback }),
   })
   const committed = await backend.mutation(internal.customerRequestV2.commitAggregate, {
     commandKey: 'command:route-mandate-base',
@@ -1713,15 +1725,20 @@ async function compileFixture(
     intent: string
     now: number
     principalId?: string
+    includeFallback?: boolean
   }>,
 ) {
-  const supply = await backend.query(internal.capabilitySupply.listRouteable, {
-    networkId: 'ae:public', limit: 64,
-  })
+  const supply = await backend.run(async (ctx) => (
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+  ))
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
   const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
   const modelInput = model.inputs[0]
   if (modelInput === undefined) throw new Error('sandbox input missing')
+  const publication = supply.supplies.find(({ binding }) => (
+    binding.capabilityId === model.contractRef.capabilityId
+  ))?.publication
+  if (publication === undefined) throw new Error('route mandate publication lineage missing')
   const result = compileCustomerRequest({
     requestId: 'request:route-mandate',
     expectedRevision: input.expectedRevision,
@@ -1733,6 +1750,7 @@ async function compileFixture(
     proposal: {
       kind: 'capability_candidates',
       selections: [{
+        operationRef: publication.operationRef,
         selectionKey: model.selectionKey,
         contractRef: model.contractRef,
         facts: [{
@@ -1746,35 +1764,198 @@ async function compileFixture(
         }],
       }],
     },
+    mappings: [],
     interpreterId: 'interpreter:route-mandate-test',
-    bindings: supply.supplies.map(({ offering, binding, publication: livePublication }) => ({
-      businessId: String(offering.businessId),
-      offeringId: offering.offeringId,
-      bindingId: binding.bindingId,
-      contractRef: {
-        capabilityId: binding.capabilityId,
-        version: binding.version,
-        contractDigest: binding.contractDigest,
-      },
-      offeringRegistrationHash: offering.registrationHash,
-      bindingRegistrationHash: binding.registrationHash,
-      price: offering.presentation.price,
-      commercialRelationship: offering.presentation.commercialRelationship,
-      cancellation: binding.cancellation,
-      ...(livePublication === undefined ? {} : {
+    bindings: supply.supplies.flatMap(({ offering, binding, publication: livePublication }) => (
+      livePublication === undefined ? [] : [{
+        operationRef: livePublication.operationRef,
+        admittedOperation: livePublication.admittedOperation,
+        businessId: String(offering.businessId),
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: {
+          capabilityId: binding.capabilityId,
+          version: binding.version,
+          contractDigest: binding.contractDigest,
+        },
+        offeringRegistrationHash: offering.registrationHash,
+        bindingRegistrationHash: binding.registrationHash,
+        price: offering.presentation.price,
+        commercialRelationship: offering.presentation.commercialRelationship,
+        cancellation: binding.cancellation,
         publicationRef: livePublication.publicationRef,
         publicationRevision: livePublication.revision,
         readinessValidUntil: livePublication.readinessValidUntil,
-      }),
-    })),
+      }]
+    )),
     models: [model],
     now: input.now,
   })
   if (result.kind !== 'compiled' || result.routeGeneration === undefined) {
     throw new Error(`route compile failed: ${result.kind === 'compiled' ? 'generation_missing' : result.reason}`)
   }
+  const routeGeneration = input.includeFallback === true
+    ? routeGenerationWithFallback(result.routeGeneration, supply.supplies)
+    : result.routeGeneration
   return {
     aggregate: writableCustomerRequestV2Aggregate(result.aggregate),
-    routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
+    routeGeneration: writableCustomerRequestRoutePlanGeneration(routeGeneration),
   }
+}
+
+type RoutePlanStep = CustomerRequestRoutePlan['steps'][number]
+type RouteableSupplyEntry = Readonly<{
+  offering: Readonly<{
+    businessId: string
+    offeringId: string
+    registrationHash: string
+    presentation: Readonly<{
+      price: RoutePlanStep['price']
+      commercialRelationship: NonNullable<RoutePlanStep['commercialRelationship']>
+    }>
+  }>
+  binding: Readonly<{
+    bindingId: string
+    capabilityId: string
+    version: number
+    contractDigest: string
+    registrationHash: string
+    cancellation: RoutePlanStep['cancellation']
+  }>
+  publication: Readonly<{
+    operationRef: RoutePlanStep['operationRef']
+    admittedOperation: RoutePlanStep['admittedOperation']
+    publicationRef: string
+    revision: number
+    readinessValidUntil: number
+  }>
+}>
+type RouteableSupply = readonly RouteableSupplyEntry[]
+
+function routeGenerationWithFallback(
+  generation: CustomerRequestRoutePlanGeneration,
+  supplies: RouteableSupply,
+) {
+  const primary = generation.routes[0]
+  if (primary === undefined || primary.steps.length !== 1) {
+    throw new Error('single-step fallback fixture missing')
+  }
+  const primaryStep = primary.steps[0]
+  if (primaryStep === undefined) throw new Error('primary fallback step missing')
+  const alternativeSupply = supplies.find(({ offering, binding, publication }) => (
+    publication !== undefined
+      && publication.operationRef !== primaryStep.operationRef
+      && String(offering.businessId) !== primaryStep.businessId
+      && binding.bindingId !== primaryStep.bindingId
+      && binding.capabilityId === primaryStep.contractRef.capabilityId
+      && binding.version === primaryStep.contractRef.version
+      && binding.contractDigest === primaryStep.contractRef.contractDigest
+  ))
+  if (alternativeSupply?.publication === undefined) {
+    throw new Error('route mandate fallback publication lineage missing')
+  }
+  const { offering, binding, publication } = alternativeSupply
+  const alternativeStep = {
+    ...primaryStep,
+    operationRef: publication.operationRef,
+    admittedOperation: publication.admittedOperation,
+    candidateRef: `candidate:${canonicalDigest({
+      operationRef: publication.operationRef,
+      businessId: String(offering.businessId),
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: primaryStep.contractRef,
+    })}`,
+    businessId: String(offering.businessId),
+    offeringId: offering.offeringId,
+    bindingId: binding.bindingId,
+    offeringRegistrationHash: offering.registrationHash,
+    bindingRegistrationHash: binding.registrationHash,
+    price: offering.presentation.price,
+    commercialRelationship: {
+      ...offering.presentation.commercialRelationship,
+      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
+    },
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+  }
+  const alternative = rekeySingleStepRoute(primary, alternativeStep, publication.readinessValidUntil)
+  if (alternative.routePlanId === primary.routePlanId) {
+    throw new Error('route mandate fallback route did not change')
+  }
+  const routes = [
+    routeWithFallback(primary, alternative.routePlanId),
+    routeWithFallback(alternative, primary.routePlanId),
+  ]
+  const decisionSnapshot = generation.decisionSnapshot
+  if (decisionSnapshot === undefined) throw new Error('route mandate decision snapshot missing')
+  return createCustomerRequestRoutePlanGeneration({
+    generation: generation.generation,
+    requestId: generation.requestId,
+    requestRevision: generation.requestRevision,
+    compiler: generation.compiler,
+    registrySnapshotDigest: generation.registrySnapshotDigest,
+    decisionSnapshot,
+    routes,
+    createdAt: generation.createdAt,
+  })
+}
+
+function rekeySingleStepRoute(
+  route: CustomerRequestRoutePlan,
+  step: RoutePlanStep,
+  expiresAt: number,
+) {
+  const { routePlanId: _routePlanId, routeDigest: _routeDigest, fallbacks: _fallbacks, ...routeBase } = route
+  const comparison = {
+    ...routeBase.comparison,
+    freshnessValidUntil: expiresAt,
+  }
+  const { ordering: _ordering, ...comparisonCore } = comparison
+  const routePlanId = `route:${canonicalDigest({
+    ...routeBase,
+    steps: [step],
+    maximumTotalCost: maximumCostForPrice(step.price),
+    expiresAt,
+    comparison: comparisonCore,
+  })}`
+  const material = {
+    ...routeBase,
+    routePlanId,
+    steps: [step],
+    maximumTotalCost: maximumCostForPrice(step.price),
+    expiresAt,
+    fallbacks: { ordering: 'unranked' as const, alternatives: [] },
+    comparison,
+  }
+  return { ...material, routeDigest: canonicalDigest(material) }
+}
+
+function routeWithFallback(
+  route: CustomerRequestRoutePlan,
+  alternativeRoutePlanId: string,
+) {
+  const { routeDigest: _routeDigest, ...routeWithoutDigest } = route
+  const material = {
+    ...routeWithoutDigest,
+    fallbacks: {
+      ordering: 'unranked' as const,
+      alternatives: [{
+        alternativeRouteRef: alternativeRoutePlanId,
+        when: 'route_unavailable_before_approval' as const,
+      }],
+    },
+  }
+  return { ...material, routeDigest: canonicalDigest(material) }
+}
+
+function maximumCostForPrice(price: RoutePlanStep['price']) {
+  if (price.kind === 'fixed') {
+    return { kind: 'known' as const, currency: price.currency, amountMinor: price.amountMinor }
+  }
+  if (price.kind === 'range') {
+    return { kind: 'known' as const, currency: price.currency, amountMinor: price.maximumAmountMinor }
+  }
+  throw new Error('fallback route requires known price')
 }

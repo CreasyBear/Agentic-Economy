@@ -12,6 +12,58 @@ _Avoid_: Prompt, household intent, job post
 A fact, offer, commitment, status or other assertion supplied by a caller about work that may have occurred outside AE. AE preserves its source, observation time and freshness without upgrading it to AE-verified truth.
 _Avoid_: Imported fact, confirmed external state
 
+**Publisher**:
+The authenticated AE principal that submits a capability Publication. A Publisher may be the Provider's authorized owner or an AE curator preserving an external source; publication authority is not execution authority.
+_Avoid_: Provider by inference, catalog operator, endpoint owner
+
+**Provider**:
+The registered Business that can fulfil an Operation. Provider identity is the existing Business identity and is independent of who published the source record.
+_Avoid_: Publisher, marketplace listing, transport host
+
+**Capability**:
+A stable customer/domain ability represented by one or more registered Operations. It is not a service page, endpoint, provider, adapter, or model label.
+_Avoid_: API, listing category, provider feature
+
+**Operation**:
+One executable member of a Capability, identified independently of its Provider and bound to one immutable contract version. Engines resolve registered Operation identity and typed semantics, never provider-specific routing logic.
+_Avoid_: Endpoint, tool name, provider branch
+
+**Capability Contract**:
+The immutable semantic version of an Operation: strict input/output schemas, customer annotations, data use, effects, evidence requirements, and lifecycle semantics, identified by an exact digest.
+_Avoid_: OpenAPI document, prompt schema, mutable descriptor
+
+**Capability Offering**:
+An execution-grade registration of one exact catalog Offering revision against one exact Capability Contract. Catalog owns the commercial facts; capability supply binds their source reference and derived hashes for execution without copying or upgrading them.
+_Avoid_: Second commercial record, operation contract, transport binding
+
+**Capability Binding**:
+One admitted private transport target for a Capability Offering and exact contract, including adapter/config digest, endpoint or resource, credential reference, continuation/cancellation posture, and evidence.
+_Avoid_: Public endpoint, authority, provider-specific engine
+
+**Capability Publication**:
+A revisioned assertion that an exact Capability Contract, catalog Offering revision, execution Offering, and Binding were admitted from one exact source revision and digest. Publication is independent of eligibility, current readiness, and execution authority.
+_Avoid_: Ready operation, verified provider, route permission
+
+**Capability Eligibility**:
+A durable policy and admission result for an exact Business, Capability Offering, or Capability Binding. Eligibility is independent of publication, current readiness, and route authority.
+_Avoid_: Readiness probe, publication status, ranking
+
+**Capability Qualification**:
+A deterministic evaluation of one exact candidate tuple against its current contract, publication, eligibility, Binding integrity, credentials, and Readiness. Its digest records evaluated facts; its validity cannot outlive the included Readiness observation.
+_Avoid_: Fourth lifecycle, permanent approval, provider score
+
+**Capability Source Revision**:
+The source-owned immutable revision label plus canonical digest of the descriptor material admitted for one Capability Publication revision. Changed source material cannot replay under the same admission operation key.
+_Avoid_: Fetch timestamp, mutable URL, marketplace row ID
+
+**Capability Readiness**:
+An expiring observation that one exact current Capability Binding may be considered for routing. Expiry removes routeability without withdrawing history.
+_Avoid_: Publication, permanent availability, successful fulfilment
+
+**Capability Withdrawal**:
+The terminal disposition of one Capability Publication revision. It removes current routeability and projection while preserving historical plans, attempts, receipts, and evidence.
+_Avoid_: Delete provider, revoke prior evidence, readiness failure
+
 **Bundle**:
 A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A person or agent may complete one task, continue progressively, or ask AE to coordinate the remaining Bundle. A Bundle does not own a separate authority, attempt, evidence or recovery lifecycle.
 _Avoid_: Wedge-specific engine, mandatory end-to-end journey

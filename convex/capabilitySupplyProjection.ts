@@ -237,7 +237,31 @@ async function markPending(
   const row = await db.query('businessSupplyProjectionSnapshots')
     .withIndex('by_businessId', (q) => q.eq('businessId', businessId))
     .unique()
-  if (row) await db.patch(row._id, { status: 'projection_pending', disposition: 'stale', lastErrorCode: code, updatedAt: now })
+  if (row === null) return { kind: 'error', code }
+  if ('projection' in row) {
+    await db.patch(row._id, {
+      status: 'projection_pending',
+      disposition: 'stale',
+      projection: { ...row.projection, disposition: 'stale' },
+      lastErrorCode: code,
+      updatedAt: now,
+    })
+  } else {
+    let projectionJson = row.projectionJson
+    try {
+      const parsed: unknown = JSON.parse(projectionJson)
+      if (isRecord(parsed)) projectionJson = JSON.stringify({ ...parsed, disposition: 'stale' })
+    } catch {
+      // Keep malformed legacy data for the strict public reader to reject.
+    }
+    await db.patch(row._id, {
+      status: 'projection_pending',
+      disposition: 'stale',
+      projectionJson,
+      lastErrorCode: code,
+      updatedAt: now,
+    })
+  }
   return { kind: 'error', code }
 }
 

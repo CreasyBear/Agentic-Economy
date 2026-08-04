@@ -22,6 +22,8 @@ export type RouteStepAuthority = Readonly<{
   }>
   step: Readonly<{
     position: number
+    operationRef: RouteMandateStep['operationRef']
+    admittedOperation: RouteMandateStep['admittedOperation']
     actionId: string
     candidateRef: string
     businessId: string
@@ -168,6 +170,8 @@ export function deriveRouteStepAuthority(input: Readonly<{
     },
     step: {
       position: step.position,
+      operationRef: step.operationRef,
+      admittedOperation: step.admittedOperation,
       actionId: step.actionId,
       candidateRef: step.candidateRef,
       businessId: step.businessId,

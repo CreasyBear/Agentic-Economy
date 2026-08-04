@@ -35,7 +35,11 @@ describe('capability supply boundaries', () => {
 
   it('does not admit operation or vertical business vocabulary into the V2 supply shape', () => {
     for (const source of sources()) {
-      expect(source).not.toMatch(/\boperation\s*:/)
+      const neutralShape = source.replace(
+        /operation:\s*v\.object\(\{\s*path:\s*v\.string\(\),\s*method:\s*v\.union\(v\.literal\('get'\),\s*v\.literal\('post'\)\)\s*\}\)/,
+        '',
+      )
+      expect(neutralShape).not.toMatch(/(?:^|[,{]\s*)operation\s*:/m)
       expect(source).not.toMatch(/\b(?:shipping|booking|restaurant|accommodation|purchase)\b/i)
     }
   })

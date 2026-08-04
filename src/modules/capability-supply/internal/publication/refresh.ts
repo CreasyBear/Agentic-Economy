@@ -1,16 +1,22 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'
-import type {
-  CapabilityPublicationBindingDraft,
-  CapabilityPublicationOfferingDraft,
+import {
+  capabilityOperationId,
+  createPublicOperationRef,
+  type CapabilityPublicationBindingDraft,
+  type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
-
 import { contractRefFromRow } from '../offering'
 import type { RegistrationContext } from '../shared'
 
 import { preparePublicationDraft } from './draft'
 import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'
 import type { PublicationCommandPorts, PublicationCommandRow } from './ports'
+import {
+  capabilityPublicationProvenanceDigest,
+  type CapabilityPublicationAuthorityMode,
+  type CapabilityPublicationProvenance,
+} from './provenance'
 
 export type RefreshCapabilityCommandInput = RegistrationContext & Readonly<{
   publication: PublicationCommandRow
@@ -18,6 +24,7 @@ export type RefreshCapabilityCommandInput = RegistrationContext & Readonly<{
   offering?: CapabilityPublicationOfferingDraft | undefined
   binding?: CapabilityPublicationBindingDraft | undefined
   now: number
+  publicationMetadata?: CapabilityPublicationProvenance
 }>
 
 export async function refreshCapabilityCommand(
@@ -39,6 +46,19 @@ export async function refreshCapabilityCommand(
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
   const { draft, encoded } = prepared
+  const publicationMetadata: CapabilityPublicationProvenance = input.publicationMetadata === undefined
+    ? {
+      publisherRef: publication.publisherRef,
+      authorityMode: publication.authorityMode,
+      sourceRevision: publication.sourceRevision,
+      provenanceDigest: capabilityPublicationProvenanceDigest({
+        publisherRef: publication.publisherRef,
+        authorityMode: publication.authorityMode,
+        sourceRevision: publication.sourceRevision,
+        sourceDigest: draft.source.descriptorDigest,
+      }),
+    }
+    : input.publicationMetadata
 
   const repeatsExactContract = encoded.contract.ref.version === publication.version
     && encoded.contract.ref.contractDigest === publication.contractDigest
@@ -75,6 +95,12 @@ export async function refreshCapabilityCommand(
   } as StableHashValue)
 
   const revision = publication.revision + 1
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+    publicationRef: publication.publicationRef,
+    publicationRevision: revision,
+    contractRef: encoded.contract.ref,
+  })
   const [currentOffering, currentBinding] = await Promise.all([
     ports.loadOfferingByOfferingId(publication.offeringId),
     ports.loadBindingByBindingId(publication.bindingId),
@@ -99,12 +125,17 @@ export async function refreshCapabilityCommand(
 
   if (!compatible) {
     await ports.insertPublication({
+      operationRef,
       publicationRef: publication.publicationRef,
       revision,
       businessId: publication.businessId,
       networkId: draft.offering.networkId,
       sourceKind: draft.source.kind,
+      sourceRevision: publicationMetadata.sourceRevision,
       sourceDigest: draft.source.descriptorDigest,
+      publisherRef: publicationMetadata.publisherRef,
+      authorityMode: publicationMetadata.authorityMode,
+      provenanceDigest: publicationMetadata.provenanceDigest,
       ...encoded.contract.ref,
       offeringId: draft.offering.offeringId,
       bindingId: draft.binding.bindingId,
@@ -150,12 +181,17 @@ export async function refreshCapabilityCommand(
     throw new Error(`capability_publication_refresh_${bindingResult.reason}`)
   }
   await ports.insertPublication({
+    operationRef,
     publicationRef: publication.publicationRef,
     revision,
     businessId: publication.businessId,
     networkId: draft.offering.networkId,
     sourceKind: draft.source.kind,
+    sourceRevision: publicationMetadata.sourceRevision,
     sourceDigest: draft.source.descriptorDigest,
+    publisherRef: publicationMetadata.publisherRef,
+    authorityMode: publicationMetadata.authorityMode,
+    provenanceDigest: publicationMetadata.provenanceDigest,
     ...encoded.contract.ref,
     offeringId: draft.offering.offeringId,
     bindingId: draft.binding.bindingId,

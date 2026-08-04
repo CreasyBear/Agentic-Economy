@@ -23,7 +23,8 @@ evidence class; local report output never stands in for it.
 - Harness run reports can be derived from persisted turn evidence without
   leaking raw tool evidence to the public projection.
 - The v3 report records request wall-clock first-progress and completion measurements,
-  sanitized model/tool counts, aggregate usage, and explicit cost availability.
+  sanitized model-request, model-tool, and route-total tool counts, aggregate usage,
+  and explicit cost availability.
 - Direct and model-path evidence remains separate: a local captured-provider run is
   source/mock proof, not live provider or deployment proof.
 - A 100-business broad seed exercises multiple industries and Australian
@@ -82,21 +83,24 @@ imports the same catalog and evaluator.
 ## Model and Tool Count Interpretation
 
 `performancePath` is `deterministic` when the persisted harness summary records
-zero model requests and `model` otherwise. Counts come from the private
-`harnessRun` summary and are copied into the sanitized report; they are not
-inferred from prompt text, stream frame count, or timing names.
+zero model requests and `model` otherwise. `modelRequestCount` and route-total
+`toolRunCount` come from the private `harnessRun` summary. `modelToolRunCount`
+comes only from persisted model-step execution evidence whose stop reason is a
+tool call; all three values are copied into the sanitized report as counts, not
+private records. They are not inferred from prompt text, stream frame count, or
+timing names.
 
 The named expectations are exact:
 
-- `turn-direct-parramatta-fast-path` requires **zero model requests**. AE takes
-  the source-defined deterministic retrieval path, so zero means no model
-  planning or recovery request—not zero tools. Its persisted search still
-  supplies the listed evidence.
-- `turn-paramata-visible-recovery` requires **two model requests** and **two
-  persisted tool runs**. AI SDK `generateText` performs one provider request
-  that returns the corrected tool call and one final structured-prose request.
-  The tool runs are the initial literal `paramata` search and the model-selected
-  corrected `parramatta` recovery search.
+- Every deterministic case requires **zero model requests and zero model-tool
+  runs**. Its persisted route tools, when present, remain route-total evidence
+  and do not turn the path into a model path.
+- `turn-paramata-visible-recovery` requires **two model requests**, **two
+  persisted route-total tool runs**, and **one model-tool run**. AI SDK
+  `generateText` performs one provider request that returns the corrected tool
+  call and one final structured-prose request. The route tools are the initial
+  literal `paramata` search and the model-selected corrected `parramatta`
+  recovery search.
 
 These counts describe harness evidence only; authority, validation, persistence,
 and public projection remain deterministic AE responsibilities. For every
@@ -151,14 +155,10 @@ the answer eval workflow. It uses the single report schema
 
 The v3 report contains:
 
-- `summary` case/turn counts, failure counts, score threshold/minimum/average,
-  existing internal `totalTimingMs` aggregates (`p95TurnTimingMs` and
-  `maxTurnTimingMs`), aggregate model/tool counts, aggregate usage/cost, and
-  `performanceByPath`.
 - Per-turn fields under each turn case (or nested thread turn): `performancePath`,
   `requestToFirstProgressMs`, `requestToCompletionMs`, `modelRequestCount`,
-  `toolRunCount`, `usage`, optional `estimatedUsd`, and sorted
-  `costUnavailableReasons`.
+  `modelToolRunCount`, route-total `toolRunCount`, `usage`, optional
+  `estimatedUsd`, and sorted `costUnavailableReasons`.
 - `usage` is aggregate harness usage with `inputTokens`, `outputTokens`,
   `cachedInputTokens`, `cacheWriteTokens`, `reasoningOutputTokens`, and
   `totalTokens`. `estimatedUsd` is present only for a finite non-negative
@@ -253,6 +253,7 @@ not claim that the smoke has run.
 The public smoke alone does **not** prove private hosted model/tool counts,
 token usage, estimated cost, provider request/response IDs, or private harness
 records. The local captured-provider eval supplies source/mock classification:
-the direct case's zero-model expectation and Paramata's two-model/two-tool
-expectation. Neither local captures nor a public readback may be relabeled as
-hosted provider proof.
+deterministic cases require zero model requests/model-tool runs, while Paramata
+requires two model requests, two route-total tool runs, and one model-tool run.
+Neither local captures nor a public readback may be relabeled as hosted
+provider proof.

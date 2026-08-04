@@ -4,6 +4,30 @@ import { v } from 'convex/values'
 export const capabilityContractRefV2Value = v.object({
   capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
 })
+const admittedOperationV2Value = v.object({
+  operationId: v.string(),
+  publisherRef: v.string(),
+  provenanceDigest: v.string(),
+  businessId: v.string(),
+  publicationRef: v.string(),
+  publicationRevision: v.number(),
+  sourceRevision: v.string(),
+  sourceDigest: v.string(),
+  contractRef: capabilityContractRefV2Value,
+  catalogOfferingRef: v.string(),
+  catalogOfferingRevision: v.number(),
+  offeringId: v.string(),
+  offeringRegistrationHash: v.string(),
+  offeringEligibilityHash: v.string(),
+  bindingId: v.string(),
+  bindingRegistrationHash: v.string(),
+  bindingEligibilityHash: v.string(),
+  bindingConfigDigest: v.string(),
+  qualificationDigest: v.string(),
+  readinessValidUntil: v.number(),
+  commercialDigest: v.string(),
+  effectDigest: v.string(),
+})
 export const actionPreparationLineageV2Value = v.object({
   requestId: v.string(), requestRevision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
   planRevisionId: v.string(), planDigest: v.string(), actionId: v.string(),
@@ -506,6 +530,7 @@ const commercialRelationshipV2Value = v.object({
   influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
 })
 export const requestEvaluationCandidateV2Value = v.object({
+  operationRef: v.optional(v.string()), admittedOperation: v.optional(admittedOperationV2Value),
   candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
   contractRef: capabilityContractRefV2Value, selectionKey: v.string(), semanticDigest: v.string(),
   offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
@@ -532,22 +557,32 @@ const completionRequirementV2Value = v.object({
   evidenceId: v.string(), outputPointer: v.string(), purpose: v.literal('completion'), schemaIdentity: v.string(),
 })
 const actionInputMappingV2Value = v.object({
+  mappingRef: v.optional(v.string()),
   mappingId: v.string(),
+  kind: v.optional(v.union(v.literal('identity'), v.literal('field'), v.literal('array_project'), v.literal('registered_transform'))),
   semanticIdentity: v.string(),
   source: v.object({ actionId: v.string(), annotationId: v.string(), evidenceId: v.string(), outputPointer: v.string() }),
   target: v.object({ annotationId: v.string(), inputKey: v.string(), inputPointer: v.string() }),
   schemaIdentity: v.string(), authority: v.literal('registered_contract_semantics'),
+  sourceArrayPointer: v.optional(v.string()), sourceItemPointer: v.optional(v.string()),
+  targetArrayPointer: v.optional(v.string()), minItems: v.optional(v.number()), maxItems: v.optional(v.number()),
+  transformRef: v.optional(v.string()), transformVersion: v.optional(v.number()),
+  inputCardinalityMax: v.optional(v.number()), outputCardinalityMax: v.optional(v.number()),
 })
 const proposedActionV2Value = v.object({
-  actionId: v.string(), contractRef: capabilityContractRefV2Value,
-  selectionKey: v.string(), semanticDigest: v.string(), dependsOn: v.array(v.string()),
+  actionId: v.string(), operationRef: v.optional(v.string()), contractRef: capabilityContractRefV2Value,
+  selectionKey: v.string(), semanticDigest: v.string(), dependsOn: v.array(v.string()), mappingRefs: v.optional(v.array(v.string())),
   inputs: v.array(requestFactV2Value),
   inputMappings: v.array(actionInputMappingV2Value),
 })
 const routePlanV2Value = v.object({
   routePlanId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
   steps: v.array(v.object({
-    actionId: v.string(), candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
+    actionId: v.string(),
+    // Optional only for immutable RoutePlan generations written before source-owned operation admission.
+    operationRef: v.optional(v.string()),
+    admittedOperation: v.optional(admittedOperationV2Value),
+    candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
     contractRef: capabilityContractRefV2Value, offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
     publicationRef: v.string(), publicationRevision: v.number(),
     resolvedInputs: v.array(requestFactV2Value), deferredInputs: v.array(actionInputMappingV2Value),
@@ -586,11 +621,17 @@ const routePlanV2Value = v.object({
     }),
   })),
   edges: v.array(v.object({
+    mappingRef: v.optional(v.string()),
     mappingId: v.string(),
+    kind: v.optional(v.union(v.literal('identity'), v.literal('field'), v.literal('array_project'), v.literal('registered_transform'))),
     semanticIdentity: v.string(),
     source: v.object({ actionId: v.string(), annotationId: v.string(), evidenceId: v.string(), outputPointer: v.string() }),
     target: v.object({ annotationId: v.string(), inputKey: v.string(), inputPointer: v.string() }),
     schemaIdentity: v.string(), authority: v.literal('registered_contract_semantics'),
+    sourceArrayPointer: v.optional(v.string()), sourceItemPointer: v.optional(v.string()),
+    targetArrayPointer: v.optional(v.string()), minItems: v.optional(v.number()), maxItems: v.optional(v.number()),
+    transformRef: v.optional(v.string()), transformVersion: v.optional(v.number()),
+    inputCardinalityMax: v.optional(v.number()), outputCardinalityMax: v.optional(v.number()),
     fromStep: v.string(), toStep: v.string(),
   })),
   maximumTotalCost: v.union(

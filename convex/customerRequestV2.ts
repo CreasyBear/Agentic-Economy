@@ -30,6 +30,7 @@ import {
   getCurrentAggregate as getCurrentAggregateMachine,
   getRoutePlanGeneration as getRoutePlanGenerationMachine,
   getRoutePlanGenerationRefreshReplay as getRoutePlanGenerationRefreshReplayMachine,
+  hasLegacyEmbeddedRoute,
 } from '@/modules/customer-request/v2-read'
 
 import { internalMutation, internalQuery, type QueryCtx } from './_generated/server'
@@ -107,6 +108,11 @@ const routePlanProjectionMaterialResult = v.union(
 const commandReplayResult = v.union(
   v.object({ kind: v.literal('not_found') }),
   v.object({ kind: v.literal('conflict') }),
+  v.object({
+    kind: v.literal('resubmit_required'),
+    requestId: v.string(), revision: v.number(),
+    reason: v.literal('legacy_embedded_route'),
+  }),
   v.object({
     kind: v.literal('replayed'), aggregate: customerRequestV2AggregateValue,
     routeGenerationRef: v.optional(v.string()),
@@ -482,6 +488,21 @@ export const getCommandReplay = internalQuery({
     if (command === null) return { kind: 'not_found' as const }
     if (command.commandDigest !== args.commandDigest || command.principalId !== args.principalId
       || command.requestId !== args.requestId) return { kind: 'conflict' as const }
+    const revision = await ctx.db.query('customerRequestV2Revisions')
+      .withIndex('by_requestId_and_requestRevision', (query) => (
+        query.eq('requestId', command.requestId).eq('requestRevision', command.resultingRevision)
+      )).unique()
+    if (revision !== null && hasLegacyEmbeddedRoute(revision.aggregate)) {
+      if (command.aggregateDigest !== revision.aggregate.aggregateDigest) {
+        throw new Error('customer_request_v2_command_integrity_failure')
+      }
+      return {
+        kind: 'resubmit_required' as const,
+        requestId: command.requestId,
+        revision: command.resultingRevision,
+        reason: 'legacy_embedded_route' as const,
+      }
+    }
     const verified = await readVerifiedCommandReplay(ctx.db, command)
     return {
       kind: 'replayed' as const,
@@ -557,29 +578,33 @@ type AvailableEligibleCapabilitySupply = Extract<
 function registeredEvaluationBindingsFromEligibleSupply(
   supply: AvailableEligibleCapabilitySupply,
 ): RegisteredEvaluationBinding[] {
-  return supply.supplies.map(({ offering, binding, publication }) => ({
-    businessId: String(offering.businessId),
-    offeringId: offering.offeringId,
-    bindingId: binding.bindingId,
-    contractRef: {
-      capabilityId: binding.capabilityId,
-      version: binding.version,
-      contractDigest: binding.contractDigest,
-    },
-    offeringRegistrationHash: offering.registrationHash,
-    bindingRegistrationHash: binding.registrationHash,
-    price: offering.presentation.price,
-    commercialRelationship: {
-      ...offering.presentation.commercialRelationship,
-      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
-    },
-    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
-    ...(publication === undefined ? {} : {
-      publicationRef: publication.publicationRef,
-      publicationRevision: publication.revision,
-      readinessValidUntil: publication.readinessValidUntil,
-    }),
-  }))
+  return supply.supplies.flatMap(({ offering, binding, publication }) => (
+    publication === undefined
+      ? []
+      : [{
+          operationRef: publication.operationRef,
+          admittedOperation: publication.admittedOperation,
+          businessId: String(offering.businessId),
+          offeringId: offering.offeringId,
+          bindingId: binding.bindingId,
+          contractRef: {
+            capabilityId: binding.capabilityId,
+            version: binding.version,
+            contractDigest: binding.contractDigest,
+          },
+          offeringRegistrationHash: offering.registrationHash,
+          bindingRegistrationHash: binding.registrationHash,
+          price: offering.presentation.price,
+          commercialRelationship: {
+            ...offering.presentation.commercialRelationship,
+            evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
+          },
+          cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
+          publicationRef: publication.publicationRef,
+          publicationRevision: publication.revision,
+          readinessValidUntil: publication.readinessValidUntil,
+        }]
+  ))
 }
 
 function domainRouteGeneration(value: RouteGeneration): CustomerRequestRoutePlanGeneration

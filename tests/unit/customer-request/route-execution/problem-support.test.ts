@@ -279,7 +279,7 @@ describe('problem-support public interface', () => {
     })
 
     it('reconstructs spend admit sum, releaseState, and retry posture', () => {
-      const export_ = projectSupportProblemExport({
+      const material = {
         problem: {
           reportRef: 'problem:1',
           requestId: 'req-1',
@@ -348,19 +348,57 @@ describe('problem-support public interface', () => {
         attempts: [{
           position: 1,
           state: 'failed',
+          dispatchState: 'delivered',
+          transportObservationJson: JSON.stringify({
+            transport: 'http',
+            disposition: 'refused',
+            releaseStarted: true,
+            requestDigest: 'input-digest',
+          }),
           attemptRef: 'attempt-1',
           evidence: [],
         }],
         businessNames: new Map([['biz-1', 'Resolver']]),
         observedAt: 10_000,
-      })
+      } satisfies Parameters<typeof projectSupportProblemExport>[0]
+      const export_ = projectSupportProblemExport(material)
       expect(export_.kind).toBe('problem_export')
+
       expect(export_.reconstruction?.execution.steps[0]?.state).toBe('failed')
       expect(export_.reconstruction?.authority.spend.admitted).toEqual({
         currency: 'AUD', amountMinor: 300,
       })
       expect(export_.reconstruction?.authority.dataSharing[0]?.releaseState).toBe('business_step_released')
       expect(export_.reconstruction?.recovery.retry).toBe('safe')
+      const notReleased = projectSupportProblemExport({
+        ...material,
+        attempts: [{
+          ...material.attempts[0]!,
+          dispatchState: 'failed',
+          transportObservationJson: JSON.stringify({
+            transport: 'unknown',
+            disposition: 'refused',
+            releaseStarted: false,
+            requestDigest: 'input-digest',
+            failureCode: 'route_transport_work_lease_not_released',
+          }),
+        }],
+      })
+      expect(notReleased.reconstruction?.authority.dataSharing[0]?.releaseState).toBe('authorized')
+      expect(notReleased.reconstruction?.authority.effects[0]?.releaseState).toBe('authorized')
+
+      const leasedAttempt = material.attempts[0]!
+      const leased = projectSupportProblemExport({
+        ...material,
+        attempts: [{
+          position: leasedAttempt.position,
+          state: 'queued',
+          dispatchState: 'leased',
+          attemptRef: leasedAttempt.attemptRef,
+          evidence: leasedAttempt.evidence,
+        }],
+      })
+      expect(leased.reconstruction?.execution.steps[0]?.state).toBe('leased')
     })
 
     it('labels only selected evidence receipt refs for customer evidence problems', () => {

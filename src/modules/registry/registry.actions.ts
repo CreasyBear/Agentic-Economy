@@ -6,6 +6,22 @@ import {
   OfferingPriceUnitValues,
 } from '@/modules/catalog/public'
 import { TrustTierValues } from '@/modules/business/public'
+import {
+  type InspectPlanInput,
+  type InspectPlanResult,
+  type OperationCompareInput,
+  type OperationCompareResult,
+  type OperationDetailInput,
+  type OperationDetailResult,
+  type OperationSearchInput,
+  type OperationSearchResult,
+} from '@/modules/capability-supply/public'
+import {
+  readCapabilityOperationCompare,
+  readCapabilityOperationDetail,
+  readCapabilityOperationInspectPlan,
+  readCapabilityOperationSearch,
+} from '@/modules/capability-supply/operation-source'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   readPublicOfferingRegistryBusinessDetail,
@@ -616,3 +632,9 @@ export const registryDetailAction = defineAction({
     )
   },
 })
+export {
+  registryOperationsSearchAction,
+  registryOperationsDetailAction,
+  registryOperationsCompareAction,
+  registryOperationsInspectPlanAction,
+} from './operations.actions'

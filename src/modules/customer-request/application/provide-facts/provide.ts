@@ -1,4 +1,3 @@
-import { rehydrateCapabilitySelectionKey, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 
 import { bindRequirementAnswer, rebindPlanSelections, rebindStoredFacts } from '../interpret-compile'
@@ -54,17 +53,8 @@ export async function provideCustomerRequestFacts(
       summary: 'That answer does not match the requested information.',
     })
   }
-  const planActions: readonly Readonly<{
-    contractRef: CapabilityContractRef
-    selectionKey: string
-    semanticDigest: string
-  }>[] = current.aggregate.plan.actions
   const selections = rebindPlanSelections(
-    planActions.map(({ contractRef, selectionKey, semanticDigest }) => ({
-      contractRef,
-      selectionKey: rehydrateCapabilitySelectionKey(selectionKey),
-      semanticDigest,
-    })),
+    current.aggregate.plan.actions,
     answerFacts,
     graph.models,
   ) ?? []

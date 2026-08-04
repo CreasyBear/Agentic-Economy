@@ -1,7 +1,9 @@
-import type {
-  EligiblePublicationRow,
-  EligiblePublishedBusiness,
-  EligibleSupplyPorts,
+import {
+  capabilityOperationId,
+  createPublicOperationRef,
+  type EligiblePublicationRow,
+  type EligiblePublishedBusiness,
+  type EligibleSupplyPorts,
 } from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
@@ -73,10 +75,35 @@ function toPublishedBusiness(doc: Doc<'businesses'>): EligiblePublishedBusiness 
   return { businessId: String(doc._id) }
 }
 
-function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicationRow {
+function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicationRow | null {
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(doc.capabilityId),
+    publicationRef: doc.publicationRef,
+    publicationRevision: doc.revision,
+    contractRef: {
+      capabilityId: doc.capabilityId,
+      version: doc.version,
+      contractDigest: doc.contractDigest,
+    },
+  })
+  if (operationRef !== doc.operationRef) return null
   return {
     publicationRef: doc.publicationRef,
+    operationRef,
     revision: doc.revision,
+    businessId: String(doc.businessId),
+    networkId: doc.networkId,
+    capabilityId: doc.capabilityId,
+    version: doc.version,
+    contractDigest: doc.contractDigest,
+    offeringId: doc.offeringId,
+    bindingId: doc.bindingId,
+    sourceRevision: doc.sourceRevision,
+    sourceDigest: doc.sourceDigest,
+    publisherRef: doc.publisherRef,
+    provenanceDigest: doc.provenanceDigest,
+    registrationEvidenceRefs: [...doc.registrationEvidenceRefs],
+    readinessEvidenceRefs: [...doc.readinessEvidenceRefs],
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,
@@ -84,5 +111,3 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),
   }
 }
-
-

@@ -1,6 +1,8 @@
 import type {
+  AdmittedOperationRef,
   CapabilityCancellation,
   CapabilityOfferingRegistration,
+  PublicOperationRef,
 } from '@/modules/capability-supply/public'
 import type { RegisteredEvaluationBinding } from '@/modules/customer-request/evaluation'
 
@@ -21,10 +23,12 @@ type AvailableRouteableSupply = Readonly<{
       registrationHash: string
       cancellation: CapabilityCancellation
     }>
-    publication?: Readonly<{
+    publication: Readonly<{
       publicationRef: string
       revision: number
       readinessValidUntil: number
+      operationRef: PublicOperationRef
+      admittedOperation: AdmittedOperationRef
     }>
   }>>
 }>
@@ -50,7 +54,9 @@ export function registeredEvaluationBindingsFromRouteableSupply(
       evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
     },
     cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
-    ...(options.includePublication === true && publication !== undefined ? {
+    operationRef: publication.operationRef,
+    admittedOperation: publication.admittedOperation,
+    ...(options.includePublication === true ? {
       publicationRef: publication.publicationRef,
       publicationRevision: publication.revision,
       readinessValidUntil: publication.readinessValidUntil,

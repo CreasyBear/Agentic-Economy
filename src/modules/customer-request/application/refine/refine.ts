@@ -1,4 +1,3 @@
-import { rehydrateCapabilitySelectionKey, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { routeChoiceSignature } from '@/modules/customer-request/compiler'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
@@ -109,17 +108,8 @@ export async function refineCustomerRequest(
     const graph = await ports.loadRequestGraph(current.aggregate.snapshot.networkId)
     if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
     const reboundFacts = rebindStoredFacts(current.aggregate.snapshot.facts as never, graph.models)
-    const planActions: readonly Readonly<{
-      contractRef: CapabilityContractRef
-      selectionKey: string
-      semanticDigest: string
-    }>[] = current.aggregate.plan.actions
     const selections = rebindPlanSelections(
-      planActions.map(({ contractRef, selectionKey, semanticDigest }) => ({
-        contractRef,
-        selectionKey: rehydrateCapabilitySelectionKey(selectionKey),
-        semanticDigest,
-      })),
+      current.aggregate.plan.actions,
       reboundFacts,
       graph.models,
     )

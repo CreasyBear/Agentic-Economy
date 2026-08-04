@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
+import { createRegisteredOperationMappingRef, type RegisteredOperationMapping } from '@/modules/capability-supply/public'
 
 import {
   defineCapabilityContract,
   isBoundedJsonValue,
   openCapabilityDecisionModel,
   projectCapabilityInputValueSchema,
+  type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
 import {
   discoverRequestEvaluationCandidates,
@@ -306,7 +309,8 @@ describe('V2 Request semantics', () => {
           { source: 'prior', quote: 'Keep the total under AUD 1,000.50.' },
           { source: 'prior', quote: 'Email ops@example.com.' },
           { source: 'prior', quote: 'Use https://example.com/path.' },
-          { source: 'prior', quote: 'Dr. J. Chen must approve.' },
+          { source: 'prior', quote: 'Dr. J.' },
+          { source: 'prior', quote: 'Chen must approve.' },
           { source: 'amendment', quote: 'Move arrival to 09:00.' },
         ],
         supersededStatements: [],
@@ -321,7 +325,7 @@ describe('V2 Request semantics', () => {
     })).resolves.toMatchObject({
       canonicalCustomerJob: 'Keep the total under AUD 1,000.50.\n'
         + 'Email ops@example.com.\nUse https://example.com/path.\n'
-        + 'Dr. J. Chen must approve.\nMove arrival to 09:00.',
+        + 'Dr. J.\nChen must approve.\nMove arrival to 09:00.',
     })
   })
 
@@ -359,12 +363,14 @@ describe('V2 Request semantics', () => {
   it('persists extracted material constraints while keeping route satisfaction unproven', () => {
     const model = compositionLookupModel()
     const requestInput = requiredInput(model, 'request')
+    const binding = supply('binding:material-constraint', model)
     const intent = 'Prepare a result. Wheelchair accessibility is mandatory. Passport validity is unknown.'
     const result = compileCustomerRequest({
       requestId: 'request:material-constraint', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test', intent,
       networkId: 'ae:public', interpreterId: 'interpreter:test', now: 10_000,
       proposal: { kind: 'capability_candidates', selections: [{
+        operationRef: binding.operationRef,
         selectionKey: model.selectionKey, contractRef: model.contractRef,
         facts: [{
           contractRef: model.contractRef, selectionKey: model.selectionKey,
@@ -373,7 +379,7 @@ describe('V2 Request semantics', () => {
           source: { kind: 'customer', assertionRef: 'assertion:request' },
         }],
       }] },
-      bindings: [supply('binding:material-constraint', model)], models: [model],
+      bindings: [binding], mappings: [], models: [model],
     })
 
     expect(result).toMatchObject({
@@ -418,7 +424,7 @@ describe('V2 Request semantics', () => {
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: 'Book it, pay for it, and guarantee completion without asking me again.',
       networkId: 'ae:public', proposal, interpreterId: 'interpreter:unsupported-operation',
-      bindings: [], models: [], now: 1,
+      bindings: [], mappings: [], models: [], now: 1,
     })
     expect(compiled).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { actions: [] } } })
     expect(projectCustomerRequest(compiled)).toMatchObject({
@@ -477,15 +483,16 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:value-json',
       transport: { generateJson: async () => ({
         kind: 'capability_candidates', prompt: '', selections: [{
+          operationRef: testOperationRef(model),
           selectionKey: model.selectionKey,
           facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify({ topic: 'Fremantle' }) }],
         }],
       }) },
       timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
-
     await expect(interpreter.propose({
       customerJob: 'Fremantle', capabilities: [bindCustomerCapabilityDescriptor({
+        operationRef: testOperationRef(model),
         contractRef: model.contractRef, selectionKey: model.selectionKey,
         name: 'Search data', description: 'Returns matching data.', inputs: model.inputs,
         valueSchemas: inputValueSchemas(model, structuredInputSchema()),
@@ -502,6 +509,7 @@ describe('V2 Request semantics', () => {
     const generateJson = vi.fn().mockResolvedValue({
       kind: 'capability_candidates',
       selections: [{
+        operationRef: testOperationRef(model),
         selectionKey: model.selectionKey,
         facts: [{ inputKey: requestInput.key, value: { topic: 'market data' } }],
       }],
@@ -510,10 +518,10 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test', transport: { generateJson }, timeoutMs: 1_000,
       maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
-
     const proposal = await interpreter.propose({
       customerJob: 'Find market data about routing.',
       capabilities: [bindCustomerCapabilityDescriptor({
+        operationRef: testOperationRef(model),
         contractRef: model.contractRef,
         selectionKey: model.selectionKey,
         name: 'Search data',
@@ -559,7 +567,7 @@ describe('V2 Request semantics', () => {
     const quote = compositionShippingModel(lookup)
     const generateJson = vi.fn().mockResolvedValue({
       kind: 'capability_candidates',
-      selections: [{ selectionKey: quote.selectionKey, facts: [] }],
+      selections: [{ operationRef: testOperationRef(quote), selectionKey: quote.selectionKey, facts: [] }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:dependency-closure', transport: { generateJson }, timeoutMs: 1_000,
@@ -567,6 +575,7 @@ describe('V2 Request semantics', () => {
     })
     const customerJob = 'Find a labelled service and tell me what it costs.'
     const capabilities = [lookup, quote].map((model) => bindCustomerCapabilityDescriptor({
+      operationRef: testOperationRef(model),
       contractRef: model.contractRef,
       selectionKey: model.selectionKey,
       name: model.contractRef.capabilityId,
@@ -610,6 +619,7 @@ describe('V2 Request semantics', () => {
     const generateJson = vi.fn().mockResolvedValue({
       kind: 'capability_candidates',
       selections: [{
+        operationRef: testOperationRef(lookup),
         selectionKey: lookup.selectionKey,
         facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify('A shorter model paraphrase.') }],
       }],
@@ -623,6 +633,7 @@ describe('V2 Request semantics', () => {
     const proposal = await interpreter.propose({
       customerJob,
       capabilities: [bindCustomerCapabilityDescriptor({
+        operationRef: testOperationRef(lookup),
         contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
         name: 'Resolve service reference', description: 'Returns a registered service reference.',
         inputs: lookup.inputs,
@@ -653,7 +664,8 @@ describe('V2 Request semantics', () => {
   it('uses the literal customer request for a plain request input without asking them to restate it', async () => {
     const lookup = compositionLookupModel('catalog.customer-grounded', 'customer_required')
     const generateJson = vi.fn().mockResolvedValue({
-      kind: 'capability_candidates', selections: [{ selectionKey: lookup.selectionKey, facts: [] }],
+      kind: 'capability_candidates',
+      selections: [{ operationRef: testOperationRef(lookup), selectionKey: lookup.selectionKey, facts: [] }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:customer-grounded', transport: { generateJson }, timeoutMs: 1_000,
@@ -663,6 +675,7 @@ describe('V2 Request semantics', () => {
     const proposal = await interpreter.propose({
       customerJob,
       capabilities: [bindCustomerCapabilityDescriptor({
+        operationRef: testOperationRef(lookup),
         contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
         name: 'Find a place', description: 'Returns matching places.', inputs: lookup.inputs,
         valueSchemas: lookup.inputs.map((input) => ({
@@ -690,13 +703,15 @@ describe('V2 Request semantics', () => {
     const second = compositionLookupModel('catalog.resolve-two')
     const quote = compositionShippingModel(first)
     const generateJson = vi.fn().mockResolvedValue({
-      kind: 'capability_candidates', selections: [{ selectionKey: quote.selectionKey, facts: [] }],
+      kind: 'capability_candidates',
+      selections: [{ operationRef: testOperationRef(quote), selectionKey: quote.selectionKey, facts: [] }],
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:ambiguous-dependency', transport: { generateJson }, timeoutMs: 1_000,
       maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
     const capabilities = [first, second, quote].map((model) => bindCustomerCapabilityDescriptor({
+      operationRef: testOperationRef(model),
       contractRef: model.contractRef, selectionKey: model.selectionKey,
       name: model.contractRef.capabilityId, description: 'Registered service.', inputs: model.inputs,
       valueSchemas: model.inputs.map((input) => ({
@@ -725,22 +740,29 @@ describe('V2 Request semantics', () => {
     })
   })
 
-  it('preserves divergent model outputs even when both normalize to the same empty selection set', async () => {
+  it('rejects divergent model outputs with unknown operation refs', async () => {
     const model = decisionModelWithCommitment()
     const generateJson = vi.fn()
       .mockResolvedValueOnce({
         kind: 'capability_candidates',
-        selections: [{ selectionKey: 'unknown:first', facts: [] }],
+        selections: [{
+          operationRef: testOperationRef(model, 'v2-semantics:unknown:first'),
+          selectionKey: model.selectionKey, facts: [],
+        }],
       })
       .mockResolvedValueOnce({
         kind: 'capability_candidates',
-        selections: [{ selectionKey: 'unknown:second', facts: [] }],
+        selections: [{
+          operationRef: testOperationRef(model, 'v2-semantics:unknown:second'),
+          selectionKey: model.selectionKey, facts: [],
+        }],
       })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:divergence', transport: { generateJson }, timeoutMs: 1_000,
       maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
     const capabilities = [bindCustomerCapabilityDescriptor({
+      operationRef: testOperationRef(model),
       contractRef: model.contractRef,
       selectionKey: model.selectionKey,
       name: 'Search data',
@@ -750,21 +772,17 @@ describe('V2 Request semantics', () => {
       evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
     })]
 
-    const first = await interpreter.propose({ customerJob: 'Find market data.', capabilities })
-    const second = await interpreter.propose({ customerJob: 'Find market data.', capabilities })
-
-    expect(first).toMatchObject({ kind: 'capability_candidates', selections: [] })
-    expect(second).toMatchObject({ kind: 'capability_candidates', selections: [] })
-    if (first.interpretationEvidence === undefined || second.interpretationEvidence === undefined) {
-      throw new Error('model interpretation evidence missing')
-    }
-    expect(first.interpretationEvidence.inputDigest).toBe(second.interpretationEvidence.inputDigest)
-    expect(first.interpretationEvidence.outputDigest).not.toBe(second.interpretationEvidence.outputDigest)
+    await expect(interpreter.propose({ customerJob: 'Find market data.', capabilities }))
+      .rejects.toThrow('customer_request_semantic_operation_ref_mismatch')
+    await expect(interpreter.propose({ customerJob: 'Find market data.', capabilities }))
+      .rejects.toThrow('customer_request_semantic_operation_ref_mismatch')
+    expect(generateJson).toHaveBeenCalledTimes(2)
   })
 
   it('derives option viability from the V2 model without requiring commitment-only input', () => {
     const model = decisionModelWithCommitment()
     const requestInput = requiredInput(model, 'request')
+    const candidateLineage = createTestOperationLineage(model.contractRef, 'v2-semantics:candidate')
     const evaluation = evaluateCustomerRequestSnapshot({
       requestId: 'request:v2', requestRevision: 1, intent: 'Find data',
       facts: [{
@@ -778,9 +796,15 @@ describe('V2 Request semantics', () => {
       }],
       registrySnapshotDigest: 'sha256:graph',
       candidates: [{
-        businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
-        offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
-        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
+        operationRef: candidateLineage.operationRef,
+        admittedOperation: candidateLineage.admittedOperation,
+        businessId: candidateLineage.admittedOperation.businessId,
+        offeringId: candidateLineage.admittedOperation.offeringId,
+        bindingId: candidateLineage.admittedOperation.bindingId,
+        model,
+        offeringRegistrationHash: candidateLineage.admittedOperation.offeringRegistrationHash,
+        bindingRegistrationHash: candidateLineage.admittedOperation.bindingRegistrationHash,
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:v2-semantics:candidate'] },
       }],
     })
 
@@ -920,6 +944,7 @@ describe('V2 Request semantics', () => {
     await expect(interpreter.propose({
       customerJob: 'Find market data.',
       capabilities: [bindCustomerCapabilityDescriptor({
+        operationRef: testOperationRef(model),
         contractRef: model.contractRef,
         selectionKey: model.selectionKey,
         name: 'Search data',
@@ -949,6 +974,7 @@ describe('V2 Request semantics', () => {
       effects: structuredEffects(),
     })))
     const requestInput = requiredInput(model, 'request')
+    const candidateLineage = createTestOperationLineage(model.contractRef, 'v2-semantics:disclosure')
 
     const evaluation = evaluateCustomerRequestSnapshot({
       requestId: 'request:disclosure', requestRevision: 1, intent: 'Find data',
@@ -963,9 +989,15 @@ describe('V2 Request semantics', () => {
       }],
       registrySnapshotDigest: 'sha256:graph',
       candidates: [{
-        businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
-        offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
-        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
+        operationRef: candidateLineage.operationRef,
+        admittedOperation: candidateLineage.admittedOperation,
+        businessId: candidateLineage.admittedOperation.businessId,
+        offeringId: candidateLineage.admittedOperation.offeringId,
+        bindingId: candidateLineage.admittedOperation.bindingId,
+        model,
+        offeringRegistrationHash: candidateLineage.admittedOperation.offeringRegistrationHash,
+        bindingRegistrationHash: candidateLineage.admittedOperation.bindingRegistrationHash,
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:v2-semantics:disclosure'] },
       }],
     })
 
@@ -994,7 +1026,10 @@ describe('V2 Request semantics', () => {
     ]
 
     expect(discoverRequestEvaluationCandidates({
-      selectedCapabilities: [{ selectionKey: first.selectionKey, contractRef: first.contractRef }],
+      selectedCapabilities: [{
+        operationRef: bindings[0]!.operationRef,
+        selectionKey: first.selectionKey, contractRef: first.contractRef,
+      }],
       bindings,
       resolveModel: (ref) => ref.contractDigest === first.contractRef.contractDigest ? first : second,
     }).map(({ bindingId }) => bindingId)).toEqual(['binding:first'])
@@ -1002,7 +1037,6 @@ describe('V2 Request semantics', () => {
       { ...bindings[0]!, contractRef: second.contractRef }, bindings[1]!,
     ]))
   })
-
   it('derives completion only from registered completion evidence on the exact contract', () => {
     const model = decisionModelWithCommitment()
     const completion = model.evidence.find((evidence) => evidence.purpose === 'completion')
@@ -1012,9 +1046,9 @@ describe('V2 Request semantics', () => {
       requestId: 'request:completion', requestRevision: 1, intent: 'Find data', facts: [],
       registrySnapshotDigest: 'sha256:graph', candidates: [],
       proposedActions: [{
-        actionId: 'action:one', contractRef: model.contractRef,
+        actionId: 'action:one', operationRef: testOperationRef(model), contractRef: model.contractRef,
         selectionKey: model.selectionKey, semanticDigest: model.semanticDigest, dependsOn: [], inputs: [],
-        inputMappings: [],
+        mappingRefs: [], inputMappings: [],
       }],
       resolveModel: () => model,
     })
@@ -1034,32 +1068,35 @@ describe('V2 Request semantics', () => {
       models: [typeof lookup, typeof shipping],
       expectedRouteGeneration = 0,
       downstreamPriceMinor = 100,
-    ) => compileCustomerRequest({
-      requestId: 'request:composed', expectedRevision: 4, expectedRouteGeneration,
-      principalId: 'principal:test', delegatedAgentId: 'agent:test',
-      intent: 'Find an option and get its shipping quote.', networkId: 'ae:public',
-      proposal: {
-        kind: 'capability_candidates',
-        selections: models.map((model) => ({
-          selectionKey: model.selectionKey, contractRef: model.contractRef,
-          facts: model === lookup ? [{
-            contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
-            inputKey: lookupRequest.key, inputPointer: lookupRequest.inputPointer,
-            schemaIdentity: lookupRequest.schemaIdentity, value: 'routing book',
-            source: { kind: 'agent_inference' as const, inferenceRef: 'inference:request' },
-          }] : [],
-        })),
-      },
-      interpreterId: 'interpreter:test',
-      bindings: models.map((model) => ({
+    ) => {
+      const bindings = models.map((model) => ({
         ...supply(`binding:${model.contractRef.capabilityId}`, model),
         price: {
           kind: 'fixed' as const, currency: 'AUD',
           amountMinor: model === shipping ? downstreamPriceMinor : 100,
         },
-      })),
-      models, now: 10_000,
-    })
+      }))
+      return compileCustomerRequest({
+        requestId: 'request:composed', expectedRevision: 4, expectedRouteGeneration,
+        principalId: 'principal:test', delegatedAgentId: 'agent:test',
+        intent: 'Find an option and get its shipping quote.', networkId: 'ae:public',
+        proposal: {
+          kind: 'capability_candidates',
+          selections: models.map((model, index) => ({
+            operationRef: bindings[index]!.operationRef,
+            selectionKey: model.selectionKey, contractRef: model.contractRef,
+            facts: model === lookup ? [{
+              contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+              inputKey: lookupRequest.key, inputPointer: lookupRequest.inputPointer,
+              schemaIdentity: lookupRequest.schemaIdentity, value: 'routing book',
+              source: { kind: 'agent_inference' as const, inferenceRef: 'inference:request' },
+            }] : [],
+          })),
+        },
+        interpreterId: 'interpreter:test',
+        bindings, mappings: [registeredFieldMapping(lookup, shipping, '/optionId', '/optionId')], models, now: 10_000,
+      })
+    }
 
     const first = compile([lookup, shipping])
     const permuted = compile([shipping, lookup])
@@ -1220,6 +1257,7 @@ describe('V2 Request semantics', () => {
         kind: 'capability_candidates',
         selections: [
           {
+            operationRef: testOperationRef(component, `v2-semantics:binding:${component.contractRef.capabilityId}`),
             selectionKey: component.selectionKey, contractRef: component.contractRef,
             facts: [{
               contractRef: component.contractRef, selectionKey: component.selectionKey,
@@ -1228,12 +1266,14 @@ describe('V2 Request semantics', () => {
               source: { kind: 'customer', assertionRef: 'assertion:optional-component' },
             }],
           },
-          { selectionKey: assembly.selectionKey, contractRef: assembly.contractRef, facts: [] },
+          { operationRef: testOperationRef(assembly, `v2-semantics:binding:${assembly.contractRef.capabilityId}`), selectionKey: assembly.selectionKey, contractRef: assembly.contractRef, facts: [] },
         ],
       },
       interpreterId: 'interpreter:test',
       bindings: [component, assembly].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
-      models: [component, assembly], now: 10_000,
+      mappings: [registeredFieldMapping(component, assembly, '/optionId', '/optionalComponent')],
+      models: [component, assembly],
+      now: 10_000,
     })
 
     expect(compiled).toMatchObject({
@@ -1269,6 +1309,7 @@ describe('V2 Request semantics', () => {
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: 'Find options and quote shipping.', networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [firstLookup, secondLookup, shipping].map((model) => ({
+        operationRef: testOperationRef(model, `v2-semantics:binding:${model.contractRef.capabilityId}`),
         selectionKey: model.selectionKey, contractRef: model.contractRef,
         facts: model === firstLookup || model === secondLookup ? [{
           contractRef: model.contractRef, selectionKey: model.selectionKey,
@@ -1279,7 +1320,7 @@ describe('V2 Request semantics', () => {
       })) },
       interpreterId: 'interpreter:test',
       bindings: [firstLookup, secondLookup, shipping].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
-      models: [firstLookup, secondLookup, shipping], now: 10_000,
+      mappings: [], models: [firstLookup, secondLookup, shipping], now: 10_000,
     })
     expect(result).toMatchObject({ kind: 'compiled', aggregate: {
       outcome: 'needs_information',
@@ -1299,7 +1340,8 @@ describe('V2 Request semantics', () => {
         requestId: 'request:money-safety', expectedRevision: 0,
         principalId: 'principal:test', delegatedAgentId: 'agent:test',
         intent: 'Find an option and quote shipping.', networkId: 'ae:public',
-        proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
+        proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model, index) => ({
+          operationRef: testOperationRef(model, `v2-semantics:binding:money:${index}`),
           selectionKey: model.selectionKey, contractRef: model.contractRef,
           facts: model === lookup ? [{
             contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
@@ -1307,7 +1349,9 @@ describe('V2 Request semantics', () => {
             value: 'routing book', source: { kind: 'agent_inference' as const, inferenceRef: 'inference:money-safety' },
           }] : [],
         })) },
-        interpreterId: 'interpreter:test', models: [lookup, shipping], now: 10_000,
+        interpreterId: 'interpreter:test',
+        mappings: [registeredFieldMapping(lookup, shipping, '/optionId', '/optionId')],
+        models: [lookup, shipping], now: 10_000,
         bindings: [lookup, shipping].map((model, index) => {
           const price = prices[index]
           if (price === undefined) throw new Error('test price missing')
@@ -1344,30 +1388,55 @@ describe('V2 Request semantics', () => {
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
     const request = requiredInput(lookup, 'request')
+    const lookupOperationId = 'operation:test:ranked-fallback:lookup'
+    const lookupPublicationRef = 'publication:test:ranked-fallback:lookup'
+    const shippingOperationId = 'operation:test:ranked-fallback:shipping'
+    const shippingPublicationRef = 'publication:test:ranked-fallback:shipping'
     const bindings = [
-      supply('binding:lookup:cheap', lookup),
+      supply('binding:lookup:cheap', lookup, {
+        operationId: lookupOperationId, publicationRef: lookupPublicationRef,
+      }),
       {
-        ...supply('binding:lookup:same-business', lookup),
-        businessId: 'business:binding:lookup:cheap',
+        ...supply('binding:lookup:same-business', lookup, {
+          operationId: lookupOperationId, publicationRef: lookupPublicationRef,
+          businessId: 'business:binding:lookup:cheap',
+        }),
         price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 150 },
       },
-      { ...supply('binding:lookup:expensive', lookup), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 200 } },
-      { ...supply('binding:shipping:expensive', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 300 } },
-      { ...supply('binding:shipping:cheap', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 } },
+      { ...supply('binding:lookup:expensive', lookup, {
+        operationId: lookupOperationId, publicationRef: lookupPublicationRef,
+      }), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 200 } },
+      { ...supply('binding:shipping:expensive', shipping, {
+        operationId: shippingOperationId, publicationRef: shippingPublicationRef,
+      }), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 300 } },
+      { ...supply('binding:shipping:cheap', shipping, {
+        operationId: shippingOperationId, publicationRef: shippingPublicationRef,
+      }), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 } },
     ]
     const result = compileCustomerRequest({
       requestId: 'request:ranked-fallback', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: 'Find the cheapest option and quote shipping.', networkId: 'ae:public',
-      proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
-        selectionKey: model.selectionKey, contractRef: model.contractRef,
-        facts: model === lookup ? [{
-          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
-          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
-          value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
-        }] : [],
-      })) },
-      interpreterId: 'interpreter:test', bindings, models: [lookup, shipping], now: 10_000,
+      proposal: {
+        kind: 'capability_candidates',
+        selections: [lookup, shipping].map((model) => {
+          const operationRef = bindings.find((binding) => (
+            binding.contractRef.capabilityId === model.contractRef.capabilityId
+          ))?.operationRef
+          if (operationRef === undefined) throw new Error('fallback operation lineage missing')
+          return {
+            operationRef,
+            selectionKey: model.selectionKey, contractRef: model.contractRef,
+            facts: model === lookup ? [{
+              contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+              inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+              value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+            }] : [],
+          }
+        }),
+      },
+      interpreterId: 'interpreter:test',
+      bindings, mappings: [registeredFieldMapping(lookup, shipping, '/optionId', '/optionId')], models: [lookup, shipping], now: 10_000,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
     if (result.routeGeneration === undefined) throw new Error('route generation missing')
@@ -1419,6 +1488,7 @@ describe('V2 Request semantics', () => {
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: 'Use both providers but keep the total below AUD 5.', networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
+        operationRef: testOperationRef(model, `v2-semantics:binding:${model === lookup ? 'lookup' : 'shipping'}:hard-spend`),
         selectionKey: model.selectionKey, contractRef: model.contractRef,
         facts: model === lookup ? [{
           contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
@@ -1427,6 +1497,7 @@ describe('V2 Request semantics', () => {
         }] : [],
       })) },
       interpreterId: 'interpreter:test',
+      mappings: [registeredFieldMapping(lookup, shipping, '/optionId', '/optionId')],
       bindings: [
         { ...supply('binding:lookup:hard-spend', lookup), price: { kind: 'fixed', currency: 'AUD', amountMinor: 300 } },
         { ...supply('binding:shipping:hard-spend', shipping), price: { kind: 'fixed', currency: 'AUD', amountMinor: 700 } },
@@ -1463,6 +1534,7 @@ describe('V2 Request semantics', () => {
       intent: 'Find a labelled sandbox option, but do not share any data with a business.',
       networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [{
+        operationRef: testOperationRef(lookup, 'v2-semantics:binding:lookup:no-provider-sharing'),
         selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
         facts: [{
           contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
@@ -1473,7 +1545,7 @@ describe('V2 Request semantics', () => {
       }] },
       interpreterId: 'interpreter:test',
       bindings: [supply('binding:lookup:no-provider-sharing', lookup)],
-      models: [lookup], now: 10_000,
+      mappings: [], models: [lookup], now: 10_000,
     })
 
     expect(result).toMatchObject({
@@ -1524,6 +1596,7 @@ describe('V2 Request semantics', () => {
       intent: 'Find a labelled sandbox option that responds within 50 milliseconds.',
       networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [{
+        operationRef: testOperationRef(lookup, 'v2-semantics:binding:lookup:maximum-response-time'),
         selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
         facts: [{
           contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
@@ -1534,7 +1607,7 @@ describe('V2 Request semantics', () => {
       }] },
       interpreterId: 'interpreter:test',
       bindings: [supply('binding:lookup:maximum-response-time', lookup)],
-      models: [lookup], now: 10_000,
+      mappings: [], models: [lookup], now: 10_000,
     })
 
     expect(result).toMatchObject({
@@ -1564,23 +1637,36 @@ describe('V2 Request semantics', () => {
   it('does not price-rank otherwise viable routes across currencies', () => {
     const lookup = compositionLookupModel()
     const request = requiredInput(lookup, 'request')
+    const operationId = 'operation:test:cross-currency'
+    const publicationRef = 'publication:test:cross-currency'
+    const bindings = [
+      {
+        ...supply('binding:lookup:aud', lookup, { operationId, publicationRef }),
+        price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1 },
+      },
+      {
+        ...supply('binding:lookup:usd', lookup, { operationId, publicationRef }),
+        price: { kind: 'fixed' as const, currency: 'USD', amountMinor: 1 },
+      },
+    ]
     const result = compileCustomerRequest({
       requestId: 'request:cross-currency', expectedRevision: 0,
-      principalId: 'principal:test', delegatedAgentId: 'agent:test',
-      intent: 'Find the cheapest lookup.', networkId: 'ae:public',
-      proposal: { kind: 'capability_candidates', selections: [{
-        selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
-        facts: [{
-          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
-          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
-          value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+      principalId: 'principal:test', delegatedAgentId: 'agent:test', intent: 'Find the cheapest lookup.',
+      networkId: 'ae:public',
+      proposal: {
+        kind: 'capability_candidates',
+        selections: [{
+          operationRef: bindings[0]!.operationRef,
+          selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
+          facts: [{
+            contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+            inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+            value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+          }],
         }],
-      }] },
+      },
       interpreterId: 'interpreter:test', models: [lookup], now: 10_000,
-      bindings: [
-        supply('binding:lookup:aud', lookup),
-        { ...supply('binding:lookup:usd', lookup), price: { kind: 'fixed' as const, currency: 'USD', amountMinor: 1 } },
-      ],
+      mappings: [], bindings,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
     if (result.routeGeneration === undefined) throw new Error('route generation missing')
@@ -1596,9 +1682,15 @@ describe('V2 Request semantics', () => {
       requestId: 'request:cycle', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test', intent: 'Run the cycle', networkId: 'ae:public',
       proposal: { kind: 'capability_candidates' as const, selections: [first, second].map((model) => ({
+        operationRef: testOperationRef(model, `v2-semantics:binding:${model.contractRef.capabilityId}`),
         selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [],
       })) },
-      interpreterId: 'interpreter:test', bindings: [first, second].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      interpreterId: 'interpreter:test',
+      mappings: [
+        registeredFieldMapping(first, second, '/value', '/value'),
+        registeredFieldMapping(second, first, '/value', '/value'),
+      ],
+      bindings: [first, second].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
       models: [first, second], now: 10_000,
     }
     expect(compileCustomerRequest(command)).toEqual({ kind: 'refused', reason: 'capability_graph_invalid' })
@@ -1620,6 +1712,7 @@ describe('V2 Request semantics', () => {
       proposal: {
         kind: 'capability_candidates',
         selections: [{
+          operationRef: binding.operationRef,
           selectionKey: model.selectionKey,
           contractRef: model.contractRef,
           facts: [{
@@ -1633,7 +1726,7 @@ describe('V2 Request semantics', () => {
           }],
         }],
       },
-      interpreterId: 'interpreter:test', bindings: [binding], models: [model], now: 1,
+      interpreterId: 'interpreter:test', bindings: [binding], mappings: [], models: [model], now: 1,
     })
 
     expect(result).toEqual({ kind: 'refused', reason: 'unsafe_interpretation' })
@@ -1642,6 +1735,7 @@ describe('V2 Request semantics', () => {
   it('keeps structured request input missing when verbatim customer text does not satisfy its registered schema', () => {
     const model = decisionModelWithCommitment()
     const requestInput = requiredInput(model, 'request')
+    const binding = supply('binding:structured', model)
     const result = compileCustomerRequest({
       requestId: 'request:structured-recovery', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
@@ -1649,6 +1743,7 @@ describe('V2 Request semantics', () => {
       proposal: {
         kind: 'capability_candidates',
         selections: [{
+          operationRef: binding.operationRef,
           selectionKey: model.selectionKey,
           contractRef: model.contractRef,
           facts: [{
@@ -1662,7 +1757,7 @@ describe('V2 Request semantics', () => {
           }],
         }],
       },
-      interpreterId: 'interpreter:test', bindings: [supply('binding:structured', model)], models: [model], now: 1,
+      interpreterId: 'interpreter:test', bindings: [binding], mappings: [], models: [model], now: 1,
     })
 
     expect(result).toMatchObject({
@@ -1682,6 +1777,7 @@ describe('V2 Request semantics', () => {
       dataUse: structuredDataUse(), effects: structuredEffects(),
     })))
     const requestInput = requiredInput(model, 'request')
+    const binding = supply('binding:customer-provenance', model)
     const result = compileCustomerRequest({
       requestId: 'request:customer-provenance', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
@@ -1689,6 +1785,7 @@ describe('V2 Request semantics', () => {
       proposal: {
         kind: 'capability_candidates',
         selections: [{
+          operationRef: binding.operationRef,
           selectionKey: model.selectionKey, contractRef: model.contractRef,
           facts: [{
             contractRef: model.contractRef, selectionKey: model.selectionKey,
@@ -1698,7 +1795,7 @@ describe('V2 Request semantics', () => {
           }],
         }],
       },
-      interpreterId: 'interpreter:test', bindings: [supply('binding:customer-provenance', model)],
+      interpreterId: 'interpreter:test', bindings: [binding], mappings: [],
       models: [model], now: 1,
     })
 
@@ -1732,6 +1829,7 @@ describe('V2 Request semantics', () => {
     await expect(interpreter.propose({
       customerJob: 'Find a suitable option.',
       capabilities: [bindCustomerCapabilityDescriptor({
+        operationRef: testOperationRef(model),
         contractRef: model.contractRef, selectionKey: model.selectionKey,
         name: 'Search data', description: 'Returns matching data.', inputs: model.inputs,
         valueSchemas: inputValueSchemas(model, structuredInputSchema()),
@@ -1912,10 +2010,32 @@ function dataEffect(effectId: string) {
   }
 }
 
-function requiredInput(model: ReturnType<typeof decisionModelWithCommitment>, annotationId: string) {
+function requiredInput(model: CapabilityDecisionModel, annotationId: string) {
   const input = model.inputs.find((candidate) => candidate.annotationId === annotationId)
   if (input === undefined) throw new Error(`missing test input: ${annotationId}`)
   return input
+}
+
+function registeredFieldMapping(
+  source: CapabilityDecisionModel,
+  target: CapabilityDecisionModel,
+  sourceOutputPointer: string,
+  targetInputPointer: string,
+): RegisteredOperationMapping {
+  const output = source.evidence.find((candidate) => candidate.outputPointer === sourceOutputPointer)
+  const input = target.inputs.find((candidate) => candidate.inputPointer === targetInputPointer)
+  if (output === undefined || input === undefined) throw new Error('registered mapping semantics missing')
+  const material = {
+    kind: 'field' as const,
+    authority: 'registered_contract_semantics' as const,
+    sourceContractRef: source.contractRef,
+    targetContractRef: target.contractRef,
+    sourceSchemaIdentity: output.schemaIdentity,
+    targetSchemaIdentity: input.schemaIdentity,
+    sourceOutputPointer,
+    targetInputPointer,
+  }
+  return { ...material, mappingRef: createRegisteredOperationMappingRef(material) }
 }
 
 function inputValueSchemas(
@@ -1928,13 +2048,54 @@ function inputValueSchemas(
   }))
 }
 
-function supply(bindingId: string, model: ReturnType<typeof decisionModelWithCommitment>) {
-  return {
-    businessId: `business:${bindingId}`, offeringId: `offering:${bindingId}`, bindingId,
-    contractRef: model.contractRef, offeringRegistrationHash: `sha256:offering:${bindingId}`,
+function supply(
+  bindingId: string,
+  model: CapabilityDecisionModel,
+  overrides: Readonly<{ businessId?: string; operationId?: string; publicationRef?: string }> = {},
+) {
+  const lineage = createTestOperationLineage(model.contractRef, `v2-semantics:${bindingId}`, {
+    operationId: overrides.operationId ?? `operation:test:${bindingId}`,
+    businessId: overrides.businessId ?? `business:${bindingId}`,
+    publicationRef: overrides.publicationRef ?? `publication:${bindingId}`,
+    offeringId: `offering:${bindingId}`,
+    offeringRegistrationHash: `sha256:offering:${bindingId}`,
+    bindingId,
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
-    publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
+    readinessValidUntil: 20_000,
+  })
+  return {
+    operationRef: lineage.operationRef,
+    admittedOperation: lineage.admittedOperation,
+    businessId: lineage.admittedOperation.businessId,
+    offeringId: lineage.admittedOperation.offeringId,
+    bindingId: lineage.admittedOperation.bindingId,
+    contractRef: model.contractRef,
+    offeringRegistrationHash: lineage.admittedOperation.offeringRegistrationHash,
+    bindingRegistrationHash: lineage.admittedOperation.bindingRegistrationHash,
+    publicationRef: lineage.admittedOperation.publicationRef,
+    publicationRevision: lineage.admittedOperation.publicationRevision,
+    readinessValidUntil: lineage.admittedOperation.readinessValidUntil,
     price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
+}
+function testOperationRef(
+  model: CapabilityDecisionModel,
+  suffix = `v2-semantics:descriptor:${model.contractRef.capabilityId}`,
+) {
+  const bindingPrefix = 'v2-semantics:binding:'
+  if (suffix.startsWith(bindingPrefix)) {
+    const bindingId = `binding:${suffix.slice(bindingPrefix.length)}`
+    return createTestOperationLineage(model.contractRef, suffix, {
+      operationId: `operation:test:${bindingId}`,
+      businessId: `business:${bindingId}`,
+      publicationRef: `publication:${bindingId}`,
+      offeringId: `offering:${bindingId}`,
+      offeringRegistrationHash: `sha256:offering:${bindingId}`,
+      bindingId,
+      bindingRegistrationHash: `sha256:binding:${bindingId}`,
+      readinessValidUntil: 20_000,
+    }).operationRef
+  }
+  return createTestOperationLineage(model.contractRef, suffix).operationRef
 }

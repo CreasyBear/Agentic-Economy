@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto'
 
 import { expect, request, test, type APIRequestContext, type Page } from '@playwright/test'
-import type { PublicBusinessCatalogApiV2Dto } from '../../src/modules/registry/public'
-import { LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS } from '../../src/lib/dev/local-e2e-business-fixtures'
-import { DEV_SEED_BUSINESS_FIXTURES } from '../../src/modules/dev/public'
+import {
+  ANSWER_SERVICE_SIGNAL,
+  DEVELOPMENT_FIXTURE_SLUGS,
+  selectSubject,
+  type PublicBusinessCatalogApiV2Dto,
+} from './answer-runtime-production-smoke-selection'
 
 import {
   applyVercelProtectionBypassToPage,
@@ -29,13 +32,8 @@ type PublicThreadReadback = {
   turns: readonly PublicThreadTurnReadback[]
 }
 
-const ANSWER_SERVICE_SIGNAL = /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|photographer|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i
 const FORBIDDEN_PUBLIC_EFFECT_CLAIM = /\b(?:book(?:ing)? confirmed|pay now|payment required|payment (?:taken|processed)|charged|provider dispatched|dispatch confirmed|appointment confirmed|work completed|request sent)\b/i
 const FORBIDDEN_PRIVATE_PUBLIC_EVIDENCE = /\b(?:harnessRun|harnessFinalization|snapshotHash|resultHash|inputJson|resultJson|sourceHash|ownerId|clerkUserId)\b/i
-const DEVELOPMENT_FIXTURE_SLUGS = new Set<string>([
-  ...LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS,
-  ...DEV_SEED_BUSINESS_FIXTURES.map((fixture) => fixture.requestedSlug),
-])
 
 
 test('runtime-selected direct and model-recovery answer paths stay public and read-only', async ({ page }) => {
@@ -218,34 +216,6 @@ async function readPublicThread(
   }
 }
 
-function selectSubject(
-  businesses: readonly PublicBusinessCatalogApiV2Dto[],
-  seed: string,
-): PublicBusinessCatalogApiV2Dto {
-  // Count locality pairs only among real live candidates; development fixtures are excluded
-  // before uniqueness is evaluated so they cannot disqualify a published business.
-  const candidates = businesses.filter((business) => (
-    business.slug.trim().length > 0
-    && business.name.trim().length > 0
-    && business.category.trim().length > 0
-    && business.suburb.trim().length > 0
-    && business.stateTerritory.trim().length > 0
-    && business.offerings.length > 0
-    && !DEVELOPMENT_FIXTURE_SLUGS.has(business.slug)
-  ))
-  const pairCounts = new Map<string, number>()
-  for (const business of candidates) {
-    const key = categoryLocalityKey(business.category, business.suburb, business.stateTerritory)
-    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1)
-  }
-
-  const eligible = candidates.filter((business) => (
-    pairCounts.get(categoryLocalityKey(business.category, business.suburb, business.stateTerritory)) === 1
-    && ANSWER_SERVICE_SIGNAL.test(business.category)
-  ))
-  expect(eligible.length, 'live catalog has no unique fixture-distinct service/category locality subject').toBeGreaterThan(0)
-  return eligible[seedHash(seed) % eligible.length] as PublicBusinessCatalogApiV2Dto
-}
 
 function exactCategoryLocalityQuery(subject: PublicBusinessCatalogApiV2Dto): string {
   return [subject.category, subject.suburb, subject.stateTerritory]
@@ -318,13 +288,6 @@ function replaceWord(words: readonly string[], index: number, replacement: strin
   return words.map((word, wordIndex) => wordIndex === index ? replacement : word).join(' ')
 }
 
-function categoryLocalityKey(category: string, suburb: string, stateTerritory: string): string {
-  return [category, suburb, stateTerritory].map(normalizeKeyPart).join('\u0000')
-}
-
-function normalizeKeyPart(value: string): string {
-  return value.trim().toLocaleLowerCase().replace(/\s+/gu, ' ')
-}
 
 function citedSlugs(artifacts: readonly unknown[]): readonly string[] {
   const slugs: string[] = []
@@ -398,8 +361,7 @@ function isPublicBusiness(value: unknown): value is PublicBusinessCatalogApiV2Dt
     || typeof value.category !== 'string'
     || typeof value.suburb !== 'string'
     || typeof value.stateTerritory !== 'string'
-    || !Array.isArray(value.offerings)
-    || value.offerings.length === 0) {
+    || !Array.isArray(value.offerings)) {
     return false
   }
   return value.offerings.every((offering) => (
@@ -443,14 +405,6 @@ function readSelectionSeed(): string {
   return supplied === undefined || supplied.length === 0 ? randomUUID() : supplied
 }
 
-function seedHash(seed: string): number {
-  let hash = 2_166_136_261
-  for (const character of seed) {
-    hash ^= character.codePointAt(0) ?? 0
-    hash = Math.imul(hash, 16_777_619)
-  }
-  return hash >>> 0
-}
 
 function timestamp(): string {
   return new Date().toISOString()

@@ -1,3 +1,9 @@
+import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
+import {
+  effectiveRouteAttemptState,
+  type RouteAttemptState,
+  type RouteDispatchState,
+} from '@/modules/customer-request/route-execution/journal/export-state'
 import { formatCurrencyAmount } from '@/modules/customer-request/format-currency-amount'
 
 import type {
@@ -147,9 +153,16 @@ export function projectSupportProblemList(input: Readonly<{
   })
 }
 
+type SupportAttemptProjection = Readonly<{
+  state: RouteAttemptState
+  dispatchState?: RouteDispatchState
+  transportObservationJson?: string
+}>
+
 function supportAttemptState(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
+  attempt: SupportAttemptProjection,
 ): 'queued' | 'leased' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled' {
+  const state = effectiveRouteAttemptState(attempt.state, attempt.dispatchState)
   if (state === 'leased') return 'leased'
   if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
@@ -157,12 +170,18 @@ function supportAttemptState(
   return state
 }
 
-function supportAttemptWasReleased(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
-    | undefined,
-): boolean {
+function supportAttemptWasReleased(attempt: SupportAttemptProjection | undefined): boolean {
+  if (attempt === undefined) return false
+  const observation = attempt.transportObservationJson === undefined
+    ? undefined
+    : parseRouteTransportObservationJson(attempt.transportObservationJson)
+  if (observation !== undefined) return observation.releaseStarted
+  if (attempt.dispatchState === 'delivered' || attempt.dispatchState === 'outcome_unknown') {
+    return true
+  }
+  const state = effectiveRouteAttemptState(attempt.state, attempt.dispatchState)
   return state === 'dispatched' || state === 'accepted' || state === 'succeeded'
-    || state === 'failed' || state === 'outcome_unknown'
+    || state === 'outcome_unknown'
 }
 
 
@@ -210,12 +229,11 @@ function supportProblemReconstruction(input: Readonly<{
   }
   revocation: null | { recordedAt: number }
   reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
-  attempts: readonly Readonly<{
+  attempts: readonly (SupportAttemptProjection & Readonly<{
     position: number
-    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     attemptRef: string
     evidence?: readonly AttemptEvidenceItem[]
-  }>[]
+  }>)[]
   businessNames: ReadonlyMap<string, string>
   tracking: {
     nextAction: 'await_status_update' | 'check_status' | 'provide_information' | 'none'
@@ -266,7 +284,7 @@ function supportProblemReconstruction(input: Readonly<{
         admitted: { currency: maximum.currency, amountMinor: admitted },
       },
       dataSharing: input.mandate.route.steps.flatMap((step) => {
-        const released = supportAttemptWasReleased(attempts.get(step.position)?.state)
+        const released = supportAttemptWasReleased(attempts.get(step.position))
         return step.dataScope.map((scope) => ({
           classification: scope.classification,
           recipient: scope.recipient.kind === 'named_recipient'
@@ -277,7 +295,7 @@ function supportProblemReconstruction(input: Readonly<{
         }))
       }),
       effects: input.mandate.route.steps.flatMap((step) => {
-        const released = supportAttemptWasReleased(attempts.get(step.position)?.state)
+        const released = supportAttemptWasReleased(attempts.get(step.position))
         return step.effects.map((effect) => ({
           class: effect.class,
           reversibility: effect.reversibility,
@@ -303,7 +321,7 @@ function supportProblemReconstruction(input: Readonly<{
         return {
           step: step.position,
           business: businesses.get(step.businessId) ?? 'Registered business',
-          state: attempt === undefined ? 'blocked' as const : supportAttemptState(attempt.state),
+          state: attempt === undefined ? 'blocked' as const : supportAttemptState(attempt),
           evidence,
         }
       }),
@@ -355,6 +373,7 @@ export type SupportProblemExportMaterial = Readonly<{
     requestId: string
     position: number
     grant: { step: { businessId: string } }
+    transportObservationJson?: string
     evidence?: readonly AttemptEvidenceItem[]
   }>
   requestRevision: undefined | Readonly<{
@@ -378,12 +397,11 @@ export type SupportProblemExportMaterial = Readonly<{
   reservations: readonly Readonly<{
     reservedSpend: { currency: string; amountMinor: number }
   }>[]
-  attempts: readonly Readonly<{
+  attempts: readonly (SupportAttemptProjection & Readonly<{
     position: number
-    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     attemptRef: string
     evidence?: readonly AttemptEvidenceItem[]
-  }>[]
+  }>)[]
   businessNames: ReadonlyMap<string, string>
 }>
 

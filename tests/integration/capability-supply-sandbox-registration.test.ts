@@ -6,6 +6,7 @@ import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
   registerSandboxV2SupplyRegistrations,
+  seedSandboxCapabilityPublication,
 } from '../../convex/devSeed'
 import {
   registerCapabilityBindingCommand,
@@ -14,6 +15,7 @@ import {
 } from '../../convex/capabilitySupply'
 import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
 import schema from '../../convex/schema'
+import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
@@ -28,8 +30,7 @@ import {
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
-import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import { convexModules as modules, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
 describe('labelled sandbox V2 capability supply', () => {
   it('binds labelled sandbox businesses to an explicit authenticated dev owner idempotently', async () => {
@@ -100,6 +101,7 @@ describe('labelled sandbox V2 capability supply', () => {
   it('registers and admits the three-business procurement workflow through generic supply commands', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await seedHealthyCurrentSandboxPublications(backend)
 
     expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
       'binding:sandbox-procurement-brief:http-json:v3',
@@ -131,6 +133,7 @@ describe('labelled sandbox V2 capability supply', () => {
   it('registers and admits the three-business itinerary workflow through generic supply commands', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await seedHealthyCurrentSandboxPublications(backend)
 
     expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
       'binding:sandbox-trip-constraints:http-json:v2',
@@ -227,6 +230,7 @@ describe('labelled sandbox V2 capability supply', () => {
   it('seeds labelled comparison and composite-route businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await seedHealthyCurrentSandboxPublications(backend)
 
     expect(result).toMatchObject({
       seededSlugs: [
@@ -304,102 +308,102 @@ describe('labelled sandbox V2 capability supply', () => {
       {
         publicationRef: 'offering:sandbox-option-one:reference-lookup:v3',
         bindingId: 'binding:sandbox-option-one:http-json:v4',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
         bindingId: 'binding:sandbox-option-two:http-json:v4',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v6',
         bindingId: 'binding:sandbox-route-resolver:http-json:v6',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-route-quoter:service-quote:v5',
         bindingId: 'binding:sandbox-route-quoter:http-json:v5',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-procurement-brief:v3',
         bindingId: 'binding:sandbox-procurement-brief:http-json:v3',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-supplier-options:v2',
         bindingId: 'binding:sandbox-supplier-options:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-procurement-recommendation:v2',
         bindingId: 'binding:sandbox-procurement-recommendation:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-trip-constraints:v2',
         bindingId: 'binding:sandbox-trip-constraints:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-accessible-transfer:v2',
         bindingId: 'binding:sandbox-accessible-transfer:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-accessible-hotel:v2',
         bindingId: 'binding:sandbox-accessible-hotel:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-meeting-schedule:v2',
         bindingId: 'binding:sandbox-meeting-schedule:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-dinner-plan:v2',
         bindingId: 'binding:sandbox-dinner-plan:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-itinerary-builder:v3',
         bindingId: 'binding:sandbox-itinerary-builder:http-json:v3',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-itinerary-readiness:v2',
         bindingId: 'binding:sandbox-itinerary-readiness:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-event-requirements:v6',
         bindingId: 'binding:sandbox-event-requirements:http-json:v6',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-event-site-evidence:v3',
         bindingId: 'binding:sandbox-event-site-evidence:http-json:v3',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-event-business-readiness:v4',
         bindingId: 'binding:sandbox-event-business-readiness:http-json:v4',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-journey-case:v2',
         bindingId: 'binding:sandbox-journey-case:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-milestone-plan:v2',
         bindingId: 'binding:sandbox-milestone-plan:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-progress-synthesis:v2',
         bindingId: 'binding:sandbox-progress-synthesis:http-json:v2',
-        credentialState: 'unobserved', healthState: 'unobserved',
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
     ])
   })
@@ -409,6 +413,7 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {
       includeComparisonOptions: false,
     })
+    await seedHealthyCurrentSandboxPublications(backend)
 
     expect(result.retiredSandboxV2Bindings).toEqual([
       'binding:sandbox-option-one:http-json:v4',
@@ -466,11 +471,17 @@ describe('labelled sandbox V2 capability supply', () => {
       await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
       return registerSandboxV2SupplyRegistrations(ctx.db, 3_000)
     })
+    await backend.run(async (ctx) => {
+      await Promise.all(registrations.map((registration, index) => (
+        seedSandboxCapabilityPublication(ctx, registration, 4_000 + index)
+      )))
+    })
 
     await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
 
     await backend.run((ctx) => admitSandboxV2Supply(ctx.db, registrations, 3_500))
+    await seedHealthyCurrentSandboxPublications(backend)
     const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
@@ -498,6 +509,7 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v3')
     expect(replay.sandboxCapabilityPublicationRef).toBe(first.sandboxCapabilityPublicationRef)
     expect(ownerAfterReplay).toEqual(ownerBeforeReplay)
+    await seedHealthyCurrentSandboxPublications(backend)
 
     const state = await backend.run(async (ctx) => ({
       contracts: await ctx.db.query('capabilityContractDocuments').collect(),
@@ -520,23 +532,19 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(state.publications).toMatchObject([
       {
         publicationRef: first.sandboxCapabilityPublicationRef,
-        bindingId: 'binding:sandbox-option-one:http-json:v4',
-        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
-        bindingId: 'binding:sandbox-option-two:http-json:v4',
-        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v6',
-        bindingId: 'binding:sandbox-route-resolver:http-json:v6',
-        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
       {
         publicationRef: 'offering:sandbox-route-quoter:service-quote:v5',
-        bindingId: 'binding:sandbox-route-quoter:http-json:v5',
-        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+        credentialState: 'ready', healthState: 'healthy', readinessEvidenceRefs: ['seed:healthy-supply'],
       },
     ])
     expect(state.bindings.find((binding) => binding.bindingId === state.publications[0]?.bindingId))
@@ -545,7 +553,12 @@ describe('labelled sandbox V2 capability supply', () => {
       networkId: 'ae:public', includeInactive: false, limit: 10,
     })).resolves.toMatchObject({
       kind: 'available',
-      nodes: [],
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ publicationRef: 'offering:sandbox-option-one:reference-lookup:v3' }),
+        expect.objectContaining({ publicationRef: 'offering:sandbox-option-two:reference-lookup:v3' }),
+        expect.objectContaining({ publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v6' }),
+        expect.objectContaining({ publicationRef: 'offering:sandbox-route-quoter:service-quote:v5' }),
+      ]),
     })
     expect(state.contracts).toHaveLength(3)
     expect(state.contracts.map(({ capabilityId, version, status }) => ({ capabilityId, version, status }))).toEqual([
@@ -633,6 +646,7 @@ describe('labelled sandbox V2 capability supply', () => {
   it('does not promote a published listing without an offering and binding into V2 supply', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await seedHealthyCurrentSandboxPublications(backend)
     await backend.run(async (ctx) => {
       const template = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', 'sandbox-option-one')).unique()
       if (template === null) throw new Error('sandbox template missing')
@@ -1085,6 +1099,27 @@ describe('labelled sandbox V2 capability supply', () => {
       .rejects.toThrow('sandbox_business_claim_claim_operation_conflict')
   })
 })
+
+async function seedHealthyCurrentSandboxPublications(backend: ConvexFixtureBackend): Promise<void> {
+  await backend.finishInProgressScheduledFunctions()
+  const publications = await backend.run(async (ctx) => (
+    await ctx.db.query('capabilityPublications').collect()
+  ))
+  for (const publication of publications) {
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: publication.revision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      evidenceRefs: ['seed:healthy-supply'],
+      operationKey: `readiness:${publication.publicationRef}`,
+      correlationId: `readiness:${publication.publicationRef}`,
+      reasonCode: 'source_test_readiness',
+      validUntil: Date.now() + 3_600_000,
+    })
+  }
+  if (publications.length === 0) throw new Error('sandbox publications missing')
+}
 
 async function registerLegacySandboxSupply(
   db: Parameters<typeof registerCapabilityContractDocument>[0],

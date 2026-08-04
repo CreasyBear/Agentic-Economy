@@ -42,6 +42,7 @@ export async function beginOperation(
     if (existing.status === 'succeeded') {
       return {
         kind: 'replay' as const,
+        operationId: existing.operationId,
         resultHash: existing.resultHash,
         effectRefs: existing.effectRefs,
       }

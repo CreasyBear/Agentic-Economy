@@ -1,4 +1,4 @@
-import type { PublicationCommandPorts, OperationLedgerPorts } from '@/modules/capability-supply/public'
+import { isPublicOperationRef, type PublicationCommandPorts, type OperationLedgerPorts } from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
@@ -29,8 +29,12 @@ export function capabilitySupplyPublicationPorts(
           index.eq('publicationRef', publicationRef).eq('revision', revision)
         )).unique()
       if (publication === null) return null
+      if (!isPublicOperationRef(publication.operationRef)) {
+        throw new Error('capability_publication_operation_ref_invalid')
+      }
       return {
         id: publication._id,
+        operationRef: publication.operationRef,
         publicationRef: publication.publicationRef,
         revision: publication.revision,
         businessId: publication.businessId,
@@ -41,17 +45,26 @@ export function capabilitySupplyPublicationPorts(
         version: publication.version,
         contractDigest: publication.contractDigest,
         disposition: publication.disposition,
+        sourceRevision: publication.sourceRevision,
         sourceDigest: publication.sourceDigest,
+        publisherRef: publication.publisherRef,
+        authorityMode: publication.authorityMode,
+        provenanceDigest: publication.provenanceDigest,
       }
     },
     insertPublication: async (input) => {
       await ctx.db.insert('capabilityPublications', {
+        operationRef: input.operationRef,
         publicationRef: input.publicationRef,
         revision: input.revision,
         businessId: input.businessId as Id<'businesses'>,
         networkId: input.networkId,
         sourceKind: input.sourceKind,
+        sourceRevision: input.sourceRevision,
         sourceDigest: input.sourceDigest,
+        publisherRef: input.publisherRef,
+        authorityMode: input.authorityMode,
+        provenanceDigest: input.provenanceDigest,
         capabilityId: input.capabilityId,
         version: input.version,
         contractDigest: input.contractDigest,

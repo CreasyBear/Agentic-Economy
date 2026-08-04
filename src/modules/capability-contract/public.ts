@@ -1,12 +1,4 @@
 import { Validator, type Schema } from '@cfworker/json-schema'
-import applicatorMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/applicator.json'
-import contentMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/content.json'
-import coreMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/core.json'
-import formatAnnotationMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json'
-import metaDataMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/meta-data.json'
-import unevaluatedMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json'
-import validationMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/validation.json'
-import rootMetaSchema from 'ajv/dist/refs/json-schema-2020-12/schema.json'
 import { z } from 'zod'
 
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
@@ -62,7 +54,6 @@ const jsonSchema = z.record(z.string(), jsonValueSchema).superRefine((schema, co
     context.addIssue({ code: 'custom', message: 'json_schema_reference_profile_unsupported' })
   }
 })
-const schemaMetaValidator = createSchemaMetaValidator()
 const customerAnnotation = z.strictObject({
   annotationId: identifier,
   semanticIdentity: identifier.optional(),
@@ -598,6 +589,7 @@ function applicablePreparationDataUse(
   return applicable
 }
 
+
 function assertSchemaIsSafeAndValid(schema: Readonly<Record<string, JsonValue>>): void {
   if (JSON.stringify(schema).length > MAX_SCHEMA_BYTES || jsonDepth(schema) > MAX_SCHEMA_DEPTH || hasReferenceCycle(schema)) {
     throw new Error('capability_json_schema_too_complex')
@@ -610,24 +602,81 @@ function assertSchemaIsSafeAndValid(schema: Readonly<Record<string, JsonValue>>)
   }
 }
 
-function createSchemaMetaValidator(): Validator {
-  const validator = new Validator(mutableInterpreterSchema(rootMetaSchema), '2020-12', false)
-  for (const schema of [
-    applicatorMetaSchema,
-    contentMetaSchema,
-    coreMetaSchema,
-    formatAnnotationMetaSchema,
-    metaDataMetaSchema,
-    unevaluatedMetaSchema,
-    validationMetaSchema,
-  ]) validator.addSchema(mutableInterpreterSchema(schema))
-  return validator
-}
-
 function schemaAndChildrenMatchMetaSchema(schema: Readonly<Record<string, JsonValue>>): boolean {
   if (Object.keys(schema).some((keyword) => !supportedSchemaKeywords.has(keyword))) return false
-  const result = schemaMetaValidator.validate(schema)
-  return result.valid && childSchemas(schema).every(schemaAndChildrenMatchMetaSchema)
+  if (!schemaKeywordValuesAreValid(schema)) return false
+  return childSchemas(schema).every(schemaAndChildrenMatchMetaSchema)
+}
+
+const JSON_SCHEMA_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string'])
+const NON_NEGATIVE_INTEGER_KEYWORDS = [
+  'maxContains', 'maxItems', 'maxLength', 'maxProperties',
+  'minContains', 'minItems', 'minLength', 'minProperties',
+] as const
+const NUMBER_KEYWORDS = ['exclusiveMaximum', 'exclusiveMinimum', 'maximum', 'minimum', 'multipleOf'] as const
+const SCHEMA_MAP_KEYWORDS = ['$defs', 'definitions', 'dependentSchemas', 'patternProperties', 'properties'] as const
+const SCHEMA_KEYWORDS = [
+  'additionalProperties', 'contains', 'contentSchema', 'else', 'if', 'items',
+  'not', 'propertyNames', 'then', 'unevaluatedItems', 'unevaluatedProperties',
+] as const
+const SCHEMA_ARRAY_KEYWORDS = ['allOf', 'anyOf', 'oneOf', 'prefixItems'] as const
+
+function schemaKeywordValuesAreValid(schema: Readonly<Record<string, JsonValue>>): boolean {
+  const type = schema.type
+  if (type !== undefined && !validSchemaType(type)) return false
+  if (schema.$schema !== undefined && typeof schema.$schema !== 'string') return false
+  for (const keyword of ['$anchor', '$comment', '$dynamicAnchor', '$dynamicRef', '$id', '$ref', 'contentEncoding', 'contentMediaType', 'description', 'format', 'pattern', 'title'] as const) {
+    if (schema[keyword] !== undefined && typeof schema[keyword] !== 'string') return false
+  }
+  for (const keyword of NON_NEGATIVE_INTEGER_KEYWORDS) {
+    const value = schema[keyword]
+    if (value !== undefined && (!Number.isInteger(value) || (value as number) < 0)) return false
+  }
+  for (const keyword of NUMBER_KEYWORDS) {
+    const value = schema[keyword]
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) return false
+  }
+  if (schema.multipleOf !== undefined && (schema.multipleOf as number) <= 0) return false
+  for (const keyword of ['deprecated', 'readOnly', 'uniqueItems', 'writeOnly'] as const) {
+    if (schema[keyword] !== undefined && typeof schema[keyword] !== 'boolean') return false
+  }
+  if (schema.required !== undefined && !uniqueStringArray(schema.required)) return false
+  if (schema.dependentRequired !== undefined && (
+    !isJsonRecord(schema.dependentRequired)
+    || Object.values(schema.dependentRequired).some((value) => !uniqueStringArray(value))
+  )) return false
+  if (schema.enum !== undefined && (!Array.isArray(schema.enum) || schema.enum.length === 0)) return false
+  for (const keyword of SCHEMA_MAP_KEYWORDS) {
+    const value = schema[keyword]
+    if (value !== undefined && (!isJsonRecord(value) || Object.values(value).some((child) => !isSchemaValue(child)))) return false
+  }
+  for (const keyword of SCHEMA_KEYWORDS) {
+    const value = schema[keyword]
+    if (value !== undefined && !isSchemaValue(value)) return false
+  }
+  for (const keyword of SCHEMA_ARRAY_KEYWORDS) {
+    const value = schema[keyword]
+    if (value !== undefined && (!Array.isArray(value) || value.length === 0 || value.some((child) => !isSchemaValue(child)))) return false
+  }
+  return true
+}
+
+function validSchemaType(value: JsonValue): boolean {
+  if (typeof value === 'string') return JSON_SCHEMA_TYPES.has(value)
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every((entry) => typeof entry === 'string' && JSON_SCHEMA_TYPES.has(entry))
+    && new Set(value).size === value.length
+}
+
+function uniqueStringArray(value: JsonValue): boolean {
+  return Array.isArray(value)
+    && value.every((entry) => typeof entry === 'string')
+    && new Set(value).size === value.length
+}
+
+function isSchemaValue(value: JsonValue): boolean {
+  return typeof value === 'boolean' || isJsonRecord(value)
 }
 
 function createInterpreter(schema: Readonly<Record<string, JsonValue>>): Validator {
@@ -773,7 +822,6 @@ function pointerSyntaxIsCanonical(pointer: string): boolean {
   return pointer.slice(1).split('/').every((segment) => (
     segment.length > 0
     && !/~(?:[^01]|$)/.test(segment)
-    && !/^(?:0|[1-9]\d*)$/.test(segment.replaceAll('~1', '/').replaceAll('~0', '~'))
   ))
 }
 
@@ -1096,7 +1144,7 @@ function resolveInstanceSchema(
   return resolveInstanceSchemaSegments(root, segments, root, new Set())
 }
 
-function resolvePointedSchema(
+export function resolvePointedSchema(
   root: Readonly<Record<string, JsonValue>>,
   pointer: string,
 ): Readonly<Record<string, JsonValue>> | undefined {

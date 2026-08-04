@@ -1,24 +1,24 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { RateLimitAdmission } from '@/lib/server/rate-limit'
 import { resetAnswerTurnGuardForTests } from '@/modules/answer-thread/testing'
 import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { sessionCookieHeader } from '../helpers/answer-thread-test-port'
 
-const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-const ANSWER_TURN_RATE_LIMIT = 30
-const ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT = 60
+const NOOP_TURN_STREAM = async () => undefined
+const RETRY_AFTER_MS = 60_000
 
 describe('answer HTTP rate limits', () => {
   afterEach(() => {
     resetAnswerTurnGuardForTests()
   })
 
-  it('dedupes turn submit rate limit for the same client turn key', async () => {
-    const session = `turn-idempotency-session-${runId}`
+  it('dedupes admission for the same client turn key', async () => {
+    const admit = vi.fn<RateLimitAdmission>().mockResolvedValue({ ok: true })
     const headers = {
       'Content-Type': 'application/json',
-      cookie: sessionCookieHeader(session),
+      cookie: sessionCookieHeader('turn-idempotency-session'),
       'X-AE-Turn-Key': 'gen-1:plumber brunswick',
     }
 
@@ -29,76 +29,62 @@ describe('answer HTTP rate limits', () => {
           headers,
           body: JSON.stringify({ query: 'plumber brunswick' }),
         }),
-      )
-      expect(response.status).not.toBe(429)
-    }
-  })
-
-  it('returns 429 after turn submit limit', async () => {
-    const session = `turn-rate-limit-session-${runId}`
-
-    for (let index = 0; index < ANSWER_TURN_RATE_LIMIT; index += 1) {
-      const response = await handleAnswerTurnRequest(
-        new Request('https://ae.example/api/answer/turn', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            cookie: sessionCookieHeader(session),
-          },
-          body: JSON.stringify({ query: `plumber test ${index}` }),
-        }),
+        { admit, stream: NOOP_TURN_STREAM },
       )
       expect(response.status).not.toBe(429)
     }
 
-    const limited = await handleAnswerTurnRequest(
-      new Request('https://ae.example/api/answer/turn', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          cookie: sessionCookieHeader(session),
-        },
-        body: JSON.stringify({ query: 'plumber test limited' }),
-      }),
-    )
-
-    expect(limited.status).toBe(429)
-    expect(await limited.json()).toEqual({ error: 'rate_limited' })
+    expect(admit).toHaveBeenCalledTimes(1)
   })
 
-  it('returns 429 after follow-up chips limit', async () => {
-    const session = `follow-up-chips-rate-limit-session-${runId}`
-    const body = JSON.stringify({
-      query: 'emergency plumber parramatta',
-      providers: [],
+  it('maps a refused turn admission to 429', async () => {
+    const admit = sequencedAdmission()
+    const request = () => new Request('https://ae.example/api/answer/turn', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: sessionCookieHeader('turn-rate-limit-session'),
+      },
+      body: JSON.stringify({ query: 'plumber test' }),
     })
 
-    for (let index = 0; index < ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT; index += 1) {
-      const response = await handleFollowUpChipsRequest(
-        new Request('https://ae.example/api/answer/follow-up-chips', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            cookie: sessionCookieHeader(session),
-          },
-          body,
-        }),
-      )
-      expect(response.status).not.toBe(429)
-    }
+    const accepted = await handleAnswerTurnRequest(request(), { admit, stream: NOOP_TURN_STREAM })
+    expect(accepted.status).not.toBe(429)
 
-    const limited = await handleFollowUpChipsRequest(
-      new Request('https://ae.example/api/answer/follow-up-chips', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          cookie: sessionCookieHeader(session),
-        },
-        body,
+    const limited = await handleAnswerTurnRequest(request(), { admit, stream: NOOP_TURN_STREAM })
+    await expectRateLimited(limited)
+  })
+
+  it('maps a refused follow-up-chip admission to 429', async () => {
+    const admit = sequencedAdmission()
+    const request = () => new Request('https://ae.example/api/answer/follow-up-chips', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: sessionCookieHeader('follow-up-chips-rate-limit-session'),
+      },
+      body: JSON.stringify({
+        query: 'emergency plumber parramatta',
+        providers: [],
       }),
-    )
+    })
 
-    expect(limited.status).toBe(429)
-    expect(await limited.json()).toEqual({ error: 'rate_limited' })
+    const accepted = await handleFollowUpChipsRequest(request(), { admit })
+    expect(accepted.status).not.toBe(429)
+
+    const limited = await handleFollowUpChipsRequest(request(), { admit })
+    await expectRateLimited(limited)
   })
 })
+
+function sequencedAdmission(): RateLimitAdmission {
+  return vi.fn<RateLimitAdmission>()
+    .mockResolvedValueOnce({ ok: true })
+    .mockResolvedValue({ ok: false, retryAfter: RETRY_AFTER_MS })
+}
+
+async function expectRateLimited(response: Response): Promise<void> {
+  expect(response.status).toBe(429)
+  expect(await response.json()).toEqual({ error: 'rate_limited' })
+  expect(response.headers.get('Retry-After')).toBe('60')
+}

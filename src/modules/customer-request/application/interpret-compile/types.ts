@@ -1,12 +1,20 @@
 import type { CapabilityContractRef, CapabilityDecisionModel } from '@/modules/capability-contract/public'
 import type {
+  AdmittedOperationRef,
+  PublicOperationRef,
+  RegisteredOperationMapping,
+} from '@/modules/capability-supply/public'
+import type {
   CompileCustomerRequestResult,
   CustomerReportedRouteExclusion,
 } from '@/modules/customer-request/compiler'
-import type { RegisteredEvaluationBinding, RegisteredSupplyPrice, RequestFact } from '@/modules/customer-request/evaluation'
+import type {
+  RegisteredEvaluationBinding,
+  RegisteredSupplyPrice,
+  RequestFact,
+} from '@/modules/customer-request/evaluation'
 import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
-import { bindCustomerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
-
+import type { ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 export type EligibleSupply = Readonly<{
   offering: Readonly<{
     offeringId: string
@@ -30,7 +38,13 @@ export type EligibleSupply = Readonly<{
     }>
     registrationHash: string
   }>
-  publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
+  publication?: Readonly<{
+    operationRef: PublicOperationRef
+    admittedOperation: AdmittedOperationRef
+    publicationRef: string
+    revision: number
+    readinessValidUntil: number
+  }>
   binding: Readonly<{
     bindingId: string
     offeringId: string
@@ -59,11 +73,11 @@ export type ExactContractResult = Readonly<
 export type RequestGraph = Readonly<{
   kind: 'available'
   models: readonly CapabilityDecisionModel[]
-  descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[]
+  descriptors: readonly ServerCapabilityDescriptor[]
   bindings: readonly RegisteredEvaluationBinding[]
+  mappings: readonly RegisteredOperationMapping[]
   registrySnapshotDigest: string
 }>
-
 /**
  * `no_routeable_supply` is a fact about the world: no registered business is currently routeable
  * on this network, so retrying cannot change the answer. `graph_unreadable` is an AE-side fault
@@ -104,5 +118,11 @@ export type CommitResult = Readonly<
 export type CommandReplayResult = Readonly<
   | { kind: 'not_found' }
   | { kind: 'conflict' }
+  | {
+      kind: 'resubmit_required'
+      requestId: string
+      revision: number
+      reason: 'legacy_embedded_route'
+    }
   | { kind: 'replayed'; aggregate: unknown; routeGenerationRef?: string; noEffect: boolean }
 >

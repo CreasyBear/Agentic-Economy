@@ -5,6 +5,11 @@ import {
   registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
 } from '@/modules/capability-supply/public'
 import {
+  isRegisteredOperationMappingRef,
+  resolveRegisteredOperationMappingRef,
+  type RegisteredOperationMapping,
+} from '@/modules/capability-supply/public'
+import {
   getEligibleExactCapabilitySupply as getEligibleExactCapabilitySupplyFromModule,
   listIntegratedCapabilitySupply as listIntegratedCapabilitySupplyFromModule,
   listRouteableCapabilitySupply as listRouteableCapabilitySupplyFromModule,
@@ -28,6 +33,8 @@ import {
   type OperationLedgerPorts,
 } from '@/modules/capability-supply/public'
 import {
+  admitCapabilityPublicationCommand,
+  decodeConvexPublicationSource,
   publicationLifecycle,
   publicationProjection,
   publishCapabilityCommand,
@@ -38,14 +45,21 @@ import {
   bindingObservedRowDigest,
 } from '@/modules/capability-supply/public'
 import {
+  boundedTrimmed,
+  validEvidenceRefs,
   validRegistrationContext,
   type RegistrationContext,
+  type CapabilityPublicationAdmissionSource,
   type SupplyCommandActor,
 } from '@/modules/capability-supply/public'
-import type { Id } from './_generated/dataModel'
+import { registeredOperationMappingValue } from './capabilitySupplyValues'
+import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
+import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
+import type { Id } from './_generated/dataModel'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
@@ -115,6 +129,34 @@ const cancellationValue = v.object({
   evidenceRefs: evidenceRefsValue,
 })
 
+const queryMappingValue = v.array(v.object({
+  inputPointer: v.string(),
+  parameter: v.string(),
+}))
+const fixedQueryValue = v.array(v.object({
+  parameter: v.string(),
+  value: v.string(),
+}))
+const adapterConfigScalarValue = v.union(
+  v.string(),
+  v.number(),
+  v.boolean(),
+  v.null(),
+)
+const adapterConfigObjectValue = v.record(v.string(), adapterConfigScalarValue)
+const adapterConfigValue = v.record(
+  v.string(),
+  v.union(
+    adapterConfigScalarValue,
+    v.array(adapterConfigScalarValue),
+    adapterConfigObjectValue,
+    v.array(adapterConfigObjectValue),
+  ),
+)
+const adapterValue = v.object({
+  adapterId: v.string(),
+  config: v.union(v.null(), adapterConfigValue),
+})
 const bindingRegistrationValue = v.object({
   bindingId: v.string(),
   offeringId: v.string(),
@@ -124,7 +166,7 @@ const bindingRegistrationValue = v.object({
   credentialRef: v.string(),
   continuation: continuationValue,
   cancellation: cancellationValue,
-  adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
+  adapter: adapterValue,
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const capabilityPublicationOfferingValue = v.object({
@@ -141,7 +183,7 @@ const capabilityPublicationBindingValue = v.object({
   credentialRef: v.string(),
   continuation: continuationValue,
   cancellation: cancellationValue,
-  adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
+  adapter: adapterValue,
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const capabilityContractMetadataValue = v.object({
@@ -216,6 +258,7 @@ const capabilityPublicationSourceValue = v.union(
     kind: v.literal('openapi_http'),
     documentJson: v.string(),
     'operation': v.object({ path: v.string(), method: v.union(v.literal('get'), v.literal('post')) }),
+    fixedQuery: v.optional(fixedQueryValue),
     contract: capabilityContractMetadataValue,
     commercial: capabilityImporterCommercialValue,
     evidenceRefs: evidenceRefsValue,
@@ -237,7 +280,62 @@ const capabilityPublicationSourceValue = v.union(
     evidenceRefs: evidenceRefsValue,
   }),
 )
-
+const publicationAuthorityModeValue = v.union(
+  v.literal('provider_owned'),
+  v.literal('ae_curated_external'),
+)
+const capabilityPublicationAdmissionSourceValue = v.union(
+  v.object({
+    kind: v.literal('ae_envelope'),
+    sourceRevision: v.string(),
+    documentJson: v.string(),
+    offering: capabilityPublicationOfferingValue,
+    binding: capabilityPublicationBindingValue,
+    evidenceRefs: evidenceRefsValue,
+  }),
+  v.object({
+    kind: v.literal('openapi_http'),
+    sourceRevision: v.string(),
+    documentJson: v.string(),
+    fixedQuery: v.optional(fixedQueryValue),
+    operation: v.object({ path: v.string(), method: v.union(v.literal('get'), v.literal('post')) }),
+    contract: capabilityContractMetadataValue,
+    commercial: capabilityImporterCommercialValue,
+    evidenceRefs: evidenceRefsValue,
+  }),
+  v.object({
+    kind: v.literal('mcp'),
+    serverUrl: v.string(),
+    toolJson: v.string(),
+    protocolVersion: v.string(),
+    contract: capabilityContractMetadataValue,
+    commercial: capabilityImporterCommercialValue,
+    evidenceRefs: evidenceRefsValue,
+  }),
+  v.object({
+    kind: v.literal('x402'),
+    sourceRevision: v.string(),
+    resourceJson: v.string(),
+    contract: capabilityContractMetadataValue,
+    commercial: capabilityImporterCommercialValue,
+    evidenceRefs: evidenceRefsValue,
+  }),
+)
+const mappingFailureReason = v.union(
+  v.literal('authorization_denied'),
+  v.literal('registration_context_invalid'),
+  v.literal('mapping_invalid'),
+  v.literal('mapping_integrity_failure'),
+  v.literal('contract_not_found'),
+  v.literal('contract_not_active'),
+  v.literal('contract_integrity_failure'),
+  v.literal('network_not_owned'),
+  v.literal('operation_key_conflict'),
+)
+const registerMappingResultValue = v.union(
+  v.object({ kind: v.literal('registered'), mappingRef: v.string() }),
+  v.object({ kind: v.literal('refused'), reason: mappingFailureReason }),
+)
 const contextFields = {
   operationKey: v.string(),
   correlationId: v.string(),
@@ -322,6 +420,23 @@ const eligibleSupplyValue = v.object({
   }),
   publication: v.optional(v.object({
     publicationRef: v.string(), revision: v.number(), readinessValidUntil: v.number(),
+    operationRef: v.string(),
+    admittedOperation: v.object({
+      publicationRef: v.string(), publicationRevision: v.number(),
+      publisherRef: v.string(), sourceRevision: v.string(), sourceDigest: v.string(),
+      businessId: v.string(), offeringId: v.string(),
+      catalogOfferingRef: v.string(), catalogOfferingRevision: v.number(),
+      offeringRegistrationHash: v.string(), offeringEligibilityHash: v.string(),
+      bindingId: v.string(), bindingRegistrationHash: v.string(),
+      bindingEligibilityHash: v.string(), bindingConfigDigest: v.string(),
+      operationId: v.string(),
+      contractRef: v.object({
+        capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
+      }),
+      effectDigest: v.string(), commercialDigest: v.string(),
+      provenanceDigest: v.string(), qualificationDigest: v.string(),
+      readinessValidUntil: v.number(),
+    }),
   })),
 })
 const eligibleSupplyResultValue = v.union(
@@ -380,6 +495,61 @@ const capabilityPublicationResultValue = v.union(
       v.literal('registration_context_invalid'),
       v.literal('operation_key_conflict'),
       v.literal('source_invalid'),
+    ),
+  }),
+)
+const capabilityPublicationAdmissionResultValue = v.union(
+  v.object({
+    kind: v.union(v.literal('published'), v.literal('replayed')),
+    operationId: v.string(),
+    operationName: v.literal('publishCapability'),
+    publisherRef: v.string(),
+    provenanceDigest: v.string(),
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    contractRef: contractRefValue,
+    catalogOfferingRef: v.string(),
+    catalogOfferingRevision: v.number(),
+    offeringId: v.string(),
+    bindingId: v.string(),
+    sourceRevision: v.string(),
+    sourceDigest: v.string(),
+    authorityMode: publicationAuthorityModeValue,
+    lifecycle: publicationLifecycleValue,
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authorization_denied'),
+      v.literal('registration_context_invalid'),
+      v.literal('source_revision_invalid'),
+      v.literal('catalog_offering_invalid'),
+      v.literal('provenance_invalid'),
+      v.literal('source_invalid'),
+      v.literal('source_too_large'),
+      v.literal('source_too_deep'),
+      v.literal('source_version_unsupported'),
+      v.literal('selector_invalid'),
+      v.literal('operation_not_found'),
+      v.literal('schema_missing'),
+      v.literal('schema_profile_unsupported'),
+      v.literal('transport_unsupported'),
+      v.literal('commercial_metadata_inconsistent'),
+      v.literal('payment_execution_unsupported'),
+      v.literal('contract_too_large'),
+      v.literal('contract_invalid'),
+      v.literal('contract_identity_conflict'),
+      v.literal('contract_integrity_failure'),
+      v.literal('offering_invalid'),
+      v.literal('offering_identity_conflict'),
+      v.literal('offering_integrity_failure'),
+      v.literal('binding_invalid'),
+      v.literal('binding_identity_conflict'),
+      v.literal('binding_integrity_failure'),
+      v.literal('adapter_not_registered'),
+      v.literal('adapter_config_invalid'),
+      v.literal('adapter_config_too_large'),
+      v.literal('operation_key_conflict'),
     ),
   }),
 )
@@ -463,6 +633,7 @@ const capabilityGraphResultValue = v.union(
 )
 
 type ContractRef = Infer<typeof contractRefValue>
+type RegisteredOperationMappingInput = Infer<typeof registeredOperationMappingValue>
 
 export const publishCapability = mutation({
   args: {
@@ -496,6 +667,68 @@ export const publishCapability = mutation({
       actor,
       now: Date.now(),
     }, ports)
+    if (result.kind !== 'refused') {
+      const projected = publicationProjection(
+        result.contractRef,
+        result.offeringId,
+        result.bindingId,
+        result.lifecycle,
+      )
+      if (result.kind === 'published') {
+        await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, Date.now())
+      }
+      return projected
+    }
+    return result
+  },
+})
+export const admitCapabilityPublication = mutation({
+  args: {
+    businessId: v.id('businesses'),
+    catalogOfferingRef: v.string(),
+    catalogOfferingRevision: v.number(),
+    source: capabilityPublicationAdmissionSourceValue,
+    authorityMode: publicationAuthorityModeValue,
+    ...contextFields,
+  },
+  returns: capabilityPublicationAdmissionResultValue,
+  handler: async (ctx, args): Promise<Infer<typeof capabilityPublicationAdmissionResultValue>> => {
+    if (!validRegistrationContext(args)) {
+      return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
+    }
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
+    let actor: SupplyCommandActor
+    if (args.authorityMode === 'provider_owned') {
+      if (!await ownsPublishedBusiness(ctx, args.businessId)) {
+        return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+      }
+      actor = { kind: 'owner', ref: identity.subject }
+    } else {
+      const authority = await resolveAdminAuthority(
+        { db: ctx.db, auth: ctx.auth },
+        'register_capability_supply',
+      )
+      if (authority.kind !== 'allowed') {
+        return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+      }
+      actor = { kind: 'admin', ref: authority.membership.clerkUserId }
+    }
+    const result = await admitCapabilityPublicationCommand({
+      businessId: args.businessId,
+      catalogOfferingRef: args.catalogOfferingRef,
+      catalogOfferingRevision: args.catalogOfferingRevision,
+      source: decodeConvexPublicationSource(args.source) as CapabilityPublicationAdmissionSource,
+      authorityMode: args.authorityMode,
+      actor,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      reasonCode: args.reasonCode,
+      evidenceRefs: args.evidenceRefs,
+      now: Date.now(),
+    }, publicationPorts(ctx))
     if (result.kind === 'published') {
       await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, Date.now())
     }
@@ -593,32 +826,9 @@ export const observeCapabilityReadiness = internalMutation({
   },
 })
 
-/** Dev-only: force all current capability publications to ready/healthy so routeable supply
- * exists without reachable sandbox provider endpoints (the readiness probe would mark them
- * unhealthy in local dev). Rebuilds the origin supply projection for each affected business. */
-export const seedHealthyPublications = internalMutation({
-  args: {},
-  returns: v.object({ updated: v.number() }),
-  handler: async (ctx) => {
-    const now = Date.now()
-    const publications = await ctx.db.query('capabilityPublications').take(256)
-    let updated = 0
-    for (const publication of publications) {
-      if (publication.disposition !== 'current') continue
-      await ctx.db.patch(publication._id, {
-        credentialState: 'ready',
-        healthState: 'healthy',
-        readinessEvidenceRefs: ['seed:healthy-supply'],
-        readinessObservedAt: now,
-        readinessValidUntil: now + 3_600_000,
-        updatedAt: now,
-      })
-      await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId, now)
-      updated += 1
-    }
-    return { updated }
-  },
-})
+
+const READINESS_REFRESH_LEAD_MS = 90_000
+const MAX_READINESS_REFRESH_BATCH = 20
 
 const probeOutcomeValue = v.union(
   v.literal('healthy'), v.literal('credential_unavailable'), v.literal('credential_rejected'),
@@ -637,6 +847,8 @@ export const readCapabilityProbeTarget = internalQuery({
         publicationRef: v.string(), revision: v.number(), bindingId: v.string(), capabilityId: v.string(),
         endpointUrl: v.string(), credentialRef: v.string(), adapterId: v.string(),
         probeKind: v.union(v.literal('ae_quote'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
+        probeQuery: v.array(v.object({ parameter: v.string(), value: v.string() })),
+        probeMethod: v.union(v.literal('GET'), v.literal('HEAD')),
         targetDigest: v.string(),
       }),
     }),
@@ -665,6 +877,28 @@ export const recordCapabilityProbeResult = internalMutation({
       await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId as Id<'businesses'>, Date.now())
     }
     return result
+  },
+})
+
+export const scheduleDueCapabilityProbes = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const due = await ctx.db.query('capabilityPublications')
+      .withIndex('by_disposition_and_readinessValidUntil', (index) => (
+        index.eq('disposition', 'current')
+          .lt('readinessValidUntil', Date.now() + READINESS_REFRESH_LEAD_MS)
+      ))
+      .take(MAX_READINESS_REFRESH_BATCH)
+    await Promise.all(due.map((publication) => ctx.scheduler.runAfter(
+      0,
+      internal.capabilitySupplyReadiness.probe,
+      {
+        publicationRef: publication.publicationRef,
+        expectedRevision: publication.revision,
+      },
+    )))
+    return due.length
   },
 })
 
@@ -800,6 +1034,132 @@ export const registerBinding = mutation({
     }, Date.now()) as Infer<typeof registerBindingResultValue>
   },
 })
+export const registerMapping = mutation({
+  args: {
+    networkId: v.string(),
+    mapping: registeredOperationMappingValue,
+    authorityMode: publicationAuthorityModeValue,
+    registrationEvidenceRefs: evidenceRefsValue,
+  },
+  returns: registerMappingResultValue,
+  handler: async (ctx, args) => {
+    if (!boundedTrimmed(args.networkId, 200) || !validEvidenceRefs(args.registrationEvidenceRefs)) {
+      return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
+    }
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    const authority = await resolveMappingAuthority(ctx, args.networkId, args.mapping, args.authorityMode, identity.subject)
+    if (authority.kind === 'refused') return authority
+    return await registerMappingCommand(ctx.db, { ...args, ...authority })
+  },
+})
+
+type MappingCommandInput = Readonly<{
+  networkId: string
+  mapping: RegisteredOperationMappingInput
+  authorityMode: Infer<typeof publicationAuthorityModeValue>
+  registrationEvidenceRefs: readonly string[]
+  actorKind: 'owner' | 'admin' | 'system'
+  publisherRef: string
+}>
+
+async function registerMappingCommand(
+  db: MutationCtx['db'],
+  input: MappingCommandInput,
+) {
+  let mapping: RegisteredOperationMapping
+  try {
+    if (!isRegisteredOperationMappingRef(input.mapping.mappingRef)) {
+      return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
+    }
+    mapping = { ...input.mapping, mappingRef: input.mapping.mappingRef }
+    if (resolveRegisteredOperationMappingRef(mapping) !== mapping.mappingRef) {
+      return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
+    }
+  } catch {
+    return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
+  }
+  const mappingRef = mapping.mappingRef
+  const contracts = await validateMappingContracts(db, mapping)
+  if (contracts.kind === 'refused') return contracts
+  const existingMapping = await db.query('registeredOperationMappings')
+    .withIndex('by_networkId_and_mappingRef', (query) => (
+      query.eq('networkId', input.networkId).eq('mappingRef', mappingRef)
+    ))
+    .unique()
+  if (existingMapping !== null && toRegisteredOperationMapping(existingMapping) === null) {
+    return { kind: 'refused' as const, reason: 'mapping_integrity_failure' as const }
+  }
+  const requestHash = canonicalDigest({
+    networkId: input.networkId,
+    mapping,
+    authorityMode: input.authorityMode,
+  })
+  const existingOperation = await db.query('operationKeys')
+    .withIndex('by_actor_operation_key', (query) => (
+      query.eq('actorRef', input.publisherRef)
+        .eq('operationName', 'registerMapping')
+        .eq('key', mappingRef)
+    ))
+    .unique()
+  if (existingOperation !== null) {
+    if (existingOperation.requestHash !== requestHash || existingOperation.status !== 'succeeded') {
+      return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
+    }
+    return { kind: 'registered' as const, mappingRef }
+  }
+  const now = Date.now()
+  const operationId = await db.insert('operationKeys', {
+    scope: 'capability_supply',
+    actorKind: input.actorKind,
+    actorRef: input.publisherRef,
+    operationName: 'registerMapping',
+    key: mappingRef,
+    requestHash,
+    status: 'in_progress',
+    effectRefs: [],
+    createdAt: now,
+    updatedAt: now,
+  })
+  if (existingMapping === null) {
+    const { mappingRef: storedMappingRef, ...material } = mapping
+    await db.insert('registeredOperationMappings', {
+      networkId: input.networkId,
+      mappingRef: storedMappingRef,
+      material,
+      publisherRef: input.publisherRef,
+      authorityMode: input.authorityMode,
+      registrationEvidenceRefs: [...input.registrationEvidenceRefs],
+      registeredAt: now,
+      updatedAt: now,
+    })
+  }
+  await db.patch(operationId, {
+    status: 'succeeded',
+    resultHash: canonicalDigest({ mappingRef }),
+    updatedAt: now,
+  })
+  return { kind: 'registered' as const, mappingRef }
+}
+
+export async function registerCuratedMapping(
+  ctx: MutationCtx,
+  input: Readonly<{
+    networkId: string
+    mapping: RegisteredOperationMappingInput
+    registrationEvidenceRefs: readonly string[]
+  }>,
+) {
+  if (!boundedTrimmed(input.networkId, 200) || !validEvidenceRefs(input.registrationEvidenceRefs)) {
+    return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
+  }
+  return await registerMappingCommand(ctx.db, {
+    ...input,
+    authorityMode: 'ae_curated_external',
+    actorKind: 'system',
+    publisherRef: 'system:curated-provider-bootstrap',
+  })
+}
 
 export const setEligibility = mutation({
   args: {
@@ -880,6 +1240,19 @@ export const listRouteable = internalQuery({
   args: { networkId: v.string(), limit: v.number() },
   returns: eligibleSupplyResultValue,
   handler: async (ctx, args) => await listRouteableCapabilitySupply(ctx.db, args) as Infer<typeof eligibleSupplyResultValue>,
+})
+export const listMappings = internalQuery({
+  args: { networkId: v.string(), limit: v.number() },
+  returns: v.array(registeredOperationMappingValue),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('registeredOperationMappings')
+      .withIndex('by_networkId_and_mappingRef', (query) => query.eq('networkId', args.networkId))
+      .take(args.limit)
+    return rows.flatMap((row) => {
+      const mapping = toRegisteredOperationMapping(row)
+      return mapping === null ? [] : [mapping]
+    })
+  },
 })
 
 export async function registerCapabilityOfferingCommand(
@@ -970,8 +1343,81 @@ async function ownsPublishedBusiness(
   if (identity === null) return false
   const business = await publishedBusiness(ctx.db, businessId)
   if (business === null) return false
+
   const owner = await ctx.db.get(business.ownerId)
   return owner !== null && owner.clerkUserId === identity.subject
+}
+type MappingAuthorityResult =
+  | Readonly<{ kind: 'allowed'; actorKind: 'owner' | 'admin'; publisherRef: string }>
+  | Readonly<{ kind: 'refused'; reason: 'authorization_denied' | 'network_not_owned' }>
+
+async function resolveMappingAuthority(
+  ctx: MutationCtx,
+  networkId: string,
+  mapping: RegisteredOperationMappingInput,
+  authorityMode: 'provider_owned' | 'ae_curated_external',
+  principalId: string,
+): Promise<MappingAuthorityResult> {
+  const current = await ctx.db.query('capabilityPublications')
+    .withIndex('by_networkId_and_disposition', (query) => (
+      query.eq('networkId', networkId).eq('disposition', 'current')
+    ))
+    .take(128)
+  const source = current.filter((publication) => (
+    publication.capabilityId === mapping.sourceContractRef.capabilityId
+      && publication.version === mapping.sourceContractRef.version
+      && publication.contractDigest === mapping.sourceContractRef.contractDigest
+  ))
+  const target = current.filter((publication) => (
+    publication.capabilityId === mapping.targetContractRef.capabilityId
+      && publication.version === mapping.targetContractRef.version
+      && publication.contractDigest === mapping.targetContractRef.contractDigest
+  ))
+  if (source.length === 0 || target.length === 0) {
+    return { kind: 'refused', reason: 'network_not_owned' }
+  }
+  if (authorityMode === 'ae_curated_external') {
+    const authority = await resolveAdminAuthority(
+      { db: ctx.db, auth: ctx.auth }, 'register_capability_supply',
+    )
+    return authority.kind === 'allowed'
+      ? { kind: 'allowed', actorKind: 'admin', publisherRef: authority.membership.clerkUserId }
+      : { kind: 'refused', reason: 'authorization_denied' }
+  }
+  for (const publication of source) {
+    const business = await publishedBusiness(ctx.db, publication.businessId)
+    if (business === null) continue
+    const owner = await ctx.db.get(business.ownerId)
+    if (owner?.clerkUserId === principalId) {
+      return { kind: 'allowed', actorKind: 'owner', publisherRef: principalId }
+    }
+  }
+  return { kind: 'refused', reason: 'network_not_owned' }
+}
+
+async function validateMappingContracts(
+  db: MutationCtx['db'],
+  mapping: RegisteredOperationMappingInput,
+): Promise<
+  | Readonly<{ kind: 'ok' }>
+  | Readonly<{ kind: 'refused'; reason: 'contract_not_found' | 'contract_not_active' | 'contract_integrity_failure' }>
+> {
+  const [source, target] = await Promise.all([
+    getActiveExactCapabilityContract(db, mapping.sourceContractRef),
+    getActiveExactCapabilityContract(db, mapping.targetContractRef),
+  ])
+  const failure = [source, target].find((result) => result.kind === 'unavailable')
+  if (failure?.kind === 'unavailable') {
+    return {
+      kind: 'refused',
+      reason: failure.reason === 'not_found'
+        ? 'contract_not_found'
+        : failure.reason === 'not_active'
+          ? 'contract_not_active'
+          : 'contract_integrity_failure',
+    }
+  }
+  return { kind: 'ok' }
 }
 
 async function publishedBusiness(db: QueryCtx['db'], businessId: string | Id<'businesses'>) {
@@ -1403,6 +1849,7 @@ export const recordCapabilityCallEvent = internalMutation({
   },
 })
 
+
 function publicationPorts(ctx: MutationCtx) {
   return capabilitySupplyPublicationPorts(ctx, {
     registerOffering: (registration, now) => registerCapabilityOffering(ctx.db, registration, now),
@@ -1417,6 +1864,15 @@ export async function publishCapabilityForSeed(
   return publishCapabilityCommand({
     ...input,
     actor: { kind: 'system', ref: 'system:dev-seed' },
+  }, publicationPorts(ctx))
+}
+export async function publishCuratedCapability(
+  ctx: MutationCtx,
+  input: Omit<Parameters<typeof publishCapabilityCommand>[0], 'actor'>,
+) {
+  return publishCapabilityCommand({
+    ...input,
+    actor: { kind: 'system', ref: 'system:curated-provider-bootstrap' },
   }, publicationPorts(ctx))
 }
 export const authorizeOwnerSupplyAction = internalQuery({

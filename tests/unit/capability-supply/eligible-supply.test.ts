@@ -5,6 +5,7 @@ import {
   listIntegratedCapabilitySupply,
   listRouteableCapabilitySupply,
   MAX_ELIGIBLE_SUPPLY,
+  type EligiblePublicationRow,
   type EligibleSupplyPorts,
 } from '@/modules/capability-supply/internal/eligibility'
 import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
@@ -12,8 +13,10 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -64,6 +67,40 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
 const admitted = {
   configJson: '{}',
   configDigest: canonicalDigest({}),
+}
+
+function currentPublication(overrides: Partial<Omit<EligiblePublicationRow, 'operationRef'>> = {}): EligiblePublicationRow {
+  const publicationRef = overrides.publicationRef ?? 'pub-a'
+  const revision = overrides.revision ?? 2
+  return {
+    publicationRef,
+    revision,
+    operationRef: createPublicOperationRef({
+      operationId: capabilityOperationId(contractRef.capabilityId),
+      publicationRef,
+      publicationRevision: revision,
+      contractRef,
+    }),
+    businessId: 'business-1',
+    networkId: 'ae:public',
+    capabilityId: contractRef.capabilityId,
+    version: contractRef.version,
+    contractDigest: contractRef.contractDigest,
+    offeringId: 'offering-a',
+    bindingId: 'binding-a',
+    sourceRevision: 'source:revision:v1',
+    sourceDigest: `sha256:${'2'.repeat(64)}`,
+    publisherRef: 'publisher:demo',
+    provenanceDigest: `sha256:${'3'.repeat(64)}`,
+    registrationEvidenceRefs: ['evidence:publication'],
+    readinessEvidenceRefs: ['evidence:readiness'],
+    disposition: 'current',
+    credentialState: 'ready',
+    healthState: 'healthy',
+    readinessValidUntil: 10_000,
+    readinessObservedAt: 1,
+    ...overrides,
+  }
 }
 
 function activeOffering(overrides: Partial<CapabilityOfferingRow> = {}): CapabilityOfferingRow {
@@ -199,7 +236,7 @@ describe('capability-supply eligible inventory', () => {
     expect(result).toEqual({ kind: 'available', supplies: [] })
   })
 
-  it('attaches active publication metadata and sorts stably', async () => {
+  it('attaches canonical active publication metadata and filters unpublished supply', async () => {
     const bindingA = admittedBinding()
     const offeringA = activeOffering()
     const offeringBRegistration = defineCapabilityOfferingRegistration({
@@ -250,28 +287,47 @@ describe('capability-supply eligible inventory', () => {
         }),
         loadCurrentPublicationByBindingId: async (bindingId) => (
           bindingId === 'binding-a'
-            ? {
-                publicationRef: 'pub-a',
-                revision: 2,
-                disposition: 'current',
-                credentialState: 'ready',
-                healthState: 'healthy',
-                readinessValidUntil: 10_000,
-                readinessObservedAt: 1,
-              }
+            ? currentPublication()
             : null
         ),
       }),
       { networkId: 'ae:public', limit: 8, now: 100 },
     )
+    if (result.kind !== 'available') throw new Error(`supply unavailable: ${result.reason}`)
 
-    expect(result.kind).toBe('available')
-    if (result.kind !== 'available') return
-    expect(result.supplies.map((supply) => supply.binding.bindingId)).toEqual(['binding-a', 'binding-b'])
-    expect(result.supplies[0]?.publication).toEqual({
-      publicationRef: 'pub-a', revision: 2, readinessValidUntil: 10_000,
+    expect(result.supplies.map((supply) => supply.binding.bindingId)).toEqual(['binding-a'])
+    expect(result.supplies[0]?.publication).toMatchObject({
+      publicationRef: 'pub-a',
+      revision: 2,
+      readinessValidUntil: 10_000,
+      operationRef: createPublicOperationRef({
+        operationId: capabilityOperationId(contractRef.capabilityId),
+        publicationRef: 'pub-a',
+        publicationRevision: 2,
+        contractRef,
+      }),
+      admittedOperation: {
+        operationId: capabilityOperationId(contractRef.capabilityId),
+        publisherRef: 'publisher:demo',
+        provenanceDigest: `sha256:${'3'.repeat(64)}`,
+        businessId: 'business-1',
+        publicationRef: 'pub-a',
+        publicationRevision: 2,
+        sourceRevision: 'source:revision:v1',
+        sourceDigest: `sha256:${'2'.repeat(64)}`,
+        contractRef,
+        catalogOfferingRef: 'offering-a',
+        catalogOfferingRevision: 1,
+        offeringId: 'offering-a',
+        offeringRegistrationHash: offeringA.registrationHash,
+        offeringEligibilityHash: offeringA.eligibilityHash,
+        bindingId: 'binding-a',
+        bindingRegistrationHash: bindingA.registrationHash,
+        bindingEligibilityHash: bindingA.eligibilityHash,
+        bindingConfigDigest: bindingA.configDigest,
+        readinessValidUntil: 10_000,
+      },
     })
-    expect(result.supplies[1]?.publication).toBeUndefined()
 
     const routeable = await listRouteableCapabilitySupply(
       emptyPorts({
@@ -285,11 +341,7 @@ describe('capability-supply eligible inventory', () => {
         }),
         loadCurrentPublicationByBindingId: async (bindingId) => (
           bindingId === 'binding-a'
-            ? {
-                publicationRef: 'pub-a', revision: 2, disposition: 'current',
-                credentialState: 'ready', healthState: 'healthy',
-                readinessValidUntil: 10_000, readinessObservedAt: 1,
-              }
+            ? currentPublication()
             : null
         ),
       }),
@@ -300,7 +352,7 @@ describe('capability-supply eligible inventory', () => {
       : []).toEqual(['binding-a'])
   })
 
-  it('separates integrated supply from supply that is currently routeable', async () => {
+  it('filters stale publication readiness from integrated and routeable supply', async () => {
     const binding = admittedBinding()
     const ports = emptyPorts({
       listAdmittedConformantBindingsByNetwork: async () => [binding],
@@ -309,7 +361,7 @@ describe('capability-supply eligible inventory', () => {
       getActiveExactCapabilityContract: async () => ({
         kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
       }),
-      loadCurrentPublicationByBindingId: async () => null,
+      loadCurrentPublicationByBindingId: async () => currentPublication({ readinessValidUntil: 100 }),
     })
 
     const integrated = await listIntegratedCapabilitySupply(
@@ -320,7 +372,7 @@ describe('capability-supply eligible inventory', () => {
     )
 
     expect(integrated.kind).toBe('available')
-    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(1)
+    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(0)
     expect(routeable).toEqual({ kind: 'available', supplies: [] })
   })
 

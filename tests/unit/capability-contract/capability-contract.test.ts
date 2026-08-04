@@ -183,7 +183,29 @@ describe('function-agnostic capability contract', () => {
     })).toThrowError('capability_evidence_pointer_invalid')
   })
 
-  it('rejects malformed schemas even when they are JSON objects', () => {
+  it('loads valid 2020-12 schemas and rejects invalid dialects and keywords', () => {
+    const contract = defineCapabilityContract({
+      ...minimalContract(),
+      inputSchema: objectSchema({ id: { type: 'string' } }, ['id']),
+    })
+    expect(contract.inputSchema.$schema).toBe(JSON_SCHEMA_2020_12)
+
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      inputSchema: {
+        ...objectSchema({ id: { type: 'string' } }, ['id']),
+        $schema: 'https://json-schema.org/draft/2019-09/schema',
+      },
+    })).toThrowError('capability_contract_invalid')
+
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      inputSchema: {
+        ...objectSchema({ id: { type: 'string' } }, ['id']),
+        'x-unsupported-keyword': true,
+      },
+    })).toThrowError('capability_json_schema_invalid')
+
     expect(() => defineCapabilityContract({
       ...minimalContract(),
       inputSchema: { $schema: JSON_SCHEMA_2020_12, type: 'not-a-json-schema-type' },
@@ -223,6 +245,26 @@ describe('function-agnostic capability contract', () => {
     })
 
     expect(contract.customerAnnotations[0]?.pointer).toBe('/records')
+  })
+
+  it('accepts canonical numeric pointers into bounded output arrays', () => {
+    const contract = defineCapabilityContract({
+      ...minimalContract(),
+      outputSchema: {
+        $schema: JSON_SCHEMA_2020_12,
+        type: 'array',
+        minItems: 1,
+        maxItems: 1,
+        items: objectSchema({ result: { type: 'string' } }, ['result']),
+      },
+      customerAnnotations: [
+        { annotationId: 'identifier', document: 'input', pointer: '/id', label: 'Identifier', role: 'request' },
+        { annotationId: 'result', document: 'output', pointer: '/0/result', label: 'Result', role: 'completion_evidence' },
+      ],
+      evidence: [{ evidenceId: 'result', outputPointer: '/0/result', purpose: 'completion' }],
+    })
+
+    expect(contract.customerAnnotations[1]?.pointer).toBe('/0/result')
   })
 
   it('rejects non-canonical JSON Pointer escapes and array-index aliases', () => {

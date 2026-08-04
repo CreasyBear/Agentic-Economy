@@ -3,7 +3,7 @@ import {
   verifyCustomerRequestHostedRevision,
 } from '../../src/modules/customer-request/release-readback'
 import { pathToFileURL } from 'node:url'
-import { resolveVercelProtectionBypassSecret } from './work-tree-parity-release'
+import { resolveVercelProtectionBypassSecret } from './vercel-protection-bypass'
 
 type Environment = Record<string, string | undefined>
 

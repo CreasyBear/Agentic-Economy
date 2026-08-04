@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { resolveVercelProtectionBypassSecret } from '../../tools/release/work-tree-parity-release'
+import { resolveVercelProtectionBypassSecret } from '../../tools/release/vercel-protection-bypass'
 
 type RequestContextFactory = {
   newContext(options?: RequestContextOptions): Promise<APIRequestContext>

@@ -1,5 +1,6 @@
 export {
   getCurrentAggregate,
+  hasLegacyEmbeddedRoute,
 } from './get-current-aggregate'
 
 export {

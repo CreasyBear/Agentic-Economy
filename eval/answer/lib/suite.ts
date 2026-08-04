@@ -56,6 +56,7 @@ type AnswerEvalTurnMetrics = {
   requestToFirstProgressMs: number
   requestToCompletionMs: number
   modelRequestCount: number
+  modelToolRunCount: number
   toolRunCount: number
   usage: AnswerEvalUsage
   estimatedUsd?: number
@@ -68,6 +69,7 @@ type AnswerEvalMeasuredTurn = AnswerEvalTurnMetrics & {
 }
 type AnswerEvalAggregateMetrics = {
   modelRequestCount: number
+  modelToolRunCount: number
   toolRunCount: number
   usage: AnswerEvalUsage
   estimatedUsd?: number
@@ -95,11 +97,11 @@ export type AnswerEvalSuiteCaseReport =
       requestToFirstProgressMs: number
       requestToCompletionMs: number
       modelRequestCount: number
+      modelToolRunCount: number
       toolRunCount: number
       usage: AnswerEvalUsage
       estimatedUsd?: number
       costUnavailableReasons: readonly string[]
-      diagnostics: AnswerTurnEvalResult['diagnostics']
     } & AnswerEvalScoredReport)
   | ({
       kind: 'thread'
@@ -124,11 +126,11 @@ export type AnswerEvalSuiteCaseReport =
         requestToFirstProgressMs: number
         requestToCompletionMs: number
         modelRequestCount: number
+        modelToolRunCount: number
         toolRunCount: number
         usage: AnswerEvalUsage
         estimatedUsd?: number
         costUnavailableReasons: readonly string[]
-        diagnostics: AnswerTurnEvalResult['diagnostics']
       } & AnswerEvalScoredReport)[]
     } & AnswerEvalScoredReport)
 
@@ -150,6 +152,7 @@ export type AnswerEvalSuiteReport = {
     p95TurnTimingMs: number
     maxTurnTimingMs: number
     modelRequestCount: number
+    modelToolRunCount: number
     toolRunCount: number
     usage: AnswerEvalUsage
     estimatedUsd?: number
@@ -249,7 +252,6 @@ function toTurnReport(
     workStepIds: result.workStepIds,
     totalTimingMs: result.totalTimingMs,
     ...toTurnMetrics(result),
-    diagnostics: result.diagnostics,
     ...toScoredReport(score),
   }
 }
@@ -282,7 +284,6 @@ function toThreadReport(
         workStepIds: turn.workStepIds,
         totalTimingMs: turn.totalTimingMs,
         ...toTurnMetrics(turn),
-      diagnostics: turn.diagnostics,
       ...toScoredReport(turnScores[index] ?? scoreAnswerThreadTurn(readThreadTurn(testCase, index), turn)),
     })),
     ...toScoredReport(score),
@@ -294,6 +295,7 @@ function toTurnMetrics(result: AnswerEvalTurnMetrics): AnswerEvalTurnMetrics {
     requestToFirstProgressMs: result.requestToFirstProgressMs,
     requestToCompletionMs: result.requestToCompletionMs,
     modelRequestCount: result.modelRequestCount,
+    modelToolRunCount: result.modelToolRunCount,
     toolRunCount: result.toolRunCount,
     usage: result.usage,
     ...(result.estimatedUsd === undefined ? {} : { estimatedUsd: result.estimatedUsd }),
@@ -371,6 +373,7 @@ function aggregateTurnMetrics(turns: readonly AnswerEvalMeasuredTurn[]): AnswerE
   const modelTurns = turns.filter((turn) => turn.performancePath === 'model')
   return {
     modelRequestCount: turns.reduce((sum, turn) => sum + turn.modelRequestCount, 0),
+    modelToolRunCount: turns.reduce((sum, turn) => sum + turn.modelToolRunCount, 0),
     toolRunCount: turns.reduce((sum, turn) => sum + turn.toolRunCount, 0),
     usage,
     ...(estimatedUsd === undefined ? {} : { estimatedUsd }),

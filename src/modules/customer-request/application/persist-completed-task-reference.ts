@@ -162,7 +162,6 @@ export async function persistCompletedTaskReference(
   const compiled = compileCustomerRequest({
     requestId: input.requestRef,
     expectedRevision: input.expectedRevision,
-    expectedRouteGeneration: input.expectedRouteGeneration,
     principalId: input.principalRef,
     delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
     intent: current.aggregate.snapshot.intent,
@@ -174,6 +173,7 @@ export async function persistCompletedTaskReference(
     proposal: { kind: 'capability_candidates', selections },
     interpreterId: 'customer:attach-completed-task',
     bindings: graph.bindings,
+    mappings: graph.mappings,
     models: graph.models,
     now: input.referencedAt,
   })

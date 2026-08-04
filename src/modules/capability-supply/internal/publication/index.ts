@@ -16,6 +16,24 @@ export type {
   PublicationInsertInput,
   RegisterContractDocumentResult,
 } from './ports'
+export {
+  CAPABILITY_PUBLICATION_AUTHORITY_MODES,
+  capabilityPublicationProvenanceDigest,
+  defineCapabilityPublicationProvenance,
+  validCapabilityPublicationAuthority,
+  validCapabilityPublicationSourceRevision,
+  type CapabilityPublicationAuthorityMode,
+  type CapabilityPublicationProvenance,
+  type CapabilityPublicationSourceIdentity,
+} from './provenance'
+
+export {
+  admitCapabilityPublicationCommand,
+  type AdmitCapabilityPublicationInput,
+  type AdmitCapabilityPublicationResult,
+  type CapabilityPublicationAdmissionSource,
+  type CapabilityPublicationAdmissionRefusal,
+} from './admit'
 
 export {
   admitPublicationDraft,

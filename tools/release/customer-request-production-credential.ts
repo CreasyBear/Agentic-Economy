@@ -11,6 +11,7 @@ import {
 } from './customer-request-production-smoke'
 
 const REQUIRED_SCOPE = 'customer_requests:create'
+const ACCEPTANCE_SCOPES = [REQUIRED_SCOPE, 'customer_requests:approve_each'] as const
 const ACCEPTANCE_PRIMARY_EMAIL = 'joel@agentic-economy.ai'
 const CLERK_API = 'https://api.clerk.com/v1'
 const instanceSchema = z.looseObject({ id: z.string().min(1), environment_type: z.string().min(1) })
@@ -542,6 +543,7 @@ async function main(): Promise<void> {
     expectedInstanceId: process.env.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID ?? '',
     subject: process.env.AE_CUSTOMER_REQUEST_CLERK_SUBJECT ?? '',
     fetch: globalThis.fetch,
+    scopes: ACCEPTANCE_SCOPES,
     run: async (agentApiKey) => {
       await runCustomerRequestProductionSmoke(
         customerRequestProductionSmokeConfigFromEnvironment(process.env, agentApiKey),

@@ -33,6 +33,10 @@ describe('public agent skill', () => {
       'ae_registry_services_list',
       'ae_registry_services_search',
       'ae_registry_detail',
+      'ae_registry_operations_search',
+      'ae_registry_operations_detail',
+      'ae_registry_operations_compare',
+      'ae_registry_operations_inspectPlan',
       'ae_sandbox_checkup_quote',
     ])
     for (const toolName of mcpToolNames) {

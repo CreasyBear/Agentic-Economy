@@ -92,13 +92,19 @@ describe('action registry', () => {
   it('exposes exactly the anonymous read-only tier to the MCP host', () => {
     const exposed = listMcpActions()
     expect(exposed.map((action) => action.id)).toEqual([
-      'registry.services_list', 'registry.services_search', 'registry.detail', 'sandbox.checkup_quote',
+      'registry.services_list', 'registry.services_search', 'registry.detail',
+      'registry.operations.search', 'registry.operations.detail',
+      'registry.operations.compare', 'registry.operations.inspectPlan',
+      'sandbox.checkup_quote',
     ])
     for (const action of exposed) {
       expect(action.readOnly).toBe(true)
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
-      'ae_registry_services_list', 'ae_registry_services_search', 'ae_registry_detail', 'ae_sandbox_checkup_quote',
+      'ae_registry_services_list', 'ae_registry_services_search', 'ae_registry_detail',
+      'ae_registry_operations_search', 'ae_registry_operations_detail',
+      'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
+      'ae_sandbox_checkup_quote',
     ])
   })
 

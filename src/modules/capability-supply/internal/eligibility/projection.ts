@@ -5,7 +5,7 @@ export function compareStableIdentifier(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
-export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(row: T): {
+export type EligibleOfferingProjection<T extends CapabilityOfferingRow = CapabilityOfferingRow> = {
   offeringId: T['offeringId']
   businessId: T['businessId']
   networkId: T['networkId']
@@ -16,7 +16,11 @@ export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(row:
   presentation: T['presentation']
   status: 'active'
   registrationHash: T['registrationHash']
-} {
+}
+
+export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(
+  row: T,
+): EligibleOfferingProjection<T> {
   return {
     offeringId: row.offeringId, businessId: row.businessId, networkId: row.networkId,
     ...contractRefFromRow(row), presentation: row.presentation, status: 'active' as const,
@@ -25,7 +29,7 @@ export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(row:
   }
 }
 
-export function eligibleBindingProjection<T extends CapabilityBindingRow>(row: T): {
+export type EligibleBindingProjection<T extends CapabilityBindingRow = CapabilityBindingRow> = {
   bindingId: T['bindingId']
   offeringId: T['offeringId']
   networkId: T['networkId']
@@ -42,7 +46,11 @@ export function eligibleBindingProjection<T extends CapabilityBindingRow>(row: T
   admission: 'admitted'
   conformance: 'conformant'
   registrationHash: T['registrationHash']
-} {
+}
+
+export function eligibleBindingProjection<T extends CapabilityBindingRow>(
+  row: T,
+): EligibleBindingProjection<T> {
   return {
     bindingId: row.bindingId, offeringId: row.offeringId, networkId: row.networkId,
     ...contractRefFromRow(row), endpointUrl: row.endpointUrl, credentialRef: row.credentialRef,
