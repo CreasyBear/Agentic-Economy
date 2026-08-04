@@ -82,25 +82,38 @@ function attemptInput(
     terminalAt: startedAt + 30_000,
     request: {
       requestRef: `request:${kind}:${index}`,
+      intent: 'Research official AI agent payment guidance and convert the cited EUR amount to USD.',
       revision: 3,
       routeRef: `route:${kind}:${index}`,
       planDigest: sha(index === 1 ? '5' : '6'),
       confirmationReceiptRef: `receipt:confirmation:${kind}:${index}`,
     },
-    steps: manifest.operations.map((entry, stepIndex) => ({
-      role: entry.role,
-      operationRef: entry.operationRef,
-      providerRef: entry.providerRef,
-      bindingId: entry.bindingId,
-      kernelAttemptRef: `kernel-attempt:${kind}:${stepIndex}`,
-      outcome: 'succeeded',
-      startedAt: startedAt + stepIndex * 5_000,
-      terminalAt: startedAt + (stepIndex + 1) * 5_000,
-      validatedOutputDigest: sha(String(stepIndex + 7)),
-      providerReceiptDigest: sha(['a', 'b', 'c'][stepIndex] ?? 'd'),
-      providerCostMinor: entry.maximumProviderCostMinor,
-      paymentSubmitted: false,
-    })),
+    steps: manifest.operations.map((entry, stepIndex) => {
+      const common = {
+        role: entry.role,
+        operationRef: entry.operationRef,
+        providerRef: entry.providerRef,
+        bindingId: entry.bindingId,
+        startedAt: startedAt + stepIndex * 5_000,
+        terminalAt: startedAt + (stepIndex + 1) * 5_000,
+        paymentSubmitted: false as const,
+      }
+      return entry.role === 'frankfurter_rate'
+        ? {
+            ...common,
+            outcome: 'succeeded' as const,
+            kernelAttemptRef: `kernel-attempt:${kind}:${stepIndex}`,
+            validatedOutputDigest: sha(String(stepIndex + 7)),
+            providerReceiptDigest: sha(['a', 'b', 'c'][stepIndex] ?? 'd'),
+            providerCostMinor: 0,
+          }
+        : {
+            ...common,
+            outcome: 'selected' as const,
+            selectionEvidenceDigest: sha(String(stepIndex + 7)),
+            providerCostMinor: 0 as const,
+          }
+    }),
     recovery: {
       interruptionExercised: true,
       resumedFromDurableState: true,
@@ -150,9 +163,10 @@ describe('operation market proof contract', () => {
       attemptCount: 2,
       participantKinds: ['cold_external_agent', 'cold_human'],
       completedSteps: 6,
-      providerSuccesses: 6,
+      selectedSteps: 4,
+      providerSuccesses: 2,
       paymentSubmissions: 0,
-      totalProviderCostMinor: 4,
+      totalProviderCostMinor: 0,
       acceptedAttempts: 2,
     }))
   })
@@ -163,8 +177,8 @@ describe('operation market proof contract', () => {
     if (first === undefined) throw new Error('proof_attempt_missing')
     const tampered: OperationMarketProofAttempt = {
       ...first,
-      steps: first.steps.map((step, index) => index === 0
-        ? { ...step, operationRef: operation('f'), providerCostMinor: 2 }
+      steps: first.steps.map((step) => step.role === 'frankfurter_rate' && step.outcome === 'succeeded'
+        ? { ...step, operationRef: operation('f'), providerCostMinor: 5 }
         : step),
     }
     const gate = computeOperationMarketProofGate(manifest, [tampered, attempts[1]!])
@@ -172,8 +186,8 @@ describe('operation market proof contract', () => {
     expect(gate.decision).toBe('FAIL')
     expect(gate.failures).toEqual(expect.arrayContaining([
       `${tampered.attemptRef}:integrity_invalid`,
-      `${tampered.attemptRef}:exa_search:operation_drift`,
-      `${tampered.attemptRef}:exa_search:provider_cost_exceeded`,
+      `${tampered.attemptRef}:frankfurter_rate:operation_drift`,
+      `${tampered.attemptRef}:frankfurter_rate:provider_cost_exceeded`,
       `${tampered.attemptRef}:attempt_cost_exceeded`,
       'program_cost_exceeded',
     ]))

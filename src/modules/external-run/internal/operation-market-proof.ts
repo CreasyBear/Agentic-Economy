@@ -64,20 +64,29 @@ export const operationMarketProofManifestSchema = operationMarketProofManifestIn
 })
 export type OperationMarketProofManifest = z.infer<typeof operationMarketProofManifestSchema>
 
-const attemptStep = z.strictObject({
+const attemptStepBase = z.strictObject({
   role,
   operationRef,
   providerRef: nonEmpty,
   bindingId: nonEmpty,
-  kernelAttemptRef: nonEmpty,
-  outcome: z.literal('succeeded'),
   startedAt: z.number().finite().nonnegative(),
   terminalAt: z.number().finite().nonnegative(),
-  validatedOutputDigest: digest,
-  providerReceiptDigest: digest,
-  providerCostMinor: z.number().int().nonnegative(),
   paymentSubmitted: z.literal(false),
 })
+const attemptStep = z.discriminatedUnion('outcome', [
+  attemptStepBase.extend({
+    outcome: z.literal('selected'),
+    selectionEvidenceDigest: digest,
+    providerCostMinor: z.literal(0),
+  }),
+  attemptStepBase.extend({
+    outcome: z.literal('succeeded'),
+    kernelAttemptRef: nonEmpty,
+    validatedOutputDigest: digest,
+    providerReceiptDigest: digest,
+    providerCostMinor: z.number().int().nonnegative(),
+  }),
+])
 
 const citation = z.strictObject({
   providerRef: nonEmpty,
@@ -99,6 +108,7 @@ export const operationMarketProofAttemptInputSchema = z.strictObject({
   terminalAt: z.number().finite().nonnegative(),
   request: z.strictObject({
     requestRef: nonEmpty,
+    intent: nonEmpty,
     revision: z.number().int().positive(),
     routeRef: nonEmpty,
     planDigest: digest,
@@ -145,7 +155,8 @@ export const operationMarketProofObservationSchema = z.strictObject({
   attemptCount: z.literal(2),
   participantKinds: z.tuple([z.literal('cold_external_agent'), z.literal('cold_human')]),
   completedSteps: z.literal(6),
-  providerSuccesses: z.literal(6),
+  selectedSteps: z.literal(4),
+  providerSuccesses: z.literal(2),
   duplicateEffects: z.literal(0),
   unauthorizedEffects: z.literal(0),
   unknownOutcomes: z.literal(0),
@@ -237,6 +248,10 @@ export function computeOperationMarketProofGate(
     if (attemptCost > manifest.spend.maximumAttemptCostMinor) failures.push(`${attempt.attemptRef}:attempt_cost_exceeded`)
     const roles = [...new Set(attempt.steps.map((step) => step.role))]
     if (roles.length !== 3) failures.push(`${attempt.attemptRef}:step_roles_incomplete`)
+    const selectedRoles = attempt.steps.filter(({ outcome }) => outcome === 'selected').map(({ role: selectedRole }) => selectedRole).sort()
+    if (selectedRoles.join(',') !== 'exa_contents,exa_search') failures.push(`${attempt.attemptRef}:exa_selection_incomplete`)
+    const executedRoles = attempt.steps.filter(({ outcome }) => outcome === 'succeeded').map(({ role: executedRole }) => executedRole)
+    if (executedRoles.length !== 1 || executedRoles[0] !== 'frankfurter_rate') failures.push(`${attempt.attemptRef}:provider_execution_invalid`)
     for (const step of attempt.steps) {
       const expected = manifest.operations.find(({ role: expectedRole }) => expectedRole === step.role)
       if (expected === undefined || expected.operationRef !== step.operationRef || expected.providerRef !== step.providerRef || expected.bindingId !== step.bindingId) failures.push(`${attempt.attemptRef}:${step.role}:operation_drift`)
@@ -267,7 +282,8 @@ export function buildOperationMarketProofReport(
     attemptCount: 2,
     participantKinds: ['cold_external_agent', 'cold_human'],
     completedSteps: 6,
-    providerSuccesses: 6,
+    selectedSteps: 4,
+    providerSuccesses: 2,
     duplicateEffects: 0,
     unauthorizedEffects: 0,
     unknownOutcomes: 0,
