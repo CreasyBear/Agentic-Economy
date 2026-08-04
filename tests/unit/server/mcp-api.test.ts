@@ -90,6 +90,37 @@ describe('MCP host adapter', () => {
     })
   })
 
+  it('rebuilds a cross-realm hosted request from web-standard fields', async () => {
+    const native = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'cross-realm',
+        method: 'tools/list',
+        params: {},
+      }),
+    })
+    const hostedRequest = {
+      method: native.method,
+      url: native.url,
+      headers: native.headers,
+      body: native.body,
+      signal: native.signal,
+      clone: () => native.clone(),
+    } as Request
+
+    const response = await handleMcpRequest(hostedRequest)
+
+    expect(response.status).toBe(200)
+    expect((await readMcpBody(response)).result).toMatchObject({
+      tools: expect.any(Array),
+    })
+  })
+
   it('lists exactly the registered MCP tools in deterministic order', async () => {
     const response = await postMcp({
       jsonrpc: '2.0',

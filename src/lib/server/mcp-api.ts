@@ -113,11 +113,15 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
 
 async function boundedMcpRequest(request: Request): Promise<Request> {
   if (request.method !== 'POST') return request
+  const init = {
+    method: request.method,
+    headers: request.headers,
+  }
   try {
     const boundedBody = await readBoundedRequestText(request, MAX_MCP_REQUEST_BODY_BYTES)
-    return new Request(request, { body: boundedBody.ok ? boundedBody.text : '' })
+    return new Request(request.url, { ...init, body: boundedBody.ok ? boundedBody.text : '' })
   } catch {
-    return new Request(request, { body: '' })
+    return new Request(request.url, { ...init, body: '' })
   }
 }
 
