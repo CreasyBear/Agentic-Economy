@@ -73,6 +73,7 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
+      AE_T51_RELEASE_MODE: release
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
@@ -83,6 +84,8 @@ jobs:
       AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      AE_WORK_TREE_EVIDENCE_DIR: output/release/work-tree-parity
+      AE_WORK_TREE_TIMEOUT_MS: '180000'
     steps:
       - uses: actions/checkout@v6
 
@@ -183,6 +186,25 @@ jobs:
           AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Frankfurter — ECB rates","purposes":["retrieve_ecb_reference_rate"]}]'
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:hosted
+
+      - name: Verify exact hosted T51 WorkTree parity
+        env:
+          DEPLOY_BASE_URL: https://agentic-economy-phi.vercel.app
+          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+        run: npm run smoke:work-tree:production:hosted
+
+      - name: Upload sanitized T51 hosted parity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-t51-hosted-work-tree
+          path: |
+            output/release/hosted-metadata.json
+            output/release/playwright-deploy-smoke.json
+            output/release/work-tree-parity/work-tree-parity-evidence.json
+            test-results/**/*.png
+          if-no-files-found: error
+          retention-days: 14
 
 
       - name: Upload sanitized hosted release evidence
