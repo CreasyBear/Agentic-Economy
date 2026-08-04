@@ -31,7 +31,7 @@ scope: Full repository security, reliability, performance, debt, and operational
 
 **Inquiry source state reconstruction: [P1]**
 - Issue: `loadInquirySourceState` applies one fixed row limit to every table and does not use the target, thread, owner, or business scope to constrain most queries.
-- Files: `convex/inquirySourceStateLoad.ts:42-66`, `convex/inquiries.ts:737-784`, `convex/inquirySourceStatePersist.ts:32-172`
+- Files: `convex/inquirySourceStateLoad.ts:41-73`, `convex/inquiries.ts:737-784`, `convex/inquirySourceStatePersist.ts:32-172`
 - Impact: [Observed] Rows after the first 100 (or 200 for operator scope) are silently absent from the reconstructed aggregate. [Inference] A targeted operation can report missing data, rebuild incomplete projections, or persist a partial state once a table exceeds the cap.
 - Fix approach: Replace broad reads with indexed, scope-specific loaders; paginate append-only history; make intentionally bounded reads return an explicit truncation marker instead of treating partial state as complete.
 
@@ -171,7 +171,7 @@ scope: Full repository security, reliability, performance, debt, and operational
 
 **Large Convex host modules: [P2]**
 - Files: `convex/catalog.ts`, `convex/capabilitySupply.ts`, `convex/customerRequestApplication.ts`, `convex/customerRequestRouteExecution.ts`, `convex/workTrees.ts`
-- Why fragile: These files combine public schemas, authority checks, state reconstruction, durable writes, projection repair, and transport orchestration in hundreds to thousands of lines. Small edits can cross source/projection or auth/effect boundaries.
+- Why fragile: These files combine public schemas, authority checks, state reconstruction, durable writes, projection repair, and transport orchestration in roughly 1,100-2,200 lines each. Small edits can cross source/projection or auth/effect boundaries.
 - Safe modification: Change one domain command or port at a time, preserve generated `DataModel` types, and add a failure-path readback before moving code between hosts.
 - Test coverage: Focused unit and integration suites cover many command paths, but cross-module mutation failure and deployed Convex transaction-limit behavior remain under-observed.
 
@@ -189,7 +189,7 @@ scope: Full repository security, reliability, performance, debt, and operational
 
 **Durable inquiry state tables: [P1/P2]**
 - Current capacity: The loader reads at most 100 rows per table for normal scopes and 200 for operator scope.
-- Limit: `convex/inquirySourceStateLoad.ts:42-66`
+- Limit: `convex/inquirySourceStateLoad.ts:41-66`
 - Scaling path: Scope every table by business/thread/owner, page append-only history, and reserve full-table repair for scheduled bounded jobs.
 
 **External-run cohort and evidence: [P2]**
@@ -206,7 +206,7 @@ scope: Full repository security, reliability, performance, debt, and operational
 
 **Node runtime metadata drift: [P2]**
 - Risk: Source configuration declares Node `>=22` and Nitro functions `nodejs22.x`, while Vercel project metadata records Node `24.x`.
-- Impact: `package.json:156-159`, `vite.config.ts:57-67`, `.vercel/project.json:5-15` can select different runtime behavior for local, build, and hosted execution.
+- Impact: `package.json:153-156`, `vite.config.ts:57-67`, `.vercel/project.json:5-15` can select different runtime behavior for local, build, and hosted execution.
 - Migration plan: Choose one supported Node major, update source and project metadata together, and add a deployment readback that proves the selected runtime rather than relying on configuration inspection.
 
 **AI SDK/provider surface churn: [P2]**
@@ -229,7 +229,7 @@ scope: Full repository security, reliability, performance, debt, and operational
 **Durable cleanup and retention policy for append-only evidence: [P2]**
 - Problem: OAuth cleanup and source-write nonce cleanup are bounded jobs, but broad inquiry, answer, harness, audit, and external-run evidence retention/archival is not represented as a single operational policy.
 - Blocks: Long-lived deployments can accumulate private records and projection history until fixed row caps become correctness limits or storage cost drivers.
-- Files: `convex/customerRequestAgentOAuth.ts:44-78`, `convex/sourceWriteAdmission.ts:195-234`, `convex/inquirySourceStateLoad.ts:44-66`, `convex/harnessSessions.ts:448-499`, `convex/externalRuns.ts:320-357`
+- Files: `convex/customerRequestAgentOAuth.ts:44-78`, `convex/sourceWriteAdmission.ts:195-234`, `convex/inquirySourceStateLoad.ts:41-66`, `convex/harnessSessions.ts:448-499`, `convex/externalRuns.ts:320-357`
 
 ## Test Coverage Gaps
 
@@ -247,7 +247,7 @@ scope: Full repository security, reliability, performance, debt, and operational
 
 **Inquiry overflow and scope completeness: [High]**
 - What's not tested: More than 100 businesses, messages, operations, or audit rows with a target/thread operation that must see a row outside the first page.
-- Files: `convex/inquirySourceStateLoad.ts:42-66`, `convex/inquirySourceStatePersist.ts:32-172`, `tests/unit`, `tests/integration`
+- Files: `convex/inquirySourceStateLoad.ts:41-66`, `convex/inquirySourceStatePersist.ts:32-172`, `tests/unit`, `tests/integration`
 - Risk: Truncated state can look like a legitimate empty/missing source and produce partial readbacks or writes without a failing typecheck.
 - Priority: High
 

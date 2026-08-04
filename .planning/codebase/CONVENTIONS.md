@@ -7,8 +7,9 @@
 **Files:**
 - Keep product/domain code under `src/modules/<domain>/`; expose cross-surface contracts through `public.ts`, keep implementation-only code under `internal/`, and put explicit host adapters in `*.functions.ts` or `*.convex.ts` (`src/modules/work-tree/public.ts`, `src/modules/work-tree/work-tree.functions.ts`, `src/modules/work-tree/convex.ts`).
 - Use lower-kebab names for authored TypeScript modules and explicit suffixes for seams: `*.actions.ts` for registered action declarations, `*.functions.ts` for TanStack/source adapters, and `*.test.ts`/`*.test.tsx` for Vitest (`src/modules/customer-request/customer-request.actions.ts`, `src/modules/inquiries/inquiry.functions.ts`).
-- Convex entrypoints retain lower-camel filenames that match their exported function family (`convex/customerRequestApplication.ts`, `convex/capabilitySupply.ts`, `convex/notificationOutbox.ts`). TanStack route filenames follow route syntax (`src/routes/api.answer.turn.ts`, `src/routes/$slug.tsx`).
-- React product components use PascalCase filenames and the `Ae` prefix; shared primitives remain in `src/components/ui/` (`src/components/ae/chat/AeChat.tsx`, `src/components/ae/action-invocation/AePaidOperationCard.tsx`).
+- Convex entrypoints retain lower-camel filenames that match their exported function family (`convex/customerRequestV2.ts`, `convex/capabilitySupply.ts`, `convex/notificationOutbox.ts`). TanStack route filenames follow route syntax (`src/routes/api.answer.turn.ts`, `src/routes/$slug.tsx`).
+- React product components use PascalCase filenames and the `Ae` prefix; shared primitives remain in `src/components/ui/` (`src/components/ae/chat/AeChat.tsx`, `src/components/ae/action-invocation/AePaidOperationCard.tsx`). shadcn primitives are generated into `src/components/ui/` with kebab names and the `new-york` style per `components.json`.
+- Value-only exports that must leave a component file for react-doctor `only-export-components` are split into sibling `*.exports.ts` modules; type-only exports stay in the component module (`src/components/ae/provider-facts.tsx` + `src/components/ae/provider-facts.exports.ts`, `src/components/ui/button.tsx` + `src/components/ui/button-groups.tsx`/`button-variants.ts`).
 
 **Functions:**
 - Name functions and commands in camelCase with a verb describing the read or transition (`readPublicTargetAdmissionThroughSource` in `src/modules/inquiries/inquiry.functions.ts`, `createWorkTreeThroughSource` in `src/modules/work-tree/work-tree.functions.ts`).
@@ -36,7 +37,7 @@
 **Linting:**
 - Run `npm run lint`, which invokes `oxlint src convex tests tools --deny-warnings`; correctness is an error category and the TypeScript/OXC plugins plus `no-debugger` are enabled in `.oxlintrc.json`.
 - Keep generated, intentionally invalid, and vendor inputs out of ordinary lint changes: `.oxlintrc.json` ignores `convex/_generated/**`, `tests/fixtures/**`, and `vendor/**`.
-- Treat React Doctor as advisory and preserve its source-reviewed exception/retired-file list in `doctor.config.ts`; the release baseline explicitly checks that the workflow uses `blocking: none` (`tests/unit/release/green-release-baseline.test.ts`).
+- Treat React Doctor as advisory and preserve its source-reviewed exception/retired-file list in `doctor.config.ts`; the release baseline explicitly checks that the workflow uses `blocking: none` (`tests/unit/release/green-release-baseline.test.ts`), and the `react-doctor.yml` workflow runs the audit separately.
 
 ## Import Organization
 
@@ -91,6 +92,15 @@
 **Exports:** Put cross-surface schemas, contracts, DTO builders, and safe reads in the owning `public.ts`; keep implementation-only state machines and persistence details under `internal/`; expose explicit `*.functions.ts`/`*.convex.ts` adapters for routes, Convex, and hosts (`src/modules/capability-supply/public.ts`, `src/modules/capability-supply/internal/`, `src/modules/capability-supply/convex.ts`).
 
 **Barrel Files:** Use intentional domain barrels and one explicit action registry. `src/modules/actions/index.ts` imports every registered action, asserts unique IDs, and derives MCP names; never rely on module-evaluation side effects or hand-maintained parallel surface maps. Boundary tests in `tests/imports/` and `tests/unit/actions/registry.test.ts` are the contract.
+
+## Behavioral Conventions
+
+The repository records a lazy-minimal-edit doctrine that governs all code changes:
+
+- Prefer the laziest correct solution: reuse an existing helper, pattern, or already-installed dependency before writing new code; the standard library before custom code; a one-liner before a helper (`CLAUDE.md`, `.agents/rules/ponytail.md`).
+- Make surgical changes: touch only what a ticket requires, match existing style, and clean up only orphans your own change creates (`CLAUDE.md`).
+- Fix root causes, not symptoms: grep every caller of a shared function and fix the shared path once rather than patching a single call site (`.agents/rules/ponytail.md`).
+- No speculative abstractions, no new dependency when avoidable, deletion over addition; mark deliberate simplifications with a `ponytail:` comment naming the ceiling and upgrade path (`.agents/rules/ponytail.md`).
 
 ## Anti-Patterns
 

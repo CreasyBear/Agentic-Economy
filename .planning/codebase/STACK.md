@@ -66,7 +66,7 @@
 ## Configuration
 
 **Environment:**
-- `.env`, `.env.local`, `.env.example`, and `.vercel/.env.production.local` are present as environment-configuration files; values are not committed to this map.
+- `.env.local`, `.env.example`, and `.vercel/.env.production.local` are present as environment-configuration files; values are not committed to this map.
 - Convex deployment environment names are declared in `convex/convex.config.ts`; server reads use `process.env` through `src/lib/server/read-trimmed-env.ts`, while browser-exposed configuration uses `VITE_` names.
 - Core connection and identity names include `VITE_CONVEX_URL`, `CONVEX_URL`, `CLERK_JWT_ISSUER_DOMAIN`, and `CLERK_SECRET_KEY` in `src/lib/server/convex-source.ts` and `convex/auth.config.ts`.
 - Model and site names include `OPENROUTER_API_KEY`, `AE_LLM_MODEL`, `AE_OPENROUTER_API_BASE_URL`, `AE_CUSTOMER_REQUEST_MODEL`, `AE_SITE_URL`, and `SITE_URL` in `src/modules/model-gateway/public.ts`, `convex/customerRequestApplication.ts`, and `convex/convex.config.ts`.
