@@ -1,6 +1,7 @@
+<!-- refreshed: 2026-08-05 -->
 # Codebase Structure
 
-**Analysis Date:** 2026-08-04
+**Analysis Date:** 2026-08-05
 
 ## Directory Layout
 
@@ -18,8 +19,9 @@ Agentic-Economy/
 │   ├── modules/                 # bounded contexts and public/private seams
 │   │   ├── common/              # domain-neutral primitives
 │   │   ├── actions/             # explicit cross-surface registry
-│   │   ├── customer-request/    # request compiler, authority, execution, projections
-│   │   ├── capability-supply/    # contracts, publication, operations, transport
+│   │   ├── customer-request/    # request interpreter/compiler, authority, execution
+│   │   │   └── application/     # application composition, incl. interpret-compile engine
+│   │   ├── capability-supply/    # contracts, admission, publication, operations, transport
 │   │   ├── answer/               # answer semantics, gates, model tools
 │   │   ├── answer-thread/        # turn orchestration and thread persistence
 │   │   ├── work-tree/            # human/agent project loop and inbox
@@ -33,6 +35,7 @@ Agentic-Economy/
 ├── convex/                      # durable source, functions, workers, and schema
 │   ├── schema.ts                # composed module table fragments
 │   ├── _generated/              # generated API/server/data-model declarations
+│   ├── curatedProviders.ts      # idempotent curated capability-catalog seed
 │   ├── customerRequest*.ts      # request application, mandate, execution, workers
 │   ├── capabilitySupply*.ts     # supply publication, readiness, operation ports
 │   ├── workTrees*.ts            # WorkTree, approval, and repeat ledger functions
@@ -100,10 +103,30 @@ Agentic-Economy/
 - Contains: Root contracts/compiler/interpreter, `application/`, `v2-read/`, `v2-write/`, `v2-preparation-egress/`, `route-mandate-mutation/`, `route-execution/`, agent/browser contracts, and source/action adapters.
 - Key files: `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/semantic-interpreter.ts`, `src/modules/customer-request/customer-request.functions.ts`, `src/modules/customer-request/application/public.ts`, `src/modules/customer-request/route-execution/machines/record-outcome.ts`.
 
+**`src/modules/customer-request/application/`:**
+- Purpose: Application-level composition that binds the engine, compiler, and projections behind `application/public.ts`.
+- Contains: `interpret-compile/` (the natural-language capability engine), `compare-resume/`, `problem-route/`, `confirm-route/`, `authorize-preparation/`, `preparation-egress/`, `standing-route/`, `refine/`, `provide-facts/`, `route-plan-projection/`, `action-projection/`, `consumer-plan-projection.ts`, and reference/completion helpers.
+- Key files: `src/modules/customer-request/application/public.ts`, `src/modules/customer-request/application/interpret-compile/index.ts`.
+
+**`src/modules/customer-request/application/interpret-compile/`:**
+- Purpose: Seek-preview-and-compile engine over the routeable capability graph. Deterministic discovery narrows the pool; a composite (model + deterministic) interpreter proposes; the compiler produces a `proposal_only` aggregate/route generation.
+- Contains: `discover.ts` (discovery narrow + order), `capability-domain.ts` (cross-capability domain guard), `interpreter.ts` (composite recovery interpreter), `deterministic-interpreter.ts` (searchTerms matcher), `preview.ts` (planPreview surface), `graph.ts` (descriptor pool assembly), `interpret.ts`, `compile.ts`, `facts.ts`, `types.ts`, `index.ts`.
+- Key files: `src/modules/customer-request/application/interpret-compile/interpreter.ts`, `.../deterministic-interpreter.ts`, `.../capability-domain.ts`, `.../preview.ts`, `.../discover.ts`.
+
 **`src/modules/capability-contract/`, `src/modules/capability-contract-registry/`, and `src/modules/capability-supply/`:**
-- Purpose: Validate capability contracts, persist exact active contract documents, admit/publish provider bindings, project public operations, and prepare registered route transports.
-- Contains: Contract schemas, registry codecs, publication/eligibility/operation-ledger internals, HTTP/MCP/x402 adapters, readiness, owner funnel, and development ports.
+- Purpose: Validate capability contracts (including the `inputExamples` teaching surface), persist exact active contract documents, admit/publish provider bindings with provenance, project public operations, and prepare registered route transports.
+- Contains: Contract schemas/registry codecs, normalized admission (`internal/admit-provider-schema.ts`), publication/eligibility/operation-ledger internals, the curated catalog payloads, HTTP/MCP/x402 adapters, readiness, owner funnel, and development ports.
 - Key files: `src/modules/capability-contract/public.ts`, `src/modules/capability-contract-registry/public.ts`, `src/modules/capability-supply/public.ts`, `src/modules/capability-supply/operation-projection.ts`, `src/modules/capability-supply/route-transport-runtime.ts`.
+
+**`src/modules/capability-supply/internal/`:**
+- Purpose: Private admission, publication lifecycle, provenance, importer, eligibility, binding, and operation-ledger machinery that must not leak into routes.
+- Contains: `admit-provider-schema.ts`, `publication-importers.ts`, `publication/` (`admit`, `draft`, `publish`, `refresh`, `withdraw`, `lifecycle`, `provenance`, `ports`), `eligibility/`, `binding/`, `operation-ledger/`, `graph/`, `quarantine/`, `offering/`, `route-call-signing.ts`, `x402-payment-signer.ts`, `transport-adapters.ts`, `readiness-probe.ts`, `convex-schema.ts`.
+- Key files: `src/modules/capability-supply/internal/admit-provider-schema.ts`, `src/modules/capability-supply/internal/publication/provenance.ts`, `src/modules/capability-supply/internal/convex-schema.ts`.
+
+**`src/modules/capability-supply/curated-*.ts`:**
+- Purpose: The ~20-op curated source catalog payloads and the public publications list consumed by the seed.
+- Contains: `curated-cluster-a-publications.ts` (keyless), `curated-cluster-b-publications.ts` (keyed), `curated-cluster-c-publications.ts` (observed x402), `curated-provider-publications.ts`, plus EXA/Frankfurter source in `public.ts`/`curated-provider-publications.ts`.
+- Key files: `src/modules/capability-supply/curated-cluster-a-publications.ts`, `src/modules/capability-supply/curated-provider-publications.ts`.
 
 **`src/modules/catalog/` and `src/modules/registry/`:**
 - Purpose: Own business/offering publication and public business/service/operation discovery DTOs.
@@ -147,8 +170,8 @@ Agentic-Economy/
 
 **`convex/`:**
 - Purpose: Durable backend source of truth and transaction/effect boundary.
-- Contains: `schema.ts`, public/internal functions, schema/table mappers, application ports, Workpool workers, Workflow definitions, cron/HTTP routers, Convex auth/config, and development seed code.
-- Key files: `convex/schema.ts`, `convex/customerRequestApplication.ts`, `convex/customerRequestV2.ts`, `convex/customerRequestRouteTransportWorker.ts`, `convex/capabilitySupply.ts`, `convex/catalog.ts`, `convex/registry.ts`, `convex/workTrees.ts`, `convex/studies.ts`, `convex/externalRuns.ts`.
+- Contains: `schema.ts`, the curated catalog seed, public/internal functions, schema/table mappers, application ports, Workpool workers, Workflow definitions, cron/HTTP routers, Convex auth/config, and development seed code.
+- Key files: `convex/schema.ts`, `convex/curatedProviders.ts`, `convex/customerRequestApplication.ts`, `convex/customerRequestV2.ts`, `convex/customerRequestRouteTransportWorker.ts`, `convex/capabilitySupply.ts`, `convex/catalog.ts`, `convex/registry.ts`, `convex/workTrees.ts`, `convex/studies.ts`, `convex/externalRuns.ts`.
 
 **`convex/_generated/`:**
 - Purpose: Convex-generated API references, server declarations, data-model types, component refs, and AI guidance.
@@ -208,7 +231,9 @@ Agentic-Economy/
 - `src/routes/__root.tsx`: root HTML document, provider, and client observability host.
 - `src/routes/index.tsx`: root service discovery/WorkTree journey.
 - `src/routeTree.gen.ts`: generated route registration; do not hand-edit.
+- `src/modules/customer-request/application/interpret-compile/preview.ts`: natural-language capability engine `previewCustomerRequest` surface.
 - `convex/schema.ts`: table-fragment composition entry.
+- `convex/curatedProviders.ts`: curated capability-catalog seed entry (`internal.curatedProviders.seed`).
 - `convex/http.ts`: Convex HTTP router for sandbox providers and explicit legacy retirement responses.
 - `tools/ae/cli.ts`: agent-like machine CLI entry.
 
@@ -227,14 +252,19 @@ Agentic-Economy/
 - `src/modules/common/action.ts`: action contract and effect/authority metadata.
 - `src/modules/actions/index.ts`: explicit action registry and MCP naming.
 - `src/modules/customer-request/compiler.ts`: deterministic aggregate/route compilation.
+- `src/modules/customer-request/application/interpret-compile/interpreter.ts`: composite (model + deterministic) Customer Request interpreter.
+- `src/modules/customer-request/application/interpret-compile/capability-domain.ts`: cross-capability domain guard for the engine.
 - `src/modules/customer-request/application/public.ts`: application composition for compile, prepare, confirm, resume, and recovery.
 - `src/modules/capability-contract/public.ts`: capability contract schemas and validation semantics.
+- `src/modules/capability-supply/internal/admit-provider-schema.ts`: deterministic OpenAPI/MCP schema admission normalizer.
+- `src/modules/capability-supply/internal/publication/provenance.ts`: capability publication authority-mode/digest provenance.
 - `src/modules/capability-supply/operation-projection.ts`: public executable operation descriptors and plan inspection.
 - `src/modules/answer-thread/internal/turn-orchestrator.ts`: answer phase orchestration.
 - `src/modules/harness/run-loop.ts`: ordered harness lifecycle and status/error handling.
 - `src/modules/work-tree/internal/root-loop.ts`: deterministic human WorkTree host loop.
 - `src/modules/study/internal/pipeline.ts`: Study qualification, quote, and TOPSIS pipeline.
 - `src/lib/server/convex-source.ts`: typed authenticated/public Convex transport seam.
+- `convex/curatedProviders.ts`: idempotent curated catalog bootstrap (seed + retire-on-drift).
 - `convex/customerRequestApplication.ts`: Customer Request commands and source caller resolution.
 - `convex/customerRequestRouteTransportWorker.ts`: bounded external route effect execution.
 - `convex/workTrees.ts`, `convex/studies.ts`: durable WorkTree and Study ownership.
@@ -255,15 +285,15 @@ Agentic-Economy/
 - Supported module seams are `public.ts`: `src/modules/customer-request/public.ts`, `src/modules/registry/public.ts`.
 - Action declarations use `*.actions.ts`: `src/modules/customer-request/customer-request.actions.ts`, `src/modules/work-tree/work-tree-agent.actions.ts`.
 - TanStack/source adapters use `*.functions.ts`: `src/modules/customer-request/customer-request.functions.ts`, `src/modules/registry/registry.functions.ts`.
-- Convex table fragments use `internal/*schema.ts`, `internal/schema.ts`, or context `*.schema.ts`: `src/modules/action-invocation/internal/convex-schema.ts`, `src/modules/answer-thread/answer-thread.schema.ts`.
-- Convex files use context/lifecycle names with lower camel case: `convex/customerRequestApplication.ts`, `convex/customerRequestRouteExecution.ts`, `convex/workTrees.ts`.
+- Convex table fragments use `internal/*schema.ts`, `internal/schema.ts`, or context `*.schema.ts`: `src/modules/action-invocation/internal/convex-schema.ts`, `src/modules/answer-thread/answer-thread.schema.ts`, `src/modules/capability-supply/internal/convex-schema.ts`.
+- Convex files use context/lifecycle names with lower camel case: `convex/customerRequestApplication.ts`, `convex/customerRequestRouteExecution.ts`, `convex/curatedProviders.ts`, `convex/workTrees.ts`.
 - React product components use `Ae` PascalCase: `src/components/ae/chat/AeChat.tsx`, `src/components/ae/work-tree/AeWorkTreePanel.tsx`; generic UI primitives are lowercase: `src/components/ui/button.tsx`.
 - Tests use `*.test.ts`/`*.test.tsx`; Playwright browser specs use `*.spec.ts`.
 - Evidence/fixture helpers describe the boundary: `tests/helpers/openrouter-contract-server.ts`, `tools/dev/*-evidence*.ts`, `tools/release/*-smoke*.ts`.
 
 **Directories:**
 - Bounded contexts use lowercase kebab-case: `src/modules/customer-request/`, `src/modules/capability-supply/`, `src/modules/answer-thread/`.
-- Private implementation is grouped under `internal/`; nested subdomains use descriptive lowercase names such as `route-execution/`, `v2-write/`, and `application/`.
+- Private implementation is grouped under `internal/`; nested subdomains use descriptive lowercase names such as `route-execution/`, `v2-write/`, `application/`, and `interpret-compile/`.
 - Route families use TanStack pathless/parameter naming such as `_operator/`, `$slug`, `$requestRef`, and `[.]well-known/`.
 - Test directories mirror the boundary under test: `tests/unit/customer-request/`, `tests/integration/`, `tests/imports/`, and `tests/deploy-smoke/`.
 - Convex port filenames preserve the owning family: `customerRequestV2*Ports.ts`, `customerRequestRouteExecution*Ports.ts`, `capabilitySupply*Ports.ts`.
@@ -277,6 +307,17 @@ Agentic-Economy/
 - Transport: Add a thin `src/routes/` file and delegate to an existing `src/lib/server/*-api.ts` or module `*.functions.ts`; keep request bounds, auth, and response mapping at that boundary.
 - Durable state: Add the context schema fragment under `src/modules/<context>/internal/`, compose it in `convex/schema.ts`, then add matching application/port functions under `convex/`.
 - Tests: Mirror the owning boundary in `tests/unit/`; add `tests/integration/`, `tests/e2e/`, or `tests/deploy-smoke/` only for the observable cross-boundary contract.
+
+**New Capability Admission / Provider Port:**
+- Source content: Add the normalized operation to the curated catalog payloads (`src/modules/capability-supply/curated-cluster-*-publications.ts`) or a `CURATED_PROVIDER_PUBLICATIONS` entry in `src/modules/capability-supply/public.ts`, including the contract's `searchTerms` for discovery/domain and `inputExamples` for teaching.
+- Normalizer: Route OpenAPI/MCP schemas through `src/modules/capability-supply/internal/admit-provider-schema.ts` so admission is deterministic and refuses with a named reason rather than looping.
+- Provenance: Tag the publication with an authority mode + source revision + digest via `src/modules/capability-supply/internal/publication/provenance.ts` so provider-owned vs AE-curated vs observed supply is never conflated.
+- Seed/routeability: Materialize publications/mappings/eligibility idempotently through `convex/curatedProviders.ts` (`internal.curatedProviders.seed`; `npm run seed:dev`) and verify the op is live-routeable via `registry.operations.search`.
+
+**New Engine Query / Selection Behavior:**
+- Discovery vocabulary: Declare `searchTerms` on the catalog offering source (`src/modules/capability-supply/curated-cluster-*-publications.ts`) so both discovery and the deterministic recovery interpreter can match (see `src/modules/customer-request/application/interpret-compile/discover.ts` and `deterministic-interpreter.ts`).
+- Domain guard: Extend `src/modules/customer-request/application/interpret-compile/capability-domain.ts` rather than regex-scanning free text at call sites; stamp the declared `domain` once during graph assembly.
+- Recovery: Keep deterministic recovery on the discovery-narrowed, domain-appropriate pool in `src/modules/customer-request/application/interpret-compile/interpreter.ts`; a model zero-selection/unsupported against a non-empty pool is a vocabulary miss, not an honest refusal.
 
 **New Component/Module:**
 - Implementation: Use `src/modules/<new-context>/` with `public.ts`, private `internal/` schemas/ports/state machines, source adapters, and `*.actions.ts` only when the operation is a registered cross-surface action.
@@ -337,4 +378,4 @@ Agentic-Economy/
 
 ---
 
-*Structure analysis: 2026-08-04*
+*Structure analysis: 2026-08-05*
