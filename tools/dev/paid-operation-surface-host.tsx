@@ -100,13 +100,16 @@ export function AePaidOperationDevelopmentSurface({
       return
     }
     setPending(true)
-    const next = await service.command({
-      ...ref,
-      command,
-    })
-    setResult(next)
-    setPending(false)
-    queueMicrotask(() => statusRef.current?.focus())
+    try {
+      const next = await service.command({
+        ...ref,
+        command,
+      })
+      setResult(next)
+      queueMicrotask(() => statusRef.current?.focus())
+    } finally {
+      setPending(false)
+    }
   }
 
   return (

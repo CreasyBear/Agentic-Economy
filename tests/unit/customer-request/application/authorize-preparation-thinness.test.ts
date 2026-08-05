@@ -89,7 +89,7 @@ describe('customer-request authorize-preparation thinness', () => {
 
   it('composes preparation-egress instead of folding into it', () => {
     const authorizeSource = readFileSync(`${moduleRoot}/authorize.ts`, 'utf8')
-    expect(authorizeSource).toContain("from '../preparation-egress'")
+    expect(authorizeSource).toContain("from '../preparation-egress/")
     expect(authorizeSource).toContain('runPreparationEgress')
     expect(authorizeSource).toContain('preparationResultView')
     for (const file of listTsFiles(preparationEgressRoot)) {

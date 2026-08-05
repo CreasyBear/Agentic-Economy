@@ -6,10 +6,12 @@ import '../../setup/jsdom-platform'
 
 import {
   AeOwnerOfferingEditor,
+} from '@/components/ae/offerings/AeOwnerOfferings'
+import {
   OWNER_OFFERING_DRAFT_STORAGE_KEY,
   emptyOwnerOfferingEditorValue,
   readStoredOfferingDraft,
-} from '@/components/ae/offerings/AeOwnerOfferings'
+} from '@/components/ae/offerings/AeOwnerOfferings.exports'
 import type { OwnerOfferingEditorValue, OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 
 

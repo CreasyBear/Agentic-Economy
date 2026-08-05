@@ -634,7 +634,7 @@ export function offeringAccessToAeStatus(
   return accessPaths.length > 0 ? 'listed' : 'not_queued'
 }
 
-export function firstRequestModeLabel(mode: FirstRequestMode): string {
+function firstRequestModeLabel(mode: FirstRequestMode): string {
   if (mode === 'quote_request_available') {
     return 'Quote details supplied'
   }

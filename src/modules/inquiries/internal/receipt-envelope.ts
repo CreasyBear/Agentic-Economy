@@ -43,19 +43,15 @@ export async function encryptGovernedSendReceipt(
   const dataKeyBytes = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(32)))
   const contentIv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)))
   const wrapIv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)))
-  const dataKey = await crypto.subtle.importKey('raw', dataKeyBytes, { name: 'AES-GCM' }, false, ['encrypt'])
-  const wrappingKey = await importWrappingKey(keyring.secret)
+  const [dataKey, wrappingKey] = await Promise.all([
+    crypto.subtle.importKey('raw', dataKeyBytes, { name: 'AES-GCM' }, false, ['encrypt']),
+    importWrappingKey(keyring.secret),
+  ])
   const canonicalBytes = base64Codec.fromBase64(receipt.canonicalBytesBase64)
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: contentIv, additionalData },
-    dataKey,
-    canonicalBytes,
-  )
-  const wrappedKey = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: wrapIv, additionalData },
-    wrappingKey,
-    dataKeyBytes,
-  )
+  const [ciphertext, wrappedKey] = await Promise.all([
+    crypto.subtle.encrypt({ name: 'AES-GCM', iv: contentIv, additionalData }, dataKey, canonicalBytes),
+    crypto.subtle.encrypt({ name: 'AES-GCM', iv: wrapIv, additionalData }, wrappingKey, dataKeyBytes),
+  ])
   dataKeyBytes.fill(0)
 
   return {

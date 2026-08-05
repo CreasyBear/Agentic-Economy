@@ -207,7 +207,7 @@ function eventTitle(kind: string): string {
 }
 
 
-export function WeeklyMemo({ data }: Readonly<{ data: WeeklyMemoData }>): ReactElement {
+function WeeklyMemo({ data }: Readonly<{ data: WeeklyMemoData }>): ReactElement {
   const waitingDecisions = data.waitingDecisions?.slice(0, 3) ?? []
   const changes = data.changes?.slice(0, 12) ?? []
   const receipts = data.receipts?.slice(0, 12) ?? []
@@ -312,8 +312,8 @@ function MemoRows({ heading, items }: Readonly<{
   return (
     <Section style={sectionStyle}>
       <Text style={sectionHeadingStyle}>{heading}</Text>
-      {items.map((item, index) => (
-        <Row key={`${heading}:${index}:${item.title}`} style={itemRowStyle}>
+      {items.map((item) => (
+        <Row key={`${heading}:${item.title}`} style={itemRowStyle}>
           <Column>
             <Text style={itemTitleStyle}>{item.title}</Text>
             <Text style={itemDetailStyle}>{item.detail}</Text>

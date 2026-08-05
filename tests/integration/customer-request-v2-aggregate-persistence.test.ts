@@ -18,9 +18,11 @@ import {
   writableCustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
+import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
 import { listRouteableCapabilitySupply, setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 import { convexModules as modules } from '../helpers/convex-fixtures'
+import { factsForModel, markCuratedSupplyReady, readCuratedContract, readCuratedModel } from '../helpers/curated-supply'
 
 describe('atomic V2 Customer Request aggregate persistence', () => {
 
@@ -94,10 +96,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
         snapshot: { revision: 1 },
         plan: {
           actions: [{ contractRef: aggregate.plan.actions[0]?.contractRef }],
-          completionRequirements: [{
-            contractRef: aggregate.plan.actions[0]?.contractRef,
-            evidenceId: 'option_summary', outputPointer: '/optionSummary', purpose: 'completion',
-          }],
+          completionRequirements: aggregate.plan.completionRequirements,
         },
       },
     })
@@ -663,7 +662,8 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
   it('rejects a fully re-digested aggregate whose structured input violates the exact contract schema', async () => {
     const backend = convexTest(schema, modules)
     const { aggregate, routeGeneration } = await compiledAggregate(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const model = await readCuratedModel(backend, 'frankfurter.single-rate')
+    const input = model.inputs[0]
     const facts = aggregate.snapshot.facts.map((fact) => ({ ...fact, value: 42 }))
     const actions = aggregate.plan.actions.map((action) => ({ ...action, inputs: facts }))
     const evaluation = evaluateCustomerRequestSnapshot({
@@ -797,31 +797,18 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
 async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
-  await admitSandboxSupply(backend)
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
-  await backend.finishInProgressScheduledFunctions()
-  await observeSandboxPublications(backend)
+  await markCuratedSupplyReady(backend)
   const supply = await backend.run(async (ctx) => (
     await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
   ))
   if (supply.kind !== 'available') throw new Error(`routeable supply unavailable: ${supply.reason}`)
-  const contract = defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
-  const model = openCapabilityDecisionModel(contract)
-  const input = model.inputs[0]
-  if (input === undefined) throw new Error('test input missing')
-  const fact = {
-    contractRef: model.contractRef, selectionKey: model.selectionKey,
-    inputKey: input.key, inputPointer: input.inputPointer, schemaIdentity: input.schemaIdentity,
-    value: 'Find a match', source: { kind: 'customer' as const, assertionRef: 'assertion:test' },
-  }
-  const sandboxSupply = supply.supplies.find(({ binding, publication }) => (
-    publication !== undefined
-    && binding.capabilityId === model.contractRef.capabilityId
-    && binding.version === model.contractRef.version
-    && binding.contractDigest === model.contractRef.contractDigest
+  const frankfurter = supply.supplies.find(({ binding, publication }) => (
+    publication !== undefined && binding.capabilityId === 'frankfurter.single-rate'
   ))
-  if (sandboxSupply?.publication === undefined) throw new Error('sandbox publication for model missing')
-  const publication = sandboxSupply.publication
+  const publication = frankfurter?.publication
+  if (publication === undefined) throw new Error('curated frankfurter publication missing')
+  const model = await readCuratedModel(backend, 'frankfurter.single-rate')
+  const facts = factsForModel(model)
   const result = compileCustomerRequest({
     requestId: 'request:v2:persist', expectedRevision: 0,
     principalId: 'principal:v2', delegatedAgentId: 'agent:v2', intent: 'Find a match', networkId: 'ae:public',
@@ -829,7 +816,7 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       kind: 'capability_candidates',
       selections: [{
         operationRef: publication.operationRef,
-        selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [fact],
+        selectionKey: model.selectionKey, contractRef: model.contractRef, facts,
       }],
     },
     interpreterId: 'interpreter:test',
@@ -884,7 +871,7 @@ async function compileRefreshCandidate(
     await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
   ))
   if (supply.kind !== 'available') throw new Error(`refresh routeable supply unavailable: ${supply.reason}`)
-  const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+  const model = await readCuratedModel(backend, 'frankfurter.single-rate')
   const result = compileCustomerRequest({
     requestId: aggregate.snapshot.requestId,
     expectedRevision: aggregate.snapshot.revision - 1,
@@ -964,41 +951,6 @@ function preCancellationRouteGeneration(
     createdAt: historical.createdAt,
   })
 }
-
-async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
-  await backend.run(async (ctx) => {
-    const offerings = await ctx.db.query('capabilityOfferings').collect()
-    const bindings = await ctx.db.query('capabilityTransportBindings').collect()
-    for (const binding of bindings) {
-      const offering = offerings.find((candidate) => candidate.offeringId === binding.offeringId)
-      if (offering === undefined) throw new Error('sandbox offering missing')
-      const result = await setCapabilitySupplyEligibility(ctx.db, {
-        offeringId: offering.offeringId, bindingId: binding.bindingId,
-        contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
-        decision: 'admit', expectedOfferingRegistrationHash: offering.registrationHash,
-        expectedBindingRegistrationHash: binding.registrationHash,
-        admissionEvidenceRefs: ['test:business-reviewed'], conformanceEvidenceRefs: ['test:adapter-reviewed'],
-      }, 2_000)
-      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
-    }
-  })
-}
-async function observeSandboxPublications(backend: ReturnType<typeof convexTest>) {
-  const publications = await backend.run(async (ctx) => await ctx.db.query('capabilityPublications').collect())
-  if (publications.length === 0) throw new Error('sandbox publications missing')
-  const now = Date.now()
-  for (const publication of publications) {
-    const result = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
-      credentialState: 'ready', healthState: 'healthy', validUntil: now + 300_000,
-      operationKey: `test:observe-publication:${publication.publicationRef}`,
-      correlationId: 'test:aggregate-persistence',
-      reasonCode: 'test_readiness', evidenceRefs: ['test:readiness'],
-    })
-    if (result.kind !== 'observed') throw new Error(`sandbox readiness failed: ${result.reason}`)
-  }
-}
-
 
 async function revokeFirstSupply(backend: ReturnType<typeof convexTest>) {
   await backend.run(async (ctx) => {

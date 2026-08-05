@@ -77,6 +77,10 @@ export {
   type PreviewCustomerRequestResult,
   type PreviewCustomerRequestStep,
 } from './interpret-compile'
+export {
+  discoverAndFilterDescriptors,
+  type DiscoverCapabilities,
+} from './interpret-compile'
 
 export {
   projectConsumerPlan,

@@ -10,20 +10,18 @@ import { formatMoney } from '@/lib/ui/format-money'
 import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { CustomerRequestRepeatPermissionControl } from '../../CustomerRequestRepeatPermissionControl'
 import type { ConversationTurn, CustomerRoute } from '../../workspace-types'
+import { Conversation } from '../shared/conversation'
+import { Fact, FactBlock, FactValue } from '../shared/fact'
+import { WorkingUnderstanding } from '../shared/working-understanding'
+import { RecoveryActions } from '../shared/recovery-actions'
 import {
-  Conversation,
-  Fact,
-  FactBlock,
-  FactValue,
-  WorkingUnderstanding,
-  RecoveryActions,
   activityResponsibility,
   businessList,
   readableLabel,
   effectLabel,
   reversibilityLabel,
   uncertaintyLabel,
-} from '../shared'
+} from '../shared/format'
 import {
   CancellationDetail,
   EffectsDetail,
@@ -33,7 +31,7 @@ import {
   SharingSummary,
   RouteDisclosure,
 } from './route-disclosure'
-import { RequestRecordLinks } from '../records'
+import { RequestRecordLinks } from '../records/records'
 
 export function RouteDecisionCard({ projection, turns, review, check, edit, restart }: {
   projection: CustomerRequestView

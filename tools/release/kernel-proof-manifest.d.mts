@@ -7,6 +7,3 @@ export function verifyKernelProofManifest(
   manifest: unknown,
   expectedRevision: string,
 ): { ok: boolean; errors: string[] }
-
-export function readExpectedRevision(env?: NodeJS.ProcessEnv): string
-export function readManifest(env?: NodeJS.ProcessEnv, argv?: readonly string[]): unknown

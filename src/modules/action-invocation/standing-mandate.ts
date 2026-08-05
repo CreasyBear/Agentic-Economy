@@ -573,7 +573,8 @@ export class StandingMandateStore {
     if (!mandate.scope.providerRefs.includes(input.providerRef)) return 'mandate_provider_mismatch'
     if (!mandate.scope.recipientRefs.includes(input.recipientRef)) return 'mandate_recipient_mismatch'
     if (!mandate.scope.purposes.includes(input.purpose)) return 'mandate_purpose_mismatch'
-    if (input.dataFields.some((field) => !mandate.scope.allowedDataFields.includes(field))) {
+    const allowedDataFields = new Set(mandate.scope.allowedDataFields)
+    if (input.dataFields.some((field) => !allowedDataFields.has(field))) {
       return 'mandate_data_widening'
     }
     if (input.reservedSpend.currency !== mandate.scope.maximumSpend.currency) return 'mandate_currency_mismatch'

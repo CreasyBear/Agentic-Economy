@@ -1,10 +1,8 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 
-import {
-  preparationResultView,
-  runPreparationEgress,
-} from '../preparation-egress'
+import { preparationResultView } from '../preparation-egress/project'
+import { runPreparationEgress } from '../preparation-egress/resolve'
 import type {
   AuthorizePreparationInput,
   AuthorizePreparationPorts,

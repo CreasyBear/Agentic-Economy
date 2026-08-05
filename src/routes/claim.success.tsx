@@ -69,7 +69,7 @@ function ClaimSuccessRoute() {
         description="People can now find it and reach you from the public page."
         actions={(
           <div className="flex flex-wrap gap-2">
-            {search.source === 'supply' ? <Button asChild variant="default"><a href="/owner/supply">List an API service</a></Button> : null}
+            {search.source === 'supply' ? <Button asChild variant="default"><Link to="/owner/supply">List an API service</Link></Button> : null}
             <Button asChild variant="default"><Link to="/owner/status" search={{ slug: catalog.slug }}>Manage your page</Link></Button>
           </div>
         )}

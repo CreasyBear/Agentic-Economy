@@ -65,8 +65,10 @@ export async function readPublicCatalogDiscoveryManifest(
 export async function readPublicOfferingDiscoveryManifest(
   input: ReadCatalogDiscoveryManifestInput,
 ): Promise<BuildOfferingDiscoveryManifestResult> {
-  const detail = await readPublicOfferingRegistryBusinessDetail({ slug: input.slug })
-  const invocable = await readInvocableInquiry(input.slug)
+  const [detail, invocable] = await Promise.all([
+    readPublicOfferingRegistryBusinessDetail({ slug: input.slug }),
+    readInvocableInquiry(input.slug),
+  ])
   return buildOfferingDiscoveryManifest({
     ...(detail.kind === 'found' ? { business: detail.business } : {}),
     canonicalBaseUrl: input.canonicalBaseUrl,

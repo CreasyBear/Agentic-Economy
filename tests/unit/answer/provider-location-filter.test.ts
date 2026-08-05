@@ -30,6 +30,11 @@ const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
 describe('provider location filtering', () => {
   it('extracts explicit places before trailing timing language', () => {
     expect(extractRequestedLocation('My tooth hurts and I need a dentist near Adelaide this week')).toBe('Adelaide')
+    expect(extractRequestedLocation('Burst pipe plumber serving Parramatta immediately')).toBe('Parramatta')
+    expect(extractRequestedLocation('Emergency plumber near Parramatta tonight')).toBe('Parramatta')
+    expect(
+      extractRequestedLocation('Compare the two best plumbers near Parramatta and tell me what to confirm before booking'),
+    ).toBe('Parramatta')
   })
 
   it('extracts trailing suburb intent without treating service words as places', () => {
@@ -49,6 +54,7 @@ describe('provider location filtering', () => {
     expect(extractRequestedLocation('which take inquiries?')).toBeUndefined()
     expect(extractRequestedLocation('filter inquiry options')).toBeUndefined()
     expect(extractRequestedLocation('show me the ones that accept inquiries')).toBeUndefined()
+    expect(extractRequestedLocation('My BAS is overdue and my books are a mess')).toBeUndefined()
   })
 
   it('uses user location when a tool search drops the requested suburb', () => {

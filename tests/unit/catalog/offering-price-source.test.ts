@@ -122,14 +122,17 @@ describe('Offering facts cleaning', () => {
 
 
 describe('Dev seed prices', () => {
-  it('publishes a structured twin for every seeded pricing sentence', () => {
+  it('publishes no fabricated price for the curated provider listings', () => {
     const pricedSlugs = DEV_SEED_BUSINESS_FIXTURES
       .filter((fixture) => fixture.offerings.some((offering) => offering.pricingSummary !== undefined))
       .map((fixture) => fixture.requestedSlug)
 
-    expect(pricedSlugs.length).toBeGreaterThan(0)
-    // Prose without a comparable twin is the exact gap this seed data exists to
-    // demonstrate closed; a drifted fixture sentence must not silently reopen it.
+    // The curated-only seed observes external provider listings, none of which
+    // publishes a verifiable price AE can carry as a fact. Inventing one here
+    // would be the fabrication the price twin exists to prevent.
+    expect(pricedSlugs).toEqual([])
+    // The prose <=> structured twin invariant still holds for whatever the seed
+    // does publish: a floating pricing sentence must never silently drop its twin.
     expect(pricedSlugs.filter((slug) => DEV_SEED_PRICE_BY_SLUG[slug] === undefined)).toEqual([])
     expect(Object.values(DEV_SEED_PRICE_BY_SLUG).every((price) => normalizeOfferingPrice(price) !== undefined)).toBe(true)
     expect(Object.keys(DEV_SEED_PRICE_BY_SLUG)).toHaveLength(pricedSlugs.length)

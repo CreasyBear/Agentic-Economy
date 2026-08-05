@@ -1,7 +1,8 @@
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 
-import { bindingIntegrityIsValid } from '../binding'
-import { contractRefFromRow, offeringIntegrityIsValid, type CapabilityContractRef } from '../offering'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import { contractRefFromRow, type CapabilityContractRef } from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
 
 import { bindingEligibilityIsValid, offeringEligibilityIsValid } from './integrity'
 import type { EligibleSupplyPorts } from './ports'

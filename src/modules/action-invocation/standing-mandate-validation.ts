@@ -7,28 +7,28 @@ const isoTimestamp = z.iso.datetime({ offset: true })
 const currency = z.string().regex(/^[A-Z]{3}$/)
 const digest = nonEmpty
 
-const actionIdentity = z.object({
+const actionIdentity = z.strictObject({
   id: nonEmpty,
   version: nonEmpty,
-}).strict()
+})
 
-const money = z.object({
+const money = z.strictObject({
   amountMinor: nonNegativeSafeInteger,
   currency,
-}).strict()
+})
 
-const exposureOffsetRuleIdentity = z.object({
+const exposureOffsetRuleIdentity = z.strictObject({
   evidenceRuleRef: nonEmpty,
   source: nonEmpty,
   version: nonEmpty,
-}).strict()
+})
 
-const verificationKey = z.object({
+const verificationKey = z.strictObject({
   keyId: nonEmpty,
   publicKey: z.string().regex(/^[0-9a-f]{64}$/),
-}).strict()
+})
 
-const standingMandateScope = z.object({
+const standingMandateScope = z.strictObject({
   objective: nonEmpty,
   action: actionIdentity,
   actions: z.array(actionIdentity).min(1).optional(),
@@ -46,9 +46,9 @@ const standingMandateScope = z.object({
   maximumLoss: money.optional(),
   exposureOffsetRules: z.array(exposureOffsetRuleIdentity).optional(),
   exposureOffsetVerificationKeys: z.array(verificationKey).optional(),
-}).strict()
+})
 
-const mandateInput = z.object({
+const mandateInput = z.strictObject({
   mode: z.enum(['bounded_mandate', 'full_yolo']).optional(),
   mandateRef: nonEmpty,
   version: positiveSafeInteger,
@@ -59,7 +59,7 @@ const mandateInput = z.object({
   callerRef: nonEmpty,
   scope: standingMandateScope,
   issuedAt: isoTimestamp,
-}).strict().superRefine((input, context) => {
+}).superRefine((input, context) => {
   const mode = input.mode ?? 'bounded_mandate'
   const actions = input.scope.actions ?? [input.scope.action]
   if (Date.parse(input.scope.startsAt) >= Date.parse(input.scope.expiresAt)) {
@@ -93,10 +93,10 @@ const mandateInput = z.object({
 
 const revoked = z.union([
   z.literal(false),
-  z.object({ reason: nonEmpty, revokedAt: isoTimestamp }).strict(),
+  z.strictObject({ reason: nonEmpty, revokedAt: isoTimestamp }),
 ])
 
-const standingMandate = z.object({
+const standingMandate = z.strictObject({
   format: z.literal('ae.action-invocation-standing-mandate:v1'),
   mode: z.enum(['bounded_mandate', 'full_yolo']),
   mandateRef: nonEmpty,
@@ -110,7 +110,7 @@ const standingMandate = z.object({
   issuedAt: isoTimestamp,
   revoked,
   digest,
-}).strict().superRefine((input, context) => {
+}).superRefine((input, context) => {
   const result = mandateInput.safeParse({
     mode: input.mode,
     mandateRef: input.mandateRef,
@@ -128,7 +128,7 @@ const standingMandate = z.object({
   }
 })
 
-const authorityUseMaterial = z.object({
+const authorityUseMaterial = z.strictObject({
   authorityUseRef: nonEmpty,
   mandateRef: nonEmpty,
   mandateVersion: positiveSafeInteger,
@@ -149,7 +149,7 @@ const authorityUseMaterial = z.object({
   risk: nonEmpty,
   effectGeneration: positiveSafeInteger,
   policyDecisionRef: nonEmpty.optional(),
-}).strict()
+})
 
 const authorityUse = authorityUseMaterial.extend({
   state: z.enum(['reserved', 'not_released', 'released', 'uncertain']),
@@ -158,7 +158,7 @@ const authorityUse = authorityUseMaterial.extend({
   digest,
 }).strict()
 
-const policyProposal = z.object({
+const policyProposal = z.strictObject({
   objectiveRef: nonEmpty,
   objective: nonEmpty,
   sourceOptionRef: nonEmpty,
@@ -174,16 +174,16 @@ const policyProposal = z.object({
   worstCaseLoss: money,
   fallbackRef: nonEmpty,
   risk: nonEmpty,
-}).strict()
+})
 
-const capacity = z.object({
+const capacity = z.strictObject({
   consumedCount: nonNegativeSafeInteger,
   reservedCount: nonNegativeSafeInteger,
   committedSpendMinor: nonNegativeSafeInteger,
   heldWorstCaseLossMinor: nonNegativeSafeInteger,
-}).strict()
+})
 
-const policyDecision = z.object({
+const policyDecision = z.strictObject({
   policyDecisionRef: nonEmpty,
   policy: z.literal('exact_scope_and_worst_case_loss:v1'),
   objectiveRef: nonEmpty,
@@ -198,11 +198,11 @@ const policyDecision = z.object({
   maximumLossMinor: nonNegativeSafeInteger,
   accepted: z.literal(true),
   digest,
-}).strict()
+})
 
 // Grant and offset cryptographic semantics remain owned by their existing verifiers.
 // These schemas reject malformed scalar material before those verifiers run.
-const grant = z.object({
+const grant = z.strictObject({
   format: z.literal('ae.verified-standing-mandate-grant:v1'),
   evidenceRef: nonEmpty,
   verifierRef: nonEmpty,
@@ -223,9 +223,9 @@ const grant = z.object({
   authenticated: z.literal(true),
   cryptographicResult: z.literal('valid'),
   digest,
-}).strict()
+})
 
-const exposureOffset = z.object({
+const exposureOffset = z.strictObject({
   authorityUseRef: nonEmpty,
   offsetAuthorityUseRef: nonEmpty,
   mandateRef: nonEmpty,
@@ -250,16 +250,16 @@ const exposureOffset = z.object({
   offsetGeneration: z.literal(1),
   recordedAt: isoTimestamp,
   digest,
-}).strict()
+})
 
-const standingMandateSnapshot = z.object({
+const standingMandateSnapshot = z.strictObject({
   format: z.literal('ae.action-invocation-standing-mandate-store:v1'),
   mandates: z.array(standingMandate),
   grants: z.array(grant),
   uses: z.array(authorityUse),
   exposureOffsets: z.array(exposureOffset).optional(),
   policyDecisions: z.array(policyDecision).optional(),
-}).strict()
+})
 
 export function parseStandingMandateInput(input: unknown) {
   return mandateInput.safeParse(input)

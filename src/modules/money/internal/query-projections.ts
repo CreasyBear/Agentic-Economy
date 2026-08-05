@@ -43,9 +43,9 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
     },
     listCreditActivity: async (query: CreditActivityQuery) => {
       const rows = input.ledger.usageEvents
-        .filter((event) => event.principalId === query.principalId)
-        .filter((event) => event.credentialId === query.credentialId)
-        .filter((event) => event.currency === query.currency)
+        .filter((event) => event.principalId === query.principalId
+          && event.credentialId === query.credentialId
+          && event.currency === query.currency)
         .sort((left, right) => right.observedAt - left.observedAt)
       const rawOffset = query.paginationOpts.cursor === null ? 0 : Number(query.paginationOpts.cursor)
       const offset = Number.isSafeInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0

@@ -357,19 +357,20 @@ function rollupCost(tree: WorkTree): CostRollup {
   const breaches: CostEnvelopeBreach[] = []
   const childEnvelopeTotals = new Map<string, number>()
   for (const node of nodes) {
-    if (node.cost?.envelopeMinor === undefined) continue
+    const cost = node.cost
+    if (cost?.envelopeMinor === undefined) continue
     const subtree = collectCostSubtree(node.nodeId, nodeById, childrenByParent, new Set())
-    const subtreeTotals = subtree.byCurrency.get(node.cost.currency) ?? { estimateMinor: 0, committedMinor: 0, envelopeMinor: 0 }
-    const childEnvelopeMinor = subtree.childEnvelopeByCurrency.get(node.cost.currency) ?? 0
-    childEnvelopeTotals.set(node.cost.currency, (childEnvelopeTotals.get(node.cost.currency) ?? 0) + childEnvelopeMinor)
-    const breached = childEnvelopeMinor > node.cost.envelopeMinor
-      || subtreeTotals.estimateMinor > node.cost.envelopeMinor
-      || subtreeTotals.committedMinor > node.cost.envelopeMinor
+    const subtreeTotals = subtree.byCurrency.get(cost.currency) ?? { estimateMinor: 0, committedMinor: 0, envelopeMinor: 0 }
+    const childEnvelopeMinor = subtree.childEnvelopeByCurrency.get(cost.currency) ?? 0
+    childEnvelopeTotals.set(cost.currency, (childEnvelopeTotals.get(cost.currency) ?? 0) + childEnvelopeMinor)
+    const breached = childEnvelopeMinor > cost.envelopeMinor
+      || subtreeTotals.estimateMinor > cost.envelopeMinor
+      || subtreeTotals.committedMinor > cost.envelopeMinor
     if (breached) {
       breaches.push({
         nodeId: node.nodeId,
-        currency: node.cost.currency,
-        envelopeMinor: node.cost.envelopeMinor,
+        currency: cost.currency,
+        envelopeMinor: cost.envelopeMinor,
         childEnvelopeMinor,
         subtreeEstimateMinor: subtreeTotals.estimateMinor,
         subtreeCommittedMinor: subtreeTotals.committedMinor,

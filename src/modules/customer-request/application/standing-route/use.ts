@@ -4,7 +4,7 @@ import {
 } from '@/modules/customer-request/customer-projection'
 
 import type { CustomerRequestActionResult } from '../action-result'
-import { projectConfirmedRoute } from '../route-plan-projection'
+import { projectConfirmedRoute } from '../route-plan-projection/project-aggregate'
 import { resolveSelectableCurrentRoute } from './select'
 import type {
   StandingRoutePorts,

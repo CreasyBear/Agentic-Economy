@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -138,7 +138,7 @@ function ForAgentsRoute() {
           <p className="block max-w-3xl text-muted-foreground">
             Publish what you do once, and these are the surfaces agents read it from.
           </p>
-          <Button asChild variant="secondary" className="min-h-11 justify-self-start"><a href="/claim">List your business</a></Button>
+          <Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/claim">List your business</Link></Button>
         </section>
       </div>
     </AePublicShell>

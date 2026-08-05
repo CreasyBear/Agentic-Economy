@@ -102,7 +102,7 @@ describe('capability publication importers', () => {
     } as never
     const result = importOpenApiHttpCapability({
       kind: 'openapi_http',
-      document: JSON.parse(JSON.stringify(document)) as unknown,
+      document: structuredClone(document) as unknown,
       contract: {
         ...contractMetadata('independent.lookup-query-alias'),
         customerAnnotations: [

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
   GitCompareIcon,
@@ -105,8 +105,8 @@ function TermsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button asChild variant="default"><a href="/">Ask a question</a></Button>
-            <Button asChild variant="secondary"><a href="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></a></Button>
+            <Button asChild variant="default"><Link to="/">Ask a question</Link></Button>
+            <Button asChild variant="secondary"><Link to="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></Link></Button>
           </div>
         </section>
       </div>

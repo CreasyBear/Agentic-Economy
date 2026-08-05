@@ -1,9 +1,9 @@
 import {
   bindingEligibilityIsValid,
   offeringEligibilityIsValid,
-} from '../eligibility'
-import type { CapabilityBindingRow } from '../binding'
-import type { CapabilityOfferingRow } from '../offering'
+} from '../eligibility/integrity'
+import type { CapabilityBindingRow } from '../binding/registration'
+import type { CapabilityOfferingRow } from '../offering/registration'
 
 export type PublicationLifecycleReason =
   | 'admission_unproven' | 'conformance_unproven' | 'credential_readiness_unobserved'

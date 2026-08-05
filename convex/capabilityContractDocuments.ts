@@ -108,19 +108,21 @@ export const register = mutation({
         : { kind: 'refused' as const, reason: 'contract_integrity_failure' as const }
     }
 
-    const operationId = await ctx.db.insert('operationKeys', {
-      scope: 'capability_contract_registry',
-      actorKind: 'admin',
-      actorRef,
-      operationName: 'registerCapabilityContract',
-      key: args.operationKey,
-      requestHash,
-      status: 'in_progress',
-      effectRefs: [],
-      createdAt: registeredAt,
-      updatedAt: registeredAt,
-    })
-    const result = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, registeredAt)
+    const [operationId, result] = await Promise.all([
+      ctx.db.insert('operationKeys', {
+        scope: 'capability_contract_registry',
+        actorKind: 'admin',
+        actorRef,
+        operationName: 'registerCapabilityContract',
+        key: args.operationKey,
+        requestHash,
+        status: 'in_progress',
+        effectRefs: [],
+        createdAt: registeredAt,
+        updatedAt: registeredAt,
+      }),
+      registerCapabilityContractDocument(ctx.db, encoded.documentJson, registeredAt),
+    ])
     if (result.kind === 'refused') {
       await ctx.db.patch(operationId, {
         status: 'failed_terminal',

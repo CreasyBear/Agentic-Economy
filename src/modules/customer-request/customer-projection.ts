@@ -348,7 +348,7 @@ function customerPurposeLabel(value: string): string {
   return `${words.at(0)?.toUpperCase() ?? ''}${words.slice(1)}`
 }
 
-export function projectPreparingOptions(input: Readonly<{
+function projectPreparingOptions(input: Readonly<{
   requestRef: string
   revision: number
   summary: string
@@ -359,7 +359,7 @@ export function projectPreparingOptions(input: Readonly<{
   return requestView({ ...input, state: 'preparing_options', nextAction: 'wait' })
 }
 
-export function projectOptionsReady(input: Readonly<{
+function projectOptionsReady(input: Readonly<{
   requestRef: string
   revision: number
   summary: string

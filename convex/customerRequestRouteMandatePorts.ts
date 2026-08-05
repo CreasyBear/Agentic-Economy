@@ -481,10 +481,12 @@ export async function openCurrentRouteGeneration(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   requestId: string,
 ): Promise<OpenCurrentRouteGenerationResult> {
-  const requestHead = await ctx.db.query('customerRequestV2Heads')
-    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-  const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
-    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
+  const [requestHead, routeHead] = await Promise.all([
+    ctx.db.query('customerRequestV2Heads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique(),
+    ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique(),
+  ])
   if (requestHead === null || routeHead?.currentGenerationRef === undefined
     || routeHead.currentRequestRevision !== requestHead.currentRevision) {
     return { kind: 'not_found' }

@@ -20,7 +20,7 @@ import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.se
 import { handleDeveloperDiscoveryExamplesRequest } from '@/routes/api.discovery.examples'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
-import { loadDeveloperDiscoveryRoute } from '@/routes/developers.discovery'
+import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route'
 
 const privateOrAuthorityPattern =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu

@@ -150,7 +150,8 @@ function buildAgentResult(
   const finalProviders: readonly AnswerSource[] =
     providers.length > 0 ? (locationFiltered?.providers ?? providers) : (input.priorProviders ?? [])
 
-  const mapped = snapshotProseFromAnswer(prose)
+  const effectiveProse = finalProviders.length === 0 ? buildNoMatchesProse(input.query) : prose
+  const mapped = snapshotProseFromAnswer(effectiveProse)
   // The agent JSON URL points at the search that actually grounded the answer.
   // When the model chose a corrected `registry.search` argument (e.g.
   // "parramatta" for a misspelled "paramata"), the URL reflects that chosen
@@ -177,7 +178,7 @@ function buildAgentResult(
   const rawGate = runAnswerGate({ snapshot: rawSnapshot, allowedSlugs })
   if (!rawGate.ok) {
     return {
-      prose,
+      prose: effectiveProse,
       providers: finalProviders,
       allowedSlugs,
       toolCalls: [...toolCalls],
@@ -188,32 +189,6 @@ function buildAgentResult(
     }
   }
 
-  const snapshotProse =
-    locationFiltered.filtered === true || (locationFiltered.location !== undefined && finalProviders.length === 0)
-      ? buildLocationScopedProse({
-          query: input.query,
-          location: locationFiltered.location,
-          providers: finalProviders,
-        })
-      : mapped
-  const snapshot: AnswerSnapshot = {
-    query: input.query,
-    oneLine: snapshotProse.oneLine,
-    providers: finalProviders,
-    summary: snapshotProse.summary,
-    nextStep: snapshotProse.nextStep,
-    agentJsonUrl,
-  }
-
-  const gate = runAnswerGate({ snapshot, allowedSlugs })
-  const effectiveProse: AnswerProse =
-    snapshotProse === mapped
-      ? prose
-      : {
-          oneLine: snapshotProse.oneLine,
-          summary: snapshotProse.summary,
-          whatToDoNow: snapshotProse.nextStep,
-        }
   return {
     prose: effectiveProse,
     providers: finalProviders,
@@ -221,8 +196,8 @@ function buildAgentResult(
     toolCalls: [...toolCalls],
     modelRequests: [...modelRequests],
     timings: [...timings],
-    snapshot,
-    gate,
+    snapshot: rawSnapshot,
+    gate: rawGate,
   }
 }
 
@@ -334,6 +309,41 @@ async function runRealToolUseAgent(
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   }))
 
+  const finalizeProse = async (candidate: AnswerProse): Promise<AnswerToolUseAgentResult> => {
+    const initial = buildAgentResult(input, candidate, toolCalls, providers, timings, modelRequests)
+    if (initial.gate.ok || initial.gate.code !== 'unsupported_provider_claim') {
+      return initial
+    }
+
+    const evidenceProviders = providers.length > 0 ? providers : (input.priorProviders ?? [])
+    const repairPrompt = [
+      buildToolUseAgentUserPrompt({
+        query: input.query,
+        ...(evidenceProviders === undefined ? {} : { priorProviders: evidenceProviders }),
+        ...(input.followUpIntent === undefined ? {} : { followUpIntent: input.followUpIntent }),
+        ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
+      }),
+      'The previous draft was rejected because it asserted a provider capability, price, or availability beyond the published evidence.',
+      'Rewrite the answer from the catalog evidence. In oneLine and summary, use only “publishes” or “lists” for provider facts. Do not say a provider, business, listing, it, or they can, will, handles, confirms, guarantees, is available, or is qualified. Mention a price or hours only by reproducing the provider’s complete published pricingSummary or availabilitySummary verbatim; otherwise put the question about fit, scope, price, or availability in whatToDoNow.',
+    ].join('\n\n')
+    const repair = await requestProse(repairPrompt, 'model.openrouter_repair')
+    if (repair.toolCalls.length > 0 || repair.output === undefined) {
+      throw new AnswerToolUseAgentError('prose_failed')
+    }
+    const repaired = buildAgentResult(input, repair.output, toolCalls, providers, timings, modelRequests)
+    if (repaired.gate.ok) {
+      return repaired
+    }
+    return buildAgentResult(
+      input,
+      buildGroundedProviderFallback(evidenceProviders),
+      toolCalls,
+      providers,
+      timings,
+      modelRequests,
+    )
+  }
+
   // filter_known / compare_known reuse frozen prior evidence, so the turn is a
   // single prose request that never exposes the catalogue toolset at all.
   if (input.disableTools === true) {
@@ -345,7 +355,7 @@ async function runRealToolUseAgent(
     if (frozenProse === undefined) {
       throw new AnswerToolUseAgentError('prose_failed')
     }
-    return buildAgentResult(input, frozenProse, toolCalls, providers, timings, modelRequests)
+    return await finalizeProse(frozenProse)
   }
 
   let finalStepRequested = false
@@ -387,7 +397,7 @@ async function runRealToolUseAgent(
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
-  return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
+  return await finalizeProse(prose)
 }
 
 
@@ -568,30 +578,13 @@ function appendTimings(
   }
 }
 
-function buildLocationScopedProse(input: {
-  query: string
-  location: string | undefined
-  providers: readonly AnswerSource[]
-}): { oneLine: string; summary: string; nextStep: string } {
-  const location = input.location?.trim()
-  const place = location === undefined || location.length === 0 ? 'that place' : location
-  const count = input.providers.length
 
-  if (count === 0) {
-    return {
-      oneLine: `No listed businesses match "${input.query}" yet.`,
-      summary: `No listed businesses publish coverage for ${place} yet.`,
-      nextStep: 'Try a nearby suburb, browse services, or list a business that should appear here.',
-    }
-  }
-
+function buildNoMatchesProse(query: string): AnswerProse {
+  const request = query.trim() || 'this request'
   return {
-    oneLine: count === 1 ? `1 listed business matches ${place}.` : `${count} listed businesses match ${place}.`,
-    summary:
-      count === 1
-        ? `This listing publishes service coverage for ${place}. The business handles timing, price, and availability.`
-        : `These listings publish service coverage for ${place}. The business handles timing, price, and availability.`,
-    nextStep: 'Open a listed business page and send an inquiry when that option is published.',
+    oneLine: `No matching listed business was found for "${request}".`,
+    summary: `No matching listed business was found for "${request}". Try a location or a broader service description.`,
+    whatToDoNow: 'Try a nearby location or a broader service description.',
   }
 }
 
@@ -619,7 +612,60 @@ function appendProvidersFromToolResult(
 }
 
 
+function buildGroundedProviderFallback(providers: readonly AnswerSource[]): AnswerProse {
+  if (providers.length === 0) {
+    return {
+      oneLine: 'No matching listed business was found.',
+      summary: 'No listed business published enough matching detail for this request.',
+      whatToDoNow: 'Try a nearby area or a broader service description.',
+    }
+  }
+
+  const providerFacts = providers.map((provider) => {
+    const services = provider.services
+      .map((service) => service.name.trim())
+      .filter((name) => name.length > 0)
+    const details = [services.length > 0 ? services.join(', ') : provider.category]
+    if (provider.pricingSummary !== undefined) details.push(`published pricing "${provider.pricingSummary}"`)
+    if (provider.availabilitySummary !== undefined) details.push(`published availability "${provider.availabilitySummary}"`)
+    return `${provider.name} lists ${formatProviderNames(details)}.`
+  })
+  const names = formatProviderNames(providers.map((provider) => provider.name))
+  const sharedSuburb = providers.every((provider) => provider.suburb === providers[0]?.suburb)
+    ? providers[0]?.suburb
+    : undefined
+  const place = sharedSuburb === undefined || sharedSuburb.length === 0 ? '' : ` in ${sharedSuburb}`
+  const contactable = providers.find((provider) => provider.publishedPhone !== undefined || provider.inquiryUrl !== undefined)
+  const nextStep = contactable === undefined
+    ? sharedSuburb === undefined
+      ? 'Tell me your suburb or city so I can narrow these listings.'
+      : 'Open one listing and ask whether its published service covers your job, what it costs, and the earliest appointment.'
+    : `Contact ${contactable.name} to confirm ${formatProviderNames([
+        `whether ${contactable.services[0]?.name ?? contactable.category} covers your job`,
+        contactable.pricingSummary === undefined
+          ? 'the price'
+          : `whether "${contactable.pricingSummary}" applies`,
+        contactable.availabilitySummary === undefined
+          ? 'the earliest appointment'
+          : `the earliest appointment within "${contactable.availabilitySummary}"`,
+      ])}.`
+
+  return {
+    oneLine: providers.length === 1
+      ? providerFacts[0] ?? `${names} is listed${place}.`
+      : `${names} publish listed options${place}.`,
+    summary: providerFacts.join(' '),
+    whatToDoNow: nextStep,
+  }
+}
+
+function formatProviderNames(names: readonly string[]): string {
+  if (names.length < 2) return names[0] ?? 'The listing'
+  if (names.length === 2) return names.join(' and ')
+  return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`
+}
 function resolveAgentQuery(
+
   toolCalls: readonly AnswerToolCallRecord[],
   fallback: string,
 ): string {

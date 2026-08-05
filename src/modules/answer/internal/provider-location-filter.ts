@@ -1,4 +1,5 @@
 import { distance as levenshteinDistance } from 'fastest-levenshtein'
+import { parseExplicitLocationIntent } from './location-intent'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 
 import type { AnswerSource } from '../answer-synthesizer'
@@ -40,6 +41,7 @@ const SERVICE_WORDS = new Set([
   'locksmiths',
   'mechanic',
   'mechanics',
+  'immediately',
   'narrow',
   'need',
   'no',
@@ -65,6 +67,7 @@ const SERVICE_WORDS = new Set([
   'the',
   'to',
   'today',
+  'tonight',
   'tomorrow',
   'trade',
   'trades',
@@ -78,7 +81,6 @@ const SERVICE_WORDS = new Set([
 ])
 
 const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'])
-const LOCATION_PREPOSITION = /\b(?:in|near|around|at)\s+([a-z][a-z\s'-]{1,80})(?:\?|$)/i
 
 export type ProviderLocationFilterResult = {
   providers: AnswerSource[]
@@ -94,7 +96,9 @@ export function filterProvidersForRequestedLocation(input: {
   toolQuery?: string
   searchContext?: AeSearchContext | undefined
 }): ProviderLocationFilterResult {
-  const toolLocation = input.toolQuery === undefined ? undefined : extractRequestedLocation(input.toolQuery)
+  const toolLocation = input.toolQuery === undefined
+    ? undefined
+    : extractRequestedLocation(input.toolQuery, { allowLowercaseFallback: true })
   const userLocation = extractRequestedLocation(input.userQuery)
   const contextLocation = aeSearchContextLocationQuery(input.searchContext)
   const resolved = resolveRequestedLocation({ userLocation, contextLocation, toolLocation })
@@ -122,7 +126,10 @@ export function filterProvidersForRequestedLocation(input: {
   }
 }
 
-export function extractRequestedLocation(query: string): string | undefined {
+export function extractRequestedLocation(
+  query: string,
+  options: { allowLowercaseFallback?: boolean } = {},
+): string | undefined {
   const normalized = query
     .trim()
     .replace(/[^a-z0-9\s'-]+/gi, ' ')
@@ -133,9 +140,9 @@ export function extractRequestedLocation(query: string): string | undefined {
     return undefined
   }
 
-  const prepositionMatch = normalized.match(LOCATION_PREPOSITION)
-  if (prepositionMatch?.[1] !== undefined) {
-    return normalizeLocationCandidate(prepositionMatch[1])
+  const explicitIntent = parseExplicitLocationIntent(normalized)
+  if (explicitIntent !== undefined) {
+    return normalizeLocationCandidate(explicitIntent.label)
   }
 
   const tokens = normalized.split(/\s+/).filter(Boolean)
@@ -143,13 +150,23 @@ export function extractRequestedLocation(query: string): string | undefined {
     return undefined
   }
 
-  const withoutState = dropTrailingState(tokens)
-  const candidate = trimServiceWords(withoutState).join(' ')
-  if (candidate.length === 0) {
+  const candidateTokens = trimServiceWords(dropTrailingState(tokens))
+  const hasLowercaseLocationShape =
+    (candidateTokens.length === 1 && tokens.length === 1) ||
+    (candidateTokens.length < tokens.length && tokens.length <= 5)
+  if (
+    candidateTokens.length === 0 ||
+    candidateTokens.length > 3 ||
+    (
+      options.allowLowercaseFallback !== true &&
+      !candidateTokens.every(isProperLocationToken) &&
+      !hasLowercaseLocationShape
+    )
+  ) {
     return undefined
   }
 
-  return normalizeLocationCandidate(candidate)
+  return normalizeLocationCandidate(candidateTokens.join(' '))
 }
 
 function resolveRequestedLocation(input: {
@@ -245,6 +262,10 @@ function isServiceWord(word: string | undefined): boolean {
     }
   }
   return false
+}
+
+function isProperLocationToken(token: string): boolean {
+  return /^(?:[A-Z][A-Za-z'’-]*|\d{4})$/.test(token)
 }
 
 function providerMatchesLocation(provider: AnswerSource, location: string): boolean {

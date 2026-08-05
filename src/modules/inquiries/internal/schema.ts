@@ -221,7 +221,7 @@ export type InquiryThreadRecord =
       offeringRef?: never
     })
 
-export function isCurrentInquiryThreadRecord(thread: InquiryThreadRecord): thread is Extract<InquiryThreadRecord, { offeringRef: OfferingRef }> {
+function isCurrentInquiryThreadRecord(thread: InquiryThreadRecord): thread is Extract<InquiryThreadRecord, { offeringRef: OfferingRef }> {
   return thread.offeringRef !== undefined
 }
 

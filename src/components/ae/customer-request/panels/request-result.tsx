@@ -2,25 +2,22 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import type { ConversationTurn, WorkspaceState } from '../workspace-types'
-import {
-  Conversation,
-  Clarification,
-  WorkingUnderstanding,
-  RecoveryActions,
-  customerFacingAeTurn,
-  statusLabel,
-} from './shared'
+import { Conversation } from './shared/conversation'
+import { Clarification } from './shared/clarification'
+import { WorkingUnderstanding } from './shared/working-understanding'
+import { RecoveryActions } from './shared/recovery-actions'
+import { customerFacingAeTurn, statusLabel } from './shared/prompts'
 import { DirectoryFallback } from './directory-fallback'
-import { OptionsCard, NoOptions } from './options'
-import { DisclosureReview } from './disclosure'
+import { OptionsCard, NoOptions } from './options/options'
+import { DisclosureReview } from './disclosure/disclosure-review'
 import {
   RouteDecisionCard,
   RouteReviewCard,
   RouteConfirmationCard,
   RouteProgressCard,
   ConfirmationLoadingCard,
-} from './routes'
-import { ActionStatusCard, CancelledStatusCard } from './status'
+} from './routes/routes'
+import { ActionStatusCard, CancelledStatusCard } from './status/status'
 
 export function RequestResult({ state, compare, reviewRoute, leaveRouteReview, reportRouteUnavailable, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, routeFeedback, setRouteFeedback, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; reviewRoute: (projection: CustomerRequestView, routeRef: string) => void; leaveRouteReview: (projection: CustomerRequestView) => void; reportRouteUnavailable: (projection: CustomerRequestView, routeRef: string) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; routeFeedback: string; setRouteFeedback: (feedback: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card className="min-w-0 p-5" aria-live="polite"><div className="grid gap-4"><h2 className="text-2xl font-semibold">Request unavailable</h2><p className="text-muted-foreground">{state.message}</p>{state.authenticationRequired ? <Button asChild variant="default"><a href="/sign-in">Sign in to continue</a></Button> : null}</div></Card>

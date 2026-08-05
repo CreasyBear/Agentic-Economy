@@ -27,6 +27,10 @@ export {
   type ProposeThenCompileResult,
 } from './interpret'
 export {
+  discoverAndFilterDescriptors,
+  type DiscoverCapabilities,
+} from './discover'
+export {
   previewCustomerRequest,
   type PreviewCustomerRequest,
   type PreviewCustomerRequestInput,

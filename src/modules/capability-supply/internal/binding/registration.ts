@@ -3,7 +3,7 @@ import {
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 
-import { contractRefFromRow } from '../offering'
+import { contractRefFromRow } from '../offering/registration'
 
 export type CapabilityBindingRow = Readonly<{
   _id: string

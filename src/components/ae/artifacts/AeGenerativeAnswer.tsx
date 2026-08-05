@@ -146,7 +146,7 @@ export function AeGenerativeAnswer({
         />
       )}
 
-      {parts.filter((part) => part.kind !== 'prose').map((part) => (
+      {parts.flatMap((part) => (part.kind === 'prose' ? [] : [
         <AnswerPartView
           key={part.kind}
           part={part}
@@ -156,7 +156,7 @@ export function AeGenerativeAnswer({
           threadId={threadId}
           hasAnswerFirstSummary={hasSummary}
         />
-      ))}
+      ]))}
 
       {/* The construction record supports inspection without competing with the answer.
           It stays complete and reachable, but ordinary users do not need to read it first. */}

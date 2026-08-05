@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { AeOwnerStatusEmptyState } from '@/components/ae/status/AeOwnerStatusEmptyState'
@@ -90,7 +90,7 @@ function OwnerStatusRoute() {
             <AeStatusCard readback={readback} />
             <OwnerSearchGapCard readback={searchGaps} />
             <div className="flex flex-wrap gap-3">
-              <Button asChild variant="default"><a href="/owner/offerings">Manage Offerings</a></Button>
+              <Button asChild variant="default"><Link to="/owner/offerings">Manage Offerings</Link></Button>
             </div>
             <AeCapabilityList catalog={readback.catalog} />
           </>

@@ -8,28 +8,9 @@ import {
   readCurrentOwnerInboxServer,
   type OwnerInboxServerResult,
 } from '@/modules/inquiries/inquiry.functions'
-import {
-  createEmptyInquirySourceState,
-  listOwnerInbox,
-  type InquirySourceState,
-  type OwnerInboxReadback,
-} from '@/modules/inquiries/public'
+import { readOwnerInquiriesRouteReadback, type OwnerInquiriesRouteReadback } from '@/modules/inquiries/owner-inquiry-route'
+import type { OwnerInboxReadback } from '@/modules/inquiries/public'
 
-export type OwnerInquiriesRouteInput = {
-  state?: InquirySourceState
-  ownerId?: OwnerInboxReadback['ownerId']
-}
-
-export type OwnerInquiriesRouteReadback = {
-  inbox: OwnerInboxReadback
-  error?: {
-    code: string
-    reason: string
-  }
-}
-
-const defaultOwnerId = 'owner:inquiries-route' as OwnerInboxReadback['ownerId']
-const emptyInquiryState = createEmptyInquirySourceState()
 const readOwnerInboxServer = readCurrentOwnerInboxServer
 
 export const Route = createFileRoute('/_operator/owner/inquiries')({
@@ -44,14 +25,6 @@ export const Route = createFileRoute('/_operator/owner/inquiries')({
   }),
   component: OwnerInquiriesRoute,
 })
-
-export function readOwnerInquiriesRouteReadback(input: OwnerInquiriesRouteInput = {}): OwnerInquiriesRouteReadback {
-  const ownerId = input.ownerId ?? defaultOwnerId
-
-  return {
-    inbox: listOwnerInbox(input.state ?? emptyInquiryState, { authority: { ownerId } }),
-  }
-}
 
 function ownerInboxServerToRouteReadback(result: OwnerInboxServerResult): OwnerInquiriesRouteReadback {
   if (result.kind === 'ok') {

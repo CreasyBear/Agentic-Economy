@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Outlet, Link, createFileRoute, useLocation } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
   EyeOffIcon,
@@ -140,7 +140,7 @@ function PrivacyRoute() {
               Send the page slug and what should change.
             </p>
           </div>
-          <Button asChild variant="secondary"><a href="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></a></Button>
+          <Button asChild variant="secondary"><Link to="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
     </AePublicShell>

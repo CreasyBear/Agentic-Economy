@@ -1,4 +1,3 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ChargeAuthorizationResult,
   EntryType,
@@ -167,15 +166,6 @@ export function validateChargeAccounts(input: Readonly<{
   ) return refusalResult('billing_identity_mismatch', false)
   if (operator.currency !== input.currency || provider.currency !== input.currency || rake.currency !== input.currency) return refusalResult('currency_mismatch', false)
   return undefined
-}
-
-export function buildChargeIdempotencyKey(input: Readonly<{ principalId: string; operationKey: string; attemptRef: string; effectGeneration: number }>): string {
-  return canonicalDigest({
-    principalId: input.principalId,
-    operationKey: input.operationKey,
-    attemptRef: input.attemptRef,
-    effectGeneration: input.effectGeneration,
-  })
 }
 
 export function beginIdempotentTransaction(input: Readonly<{ state: LedgerState; transaction: BeginTransactionInput }>): LedgerOperationResult<Readonly<{ kind: 'new' } | { kind: 'replay'; transaction: MoneyTransaction } | { kind: 'refused'; refusal: MoneyRefusal }>> {

@@ -52,11 +52,11 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
     case 'resolved':
       return [
         `${resolution.provider.name} publishes an inquiry path for owner review.`,
-        'AE can route you to that form. The business confirms timing, quote, availability, and the work.',
+        'AE can route you to that form. The business reviews the request and decides whether to accept it; timing, quote, and availability are not confirmed yet.',
       ].join(' ')
     case 'provider_unavailable':
       return [
-        `${resolution.provider.name} can still be reviewed from its listed page.`,
+        `The published page for ${resolution.provider.name} remains available for review.`,
         'This listing does not publish an AE inquiry form yet.',
         'Use the published details and confirm timing, quote, and availability with the business.',
       ].join(' ')
@@ -64,7 +64,7 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
       return [
         'AE can route you to a qualified inquiry form when a listed business publishes one.',
         'Name the business you want to contact, or use Open inquiry form from the listed businesses in this answer.',
-        'The business confirms timing, quote, and availability.',
+        'A submitted inquiry goes to the business for review; timing, quote, and availability are not confirmed yet.',
       ].join(' ')
     case 'no_provider':
       return [

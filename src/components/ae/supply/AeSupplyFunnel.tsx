@@ -10,11 +10,9 @@ import type { PricingConfig } from '@/modules/money/public'
 import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import type { SupplyFunnelDraft, SupplyFunnelRefusal, SupplyFunnelStep, SupplyFunnelStepCompletion, SupplyFunnelStepState } from '@/modules/capability-supply/supply-funnel.functions'
 import { defaultSupplyPricingConfig } from '@/modules/capability-supply/public'
-import { isRecord } from '@/modules/common/is-record'
 import { AeSupplyEndpointConfigStep, type SupplyEndpointConfigValue } from './AeSupplyEndpointConfigStep'
+import { emptySupplyFunnelDraft, readSupplyFunnelDraft, writeSupplyFunnelDraft } from './AeSupplyFunnel.exports'
 
-export const OWNER_SUPPLY_DRAFT_STORAGE_KEY = 'ae.supplyFunnelDraft.v1'
-const SUPPLY_DRAFT_MAX_BYTES = 100_000
 const steps: readonly SupplyFunnelStep[] = ['describe', 'endpoint', 'readiness', 'pricing', 'test', 'publish']
 const stepLabels: Readonly<Record<SupplyFunnelStep, string>> = {
   describe: 'Describe your service',
@@ -40,33 +38,6 @@ export type SupplyFunnelCallbacks = Readonly<{
   runTest: (value: Readonly<Record<string, unknown>>) => Promise<SupplyFunnelStepCompletion>
   publish: (value: Readonly<Record<string, unknown>>) => Promise<SupplyFunnelStepCompletion>
 }>
-
-export function emptySupplyFunnelDraft(businessId: string, offeringRef?: string): SupplyFunnelDraft {
-  const states: Record<SupplyFunnelStep, SupplyFunnelStepState> = {
-    describe: 'not_started', endpoint: 'not_started', readiness: 'not_started', pricing: 'not_started', test: 'not_started', publish: 'not_started',
-  }
-  return { version: 'supply-funnel:v1', businessId, ...(offeringRef === undefined ? {} : { offeringRef }), completedSteps: [], states }
-}
-
-export function readSupplyFunnelDraft(): SupplyFunnelDraft | undefined {
-  if (typeof window === 'undefined') return undefined
-  const raw = window.sessionStorage.getItem(OWNER_SUPPLY_DRAFT_STORAGE_KEY)
-  if (raw === null || new TextEncoder().encode(raw).byteLength > SUPPLY_DRAFT_MAX_BYTES) return undefined
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!isDraft(parsed)) { window.sessionStorage.removeItem(OWNER_SUPPLY_DRAFT_STORAGE_KEY); return undefined }
-    return parsed
-  } catch {
-    window.sessionStorage.removeItem(OWNER_SUPPLY_DRAFT_STORAGE_KEY)
-    return undefined
-  }
-}
-
-export function writeSupplyFunnelDraft(draft: SupplyFunnelDraft): void {
-  if (typeof window === 'undefined') return
-  const encoded = JSON.stringify(draft)
-  if (new TextEncoder().encode(encoded).byteLength <= SUPPLY_DRAFT_MAX_BYTES) window.sessionStorage.setItem(OWNER_SUPPLY_DRAFT_STORAGE_KEY, encoded)
-}
 
 export function AeSupplyFunnel({
   businessId,
@@ -228,13 +199,7 @@ function PricingStep({ config, onChange, onComplete }: Readonly<{ config: Pricin
     </Card>
   )
 }
-function isDraft(value: unknown): value is SupplyFunnelDraft {
-  if (!isRecord(value)) return false
-  return value.version === 'supply-funnel:v1' && typeof value.businessId === 'string' && Array.isArray(value.completedSteps) && typeof value.states === 'object' && value.states !== null
-}
-
-
-export function refusalMessage(refusal: SupplyFunnelRefusal): string {
+function refusalMessage(refusal: SupplyFunnelRefusal): string {
   switch (refusal) {
     case 'invalid_offering':
       return 'Your service details need attention. Update the description, then try again.'

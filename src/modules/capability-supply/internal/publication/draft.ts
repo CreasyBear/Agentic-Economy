@@ -12,7 +12,7 @@ import {
   type CanonicalCapabilityPublicationDraft,
 } from '@/modules/capability-supply/public'
 
-import { transportAdmissionInput } from '../binding'
+import { transportAdmissionInput } from '../binding/registration'
 import { decodeConvexPublicationSource, isDirectPublicationSource } from './source'
 
 export type PreparedPublicationDraft = Readonly<{

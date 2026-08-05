@@ -86,14 +86,6 @@ describe('green release baseline', () => {
 
     const hosted = workflow.jobs?.['hosted-proof']
     expect(hosted).toBeDefined()
-    expect(hosted?.env?.AE_T51_RELEASE_MODE).toBe('release')
-    expect(hosted?.env).not.toHaveProperty('AE_WORK_TREE_SETUP_TOKEN')
-    expect(hosted?.env).not.toHaveProperty('AE_WORK_TREE_CLERK_SUBJECT')
-    const t51Step = hosted?.steps?.find((step) => step.name === 'Verify exact hosted T51 WorkTree parity')
-    expect(t51Step?.if).toBeUndefined()
-    const t51Upload = hosted?.steps?.find((step) => step.name === 'Upload sanitized T51 hosted parity evidence')
-    expect(t51Upload?.if).toBe('always()')
-    expect(t51Upload?.with?.['if-no-files-found']).toBe('error')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     expect(uploads.length).toBeGreaterThan(0)

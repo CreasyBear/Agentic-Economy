@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { readAgentAccessMoneyReadback } from '@/routes/_operator/agent-access'
+import { readAgentAccessMoneyReadback } from '@/modules/customer-request/agent-access-console'
 import type { CustomerRequestAgentKeyInventoryItem } from '@/modules/customer-request/agent-access'
 import {
   accountRefForOperator,

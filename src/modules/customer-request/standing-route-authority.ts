@@ -134,8 +134,9 @@ export function evaluateStandingRouteAuthority(input: Readonly<{
   if (route.steps.some(({ contractRef }) => !allowedContracts.has(contractKey(contractRef)))) {
     return { kind: 'refused', reason: 'capability_not_allowed' }
   }
+  const allowedEffectClasses = new Set(policy.allowedEffectClasses)
   if (route.steps.some(({ effects }) => effects.some(({ class: effectClass }) => (
-    effectClass !== 'data_release' || !policy.allowedEffectClasses.includes(effectClass)
+    effectClass !== 'data_release' || !allowedEffectClasses.has(effectClass)
   )))) {
     return { kind: 'refused', reason: 'consequential_effect_requires_confirmation' }
   }

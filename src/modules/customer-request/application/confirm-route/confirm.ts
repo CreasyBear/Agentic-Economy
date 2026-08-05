@@ -1,6 +1,6 @@
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 
-import { projectConfirmedRoute } from '../route-plan-projection'
+import { projectConfirmedRoute } from '../route-plan-projection/project-aggregate'
 import { resolveSelectableCurrentRoute } from '../standing-route/select'
 import type {
   ConfirmRouteInput,

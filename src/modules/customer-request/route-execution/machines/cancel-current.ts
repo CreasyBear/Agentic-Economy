@@ -8,7 +8,7 @@ import {
   cancelPriorCommandConflicts,
   cancelRunHeadIntegrityValid,
   cancelRunNotFound,
-} from '../journal'
+} from '../journal/decisions'
 
 import type { CancelMutationPorts } from './cancel-ports'
 import type { CancelCommand, CancelResult } from './types'

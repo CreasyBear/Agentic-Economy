@@ -1,7 +1,7 @@
 import type { AnswerSource } from '../answer-synthesizer'
 
 export function buildBoundaryOneLine(): string {
-  return 'Agentic Economy reads and compares published listings. The business confirms what happens next.'
+  return 'Agentic Economy compares published listings, but it cannot confirm a booking or the work.'
 }
 
 export function buildBoundarySummary(providers: readonly AnswerSource[]): string {

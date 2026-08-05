@@ -165,29 +165,6 @@ const exaContentsOutputSchema = {
   additionalProperties: false,
 } as const
 
-export const frankfurterInputSchema = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  type: 'object',
-  properties: {
-    base: {
-      type: 'string',
-      pattern: '^[A-Z]{3}$',
-      minLength: 3,
-      maxLength: 3,
-      description: 'The three-letter ISO 4217 base currency code.',
-    },
-    quote: {
-      type: 'string',
-      pattern: '^[A-Z]{3}$',
-      minLength: 3,
-      maxLength: 3,
-      description: 'The three-letter ISO 4217 quote currency code.',
-    },
-  },
-  required: ['base', 'quote'],
-  additionalProperties: false,
-} as const
-
 export const frankfurterOutputSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'array',

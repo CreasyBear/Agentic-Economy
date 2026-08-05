@@ -35,9 +35,15 @@ function AeObservabilityErrorBoundaryClient({ children }: { children: ReactNode 
   const [Boundary, setBoundary] = useState<typeof SentryErrorBoundary | null>(null)
 
   useEffect(() => {
-    void import('@/lib/observability/sentry.client').then(({ Sentry }) => {
-      setBoundary(() => Sentry.ErrorBoundary)
-    })
+    void import('@/lib/observability/sentry.client')
+      .then(({ Sentry }) => {
+        setBoundary(() => Sentry.ErrorBoundary)
+      })
+      .catch(() => {
+        // Fall back to the raw children if Sentry fails to load; the client
+        // boundary must never leave an unhandled rejection or a stuck null
+        // state when observability is unavailable.
+      })
   }, [])
 
   if (Boundary === null) {

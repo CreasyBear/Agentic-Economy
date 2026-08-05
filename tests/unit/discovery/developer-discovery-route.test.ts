@@ -15,7 +15,7 @@ import {
   renderDeveloperDiscoveryRouteCopy,
 } from '@/modules/discovery/developer-discovery'
 import type { DeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery'
-import { loadDeveloperDiscoveryRoute } from '@/routes/developers.discovery'
+import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route'
 
 const forbiddenClaims = [
   /\bapi keys?\b.{0,40}\b(?:live|available|enabled|ready|created|issued)\b/iu,

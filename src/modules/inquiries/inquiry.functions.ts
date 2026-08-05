@@ -41,26 +41,26 @@ import {
 } from './internal/submitted-receipt'
 
 
-export const publicInquirySubmitSchema = z.object({
+export const publicInquirySubmitSchema = z.strictObject({
   target: z.union([
-    z.object({
+    z.strictObject({
       businessId: z.string(),
       offeringRef: z.string(),
     }).strict(),
-    z.object({
+    z.strictObject({
       businessSlug: z.string(),
       offeringRef: z.string(),
     }).strict(),
   ]),
   body: z.string(),
-  contact: z.object({
+  contact: z.strictObject({
     name: z.string().optional(),
     email: z.string().optional(),
     phone: z.string().optional(),
   }).strict(),
   expectedDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
   operationKey: z.string().trim().min(16).max(240).optional(),
-  inquiryOrigin: z.object({
+  inquiryOrigin: z.strictObject({
     kind: z.literal('answer_thread'),
     threadId: z.string().trim().min(1).max(200),
   }).strict().optional(),
@@ -75,7 +75,7 @@ const customerRecordSchema = z.object({
   accessKey: z.string(),
 })
 
-export const ownerTargetAdmissionSchema = z.object({
+export const ownerTargetAdmissionSchema = z.strictObject({
   businessId: z.string().trim().min(1),
   offeringRef: z.string().trim().min(1),
 }).strict()

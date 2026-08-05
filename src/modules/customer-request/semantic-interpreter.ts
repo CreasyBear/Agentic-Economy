@@ -836,7 +836,7 @@ export function deriveCustomerMaximumResponseTimeCriterion(customerJob: string):
   })
 }
 
-export function descriptorMatchesModel(
+function descriptorMatchesModel(
   descriptor: ServerCapabilityDescriptor,
   input: Readonly<{ contractRef: CapabilityContractRef; selectionKey: CapabilitySelectionKey }>,
 ): boolean {

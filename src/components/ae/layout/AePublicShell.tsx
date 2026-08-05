@@ -66,7 +66,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
       >
         Skip to content
       </a>
-      <header role="banner" className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card">
         <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 md:px-6">
           <PublicBrandLink />
           <div className="ml-auto flex items-center gap-1 sm:gap-2">

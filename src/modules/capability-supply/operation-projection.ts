@@ -212,10 +212,14 @@ export async function searchCapabilityOperations(port: CapabilityOperationSource
   if (source.operations.length > MAX_SOURCE) return searchUnavailable('source_capacity_exceeded')
   const cursor = decodeCursor(normalized.cursor, normalized.query, normalized.filters, source.snapshotKey)
   if (normalized.cursor !== undefined && cursor === undefined) return searchUnavailable('query_invalid')
-  const matches = source.operations.map((record) => ({
-    operation: projectCapabilityOperation(record, now),
-    searchTerms: record.searchTerms,
-  })).filter(({ operation, searchTerms }) => matchesFilters(operation, searchTerms, normalized)).sort((a, b) => score(b.operation, b.searchTerms, normalized.query) - score(a.operation, a.searchTerms, normalized.query) || a.operation.operationRef.localeCompare(b.operation.operationRef)).map(({ operation }) => operation)
+  const projectedMatches: Array<{ operation: PublicOperationDescriptor; searchTerms: readonly string[] }> = []
+  for (const record of source.operations) {
+    const operation = projectCapabilityOperation(record, now)
+    if (matchesFilters(operation, record.searchTerms, normalized)) projectedMatches.push({ operation, searchTerms: record.searchTerms })
+  }
+  const matches = projectedMatches
+    .sort((a, b) => score(b.operation, b.searchTerms, normalized.query) - score(a.operation, a.searchTerms, normalized.query) || a.operation.operationRef.localeCompare(b.operation.operationRef))
+    .map(({ operation }) => operation)
   const start = cursor?.lastOperationRef === undefined ? 0 : Math.max(0, matches.findIndex((item) => item.operationRef === cursor.lastOperationRef) + 1)
   const items = matches.slice(start, start + normalized.limit)
   const lastItem = items.at(-1)

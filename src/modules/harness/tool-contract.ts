@@ -28,6 +28,7 @@ export const AnswerModelToolIds = [
   'registry.detail',
   'sandbox.checkup_quote',
   'web.discover',
+  'registry.operations.search',
 ] as const
 
 export type HarnessApprovalMode =

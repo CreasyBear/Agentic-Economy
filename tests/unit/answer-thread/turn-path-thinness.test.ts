@@ -53,7 +53,7 @@ describe('answer-thread turn-path thinness', () => {
   })
 
   it('imports TurnPath adapters from ./turns', () => {
-    expect(orchestratorSource).toContain("from './turns'")
+    expect(orchestratorSource).toContain("from './turns/")
     for (const symbol of turnPathExports) {
       expect(orchestratorSource).toContain(symbol)
     }
@@ -80,7 +80,7 @@ describe('answer-thread turn-path thinness', () => {
     expect(handoff).toContain('buildInquiryHandoffNextStep')
     expect(handoff).not.toMatch(/customer-request|RoutePlan|mandate|approveRoute|compileRequest/i)
     expect(handoff).toContain('Qualified inquiry for owner review')
-    expect(handoff).toContain('The business confirms timing, quote, availability, and the work')
+    expect(handoff).toContain('The business decides whether to accept it; timing, quote, and availability are not confirmed yet')
   })
 })
 

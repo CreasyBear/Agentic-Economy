@@ -350,47 +350,42 @@ function publicPageFromInquirySourceState(
     return { kind: 'not_found', reason: 'not_public' }
   }
 
-  const offerings: PublicOfferingSupplyProjection[] = state.businessOfferings
-    .filter((offering) => offering.businessId === business.businessId && offering.status === 'published')
-    .flatMap((offering) => {
-      const revision = state.businessOfferingRevisions.find((candidate) => (
-        candidate.businessId === offering.businessId
-        && candidate.offeringRef === offering.offeringRef
-        && candidate.revision === offering.currentRevision
-      ))
-      if (revision === undefined) return []
-      const accessPaths = state.offeringAccessPaths
-        .filter((path) => (
-          path.businessId === offering.businessId
-          && path.offeringRef === offering.offeringRef
-          && path.offeringRevision === revision.revision
-          && path.offeringSourceHash === revision.sourceHash
-          && path.status === 'published'
-        ))
-        .map((path) => ({
-          accessPathRef: path.accessPathRef,
-          descriptor: path.descriptor,
-        }))
-      return [{
-        offering: {
-          offeringRef: revision.offeringRef,
-          revision: revision.revision,
-          name: revision.name,
-          category: revision.category,
-          summary: revision.summary,
-          ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
-          ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
-          ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
-          ...(revision.price === undefined ? {} : { price: revision.price }),
-        },
-        accessPaths,
-        support: {
-          integrated: false,
-          routeable: false,
-          reasons: [],
-        },
-      } satisfies PublicOfferingSupplyProjection]
-    })
+  const offerings: PublicOfferingSupplyProjection[] = []
+  for (const offering of state.businessOfferings) {
+    if (offering.businessId !== business.businessId || offering.status !== 'published') continue
+    const revision = state.businessOfferingRevisions.find((candidate) => (
+      candidate.businessId === offering.businessId
+      && candidate.offeringRef === offering.offeringRef
+      && candidate.revision === offering.currentRevision
+    ))
+    if (revision === undefined) continue
+    const accessPaths = state.offeringAccessPaths
+      .reduce<{ accessPathRef: (typeof state.offeringAccessPaths)[number]['accessPathRef']; descriptor: (typeof state.offeringAccessPaths)[number]['descriptor'] }[]>((acc, path) => {
+        if (path.businessId === offering.businessId && path.offeringRef === offering.offeringRef && path.offeringRevision === revision.revision && path.offeringSourceHash === revision.sourceHash && path.status === 'published') {
+          acc.push({ accessPathRef: path.accessPathRef, descriptor: path.descriptor })
+        }
+        return acc
+      }, [])
+    offerings.push({
+      offering: {
+        offeringRef: revision.offeringRef,
+        revision: revision.revision,
+        name: revision.name,
+        category: revision.category,
+        summary: revision.summary,
+        ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
+        ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
+        ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
+        ...(revision.price === undefined ? {} : { price: revision.price }),
+      },
+      accessPaths,
+      support: {
+        integrated: false,
+        routeable: false,
+        reasons: [],
+      },
+    } satisfies PublicOfferingSupplyProjection)
+  }
 
   if (offerings.length === 0) {
     return { kind: 'not_found', reason: 'not_public' }

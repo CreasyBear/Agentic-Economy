@@ -149,7 +149,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
     const attached = attachCompletedTaskReference(input(), ports())
     if (attached.kind !== 'attached') throw new Error('reference was not attached')
     const reconstructed = structuredClone(
-      JSON.parse(JSON.stringify(attached.aggregate)) as CustomerRequestV2Aggregate,
+      structuredClone(attached.aggregate) as CustomerRequestV2Aggregate,
     )
     expect(reconstructed.completedTaskReferences).toEqual([attached.reference])
     expect(aggregateIsInternallyConsistent(reconstructed, 0)).toBe(true)
@@ -206,7 +206,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
   it('leaves historical Request aggregates and their replay digest unchanged', () => {
     const historical = aggregate()
     const reconstructed = structuredClone(
-      JSON.parse(JSON.stringify(historical)) as CustomerRequestV2Aggregate,
+      structuredClone(historical) as CustomerRequestV2Aggregate,
     )
     expect(reconstructed).toEqual(historical)
     expect(reconstructed.completedTaskReferences).toBeUndefined()

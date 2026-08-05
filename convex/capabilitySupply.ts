@@ -868,11 +868,13 @@ export const recordCapabilityProbeResult = internalMutation({
     }),
   ),
   handler: async (ctx, args) => {
-    const publication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (index) => (
-        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
-      )).unique()
-    const result = await recordCapabilityProbeResultFromModule(capabilitySupplyGraphPorts(ctx.db), args)
+    const [publication, result] = await Promise.all([
+      ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (index) => (
+          index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
+        )).unique(),
+      recordCapabilityProbeResultFromModule(capabilitySupplyGraphPorts(ctx.db), args),
+    ])
     if (result.kind === 'observed' && publication !== null) {
       await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId as Id<'businesses'>, Date.now())
     }
@@ -1737,8 +1739,8 @@ export const readOwnerSupplyFunnel = query({
     // 'active'. Filtering on it returned nothing for every owner, so the funnel
     // home always read "No services yet" while /owner/offerings listed the same
     // offerings. Same selection rule as `loadOfferingSourceState` in catalog.ts.
-    const offeringRows = await db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(50)
-    const [revisions, accessPaths, publications, capabilityOfferings, events] = await Promise.all([
+    const [offeringRows, revisions, accessPaths, publications, capabilityOfferings, events] = await Promise.all([
+      db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(50),
       db.query('businessOfferingRevisions').withIndex('by_businessId_and_createdAt', (q) => q.eq('businessId', business._id)).take(100),
       // Access-path status is draft|published|withdrawn; 'active' never matched.
       db.query('offeringAccessPaths').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(100),
@@ -1969,9 +1971,11 @@ export const publishOwnerCapability = mutation({
     const endpointConfig = ownerSupplyValue(value.endpoint)
     const endpointUrl = typeof endpointConfig.endpointUrl === 'string' ? endpointConfig.endpointUrl : ''
     const pricing = ownerSupplyPricing(value)
-    const offeringRow = await ctx.db.query('businessOfferings')
-      .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef)).unique()
-    const revisionRow = await ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', args.offeringRef).eq('revision', args.revision)).unique()
+    const [offeringRow, revisionRow] = await Promise.all([
+      ctx.db.query('businessOfferings')
+        .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef)).unique(),
+      ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', args.offeringRef).eq('revision', args.revision)).unique(),
+    ])
     if (offeringRow === null || offeringRow.businessId !== args.businessId || revisionRow === null || revisionRow.businessId !== args.businessId || endpointUrl.length === 0 || pricing === undefined) {
       return { step: 'publish', state: 'refused', refusal: 'invalid_offering' }
     }

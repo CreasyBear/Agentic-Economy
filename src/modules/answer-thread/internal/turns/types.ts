@@ -147,14 +147,6 @@ export function reindexProviders(providers: readonly AnswerSource[]): AnswerSour
   }))
 }
 
-export function providerNameList(providers: readonly AnswerSource[]): string {
-  const names = providers.map((provider) => provider.name)
-  if (names.length <= 2) {
-    return names.join(' and ')
-  }
-  return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`
-}
-
 export function makeCopyId(): string {
   return createPrefixedRandomId(`turn-${Date.now().toString(36)}-`)
 }

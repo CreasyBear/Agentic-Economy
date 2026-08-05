@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useRef } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -35,7 +35,7 @@ function OwnerSupplyDetailRoute() {
   const source = result.source
   const offerings = result.offerings
   if (result.supply.kind !== 'available' || offerings.kind !== 'available' || source === undefined || source.revision === undefined) {
-    return <AeOperatorShell operatorRole="owner" title="Get your service ready" description="We could not load this service. Return to your services and try again." currentPath="/owner/supply"><div className="grid gap-3"><Alert><AlertTitle>Service unavailable</AlertTitle><AlertDescription>We could not load this service. Return to your services and try again.</AlertDescription></Alert><Button asChild variant="secondary" className="min-h-11 justify-self-start"><a href="/owner/supply">Return to your services</a></Button></div></AeOperatorShell>
+    return <AeOperatorShell operatorRole="owner" title="Get your service ready" description="We could not load this service. Return to your services and try again." currentPath="/owner/supply"><div className="grid gap-3"><Alert><AlertTitle>Service unavailable</AlertTitle><AlertDescription>We could not load this service. Return to your services and try again.</AlertDescription></Alert><Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/owner/supply">Return to your services</Link></Button></div></AeOperatorShell>
   }
   const initialOffering = toEditorValue(source)
   return (

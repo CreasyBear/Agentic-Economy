@@ -6,18 +6,18 @@ import {
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
 import type { CustomerRequestActionResult } from '../action-result'
-import { durableSubmissionShellView } from '../interpret-compile'
+import { durableSubmissionShellView } from '../interpret-compile/compile'
+import { projectStoredPreparation } from '../preparation-egress/project'
 import {
-  projectStoredPreparation,
   recoverUnresolvedEgress,
   resumePreparationEgress,
-} from '../preparation-egress'
+} from '../preparation-egress/resolve'
 import {
   projectConfirmedRoute,
   projectStoredAggregate,
-  projectStoredRouteRun,
-  storedGenerationRepresentsAggregate,
-} from '../route-plan-projection'
+} from '../route-plan-projection/project-aggregate'
+import { projectStoredRouteRun } from '../route-plan-projection/project-run'
+import { storedGenerationRepresentsAggregate } from '../route-plan-projection/generation'
 import type { CompareResumePorts, ResumeCustomerRequestInput } from './types'
 
 export async function resumeCustomerRequest(

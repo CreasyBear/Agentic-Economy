@@ -1,9 +1,9 @@
 /**
  * Shared human-copy guards for the answer gate and follow-up chip validation.
  *
- * These protect against fabrication and prompt injection. They deliberately do
- * not police confidence: an answer may state what a business can do without
- * appending a caveat, and no pattern here blocks a capability claim.
+ * These shared patterns protect against prompt injection and internal
+ * epistemic labels. Provider-assurance checks live in `answer-gate.ts`, where
+ * they can use the grounded provider names from the snapshot.
  */
 
 const EPISTEMIC_VOCABULARY_PATTERN = /\b(?:KNOWN|UNKNOWN|UNAVAILABLE|NEXT_STEP)\b/

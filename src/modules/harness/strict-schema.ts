@@ -20,6 +20,18 @@ function walkSchema(value: unknown, path: string): StrictSchemaViolation | null 
     return null
   }
 
+  // An object whose `additionalProperties` is itself a `$ref` (rather than
+  // false) is the SDK's sentinel for an arbitrary-JSON record: e.g. embedded
+  // JSON-Schema payloads (`z.any()` / `z.record(...)`) inside operation
+  // descriptors. Such fields are opaque by design and cannot declare
+  // additionalProperties:false. Do not require strictness, and do not descend
+  // into the $ref target (a shared primitive/any union), since that would flag
+  // every such payload. A genuine strict business object always sets
+  // additionalProperties to false, so this carve-out cannot weaken it.
+  if (isRecord(value.additionalProperties) && typeof value.additionalProperties.$ref === 'string') {
+    return null
+  }
+
   const allowedTypes = readAllowedTypes(value.type)
   const enumValues = Array.isArray(value.enum) ? value.enum : undefined
   if (enumValues !== undefined && allowedTypes.length > 0) {

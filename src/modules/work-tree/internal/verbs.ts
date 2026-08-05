@@ -96,7 +96,6 @@ export const gardenerVerbSchema = z
     }
   })
 
-export const workTreeVerbSchema = gardenerVerbSchema
 export type GardenerVerb = z.infer<typeof gardenerVerbSchema>
 export type ElaborateVerb = Extract<GardenerVerb, { kind: 'elaborate' }>
 export type StudyVerb = Extract<GardenerVerb, { kind: 'study' }>
@@ -151,7 +150,7 @@ export type GardenerApplyResult = Readonly<{
   changedNodeIds: readonly string[]
 }>
 
-export const GardenerEventKindValues = ['created', 'claimed', 'elaborated', 'study_started', 'decision_proposed'] as const
+const GardenerEventKindValues = ['created', 'claimed', 'elaborated', 'study_started', 'decision_proposed'] as const
 export type GardenerEventKind = (typeof GardenerEventKindValues)[number]
 
 /**

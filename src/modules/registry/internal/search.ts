@@ -33,7 +33,6 @@ import {
 } from './offering-api-projection'
 const defaultLimit = 20
 const maxLimit = 50
-const fixturePublishedAt = Date.now()
 
 export type PublicBusinessCatalogQueryInput = {
   paginationOpts: {
@@ -90,12 +89,11 @@ export function searchPublicBusinessOfferingSupply(
     ? searchableCatalogs
     : searchableCatalogs.filter((item) => matchesSearchLocation(item, location))
   const matches = scopedCatalogs
-    .map((item, index) => ({
-      item,
-      index,
-      matches: tokens.filter((token) => matchesNativeSearch(item, token)).length,
-    }))
-    .filter(({ matches }) => matches === tokens.length)
+    .reduce<{ item: (typeof scopedCatalogs)[number]; index: number; matches: number }[]>((acc, item, index) => {
+      const matchCount = tokens.filter((token) => matchesNativeSearch(item, token)).length
+      if (matchCount === tokens.length) acc.push({ item, index, matches: matchCount })
+      return acc
+    }, [])
     .sort((left, right) => right.matches - left.matches || left.index - right.index)
     .map(({ item }) => item)
 
@@ -181,7 +179,7 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     indexStatus: [],
     suppressionRules: [],
   }
-  const publishedAt = fixturePublishedAt
+  const publishedAt = Date.now()
 
   const claim = claimBusiness(state, {
     actor: {
@@ -251,7 +249,7 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
       clerkUserId: `owner:${fixture.requestedSlug}`,
       displayName: `${fixture.businessName} Owner`,
     }
-    const publishedAt = fixturePublishedAt
+    const publishedAt = Date.now()
     const claim = claimBusiness(state, {
       actor,
       facts: {

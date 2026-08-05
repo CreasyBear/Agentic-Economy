@@ -201,7 +201,8 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
   assertDynamicPublishedSnapshotShape(input.snapshot)
   const rawSnapshot = input.snapshot
   const normalizedControls = rawSnapshot.controls.map(reconstructDurableControlRow)
-  const snapshot = normalizedControls.every((row, index) => row === rawSnapshot.controls[index])
+  const snapshot = normalizedControls.length === rawSnapshot.controls.length
+    && normalizedControls.every((row, index) => row === rawSnapshot.controls[index])
     ? rawSnapshot
     : { ...rawSnapshot, controls: normalizedControls }
   const {
@@ -638,6 +639,7 @@ function inputStateValid(
   if (work.length === 0) return history.length === 0
   const current = work[0]
   if (current === undefined) return false
+  const requiredFields = new Set(current.requiredFields)
   if (current.invocationVersion > currentVersion
     || canonicalDigest(current.owner)
       !== canonicalDigest(actor)
@@ -645,8 +647,8 @@ function inputStateValid(
       !== canonicalDigest(origin)
     || canonicalDigest(current.knownInput)
       !== canonicalDigest(source.input.input)
-    || current.missingFields.some((field) => !current.requiredFields.includes(field))
-    || current.askedFields.some((field) => !current.requiredFields.includes(field))) return false
+    || current.missingFields.some((field) => !requiredFields.has(field))
+    || current.askedFields.some((field) => !requiredFields.has(field))) return false
   let priorVersion = 0
   return history.every((row) => {
     const valid = row.invocationVersion > priorVersion

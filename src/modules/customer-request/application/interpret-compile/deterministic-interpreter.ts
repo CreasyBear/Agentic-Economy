@@ -73,16 +73,17 @@ function rankCapabilities(
     stem,
     supplied.filter((candidate) => candidate.stems.has(stem)).length,
   ]))
-  return supplied
-    .map((candidate) => ({
-      descriptor: candidate.descriptor,
-      score: requested.reduce((total, stem) => candidate.stems.has(stem)
-        ? total + Math.log(1 + supplied.length / (frequencies.get(stem) ?? supplied.length))
-        : total, 0),
-    }))
-    .filter((candidate) => candidate.score > 0)
-    .sort((left, right) => right.score - left.score
-      || left.descriptor.selectionKey.localeCompare(right.descriptor.selectionKey))
+  const ranked: RankedCapability[] = []
+  for (const candidate of supplied) {
+    const score = requested.reduce((total, stem) => candidate.stems.has(stem)
+      ? total + Math.log(1 + supplied.length / (frequencies.get(stem) ?? supplied.length))
+      : total, 0)
+    if (score > 0) {
+      ranked.push({ descriptor: candidate.descriptor, score })
+    }
+  }
+  return ranked.sort((left, right) => right.score - left.score
+    || left.descriptor.selectionKey.localeCompare(right.descriptor.selectionKey))
 }
 
 function requestedStems(customerJob: string): readonly string[] {

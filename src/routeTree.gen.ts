@@ -83,7 +83,6 @@ import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as SlugToolsToolIdRouteImport } from './routes/$slug.tools.$toolId'
-import { Route as ApiV1WorkTreeSetupRouteImport } from './routes/api.v1.work-tree.setup'
 import { Route as ApiV1WorkTreeOperationRouteImport } from './routes/api.v1.work-tree.$operation'
 import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
@@ -510,11 +509,6 @@ const SlugToolsToolIdRoute = SlugToolsToolIdRouteImport.update({
   path: '/tools/$toolId',
   getParentRoute: () => SlugRoute,
 } as any)
-const ApiV1WorkTreeSetupRoute = ApiV1WorkTreeSetupRouteImport.update({
-  id: '/api/v1/work-tree/setup',
-  path: '/api/v1/work-tree/setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiV1WorkTreeOperationRoute = ApiV1WorkTreeOperationRouteImport.update({
   id: '/api/v1/work-tree/$operation',
   path: '/api/v1/work-tree/$operation',
@@ -876,7 +870,6 @@ export interface FileRoutesByFullPath {
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
-  '/api/v1/work-tree/setup': typeof ApiV1WorkTreeSetupRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -995,7 +988,6 @@ export interface FileRoutesByTo {
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
-  '/api/v1/work-tree/setup': typeof ApiV1WorkTreeSetupRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -1116,7 +1108,6 @@ export interface FileRoutesById {
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
-  '/api/v1/work-tree/setup': typeof ApiV1WorkTreeSetupRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -1237,7 +1228,6 @@ export interface FileRouteTypes {
     | '/api/v1/requests/schema'
     | '/api/v1/services/search'
     | '/api/v1/work-tree/$operation'
-    | '/api/v1/work-tree/setup'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1356,7 +1346,6 @@ export interface FileRouteTypes {
     | '/api/v1/requests/schema'
     | '/api/v1/services/search'
     | '/api/v1/work-tree/$operation'
-    | '/api/v1/work-tree/setup'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1476,7 +1465,6 @@ export interface FileRouteTypes {
     | '/api/v1/requests/schema'
     | '/api/v1/services/search'
     | '/api/v1/work-tree/$operation'
-    | '/api/v1/work-tree/setup'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1552,7 +1540,6 @@ export interface RootRouteChildren {
   ApiSandboxProvidersRouteResolverRoute: typeof ApiSandboxProvidersRouteResolverRoute
   ApiSandboxProvidersWorkflowRoute: typeof ApiSandboxProvidersWorkflowRoute
   ApiV1WorkTreeOperationRoute: typeof ApiV1WorkTreeOperationRoute
-  ApiV1WorkTreeSetupRoute: typeof ApiV1WorkTreeSetupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -2074,13 +2061,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/$slug/tools/$toolId'
       preLoaderRoute: typeof SlugToolsToolIdRouteImport
       parentRoute: typeof SlugRoute
-    }
-    '/api/v1/work-tree/setup': {
-      id: '/api/v1/work-tree/setup'
-      path: '/api/v1/work-tree/setup'
-      fullPath: '/api/v1/work-tree/setup'
-      preLoaderRoute: typeof ApiV1WorkTreeSetupRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/v1/work-tree/$operation': {
       id: '/api/v1/work-tree/$operation'
@@ -2828,7 +2808,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSandboxProvidersRouteResolverRoute: ApiSandboxProvidersRouteResolverRoute,
   ApiSandboxProvidersWorkflowRoute: ApiSandboxProvidersWorkflowRoute,
   ApiV1WorkTreeOperationRoute: ApiV1WorkTreeOperationRoute,
-  ApiV1WorkTreeSetupRoute: ApiV1WorkTreeSetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -273,12 +273,14 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
     },
 
     cancelPriorUnreleasedRun: async (input) => {
-      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', input.attemptRef)).unique()
-      const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox')
-        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', input.attemptRef)).unique()
-      const run = await ctx.db.query('customerRequestRouteRuns')
-        .withIndex('by_runRef', (query) => query.eq('runRef', input.runRef)).unique()
+      const [attempt, outbox, run] = await Promise.all([
+        ctx.db.query('customerRequestRouteStepAttempts')
+          .withIndex('by_attemptRef', (query) => query.eq('attemptRef', input.attemptRef)).unique(),
+        ctx.db.query('customerRequestRouteDispatchOutbox')
+          .withIndex('by_attemptRef', (query) => query.eq('attemptRef', input.attemptRef)).unique(),
+        ctx.db.query('customerRequestRouteRuns')
+          .withIndex('by_runRef', (query) => query.eq('runRef', input.runRef)).unique(),
+      ])
       if (attempt === null || outbox === null || run === null) {
         throw new Error('customer_request_route_dispatch_integrity_failure')
       }

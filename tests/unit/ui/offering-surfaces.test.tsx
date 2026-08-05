@@ -11,9 +11,8 @@ import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import {
   AeOwnerOfferingEditor,
   AeOwnerOfferingsList,
-  emptyOwnerOfferingEditorValue,
-  toOwnerOfferingSummary,
 } from '@/components/ae/offerings/AeOwnerOfferings'
+import { emptyOwnerOfferingEditorValue, toOwnerOfferingSummary } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 

@@ -7,7 +7,6 @@ import { handleWorkTreeAgentAction, type WorkTreeAgentOperation } from '@/lib/se
 import {
   decideRootWorkTree,
   readRootWorkTree,
-  startRootWorkTree,
   type WorkTreeDecisionReceipt as RootWorkTreeDecisionReceipt,
   type WorkTreeInspectResult,
   type WorkTreeSourcePort,
@@ -85,7 +84,7 @@ const PRINCIPAL = Object.freeze({
 
 const createInput = {
   idempotencyKey: 'create:parity',
-  charterText: 'Keep the BAS development decision moving.',
+  charterText: 'Keep the project decision moving.',
   lineage: { kind: 'standalone' as const },
 }
 
@@ -171,21 +170,21 @@ describe('T47 registered WorkTree action and human readback parity', () => {
         expectedGeneration: 1,
         expectedRevision: 1,
         targetNodeId: 'root',
-        children: [{ kind: 'task', title: 'Draft the next BAS step' }],
+        children: [{ kind: 'task', title: 'Draft the next project step' }],
       },
       {
         kind: 'study',
         expectedGeneration: 1,
         expectedRevision: 1,
-        targetNodeId: 'decision:bas',
-        studyBrief: 'Check the current development evidence.',
+        targetNodeId: 'decision:project',
+        studyBrief: 'Check the current project evidence.',
         criteriaFromCharter: ['same project'],
       },
       {
         kind: 'propose_decision',
         expectedGeneration: 1,
         expectedRevision: 1,
-        targetNodeId: 'decision:bas',
+        targetNodeId: 'decision:project',
         options: [{ optionId: 'keep', label: 'Keep moving', summary: 'Continue the bounded plan.' }],
         recommendation: 'keep',
       },
@@ -199,18 +198,18 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     }
     expect(apply.schema.safeParse({
       projectId: 'project:parity', operationKey: 'op:invalid', correlationId: 'corr:parity',
-      verb: { kind: 'patch', targetNodeId: 'decision:bas' },
+      verb: { kind: 'patch', targetNodeId: 'decision:project' },
     }).success).toBe(false)
 
     for (const kind of ['lock', 'adjust', 'park'] as const) {
       expect(decide.schema.safeParse({
-        projectId: 'project:parity', nodeId: 'decision:bas', kind,
+        projectId: 'project:parity', nodeId: 'decision:project', kind,
         expectedGeneration: 1, expectedRevision: 1,
         proposalDigest: 'digest:decision', idempotencyKey: `decision:${kind}`,
       }).success).toBe(true)
     }
     expect(decide.schema.safeParse({
-      projectId: 'project:parity', nodeId: 'decision:bas', kind: 'release',
+      projectId: 'project:parity', nodeId: 'decision:project', kind: 'release',
       expectedGeneration: 1, expectedRevision: 1,
       proposalDigest: 'digest:decision', idempotencyKey: 'decision:invalid',
     }).success).toBe(false)
@@ -295,7 +294,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   it('lets an agent create and a person inspect the same project and revision', async () => {
     const started = await source.create(createInput)
     expect(started.kind).toBe('accepted')
-    if (started.kind === 'refused') throw new Error('fixture create refused')
+    if (started.kind === 'refused') throw new Error('initial create refused')
 
     const createResponse = await handleAgentWorkTree('create', createInput)
     expect(createResponse.status).toBe(200)
@@ -320,17 +319,17 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   })
 
   it('projects an agent proposal into the person inbox with the same decision identity', async () => {
-    const started = await startDevelopmentFixture()
+    const started = await createReadyProject()
     const before = await readRootWorkTree({ projectId: started.projectId, nowMs: 1_754_000_000_000 }, humanSourcePort())
     expect(before.kind).toBe('ready')
-    if (before.kind !== 'ready') throw new Error('fixture readback refused')
+    if (before.kind !== 'ready') throw new Error('project readback refused')
 
     const decisionNode = before.inbox.items[0]
     expect(decisionNode).toBeDefined()
-    if (decisionNode === undefined) throw new Error('fixture has no decision item')
+    if (decisionNode === undefined) throw new Error('project has no decision item')
 
     const inspected = await source.inspect({ projectId: started.projectId })
-    if (inspected.kind !== 'accepted') throw new Error('fixture source inspect refused')
+    if (inspected.kind !== 'accepted') throw new Error('project source inspect refused')
     const unsigned = {
       kind: 'propose_decision' as const,
       expectedGeneration: inspected.generation,
@@ -367,12 +366,12 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   })
 
   it('returns the human Lock receipt through agent inspect after the person decides', async () => {
-    const started = await startDevelopmentFixture()
+    const started = await createReadyProject()
     const humanBefore = await readRootWorkTree({ projectId: started.projectId, nowMs: 1_754_000_000_000 }, humanSourcePort())
     expect(humanBefore.kind).toBe('ready')
-    if (humanBefore.kind !== 'ready') throw new Error('fixture readback refused')
+    if (humanBefore.kind !== 'ready') throw new Error('project readback refused')
     const item = humanBefore.inbox.items[0]
-    if (item === undefined) throw new Error('fixture has no decision item')
+    if (item === undefined) throw new Error('project has no decision item')
 
     const humanDecision = await decideRootWorkTree({
       projectId: item.projectId,
@@ -396,11 +395,11 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   })
 
   it('replays identical idempotency keys byte-stably and refuses changed payloads without state change', async () => {
-    const started = await startDevelopmentFixture()
+    const started = await createReadyProject()
     const inspected = await source.inspect({ projectId: started.projectId })
-    if (inspected.kind !== 'accepted') throw new Error('fixture source inspect refused')
+    if (inspected.kind !== 'accepted') throw new Error('project source inspect refused')
     const node = inspected.tree.nodes.find((candidate) => candidate.kind === 'decision' && candidate.status === 'ready')
-    if (node === undefined) throw new Error('fixture has no ready decision')
+    if (node === undefined) throw new Error('project has no ready decision')
     const proposal = {
       projectId: started.projectId,
       nodeId: node.nodeId,
@@ -426,7 +425,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     expect(retryText).toBe(firstText)
 
     const afterReplay = await source.inspect({ projectId: started.projectId })
-    if (afterReplay.kind !== 'accepted') throw new Error('fixture source inspect refused')
+    if (afterReplay.kind !== 'accepted') throw new Error('project source inspect refused')
     const revisionAfterReplay = afterReplay.revision
     const changed = await handleAgentWorkTree('decide', {
       ...proposal,
@@ -439,11 +438,11 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   })
 
   it('refuses stale fences, missing scopes, and wrong principals before state changes', async () => {
-    const started = await startDevelopmentFixture()
+    const started = await createReadyProject()
     const before = await source.inspect({ projectId: started.projectId })
-    if (before.kind !== 'accepted') throw new Error('fixture source inspect refused')
+    if (before.kind !== 'accepted') throw new Error('project source inspect refused')
     const node = before.tree.nodes.find((candidate) => candidate.kind === 'decision' && candidate.status === 'ready')
-    if (node === undefined) throw new Error('fixture has no ready decision')
+    if (node === undefined) throw new Error('project has no ready decision')
     const proposal = {
       projectId: started.projectId,
       nodeId: node.nodeId,
@@ -487,10 +486,53 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   })
 })
 
-async function startDevelopmentFixture(): Promise<{ projectId: string }> {
-  const started = await startRootWorkTree({ outcome: 'BAS development loop' }, source)
-  if (started.kind !== 'started') throw new Error(`fixture start refused: ${started.reason}`)
-  return started
+async function createReadyProject(): Promise<{ projectId: string }> {
+  const created = await source.create(createInput)
+  if (created.kind === 'refused') throw new Error(`project create refused: ${created.reason}`)
+
+  const root = created.tree.nodes.find((candidate) => candidate.parentId === undefined)
+  if (root === undefined) throw new Error('project has no root node')
+  const rootVerb = signGardenerVerb({
+    kind: 'elaborate',
+    expectedGeneration: created.generation,
+    expectedRevision: created.revision,
+    targetNodeId: root.nodeId,
+    children: [{ kind: 'decision', title: 'Choose the next project step' }],
+  })
+  const rootApplied = await source.apply({
+    projectId: created.projectId,
+    operationKey: `${created.projectId}:elaborate-root`,
+    correlationId: `${created.projectId}:parity`,
+    verb: rootVerb,
+  })
+  if (rootApplied.kind === 'refused' || rootApplied.kind === 'unknown') {
+    throw new Error(`root elaboration refused: ${rootApplied.reason}`)
+  }
+
+  const decision = rootApplied.receipt.tree.nodes.find((candidate) => candidate.kind === 'decision')
+  if (decision === undefined) throw new Error('project has no decision node')
+  const decisionVerb = signGardenerVerb({
+    kind: 'elaborate',
+    expectedGeneration: rootApplied.receipt.tree.generation,
+    expectedRevision: rootApplied.receipt.tree.revision,
+    targetNodeId: decision.nodeId,
+    children: [{ kind: 'task', title: 'Complete the chosen project step' }],
+  })
+  const decisionApplied = await source.apply({
+    projectId: created.projectId,
+    operationKey: `${created.projectId}:elaborate-decision`,
+    correlationId: `${created.projectId}:parity`,
+    verb: decisionVerb,
+  })
+  if (decisionApplied.kind === 'refused' || decisionApplied.kind === 'unknown') {
+    throw new Error(`decision elaboration refused: ${decisionApplied.reason}`)
+  }
+  return { projectId: created.projectId }
+}
+
+function signGardenerVerb(unsigned: UnsignedGardenerVerb): GardenerVerb {
+  const parsed = gardenerVerbSchema.parse({ ...unsigned, proposalDigest: 'unsigned' })
+  return { ...parsed, proposalDigest: gardenerVerbDigest(parsed) }
 }
 
 function humanSourcePort(): WorkTreeSourcePort {

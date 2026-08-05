@@ -83,4 +83,46 @@ describe('location intent', () => {
       placeQuery: 'Parramatta, Australia',
     })
   })
+
+  it.each([
+    'plumber in Parramatta',
+    'plumber near Parramatta',
+    'plumber around Parramatta',
+    'plumber at Parramatta',
+  ])('preserves explicit location phrases: %s', (query) => {
+    expect(parseLocationIntent(query)).toEqual({
+      label: 'Parramatta',
+      placeQuery: 'Parramatta, Australia',
+    })
+  })
+
+  it('extracts service-area wording before trailing urgency language', () => {
+    expect(parseLocationIntent('Burst pipe plumber serving Parramatta immediately')).toEqual({
+      label: 'Parramatta',
+      placeQuery: 'Parramatta, Australia',
+    })
+  })
+
+  it('stops explicit places before a follow-on instruction', () => {
+    expect(
+      parseLocationIntent('Compare plumbers near Parramatta and tell me what to confirm before booking'),
+    ).toEqual({
+      label: 'Parramatta',
+      placeQuery: 'Parramatta, Australia',
+    })
+  })
+
+  it('preserves postcode location intent', () => {
+    expect(parseLocationIntent('2150')).toEqual({
+      label: '2150',
+      placeQuery: 'Postcode 2150, Australia',
+    })
+  })
+
+  it.each([
+    'My BAS is overdue and my books are a mess',
+    'plumber Parramatta please',
+  ])('does not infer a location from a lowercase trailing word: %s', (query) => {
+    expect(parseLocationIntent(query)).toBeUndefined()
+  })
 })

@@ -204,7 +204,7 @@ function applyOfferingInquiryAdmission(
   admitted: ReadonlySet<string>,
 ): PublicBusinessCatalogApiV2Dto {
   const offerings = projectOfferingInquiryOfferings(business.slug, business.offerings, admitted)
-  if (offerings.every((offering, index) => offering === business.offerings[index])) return business
+  if (offerings.length === business.offerings.length && offerings.every((offering, index) => offering === business.offerings[index])) return business
   return {
     ...business,
     offerings,

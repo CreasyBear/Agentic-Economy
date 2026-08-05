@@ -3,7 +3,7 @@ import type {
   CustomerReportedRouteExclusion,
 } from '@/modules/customer-request/compiler'
 import { projectNeedsAttention, projectNoCurrentBusiness } from '@/modules/customer-request/customer-projection'
-import type { CustomerRequestAmendment, CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
+import type { CustomerRequestAmendment, CustomerRequestSemanticProposal, ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 
 import { recordCapabilityDepthObservation, type CapabilityLiquidityWritePort } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -21,6 +21,10 @@ import {
   interpreterFailureCode,
   type InterpreterEnvironment,
 } from './interpreter'
+import {
+  discoverAndFilterDescriptors,
+  type DiscoverCapabilities,
+} from './discover'
 import type { CompileCommitInput, RequestGraph, RequestGraphUnavailable } from './types'
 
 export type InterpretCompileCommitInput = Readonly<{
@@ -49,6 +53,8 @@ export type InterpretCompileCommitPorts = CompileCommitPorts & Readonly<{
     principalId: string
   }>) => Promise<CustomerRequestActionResult | undefined>
   loadRequestGraph: (networkId: string) => Promise<RequestGraph | RequestGraphUnavailable>
+  /** Inject a deterministic discovery read (defaults to the registry operation search). */
+  discoverCapabilities?: DiscoverCapabilities
   logInterpretationFailure?: (code: string) => void
   liquidityPort?: CapabilityLiquidityWritePort
 }>
@@ -80,6 +86,13 @@ export async function proposeThenCompile(
     amendment?: CustomerRequestAmendment
     priorFacts: CompileCommitInput['priorFacts']
     graph: RequestGraph
+    /**
+     * Discovery-narrowed descriptor pool the interpreter may select from. When omitted, the full
+     * `graph.descriptors` set is offered. `graph` itself is always kept whole (bindings/models/
+     * mappings/digest) because those are baked into the aggregate and re-derived over the full
+     * routeable set.
+     */
+    capabilities?: readonly ServerCapabilityDescriptor[]
     /** False only while the caller still intends to ask the interpreter again. */
     finalAttempt: boolean
     compileBase: Omit<
@@ -94,7 +107,7 @@ export async function proposeThenCompile(
     proposal = await interpreter.propose({
       customerJob: input.intent,
       ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
-      capabilities: input.graph.descriptors,
+      capabilities: input.capabilities ?? input.graph.descriptors,
       finalAttempt: input.finalAttempt,
     })
   } catch (error) {
@@ -166,6 +179,7 @@ export async function interpretCompileCommit(
       ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
       priorFacts,
       graph,
+      capabilities: await discoverAndFilterDescriptors(input.intent, graph, ports.discoverCapabilities),
       finalAttempt: attempt === 1,
       compileBase: {
         commandKey: input.commandKey,

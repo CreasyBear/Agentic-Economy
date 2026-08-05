@@ -19,14 +19,14 @@ const studyStartOutputSchema = z.strictObject({
   refusalCode: z.string().optional(), workTree: z.unknown().optional(), study: z.unknown().optional(),
 })
 const studyInspectInputSchema = z.strictObject({ studyId: z.string().min(1), ownerSessionId: z.string().min(1).optional() })
-const studyInspectOutputSchema = z.object({ kind: z.enum(['accepted', 'not_found', 'unknown']) }).passthrough()
+const studyInspectOutputSchema = z.looseObject({ kind: z.enum(['accepted', 'not_found', 'unknown']) }).passthrough()
 const studyCompleteInputSchema = z.strictObject({
   studyId: z.string().min(1), projectId: z.string().min(1), treeId: z.string().min(1).optional(), studyNodeId: z.string().min(1),
   targetDecisionNodeId: z.string().min(1), generation: z.number().int().min(1), treeRevision: z.number().int().min(1),
   expectedStudyRevision: z.number().int().min(1), operationKey: z.string().min(1), correlationId: z.string().min(1),
   charter: studyCharterSchema, requestedAt: z.number().int().nonnegative(),
 })
-const studyCompleteOutputSchema = z.object({ kind: z.enum(['accepted', 'replayed', 'refused', 'unknown']) }).passthrough()
+const studyCompleteOutputSchema = z.looseObject({ kind: z.enum(['accepted', 'replayed', 'refused', 'unknown']) }).passthrough()
 
 const startParameters: readonly ActionParameter[] = [
   { name: 'studyId', type: 'string', description: 'Stable Study identity for this WorkTree node.', required: true },

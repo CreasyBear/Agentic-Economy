@@ -4,16 +4,12 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import type { OwnerActivationState } from '@/modules/observability/public'
 import {
   ActivationStageValues,
-  ActorKindValues,
   AuditEventTypeValues,
   AuditTargetTypeValues,
   FunnelEventTypeValues,
-  OperationKeyStatusValues,
   OperatorControlKeyValues,
 } from './literals'
 
-export const OperationKeyStatusSchema = z.enum(OperationKeyStatusValues)
-export const ActorKindSchema = z.enum(ActorKindValues)
 export const AuditTargetTypeSchema = z.enum(AuditTargetTypeValues)
 export const AuditEventTypeSchema = z.enum(AuditEventTypeValues)
 export const OperatorControlKeySchema = z.enum(OperatorControlKeyValues)

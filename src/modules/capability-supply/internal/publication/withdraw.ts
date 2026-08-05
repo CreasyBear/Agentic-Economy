@@ -1,4 +1,4 @@
-import { contractRefFromRow } from '../offering'
+import { contractRefFromRow } from '../offering/registration'
 
 import type { PublicationCommandPorts, PublicationCommandRow } from './ports'
 

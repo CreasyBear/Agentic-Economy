@@ -2,13 +2,13 @@ import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'
 
-import type { CapabilityBindingRow } from '../binding'
+import type { CapabilityBindingRow } from '../binding/registration'
 import {
   contractRefFromRow,
-  offeringIntegrityIsValid,
   type CapabilityOfferingRow,
-} from '../offering'
-import type { RegistrationContext, SupplyCommandActor } from '../shared'
+} from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
+import type { RegistrationContext, SupplyCommandActor } from '../shared/command-envelope'
 import type { OperationBeginResult, OperationLedgerPorts } from './types'
 
 export function isTrustedQuarantineParent(

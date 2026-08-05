@@ -17,7 +17,7 @@ const requiredFactFields = [
   'parcel_length_mm', 'parcel_width_mm', 'parcel_height_mm', 'parcel_weight_grams', 'delivery_deadline',
 ] as const
 
-const addressSchema = z.object({
+const addressSchema = z.strictObject({
   name: z.string().trim().min(1).max(200),
   street1: z.string().trim().min(1).max(200),
   city: z.string().trim().min(1).max(200),
@@ -26,12 +26,12 @@ const addressSchema = z.object({
   countryCode: z.string().regex(/^[A-Z]{2}$/),
 }).strict()
 
-const quoteInputMaterialSchema = z.object({
+const quoteInputMaterialSchema = z.strictObject({
   schemaVersion: z.literal('ae-shipping-quote-input:v1'),
-  source: z.object({ requestId: z.string().min(1).max(200), requestRevision: z.number().int().positive() }).strict(),
+  source: z.strictObject({ requestId: z.string().min(1).max(200), requestRevision: z.number().int().positive() }).strict(),
   origin: addressSchema,
   destination: addressSchema,
-  parcel: z.object({
+  parcel: z.strictObject({
     lengthMillimetres: z.number().int().positive().max(1_000_000),
     widthMillimetres: z.number().int().positive().max(1_000_000),
     heightMillimetres: z.number().int().positive().max(1_000_000),

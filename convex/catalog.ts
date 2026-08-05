@@ -1128,18 +1128,20 @@ async function loadOfferingSourceState(
     createdAt: requiredCatalogNumber(row, 'createdAt'),
     updatedAt: requiredCatalogNumber(row, 'updatedAt'),
   }))
-  const revisionRows = await Promise.all(offerings.map((offering) => (
-    db.query('businessOfferingRevisions')
-      .withIndex('by_offeringRef_and_revision', (query) => (
-        query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
-      ))
-      .unique()
-  )))
-  const pathRows = await Promise.all(offerings.map((offering) => (
-    db.query('offeringAccessPaths')
-      .withIndex('by_offeringRef_and_status', (query) => query.eq('offeringRef', offering.offeringRef))
-      .take(MAX_ACCESS_PATHS_PER_OFFERING + 1)
-  )))
+  const [revisionRows, pathRows] = await Promise.all([
+    Promise.all(offerings.map((offering) => (
+      db.query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (query) => (
+          query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
+        ))
+        .unique()
+    ))),
+    Promise.all(offerings.map((offering) => (
+      db.query('offeringAccessPaths')
+        .withIndex('by_offeringRef_and_status', (query) => query.eq('offeringRef', offering.offeringRef))
+        .take(MAX_ACCESS_PATHS_PER_OFFERING + 1)
+    ))),
+  ])
   if (pathRows.some((rows) => rows.length > MAX_ACCESS_PATHS_PER_OFFERING)) {
     throw new Error('offering_access_path_capacity_exceeded')
   }
@@ -1217,23 +1219,20 @@ export async function persistOfferingSourceState(
     if (existing === null) await db.insert('businessOfferings', value)
     else await db.patch(existing._id, value)
   }
-  for (const revision of after.revisions.slice(before.revisions.length)) {
-    const value = {
-      offeringRef: revision.offeringRef,
-      businessId,
-      revision: revision.revision,
-      name: revision.name,
-      category: revision.category,
-      summary: revision.summary,
-      ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
-      ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
-      ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
-      ...(revision.price === undefined ? {} : { price: revision.price }),
-      sourceHash: revision.sourceHash,
-      createdAt: revision.createdAt,
-    }
-    await db.insert('businessOfferingRevisions', value)
-  }
+  await Promise.all(after.revisions.slice(before.revisions.length).map((revision) => db.insert('businessOfferingRevisions', {
+    offeringRef: revision.offeringRef,
+    businessId,
+    revision: revision.revision,
+    name: revision.name,
+    category: revision.category,
+    summary: revision.summary,
+    ...(revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: revision.serviceAreaSummary }),
+    ...(revision.availabilitySummary === undefined ? {} : { availabilitySummary: revision.availabilitySummary }),
+    ...(revision.pricingSummary === undefined ? {} : { pricingSummary: revision.pricingSummary }),
+    ...(revision.price === undefined ? {} : { price: revision.price }),
+    sourceHash: revision.sourceHash,
+    createdAt: revision.createdAt,
+  })))
   for (const item of after.accessPaths) {
     const existing = await db.query('offeringAccessPaths')
       .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', item.accessPathRef))
@@ -1253,20 +1252,18 @@ export async function persistOfferingSourceState(
     if (existing === null) await db.insert('offeringAccessPaths', value)
     else await db.patch(existing._id, value)
   }
-  for (const operation of after.operations.slice(before.operations.length)) {
-    await db.insert('operationKeys', {
-      scope: 'catalog_offering',
-      actorKind: 'owner',
-      actorRef: operation.actorRef,
-      operationName: operation.operationName,
-      key: operation.operationKey,
-      requestHash: operation.requestHash,
-      status: 'succeeded',
-      effectRefs: [operation.resultRef],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    })
-  }
+  await Promise.all(after.operations.slice(before.operations.length).map((operation) => db.insert('operationKeys', {
+    scope: 'catalog_offering',
+    actorKind: 'owner',
+    actorRef: operation.actorRef,
+    operationName: operation.operationName,
+    key: operation.operationKey,
+    requestHash: operation.requestHash,
+    status: 'succeeded',
+    effectRefs: [operation.resultRef],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  })))
   return { kind: 'ok' }
 }
 
@@ -1335,8 +1332,10 @@ export const getCurrentOwnerOfferingSupply = queryGeneric({
       .order('desc')
       .first()
     if (business === null) return { kind: 'not_found' as const }
-    const state = await loadOfferingSourceState(ctx.db, business._id)
-    const snapshot = await ctx.db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (query) => query.eq('businessId', business._id)).unique()
+    const [state, snapshot] = await Promise.all([
+      loadOfferingSourceState(ctx.db, business._id),
+      ctx.db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (query) => query.eq('businessId', business._id)).unique(),
+    ])
     const projection = snapshot === null
       ? { status: 'projection_pending' as const }
       : (() => {

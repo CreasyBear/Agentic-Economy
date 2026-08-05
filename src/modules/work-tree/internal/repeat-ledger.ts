@@ -9,7 +9,6 @@ const money = z.strictObject({
   amountMinor: z.number().int().nonnegative().safe(),
 })
 
-export const repeatMoneySchema = money
 export type RepeatMoney = z.infer<typeof money>
 
 export const workTreeRepeatReserveInputSchema = z.strictObject({

@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-export const HarnessEmissionSeverityValues = [
+const HarnessEmissionSeverityValues = [
   'info',
   'warning',
   'error',
@@ -9,7 +9,7 @@ export const HarnessEmissionSeverityValues = [
 
 export type HarnessEmissionSeverity = (typeof HarnessEmissionSeverityValues)[number]
 
-export const HarnessEmissionSurfaceValues = [
+const HarnessEmissionSurfaceValues = [
   'private',
   'admin',
   'public',

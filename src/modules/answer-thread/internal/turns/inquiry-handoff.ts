@@ -90,7 +90,7 @@ async function streamInquiryHandoffTurn(
     phase: 'route',
     status: 'complete',
     title: 'Checking safe-action boundary',
-    summary: 'AE can route the inquiry for owner review. The business confirms timing, quote, availability, and the work.',
+    summary: 'AE can route the inquiry for owner review. The business decides whether to accept it; timing, quote, and availability are not confirmed yet.',
     detailRows: [{ label: 'Allowed next step', value: 'Qualified inquiry for owner review' }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     startedAtMs: boundaryStartedAt,

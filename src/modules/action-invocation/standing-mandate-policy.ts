@@ -130,7 +130,8 @@ function scopeRefusal(
   if (!mandate.scope.providerRefs.includes(proposal.providerRef)) return 'mandate_provider_mismatch'
   if (!mandate.scope.recipientRefs.includes(proposal.recipientRef)) return 'mandate_recipient_mismatch'
   if (!mandate.scope.purposes.includes(proposal.purpose)) return 'mandate_purpose_mismatch'
-  if (proposal.dataFields.some((field) => !mandate.scope.allowedDataFields.includes(field))) {
+  const allowedDataFields = new Set(mandate.scope.allowedDataFields)
+  if (proposal.dataFields.some((field) => !allowedDataFields.has(field))) {
     return 'mandate_data_widening'
   }
   if (

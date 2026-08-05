@@ -11,8 +11,10 @@ export async function resolveCancellationAttempt(
   const now = ports.now()
   const cancellation = await ports.loadCancellationAttempt(args.cancellationRef)
   if (cancellation === null) return { kind: 'refused' }
-  const run = await ports.loadRunByRef(cancellation.runRef)
-  const attempt = await ports.loadAttemptByRef(cancellation.attemptRef)
+  const [run, attempt] = await Promise.all([
+    ports.loadRunByRef(cancellation.runRef),
+    ports.loadAttemptByRef(cancellation.attemptRef),
+  ])
   if (run === null || attempt === null || attempt.runRef !== run.runRef) {
     throw new Error('customer_request_route_cancellation_integrity_failure')
   }

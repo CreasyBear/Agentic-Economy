@@ -35,11 +35,6 @@ type OperatorShellChromeRegistration = {
 const OperatorShellChromeContext = createContext<OperatorShellChromeRegistration | null>(null)
 
 
-/** Owner routes render compact; admin/developer routes keep comfortable density. */
-export function useOperatorDensity(): OperatorDensity {
-  return use(OperatorDensityContext)
-}
-
 export type AeOperatorShellProps = {
   operatorRole: OperatorRole
   title: string
@@ -220,7 +215,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
             </a>
             {sidebar}
             <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
-              <header role="banner" className="border-b border-border bg-card">
+              <header className="border-b border-border bg-card">
                 {topNav}
               </header>
               <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="min-h-0">

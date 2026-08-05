@@ -4,6 +4,10 @@ import { stableUnique } from '@/modules/common/stable-unique'
 
 import { createConfiguredRequestInterpreter, type InterpreterEnvironment } from './interpreter'
 import { proposeThenCompile } from './interpret'
+import {
+  discoverAndFilterDescriptors,
+  type DiscoverCapabilities,
+} from './discover'
 import type { RequestGraph, RequestGraphUnavailable } from './types'
 
 const MAX_PREVIEW_STEPS = 32
@@ -49,6 +53,8 @@ export type PreviewCustomerRequestResult = Readonly<
 
 export type PreviewCustomerRequestPorts = Readonly<{
   loadRequestGraph: (network: string) => Promise<RequestGraph | RequestGraphUnavailable>
+  /** Inject a deterministic discovery read (defaults to the registry operation search). */
+  discoverCapabilities?: DiscoverCapabilities
 }>
 
 export async function previewCustomerRequest(
@@ -81,6 +87,7 @@ export async function previewCustomerRequest(
     ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
     priorFacts: [],
     graph,
+    capabilities: await discoverAndFilterDescriptors(customerJob, graph, ports.discoverCapabilities),
     finalAttempt: true,
     compileBase: {
       commandKey: `preview:${network}`,

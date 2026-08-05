@@ -4,13 +4,13 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 import type { CustomerRoute } from '../../workspace-types'
+import { FactBlock } from '../shared/fact'
 import {
-  FactBlock,
   effectLabel,
   readableLabel,
   reversibilityLabel,
   uncertaintyLabel,
-} from '../shared'
+} from '../shared/format'
 
 export function RouteDisclosure({ trigger, children, defaultIsOpen = true }: Readonly<{
   trigger: ReactNode
@@ -86,7 +86,7 @@ export function CancellationDetail({ route }: { route: CustomerRoute }) {
   </FactBlock>
 }
 
-export function UncertaintyDetail({ route, subject }: { route: CustomerRoute; subject: string }) {
+function UncertaintyDetail({ route, subject }: { route: CustomerRoute; subject: string }) {
   return <FactBlock label="What remains uncertain">
     <p className="text-muted-foreground">{route.uncertainty.length === 0
       ? `No uncertainty is declared for this ${subject}.`
@@ -97,7 +97,7 @@ export function UncertaintyDetail({ route, subject }: { route: CustomerRoute; su
   </FactBlock>
 }
 
-export function CommercialDetail({ route }: { route: CustomerRoute }) {
+function CommercialDetail({ route }: { route: CustomerRoute }) {
   const influence = route.comparison.commercialInfluence
   return <FactBlock label="Commercial relationships">
     <p className="text-muted-foreground">{influence.status === 'unknown'
@@ -108,7 +108,7 @@ export function CommercialDetail({ route }: { route: CustomerRoute }) {
   </FactBlock>
 }
 
-export function RecoveryDetail({ route }: { route: CustomerRoute }) {
+function RecoveryDetail({ route }: { route: CustomerRoute }) {
   return <FactBlock label="If something goes wrong">
     <ul className="grid gap-1 text-sm text-muted-foreground">
       {route.recovery.map((recovery) => <li key={recovery.step}>
@@ -123,7 +123,7 @@ export function RecoveryDetail({ route }: { route: CustomerRoute }) {
   </FactBlock>
 }
 
-export function EvidenceDetail({ route }: { route: CustomerRoute }) {
+function EvidenceDetail({ route }: { route: CustomerRoute }) {
   return <FactBlock label="Evidence expected">
     <p className="text-muted-foreground">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</p>
   </FactBlock>

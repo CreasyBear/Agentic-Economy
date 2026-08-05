@@ -5,13 +5,14 @@ import {
   capabilitySupplyEligibilityHash,
 } from '@/modules/capability-supply/public'
 
-import { bindingIntegrityIsValid, type CapabilityBindingRow } from '../binding'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import type { CapabilityBindingRow } from '../binding/registration'
 import {
   contractRefFromRow,
-  offeringIntegrityIsValid,
   type CapabilityContractRef,
   type CapabilityOfferingRow,
-} from '../offering'
+} from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
 import {
   desiredEligibility,
   validEligibilityInput,

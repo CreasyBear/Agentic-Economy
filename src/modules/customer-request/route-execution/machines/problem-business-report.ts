@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { decideBusinessProblemClaim } from '../problem-support'
+import { decideBusinessProblemClaim } from '../problem-support/commands'
 
 import type {
   BusinessProblemClaimArgs,

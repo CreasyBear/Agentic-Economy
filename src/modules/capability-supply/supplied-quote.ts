@@ -6,10 +6,8 @@ import type {
 } from '@/modules/action-invocation'
 import type { ActionContext } from '@/modules/common/action'
 
-import {
-  qualifySuppliedCandidate,
-  type CapabilityGraphPorts,
-} from './internal/graph'
+import { qualifySuppliedCandidate } from './internal/graph/qualify-candidate'
+import type { CapabilityGraphPorts } from './internal/graph/ports'
 import type {
   SuppliedCandidateQuoteInput,
   SuppliedCandidateQuoteResult,

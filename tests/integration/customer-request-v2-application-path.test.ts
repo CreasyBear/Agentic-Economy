@@ -1,16 +1,30 @@
 import { convexTest } from 'convex-test'
+import { Response as UndiciResponse } from 'undici'
+import { fetch as UndiciFetch } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// The kernel performs provider HTTP (readiness probes and egress transport)
+// through undici, not the global fetch the OPENROUTER model call is stubbed
+// with. Mock undici so the real curated provider bindings (frankfurter + exa)
+// and the preparation-variant bindings resolve deterministically instead of
+// racing the live network mid-test.
+const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
+vi.mock('undici', async (importOriginal) => ({
+  ...await importOriginal<typeof import('undici')>(),
+  fetch: providerFetch,
+}))
 
 import {
   defineCapabilityContract,
   openCapabilityDecisionModel,
+  type CapabilityContractDocument,
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
 import type { ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
-import { sandboxWorkflowCapabilityContractDocument } from '@/modules/sandbox-supply/workflow-cohorts'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
+import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
 import {
   registerCapabilityBindingCommand,
@@ -18,15 +32,13 @@ import {
   setCapabilitySupplyEligibility,
 } from '../../convex/capabilitySupply'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
+import { listRouteableCapabilitySupply } from '../../convex/capabilitySupply'
+import { registeredEvaluationBindingsFromRouteableSupply } from '../../convex/customerRequestEvaluationBindings'
 import { api, internal } from '../../convex/_generated/api'
-import {
-  admitSandboxV2Supply,
-  registerSandboxBusinesses,
-  registerSandboxV2SupplyRegistrations,
-  seedSandboxCapabilityPublication,
-} from '../../convex/devSeed'
-import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
+import { seedSandboxCapabilityPublication } from '../../convex/devSeed'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
+import { readCuratedContract } from '../helpers/curated-supply'
 const identity = { subject: 'customer-v2', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
 const operationRefsBySelectionKey = new Map<string, string>()
@@ -87,17 +99,37 @@ async function rememberModelOperationRef(
 }
 
 describe('current V2 Customer Request application path', () => {
-  beforeEach(() => vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer))
+  beforeEach(() => {
+    operationRefsBySelectionKey.clear()
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer)
+    // Keep the kernel's readiness probes and egress transport deterministic:
+    // the exa credential resolves, DNS is pinned, and every provider HTTP call
+    // returns a healthy probe response. The egress state machine itself is
+    // still driven through the real mutations below.
+    vi.stubEnv('EXA_API_KEY', 'test-exa-api-key')
+    vi.stubEnv('AE_SITE_URL', 'https://application-ae.example.test')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
+      kind: 'quoted',
+      expectedCost: { currency: 'USD', amountMinor: 0 },
+      maximumCost: { currency: 'USD', amountMinor: 0 },
+      expectedLatencyMs: 1,
+      dataFields: [],
+      disclosures: ['Readiness probe only.'],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+  })
 
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    providerFetch.mockReset()
     operationRefsBySelectionKey.clear()
   })
 
   it('preserves the unsupported Request data disposition through the durable application projection', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
+    await seedCuratedFrankfurterSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'unsupported_request',
       reason: 'requested_result_not_available',
@@ -148,15 +180,12 @@ describe('current V2 Customer Request application path', () => {
   })
   it('resumes a legacy embedded-route aggregate as resubmit-only needs attention', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: 'Legacy route recovery' }],
+        facts: frankfurterFacts(model),
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -372,15 +401,17 @@ describe('current V2 Customer Request application path', () => {
 
   it('uses eligible V2 supply, opaque interpretation and one durable exact aggregate', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
-    const generate = vi.fn().mockResolvedValue(modelResponse({
+    const model = await registerDualPreparationSupply(backend)
+    // Ensure both heterogeneous bindings are routeable and their readiness fully
+    // settled before submit/compare, so in-suite ordering does not leave a probe
+    // mid-flight (which otherwise surfaces as provide_information/unsupported).
+    await backend.finishInProgressScheduledFunctions()
+    await observeSandboxPublications(backend)
+    const generate = vi.fn().mockImplementation(async () => modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
+        facts: frankfurterFacts(model),
       }],
     }))
     vi.stubGlobal('fetch', generate)
@@ -389,7 +420,7 @@ describe('current V2 Customer Request application path', () => {
 
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:1', requestId: 'request:v2:application',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest EUR to USD rate',
       routing: { networkId: 'ae:public' },
     })
     expect(submitted).toMatchObject({
@@ -405,7 +436,7 @@ describe('current V2 Customer Request application path', () => {
     vi.stubEnv('OPENROUTER_API_KEY', '')
     const replayedSubmit = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:1', requestId: 'request:v2:application',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest EUR to USD rate',
       routing: { networkId: 'ae:public' },
     })
     expect(replayedSubmit).toEqual(submitted)
@@ -452,10 +483,12 @@ describe('current V2 Customer Request application path', () => {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
     })).resolves.toEqual(decision)
 
+    const firstInput = model.inputs[0]
+    if (firstInput === undefined) throw new Error('dual preparation model has no inputs')
     const modelRequest = JSON.stringify(generate.mock.calls[0])
     expect(modelRequest).not.toContain(model.contractRef.capabilityId)
     expect(modelRequest).not.toContain(model.contractRef.contractDigest)
-    expect(modelRequest).not.toContain(input.inputPointer)
+    expect(modelRequest).not.toContain(firstInput.inputPointer)
     const persisted = await backend.run(async (ctx) => ({
       heads: await ctx.db.query('customerRequestV2Heads').collect(),
       revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
@@ -479,7 +512,7 @@ describe('current V2 Customer Request application path', () => {
       { contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest },
     ])
     expect(activeRevision.aggregate.plan.completionRequirements).toMatchObject([
-      { contractRef: model.contractRef, evidenceId: 'option_summary', outputPointer: '/optionSummary', purpose: 'completion' },
+      { contractRef: model.contractRef, evidenceId: 'rate', outputPointer: '/0', purpose: 'completion' },
     ])
     expect(persisted.preparations).toHaveLength(1)
     expect(persisted.preparations[0]?.preparation).toMatchObject({
@@ -505,10 +538,12 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.operations).toEqual(expect.arrayContaining([
       expect.objectContaining({ state: 'not_released', authorityReference: persisted.reservations[0]?.reservationRef }),
     ]))
-    expect(persisted.allocations).toHaveLength(2)
+    // Two candidate bindings (Frankfurter keyless + Exa credential) each with two
+    // preparation inputs => 4 disclosure allocations, with 2 recipient operations.
+    expect(persisted.allocations).toHaveLength(4)
     expect(persisted.consumption).toMatchObject([{
-      maximumRecipients: 2, maximumOperations: 2, maximumExposures: 2,
-      consumedRecipients: 2, consumedOperations: 2, consumedExposures: 2,
+      maximumRecipients: 2, maximumOperations: 2, maximumExposures: 4,
+      consumedRecipients: 2, consumedOperations: 2, consumedExposures: 4,
     }])
     expect(JSON.stringify(persisted.allocations)).not.toContain('Compare labelled sandbox options')
     expect(persisted.approvals[0]).toMatchObject({
@@ -534,15 +569,12 @@ describe('current V2 Customer Request application path', () => {
 
   it('does not return an unchanged option after the customer reports that exact option cannot work', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await registerDualPreparationSupply(backend)
     const selected = {
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: 'Find an option before the hard deadline.' }],
+        facts: frankfurterFacts(model),
       }],
     }
     const replacementRequest = 'Find an option with a flexible deadline.'
@@ -552,7 +584,7 @@ describe('current V2 Customer Request application path', () => {
         ...selected,
         selections: [{
           selectionKey: model.selectionKey,
-          facts: [{ inputKey: input.key, value: replacementRequest }],
+          facts: frankfurterFacts(model),
         }],
       }))
       .mockRejectedValue(new Error('reported option feedback must not require model reinterpretation')))
@@ -703,36 +735,20 @@ describe('current V2 Customer Request application path', () => {
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
-  it('asks once for a registered procurement specification and continues the same Request after the answer', async () => {
+  it('asks once for a second required currency input and continues the same Request after the answer', async () => {
     const backend = await convexTestWithWorkers()
-    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
-    await observeSandboxPublications(backend, true)
-    const currentSupply = await backend.query(internal.capabilitySupply.listIntegrated, {
-      networkId: 'ae:public',
-      limit: 64,
-    })
-    if (currentSupply.kind !== 'available') throw new Error('procurement supply unavailable')
-    const procurementSupplies = currentSupply.supplies.filter(({ binding }) => (
-      binding.bindingId === 'binding:sandbox-procurement-brief:http-json:v3'
-    ))
-    expect(procurementSupplies).toHaveLength(1)
-    expect(procurementSupplies[0]?.publication).toMatchObject({
-      readinessValidUntil: expect.any(Number),
-    })
-    const document = sandboxWorkflowCapabilityContractDocument('procurement-brief')
-    const model = openCapabilityDecisionModel(defineCapabilityContract(document))
-    await rememberModelOperationRef(backend, model)
-    const requestInput = model.inputs.find(({ inputPointer }) => inputPointer === '/request')
-    const dimensionsInput = model.inputs.find(({ inputPointer }) => inputPointer === '/packageDimensions')
-    if (requestInput === undefined || dimensionsInput === undefined) {
-      throw new Error('procurement decision inputs missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
+    const baseInput = model.inputs.find(({ label }) => label === 'Base currency')
+    const quoteInput = model.inputs.find(({ label }) => label === 'Quote currency')
+    if (baseInput === undefined || quoteInput === undefined) {
+      throw new Error('frankfurter decision inputs missing')
     }
-    const customerJob = 'Source 500 food-safe custom cartons within 21 days under AUD 4,000.'
+    const customerJob = 'Convert EUR to one US Dollar rate.'
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: requestInput.key, value: customerJob }],
+        facts: [{ inputKey: baseInput.key, value: 'EUR' }],
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -752,24 +768,24 @@ describe('current V2 Customer Request application path', () => {
       state: 'needs_information',
       nextAction: 'provide_information',
       missingFields: [{
-        label: 'Internal carton dimensions',
+        label: 'Quote currency',
         explanation: 'This answer changes which options can be considered now.',
       }],
       clarification: {
         kind: 'contract_fact',
-        prompt: 'What internal length, width, and height must each carton fit?',
+        prompt: 'What else should AE know to find the right options?',
       },
     })
     if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
-      throw new Error(`procurement clarification missing: ${JSON.stringify(submitted)}`)
+      throw new Error(`frankfurter clarification missing: ${JSON.stringify(submitted)}`)
     }
 
     const answered = await customer.action(api.customerRequestApplication.provideFacts, {
       requestRef: submitted.requestRef,
       expectedRevision: submitted.revision,
-      idempotencyKey: 'fact:v2:procurement-dimensions',
+      idempotencyKey: 'fact:v2:quote-currency',
       requirementKey: submitted.clarification.requirementKey,
-      value: '300 × 200 × 150 mm internal',
+      value: 'USD',
     })
     expect(answered).toMatchObject({
       kind: 'request',
@@ -778,35 +794,32 @@ describe('current V2 Customer Request application path', () => {
       state: 'ready_to_compare',
       nextAction: 'prepare_options',
       criteria: expect.arrayContaining([expect.objectContaining({
-        label: 'Internal carton dimensions',
-        value: '300 × 200 × 150 mm internal',
+        label: 'Quote currency',
+        value: 'USD',
         basis: 'customer_provided',
       })]),
     })
-    if (answered.kind !== 'request') throw new Error(`procurement answer failed: ${answered.reason}`)
+    if (answered.kind !== 'request') throw new Error(`frankfurter answer failed: ${answered.reason}`)
     expect(answered.missingFields).toEqual([])
     expect(answered.clarification).toBeUndefined()
     expect(fetch).toHaveBeenCalledTimes(1)
     await expect(customer.action(api.customerRequestApplication.provideFacts, {
       requestRef: submitted.requestRef,
       expectedRevision: submitted.revision,
-      idempotencyKey: 'fact:v2:procurement-dimensions',
+      idempotencyKey: 'fact:v2:quote-currency',
       requirementKey: submitted.clarification.requirementKey,
-      value: '300 × 200 × 150 mm internal',
+      value: 'USD',
     })).resolves.toEqual(answered)
   })
 
   it('starts a customer-confirmed route from the normally seeded registered supply', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (requestInput === undefined) throw new Error('sandbox request input missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: requestInput.key, value: 'Compare labelled sandbox options' }],
+        facts: frankfurterFacts(model),
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -841,27 +854,35 @@ describe('current V2 Customer Request application path', () => {
 
   it('replays the exact submit view when registered preparation disclosure requires customer authority', async () => {
     const backend = await convexTestWithWorkers()
-    const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    const businessId = seeded.businessIdsBySlug['sandbox-option-one']
-    if (businessId === undefined) throw new Error('disclosure business missing')
+    await seedCuratedFrankfurterSupply(backend)
+    const business = await backend.run(async (ctx) => (
+      await ctx.db.query('businesses').withIndex('by_slug', (query) => (
+        query.eq('slug', 'frankfurter-ecb-rates')
+      )).unique()
+    ))
+    if (business === null) throw new Error('frankfurter disclosure business missing')
+    const disclosureDocument = await readCuratedContractDocument(backend, 'frankfurter.single-rate')
     const disclosureContract = {
-      ...SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
-      capabilityId: 'sandbox.disclosure.lookup',
-      dataUse: [{
-        ...SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.dataUse[0],
-        classification: 'personal' as const,
-      }],
+      ...disclosureDocument,
+      capabilityId: 'frankfurter.disclosure.rate',
+      dataUse: disclosureDocument.dataUse.map((use) => ({
+        ...use, classification: 'personal' as const, phase: 'preparation' as const,
+      })),
     }
     const model = openCapabilityDecisionModel(defineCapabilityContract(disclosureContract))
-    await registerDisclosureSupply(backend, disclosureContract, businessId)
+    await registerVariantSupply(
+      backend,
+      disclosureContract,
+      business._id,
+      'offering:frankfurter-disclosure:rate',
+      'binding:frankfurter-disclosure:http-json',
+    )
     await rememberModelOperationRef(backend, model)
-    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (requestInput === undefined) throw new Error('disclosure request input missing')
     const generate = vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: requestInput.key, value: 'Compare a private request safely' }],
+        facts: frankfurterFacts(model),
       }],
     }))
     vi.stubGlobal('fetch', generate)
@@ -878,8 +899,11 @@ describe('current V2 Customer Request application path', () => {
       kind: 'request', requestRef: 'request:v2:disclosure', revision: 1,
       state: 'needs_authorization', nextAction: 'review_disclosure',
       disclosureReview: {
-        purpose: 'Return sandbox result', maximumRecipients: 1,
-        categories: [{ label: 'What should the business look up?', classification: 'personal' }],
+        purpose: 'Retrieve ecb reference rate', maximumRecipients: 1,
+        categories: [
+          { label: 'Base currency', classification: 'personal' },
+          { label: 'Quote currency', classification: 'personal' },
+        ],
       },
     })
     vi.stubEnv('OPENROUTER_API_KEY', '')
@@ -891,15 +915,17 @@ describe('current V2 Customer Request application path', () => {
 
   it('discards an invalid model shape and preserves the literal customer request without restatement', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (requestInput === undefined) throw new Error('sandbox request input missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
+    const firstInput = model.inputs[0]
+    if (firstInput === undefined) throw new Error('model has no inputs')
     const generate = vi.fn().mockImplementation(async () => modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: requestInput.key, value: { criteria: 'cheapest labelled sandbox' } }],
+        facts: [
+          ...frankfurterFacts(model),
+          { inputKey: firstInput.key, value: { criteria: 'cheapest labelled sandbox' } },
+        ],
       }],
     }))
     vi.stubGlobal('fetch', generate)
@@ -915,6 +941,7 @@ describe('current V2 Customer Request application path', () => {
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:v2:retry', revision: 1,
       state: 'ready_to_compare', nextAction: 'prepare_options',
+      summary: 'Find the cheapest labelled sandbox option.',
     })
     expect(generate).toHaveBeenCalledTimes(1)
     const persisted = await backend.run(async (ctx) => (
@@ -923,21 +950,22 @@ describe('current V2 Customer Request application path', () => {
           query.eq('requestId', 'request:v2:retry').eq('requestRevision', 1)
         )).unique()
     ))
-    expect(persisted?.aggregate.snapshot.facts).toMatchObject([{
-      value: 'Find the cheapest labelled sandbox option.', source: { kind: 'customer' },
-    }])
+    expect(persisted?.aggregate.snapshot.facts).toEqual([
+      expect.objectContaining({ inputPointer: '/base', value: 'EUR' }),
+      expect.objectContaining({ inputPointer: '/quote', value: 'USD' }),
+    ])
+    const factsJson = JSON.stringify(persisted?.aggregate.snapshot.facts)
+    expect(factsJson).not.toContain('criteria')
+    expect(factsJson).not.toContain('cheapest labelled sandbox')
   })
 
   it('lets an external agent prepare but never promotes its API signature into customer authority', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await registerFrankfurterPreparationSupply(backend)
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(modelResponse({
         kind: 'capability_candidates',
-        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Find an option' }] }],
+        selections: [{ selectionKey: model.selectionKey, facts: frankfurterFacts(model) }],
       }))
       .mockResolvedValueOnce(modelResponse({
         kind: 'capability_candidates',
@@ -945,7 +973,7 @@ describe('current V2 Customer Request application path', () => {
           { source: 'prior', quote: 'Find an option' },
           { source: 'amendment', quote: 'Prefer the cheapest suitable option.' },
         ],
-        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Find an option' }] }],
+        selections: [{ selectionKey: model.selectionKey, facts: frankfurterFacts(model) }],
       })))
     const key = 'external-agent-service-key-that-is-long-enough'
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1074,15 +1102,12 @@ describe('current V2 Customer Request application path', () => {
 
   it('fails closed when registered supply drifts after disclosure review', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await registerFrankfurterPreparationSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: 'Find an option' }],
+        facts: frankfurterFacts(model),
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1145,15 +1170,12 @@ describe('current V2 Customer Request application path', () => {
 
   it('allocates before release, cannot reset cumulative limits, and never retries an interrupted dispatch', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await registerDualPreparationSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: 'Protected request' }],
+        facts: frankfurterFacts(model),
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1213,7 +1235,7 @@ describe('current V2 Customer Request application path', () => {
     }))
     expect(durable.operations).toHaveLength(2)
     expect(durable.consumption).toMatchObject([{
-      consumedRecipients: 2, consumedOperations: 2, consumedExposures: 2,
+      consumedRecipients: 2, consumedOperations: 2, consumedExposures: 4,
     }])
 
     const originalPurpose = await backend.run(async (ctx) => {
@@ -1317,7 +1339,7 @@ describe('current V2 Customer Request application path', () => {
       format: 'ae.provider-option:v1', operationRef: firstOperationRef, contractRef: model.contractRef,
       offeringId: lateOperation.offeringId, bindingId: lateOperation.bindingId,
       assertionRef: 'provider-assertion:late-release', assertedAt: lateNow, validUntil: lateNow + 60_000,
-      output: { optionSummary: 'Late provider response' },
+      output: [{ date: '2026-01-02', base: 'EUR', quote: 'USD', rate: 1.08 }],
     }
     const lateBodyText = JSON.stringify(lateEnvelope)
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.resolveDispatch, {
@@ -1353,10 +1375,7 @@ describe('current V2 Customer Request application path', () => {
 
   it('retries the complete semantic proposal after bounded transient provider exhaustion', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
     const generate = vi.fn()
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
@@ -1364,7 +1383,7 @@ describe('current V2 Customer Request application path', () => {
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
-          facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
+          facts: frankfurterFacts(model),
         }],
       }))
     vi.stubGlobal('fetch', generate)
@@ -1388,15 +1407,12 @@ describe('current V2 Customer Request application path', () => {
 
   it('preserves prepared option readback without creating legacy approval authority', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await registerDualPreparationSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: 'Find the cheapest sandbox option' }],
+        facts: frankfurterFacts(model),
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1405,7 +1421,7 @@ describe('current V2 Customer Request application path', () => {
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:prepared-action', requestId: 'request:v2:prepared-action',
-      delegatedAgentId: 'agent:prepared-action', customerJob: 'Find the cheapest sandbox option',
+      delegatedAgentId: 'agent:prepared-action', customerJob: 'Find the cheapest EUR to USD rate',
       routing: { networkId: 'ae:public' },
     })
     if (submitted.kind !== 'request') throw new Error('submitted request missing')
@@ -1460,7 +1476,7 @@ describe('current V2 Customer Request application path', () => {
         contractRef: model.contractRef, offeringId: operation.offeringId, bindingId: operation.bindingId,
         assertionRef: `provider-assertion:${operation.bindingId}`,
         assertedAt: providerNow, validUntil: providerNow + 60_000,
-        output: { optionSummary: `Validated result from ${operation.bindingId}` },
+        output: [{ date: '2026-01-02', base: 'EUR', quote: 'USD', rate: 1.087 }],
       }
       const responseBodyText = JSON.stringify(response)
       await backend.mutation(internal.customerRequestV2PreparationEgressState.resolveDispatch, {
@@ -1484,10 +1500,12 @@ describe('current V2 Customer Request application path', () => {
     expect(prepared).toMatchObject({
       kind: 'prepared',
       preparedAction: {
-        format: 'ae.prepared-action:v2', business: { name: 'Sandbox Option Two' },
-        offering: { offeringId: 'offering:sandbox-option-two:reference-lookup:v4' },
-        binding: { bindingId: 'binding:sandbox-option-two:http-json:v5' },
-        price: { currency: 'AUD', maximumAmountMinor: 900 },
+        format: 'ae.prepared-action:v2', business: { name: 'Frankfurter — ECB rates' },
+        offering: { offeringId: 'offering:frankfurter-preparation:rate' },
+        binding: { bindingId: 'binding:frankfurter-preparation:http-json' },
+        price: { currency: 'USD', maximumAmountMinor: 0 },
+        // Two heterogeneous candidate bindings (Frankfurter keyless at USD 0,
+        // Exa credential at USD 0.01); lowest-maximum-price selects Frankfurter.
         comparison: { kind: 'lowest_maximum_price', candidateCount: 2 },
       },
     })
@@ -1503,16 +1521,15 @@ describe('current V2 Customer Request application path', () => {
       requestRef: review.requestRef,
     })).resolves.toMatchObject({
       kind: 'request', state: 'options_ready',
-      preparedAction: { businessName: 'Sandbox Option Two' },
+      preparedAction: { businessName: 'Frankfurter — ECB rates' },
     })
   })
 
 
   it('preserves accepted exact facts across a natural-language refinement', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
+    const model = await seedCuratedFrankfurterSupply(backend)
+    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: frankfurterFacts(model) }] }
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(modelResponse(response))
       .mockResolvedValueOnce(modelResponse({
@@ -1539,9 +1556,10 @@ describe('current V2 Customer Request application path', () => {
       throw new Error(`refined request missing: ${JSON.stringify(refined)}`)
     }
     expect(refined).toMatchObject({ kind: 'request', revision: 2, state: 'ready_to_compare' })
-    expect(refined.criteria).toContainEqual(expect.objectContaining({
-      value: 'Find an option\nPrefer the clearest result.',
-    }))
+    expect(refined.criteria).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Base currency', value: 'EUR', basis: 'extracted_from_request' }),
+      expect.objectContaining({ label: 'Quote currency', value: 'USD', basis: 'extracted_from_request' }),
+    ]))
     const replaced = await customer.action(api.customerRequestApplication.refine, {
       requestRef: submitted.requestRef, expectedRevision: 2, idempotencyKey: 'replace:v2:2',
       message: 'Find lunch in Fremantle.', mode: 'replace',
@@ -1550,18 +1568,15 @@ describe('current V2 Customer Request application path', () => {
       throw new Error(`replaced request missing: ${JSON.stringify(replaced)}`)
     }
     expect(replaced).toMatchObject({ kind: 'request', revision: 3, state: 'ready_to_compare' })
-    expect(replaced.criteria).toContainEqual(expect.objectContaining({
-      value: 'Find lunch in Fremantle.',
-    }))
-    expect(replaced.criteria).not.toContainEqual(expect.objectContaining({
-      value: expect.stringContaining('Find an option'),
-    }))
+    expect(replaced.criteria).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Base currency', value: 'EUR', basis: 'extracted_from_request' }),
+      expect.objectContaining({ label: 'Quote currency', value: 'USD', basis: 'extracted_from_request' }),
+    ]))
   })
 
   it('stores one canonical current Request when an amendment supersedes a material assertion', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const model = await seedCuratedFrankfurterSupply(backend)
     const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
     const generate = vi.fn()
       .mockResolvedValueOnce(modelResponse(response))
@@ -1629,16 +1644,13 @@ describe('current V2 Customer Request application path', () => {
 
   it('replays an exact committed refinement before rejecting its stale expected revision', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (requestInput === undefined) throw new Error('sandbox request input missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
     const generate = vi.fn()
       .mockResolvedValueOnce(modelResponse({
         kind: 'capability_candidates',
         selections: [{
           selectionKey: model.selectionKey,
-          facts: [{ inputKey: requestInput.key, value: 'Find an option' }],
+          facts: frankfurterFacts(model),
         }],
       }))
       .mockResolvedValueOnce(modelResponse({
@@ -1689,9 +1701,8 @@ describe('current V2 Customer Request application path', () => {
 
   it('treats an exact replacement as a no-op instead of compiling a new revision', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
+    const model = await seedCuratedFrankfurterSupply(backend)
+    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: frankfurterFacts(model) }] }
     const generate = vi.fn().mockResolvedValue(modelResponse(response))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1751,17 +1762,32 @@ describe('current V2 Customer Request application path', () => {
 })
 
 describe('durable Customer Request submission recovery', () => {
-  beforeEach(() => vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer))
+  beforeEach(() => {
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer)
+    vi.stubEnv('EXA_API_KEY', 'test-exa-api-key')
+    vi.stubEnv('AE_SITE_URL', 'https://application-ae.example.test')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
+      kind: 'quoted',
+      expectedCost: { currency: 'USD', amountMinor: 0 },
+      maximumCost: { currency: 'USD', amountMinor: 0 },
+      expectedLatencyMs: 1,
+      dataFields: [],
+      disclosures: ['Readiness probe only.'],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+  })
 
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    providerFetch.mockReset()
     operationRefsBySelectionKey.clear()
   })
 
   it('answers without a provider account, replays the command, and still reaches comparison with a model', async () => {
     const backend = await convexTestWithWorkers()
-    await seedSandboxV2Supply(backend)
+    await seedCuratedFrankfurterSupply(backend)
     const customer = backend.withIdentity(identity)
     const command = {
       compilationKey: 'submit:v2:interpreter-recovery',
@@ -1803,14 +1829,12 @@ describe('durable Customer Request submission recovery', () => {
       reason: 'idempotency_key_reused',
     })
 
-    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
-    if (input === undefined) throw new Error('sandbox request input missing')
+    const model = await seedCuratedFrankfurterSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
         selectionKey: model.selectionKey,
-        facts: [{ inputKey: input.key, value: command.customerJob }],
+        facts: frankfurterFacts(model),
       }],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
@@ -1852,64 +1876,71 @@ async function beginHistoricalPreparationProof(
   })
   if ((result.kind !== 'stored' && result.kind !== 'replayed')
     || result.preparation.kind !== 'needs_authority') {
-    throw new Error(`historical preparation proof unavailable: ${result.kind}`)
+    throw new Error(`historical preparation proof unavailable: ${result.kind}${result.kind === 'needs_attention' ? `:${result.reason}` : ''}`)
   }
   return result.preparation
 }
 
-async function registerDisclosureSupply(
+async function registerVariantSupply(
   backend: ReturnType<typeof convexTest>,
   document: unknown,
   businessId: string,
+  offeringId: string,
+  bindingId: string,
+  options: Readonly<{ suffix?: string; businessSlug?: string; priceAmountMinor?: number; label?: string }> = {},
 ) {
+  const suffix = options.suffix ?? 'disclosure'
+  const businessSlug = options.businessSlug ?? 'frankfurter-ecb-rates'
+  const priceAmountMinor = options.priceAmountMinor ?? 0
+  const label = options.label ?? 'Frankfurter Preparation Rate'
   await backend.run(async (ctx) => {
     const encoded = encodeCapabilityContractDocument(document)
     const contract = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, 3_000)
-    if (contract.kind !== 'registered') throw new Error(`disclosure contract registration failed: ${contract.reason}`)
+    if (contract.kind !== 'registered') throw new Error(`variant contract registration failed: ${contract.reason}`)
     const actor = { kind: 'system' as const, ref: 'system:test' }
     const offering = await registerCapabilityOfferingCommand(ctx.db, {
       actor,
       context: {
-        correlationId: 'test:disclosure-replay', operationKey: 'test:disclosure-offering',
+        correlationId: `test:${suffix}-replay`, operationKey: `test:${suffix}-offering`,
         reasonCode: 'test_disclosure_replay', evidenceRefs: ['test:disclosure-contract'],
       },
       registration: {
-        offeringId: 'offering:sandbox-disclosure:lookup', businessId,
+        offeringId, businessId,
         networkId: 'ae:public', contractRef: contract.ref,
         presentation: {
-          label: 'Sandbox Disclosure Option',
-          summary: 'Labelled sandbox supply for disclosure replay verification only.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 500 },
-          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only.' }],
+          label,
+          summary: 'Curated Frankfurter supply for preparation authority verification only.',
+          price: { kind: 'fixed', currency: 'USD', amountMinor: priceAmountMinor },
+          materialTerms: [{ termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS.' }],
           commercialRelationship: {
             kind: 'none', summary: 'No commercial relationship.',
             influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
             evidenceRefs: ['test:commercial-neutrality'],
           },
         },
-        searchTerms: ['private request comparison'],
+        searchTerms: ['currency rate'],
         registrationEvidenceRefs: ['test:disclosure-contract'],
       },
     }, 3_001)
-    if (offering.kind !== 'registered') throw new Error(`disclosure offering registration failed: ${offering.reason}`)
+    if (offering.kind !== 'registered') throw new Error(`variant offering registration failed: ${offering.reason}`)
     const binding = await registerCapabilityBindingCommand(ctx.db, {
       actor,
       context: {
-        correlationId: 'test:disclosure-replay', operationKey: 'test:disclosure-binding',
+        correlationId: `test:${suffix}-replay`, operationKey: `test:${suffix}-binding`,
         reasonCode: 'test_disclosure_replay', evidenceRefs: ['test:disclosure-binding'],
       },
       registration: {
-        bindingId: 'binding:sandbox-disclosure:http-json', offeringId: 'offering:sandbox-disclosure:lookup',
+        bindingId, offeringId,
         networkId: 'ae:public', contractRef: contract.ref,
-        endpointUrl: 'https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=one',
-        credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
+        endpointUrl: 'https://api.frankfurter.dev/v2/rates',
+        credentialRef: 'none',
         continuation: { kind: 'single_response', evidenceRefs: ['test:single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['test:no-cancellation'] },
         adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
         registrationEvidenceRefs: ['test:disclosure-binding'],
       },
     }, 3_002)
-    if (binding.kind !== 'registered') throw new Error(`disclosure binding registration failed: ${binding.reason}`)
+    if (binding.kind !== 'registered') throw new Error(`variant binding registration failed: ${binding.reason}`)
     const eligibility = await setCapabilitySupplyEligibility(ctx.db, {
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
@@ -1920,9 +1951,9 @@ async function registerDisclosureSupply(
       admissionEvidenceRefs: ['test:disclosure-business-reviewed'],
       conformanceEvidenceRefs: ['test:disclosure-binding-reviewed'],
     }, 3_003)
-    if (eligibility.kind !== 'eligible') throw new Error(`disclosure eligibility failed: ${eligibility.kind === 'refused' ? eligibility.reason : eligibility.kind}`)
+    if (eligibility.kind !== 'eligible') throw new Error(`variant eligibility failed: ${eligibility.kind === 'refused' ? eligibility.reason : eligibility.kind}`)
     await seedSandboxCapabilityPublication(ctx, {
-      slug: 'sandbox-option-one',
+      slug: businessSlug,
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
       contractRef: contract.ref,
@@ -1933,27 +1964,119 @@ async function registerDisclosureSupply(
   await observeSandboxPublications(backend)
 }
 
-async function seedSandboxV2Supply(backend: ReturnType<typeof convexTest>) {
-  await backend.run(async (ctx) => {
-    const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
-      fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
-    ))
-    await registerSandboxBusinesses(ctx.db, fixtures, 1_000)
-    const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, 2_000)
-    await admitSandboxV2Supply(ctx.db, registrations, 2_500)
-    await Promise.all(registrations.map((registration, index) => (
-      seedSandboxCapabilityPublication(ctx, registration, 2_750 + index)
-    )))
-  })
+async function registerFrankfurterPreparationSupply(
+  backend: ConvexFixtureBackend,
+): Promise<CapabilityDecisionModel> {
+  await seedCuratedFrankfurterSupply(backend)
+  const business = await backend.run(async (ctx) => (
+    await ctx.db.query('businesses').withIndex('by_slug', (query) => (
+      query.eq('slug', 'frankfurter-ecb-rates')
+    )).unique()
+  ))
+  if (business === null) throw new Error('frankfurter preparation business missing')
+  const document = await readCuratedContractDocument(backend, 'frankfurter.single-rate')
+  const preparationContract = {
+    ...document,
+    capabilityId: 'frankfurter.preparation.rate',
+    dataUse: document.dataUse.map((use) => ({
+      ...use, phase: 'preparation' as const, classification: 'public' as const,
+      recipient: { kind: 'candidate_binding' },
+    })),
+  }
+  const model = openCapabilityDecisionModel(defineCapabilityContract(preparationContract))
+  await registerVariantSupply(
+    backend,
+    preparationContract,
+    business._id,
+    'offering:frankfurter-preparation:rate',
+    'binding:frankfurter-preparation:http-json',
+  )
+  await rememberModelOperationRef(backend, model)
+  return model
+}
+
+async function businessBySlug(
+  backend: ConvexFixtureBackend,
+  slug: string,
+) {
+  const business = await backend.run(async (ctx) => (
+    await ctx.db.query('businesses').withIndex('by_slug', (query) => (
+      query.eq('slug', slug)
+    )).unique()
+  ))
+  if (business === null) throw new Error(`business missing: ${slug}`)
+  return business
+}
+
+async function registerDualPreparationSupply(
+  backend: ConvexFixtureBackend,
+): Promise<CapabilityDecisionModel> {
+  await seedCuratedFrankfurterSupply(backend)
+  const frankfurterBusiness = await businessBySlug(backend, 'frankfurter-ecb-rates')
+  const exaBusiness = await businessBySlug(backend, 'agentic-market-exa')
+  const document = await readCuratedContractDocument(backend, 'frankfurter.single-rate')
+  const preparationContract = {
+    ...document,
+    capabilityId: 'frankfurter.preparation.rate',
+    dataUse: document.dataUse.map((use) => ({
+      ...use, phase: 'preparation' as const, classification: 'public' as const,
+      recipient: { kind: 'candidate_binding' },
+    })),
+  }
+  const model = openCapabilityDecisionModel(defineCapabilityContract(preparationContract))
+  await registerVariantSupply(
+    backend,
+    preparationContract,
+    frankfurterBusiness._id,
+    'offering:frankfurter-preparation:rate',
+    'binding:frankfurter-preparation:http-json',
+    { suffix: 'frankfurter-preparation', businessSlug: 'frankfurter-ecb-rates' },
+  )
+  await registerVariantSupply(
+    backend,
+    preparationContract,
+    exaBusiness._id,
+    'offering:exa-preparation:rate',
+    'binding:exa-preparation:http-json',
+    { suffix: 'exa-preparation', businessSlug: 'agentic-market-exa', priceAmountMinor: 1, label: 'Exa Preparation Rate' },
+  )
+  // Publishing/observing schedules readiness probes; drain them now so the
+  // routeable supply is settled (and the registry snapshot stable) before the
+  // request is submitted, instead of a probe landing mid-test.
+  await backend.finishInProgressScheduledFunctions()
+  await rememberModelOperationRef(backend, model)
+  return model
+}
+
+async function readCuratedContractDocument(
+  backend: ConvexFixtureBackend,
+  capabilityId: string,
+): Promise<CapabilityContractDocument> {
+  const contract = await readCuratedContract(backend, capabilityId)
+  const { ref: _ref, ...document } = contract
+  return document
+}
+
+async function seedCuratedFrankfurterSupply(
+  backend: ConvexFixtureBackend,
+): Promise<CapabilityDecisionModel> {
+  await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
   await observeSandboxPublications(backend, true)
-  await rememberModelOperationRef(backend, openCapabilityDecisionModel(
-    defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT),
-  ))
+  const model = openCapabilityDecisionModel(await readCuratedContract(backend, 'frankfurter.single-rate'))
+  await rememberModelOperationRef(backend, model)
+  return model
 }
 
-async function observeSandboxPublications(backend: ReturnType<typeof convexTest>, drainProbe = false) {
+function frankfurterFacts(model: CapabilityDecisionModel) {
+  return model.inputs.map((input) => ({
+    inputKey: input.key,
+    value: input.label === 'Quote currency' ? 'USD' : 'EUR',
+  }))
+}
+
+async function observeSandboxPublications(backend: ConvexFixtureBackend, drainProbe = false) {
   const publications = await backend.run(async (ctx) => ctx.db.query('capabilityPublications').collect())
   const now = Date.now()
   for (const publication of publications) {

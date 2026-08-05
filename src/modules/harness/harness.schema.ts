@@ -32,16 +32,16 @@ export const HarnessRunPhaseValues = [
 
 export type HarnessRunPhase = (typeof HarnessRunPhaseValues)[number]
 
-export const HarnessToolTierValues = ['read', 'write', 'exec'] as const
+const HarnessToolTierValues = ['read', 'write', 'exec'] as const
 export type HarnessToolTier = (typeof HarnessToolTierValues)[number]
 
-export const HarnessToolLoadModeValues = ['essential', 'discoverable'] as const
+const HarnessToolLoadModeValues = ['essential', 'discoverable'] as const
 export type HarnessToolLoadMode = (typeof HarnessToolLoadModeValues)[number]
 
-export const HarnessToolConcurrencyValues = ['shared', 'exclusive'] as const
+const HarnessToolConcurrencyValues = ['shared', 'exclusive'] as const
 export type HarnessToolConcurrency = (typeof HarnessToolConcurrencyValues)[number]
 
-export const HarnessApprovalPolicyValues = ['allow', 'deny', 'prompt'] as const
+const HarnessApprovalPolicyValues = ['allow', 'deny', 'prompt'] as const
 export type HarnessApprovalPolicy = (typeof HarnessApprovalPolicyValues)[number]
 
 export type HarnessApprovalDecision = {

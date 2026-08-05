@@ -121,10 +121,10 @@ export const journeyReleaseSchema = z.discriminatedUnion('environment', [
 
 export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   kind: z.literal('cold_external_agent_journey'),
-  agent: z.object({ name: z.string(), version: z.string() }).strict(),
+  agent: z.strictObject({ name: z.string(), version: z.string() }).strict(),
   release: journeyReleaseSchema,
   observedAt: z.iso.datetime(),
-  input: z.object({
+  input: z.strictObject({
     request: z.string(),
     availableFacts: z.array(z.strictObject({ requirementKey: z.string(), valueDigest: z.string() })),
     facts: z.array(z.strictObject({ requirementKey: z.string(), valueDigest: z.string() })),
@@ -136,7 +136,7 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     'needs_attention', 'outcome_unknown', 'completed', 'failed', 'cancelled',
   ])),
   authorityStops: z.array(z.literal('route_confirmation')),
-  final: z.object({
+  final: z.strictObject({
     requestRef: z.string(), revision: z.number().int().nonnegative(),
     state: z.enum(['in_progress', 'cancelled', 'completed', 'failed', 'outcome_unknown']), selectedBusiness: z.string(),
     selectedBusinesses: z.array(z.string()).min(1), stepCount: z.number().int().positive(),

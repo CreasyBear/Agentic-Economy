@@ -31,7 +31,7 @@ export function oauthProtectedResourceMetadata(canonicalBaseUrl: string): Readon
   }
 }
 
-export function challengeHeaders(canonicalBaseUrl: string, requiredScope: string = CUSTOMER_REQUEST_AGENT_SCOPE): Headers {
+function challengeHeaders(canonicalBaseUrl: string, requiredScope: string = CUSTOMER_REQUEST_AGENT_SCOPE): Headers {
   const headers = new Headers({
     'Cache-Control': 'no-store',
     Vary: 'Authorization',

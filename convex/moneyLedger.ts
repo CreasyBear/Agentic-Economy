@@ -118,9 +118,11 @@ export const authorizeInvocationCharge = internalMutation({
     const expectedProviderRef = accountRefForProvider(args.businessId, args.currency)
     const expectedRakeRef = accountRefForRake(args.currency)
     if (args.operatorAccountRef !== expectedOperatorRef || args.providerAccountRef !== expectedProviderRef || args.rakeAccountRef !== expectedRakeRef) return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false }
-    const operator = await ctx.db.query('moneyAccounts').withIndex('by_principalId_and_currency', (q) => q.eq('principalId', args.principalId).eq('currency', args.currency)).unique()
-    const provider = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique()
-    const rake = await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', expectedRakeRef)).unique()
+    const [operator, provider, rake] = await Promise.all([
+      ctx.db.query('moneyAccounts').withIndex('by_principalId_and_currency', (q) => q.eq('principalId', args.principalId).eq('currency', args.currency)).unique(),
+      ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique(),
+      ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', expectedRakeRef)).unique(),
+    ])
     const accountRefusal = validateChargeAccounts({ operator: operator ?? undefined, provider: provider ?? undefined, rake: rake ?? undefined, operatorAccountRef: expectedOperatorRef, providerAccountRef: expectedProviderRef, rakeAccountRef: expectedRakeRef, principalId: args.principalId, businessId: args.businessId, currency: args.currency })
     if (accountRefusal !== undefined) return accountRefusal
     if (operator === null || provider === null || rake === null) {
@@ -273,8 +275,10 @@ export const releasePayoutAccrual = internalMutation({
     if (args.providerAccountRef !== expectedProviderRef) return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false }
     const account = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique()
     if (account === null || account.accountKind !== 'provider_earnings' || account.accountRef !== expectedProviderRef) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
-    const payoutAccount = await ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique()
-    const payout = await ctx.db.query('moneyPayouts').withIndex('by_payoutRef', (q) => q.eq('payoutRef', args.payoutRef)).unique()
+    const [payoutAccount, payout] = await Promise.all([
+      ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique(),
+      ctx.db.query('moneyPayouts').withIndex('by_payoutRef', (q) => q.eq('payoutRef', args.payoutRef)).unique(),
+    ])
     if (payoutAccount === null || payout === null || payout.businessId !== args.businessId || payout.currency !== args.currency) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
     const current: MoneyPayout = {
       payoutRef: payout.payoutRef,
@@ -347,9 +351,11 @@ export const appendRefund = internalMutation({
     const provider = entries.find((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'credit')
     const rake = entries.find((entry) => entry.entryType === 'rake' && entry.direction === 'credit')
     if (charge === undefined || provider === undefined || rake === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
-    const operatorAccount = await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', charge.accountRef)).unique()
-    const providerAccount = await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', provider.accountRef)).unique()
-    const rakeAccount = await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', rake.accountRef)).unique()
+    const [operatorAccount, providerAccount, rakeAccount] = await Promise.all([
+      ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', charge.accountRef)).unique(),
+      ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', provider.accountRef)).unique(),
+      ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', rake.accountRef)).unique(),
+    ])
     if (operatorAccount === null || providerAccount === null || rakeAccount === null || providerAccount.balanceMinor < provider.amountMinor || rakeAccount.balanceMinor < rake.amountMinor) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
     const common = { transactionRef: args.transactionRef, idempotencyKey: args.idempotencyKey, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt }
     await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:operator`, accountRef: operatorAccount.accountRef, entryType: 'refund', direction: 'credit', amountMinor: charge.amountMinor, currency: original.currency, principalId: args.principalId, reversalOf: args.originalTransactionRef })

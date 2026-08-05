@@ -4,7 +4,6 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { WorkNode, WorkTree } from '@/modules/work-tree/internal/contract'
 import {
   decideRootWorkTree,
-  isBasDevelopmentAsk,
   projectRootWorkTree,
   startRootWorkTree,
   type WorkTreeDecisionReceipt,
@@ -12,8 +11,8 @@ import {
   type WorkTreeSourcePort,
 } from '@/modules/work-tree/internal/root-loop'
 
-const projectId = 'project:bas'
-const treeId = 'tree:bas'
+const projectId = 'project:root-loop'
+const treeId = 'tree:root-loop'
 const nowMs = 1_754_000_000_000
 
 function node(input: Pick<WorkNode, 'nodeId' | 'kind' | 'status'> & Partial<WorkNode>): WorkNode {
@@ -41,18 +40,11 @@ function tree(nodes: readonly WorkNode[], revision = 1): WorkTree {
     projectId,
     generation: 1,
     revision,
-    charterText: 'Bring my BAS up to date',
+    charterText: 'Bring the project up to date',
     nodes: [...nodes],
   }
 }
 
-function acceptedApply(treeValue: WorkTree, operationKey: string) {
-  return {
-    kind: 'accepted' as const,
-    receipt: { tree: treeValue, operationKey },
-    readback: { projectId, revision: treeValue.revision },
-  }
-}
 
 function inspectResult(treeValue: WorkTree, events: readonly WorkTreeSourceEvent[] = []) {
   return {
@@ -69,39 +61,25 @@ function inspectResult(treeValue: WorkTree, events: readonly WorkTreeSourceEvent
 }
 
 describe('human root WorkTree loop', () => {
-  it('creates the durable project before applying the fenced BAS development path', async () => {
-    const rootFog = node({ nodeId: 'root', kind: 'package', status: 'fog' })
-    const decisionFog = node({
-      nodeId: 'decision', kind: 'decision', status: 'fog', parentId: 'root',
-      evidenceRefs: ['ae:development-mock/bas-v1'],
-    })
-    const rootReady = node({
-      ...rootFog, status: 'ready', timing: { certainty: 'fog' },
-    })
-    const decisionReady = node({ ...decisionFog, status: 'ready' })
-    const initial = tree([rootFog])
-    const afterRoot = tree([rootReady, decisionFog], 2)
-    const afterDecision = tree([rootReady, decisionReady], 3)
+  it('creates a durable project with the trimmed charter and no apply', async () => {
+    const initial = tree([node({ nodeId: 'root', kind: 'package', status: 'fog' })])
     const calls: Array<Readonly<Record<string, unknown>>> = []
-    let current = initial
-
+    const lineage = {
+      kind: 'customer_request' as const,
+      requestRef: 'request:root-loop',
+      revision: 2,
+      routeGenerationRef: 'generation:root-loop',
+      routeRef: 'route-choice:root-loop',
+    }
     const port: WorkTreeSourcePort = {
       create: async (input) => {
         calls.push({ method: 'create', ...input })
         return { kind: 'accepted', projectId, treeId, generation: 1, revision: 1, tree: initial }
       },
-      inspect: async () => inspectResult(current),
-      apply: async (input) => {
-        calls.push({
-          method: 'apply',
-          verbKind: input.verb.kind,
-          operationKey: input.operationKey,
-          guestAssertion: input.guestAssertion,
-        })
-        current = input.verb.kind === 'propose_decision'
-          ? afterDecision
-          : input.verb.targetNodeId === 'root' ? afterRoot : afterDecision
-        return acceptedApply(current, input.operationKey)
+      inspect: async () => inspectResult(initial),
+      apply: async () => {
+        calls.push({ method: 'apply' })
+        throw new Error('create-only start invoked apply')
       },
       decide: async () => {
         throw new Error('decision not part of start')
@@ -109,86 +87,40 @@ describe('human root WorkTree loop', () => {
     }
 
     await expect(startRootWorkTree({
-      outcome: '  Bring my BAS up to date  ',
-      lineage: {
-        kind: 'customer_request',
-        requestRef: 'request:root-loop',
-        revision: 2,
-        routeGenerationRef: 'generation:root-loop',
-        routeRef: 'route-choice:root-loop',
-      },
+      outcome: '  Bring the project up to date  ',
+      lineage,
       guestAssertion: 'signed-guest',
     }, port))
       .resolves.toEqual({ kind: 'started', projectId })
-    expect(calls.map((call) => call.method)).toEqual(['create', 'apply', 'apply', 'apply'])
-    expect(calls.slice(1).map((call) => call.verbKind)).toEqual(['elaborate', 'elaborate', 'propose_decision'])
-    expect(calls.slice(1).map((call) => call.guestAssertion))
-      .toEqual(['signed-guest', 'signed-guest', 'signed-guest'])
-    expect(calls[0]).toMatchObject({
+
+    expect(calls).toEqual([{
       method: 'create',
-      lineage: {
-        kind: 'customer_request',
-        requestRef: 'request:root-loop',
-        revision: 2,
-        routeGenerationRef: 'generation:root-loop',
-        routeRef: 'route-choice:root-loop',
-      },
-    })
+      idempotencyKey: canonicalDigest({
+        surface: 'root',
+        charterText: 'Bring the project up to date',
+      }),
+      charterText: 'Bring the project up to date',
+      lineage,
+      guestAssertion: 'signed-guest',
+    }])
   })
-  it('resumes an interrupted fixture from the durable readback without restarting the root', async () => {
-    const rootFog = node({ nodeId: 'root', kind: 'package', status: 'fog' })
-    const decisionFog = node({
-      nodeId: 'decision', kind: 'decision', status: 'fog', parentId: 'root',
-      evidenceRefs: ['ae:development-mock/bas-v1'],
-    })
-    const rootReady = node({ ...rootFog, status: 'ready', timing: { certainty: 'fog' } })
-    const decisionReady = node({ ...decisionFog, status: 'ready' })
-    const initial = tree([rootFog])
-    const afterRoot = tree([rootReady, decisionFog], 2)
-    const afterDecision = tree([rootReady, decisionReady], 3)
-    const afterProposal = tree([rootReady, decisionReady], 4)
-    const calls: Array<Readonly<Record<string, unknown>>> = []
-    let current = initial
-    let createCount = 0
-    let interrupt = true
+  it('refuses legacy development-mock readbacks before exposing node content', () => {
+    const legacyTitle = 'Legacy decision content'
+    const inspected = inspectResult(tree([
+      node({ nodeId: 'root', kind: 'package', status: 'ready', timing: { certainty: 'fog' } }),
+      node({
+        nodeId: 'legacy-decision',
+        kind: 'decision',
+        status: 'ready',
+        title: legacyTitle,
+        evidenceRefs: ['ae:development-mock/bas-v1'],
+      }),
+    ], 2))
 
-    const port: WorkTreeSourcePort = {
-      create: async (input) => {
-        calls.push({ method: 'create', ...input })
-        createCount += 1
-        return {
-          kind: 'accepted',
-          projectId,
-          treeId,
-          generation: current.generation,
-          revision: current.revision,
-          tree: current,
-        }
-      },
-      inspect: async () => inspectResult(current),
-      apply: async (input) => {
-        calls.push({ method: 'apply', verbKind: input.verb.kind, targetNodeId: input.verb.targetNodeId })
-        if (interrupt && input.verb.targetNodeId === 'decision') {
-          interrupt = false
-          throw new Error('simulated interruption')
-        }
-        current = input.verb.targetNodeId === 'root'
-          ? afterRoot
-          : input.verb.kind === 'propose_decision' ? afterProposal : afterDecision
-        return acceptedApply(current, input.operationKey)
-      },
-      decide: async () => { throw new Error('decision not part of start') },
-    }
+    const projected = projectRootWorkTree(inspected, nowMs)
 
-    await expect(startRootWorkTree({ outcome: 'Bring BAS up to date' }, port))
-      .rejects.toThrow('simulated interruption')
-    await expect(startRootWorkTree({ outcome: 'Bring BAS up to date' }, port))
-      .resolves.toEqual({ kind: 'started', projectId })
-
-    expect(createCount).toBe(2)
-    expect(calls.map((call) => call.method)).toEqual(['create', 'apply', 'apply', 'create', 'apply', 'apply'])
-    expect(calls.filter((call) => call.targetNodeId === 'root')).toHaveLength(1)
-    expect(calls.slice(4).map((call) => call.verbKind)).toEqual(['elaborate', 'propose_decision'])
+    expect(projected).toEqual({ kind: 'refused', reason: 'not_found' })
+    expect(JSON.stringify(projected)).not.toContain(legacyTitle)
   })
   it('refuses an empty outcome before calling the source', async () => {
     const calls: string[] = []
@@ -222,38 +154,15 @@ describe('human root WorkTree loop', () => {
       decide: async () => { throw new Error('not used') },
     }
 
-    await expect(startRootWorkTree({ outcome: 'Bring BAS up to date' }, port))
+    await expect(startRootWorkTree({ outcome: 'Bring the project up to date' }, port))
       .resolves.toEqual({ kind: 'refused', reason: 'source_refused' })
     expect(calls).toEqual(['create'])
-  })
-  it('surfaces a refused development fixture instead of reporting started', async () => {
-    const initial = tree([node({ nodeId: 'root', kind: 'package', status: 'fog' })])
-    const calls: Array<Readonly<Record<string, unknown>>> = []
-    const port: WorkTreeSourcePort = {
-      create: async (input) => {
-        calls.push({ method: 'create', ...input })
-        return { kind: 'accepted', projectId, treeId, generation: 1, revision: 1, tree: initial }
-      },
-      inspect: async () => inspectResult(initial),
-      apply: async (input) => {
-        calls.push({ method: 'apply', guestAssertion: input.guestAssertion })
-        return { kind: 'refused', reason: 'fixture_forbidden' }
-      },
-      decide: async () => { throw new Error('not used') },
-    }
-
-    await expect(startRootWorkTree({ outcome: 'Bring BAS up to date', guestAssertion: 'signed-guest' }, port))
-      .resolves.toEqual({ kind: 'refused', reason: 'fixture_forbidden' })
-    expect(calls).toEqual([
-      expect.objectContaining({ method: 'create' }),
-      { method: 'apply', guestAssertion: 'signed-guest' },
-    ])
   })
 
 
   it('projects one durable decision proposal into a rereadable inbox item', () => {
     const decision = node({
-      nodeId: 'decision', kind: 'decision', status: 'ready', title: 'Choose a BAS path',
+      nodeId: 'decision', kind: 'decision', status: 'ready', title: 'Choose the next project step',
       description: 'Pick the next accountable step.',
     })
     const inspected = inspectResult(tree([
@@ -276,7 +185,7 @@ describe('human root WorkTree loop', () => {
     expect(projected.inbox.items).toHaveLength(1)
     expect(projected.inbox.items[0]).toMatchObject({
       nodeId: 'decision',
-      title: 'Choose a BAS path',
+      title: 'Choose the next project step',
       source: 'ready-node',
       status: 'ready',
     })
@@ -289,7 +198,7 @@ describe('human root WorkTree loop', () => {
   })
   it('uses the latest proposal event for a node', () => {
     const inspected = inspectResult(tree([
-      node({ nodeId: 'decision', kind: 'decision', status: 'queued', title: 'Choose a BAS path' }),
+      node({ nodeId: 'decision', kind: 'decision', status: 'queued', title: 'Choose the next project step' }),
     ], 5), [
       {
         seq: 1,
@@ -386,8 +295,4 @@ describe('human root WorkTree loop', () => {
     expect(result.readback).toMatchObject({ kind: 'ready', projectId, revision: 4 })
   })
 
-  it('only routes BAS asks to the WorkTree loop', () => {
-    expect(isBasDevelopmentAsk('Please help with BAS lodgement')).toBe(true)
-    expect(isBasDevelopmentAsk('Find a local bookkeeper')).toBe(false)
-  })
 })

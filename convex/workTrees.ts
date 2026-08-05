@@ -1428,8 +1428,10 @@ async function acceptedCreate(
   ctx: WorkTreeReadContext,
   tree: WorkTreeDoc,
 ): Promise<Record<string, unknown>> {
-  const readback = await workTreeReadback(ctx, tree)
-  const receipt = await creationReceipt(ctx, tree)
+  const [readback, receipt] = await Promise.all([
+    workTreeReadback(ctx, tree),
+    creationReceipt(ctx, tree),
+  ])
   return {
     kind: 'accepted',
     code: 'work_tree_created',
@@ -1488,16 +1490,18 @@ async function workTreeReadback(
   ctx: WorkTreeReadContext,
   tree: WorkTreeDoc,
 ): Promise<Record<string, unknown>> {
-  const events = await ctx.db
-    .query('workTreeEvents')
-    .withIndex('by_treeId_and_seq', (query) => query.eq('treeId', tree.treeId))
-    .order('asc')
-    .take(MAX_WORK_TREE_EVENTS + 1)
-  const decisionReceipts = await ctx.db
-    .query('workTreeDecisionReceipts')
-    .withIndex('by_projectId_and_occurredAt', (query) => query.eq('projectId', tree.projectId))
-    .order('desc')
-    .take(65)
+  const [events, decisionReceipts] = await Promise.all([
+    ctx.db
+      .query('workTreeEvents')
+      .withIndex('by_treeId_and_seq', (query) => query.eq('treeId', tree.treeId))
+      .order('asc')
+      .take(MAX_WORK_TREE_EVENTS + 1),
+    ctx.db
+      .query('workTreeDecisionReceipts')
+      .withIndex('by_projectId_and_occurredAt', (query) => query.eq('projectId', tree.projectId))
+      .order('desc')
+      .take(65),
+  ])
   return {
     projectId: tree.projectId,
     treeId: tree.treeId,

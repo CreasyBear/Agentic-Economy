@@ -1,6 +1,7 @@
-import { bindingIntegrityIsValid } from '../binding'
+import { bindingIntegrityIsValid } from '../binding/integrity'
 import { readHttpJsonProbeConfiguration } from '../transport-adapters'
-import { contractRefFromRow, offeringIntegrityIsValid } from '../offering'
+import { contractRefFromRow } from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
 
 import type { CapabilityGraphPorts } from './ports'
 import { probeTargetDigest } from './probe-digest'

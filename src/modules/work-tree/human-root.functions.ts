@@ -33,10 +33,7 @@ import type { WorkTreeClaimResult } from './work-tree.functions'
  * today. Hosts differ only in how they obtain the port and the principal.
  */
 export {
-  ROOT_WORK_TREE_MOCK_LABEL,
-  ROOT_WORK_TREE_MOCK_REF,
   decideRootWorkTree,
-  isBasDevelopmentAsk,
   projectRootWorkTree,
   readRootWorkTree,
   startRootWorkTree,

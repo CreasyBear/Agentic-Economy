@@ -20,8 +20,8 @@ describe('tool-use agent inquiry deep links', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes inquiry options. The business confirms timing, price, availability, and the work.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'The listing publishes inquiry options. Scope, price, and current availability still need confirmation.',
+        whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()

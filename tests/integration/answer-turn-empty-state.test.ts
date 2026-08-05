@@ -127,10 +127,18 @@ describe('POST /api/answer/turn empty-state queries', () => {
     }
   })
 
-  it('answers direct registry matches without requiring model planning', async () => {
+  it('synthesizes direct registry matches after one bounded search', async () => {
     const turns: unknown[] = []
     stubThreadPort(turns)
-    const server = await startOpenRouterContractServer([])
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'Start with an emergency plumber serving Parramatta.',
+        summary:
+          'Two listings publish emergency plumbing services in Parramatta. Scope, price, and current availability still need confirmation.',
+        whatToDoNow:
+          'Contact one and ask: “Can you attend in Parramatta, what is the call-out price, and when are you available?”',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -141,7 +149,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', cookie: '' },
-          body: JSON.stringify({ query: 'emergency plumber parramatta' }),
+          body: JSON.stringify({ query: 'emergency plumber Parramatta' }),
         }),
       )
 
@@ -157,7 +165,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
         'parramatta-emergency-plumbing',
         'plumbing-demo',
       ])
-      expect(complete.answer.summary).toContain('publish service coverage')
+      expect(complete.answer.oneLine).toBe('Start with an emergency plumber serving Parramatta.')
+      expect(complete.answer.summary).toContain('Scope, price, and current availability still need confirmation.')
+      expect(complete.answer.nextStep).toContain('what is the call-out price')
 
       const persisted = turns.at(0) as { evidenceJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
@@ -167,8 +177,10 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(evidence.toolCalls?.[0]?.toolId).toBe('registry.search')
       expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}')).toMatchObject({
-        query: 'emergency plumber parramatta',
+        query: 'emergency plumber Parramatta',
         limit: 3,
+        mode: 'near_me',
+        location: 'Parramatta',
       })
       expect(evidence.timings?.map((timing) => timing.name)).toEqual(
         expect.arrayContaining([
@@ -192,7 +204,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const searchStep = evidence.workLog?.find((step) => step.id === 'step-2')
       expect(searchStep?.status).toBe('complete')
       expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '2')).toBe(true)
-      expect(server.requests).toHaveLength(0)
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -263,15 +276,18 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
       const toolCalls = persisted.toolCalls
-      expect(toolCalls).toHaveLength(2)
+      expect(toolCalls).toHaveLength(3)
       expect(toolCalls.map((call) => call.toolId)).toEqual([
         'registry.search',
+        'registry.operations.search',
         'web.discover',
       ])
-      expect(toolCalls.map((call) => call.seq)).toEqual([0, 1])
+      expect(toolCalls.map((call) => call.seq)).toEqual([0, 1, 2])
       expect(new Set(toolCalls.map((call) => call.toolCallId)).size).toBe(toolCalls.length)
-      expect(toolCalls.map((call) => call.status)).toEqual(['complete', 'error'])
+      expect(toolCalls.slice(0, 1).map((call) => call.status)).toEqual(['complete'])
+      expect(toolCalls.slice(1).map((call) => call.status)).toEqual(['error', 'error'])
       expect(toolCalls.map((call) => JSON.parse(call.inputJson).query)).toEqual([
+        'Emergency plumber Brunswick',
         'Emergency plumber Brunswick',
         'Emergency plumber Brunswick',
       ])
@@ -307,9 +323,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       prose: {
         oneLine: 'Parramatta Emergency Plumbing matches this need.',
         summary:
-          'Parramatta Emergency Plumbing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+          'Parramatta Emergency Plumbing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
         whatToDoNow:
-          'Open Parramatta Emergency Plumbing and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'Contact Parramatta Emergency Plumbing and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -372,9 +388,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       prose: {
         oneLine: 'Parramatta Emergency Plumbing matches this need.',
         summary:
-          'Parramatta Emergency Plumbing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+          'Parramatta Emergency Plumbing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
         whatToDoNow:
-          'Open Parramatta Emergency Plumbing and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'Contact Parramatta Emergency Plumbing and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -431,6 +447,19 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const userMessage = request.messages.find((message) => message.role === 'user')?.content ?? ''
       const latestQuery = userMessage.match(/^User query: (?<query>.*)$/m)?.groups?.query ?? userMessage
       const hasToolResult = request.messages.some((message) => message.role === 'tool')
+      if (
+        request.response_format?.type === 'json_schema'
+        && request.tools === undefined
+        && /parramatta/i.test(latestQuery)
+      ) {
+        return openRouterProseResponse({
+          oneLine: 'Start with an emergency plumber serving Parramatta.',
+          summary:
+            'Parramatta Emergency Plumbing lists emergency pipe repair. Scope, price, and current availability still need confirmation.',
+          whatToDoNow:
+            'Contact the business and ask whether it handles this job, what it costs, and when it is available.',
+        })
+      }
       if (hasToolResult && /brunswick/i.test(latestQuery)) {
         return openRouterProseResponse({
           oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
@@ -443,9 +472,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
         return openRouterProseResponse({
           oneLine: 'One listed business matches Parramatta.',
           summary:
-            'Parramatta Emergency Plumbing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+            'Parramatta Emergency Plumbing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
           whatToDoNow:
-            'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+            'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
         })
       }
       if (/brunswick/i.test(latestQuery)) {
@@ -549,9 +578,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+          'The listing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
         whatToDoNow:
-          'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -591,10 +620,12 @@ describe('POST /api/answer/turn empty-state queries', () => {
         toolCalls?: readonly { seq?: number; inputJson?: string }[]
         timings?: readonly { name?: string }[]
       }
-      expect(evidence.toolCalls?.map((call) => call.seq)).toEqual([0, 1])
+      expect(evidence.toolCalls?.map((call) => call.seq)).toEqual([0, 1, 2])
       expect(
         evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
-      ).toEqual(['paramata', 'parramatta'])
+      ).toEqual(['paramata', 'paramata', 'parramatta'])
+      expect(evidence.toolCalls?.[1]?.seq).toBe(1)
+      expect((evidence.toolCalls as readonly { toolId?: string }[])[1]?.toolId).toBe('registry.operations.search')
       expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
     } finally {
       restoreOpenRouter()
@@ -621,8 +652,8 @@ describe('POST /api/answer/turn persistence resilience', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'The listing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
+        whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()

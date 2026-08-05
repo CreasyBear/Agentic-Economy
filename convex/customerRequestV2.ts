@@ -433,12 +433,11 @@ export const getCurrentRoutePlanProjectionMaterial = internalQuery({
     if (businessIds.length > 512) {
       throw new Error('customer_request_route_plan_projection_business_limit_exceeded')
     }
-    const businesses = []
-    for (const businessId of businessIds) {
+    const businesses = await Promise.all(businessIds.map(async (businessId) => {
       const business = await ctx.db.get(businessId as Id<'businesses'>)
       if (business === null) throw new Error('customer_request_route_plan_projection_business_integrity_failure')
-      businesses.push({ businessId, name: business.name })
-    }
+      return { businessId, name: business.name }
+    }))
     const contractRefs = [...new Map([
       ...currentReadback.routeGeneration.routes,
       ...(previous?.routes ?? []),
@@ -449,13 +448,12 @@ export const getCurrentRoutePlanProjectionMaterial = internalQuery({
     if (contractRefs.length > 512) {
       throw new Error('customer_request_route_plan_projection_capability_limit_exceeded')
     }
-    const capabilities = []
-    for (const ref of contractRefs) {
+    const capabilities = await Promise.all(contractRefs.map(async (ref) => {
       const exact = await getExactRegisteredCapabilityContract(ctx.db, ref)
       if (exact.kind !== 'found') {
         throw new Error('customer_request_route_plan_projection_capability_integrity_failure')
       }
-      capabilities.push({
+      return {
         capabilityId: exact.contract.ref.capabilityId,
         version: exact.contract.ref.version,
         contractDigest: exact.contract.ref.contractDigest,
@@ -465,8 +463,8 @@ export const getCurrentRoutePlanProjectionMaterial = internalQuery({
           .filter(({ document, role }) => document === 'output'
             && (role === 'result' || role === 'completion_evidence'))
           .map(({ label }) => label),
-      })
-    }
+      }
+    }))
     return {
       kind: 'found' as const,
       current: currentReadback.routeGeneration,

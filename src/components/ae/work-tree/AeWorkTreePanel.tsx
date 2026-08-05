@@ -139,8 +139,7 @@ function expandNode(node: WorkNode, childrenByParent: ReadonlyMap<string, readon
   const nextPath = new Set(path)
   nextPath.add(node.nodeId)
   const children = (childrenByParent.get(node.nodeId) ?? [])
-    .filter((child) => !nextPath.has(child.nodeId))
-    .map((child) => expandNode(child, childrenByParent, visited, nextPath))
+    .flatMap((child) => (nextPath.has(child.nodeId) ? [] : [expandNode(child, childrenByParent, visited, nextPath)]))
   return children.length === 0 ? node : { ...node, children }
 }
 

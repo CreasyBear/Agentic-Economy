@@ -172,7 +172,7 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     const candidateSlugs = uniqueBusinessSlugs(documents).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
     const businesses = (await Promise.all(candidateSlugs.map((slug) => ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()))).filter((business): business is Doc<'businesses'> => business !== null)
     const offeringSupplyReadPort = createOfferingSupplyReadPort(ctx.db)
-    const supply = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(offeringSupplyReadPort, business)))).filter((item): item is OfferingSupplyDto => item !== undefined).filter((item) => matchesOfferingSupply(item, tokens, locationKey))
+    const supply = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(offeringSupplyReadPort, business)))).filter((item): item is OfferingSupplyDto => item !== undefined && matchesOfferingSupply(item, tokens, locationKey))
     const items = filterOfferingSupplyByPrice(supply, args).slice().sort((left, right) => left.slug.localeCompare(right.slug))
     return paginateOfferingSupply(items, input, needle)
   },

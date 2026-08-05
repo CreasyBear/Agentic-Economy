@@ -1,5 +1,5 @@
-import type { CapabilityBindingRow } from '../binding'
-import { contractRefFromRow, type CapabilityOfferingRow } from '../offering'
+import type { CapabilityBindingRow } from '../binding/registration'
+import { contractRefFromRow, type CapabilityOfferingRow } from '../offering/registration'
 
 export function compareStableIdentifier(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0

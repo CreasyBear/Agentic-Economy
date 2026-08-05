@@ -3,10 +3,8 @@ import { z } from 'zod'
 import { identifier } from '@/modules/capability-contract/public'
 
 import { defineAction, type ActionParameter } from '@/modules/common/action'
-import {
-  qualifySuppliedCandidate,
-  type CapabilityGraphPorts,
-} from './internal/graph'
+import { qualifySuppliedCandidate } from './internal/graph/qualify-candidate'
+import type { CapabilityGraphPorts } from './internal/graph/ports'
 
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/)
 const contractRefSchema = z.strictObject({

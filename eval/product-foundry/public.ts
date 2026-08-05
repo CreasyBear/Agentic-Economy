@@ -1,4 +1,4 @@
-export const WEDGE_EXECUTION_PACK_FORMAT = 'ae.wedge-execution-pack:v1' as const
+const WEDGE_EXECUTION_PACK_FORMAT = 'ae.wedge-execution-pack:v1' as const
 
 export type EvidenceMaturity = 'simulated' | 'field' | 'production'
 export type WedgeRole =
@@ -477,15 +477,15 @@ function kernelPromotionGaps(
   const gaps: PrimitivePromotionGate[] = []
   if (families.size < 3) gaps.push('three_distinct_workflow_families')
   if (!/^[a-z][a-z0-9_]*$/.test(candidate.neutralName)) gaps.push('neutral_name')
-  const evidencedFamilies = new Set(candidate.observedWorkflows
-    .filter((workflow) =>
-      workflow.workflowFamily.length > 0
-      && workflow.evidenceRefs.length > 0
-      && workflow.evidenceRefs.every((reference) =>
-        reference.kind === 'field_observation' && validEvidenceReference(reference)
-      )
+  const evidencedFamilies = new Set(candidate.observedWorkflows.flatMap((workflow) =>
+    workflow.workflowFamily.length > 0
+    && workflow.evidenceRefs.length > 0
+    && workflow.evidenceRefs.every((reference) =>
+      reference.kind === 'field_observation' && validEvidenceReference(reference)
     )
-    .map((workflow) => workflow.workflowFamily))
+      ? [workflow.workflowFamily]
+      : [],
+  ))
   if (evidencedFamilies.size < 3 || evidencedFamilies.size !== families.size) {
     gaps.push('three_distinct_workflow_families')
   }

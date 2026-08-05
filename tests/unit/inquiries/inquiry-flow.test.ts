@@ -21,14 +21,14 @@ import type {
 import {
   buildPublicInquiryAffordance,
   projectPublicInquiryAvailability,
+  readPublicInquiryRouteReadback,
   selectOwnerAdmissionTarget,
   submitPublicInquiryRouteReadback,
   validatePublicInquiryFormInput,
 } from '@/modules/inquiries/route-readbacks'
+import { readOwnerInquiriesRouteReadback } from '@/modules/inquiries/owner-inquiry-route'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
-import { readPublicInquiryRouteReadback } from '@/routes/$slug.inquiry'
-import { readOwnerInquiriesRouteReadback } from '@/routes/owner.inquiries'
-import { readOwnerInquiryThreadRouteReadback } from '@/routes/owner.inquiries.$threadId'
+import { readOwnerInquiryThreadRouteReadback } from '@/lib/operator/owner-inquiry-thread-readback'
 
 const ownerId = brandNonEmpty('owner:inquiry', 'OwnerId')
 const otherOwnerId = brandNonEmpty('owner:other', 'OwnerId')

@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOperatorStatusList } from '@/components/ae/operator/AeOperatorStatusList'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/developer-discovery'
+import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route'
 
 export const Route = createFileRoute('/_operator/developers/discovery')({
   ...operatorRouteOptions,
@@ -24,26 +24,6 @@ export const Route = createFileRoute('/_operator/developers/discovery')({
   }),
   component: DevelopersDiscoveryRoute,
 })
-
-export async function loadDeveloperDiscoveryRoute(): Promise<DeveloperDiscoveryRouteReadback> {
-  const [{ readDeveloperDiscoveryRoute }, { buildDeveloperDiscoveryRouteSnapshot }, { createDefaultDiscoverySourceState }] =
-    await Promise.all([
-      import('@/modules/discovery/developer-discovery'),
-      import('../api.discovery.schema'),
-      import('@/modules/discovery/public'),
-    ])
-  const request = new Request('https://ae.example/developers/discovery')
-  const routeSnapshot = await buildDeveloperDiscoveryRouteSnapshot(request, {
-    canonicalBaseUrl: 'https://ae.example',
-    now: 0,
-  })
-
-  return readDeveloperDiscoveryRoute(createDefaultDiscoverySourceState(), {
-    canonicalBaseUrl: 'https://ae.example',
-    now: 0,
-    routeSnapshot,
-  })
-}
 
 function DevelopersDiscoveryRoute() {
   const readback = Route.useLoaderData()

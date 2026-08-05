@@ -154,7 +154,7 @@ export function sourceWriteBodyDigest(body: string | Uint8Array | null | undefin
   return base64Codec.toBase64Url(sha256(bytes))
 }
 
-export function sourceWriteContentDigestHeader(body: string | Uint8Array): string {
+function sourceWriteContentDigestHeader(body: string | Uint8Array): string {
   const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body
   return `sha-256=:${base64Codec.toBase64(sha256(bytes))}:`
 }

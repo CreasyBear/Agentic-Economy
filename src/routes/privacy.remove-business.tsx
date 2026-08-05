@@ -21,7 +21,7 @@ import { useClientMounted } from '@/hooks/use-client-mounted'
 
 const removalSchema = z.object({
   slug: z.string(),
-  contactEmail: z.string().email(),
+  contactEmail: z.email(),
   reasonCode: z.enum(['privacy_removal_requested', 'ownership_contested', 'duplicate_or_impersonation', 'unsafe_or_inaccurate']),
   evidenceSummary: z.string(),
 })
@@ -109,7 +109,7 @@ function RemoveBusinessRoute() {
       return
     }
 
-    if (!z.string().email().safeParse(nextValue.contactEmail.trim()).success) {
+    if (!z.email().safeParse(nextValue.contactEmail.trim()).success) {
       setError('Enter a valid contact email.')
       focusField(contactEmailRef)
       return

@@ -178,7 +178,7 @@ export function terminalMaterialDigest(
   } as StableHashValue)
 }
 
-export function preparationDigestMatches(
+function preparationDigestMatches(
   preparation: DurableActionPreparation,
   preparationDigest: string,
 ): boolean {

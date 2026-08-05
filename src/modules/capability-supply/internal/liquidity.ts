@@ -1,12 +1,12 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-export const capabilityCallEventKinds = [
+const capabilityCallEventKinds = [
   'supply_liquidity_fill_observed',
   'supply_liquidity_first_success_observed',
   'supply_liquidity_depth_observed',
 ] as const
 export type CapabilityCallEventKind = typeof capabilityCallEventKinds[number]
-export const liquidityZeroReasons = [
+const liquidityZeroReasons = [
   'no_routeable_supply', 'readiness_unavailable', 'provider_refused', 'credential_unavailable',
   'price_unavailable', 'insufficient_credit', 'input_invalid', 'outcome_unknown',
 ] as const

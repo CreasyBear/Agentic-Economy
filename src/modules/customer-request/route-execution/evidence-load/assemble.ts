@@ -29,11 +29,13 @@ export async function assembleCustomerEvidenceExport(
   if (run === null || run.principalId !== input.principalId) {
     throw new Error('customer_request_route_run_integrity_failure')
   }
-  const attempts = await ports.listAttemptsByRunRef(run.runRef, run.totalSteps + 1)
+  const [attempts, problems] = await Promise.all([
+    ports.listAttemptsByRunRef(run.runRef, run.totalSteps + 1),
+    ports.listProblemsByRequestId(input.requestId, 101),
+  ])
   const bindings = await Promise.all(attempts.map(async (attempt) => (
     await ports.getBindingByBindingId(attempt.grant.step.bindingId)
   )))
-  const problems = await ports.listProblemsByRequestId(input.requestId, 101)
   const [updatesByProblem, businessReportsByProblem] = await Promise.all([
     Promise.all(problems.map(async (problem) => loadProblemUpdates(ports, problem.reportRef))),
     Promise.all(problems.map(async (problem) => (

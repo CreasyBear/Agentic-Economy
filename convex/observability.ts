@@ -507,13 +507,15 @@ export const readAdminOwnerActivationSummary = queryGeneric({
       return { byStage: [], totalTracked: 0 }
     }
 
-    const stageCounts = await Promise.all(
-      ActivationStageValues.map(async (stage) => ({
-        stage,
-        count: await ownerActivationByStage.count(ctx, { bounds: { eq: stage } }),
-      }))
-    )
-    const totalTracked = await ownerActivationByStage.count(ctx)
+    const [stageCounts, totalTracked] = await Promise.all([
+      Promise.all(
+        ActivationStageValues.map(async (stage) => ({
+          stage,
+          count: await ownerActivationByStage.count(ctx, { bounds: { eq: stage } }),
+        }))
+      ),
+      ownerActivationByStage.count(ctx),
+    ])
     const byStage = stageCounts
       .filter(({ count }) => count > 0)
       .sort((left, right) => right.count - left.count)

@@ -2,7 +2,7 @@ import { routeChoiceSignature } from '@/modules/customer-request/compiler'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
-import { rebindPlanSelections, rebindStoredFacts } from '../interpret-compile'
+import { rebindPlanSelections, rebindStoredFacts } from '../interpret-compile/facts'
 import type {
   RefineCustomerRequestInput,
   RefineCustomerRequestPorts,

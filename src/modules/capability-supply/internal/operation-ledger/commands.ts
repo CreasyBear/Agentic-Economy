@@ -12,32 +12,34 @@ import {
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'
 
-import {
-  bindingRegistrationAudit,
-  transportAdmissionInput,
-} from '../binding'
+import { bindingRegistrationAudit } from '../binding/audit'
+import { transportAdmissionInput } from '../binding/registration'
 import {
   desiredEligibility,
   eligibilityPublicResult,
-  eligibilityReplayAudits,
   validEligibilityInput,
   type EligibilityInput,
-} from '../eligibility'
+} from '../eligibility/decision'
+import { eligibilityReplayAudits } from '../eligibility/replay'
 import {
   bindingObservedRowDigest,
+} from '../quarantine/digest'
+import {
   offeringStatusAfterBindingQuarantine,
-  quarantineBindingAudit,
-  quarantineParentAudit,
   quarantineParentUpdatedDisposition,
   type QuarantineParentDisposition,
-} from '../quarantine'
+} from '../quarantine/policy'
+import {
+  quarantineBindingAudit,
+  quarantineParentAudit,
+} from '../quarantine/audit'
 import {
   MAX_CONTEXT_VALUE_LENGTH,
   boundedTrimmed,
   validCommandEnvelope,
   type RegistrationContext,
   type SupplyCommandActor,
-} from '../shared'
+} from '../shared/command-envelope'
 import {
   beginOperation,
   failOperation,

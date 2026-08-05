@@ -1,6 +1,6 @@
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 
-import { bindRequirementAnswer, rebindPlanSelections, rebindStoredFacts } from '../interpret-compile'
+import { bindRequirementAnswer, rebindPlanSelections, rebindStoredFacts } from '../interpret-compile/facts'
 import type {
   ProvideFactsInput,
   ProvideFactsPorts,

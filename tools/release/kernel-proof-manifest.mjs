@@ -51,13 +51,13 @@ export function verifyKernelProofManifest(manifest, expectedRevision) {
   return { ok: errors.length === 0, errors: [...new Set(errors)].sort() }
 }
 
-export function readExpectedRevision(env = process.env) {
+function readExpectedRevision(env = process.env) {
   const configured = env.AE_RELEASE_SOURCE_REVISION?.trim()
   if (configured) return configured
   return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 }
 
-export function readManifest(env = process.env, argv = process.argv) {
+function readManifest(env = process.env, argv = process.argv) {
   const inline = env.AE_KERNEL_PROOF_MANIFEST_JSON?.trim()
   if (inline) return JSON.parse(inline)
   const path = argv[2] ?? env.AE_KERNEL_PROOF_MANIFEST_PATH

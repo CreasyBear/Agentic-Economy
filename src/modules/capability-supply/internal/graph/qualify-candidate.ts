@@ -3,13 +3,14 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
-import { bindingIntegrityIsValid } from '../binding'
+import { bindingIntegrityIsValid } from '../binding/integrity'
 import {
   bindingEligibilityIsValid,
   offeringEligibilityIsValid,
-} from '../eligibility'
-import { contractRefFromRow, offeringIntegrityIsValid } from '../offering'
-import { publicationLifecycle } from '../publication'
+} from '../eligibility/integrity'
+import { contractRefFromRow } from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
+import { publicationLifecycle } from '../publication/lifecycle'
 
 import type { CapabilityGraphPorts } from './ports'
 

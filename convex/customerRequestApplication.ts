@@ -55,9 +55,10 @@ import {
   type RequestGraphUnavailable,
 } from '@/modules/customer-request/application/public'
 
-import { internal } from './_generated/api'
+import { api, internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
 import { admissionKey } from './lib/rateLimit'
+import { discoverCapabilitiesPort } from './customerRequestDiscoveryPort'
 import { authorizePreparationPorts } from './customerRequestAuthorizePreparationPorts'
 import { compareResumePorts } from './customerRequestCompareResumePorts'
 import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
@@ -685,7 +686,10 @@ export const preview = action({
     }
     const result = await previewCustomerRequestApplication(
       { customerJob: args.customerJob, network: args.network },
-      { loadRequestGraph: (network) => loadRequestGraph(ctx, network) },
+      {
+        loadRequestGraph: (network) => loadRequestGraph(ctx, network),
+        discoverCapabilities: discoverCapabilitiesPort(ctx),
+      },
       {
         maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
         ...(env.OPENROUTER_API_KEY === undefined ? {} : { openRouterApiKey: env.OPENROUTER_API_KEY }),
@@ -1737,7 +1741,8 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     ...(durableShell === undefined ? {} : { durableShell }),
   }, {
     replayCommittedCommand: (replayInput) => replayCommittedCommand(ctx, replayInput),
-    loadRequestGraph: (networkId) => loadRequestGraph(ctx, networkId),
+    loadRequestGraph: (network) => loadRequestGraph(ctx, network),
+    discoverCapabilities: discoverCapabilitiesPort(ctx),
     commitAggregate: async (commitInput) => await ctx.runMutation(
       internal.customerRequestV2.commitAggregate,
       commitInput,

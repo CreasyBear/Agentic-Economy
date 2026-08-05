@@ -17,7 +17,7 @@ import type {
   OfferingPriceInput,
 } from '@/modules/catalog/public'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
-import { publishGateRefusal } from './AeOwnerOfferings'
+import { publishGateRefusal } from './AeOwnerOfferings.exports'
 import type { OwnerOfferingEditorValue, OwnerOfferingSaveResult } from './AeOwnerOfferings'
 
 export type OwnerOfferingSupplyReadResult =

@@ -847,15 +847,15 @@ export function composeRequestActions(
         if (sourceModel === undefined) return []
         return sourceModel.evidence.flatMap((evidence) => {
           if (!evidence.guaranteed || evidence.semanticIdentity !== semanticIdentity) return []
-          return registeredMappings
-            .filter((mapping) => (
-              sameCapabilityContractRef(mapping.sourceContractRef, sourceModel.contractRef)
-              && sameCapabilityContractRef(mapping.targetContractRef, model.contractRef)
-              && mapping.sourceSchemaIdentity === evidence.schemaIdentity
-              && mapping.targetSchemaIdentity === target.schemaIdentity
-              && mappingCompatibleWithPointers(mapping, evidence.outputPointer, target.inputPointer)
-            ))
-            .map((mapping) => ({ sourceAction, sourceModel, evidence, mapping }))
+          return registeredMappings.flatMap((mapping) => (
+            sameCapabilityContractRef(mapping.sourceContractRef, sourceModel.contractRef)
+            && sameCapabilityContractRef(mapping.targetContractRef, model.contractRef)
+            && mapping.sourceSchemaIdentity === evidence.schemaIdentity
+            && mapping.targetSchemaIdentity === target.schemaIdentity
+            && mappingCompatibleWithPointers(mapping, evidence.outputPointer, target.inputPointer)
+              ? [{ sourceAction, sourceModel, evidence, mapping }]
+              : []
+          ))
         })
       })
       if (candidates.length !== 1) continue

@@ -248,9 +248,9 @@ export function computeOperationMarketProofGate(
     if (attemptCost > manifest.spend.maximumAttemptCostMinor) failures.push(`${attempt.attemptRef}:attempt_cost_exceeded`)
     const roles = [...new Set(attempt.steps.map((step) => step.role))]
     if (roles.length !== 3) failures.push(`${attempt.attemptRef}:step_roles_incomplete`)
-    const selectedRoles = attempt.steps.filter(({ outcome }) => outcome === 'selected').map(({ role: selectedRole }) => selectedRole).sort()
+    const selectedRoles = attempt.steps.reduce<string[]>((rolesByStep, { role, outcome }) => { if (outcome === 'selected') rolesByStep.push(role); return rolesByStep }, []).sort()
     if (selectedRoles.join(',') !== 'exa_contents,exa_search') failures.push(`${attempt.attemptRef}:exa_selection_incomplete`)
-    const executedRoles = attempt.steps.filter(({ outcome }) => outcome === 'succeeded').map(({ role: executedRole }) => executedRole)
+    const executedRoles = attempt.steps.reduce<string[]>((rolesByStep, { role, outcome }) => { if (outcome === 'succeeded') rolesByStep.push(role); return rolesByStep }, [])
     if (executedRoles.length !== 1 || executedRoles[0] !== 'frankfurter_rate') failures.push(`${attempt.attemptRef}:provider_execution_invalid`)
     for (const step of attempt.steps) {
       const expected = manifest.operations.find(({ role: expectedRole }) => expectedRole === step.role)

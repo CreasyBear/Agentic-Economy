@@ -8,15 +8,15 @@ import {
 } from '@/modules/capability-supply/public'
 import { type StableHashValue } from '@/modules/common/stable-hash'
 
-import { bindingIntegrityIsValid } from '../binding'
-import { offeringIntegrityIsValid } from '../offering'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import { offeringIntegrityIsValid } from '../offering/integrity'
 import {
   beginOperation,
   replayOperationResult,
   succeedOperation,
 } from '../operation-ledger/policy'
 import { ensureSupplyAudit } from '../operation-ledger/replay'
-import type { RegistrationContext, SupplyCommandActor } from '../shared'
+import type { RegistrationContext, SupplyCommandActor } from '../shared/command-envelope'
 import {
   capabilityPublicationProvenanceDigest,
   defineCapabilityPublicationProvenance,

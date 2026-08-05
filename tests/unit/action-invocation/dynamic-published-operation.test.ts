@@ -680,7 +680,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       },
     }
     const loaded = loadDynamicPublishedAdapterSnapshot(
-      JSON.parse(JSON.stringify(snapshot)),
+      structuredClone(snapshot),
       snapshotAnchors,
     )
     const legacySnapshot = JSON.parse(JSON.stringify(snapshot))
@@ -863,7 +863,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     expect(cold.inspect(prepared.invocationRef)?.control)
       .toMatchObject({ state: 'reconciliation_required' })
     const cutLoaded = loadDynamicPublishedAdapterSnapshot(
-      JSON.parse(JSON.stringify(cutSnapshot)),
+      structuredClone(cutSnapshot),
       {
         operation: fixture.operation,
         descriptor: fixture.descriptor,
@@ -1460,7 +1460,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       .toMatchObject({ state: 'reconciliation_required' })
     const snapshot = adapter.exportSnapshot()
     const loaded = loadDynamicPublishedAdapterSnapshot(
-      JSON.parse(JSON.stringify(snapshot)),
+      structuredClone(snapshot),
       {
         ...dynamicSnapshotAnchors(fixture, first, origin, 'uncertain', 1),
         expectedChallengeDigest: snapshot.paymentAttempts[0]!.challengeDigest,
@@ -1548,7 +1548,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       invocationRef: prepared.invocationRef,
     })).toEqual({ kind: 'owner' })
     const loaded = loadDynamicPublishedAdapterSnapshot(
-      JSON.parse(JSON.stringify(adapter.exportSnapshot())),
+      structuredClone(adapter.exportSnapshot()),
       dynamicSnapshotAnchors(fixture, prepared, origin, 'pending', 1),
     )
     const coldSource = createDevelopmentDynamicPublishedSource(

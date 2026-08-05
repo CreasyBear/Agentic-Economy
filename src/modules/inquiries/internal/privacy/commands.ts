@@ -74,36 +74,36 @@ export function deleteInquiryPrivateContent(
   }
 
   const redactedThread = removeCustomerReplyEmail(thread)
-  const receiptErasureLineage: GovernedSendErasureLineageRecord[] = state.governedSendReceipts
-    .filter((receipt) => receipt.threadId === thread.threadId && receipt.retention === 'recoverable')
-    .map((receipt) => {
-      const keyRef = inquiryReceiptKeyRef(receipt)
-      const erasureEventId = `governed-send-erasure:${canonicalDigest({
-        receiptOperationKey: String(receipt.operationKey),
-        privacyOperationKey: String(command.operationKey),
-        keyRef,
-      })}`
-      const priorReceiptCommitment = canonicalDigest({
-        operationKey: String(receipt.operationKey),
-        threadId: String(receipt.threadId),
-        digest: receipt.digest,
-        schemaVersion: receipt.schemaVersion,
-        recipientRef: receipt.recipientRef,
-        keyRef,
-      })
-      const lineage = {
-        erasureEventId,
-        receiptOperationKey: receipt.operationKey,
-        privacyOperationKey: command.operationKey,
-        threadId: receipt.threadId,
-        digest: receipt.digest,
-        keyRef,
-        reasonCode,
-        destroyedAt: command.now,
-        priorReceiptCommitment,
-      }
-      return { ...lineage, lineageHash: canonicalDigest(lineage) }
+  const receiptErasureLineage: GovernedSendErasureLineageRecord[] = []
+  for (const receipt of state.governedSendReceipts) {
+    if (receipt.threadId !== thread.threadId || receipt.retention !== 'recoverable') continue
+    const keyRef = inquiryReceiptKeyRef(receipt)
+    const erasureEventId = `governed-send-erasure:${canonicalDigest({
+      receiptOperationKey: String(receipt.operationKey),
+      privacyOperationKey: String(command.operationKey),
+      keyRef,
+    })}`
+    const priorReceiptCommitment = canonicalDigest({
+      operationKey: String(receipt.operationKey),
+      threadId: String(receipt.threadId),
+      digest: receipt.digest,
+      schemaVersion: receipt.schemaVersion,
+      recipientRef: receipt.recipientRef,
+      keyRef,
     })
+    const lineage = {
+      erasureEventId,
+      receiptOperationKey: receipt.operationKey,
+      privacyOperationKey: command.operationKey,
+      threadId: receipt.threadId,
+      digest: receipt.digest,
+      keyRef,
+      reasonCode,
+      destroyedAt: command.now,
+      priorReceiptCommitment,
+    }
+    receiptErasureLineage.push({ ...lineage, lineageHash: canonicalDigest(lineage) })
+  }
   const erasureEventIds = receiptErasureLineage.map((lineage) => lineage.erasureEventId)
   const tombstone: InquiryPrivacyTombstoneRecord = {
     threadId: thread.threadId,

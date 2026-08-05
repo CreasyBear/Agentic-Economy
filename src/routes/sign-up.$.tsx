@@ -1,5 +1,5 @@
 import { SignUp } from '@clerk/tanstack-react-start'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -43,7 +43,7 @@ function SignUpRoute() {
                 <h1 id="sign-up-context-heading" className="text-4xl font-semibold leading-tight tracking-tight text-balance text-foreground">Local preview sign-up is off</h1>
                 <p className="block text-muted-foreground">This browser journey does not connect a Clerk account. Nothing is signed in or authorized.</p>
               </div>
-              <Button asChild variant="default" className="min-h-11 justify-self-start"><a href="/">Browse the local demo</a></Button>
+              <Button asChild variant="default" className="min-h-11 justify-self-start"><Link to="/">Browse the local demo</Link></Button>
             </div>
           ) : (
             <>

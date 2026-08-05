@@ -333,15 +333,17 @@ export const readProjectSpine = internalQuery({
   handler: async (ctx, args): Promise<ProjectSpineRead | null> => {
     const project = await getCurrentProject(ctx, args.projectId)
     if (project === null) return null
-    const events = await ctx.db
-      .query('projectSpineEvents')
-      .withIndex('by_projectId_and_seq', (q) => q.eq('projectId', args.projectId))
-      .order('asc')
-      .take(MAX_PROJECT_SPINE_EVENTS)
-    const quote = await ctx.db
-      .query('projectSpineQuotes')
-      .withIndex('by_projectId_and_quoteId', (q) => q.eq('projectId', args.projectId).eq('quoteId', `quote:${args.projectId}`))
-      .unique()
+    const [events, quote] = await Promise.all([
+      ctx.db
+        .query('projectSpineEvents')
+        .withIndex('by_projectId_and_seq', (q) => q.eq('projectId', args.projectId))
+        .order('asc')
+        .take(MAX_PROJECT_SPINE_EVENTS),
+      ctx.db
+        .query('projectSpineQuotes')
+        .withIndex('by_projectId_and_quoteId', (q) => q.eq('projectId', args.projectId).eq('quoteId', `quote:${args.projectId}`))
+        .unique(),
+    ])
     const workflow: WorkflowRead | null = project.workflowId === undefined
       ? null
       : {

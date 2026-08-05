@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
 export const AnswerProseSchema = z.object({
-  oneLine: z.string().min(1).max(400),
-  summary: z.string().min(1).max(4000),
-  whatToDoNow: z.string().min(1).max(800),
+  oneLine: z.string().min(1).max(240),
+  summary: z.string().min(1).max(700),
+  whatToDoNow: z.string().min(1).max(400),
 })
 
 export type AnswerProse = z.infer<typeof AnswerProseSchema>

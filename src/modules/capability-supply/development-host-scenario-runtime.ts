@@ -161,40 +161,6 @@ export function developmentLostResponseRuntime(
   }
 }
 
-export function developmentReconciliableLostResponseRuntime(
-  endpoint: string,
-  effects: DevelopmentEffectCounts,
-  expectedAttemptRef: string,
-  observer: DevelopmentTransportObserver = () => undefined,
-): Readonly<{
-  runtime: RouteTransportRuntime
-  reconcile: (attemptRef: string) => Readonly<{
-    resolution: 'released'
-    evidence: 'provider_ledger'
-    attemptRef: string
-  }> | undefined
-}> {
-  const releasedAttempts = new Set<string>()
-  const base = developmentLostResponseRuntime(endpoint, effects, (event) => {
-    observer(event)
-    if (event.kind === 'provider_release') {
-      releasedAttempts.add(expectedAttemptRef)
-    }
-  })
-  return {
-    runtime: base,
-    reconcile: (attemptRef) => {
-      observer({
-        kind: 'provider_reconciliation',
-        detail: { attemptRef, released: releasedAttempts.has(attemptRef), automated: true },
-      })
-      return releasedAttempts.has(attemptRef)
-        ? { resolution: 'released', evidence: 'provider_ledger', attemptRef }
-        : undefined
-    },
-  }
-}
-
 export function developmentProviderTimeoutRuntime(
   endpoint: string,
   effects: DevelopmentEffectCounts,

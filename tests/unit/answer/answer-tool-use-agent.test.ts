@@ -189,11 +189,11 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       {
         ...(openRouterStructuredProseResponse(
           {
-            oneLine: 'One listed business matches this need.',
+            oneLine: 'Start with an emergency plumber serving Parramatta.',
             summary:
-              'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+              'Parramatta Emergency Plumbing lists Emergency pipe repair, while Demo Plumbing lists Diagnostic plumbing. Price and current availability still need confirmation.',
             whatToDoNow:
-              'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+              'Contact one and ask: “Can you attend in Parramatta, what is the call-out price, and when are you available?”',
           },
           { id: 'chatcmpl-round-2', model: 'test-model-resolved' },
         ) as Record<string, unknown>),
@@ -218,11 +218,31 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
       })
-
       expect(result.gate.ok).toBe(true)
       expect(result.providers.map((provider) => provider.slug)).toContain(
         'parramatta-emergency-plumbing',
       )
+      expect(result.snapshot.oneLine).toBe(
+        'Start with an emergency plumber serving Parramatta.',
+      )
+      expect(result.snapshot.summary).toContain(
+        'Parramatta Emergency Plumbing lists Emergency pipe repair',
+      )
+      expect(result.snapshot.summary).toContain(
+        'Price and current availability still need confirmation.',
+      )
+      expect(result.snapshot.nextStep).toContain(
+        'what is the call-out price, and when are you available?',
+      )
+      const humanCopy = [
+        result.snapshot.oneLine,
+        result.snapshot.summary,
+        result.snapshot.nextStep,
+      ].join('\n')
+      expect(humanCopy).not.toMatch(
+        /(?:business|listing(?:s)?) (?:confirms?|handles?) .*?(?:timing|price|availability|work)/i,
+      )
+      expect(humanCopy).not.toMatch(/send an inquiry|inquiry form/i)
       expect(result.modelRequests).toHaveLength(2)
       expect(result.modelRequests[0]).toMatchObject({
         seq: 0,
@@ -478,11 +498,26 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
   })
 
-  it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
-    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-      prose: matchingProviderProse(),
-    }))
+  it('recovers a misspelled query and falls back after two model overclaims', async () => {
+    const server = await startOpenRouterContractServer((_request, index) => {
+      if (index === 0) {
+        return openRouterToolResponse([
+          { toolId: 'registry.search', input: { query: 'joondalup' } },
+        ])
+      }
+      if (index === 1) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'This business can fix the problem.',
+          summary: 'Joondalup Rapid Plumbing can handle the work and is available now.',
+          whatToDoNow: 'Contact the business.',
+        })
+      }
+      return openRouterStructuredProseResponse({
+        oneLine: 'Joondalup Rapid Plumbing guarantees immediate service.',
+        summary: 'Joondalup Rapid Plumbing can handle the work now.',
+        whatToDoNow: 'Book it.',
+      })
+    })
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
@@ -493,12 +528,12 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
 
     try {
       const result = await runAnswerToolUseAgent({
-        query: 'paramata',
+        query: 'jondalup',
       })
       expect(result.providers.map((provider) => provider.slug)).toContain(
-        'parramatta-emergency-plumbing',
+        'joondalup-rapid-plumbing',
       )
-      expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
+      expect(result.allowedSlugs.has('joondalup-rapid-plumbing')).toBe(true)
       expect(result.toolCalls).toHaveLength(1)
       expect(result.modelRequests).toEqual([
         expect.objectContaining({
@@ -513,11 +548,23 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           status: 'ok',
           stopReason: 'stop',
         }),
+        expect.objectContaining({
+          provider: 'openrouter',
+          model: 'test-model',
+          status: 'ok',
+          stopReason: 'stop',
+        }),
       ])
       expect(result.toolCalls[0]?.toolId).toBe('registry.search')
       expect(result.gate.ok).toBe(true)
       expect(result.snapshot.providers.map((provider) => provider.slug)).toContain(
-        'parramatta-emergency-plumbing',
+        'joondalup-rapid-plumbing',
+      )
+      expect(result.snapshot.summary).toContain(
+        'Joondalup Rapid Plumbing lists Emergency plumbing, published pricing "Demo price — $180 call-out, quoted before work starts", and published availability "Mon–Fri 7am–5pm, Sat 8am–12pm".',
+      )
+      expect(result.snapshot.nextStep).toBe(
+        'Contact Joondalup Rapid Plumbing to confirm whether Emergency plumbing covers your job, whether "Demo price — $180 call-out, quoted before work starts" applies, and the earliest appointment within "Mon–Fri 7am–5pm, Sat 8am–12pm".',
       )
     } finally {
       if (previousLocalRegistry === undefined) {
@@ -751,6 +798,14 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       // snapshot has no providers so the gate does not reject on grounding.
       // This test still proves the loop runs and returns a structured result.
       expect(result.snapshot.providers).toEqual([])
+      expect(result.snapshot.oneLine).toBe('No matching listed business was found for "no-such-suburb".')
+      expect(result.snapshot.summary).toBe(
+        'No matching listed business was found for "no-such-suburb". Try a location or a broader service description.',
+      )
+      expect(result.snapshot.nextStep).toBe('Try a nearby location or a broader service description.')
+      expect(result.snapshot.oneLine).not.toContain('Fictional Plumbing')
+      expect(result.snapshot.summary).not.toMatch(/confirms timing|inquiry/i)
+      expect(result.snapshot.nextStep).not.toMatch(/confirms timing|inquiry/i)
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -823,8 +878,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       prose: {
         oneLine: 'One listing matches the prior results.',
         summary:
-          'The earlier provider still applies. The business confirms timing, price, availability, and the work.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'The earlier provider still publishes relevant services. Scope, price, and current availability still need confirmation.',
+        whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -914,8 +969,8 @@ function matchingProviderProse(): OpenRouterProsePlan {
   return {
     oneLine: 'One listed business matches this need.',
     summary:
-      'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
-    whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+      'The listing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
+    whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
   }
 }
 

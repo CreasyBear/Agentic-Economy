@@ -514,7 +514,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (attached.kind === 'refused') throw new Error(attached.reason)
     const coldRequest = structuredClone(
-      JSON.parse(JSON.stringify(attached.aggregate)) as CustomerRequestV2Aggregate,
+      structuredClone(attached.aggregate) as CustomerRequestV2Aggregate,
     )
     expect(aggregateIsInternallyConsistent(coldRequest, 0)).toBe(true)
     expect(coldRequest.completedTaskReferences).toEqual([attached.reference])

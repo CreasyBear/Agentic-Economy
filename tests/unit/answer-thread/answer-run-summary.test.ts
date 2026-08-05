@@ -85,9 +85,9 @@ describe('answer run summary', () => {
       code: 'grounding_failed',
     })
     expect(report.coverage).toEqual({
-      toolsAvailable: ['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover'],
+      toolsAvailable: ['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover', 'registry.operations.search'],
       toolsInvoked: ['registry.detail', 'registry.search'],
-      toolsUnused: ['sandbox.checkup_quote', 'web.discover'],
+      toolsUnused: ['sandbox.checkup_quote', 'web.discover', 'registry.operations.search'],
       workLogPhases: ['assemble', 'interpret', 'search'],
       hasProviders: true,
       hasAllowedSlugs: true,
@@ -126,7 +126,7 @@ describe('answer run summary', () => {
       refused: 1,
       totalDurationMs: 7,
     })
-    expect(harnessReport.coverage.toolsUnused).toEqual(['sandbox.checkup_quote', 'web.discover'])
+    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.operations.search', 'sandbox.checkup_quote', 'web.discover'])
     expect(harnessReport.summary.errors.codes).toContain('grounding_failed')
   })
 
@@ -151,7 +151,7 @@ describe('answer run summary', () => {
       ok: false,
       source: 'turn_status',
     })
-    expect(report.coverage.toolsUnused).toEqual(['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover'])
+    expect(report.coverage.toolsUnused).toEqual(['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover', 'registry.operations.search'])
     expect(buildPublicAnswerCheckSummary(report)).toEqual({
       catalogSearches: 0,
       listingsRead: 0,
@@ -175,7 +175,7 @@ describe('answer run summary', () => {
       },
     })
     expect(harnessReport.summary.run.status).toBe('error')
-    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.detail', 'registry.search', 'sandbox.checkup_quote', 'web.discover'])
+    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.detail', 'registry.operations.search', 'registry.search', 'sandbox.checkup_quote', 'web.discover'])
   })
 })
 

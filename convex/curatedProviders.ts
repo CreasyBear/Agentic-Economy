@@ -173,8 +173,7 @@ export const seed = internalMutation({
     )
     const mappingEvidenceRefs = [...new Set(
       CURATED_PROVIDER_PUBLICATIONS
-        .filter(({ businessSlug }) => businessSlug === EXA_BUSINESS_SLUG)
-        .flatMap(({ publication }) => publication.evidenceRefs),
+        .flatMap(({ businessSlug, publication }) => businessSlug === EXA_BUSINESS_SLUG ? publication.evidenceRefs : []),
     )]
     const mappingResult = await registerCuratedMapping(ctx, {
       networkId: 'ae:public',

@@ -7,12 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
-import { AeSupplyFunnel, emptySupplyFunnelDraft, readSupplyFunnelDraft, writeSupplyFunnelDraft } from '@/components/ae/supply/AeSupplyFunnel'
+import { AeSupplyFunnel } from '@/components/ae/supply/AeSupplyFunnel'
+import { emptySupplyFunnelDraft, readSupplyFunnelDraft, writeSupplyFunnelDraft } from '@/components/ae/supply/AeSupplyFunnel.exports'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/AeSupplyEarningsCard'
 import type { SupplyFunnelStep, SupplyFunnelStepCompletion } from '@/modules/capability-supply/supply-funnel.functions'
 import type { AgentToolDescriptor } from '@/modules/actions'
 import type { ServiceDto } from '@/modules/registry/public'
-import { emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
+import { emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 
 const tool: AgentToolDescriptor = {
   id: 'registry.services_list', name: 'List published services', summary: 'Read published services.', boundaries: ['Read-only.'], readOnly: true,

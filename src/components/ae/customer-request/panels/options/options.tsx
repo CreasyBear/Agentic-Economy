@@ -3,11 +3,9 @@ import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatMoney } from '@/lib/ui/format-money'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import type { ConversationTurn } from '../../workspace-types'
-import {
-  Conversation,
-  WorkingUnderstanding,
-  RecoveryActions,
-} from '../shared'
+import { Conversation } from '../shared/conversation'
+import { WorkingUnderstanding } from '../shared/working-understanding'
+import { RecoveryActions } from '../shared/recovery-actions'
 
 export function OptionsCard({ projection, turns, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; edit: () => void; restart: () => void }) {
   const optionSet = projection.optionSet

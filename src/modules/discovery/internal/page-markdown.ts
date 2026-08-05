@@ -167,7 +167,11 @@ export function buildMissingBusinessMarkdown(
 }
 
 function catalogRow(business: PublicBusinessCatalogApiV2Dto, base: string): string {
-  const offerings = business.offerings.map((offering) => oneLine(offering.name)).filter((name) => name.length > 0)
+  const offerings = business.offerings.reduce<string[]>((acc, offering) => {
+    const name = oneLine(offering.name)
+    if (name.length > 0) acc.push(name)
+    return acc
+  }, [])
   // The first published price, not a computed cheapest: a row is a pointer to
   // the listing, and inventing a business-level minimum would publish a number
   // no offering carries.

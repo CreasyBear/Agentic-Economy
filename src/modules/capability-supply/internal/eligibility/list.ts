@@ -8,9 +8,10 @@ import {
   type PublicOperationRef,
 } from '@/modules/capability-supply/public'
 
-import { bindingIntegrityIsValid } from '../binding'
-import { contractRefFromRow, offeringIntegrityIsValid } from '../offering'
-import { publicationLifecycle } from '../publication'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import { contractRefFromRow } from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
+import { publicationLifecycle } from '../publication/lifecycle'
 
 import { bindingEligibilityIsValid, offeringEligibilityIsValid } from './integrity'
 import {

@@ -16,7 +16,8 @@ import {
   attachCompletedTaskReference,
   type AttachCompletedTaskReferencePorts,
 } from './completed-task-reference'
-import { rebindPlanSelections, rebindStoredFacts, type RequestGraph } from './interpret-compile'
+import { rebindPlanSelections, rebindStoredFacts } from './interpret-compile/facts'
+import type { RequestGraph } from './interpret-compile/types'
 
 export type PersistCompletedTaskReferenceInput = Readonly<{
   requestRef: string

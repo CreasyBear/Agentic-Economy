@@ -9,7 +9,7 @@ import {
   validCapabilityPublicationSourceRevision,
   type CapabilityPublicationAuthorityMode,
 } from './provenance'
-import { validRegistrationContext, type RegistrationContext, type SupplyCommandActor } from '../shared'
+import { validRegistrationContext, type RegistrationContext, type SupplyCommandActor } from '../shared/command-envelope'
 
 export type CapabilityPublicationAdmissionSource = CapabilityPublicationImport & Readonly<{
   sourceRevision: string

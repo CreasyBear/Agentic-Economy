@@ -35,6 +35,7 @@ import type * as customerRequestApplication from "../customerRequestApplication.
 import type * as customerRequestAuthorizePreparationPorts from "../customerRequestAuthorizePreparationPorts.js";
 import type * as customerRequestCompareResumePorts from "../customerRequestCompareResumePorts.js";
 import type * as customerRequestConfirmRoutePorts from "../customerRequestConfirmRoutePorts.js";
+import type * as customerRequestDiscoveryPort from "../customerRequestDiscoveryPort.js";
 import type * as customerRequestEvaluationBindings from "../customerRequestEvaluationBindings.js";
 import type * as customerRequestEvidenceLoadPorts from "../customerRequestEvidenceLoadPorts.js";
 import type * as customerRequestPrincipals from "../customerRequestPrincipals.js";
@@ -138,6 +139,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestAuthorizePreparationPorts: typeof customerRequestAuthorizePreparationPorts;
   customerRequestCompareResumePorts: typeof customerRequestCompareResumePorts;
   customerRequestConfirmRoutePorts: typeof customerRequestConfirmRoutePorts;
+  customerRequestDiscoveryPort: typeof customerRequestDiscoveryPort;
   customerRequestEvaluationBindings: typeof customerRequestEvaluationBindings;
   customerRequestEvidenceLoadPorts: typeof customerRequestEvidenceLoadPorts;
   customerRequestPrincipals: typeof customerRequestPrincipals;

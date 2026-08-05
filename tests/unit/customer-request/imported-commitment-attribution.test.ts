@@ -164,7 +164,7 @@ describe('ADR-009 gate 3 imported commitment attribution', () => {
   it('cold-reconstructs source custody and attaches reference-only meaning to canonical V2', () => {
     const liveStore = createDevelopmentImportedCommitmentStore()
     expect(importCommitmentClaim(input(), liveStore).kind).toBe('imported')
-    const persistedRows = JSON.parse(JSON.stringify(liveStore.snapshot()))
+    const persistedRows = structuredClone(liveStore.snapshot())
     const coldStore = createDevelopmentImportedCommitmentStore(persistedRows)
     const candidate = aggregate()
     const attached = attachImportedCommitmentReference({
@@ -194,7 +194,7 @@ describe('ADR-009 gate 3 imported commitment attribution', () => {
     expect('sourceBytes' in attached.reference).toBe(false)
     expect('invocationRef' in attached.reference).toBe(false)
     expect(aggregateIsInternallyConsistent(
-      JSON.parse(JSON.stringify(writableCustomerRequestV2Aggregate(attached.aggregate))),
+      structuredClone(writableCustomerRequestV2Aggregate(attached.aggregate)),
       0,
     )).toBe(true)
     const replay = attachImportedCommitmentReference({
@@ -253,7 +253,7 @@ describe('ADR-009 gate 3 imported commitment attribution', () => {
 
   it('preserves historical Request replay without manufacturing the new field', () => {
     const historical = aggregate()
-    const replayed = JSON.parse(JSON.stringify(writableCustomerRequestV2Aggregate(historical)))
+    const replayed = structuredClone(writableCustomerRequestV2Aggregate(historical))
     expect(replayed.importedCommitmentReferences).toBeUndefined()
     expect(aggregateIsInternallyConsistent(replayed, 0)).toBe(true)
   })

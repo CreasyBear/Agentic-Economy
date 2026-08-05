@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { decideCustomerProblemReply } from '../problem-support'
+import { decideCustomerProblemReply } from '../problem-support/commands'
 
 import type {
   ProblemMutationPorts,

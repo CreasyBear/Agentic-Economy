@@ -5,23 +5,26 @@ import type {
   CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 
-import { bindingIntegrityIsValid, type CapabilityBindingRow } from '../binding'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import type { CapabilityBindingRow } from '../binding/registration'
 import {
   desiredEligibility,
   type DesiredEligibility,
   type EligibilityInput,
-} from '../eligibility'
-import { offeringIntegrityIsValid } from '../offering'
-import { validQuarantineAuditPayload } from '../quarantine'
+} from '../eligibility/decision'
+import { offeringIntegrityIsValid } from '../offering/integrity'
+import { validQuarantineAuditPayload } from '../quarantine/audit'
 import {
   storedAuditMatches,
   storedSupplyAuditEffectRef,
   supplyAuditEffectRef,
   supplyAuditEventId,
-  type RegistrationContext,
   type SupplyAuditInput,
-  type SupplyCommandActor,
-} from '../shared'
+} from '../shared/supply-audit'
+import type {
+  RegistrationContext,
+  SupplyCommandActor,
+} from '../shared/command-envelope'
 import { isTrustedQuarantineParent, replayOperationResult } from './policy'
 import type { OperationLedgerPorts, QuarantineCommand, ReplayExpectation } from './types'
 
@@ -160,7 +163,7 @@ export async function verifyReplayAudits(
   if (replay.effectRefs.length !== expectations.length) {
     throw new Error('capability_supply_operation_integrity_failure')
   }
-  for (const [index, expectation] of expectations.entries()) {
+  await Promise.all(expectations.map(async (expectation, index) => {
     const eventId = supplyAuditEventId(expectation.audit)
     const existing = await ports.findAuditByEventId(eventId)
     if (
@@ -170,7 +173,7 @@ export async function verifyReplayAudits(
     ) {
       throw new Error('capability_supply_operation_integrity_failure')
     }
-  }
+  }))
 }
 
 export async function ensureSupplyAudit(

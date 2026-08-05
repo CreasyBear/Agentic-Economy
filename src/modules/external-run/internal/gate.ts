@@ -81,9 +81,10 @@ function rateAtMost(metric: ExternalRunRateMetric, threshold: number): boolean {
 }
 
 function finiteBoolean(rows: readonly ExternalRunEvidence[], signal: ExternalRunEvidence['signal'], evidenceClass?: ExternalRunEvidenceClass): 'yes' | 'no' | 'unknown' | 'missing' {
-  const values = rows
-    .filter((row) => row.signal === signal && (evidenceClass === undefined || row.evidenceClass === evidenceClass))
-    .map((row) => row.value)
+  const values: ExternalRunEvidence['value'][] = []
+  for (const row of rows) {
+    if (row.signal === signal && (evidenceClass === undefined || row.evidenceClass === evidenceClass)) values.push(row.value)
+  }
   if (values.length === 0) return 'missing'
   if (values.some((value) => value === 'unknown')) return 'unknown'
   const booleans = values.filter((value): value is boolean => typeof value === 'boolean')
@@ -93,9 +94,10 @@ function finiteBoolean(rows: readonly ExternalRunEvidence[], signal: ExternalRun
 }
 
 function preference(rows: readonly ExternalRunEvidence[]): 'ae' | 'incumbent' | 'tie' | 'unknown' | 'missing' {
-  const values = rows
-    .filter((row) => row.signal === 'blind_preference' && row.evidenceClass === 'customer')
-    .map((row) => row.value)
+  const values: ExternalRunEvidence['value'][] = []
+  for (const row of rows) {
+    if (row.signal === 'blind_preference' && row.evidenceClass === 'customer') values.push(row.value)
+  }
   if (values.length === 0) return 'missing'
   if (values.some((value) => value === 'unknown')) return 'unknown'
   const preferences = values.filter((value): value is 'ae' | 'incumbent' | 'tie' => value === 'ae' || value === 'incumbent' || value === 'tie')
@@ -104,9 +106,10 @@ function preference(rows: readonly ExternalRunEvidence[]): 'ae' | 'incumbent' | 
 }
 
 function touchCount(rows: readonly ExternalRunEvidence[]): number | undefined {
-  const values = rows
-    .filter((row) => row.evidenceClass === 'hosted' && row.signal === 'operator_touch_count' && typeof row.value === 'number' && row.value >= 0)
-    .map((row) => row.value as number)
+  const values: number[] = []
+  for (const row of rows) {
+    if (row.evidenceClass === 'hosted' && row.signal === 'operator_touch_count' && typeof row.value === 'number' && row.value >= 0) values.push(row.value)
+  }
   if (values.length === 0 || values.some((value) => value !== values[0])) return undefined
   return values[0]
 }
@@ -142,12 +145,13 @@ function validateRows(manifest: ExternalRunManifest, starts: readonly ExternalRu
     if (startRefs.has(start.startRef)) throw new Error('external_run_duplicate_start_ref')
     startRefs.add(start.startRef)
   }
+  const startByRef = new Map(starts.map((start) => [start.startRef, start]))
   for (const item of evidence) {
     externalRunEvidenceSchema.parse(item)
     if (!startRefs.has(item.startRef)) throw new Error('external_run_evidence_start_missing')
     if (evidenceRefs.has(item.evidenceRef)) throw new Error('external_run_duplicate_evidence_ref')
     evidenceRefs.add(item.evidenceRef)
-    const start = starts.find((candidate) => candidate.startRef === item.startRef)
+    const start = startByRef.get(item.startRef)
     if (item.evidenceClass === 'provider' && item.providerRef !== start?.providerRef) throw new Error('external_run_provider_evidence_mismatch')
     if (!externalRunEvidenceDigestValid(item)) throw new Error('external_run_evidence_digest_invalid')
   }
@@ -183,6 +187,7 @@ export function buildExternalRunReport(manifest: ExternalRunManifest, starts: re
   let contributionMarginMinor = 0
   const touchCounts: number[] = []
   const providerRefs = new Set<string>()
+  const independentProviderRefs = new Set(manifest.independentProviderRefs)
 
   for (let index = 0; index < expected; index += 1) {
     const start = orderedStarts[index]
@@ -190,7 +195,7 @@ export function buildExternalRunReport(manifest: ExternalRunManifest, starts: re
     const rows = evidenceByStart.get(start.startRef) ?? []
     if (
       rows.some((row) => row.evidenceClass === 'provider' && row.providerRef === start.providerRef)
-      && manifest.independentProviderRefs.includes(start.independentProviderRef)
+      && independentProviderRefs.has(start.independentProviderRef)
       && start.independentProviderRef.length > 0
     ) {
       providerRefs.add(start.independentProviderRef)
@@ -211,10 +216,9 @@ export function buildExternalRunReport(manifest: ExternalRunManifest, starts: re
     if (finiteBoolean(rows, 'settled_real_payment', 'payment') === 'yes') settledRealPayments += 1
     const touch = touchCount(rows)
     if (touch !== undefined) touchCounts.push(touch)
-    contributionMarginMinor += rows
-      .filter((row) => row.signal === 'contribution_margin_minor' && row.evidenceClass === 'payment' && typeof row.value === 'number')
-      .map((row) => row.value as number)
-      .reduce((sum, value) => sum + value, 0)
+    for (const row of rows) {
+      if (row.signal === 'contribution_margin_minor' && row.evidenceClass === 'payment' && typeof row.value === 'number') contributionMarginMinor += row.value as number
+    }
   }
 
   const operatorTouches: ExternalRunOperatorTouchMetric = {

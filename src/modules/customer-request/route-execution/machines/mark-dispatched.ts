@@ -1,6 +1,6 @@
 import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 
-import { routeAttemptIntegrityValid, routeDispatchIntegrityValid } from '../journal'
+import { routeAttemptIntegrityValid, routeDispatchIntegrityValid } from '../journal/integrity'
 import type { DispatchLifecyclePorts } from './dispatch-lifecycle-ports'
 import type { MarkDispatchedCommand, MarkDispatchedResult } from './types'
 
@@ -9,8 +9,10 @@ export async function markDispatched(
   ports: DispatchLifecyclePorts,
 ): Promise<MarkDispatchedResult> {
   const now = ports.now()
-  const dispatch = await ports.loadDispatchByRef(args.dispatchRef)
-  const attempt = await ports.loadAttemptByRef(args.attemptRef)
+  const [dispatch, attempt] = await Promise.all([
+    ports.loadDispatchByRef(args.dispatchRef),
+    ports.loadAttemptByRef(args.attemptRef),
+  ])
   if (dispatch === null || attempt === null || !routeDispatchIntegrityValid(dispatch)
     || !routeAttemptIntegrityValid(attempt) || dispatch.attemptRef !== attempt.attemptRef) {
     return { kind: 'refused', reason: 'dispatch_not_current' }

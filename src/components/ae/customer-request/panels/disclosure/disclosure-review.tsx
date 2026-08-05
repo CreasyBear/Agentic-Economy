@@ -3,6 +3,8 @@ import { Card } from '@/components/ui/card'
 
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import type { ConversationTurn } from '../../workspace-types'
-import { Conversation, WorkingUnderstanding, RecoveryActions } from '../shared'
+import { Conversation } from '../shared/conversation'
+import { WorkingUnderstanding } from '../shared/working-understanding'
+import { RecoveryActions } from '../shared/recovery-actions'
 
 export function DisclosureReview({ projection, turns, authorize, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; authorize: () => Promise<void>; edit: () => void; restart: () => void }) { const review = projection.disclosureReview; if (review === undefined) return null; return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={projection} correct={edit} /><Card className="p-5"><div className="grid gap-4"><p className="text-sm font-semibold text-brand">Before AE contacts businesses</p><h2 className="text-2xl font-semibold">Review what would be shared</h2><p className="text-muted-foreground">To {review.purpose.toLocaleLowerCase()}, AE would share the following with up to {review.maximumRecipients} matching {review.maximumRecipients === 1 ? 'business' : 'businesses'}.</p><ul className="grid gap-2">{review.categories.map((category) => <li key={`${category.label}:${category.classification}`} className="rounded-md border border-border bg-card px-3 py-2"><strong>{category.label}</strong> <span className="text-muted-foreground">· {category.classification}</span></li>)}</ul><p className="font-semibold">Nothing has been shared. Explicit permission is required before preparation can continue.</p><Button type="button" variant="default" onClick={authorize}>Allow this comparison</Button><RecoveryActions edit={edit} restart={restart} /></div></Card></section> }

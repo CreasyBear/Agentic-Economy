@@ -6,8 +6,8 @@ import {
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
-import { contractRefFromRow } from '../offering'
-import type { RegistrationContext } from '../shared'
+import { contractRefFromRow } from '../offering/registration'
+import type { RegistrationContext } from '../shared/command-envelope'
 
 import { preparePublicationDraft } from './draft'
 import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'

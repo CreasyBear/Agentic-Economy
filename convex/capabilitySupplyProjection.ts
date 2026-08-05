@@ -44,10 +44,12 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   if (!await projectionOperatorControlEnabled(sourceDb, 'offering_public_projection_enabled', now)) {
     return markPending(db, businessId, 'projection_disabled', now)
   }
-  const businessRow = await db.get(businessId)
-  const contextRow = await db.query('businessContexts')
-    .withIndex('by_business', (q) => q.eq('businessId', businessId))
-    .unique()
+  const [businessRow, contextRow] = await Promise.all([
+    db.get(businessId),
+    db.query('businessContexts')
+      .withIndex('by_business', (q) => q.eq('businessId', businessId))
+      .unique(),
+  ])
   const business = businessRow === null ? null : readBusinessSource(businessRow)
   const context = contextRow === null ? null : readBusinessContextSource(contextRow)
   if (business === null || context === null || business.publicStatus !== 'published') {
@@ -141,9 +143,7 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   }
   const nextDocumentIds = new Set(searchDocuments.map((document) => document.documentId))
   await Promise.all([
-    ...existingSearchDocuments
-      .filter((document) => !nextDocumentIds.has(document.documentId))
-      .map((document) => db.delete(document._id)),
+    ...existingSearchDocuments.flatMap((document) => nextDocumentIds.has(document.documentId) ? [] : [db.delete(document._id)]),
     ...searchDocuments.map((document) => {
       const prior = existingSearchDocuments.find((candidate) => candidate.documentId === document.documentId)
       const value = {

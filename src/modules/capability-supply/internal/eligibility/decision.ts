@@ -7,7 +7,7 @@ import {
   MAX_CONTEXT_VALUE_LENGTH,
   boundedTrimmed,
   validEvidenceRefs,
-} from '../shared'
+} from '../shared/command-envelope'
 
 export type EligibilityContractRef = Readonly<{
   capabilityId: string

@@ -42,72 +42,56 @@ type CatalogRow = {
  * demonstrates all four states through the real public read.
  */
 describe('dev-seeded public catalog decision facts', () => {
-  it('publishes supplied price and hours, omits absent ones, and never publishes the placeholder', async () => {
+  it('publishes the real curated hours and never fabricates price or a contact path', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)
 
     const rows = await readEveryCatalogRow(backend)
-    const withHours = rows.filter((row) => row.availabilitySummary !== null)
-    const withPrice = rows.filter((row) => row.pricingSummary !== null)
-    const priceWithoutHours = rows.filter((row) => row.pricingSummary !== null && row.availabilitySummary === null)
-    const neither = rows.filter((row) => row.pricingSummary === null && row.availabilitySummary === null)
 
+    // The curated-only seed is exactly the three AE-observed provider listings.
+    expect(rows.map((row) => row.slug).sort()).toEqual([
+      'agentic-market-exa', 'agentic-market-tavily', 'frankfurter-ecb-rates',
+    ])
+
+    // Every curated listing publishes a real availability (hours) fact through
+    // the public read, and none is the "unknown" placeholder sentinel.
     expect(rows.length).toBeGreaterThan(0)
-    expect(withHours.length).toBeGreaterThan(0)
-    expect(withPrice.length).toBeGreaterThan(0)
-    // Price and hours are independent facts. If they only ever appear together,
-    // no surface is forced to handle one without the other.
-    expect(priceWithoutHours.length).toBeGreaterThan(0)
-    expect(neither.length).toBeGreaterThan(0)
-
-    // The sentinel means "unknown". Reaching a public read as availability is
-    // the exact fabrication the projection exists to stop.
+    expect(rows.every((row) => row.availabilitySummary !== null)).toBe(true)
+    expect(rows.map((row) => row.availabilitySummary).filter((value) => value !== null).length).toBeGreaterThan(0)
     expect(rows.map((row) => row.availabilitySummary)).not.toContain('Hours supplied by owner')
-    for (const row of withHours) {
+    for (const row of rows) {
       expect(row.availabilitySummary?.trim()).toBe(row.availabilitySummary)
       expect(row.availabilitySummary).not.toBe('')
     }
 
-    // A catalog nobody can act on is a dead end no matter how good the facts
-    // are. Most of the seeded supply has to be reachable, and a deliberate
-    // minority must have no contact path at all.
-    const reachable = rows.filter((row) => row.phonePaths > 0)
-    const unreachable = rows.filter((row) => row.phonePaths === 0)
-    expect(reachable.length).toBeGreaterThan(rows.length / 2)
-    expect(unreachable.length).toBeGreaterThan(0)
-
-    // A rendered "Call" with nothing to dial is a fabricated affordance, and a
-    // published number with no path is supply the catalog silently dropped.
-    for (const row of rows) {
-      expect(row.phonePaths > 0).toBe(row.publishedPhone !== null)
-    }
-
-    // A published price is a fact the v1 service row cannot hold, so it only
-    // ever exists natively. If legacy parity counted it as drift, the second
-    // `seed:dev` would demote the business to `compare`, the v1 adapter would
-    // serve, and every price would silently vanish.
-    await runOfferingCutover(backend)
-    expect(await readEveryCatalogRow(backend)).toEqual(rows)
-
-    // Prose is not comparable. Every seeded price sentence has to be published
-    // beside a structured price a machine can filter and sort on, and it has to
-    // still be there after the parity pass that could have demoted it.
+    // None of the curated provider listings carries a verifiable price AE can
+    // publish as a fact, so the projection must not invent one: no pricing
+    // sentence and no structured price reaches the public read or the store.
+    expect(rows.every((row) => row.pricingSummary === null)).toBe(true)
     const pricedRevisions = await backend.run(async (ctx) => (
       (await ctx.db.query('businessOfferingRevisions').collect())
         .filter((revision) => revision.pricingSummary !== undefined)
-        .map((revision) => revision.price)
     ))
-    expect(pricedRevisions.length).toBeGreaterThan(0)
-    for (const price of pricedRevisions) {
-      expect(price?.currency).toBe('AUD')
-      expect(price?.taxTreatment).toBe('inclusive')
-      expect(price?.amountMinor).toBeGreaterThan(0)
+    expect(pricedRevisions).toEqual([])
+
+    // These external listings have no contact path. A rendered "Call" with
+    // nothing to dial is a fabricated affordance, and a published number with
+    // no path is supply the catalog silently dropped.
+    for (const row of rows) {
+      expect(row.phonePaths).toBe(0)
+      expect(row.publishedPhone).toBeNull()
+      expect(row.phonePaths > 0).toBe(row.publishedPhone !== null)
     }
 
-    // The stored price is only worth writing if the projection carries it out
-    // again: the snapshot is what every public read is served from.
-    const projectedPrices = await backend.run(async (ctx) => {
+    // Re-seeding is idempotent: the same real facts come back unchanged.
+    await runOfferingCutover(backend)
+    expect(await readEveryCatalogRow(backend)).toEqual(rows)
+
+    // The snapshot is what every public read is served from, so the curated
+    // hours must survive into it exactly as they reached the public read — and
+    // the placeholder must never leak into the projection either.
+    const projectedHours = await backend.run(async (ctx) => {
       const snapshots = await ctx.db.query('businessSupplyProjectionSnapshots').collect()
       const projections = snapshots.map((snapshot) => (
         readBusinessSupplyProjectionSnapshot(
@@ -116,13 +100,11 @@ describe('dev-seeded public catalog decision facts', () => {
         )
       ))
       return projections.flatMap((projection) => (
-        projection.offerings.map((item: BusinessSupplyProjection['offerings'][number]) => item.offering.price ?? null)
+        projection.offerings.map((item: BusinessSupplyProjection['offerings'][number]) => item.offering.availabilitySummary ?? null)
       ))
     })
-    expect(projectedPrices.filter((price) => price !== null)).not.toHaveLength(0)
-    expect(projectedPrices.filter((price) => price !== null).every((price) => price?.currency === 'AUD')).toBe(true)
-    // An Offering without a price still projects, exactly as it did before.
-    expect(projectedPrices.filter((price) => price === null)).not.toHaveLength(0)
+    expect(projectedHours.filter((value) => value !== null)).not.toHaveLength(0)
+    expect(projectedHours.map((value) => value === null ? null : value)).not.toContain('Hours supplied by owner')
   }, 300_000)
 
   it('republishes changed supply on the next seed instead of serving a stale mirror', async () => {

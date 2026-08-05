@@ -4,13 +4,11 @@ import {
 } from '@/modules/customer-request/customer-projection'
 
 import type { CustomerRequestActionResult } from '../action-result'
-import {
-  interpreterFailureCode,
-  proposeThenCompile,
-  rebindStoredFacts,
-} from '../interpret-compile'
+import { interpreterFailureCode } from '../interpret-compile/interpreter'
+import { proposeThenCompile } from '../interpret-compile/interpret'
+import { rebindStoredFacts } from '../interpret-compile/facts'
 import type { RequestGraph } from '../interpret-compile/types'
-import { projectStoredAggregate } from '../route-plan-projection'
+import { projectStoredAggregate } from '../route-plan-projection/project-aggregate'
 import { routeRefreshCommand } from './currency'
 import type {
   CompareResumeAggregate,

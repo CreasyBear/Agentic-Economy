@@ -1,7 +1,8 @@
-import { z } from 'zod'
-
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { pricingConfigSchema } from './pricing-contract'
+
+import {
+  pricingConfigSchema,
+} from './pricing-contract'
 import type { PricingConfig, PricingResolution, RakeConfig, RakeSplit } from '../public'
 
 export type NormalizePricingConfigResult =
@@ -83,6 +84,4 @@ export function computeRakeSplit(grossAmountMinor: number, config: RakeConfig): 
   return { grossAmountMinor, rakeBps: config.rakeBps, rakeMinor, providerNetMinor }
 }
 
-export const rakeConfigSchema = z.strictObject({
-  rakeBps: z.number().int().min(0).max(10_000).max(maxSafe),
-})
+

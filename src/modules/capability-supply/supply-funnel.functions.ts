@@ -9,7 +9,7 @@ import { registryServicesListAction } from '@/modules/registry/registry.actions'
 import type { PricingConfig } from '@/modules/money/public'
 import type { PricingConfigPort, PricingPreview, SupplyPricingRefusal } from './internal/supply-funnel/pricing-port'
 import { realPricingConfigPort } from './internal/supply-funnel/pricing-port'
-import { admitPublicationDraft, type AdmitPublicationDraftRefusal } from './internal/publication'
+import { admitPublicationDraft, type AdmitPublicationDraftRefusal } from './internal/publication/draft'
 import type { CapabilityPublicationImport, CapabilityPublicationImportResult } from './internal/publication-importers'
 import { normalizeCapabilityPublication } from './public'
 

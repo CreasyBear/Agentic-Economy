@@ -343,7 +343,7 @@ describe('answer harness operation persistence bridge', () => {
       ],
       prose: {
         oneLine: 'One listed business matches.',
-        summary: 'Parramatta Emergency Plumbing publishes service coverage. The business confirms timing, price, availability, and the work.',
+        summary: 'Parramatta Emergency Plumbing publishes emergency plumbing services. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
       },
     }))
@@ -424,6 +424,8 @@ describe('answer harness operation persistence bridge', () => {
       'tool.started',
       'tool.completed',
       'tool.started',
+      'tool.failed',
+      'tool.started',
       'tool.completed',
       'gate.evaluated',
       'turn.persisted',
@@ -432,8 +434,9 @@ describe('answer harness operation persistence bridge', () => {
     expect(journalKinds).not.toContain('model.started')
     expect(journalKinds).not.toContain('model.completed')
     expect(journalKinds.filter((kind) => kind === 'intent.routed')).toHaveLength(2)
-    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(2)
+    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(3)
     expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(2)
+    expect(journalKinds.filter((kind) => kind === 'tool.failed')).toHaveLength(1)
     expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
     expect(finalizationWrites[0]?.finalizationHash).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(evidence.harnessFinalization).toMatchObject({
@@ -477,7 +480,7 @@ describe('answer harness operation persistence bridge', () => {
       ],
       prose: {
         oneLine: 'One listed business matches.',
-        summary: 'Parramatta Emergency Plumbing publishes service coverage. The business confirms timing, price, availability, and the work.',
+        summary: 'Parramatta Emergency Plumbing publishes emergency plumbing services. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
       },
     }))

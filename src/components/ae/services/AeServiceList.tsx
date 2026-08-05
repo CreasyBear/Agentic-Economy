@@ -10,6 +10,9 @@ import { AeAssistantInstallFunnel } from '../console/AeAssistantInstallFunnel'
 import { AeConsumerPlan } from '../plan/AeConsumerPlan'
 import { AeImportedClaims } from './AeImportedClaims'
 import { AeServiceRow } from './AeServiceRow'
+
+const EMPTY_IMPORTED_CLAIMS: readonly WebDiscoveryClaim[] = []
+
 export type AeServiceListProps = Readonly<{
   services: readonly ServiceDto[]
   query: string
@@ -18,7 +21,7 @@ export type AeServiceListProps = Readonly<{
   importedClaims?: readonly WebDiscoveryClaim[]
 }>
 
-export function AeServiceList({ services, query, plan, canonicalBaseUrl, importedClaims = [] }: AeServiceListProps) {
+export function AeServiceList({ services, query, plan, canonicalBaseUrl, importedClaims = EMPTY_IMPORTED_CLAIMS }: AeServiceListProps) {
   if (plan?.kind === 'plan') {
     return (
       <div className="grid gap-6">

@@ -2,10 +2,8 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
 
 import type { CustomerRequestActionResult } from '../action-result'
-import {
-  preparationResultView,
-  runPreparationEgress,
-} from '../preparation-egress'
+import { preparationResultView } from '../preparation-egress/project'
+import { runPreparationEgress } from '../preparation-egress/resolve'
 import { hasTransientBindingUnavailable, routesAreCurrent } from './currency'
 import { persistRetryableRouteRefresh, refreshCurrentRouteGeneration } from './refresh'
 import type { CompareResumePorts, PrepareCompareInput } from './types'

@@ -49,11 +49,11 @@ type PublicInquirySubmitInput = {
 }
 
 const publicInquirySubmitTargetSchema = z.union([
-  z.object({
+  z.strictObject({
     businessId: z.string(),
     offeringRef: z.string(),
   }).strict(),
-  z.object({
+  z.strictObject({
     businessSlug: z.string(),
     offeringRef: z.string(),
   }).strict(),

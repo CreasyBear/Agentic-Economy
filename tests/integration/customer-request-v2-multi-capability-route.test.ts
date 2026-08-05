@@ -17,6 +17,7 @@ import { convexTestWithWorkers, ownerAdmin, publishedBusinessOwner, type ConvexF
 import { listRouteableCapabilitySupply } from '../../convex/capabilitySupply'
 import { registeredEvaluationBindingsFromRouteableSupply } from '../../convex/customerRequestEvaluationBindings'
 import { objectSchema } from '../fixtures/capability-contract-v2'
+import { readCuratedContract } from '../helpers/curated-supply'
 import {
   defineCapabilityContract,
   openCapabilityDecisionModel,
@@ -33,11 +34,6 @@ import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
-import {
-  SANDBOX_ROUTE_PROVIDER_PROFILES,
-  SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
-  SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT,
-} from '@/modules/sandbox-supply/public'
 import {
   aggregateIsInternallyConsistent,
   currentRoutePlanGenerationGraphStatus,
@@ -1123,36 +1119,28 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
-  it('uses source-owned sandbox registrations for one ordinary-language composite Request', async () => {
+  it('composes one ordinary-language composite Request from real curated heterogeneous operations', async () => {
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
-    vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-secret')
+    vi.stubEnv('EXA_API_KEY', 'test-exa-api-key')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
-    const seeded = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
-    await finishImmediateReadinessProbe(backend)
-    for (const [index, publicationRef] of seeded.sandboxRoutePublicationRefs.entries()) {
-      await observeReady(backend, { publicationRef, revision: 1 }, `source-route-${index + 1}`)
-    }
+    await seedCuratedHeterogeneousSupply(backend)
 
-    const resolverModel = openCapabilityDecisionModel(defineCapabilityContract(
-      SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT,
-    ))
-    const quoterModel = openCapabilityDecisionModel(defineCapabilityContract(
-      SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
-    ))
-    const mappingAdmin = await ownerAdmin(backend, 'user_source_route_mapping_admin')
-    await expect(mappingAdmin.mutation(api.capabilitySupply.registerMapping, {
-      networkId: 'ae:public',
-      mapping: routeServiceReferenceMapping(resolverModel, quoterModel),
-      authorityMode: 'ae_curated_external',
-      registrationEvidenceRefs: ['test:source-owned-route-mapping'],
-    })).resolves.toMatchObject({ kind: 'registered' })
-    const resolverOperation = await publishedOperationForModel(backend, resolverModel)
-    const quoterOperation = await publishedOperationForModel(backend, quoterModel)
-    const requestInput = resolverModel.inputs.find((input) => input.inputPointer === '/request')
-    if (requestInput === undefined) throw new Error('source-owned resolver request input missing')
-    const customerJob = 'Resolve a labelled sandbox service and prepare its quote'
+    const frankfurterModel = openCapabilityDecisionModel(await readCuratedContract(backend, 'frankfurter.single-rate'))
+    const searchModel = openCapabilityDecisionModel(await readCuratedContract(backend, 'exa.search'))
+    const contentsModel = openCapabilityDecisionModel(await readCuratedContract(backend, 'exa.contents'))
+    const searchOperation = await publishedOperationForModel(backend, searchModel)
+    const contentsOperation = await publishedOperationForModel(backend, contentsModel)
+    const frankfurterOperation = await publishedOperationForModel(backend, frankfurterModel)
+    const baseInput = frankfurterModel.inputs.find((input) => input.inputPointer === '/base')
+    const quoteInput = frankfurterModel.inputs.find((input) => input.inputPointer === '/quote')
+    const queryInput = searchModel.inputs.find((input) => input.inputPointer === '/query')
+    const urlsInput = contentsModel.inputs.find((input) => input.inputPointer === '/urls')
+    if (baseInput === undefined || quoteInput === undefined || queryInput === undefined || urlsInput === undefined) {
+      throw new Error('curated composite inputs missing')
+    }
+    const customerJob = 'Research how fast an open agent can get a deterministic answer and quote the current EUR to USD ECB rate'
     const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { role: 'assistant', content: JSON.stringify({
         kind: 'capability_candidates',
@@ -1160,44 +1148,54 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         supersededStatements: [],
         selections: [
           {
-            operationRef: resolverOperation.operationRef,
-            selectionKey: resolverModel.selectionKey,
-            facts: [{ inputKey: requestInput.key, value: customerJob }],
+            operationRef: searchOperation.operationRef,
+            selectionKey: searchModel.selectionKey,
+            facts: [{ inputKey: queryInput.key, value: 'open agent deterministic answer speed' }],
           },
-          { operationRef: quoterOperation.operationRef, selectionKey: quoterModel.selectionKey, facts: [] },
+          { operationRef: contentsOperation.operationRef, selectionKey: contentsModel.selectionKey, facts: [
+            { inputKey: urlsInput.key, value: ['https://exa.example/source-1'] },
+          ] },
+          {
+            operationRef: frankfurterOperation.operationRef,
+            selectionKey: frankfurterModel.selectionKey,
+            facts: [
+              { inputKey: baseInput.key, value: 'EUR' },
+              { inputKey: quoteInput.key, value: 'USD' },
+            ],
+          },
         ],
       }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity({
-      subject: 'customer-source-owned-route', issuer: 'https://identity.example',
+      subject: 'customer-curated-composite', issuer: 'https://identity.example',
     })
 
     const submitted = await customer.action(api.customerRequestApplication.submit, {
-      compilationKey: 'submit:source-owned-route', requestId: 'request:source-owned-route',
-      delegatedAgentId: 'agent:source-owned-route', customerJob,
+      compilationKey: 'submit:curated-composite', requestId: 'request:curated-composite',
+      delegatedAgentId: 'agent:curated-composite', customerJob,
       routing: { networkId: 'ae:public' },
     })
-    if (submitted.kind !== 'request') throw new Error(`source-owned submit failed: ${submitted.kind}`)
+    if (submitted.kind !== 'request') throw new Error(`curated submit failed: ${submitted.kind}`)
     const compared = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
-      idempotencyKey: 'compare:source-owned-route',
+      idempotencyKey: 'compare:curated-composite',
     })
     if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
-      throw new Error(`source-owned comparison failed: ${JSON.stringify(compared)}`)
+      throw new Error(`curated comparison failed: ${JSON.stringify(compared)}`)
     }
     const displayed = compared.decision.routes[0]
     expect(displayed).toMatchObject({
       businesses: [
-        { name: SANDBOX_ROUTE_PROVIDER_PROFILES.resolver.label },
-        { name: SANDBOX_ROUTE_PROVIDER_PROFILES.quoter.label },
+        { name: 'Agentic Market listing — Exa' },
+        { name: 'Frankfurter — ECB rates' },
       ],
-      stepCount: 2,
-      maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
+      stepCount: 3,
+      maximumTotalCost: { kind: 'known', currency: 'USD', amountMinor: 2 },
       result: {
-        summary: SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT.description,
-        deliverables: ['Quote reference'],
+        summary: 'Searches the public web through Exa and returns bounded result links for further inspection. Retrieves bounded contents for URLs selected from a public Exa search result. Returns one current European Central Bank reference rate through the public Frankfurter v2 API.',
+        deliverables: ['ECB reference rate', 'Retrieved contents', 'Search results'],
       },
     })
     expect(JSON.stringify(compared)).not.toMatch(
@@ -1206,54 +1204,97 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
     const confirmed = await customer.action(api.customerRequestApplication.confirmRoute, {
       requestRef: compared.requestRef, revision: compared.revision, routeRef: displayed.routeRef,
-      idempotencyKey: 'confirm:source-owned-route',
+      idempotencyKey: 'confirm:curated-composite',
     })
     expect(confirmed).toMatchObject({ kind: 'request', state: 'route_confirmed' })
     if (confirmed.kind !== 'request' || confirmed.state !== 'route_confirmed') {
-      throw new Error(`source-owned confirmation failed: ${JSON.stringify(confirmed)}`)
+      throw new Error(`curated confirmation failed: ${JSON.stringify(confirmed)}`)
     }
 
     routeProviderFetch.mockReset()
-    routeProviderFetch
-      .mockImplementationOnce(async (input, init) => {
-        expect(input.toString()).toContain('/api/sandbox/providers/route-resolver')
-        expect(init?.headers).toMatchObject({ Authorization: 'Bearer sandbox-provider-secret' })
-        expect(JSON.parse(String(init?.body))).toEqual({ request: customerJob })
-        return new UndiciResponse(JSON.stringify({ serviceReference: 'sandbox-service:source-owned' }), {
-          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:resolver' },
+    routeProviderFetch.mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/search')) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({ query: expect.any(String) })
+        return new UndiciResponse(JSON.stringify({
+          results: [{ url: 'https://exa.example/source-1' }],
+        }), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'exa:search' },
         })
-      })
-      .mockImplementationOnce(async (input, init) => {
-        expect(input.toString()).toContain('/api/sandbox/providers/route-quoter')
-        expect(JSON.parse(String(init?.body))).toEqual({ serviceReference: 'sandbox-service:source-owned' })
-        return new UndiciResponse(JSON.stringify({ quoteReference: 'sandbox-quote:source-owned' }), {
-          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:quoter' },
+      }
+      if (url.includes('/contents')) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          urls: ['https://exa.example/source-1'],
         })
-      })
+        return new UndiciResponse(JSON.stringify({
+          results: [{ url: 'https://exa.example/source-1', text: 'bounded page text' }],
+        }), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'exa:contents' },
+        })
+      }
+      if (url.includes('/rates')) {
+        expect(url).toContain('base=EUR')
+        expect(url).toContain('quotes=USD')
+        return new UndiciResponse(JSON.stringify([{
+          date: '2026-08-04', base: 'EUR', quote: 'USD', rate: 1.08,
+        }]), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'frankfurter:rate' },
+        })
+      }
+      throw new Error(`unexpected curated transport url: ${url}`)
+    })
     const started = await customer.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef,
-      idempotencyKey: 'run:source-owned-route',
+      idempotencyKey: 'run:curated-composite',
     })
     expect(started).toMatchObject({
       kind: 'request', state: 'in_progress',
-      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      progress: { completed: 0, total: 3, current: { step: 1, state: 'queued' } },
     })
-    await finishScheduledRouteWorkers(backend, 2)
+    for (let pass = 0; pass < 40; pass += 1) {
+      const dispatchRef = await backend.run(async (ctx) => {
+        const soonest = await ctx.db.query('customerRequestRouteDispatchOutbox')
+          .withIndex('by_state_and_availableAt', (query) => (
+            query.eq('state', 'pending').lt('availableAt', Date.now())
+          )).first()
+        if (soonest !== null) return soonest.dispatchRef
+        const pending = (await ctx.db.query('customerRequestRouteDispatchOutbox').collect())
+          .find(({ state }) => state === 'pending')
+        return pending?.dispatchRef ?? null
+      })
+      if (dispatchRef !== null) {
+        await backend.action(internal.customerRequestRouteTransportWorker.run, { dispatchRef })
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        await backend.finishInProgressScheduledFunctions()
+        continue
+      }
+      const delivered = await backend.run(async (ctx) => (
+        (await ctx.db.query('customerRequestRouteDispatchOutbox').collect()).filter(
+          ({ state }) => state === 'delivered',
+        ).length
+      ))
+      if (delivered >= 3) break
+      await new Promise<void>((resolve) => setTimeout(resolve, 2))
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await backend.finishInProgressScheduledFunctions()
     const completed = await customer.action(api.customerRequestApplication.resume, {
       requestRef: compared.requestRef,
     })
     expect(completed).toMatchObject({
       kind: 'request', state: 'completed', nextAction: 'none',
       businesses: [
-        { name: 'Sandbox Route Resolver' },
-        { name: 'Sandbox Route Quoter' },
+        { name: 'Agentic Market listing — Exa' },
+        { name: 'Frankfurter — ECB rates' },
       ],
-      action: { state: 'completed', result: { quoteReference: 'sandbox-quote:source-owned' } },
+      action: { state: 'completed', result: [
+        { date: '2026-08-04', base: 'EUR', quote: 'USD', rate: 1.08 },
+      ] },
     })
     await backend.run(async (ctx) => {
       const run = await ctx.db.query('customerRequestRouteRuns')
         .withIndex('by_requestId', (query) => query.eq('requestId', compared.requestRef)).unique()
-      if (run === null) throw new Error('source-owned route run missing')
+      if (run === null) throw new Error('curated route run missing')
       await ctx.db.patch(run._id, {
         businesses: undefined,
         runDigest: canonicalDigest({
@@ -1277,7 +1318,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'request', state: 'needs_attention', nextAction: 'retry',
       summary: 'AE could not verify which businesses handled this earlier run. The result has not been changed.',
     })
-    expect(routeProviderFetch).toHaveBeenCalledTimes(2)
+    expect(routeProviderFetch).toHaveBeenCalledTimes(3)
   })
 
   it('records an interrupted released call as unknown and refuses unsafe replay', async () => {
@@ -3656,6 +3697,19 @@ async function publishedOperationForModel(
   ))?.publication
   if (publication === undefined) throw new Error(`operation missing: ${model.contractRef.capabilityId}`)
   return publication
+}
+
+async function seedCuratedHeterogeneousSupply(backend: ReturnType<typeof convexTest>) {
+  const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
+  await finishImmediateReadinessProbe(backend)
+  const publications = await backend.run(async (ctx) => ctx.db.query('capabilityPublications').collect())
+  for (const publication of publications) {
+    await observeReady(backend, {
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+    }, `curated:${publication.bindingId}`)
+  }
+  return seeded
 }
 
 async function confirmedTwoStepRoute(

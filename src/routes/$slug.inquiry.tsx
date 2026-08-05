@@ -70,8 +70,6 @@ export const Route = createFileRoute('/$slug/inquiry')({
   component: PublicInquiryRoute,
 })
 
-export { readPublicInquiryRouteReadback, validatePublicInquiryFormInput }
-
 export function GovernedSendReviewRows({ values }: { values: Readonly<Record<string, string | null>> }) {
   return (
     <dl className="divide-y divide-border rounded-md border border-border">

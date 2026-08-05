@@ -2,7 +2,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { routeAttemptIntegrityValid, routeDispatchIntegrityValid } from '../journal'
+import { routeAttemptIntegrityValid, routeDispatchIntegrityValid } from '../journal/integrity'
 
 import type { DispatchLifecyclePorts } from './dispatch-lifecycle-ports'
 import type { RecordNotReleasedCommand, RecordNotReleasedResult } from './types'
@@ -15,8 +15,10 @@ export async function recordNotReleased(
   if (observation === undefined || observation.disposition !== 'refused' || observation.releaseStarted) {
     return { kind: 'refused', reason: 'dispatch_not_current' }
   }
-  const dispatch = await ports.loadDispatchByRef(args.dispatchRef)
-  const attempt = await ports.loadAttemptByRef(args.attemptRef)
+  const [dispatch, attempt] = await Promise.all([
+    ports.loadDispatchByRef(args.dispatchRef),
+    ports.loadAttemptByRef(args.attemptRef),
+  ])
   if (dispatch === null || attempt === null || dispatch.attemptRef !== attempt.attemptRef
     || !routeDispatchIntegrityValid(dispatch) || !routeAttemptIntegrityValid(attempt)) {
     return { kind: 'refused', reason: 'dispatch_not_current' }

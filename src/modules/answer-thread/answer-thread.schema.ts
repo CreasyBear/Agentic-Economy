@@ -29,7 +29,7 @@ export type AnswerTurnStatus = (typeof AnswerTurnStatusValues)[number]
 
 export const AnswerToolCallStatusValues = ['complete', 'error', 'refused'] as const
 export type AnswerToolCallStatus = (typeof AnswerToolCallStatusValues)[number]
-export const AnswerToolIdValues = ['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover'] as const
+export const AnswerToolIdValues = ['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover', 'registry.operations.search'] as const
 export type AnswerToolId = (typeof AnswerToolIdValues)[number]
 
 export const AnswerThreadSharePolicyValues = ['public', 'unlisted'] as const

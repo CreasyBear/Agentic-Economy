@@ -339,14 +339,16 @@ export const pruneSearchGapRecords = mutationGeneric({
   handler: async (ctx, args) => {
     const batchSize = Math.min(Math.max(args.batchSize ?? 200, 1), 500)
     const cutoff = utcDayBucket(Date.now() - dayBucketRetentionDays * 24 * 60 * 60 * 1_000)
-    const expiredSearches = await ctx.db
-      .query('searchGapRecords')
-      .withIndex('by_dayBucket', (q) => q.lt('dayBucket', cutoff))
-      .take(batchSize)
-    const expiredBusinesses = await ctx.db
-      .query('searchGapBusinessRecords')
-      .withIndex('by_dayBucket', (q) => q.lt('dayBucket', cutoff))
-      .take(batchSize)
+    const [expiredSearches, expiredBusinesses] = await Promise.all([
+      ctx.db
+        .query('searchGapRecords')
+        .withIndex('by_dayBucket', (q) => q.lt('dayBucket', cutoff))
+        .take(batchSize),
+      ctx.db
+        .query('searchGapBusinessRecords')
+        .withIndex('by_dayBucket', (q) => q.lt('dayBucket', cutoff))
+        .take(batchSize),
+    ])
 
     for (const row of [...expiredSearches, ...expiredBusinesses]) {
       await ctx.db.delete(row._id)

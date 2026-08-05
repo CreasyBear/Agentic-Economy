@@ -1,4 +1,4 @@
-import { routeAttemptIntegrityValid } from '../journal'
+import { routeAttemptIntegrityValid } from '../journal/integrity'
 
 import type { CancelOpenPorts } from './cancel-ports'
 import type { OpenCancellationResult } from './types'

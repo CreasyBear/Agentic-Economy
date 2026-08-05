@@ -24,8 +24,9 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByRole('link', { name: demoBusiness.businessName })).toBeVisible()
     await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
-    await expect(page.getByText(/publish service coverage/i).first()).toBeVisible()
-    await expect(page.getByText(/Open a listed business page and send an inquiry/i).first()).toBeVisible()
+    await expect(page.getByText(/publishes Emergency pipe repair/i).first()).toBeVisible()
+    await expect(page.getByText(/Published listings do not confirm price or current availability/i).first()).toBeVisible()
+    await expect(page.getByText(/confirm the work, timing, price, and current availability directly/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/\b(?:KNOWN|UNKNOWN|UNAVAILABLE)\b/)
@@ -51,7 +52,7 @@ test.describe('landing query -> thread answer', () => {
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     await expectQueryInTranscript(page, query)
 
-    await expect(page.getByText(/No listed businesses match/i)).toBeVisible()
+    await expect(page.getByText(/No matching listed business was found/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /Browse listed businesses/i })).toBeVisible()
     await expect(page.getByText('Nothing was sent.', { exact: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Today' })).toHaveAttribute('aria-checked', 'true')

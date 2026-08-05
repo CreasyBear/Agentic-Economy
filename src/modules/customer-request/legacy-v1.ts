@@ -211,30 +211,30 @@ export type CustomerRequestActivityEvent = Readonly<{
 
 const identifier = z.string().trim().min(1).max(200)
 const timestamp = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
-const literalValueSchema = z.union([z.string().max(8_000), z.number().safe(), z.boolean()])
-const requirementSchema = z.object({
+const literalValueSchema = z.union([z.string().max(8_000), z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), z.boolean()])
+const requirementSchema = z.strictObject({
   field: identifier,
   label: z.string().trim().min(1).max(240),
   value: literalValueSchema,
 }).strict()
-const understandingSchema = z.object({
+const understandingSchema = z.strictObject({
   outcome: z.string().trim().min(1).max(1_000),
   hardConstraints: z.array(requirementSchema).max(64),
   preferences: z.array(requirementSchema.extend({ priority: z.number().int().min(1).max(64) }).strict()).max(64),
-  substitutions: z.object({ allowed: z.boolean(), boundaries: z.array(z.string().trim().min(1).max(500)).max(32) }).strict(),
+  substitutions: z.strictObject({ allowed: z.boolean(), boundaries: z.array(z.string().trim().min(1).max(500)).max(32) }).strict(),
   completionCriterion: z.string().trim().min(1).max(1_000),
-  completionRequirement: z.object({
+  completionRequirement: z.strictObject({
     evidenceRole: z.enum(['provider_offer', 'result_artifact', 'status', 'provider_report']),
     valueType: z.enum(['string', 'integer', 'boolean', 'url', 'money_minor', 'provider_offer_ref']),
   }).strict().optional(),
   deadline: timestamp.optional(),
 }).strict()
-const fieldDefinitionSchema = z.object({
+const fieldDefinitionSchema = z.strictObject({
   valueType: z.enum(['string', 'integer', 'boolean', 'url', 'money_minor', 'provider_offer_ref']),
   customerLabel: z.string().trim().min(1).max(120),
   required: z.boolean(),
   decisionRelevance: z.enum(['option_selection', 'commitment']).optional(),
-  disclosure: z.object({
+  disclosure: z.strictObject({
     classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
     phase: z.enum(['preparation', 'execution']),
     recipient: z.enum(['candidate_provider', 'selected_provider', 'offer_issuer', 'named_recipient']),
@@ -242,26 +242,26 @@ const fieldDefinitionSchema = z.object({
   }).strict().optional(),
   evidenceRole: z.enum(['provider_offer', 'result_artifact', 'status', 'provider_report']).optional(),
 }).strict()
-const capabilityContractSchema = z.object({
+const capabilityContractSchema = z.strictObject({
   capabilityContractId: identifier.refine((value) => /:v[1-9]\d*$/.test(value)),
   name: z.string().trim().min(1).max(160),
   operation: z.enum(['query', 'quote', 'reserve', 'book', 'purchase', 'status', 'cancel']),
-  preparation: z.object({ purpose: identifier, customerLabel: z.string().trim().min(1).max(160) }).strict().optional(),
+  preparation: z.strictObject({ purpose: identifier, customerLabel: z.string().trim().min(1).max(160) }).strict().optional(),
   input: z.record(identifier, fieldDefinitionSchema),
   output: z.record(identifier, fieldDefinitionSchema),
-  consequence: z.object({
+  consequence: z.strictObject({
     commitment: z.enum(['none', 'hold', 'reservation', 'booking', 'purchase', 'cancellation']),
     spend: z.enum(['none', 'quoted', 'metered']),
     reversibility: z.enum(['not_applicable', 'reversible', 'conditional', 'irreversible']),
     approval: z.enum(['none', 'explicit', 'mandate_or_explicit']),
   }).strict(),
-  applicability: z.array(z.object({
+  applicability: z.array(z.strictObject({
     field: identifier,
     acceptedValues: z.array(literalValueSchema).min(1).max(32),
   }).strict()).max(32).optional(),
-  providerAffinity: z.object({ kind: z.literal('offer_issuer'), inputField: identifier }).strict().optional(),
+  providerAffinity: z.strictObject({ kind: z.literal('offer_issuer'), inputField: identifier }).strict().optional(),
 }).strict()
-const requestSchema = z.object({
+const requestSchema = z.strictObject({
   requestId: identifier,
   principalId: identifier,
   delegatedAgentId: identifier,
@@ -269,7 +269,7 @@ const requestSchema = z.object({
   compilationState: z.enum(['submitted', 'needs_information', 'plan_ready', 'unsupported']).optional(),
   understanding: understandingSchema.optional(),
   knownFacts: z.record(identifier, literalValueSchema).optional(),
-  routing: z.object({
+  routing: z.strictObject({
     networkId: identifier,
     currency: z.string().regex(/^[A-Z]{3}$/),
     maximumSpendMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
@@ -278,26 +278,26 @@ const requestSchema = z.object({
   createdAt: timestamp,
 }).strict()
 const planInputSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('literal'), value: z.union([z.string().max(8_000), z.number().safe(), z.boolean()]) }).strict(),
-  z.object({ kind: z.literal('action_output'), actionId: identifier, field: identifier }).strict(),
-  z.object({ kind: z.literal('customer_fact'), fact: identifier }).strict(),
+  z.strictObject({ kind: z.literal('literal'), value: z.union([z.string().max(8_000), z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), z.boolean()]) }).strict(),
+  z.strictObject({ kind: z.literal('action_output'), actionId: identifier, field: identifier }).strict(),
+  z.strictObject({ kind: z.literal('customer_fact'), fact: identifier }).strict(),
 ])
-const planActionSchema = z.object({
+const planActionSchema = z.strictObject({
   actionId: identifier,
   capabilityContractId: identifier,
   dependsOn: z.array(identifier).max(32),
   input: z.record(identifier, planInputSchema),
 }).strict()
-const planRevisionSchema = z.object({
+const planRevisionSchema = z.strictObject({
   planRevisionId: identifier,
   requestId: identifier,
   requestRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   proposedByAgentId: identifier,
   proposalProvenance: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('agent_interpretation'), proposalDigest: identifier, interpreterId: identifier }).strict(),
-    z.object({ kind: z.literal('direct_structured'), proposalDigest: identifier }).strict(),
+    z.strictObject({ kind: z.literal('agent_interpretation'), proposalDigest: identifier, interpreterId: identifier }).strict(),
+    z.strictObject({ kind: z.literal('direct_structured'), proposalDigest: identifier }).strict(),
   ]),
-  completionEvidence: z.array(z.object({ actionId: identifier, field: identifier }).strict()).min(1).max(32),
+  completionEvidence: z.array(z.strictObject({ actionId: identifier, field: identifier }).strict()).min(1).max(32),
   createdAt: timestamp,
   actions: z.array(planActionSchema).min(1).max(32),
 }).strict()

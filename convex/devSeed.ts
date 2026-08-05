@@ -80,86 +80,15 @@ export const seedDevCatalog = internalMutation({
     ownerId: v.string(),
     supportRecordId: v.string(),
     businessIdsBySlug: v.record(v.string(), v.string()),
-    sandboxV2Bindings: v.array(v.string()),
-    sandboxCapabilityPublicationRef: v.string(),
-    sandboxRouteBindings: v.array(v.string()),
-    sandboxRoutePublicationRefs: v.array(v.string()),
   }),
   handler: async (ctx) => {
-    const seedStartedAt = Date.now()
-    const ordinaryFixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => !isSandboxFixture(fixture))
-    const sandboxFixtures = DEV_SEED_BUSINESS_FIXTURES.filter(isSandboxFixture)
-    const bundle = buildDevSeedCatalogState(ordinaryFixtures)
-    const [result, existingSandboxBusinesses, currentClaimOperations] = await Promise.all([
-      persistDevSeedCatalogState(ctx.db, bundle),
-      Promise.all(sandboxFixtures.map(async (fixture) => (
-        await ctx.db.query('businesses')
-          .withIndex('by_slug', (query) => query.eq('slug', fixture.requestedSlug))
-          .unique()
-      ))),
-      Promise.all(sandboxFixtures.map(async (fixture) => (
-        await ctx.db.query('operationKeys').withIndex('by_scope_key', (query) => (
-          query.eq('scope', 'business_claim').eq('key', `seed:claim:${fixture.requestedSlug}`)
-        )).unique()
-      ))),
-    ])
-    for (const [index, fixture] of sandboxFixtures.entries()) {
-      const business = existingSandboxBusinesses[index]
-      if (business !== undefined && business !== null && currentClaimOperations[index] === null
-        && (business.name !== fixture.businessName
-        || business.category !== fixture.category
-        || business.claimStatus !== 'published'
-        || business.publicStatus !== 'published')) {
-        throw new Error(`sandbox_dev_seed_identity_mismatch:${fixture.requestedSlug}`)
-      }
-    }
-    const transferredSandboxBusinesses = await Promise.all(sandboxFixtures.map(async (fixture, index) => (
-      await isExactAuthenticatedSandboxOwnerTransfer(
-        ctx.db,
-        fixture,
-        existingSandboxBusinesses[index] ?? null,
-        currentClaimOperations[index] ?? null,
-      )
-    )))
-    const replayOrMissingFixtures = sandboxFixtures.filter((_, index) => (
-      existingSandboxBusinesses[index] === null
-      || (currentClaimOperations[index] !== null && transferredSandboxBusinesses[index] !== true)
-    ))
-    const registeredSandboxBusinesses = await registerSandboxBusinesses(ctx.db, replayOrMissingFixtures, seedStartedAt)
-    const sandboxBusinesses = {
-      seededSlugs: sandboxFixtures.map((fixture) => fixture.requestedSlug),
-      businessIdsBySlug: {
-        ...Object.fromEntries(sandboxFixtures.flatMap((fixture, index) => {
-          const business = existingSandboxBusinesses[index]
-          return business === undefined || business === null ? [] : [[fixture.requestedSlug, business._id]]
-        })),
-        ...registeredSandboxBusinesses.businessIdsBySlug,
-      },
-    }
-    const [sandboxRegistrations, sandboxRouteRegistrations] = await Promise.all([
-      registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000),
-      registerSandboxRouteSupplyRegistrations(ctx.db, seedStartedAt + 2_100),
-    ])
-    const [
-      sandboxV2Bindings,
-      sandboxRouteBindings,
-      sandboxCapabilityPublicationRefs,
-      sandboxRoutePublicationRefs,
-    ] = await Promise.all([
-      admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500),
-      admitSandboxV2Supply(ctx.db, sandboxRouteRegistrations, seedStartedAt + 2_600),
-      Promise.all(sandboxRegistrations.map((registration, index) => (
-        seedSandboxCapabilityPublication(ctx, registration, seedStartedAt + 2_750 + index)
-      ))),
-      Promise.all(sandboxRouteRegistrations.map((registration, index) => (
-        seedSandboxCapabilityPublication(ctx, registration, seedStartedAt + 2_800 + index)
-      ))),
-    ])
-    const sandboxCapabilityPublicationRef = sandboxCapabilityPublicationRefs[0]
-    if (sandboxCapabilityPublicationRef === undefined) {
-      throw new Error('sandbox_capability_publication_registration_missing')
-    }
-    await retireSupersededSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
+    // Drive the canonical real-provider seed first: idempotently ports the
+    // AE-curated Exa + Frankfurter capabilities through the generic
+    // Contract -> Offering -> Binding -> Publication path.
+    await ctx.runMutation(internal.curatedProviders.seed, {})
+
+    const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES)
+    const result = await persistDevSeedCatalogState(ctx.db, bundle)
     let offeringSeed: {
       processed: number
       seeded: number
@@ -180,12 +109,8 @@ export const seedDevCatalog = internalMutation({
     await ctx.scheduler.runAfter(0, internal.devSeed.seedDiscoveryManifests, { cursor: null })
     return {
       ...result,
-      seededSlugs: [...result.seededSlugs, ...sandboxBusinesses.seededSlugs],
-      businessIdsBySlug: { ...result.businessIdsBySlug, ...sandboxBusinesses.businessIdsBySlug },
-      sandboxV2Bindings,
-      sandboxCapabilityPublicationRef,
-      sandboxRouteBindings,
-      sandboxRoutePublicationRefs,
+      seededSlugs: [...result.seededSlugs],
+      businessIdsBySlug: { ...result.businessIdsBySlug },
     }
   },
 })
@@ -555,52 +480,6 @@ export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = O
   }),
 )
 
-
-function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
-  return fixture.requestedSlug.startsWith('sandbox-')
-}
-
-async function isExactAuthenticatedSandboxOwnerTransfer(
-  db: MutationCtx['db'],
-  fixture: DevSeedBusinessFixture,
-  business: Doc<'businesses'> | null,
-  operation: Doc<'operationKeys'> | null,
-): Promise<boolean> {
-  if (business === null || operation === null || business.ownerId === operation.actorRef) return false
-  if (operation.operationName !== 'claimBusiness' || operation.actorKind !== 'owner'
-    || operation.status !== 'succeeded' || operation.sourceHash !== business.sourceHash) return false
-  if (business.name !== fixture.businessName || business.category !== fixture.category
-    || business.suburb !== fixture.suburb || business.stateTerritory !== fixture.stateTerritory
-    || business.claimStatus !== 'published' || business.publicStatus !== 'published') return false
-
-  const currentOwnerId = db.normalizeId('owners', business.ownerId)
-  const originalOwnerId = db.normalizeId('owners', operation.actorRef)
-  if (currentOwnerId === null || originalOwnerId === null) return false
-  const [currentOwner, originalOwner, claims, context] = await Promise.all([
-    db.get(currentOwnerId),
-    db.get(originalOwnerId),
-    db.query('claims').withIndex('by_business_status', (query) => query.eq('businessId', business._id)).take(2),
-    db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', business._id)).unique(),
-  ])
-  const claim = claims[0]
-  const sourceRef = context?.sourceRefs[0]
-  return currentOwner?.clerkUserId.startsWith('user_') === true
-    && originalOwner?.clerkUserId === DEV_SEED_OWNER_CLERK_USER_ID
-    && claims.length === 1
-    && claim?.status === 'published'
-    && claim.ownerId === business.ownerId
-    && claim.submittedFactsHash === business.sourceHash
-    && context?.sourceHash === business.sourceHash
-    && context.category === fixture.category
-    && context.suburb === fixture.suburb
-    && context.stateTerritory === fixture.stateTerritory
-    && context.ownerMessage === fixture.ownerMessage
-    && context.sourceRefs.length === 1
-    && sourceRef?.label === fixture.sourceLabel
-    && sourceRef.evidenceRef === `private:evidence:dev-seed:${fixture.requestedSlug}`
-    && operation.effectRefs[0] === business._id
-    && operation.effectRefs[1] === claim._id
-}
 
 export async function seedSandboxCapabilityPublication(
   ctx: MutationCtx,

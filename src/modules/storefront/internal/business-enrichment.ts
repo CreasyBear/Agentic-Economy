@@ -231,12 +231,13 @@ export async function discoverBusinessesFromWebSearch(
     return { kind: 'none', query, reason: 'no_matches' }
   }
 
+  const citations = new Set(completion.citations)
   const claims = fields.businesses.flatMap((business) => {
     const businessName = business.businessName?.trim()
     const suburb = business.suburb?.trim()
     const sourceUrl = business.sourceUrl?.trim()
     if (businessName === undefined || businessName.length === 0 || suburb === undefined || suburb.length === 0
-      || sourceUrl === undefined || !completion.citations.includes(sourceUrl)) {
+      || sourceUrl === undefined || !citations.has(sourceUrl)) {
       return []
     }
     return [{

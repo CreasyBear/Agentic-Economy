@@ -1,6 +1,7 @@
 import type { AnswerSynthesizerFollowUpIntent } from '../answer-synthesizer'
 import type { AnswerSource } from '../answer-synthesizer'
 import { parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
+import { buildBoundaryOneLine } from './boundary-prose'
 
 export function buildCompactFollowUpProse(input: {
   followUpIntent?: AnswerSynthesizerFollowUpIntent
@@ -34,7 +35,7 @@ export function buildCompactFollowUpProse(input: {
     case 'unsupported':
       return {
         oneLine: input.followUpIntent === 'explain_boundary'
-          ? 'Agentic Economy reads and compares published listings. The business confirms what happens next.'
+          ? buildBoundaryOneLine()
           : 'This request needs a business-supported action that is not available here.',
         summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
@@ -123,10 +124,9 @@ function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
 
 /**
  * The summary describes the results in front of the reader.
- *
- * It used to append a standing caveat about what the business confirms later,
- * on every answer, regardless of what was being answered. That told the reader
- * nothing about these results and made every reply read like a disclaimer.
+ * It used to append the same boundary disclaimer to every answer, regardless
+ * of what was being answered. That told the reader nothing about these results
+ * and made every reply read like a disclaimer.
  */
 function resultsLine(providers: readonly AnswerSource[]): string {
   if (providers.length === 0) {

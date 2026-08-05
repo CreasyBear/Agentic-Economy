@@ -28,7 +28,7 @@ function snapshot(overrides: Partial<AnswerSnapshot> = {}): AnswerSnapshot {
     ],
     summary:
       'Here is what is listed. Contact the business for timing, price, and availability.',
-    nextStep: 'Open a listed business page. The business confirms timing, price, availability, and the work.',
+    nextStep: 'Contact the business and confirm timing, price, availability, and the work.',
     agentJsonUrl: '/api/businesses/search?q=plumber',
     ...overrides,
   }
@@ -77,6 +77,73 @@ describe('runAnswerGate', () => {
       snapshot: snapshot({
         summary: 'Here are some plumbers in Preston with published details.',
         nextStep: 'Contact the business directly.',
+      }),
+      allowedSlugs: new Set(['preston-plumbing']),
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it.each([
+    'The business confirms timing, price, availability, and the work.',
+    'These listings can complete the work this week.',
+    'Preston Plumbing is available tomorrow.',
+  ])('rejects unsupported provider assurances: %s', (summary) => {
+    const result = runAnswerGate({
+      snapshot: snapshot({ summary }),
+      allowedSlugs: new Set(['preston-plumbing']),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) {
+      throw new Error('expected gate failure')
+    }
+    expect(result.code).toBe('unsupported_provider_claim')
+  })
+
+  it('rejects paraphrased price or availability details that are not verbatim published values', () => {
+    const provider = snapshot().providers[0]!
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [{
+          ...provider,
+          pricingSummary: 'Demo price — $180 call-out, quoted before work starts',
+          availabilitySummary: 'Mon–Sun, 24 hours',
+          hoursLabel: 'Mon–Sun, 24 hours',
+        }],
+        oneLine: 'Preston Plumbing lists 24/7 availability and a $180 call-out fee.',
+        summary: 'Scope still needs confirmation.',
+      }),
+      allowedSlugs: new Set(['preston-plumbing']),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) {
+      throw new Error('expected gate failure')
+    }
+    expect(result.code).toBe('unsupported_provider_claim')
+  })
+
+  it('allows verbatim published price and availability details', () => {
+    const provider = snapshot().providers[0]!
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [{
+          ...provider,
+          pricingSummary: 'Demo price — $180 call-out, quoted before work starts',
+          availabilitySummary: 'Mon–Sun, 24 hours',
+          hoursLabel: 'Mon–Sun, 24 hours',
+        }],
+        oneLine: 'Preston Plumbing lists Mon–Sun, 24 hours.',
+        summary: 'Its published price is “Demo price — $180 call-out, quoted before work starts”.',
+      }),
+      allowedSlugs: new Set(['preston-plumbing']),
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows a concrete action that asks the person to confirm unresolved details', () => {
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        summary: 'Preston Plumbing lists plumbing services in Preston. Price and current availability still need confirmation.',
+        nextStep: 'Contact Preston Plumbing and ask whether it handles the work, what it costs, and when it is available.',
       }),
       allowedSlugs: new Set(['preston-plumbing']),
     })

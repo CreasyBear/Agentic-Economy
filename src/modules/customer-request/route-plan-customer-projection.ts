@@ -265,8 +265,8 @@ function projectRoute(
       step: index + 1,
       business: customerBusiness(step.businessId, businessNames),
       after: Object.freeze(route.edges
-        .filter(({ toStep }) => toStep === step.actionId)
-        .flatMap(({ fromStep }) => {
+        .flatMap(({ toStep, fromStep }) => {
+          if (toStep !== step.actionId) return []
           const position = actionPosition.get(fromStep)
           return position === undefined ? [] : [position]
         })

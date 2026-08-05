@@ -52,25 +52,24 @@ import {
   type LiveAnswerHarnessOperation,
 } from './answer-harness-operation'
 import type { AnswerHarnessFinalizationResult } from '../answer-thread.functions'
+import { agentTurnPath } from './turns/agent'
+import { boundaryTurnPath } from './turns/boundary'
+import { clarificationTurnPath } from './turns/clarification'
+import { retrievalFirstTurnPath } from './turns/retrieval-first'
+import { insufficientFrozenTurnPath } from './turns/insufficient-frozen'
+import { frozenKnownTurnPath, selectFrozenProviders } from './turns/frozen-known'
+import { inquiryHandoffTurnPath } from './turns/inquiry-handoff'
 import {
-  agentTurnPath,
-  boundaryTurnPath,
-  clarificationTurnPath,
   describeProviderCount,
-  frozenKnownTurnPath,
-  inquiryHandoffTurnPath,
-  insufficientFrozenTurnPath,
   makeCopyId,
   reindexProviders,
-  retrievalFirstTurnPath,
-  selectFrozenProviders,
   type SnapshotAssemblyPlan,
   type SnapshotPlanMetadata,
   type TurnPathContext,
   type TurnPathResult,
   type TurnTimingCollector,
   type WorkStepEmitter,
-} from './turns'
+} from './turns/types'
 
 type StreamAnswerRoute = ReturnType<typeof resolveIntentRoute>
 
@@ -309,6 +308,9 @@ function buildStreamAnswerTurnPhases(input: {
       if (retrievalFirst === undefined) {
         return nextState
       }
+      if ((retrievalFirst.snapshot?.providers.length ?? 0) > 0) {
+        return nextState
+      }
       return applyToolLedResult(nextState, retrievalFirst)
     },
     model: async ({ state }) => {
@@ -367,17 +369,33 @@ function buildStreamAnswerTurnPhases(input: {
               await clarificationTurnPath.run(runtimeTurnPathContext(input, state), state.responsePlan),
             )
           }
-          const result = await agentTurnPath.run(
-            runtimeTurnPathContext(input, state),
-            {
-              query: state.query,
-              followUpIntent: state.intent,
-              searchContext: state.searchContext,
-            },
-            state.toolCalls,
-            undefined,
-            state.responsePlan?.toolPolicy,
-          )
+          const retrieved = state.retrievalFirst
+          const result = retrieved?.snapshot !== undefined && retrieved.snapshot.providers.length > 0
+            ? await agentTurnPath.run(
+                runtimeTurnPathContext(input, state),
+                {
+                  query: state.query,
+                  followUpIntent: state.intent,
+                  searchContext: state.searchContext,
+                  priorProviders: retrieved.snapshot.providers,
+                  priorAllowedSlugs: [...retrieved.allowedSlugs],
+                  disableTools: true,
+                },
+                retrieved.toolCalls,
+                state.responsePlan?.mode,
+                undefined,
+              )
+            : await agentTurnPath.run(
+                runtimeTurnPathContext(input, state),
+                {
+                  query: state.query,
+                  followUpIntent: state.intent,
+                  searchContext: state.searchContext,
+                },
+                state.toolCalls,
+                undefined,
+                state.responsePlan?.toolPolicy,
+              )
           return applyToolLedResult(state, result)
         }
         default: {

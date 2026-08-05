@@ -31,11 +31,11 @@ describe('source-owned Action Invocation input work', () => {
     }
     const rich = projectRichInvocationTask({
       ...input,
-      snapshot: JSON.parse(JSON.stringify(host.correction.projectionSnapshot)),
+      snapshot: structuredClone(host.correction.projectionSnapshot),
     })
     const structured = projectStructuredInvocationTask({
       ...input,
-      snapshot: JSON.parse(JSON.stringify(host.correction.projectionSnapshot)),
+      snapshot: structuredClone(host.correction.projectionSnapshot),
     })
     expect(rich.semantics).not.toBe(structured.semantics)
     expect(rich.semanticDigest).toBe(structured.semanticDigest)

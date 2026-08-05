@@ -92,7 +92,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('business confirms what happens next')
+      expect(complete.answer.oneLine).toContain('cannot confirm a booking or the work')
       expect(complete.answer.oneLine).not.toContain('No listed businesses match')
       expect(complete.answer.summary).toContain('Use the cards to compare published services')
     } finally {
@@ -160,7 +160,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('business confirms what happens next')
+      expect(complete.answer.oneLine).toContain('cannot confirm a booking or the work')
       expect(complete.answer.summary).not.toContain('No providers are listed for that yet')
     } finally {
       restoreOpenRouter()
@@ -180,8 +180,8 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       prose: {
         oneLine: 'One listed business is listed in Parramatta.',
         summary:
-          'The listing publishes emergency pipe repair around Parramatta. The business confirms timing, price, availability, and the work.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'The listing publishes emergency pipe repair around Parramatta. Scope, price, and current availability still need confirmation.',
+        whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -254,10 +254,10 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     installAnswerThreadTestPort(store)
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
-        oneLine: 'The Adelaide dental option remains in view.',
+        oneLine: 'Start with a dentist serving Adelaide.',
         summary:
-          'The Adelaide listing publishes general dental care. The business confirms timing, price, availability, and the work.',
-        whatToDoNow: 'Open the Adelaide listing and review its published quote path.',
+          'The Adelaide listing publishes general dental care. Scope, price, and current availability still need confirmation.',
+        whatToDoNow: 'Contact the listing and ask whether it handles this need, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -301,7 +301,8 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') throw new Error('expected follow-up complete event')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
       expect(complete.answer.oneLine).toContain('Adelaide')
-      expect(server.requests).toHaveLength(0)
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
     } finally {
       restoreOpenRouter()
       await server.close()

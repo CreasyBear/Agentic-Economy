@@ -1,6 +1,7 @@
-import { bindingIntegrityIsValid } from '../binding'
-import { contractRefFromRow, offeringIntegrityIsValid } from '../offering'
-import { publicationLifecycle, type PublicationLifecycle } from '../publication'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import { contractRefFromRow } from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
+import { publicationLifecycle, type PublicationLifecycle } from '../publication/lifecycle'
 
 import type { CapabilityGraphPorts } from './ports'
 import { probeTargetDigest } from './probe-digest'

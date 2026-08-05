@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { SearchIcon } from 'lucide-react'
-import { isRecord } from '@/modules/common/is-record'
+import { claimFormSearchFor } from './AeFindMyBusiness.exports'
 
 export type FoundBusiness = Readonly<{
   slug: string
@@ -17,36 +17,7 @@ export type FoundBusiness = Readonly<{
 
 export type FindMyBusinessSearch = (query: string) => Promise<readonly FoundBusiness[]>
 
-export const CLAIM_ENRICH_INTENT_STORAGE_KEY = 'ae.claimEnrichIntent.v1'
-
 export type ClaimEnrichIntent = Readonly<{ businessName: string; suburb?: string }>
-
-export function writeClaimEnrichIntent(intent: ClaimEnrichIntent): void {
-  if (typeof window === 'undefined') return
-  window.sessionStorage.setItem(CLAIM_ENRICH_INTENT_STORAGE_KEY, JSON.stringify(intent))
-}
-
-export function readClaimEnrichIntent(): ClaimEnrichIntent | undefined {
-  if (typeof window === 'undefined') return undefined
-  const raw = window.sessionStorage.getItem(CLAIM_ENRICH_INTENT_STORAGE_KEY)
-  if (raw === null) return undefined
-
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!isRecord(parsed) || !('businessName' in parsed)) return undefined
-    const businessName = parsed.businessName
-    if (typeof businessName !== 'string' || businessName.trim().length === 0) return undefined
-    const suburb = 'suburb' in parsed && typeof parsed.suburb === 'string' ? parsed.suburb : undefined
-    return { businessName, ...(suburb === undefined || suburb.length === 0 ? {} : { suburb }) }
-  } catch {
-    return undefined
-  }
-}
-
-export function clearClaimEnrichIntent(): void {
-  if (typeof window === 'undefined') return
-  window.sessionStorage.removeItem(CLAIM_ENRICH_INTENT_STORAGE_KEY)
-}
 
 export type ClaimFormSearch = Readonly<{
   businessName: string
@@ -55,16 +26,6 @@ export type ClaimFormSearch = Readonly<{
   stateTerritory: string
   requestedSlug: string
 }>
-
-export function claimFormSearchFor(business: FoundBusiness): ClaimFormSearch {
-  return {
-    businessName: business.name,
-    category: business.category,
-    suburb: business.suburb,
-    stateTerritory: business.stateTerritory,
-    requestedSlug: business.slug,
-  }
-}
 
 /**
  * The first thing an owner sees on /claim. Typing a business name either finds

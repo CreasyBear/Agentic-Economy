@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { routeRunIdentityDigest } from '../journal'
+import { routeRunIdentityDigest } from '../journal/integrity'
 
 import type { JournalMutationPorts } from './ports'
 import type { StartCommand, StartResult } from './types'

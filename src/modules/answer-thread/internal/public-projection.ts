@@ -100,7 +100,3 @@ export function parseFrozenEvidence(value: string): FrozenTurnEvidence {
   return parsed
 }
 
-export function parseFrozenProse(value: string): FrozenTurnProse {
-  return JSON.parse(value) as FrozenTurnProse
-}
-

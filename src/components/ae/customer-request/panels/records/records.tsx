@@ -18,7 +18,7 @@ import {
   type CustomerRequestEvidenceExport,
 } from '@/modules/customer-request/agent-contract'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { isPartialResult, readableResult } from '../shared'
+import { isPartialResult, readableResult } from '../shared/format'
 
 export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
   const [reporting, setReporting] = useState(false)
@@ -286,7 +286,7 @@ export function RequestRecordLinks({ requestRef }: { requestRef: string }) {
     {error === undefined ? null : <p className="text-sm text-muted-foreground">{error}</p>}
   </div>
 }
-export function ProblemReplyForm({
+function ProblemReplyForm({
   requestRef,
   problem,
   refresh,

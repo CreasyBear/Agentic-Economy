@@ -263,12 +263,15 @@ export function evaluateActionBundles(
     )
 
   const endpointHypotheses = [...endpointIndex.entries()]
-    .filter(([, value]) => value.workflows.size >= 2)
-    .map(([family, value]) => ({
-      family,
-      workflowCount: value.workflows.size,
-      actions: [...value.actions].sort(),
-    }))
+    .flatMap(([family, value]) =>
+      value.workflows.size >= 2
+        ? [{
+          family,
+          workflowCount: value.workflows.size,
+          actions: [...value.actions].sort(),
+        }]
+        : [],
+    )
     .sort((left, right) => left.family.localeCompare(right.family))
 
   return {

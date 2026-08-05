@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, notFound, useLocation, type NotFoundRouteProps } from '@tanstack/react-router'
+import { Outlet, Link, createFileRoute, notFound, useLocation, type NotFoundRouteProps } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -189,7 +189,7 @@ function ProviderListingError() {
           <EmptyContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-              <Button asChild variant="secondary" className="min-h-11"><a href="/">Back to services</a></Button>
+              <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to services</Link></Button>
             </div>
           </EmptyContent>
         </Empty>
@@ -217,8 +217,8 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
             </EmptyHeader>
             <EmptyContent>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><a href="/claim">Claim your business page</a></Button>
-                <Button asChild variant="secondary" className="min-h-11"><a href="/">Browse businesses</a></Button>
+                <Button asChild variant="default" className="min-h-11"><Link to="/claim">Claim your business page</Link></Button>
+                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Browse businesses</Link></Button>
               </div>
             </EmptyContent>
           </Empty>
@@ -230,8 +230,8 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
             </EmptyHeader>
             <EmptyContent>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><a href="/">Browse businesses</a></Button>
-                <Button asChild variant="secondary" className="min-h-11"><a href="/">Ask a question</a></Button>
+                <Button asChild variant="default" className="min-h-11"><Link to="/">Browse businesses</Link></Button>
+                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Ask a question</Link></Button>
               </div>
             </EmptyContent>
           </Empty>

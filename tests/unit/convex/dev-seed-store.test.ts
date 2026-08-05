@@ -22,12 +22,15 @@ describe('dev seed Convex store', () => {
       accessPaths: await ctx.db.query('offeringAccessPaths').collect(),
     }))
     const seededBusinesses = persisted.businesses.filter((row) => bundle.seededSlugs.includes(row.slug))
+    // The curated-only seed is exactly the three AE-observed provider listings.
     expect(seededBusinesses).toHaveLength(3)
     expect(seededBusinesses).toEqual(expect.arrayContaining([
-      expect.objectContaining({ slug: 'joondalup-rapid-plumbing', publishedPhone: '0412 345 678' }),
-      expect.objectContaining({ slug: 'fremantle-coastal-electrical', publishedPhone: '(08) 9430 1234' }),
+      expect.objectContaining({ slug: 'agentic-market-tavily' }),
+      expect.objectContaining({ slug: 'agentic-market-exa' }),
     ]))
-    expect(seededBusinesses.find((row) => row.slug === 'plumbing-demo')?.publishedPhone).toBeUndefined()
+    expect(seededBusinesses.find((row) => row.slug === 'frankfurter-ecb-rates')).toBeDefined()
+    // None of the curated external listings publishes a phone number.
+    expect(seededBusinesses.every((row) => row.publishedPhone === undefined)).toBe(true)
     expect(persisted.offerings).toHaveLength(bundle.state.offerings.length)
     expect(persisted.revisions).toHaveLength(bundle.state.revisions.length)
     expect(persisted.accessPaths).toHaveLength(bundle.state.accessPaths.length)

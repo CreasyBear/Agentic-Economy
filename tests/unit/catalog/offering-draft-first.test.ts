@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { emptyOwnerOfferingEditorValue, publishGateRefusal } from '@/components/ae/offerings/AeOwnerOfferings'
-import { claimFormSearchFor } from '@/components/ae/claim/AeFindMyBusiness'
+import { emptyOwnerOfferingEditorValue, publishGateRefusal } from '@/components/ae/offerings/AeOwnerOfferings.exports'
+import { claimFormSearchFor } from '@/components/ae/claim/AeFindMyBusiness.exports'
 
 describe('offering requiredness is a publish gate, not a save gate', () => {
   it('lets a draft park with nothing filled in', () => {

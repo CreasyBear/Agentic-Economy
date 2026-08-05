@@ -9,7 +9,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import { telUri } from '@/lib/ui/tel-uri'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
-import { ProviderFacts, offeringPathLabel } from '@/components/ae/provider-facts'
+import { ProviderFacts } from '@/components/ae/provider-facts'
+import { offeringPathLabel } from '@/components/ae/provider-facts.exports'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
 

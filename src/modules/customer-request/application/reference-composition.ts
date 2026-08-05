@@ -163,11 +163,12 @@ export function projectReferenceComposition(
   }
   if (hasCycle(input.nodes, byRef)) return { kind: 'refused', reason: 'dependency_cycle' }
 
-  const completed = new Set(
-    resolved.filter(({ completedReference, invocation }) => (
-      completedReference !== undefined || invocationIsCompleted(invocation)
-    )).map(({ node }) => node.nodeRef),
-  )
+  const completed = new Set<string>()
+  for (const { completedReference, invocation, node } of resolved) {
+    if (completedReference !== undefined || invocationIsCompleted(invocation)) {
+      completed.add(node.nodeRef)
+    }
+  }
   const nodes = resolved.map(({ node, action, invocation, completedReference }) => {
     const state = deriveState(node, invocation, completed, completedReference !== undefined)
     const meaning = deriveMeaning(action, state, invocation, completedReference)

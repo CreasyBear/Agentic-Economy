@@ -38,7 +38,7 @@ export function AeOperatorStatusList({
     <ItemGroup className="gap-2">
       {rows.map((row) => (
         <Item asChild key={row.id} variant="outline" className="grid gap-2 bg-card">
-          <div role="listitem">
+          <li>
             <ItemContent className="gap-1">
               <ItemTitle>{row.label}</ItemTitle>
               {row.description === undefined && row.meta === undefined ? null : (
@@ -51,7 +51,7 @@ export function AeOperatorStatusList({
             <ItemActions>
               <Badge variant="secondary">{row.state}</Badge>
             </ItemActions>
-          </div>
+          </li>
         </Item>
       ))}
     </ItemGroup>

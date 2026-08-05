@@ -3,20 +3,21 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
-import type { CapabilityBindingRow } from '../binding'
-import { bindingIntegrityIsValid } from '../binding'
+import { bindingIntegrityIsValid } from '../binding/integrity'
+import type { CapabilityBindingRow } from '../binding/registration'
 import {
   bindingEligibilityIsValid,
-  MAX_ELIGIBLE_SUPPLY,
   offeringEligibilityIsValid,
-} from '../eligibility'
-import type { CapabilityOfferingRow } from '../offering'
-import { contractRefFromRow, offeringIntegrityIsValid } from '../offering'
+} from '../eligibility/integrity'
+import { MAX_ELIGIBLE_SUPPLY } from '../eligibility/list'
+import { contractRefFromRow } from '../offering/registration'
+import { offeringIntegrityIsValid } from '../offering/integrity'
+import type { CapabilityOfferingRow } from '../offering/registration'
 import {
   publicationLifecycle,
   type PublicationLifecycle,
-} from '../publication'
-import { MAX_CONTEXT_VALUE_LENGTH, boundedTrimmed } from '../shared'
+} from '../publication/lifecycle'
+import { MAX_CONTEXT_VALUE_LENGTH, boundedTrimmed } from '../shared/command-envelope'
 
 import type {
   CapabilityGraphPorts,

@@ -179,19 +179,6 @@ export function AeRouteCommandMenu({
   )
 }
 
-export function AePublicRouteCommandMenu({ mobile = false }: { mobile?: boolean }) {
-  const destinations = useMemo(() => [...publicDestinations, ownerCommandDestination(false)], [])
-
-  return (
-    <AeRouteCommandMenu
-      destinations={destinations}
-      label="Search"
-      mobile={mobile}
-      triggerClassName={mobile ? 'md:hidden' : 'hidden md:inline-flex'}
-    />
-  )
-}
-
 function ownerCommandDestination(isSignedIn: boolean): AeCommandDestination {
   if (isSignedIn) {
     return {

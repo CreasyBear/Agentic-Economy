@@ -31,12 +31,6 @@ const inspectPlanQuery = sourceQuery<InspectPlanInput, InspectPlanWireResult>('c
 
 let sourcePortForTests: CapabilityOperationSourcePort | undefined
 
-export function setCapabilityOperationSourcePortForTests(port: CapabilityOperationSourcePort | undefined): () => void {
-  const previous = sourcePortForTests
-  sourcePortForTests = port
-  return () => { sourcePortForTests = previous }
-}
-
 export function readCapabilityOperationSearch(input: OperationSearchInput): Promise<OperationSearchResult> {
   return sourcePortForTests === undefined
     ? callPublicSourceQuery(searchQuery, input).then(deserializeOperationSearchResult)

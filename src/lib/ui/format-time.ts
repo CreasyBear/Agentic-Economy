@@ -14,7 +14,6 @@ const dateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { day: 'numeric'
 const timeFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { hour: 'numeric', minute: '2-digit' })
 const dateOnlyFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { dateStyle: 'medium' })
 const numericDateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric' })
-const clockTimeFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { hour: 'numeric', minute: '2-digit', second: '2-digit' })
 const recordTimestampFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, {
   day: '2-digit',
   month: 'short',
@@ -57,10 +56,6 @@ export function formatNumericDate(value: number | string | Date): string {
   return numericDateFormatter.format(toDate(value))
 }
 
-/** Clock-only public label, e.g. "1:14:05 pm". */
-export function formatClockTime(value: number | string | Date): string {
-  return clockTimeFormatter.format(toDate(value))
-}
 
 /** Record timestamps preserve the record surface's two-digit fields. */
 export function formatRecordTimestamp(value: number | string | Date): string {

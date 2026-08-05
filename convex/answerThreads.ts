@@ -217,20 +217,18 @@ export const appendAnswerTurnWithToolCalls = mutationGeneric({
       ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
     })
 
-    for (const call of args.toolCalls) {
-      await ctx.db.insert('answerToolCalls', {
-        toolCallId: call.toolCallId,
-        turnId: args.turnId,
-        seq: call.seq,
-        toolId: call.toolId,
-        inputJson: call.inputJson,
-        resultSummaryJson: call.resultSummaryJson,
-        resultJson: call.resultJson,
-        resultHash: call.resultHash,
-        status: call.status,
-        createdAt: timestamp,
-      })
-    }
+    await Promise.all(args.toolCalls.map((call) => ctx.db.insert('answerToolCalls', {
+      toolCallId: call.toolCallId,
+      turnId: args.turnId,
+      seq: call.seq,
+      toolId: call.toolId,
+      inputJson: call.inputJson,
+      resultSummaryJson: call.resultSummaryJson,
+      resultJson: call.resultJson,
+      resultHash: call.resultHash,
+      status: call.status,
+      createdAt: timestamp,
+    })))
 
     await ctx.db.patch(thread._id, { updatedAt: now() })
     return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
@@ -315,20 +313,18 @@ export const appendAnswerTurnWithThreadAndToolCalls = mutationGeneric({
       ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
     })
 
-    for (const call of args.toolCalls) {
-      await ctx.db.insert('answerToolCalls', {
-        toolCallId: call.toolCallId,
-        turnId: args.turnId,
-        seq: call.seq,
-        toolId: call.toolId,
-        inputJson: call.inputJson,
-        resultSummaryJson: call.resultSummaryJson,
-        resultJson: call.resultJson,
-        resultHash: call.resultHash,
-        status: call.status,
-        createdAt: timestamp,
-      })
-    }
+    await Promise.all(args.toolCalls.map((call) => ctx.db.insert('answerToolCalls', {
+      toolCallId: call.toolCallId,
+      turnId: args.turnId,
+      seq: call.seq,
+      toolId: call.toolId,
+      inputJson: call.inputJson,
+      resultSummaryJson: call.resultSummaryJson,
+      resultJson: call.resultJson,
+      resultHash: call.resultHash,
+      status: call.status,
+      createdAt: timestamp,
+    })))
 
     if (existingThread !== null) {
       await ctx.db.patch(existingThread._id, { updatedAt: timestamp })
@@ -360,20 +356,18 @@ export const appendAnswerToolCalls = mutationGeneric({
   handler: async (ctx, args) => {
     await requireAnswerThreadSourceWrite(ctx, args)
     const nowTs = now()
-    for (const call of args.toolCalls) {
-      await ctx.db.insert('answerToolCalls', {
-        toolCallId: call.toolCallId,
-        turnId: args.turnId,
-        seq: call.seq,
-        toolId: call.toolId,
-        inputJson: call.inputJson,
-        resultSummaryJson: call.resultSummaryJson,
-        resultJson: call.resultJson,
-        resultHash: call.resultHash,
-        status: call.status,
-        createdAt: nowTs,
-      })
-    }
+    await Promise.all(args.toolCalls.map((call) => ctx.db.insert('answerToolCalls', {
+      toolCallId: call.toolCallId,
+      turnId: args.turnId,
+      seq: call.seq,
+      toolId: call.toolId,
+      inputJson: call.inputJson,
+      resultSummaryJson: call.resultSummaryJson,
+      resultJson: call.resultJson,
+      resultHash: call.resultHash,
+      status: call.status,
+      createdAt: nowTs,
+    })))
     return { inserted: args.toolCalls.length }
   },
 })
@@ -571,15 +565,17 @@ export const getAnswerThreadWithTurns = queryGeneric({
     }
 
     // Snapshot count: answer-thread writes cap a thread at ANSWER_THREAD_MAX_TURNS.
-    const turnRows = await ctx.db
-      .query('answerTurns')
-      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .take(ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT)
-    const page = await ctx.db
-      .query('answerTurns')
-      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
-      .order('asc')
-      .paginate(args.paginationOpts)
+    const [turnRows, page] = await Promise.all([
+      ctx.db
+        .query('answerTurns')
+        .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+        .take(ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT),
+      ctx.db
+        .query('answerTurns')
+        .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+        .order('asc')
+        .paginate(args.paginationOpts),
+    ])
 
     return {
       thread: {

@@ -114,9 +114,14 @@ export function projectDecisionInbox(
     }
   }
 
+  const treeById = new Map(trees.map((tree) => [tree.treeId, tree]))
+  const nodesByTree = new Map<string, Map<string, WorkNode>>()
+  for (const tree of trees) {
+    nodesByTree.set(tree.treeId, new Map(tree.nodes.map((node) => [node.nodeId, node])))
+  }
   for (const proposal of options.pendingProposeDecisions ?? []) {
-    const tree = trees.find((candidate) => candidate.treeId === proposal.treeId)
-    const node = tree?.nodes.find((candidate) => candidate.nodeId === proposal.targetNodeId)
+    const tree = treeById.get(proposal.treeId)
+    const node = tree === undefined ? undefined : nodesByTree.get(proposal.treeId)?.get(proposal.targetNodeId)
     if (tree === undefined || node === undefined || node.kind !== 'decision') continue
     const key = candidateKey(proposal.treeId, node.nodeId)
     if (seen.has(key)) continue

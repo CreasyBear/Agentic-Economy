@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { routeAttemptIntegrityValid } from '../journal'
-import { decideCustomerProblemReport } from '../problem-support'
+import { routeAttemptIntegrityValid } from '../journal/integrity'
+import { decideCustomerProblemReport } from '../problem-support/commands'
 
 import type {
   CustomerProblemReportArgs,

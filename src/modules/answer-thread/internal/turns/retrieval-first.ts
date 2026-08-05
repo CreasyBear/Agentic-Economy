@@ -3,7 +3,6 @@ import {
   type AnswerSource,
   type AnswerWorkStep,
   buildAgentJsonUrl,
-  buildProviderDecisionOneLine,
   extractRequestedLocation,
 } from '@/modules/answer/public'
 import {
@@ -23,7 +22,6 @@ import { safeWorkLogUserText } from '../public-worklog'
 import {
   describeProviderCount,
   emitReadAndCompareSteps,
-  providerNameList,
   rejectBlockedSnapshot,
   reindexProviders,
   withFollowUpLayout,
@@ -114,16 +112,48 @@ async function streamRetrievalFirstTurn(
 
   emitReadAndCompareSteps(ctx.workLog, result.providers)
   if (result.providers.length === 0) {
+    const operation = await discoverCapabilityOperations(ctx, searchInput)
+    const toolCalls = [result.record, operation.record]
+    const allowedSlugs = new Set([...result.allowedSlugs, ...operation.allowedSlugs])
+
+    if (operation.providers.length > 0) {
+      const operationSnapshot = withFollowUpLayout(
+        buildRetrievalFirstSnapshot({
+          query: ctx.query,
+          providers: operation.providers,
+          visibleLimit: plan.providerBudget.visibleLimit,
+          searchInput,
+          searchContext: ctx.searchContext,
+        }),
+        ctx.priorTurnsCount,
+        ctx.intent,
+      )
+      const finalized = finalizeAnswerTurnSnapshot({ snapshot: operationSnapshot, allowedSlugs })
+      if (!finalized.ok) {
+        return rejectBlockedSnapshot(ctx, toolCalls, allowedSlugs, finalized)
+      }
+      const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_first', { plan })
+      return {
+        snapshot: finalized.snapshot,
+        toolCalls,
+        allowedSlugs,
+        errorCopyId: undefined,
+        gate: finalized.gate,
+        ...(assembly === undefined ? {} : { assembly }),
+      }
+    }
+
     if (!shouldReturnDeterministicEmptyState(ctx.query, searchInput)) {
-      return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
+      return { snapshot: undefined, toolCalls, allowedSlugs, errorCopyId: undefined, gate: undefined }
     }
 
     const discovery = await discoverImportedClaims(ctx, searchInput)
+    const emptyToolCalls = [...toolCalls, discovery.record]
     if (discovery.status === 'error') {
       return {
         snapshot: undefined,
-        toolCalls: [result.record, discovery.record],
-        allowedSlugs: result.allowedSlugs,
+        toolCalls: emptyToolCalls,
+        allowedSlugs,
         errorCopyId: undefined,
         gate: undefined,
       }
@@ -139,16 +169,15 @@ async function streamRetrievalFirstTurn(
       ctx.intent,
     )
 
-    const toolCalls = [result.record, discovery.record]
-    const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
+    const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
     if (!finalized.ok) {
-      return rejectBlockedSnapshot(ctx, toolCalls, result.allowedSlugs, finalized)
+      return rejectBlockedSnapshot(ctx, emptyToolCalls, allowedSlugs, finalized)
     }
     const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_empty', { planMode: 'empty' })
     return {
       snapshot: finalized.snapshot,
-      toolCalls,
-      allowedSlugs: result.allowedSlugs,
+      toolCalls: emptyToolCalls,
+      allowedSlugs,
       errorCopyId: undefined,
       gate: finalized.gate,
       ...(assembly === undefined ? {} : { assembly }),
@@ -199,6 +228,10 @@ function buildInitialRegistrySearchInput(
 
   const contextLocation = aeSearchContextLocationQuery(searchContext)
   const userNamedLocation = extractRequestedLocation(query)
+  if (userNamedLocation !== undefined) {
+    return { ...input, mode: 'near_me', location: userNamedLocation }
+  }
+
   if (contextLocation !== undefined && userNamedLocation === undefined) {
     return { ...input, mode: 'near_me', location: contextLocation }
   }
@@ -215,20 +248,16 @@ function buildRetrievalFirstSnapshot(input: {
 }): AnswerSnapshot {
   const providers = reindexProviders(input.providers.slice(0, input.visibleLimit))
   const count = providers.length
-  const names = providerNameList(providers)
   const place = input.searchInput.location ?? extractRequestedLocation(input.query)
-  const placeSuffix = place === undefined ? '' : ` for ${place}`
+  const placeSuffix = place === undefined ? '' : ` in ${place}`
+  const subject = count === 1 ? 'This listing' : `These ${count} listings`
 
   return {
     query: input.query,
-    oneLine: count === 1 && providers[0] !== undefined
-      ? buildProviderDecisionOneLine(providers[0])
-      : `${count} listed businesses match${placeSuffix}.`,
+    oneLine: `${subject} may fit your request${placeSuffix}.`,
     providers,
-    summary: count === 1
-      ? `${names} publishes service coverage${placeSuffix}. The business confirms timing, price, availability, and the work.`
-      : `${names} publish service coverage${placeSuffix}. The businesses confirm timing, price, availability, and the work.`,
-    nextStep: 'Open a listed business page and send an inquiry when that option is published.',
+    summary: `${subject} publish services that matched your request. Scope, price, and current availability still need confirmation.`,
+    nextStep: `Choose one listing and ask whether it handles "${input.query}", what it costs, and when it is available.`,
     agentJsonUrl: buildAgentJsonUrl(
       buildAgentJsonQuery(input.query, input.searchInput),
       input.searchInput.limit,
@@ -287,7 +316,7 @@ async function discoverImportedClaims(
       ...(searchInput.location === undefined ? {} : { location: searchInput.location }),
     },
     turnId: ctx.turnId,
-    seq: 1,
+    seq: 2,
     harnessLoop: ctx.harness.loop,
   })
   ctx.timings.add(result.timings, {
@@ -321,6 +350,65 @@ async function discoverImportedClaims(
     completedAtMs: Date.now(),
   })
   return { claims, record: result.record, status: discoveryStatus }
+}
+
+/**
+ * Falls back to the typed executable-operation search when the listed-business
+ * catalog returns no provider, so natural-language questions surface real
+ * onboarded capabilities (e.g. Frankfurter / Exa) instead of stopping at an
+ * empty catalog state. Returns zero providers when the search errors or finds
+ * nothing, preserving the deterministic empty-state / web-discover path.
+ */
+async function discoverCapabilityOperations(
+  ctx: TurnPathContext,
+  searchInput: AnswerRegistrySearchInput,
+): Promise<{
+  providers: readonly AnswerSource[]
+  record: Awaited<ReturnType<typeof runAnswerToolCall>>['record']
+  allowedSlugs: ReadonlySet<string>
+}> {
+  const startedAt = Date.now()
+  ctx.workLog.emit({
+    id: 'search.operations.initial',
+    phase: 'search',
+    status: 'running',
+    title: 'Searching executable operations',
+    summary: 'No listed businesses matched, so AE is checking its executable operations.',
+    detailRows: [{ label: 'Search words', value: safeWorkLogUserText(ctx.query) }],
+    startedAtMs: startedAt,
+  })
+  const result = await runAnswerToolCall({
+    toolId: 'registry.operations.search',
+    input: { query: ctx.query, limit: searchInput.limit },
+    turnId: ctx.turnId,
+    seq: 1,
+    harnessLoop: ctx.harness.loop,
+  })
+  ctx.timings.add(result.timings, {
+    phase: 'operation_discovery',
+    toolId: result.record.toolId,
+    toolSeq: result.record.seq,
+  })
+  ctx.workLog.emit({
+    id: 'search.operations.initial',
+    phase: 'search',
+    status: result.record.status === 'complete' ? 'complete' : 'error',
+    title: 'Searching executable operations',
+    summary: result.record.status === 'complete'
+      ? result.providers.length === 0
+        ? 'No executable operations matched this request.'
+        : `${result.providers.length} executable operation${result.providers.length === 1 ? '' : 's'} matched this request.`
+      : 'The executable-operation search did not complete.',
+    detailRows: [{ label: 'Results', value: String(result.providers.length) }],
+    relatedProviderSlugs: result.providers.map((provider) => provider.slug),
+    startedAtMs: startedAt,
+    completedAtMs: Date.now(),
+  })
+  return {
+    providers: result.providers,
+    record: result.record,
+    allowedSlugs: result.allowedSlugs,
+  }
 }
 
 

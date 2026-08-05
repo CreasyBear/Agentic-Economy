@@ -3,16 +3,16 @@ import { Card } from '@/components/ui/card'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type { ConversationTurn } from '../../workspace-types'
+import { Conversation } from '../shared/conversation'
+import { WorkingUnderstanding } from '../shared/working-understanding'
+import { RecoveryActions } from '../shared/recovery-actions'
 import {
-  Conversation,
-  WorkingUnderstanding,
-  RecoveryActions,
   activityResponsibility,
   businessList,
   isPartialResult,
   readableResult,
-} from '../shared'
-import { RequestRecordLinks } from '../records'
+} from '../shared/format'
+import { RequestRecordLinks } from '../records/records'
 
 export function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
   projection: CustomerRequestView

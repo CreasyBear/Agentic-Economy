@@ -133,8 +133,10 @@ export function projectBusinessSupplyToPublicApi(
     ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
     ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
     accessPaths: item.accessPaths
-      .filter((path) => dialable || path.descriptor.kind !== 'human_request' || path.descriptor.channel !== 'phone')
-      .map(projectAccessPath),
+      .reduce<PublicOfferingAccessPathDto[]>((acc, path) => {
+        if (dialable || path.descriptor.kind !== 'human_request' || path.descriptor.channel !== 'phone') acc.push(projectAccessPath(path))
+        return acc
+      }, []),
     support: {
       integrated: item.support.integrated,
       aeSupportedAction: item.support.routeable
