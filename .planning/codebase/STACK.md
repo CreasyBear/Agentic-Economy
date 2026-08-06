@@ -1,110 +1,54 @@
-<!-- refreshed: 2026-08-05 -->
-
 # Technology Stack
-
-**Analysis Date:** 2026-08-05
+**Analysis Date:** 2026-08-06
 
 ## Languages
-
-**Primary:**
-- TypeScript 6.0.3 - Application modules, TanStack Start route handlers, Convex functions, tests, eval harness, and operational tooling in `src/`, `convex/`, `tests/`, `eval/`, and `tools/`. `tsconfig.json` targets `ES2022` with `moduleResolution: "Bundler"`, `strict: true`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, and `useUnknownInCatchVariables`.
-
-**Secondary:**
-- JavaScript ES modules - Release and repository utilities in `tools/**/*.mjs` (e.g. `tools/dev/run-with-cleanup.mjs`, `tools/release/verify-kernel-retirement.mjs`, `eval/parity/check-parity.mjs`) and package scripts; `package.json` sets `"type": "module"`.
-- CSS - Tailwind CSS v4 layers and application styles in `src/styles/globals.css` and `src/styles/legacy.css`; `tw-animate-css` for animation primitives.
-- JSON and YAML - Package, schema, route-contract, evaluation, and CI configuration in `package.json`, `tsconfig.json`, `components.json`, `eval/`, `.promptfoo-home/`, and `.github/workflows/`.
+**Primary:** TypeScript 6.0.3 (compiler, `tsconfig.json`) — application source under `src/`, `convex/`, `tests/`, `tools/`, `eval/`. Strict mode with `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `moduleResolution: "Bundler"`, `jsx: "react-jsx"`.
+**Secondary:** CSS/Tailwind (via `@tailwindcss/vite`), a small amount of JS/MJS in `tools/` + `eval/` script runners (`eval/parity/check-parity.mjs`, `eval/engine/run-evaluation.mjs`).
 
 ## Runtime
-
-**Environment:**
-- Node.js >=22 - Declared via `"engines": { "node": ">=22" }` in `package.json`; local scripts and server builds run on Node 22, Vercel serverless functions are pinned to `nodejs22.x` in `vite.config.ts` (Nitro `vercel` preset), and CI jobs run on Node 22 in `.github/workflows/kernel-release-gate.yml`.
-- Browser Web APIs - React 19 rendering, Fetch, ReadableStream, Web Crypto, cookies, and `localStorage`/`sessionStorage` used by `src/routes/` and `src/components/`.
-- WebAssembly / inline workers - Not detected; heavy lifting (Mermaid, Shiki) is pulled in as JS graph libraries (`graphology`, `graphology-dag`) rather than WASM.
-
-**Package Manager:**
-- npm 11.5.1 - Declared by `"packageManager"` in `package.json` and used in `.github/workflows/kernel-release-gate.yml`.
-- Lockfile: present - `package-lock.json` (lockfile version 3) records the resolved graph with `overrides` forcing specific transitive versions (`@opentelemetry/exporter-trace-otlp-http`, `shiki`).
+**Environment:** Node.js `>=22` (declared in `package.json` `engines`; Vite dev server + Nitro build). Browser runtime for the TanStack Start client. Convex backend runtime for server functions.
+**Package Manager:** npm 11.5.1 — `"packageManager": "npm@11.5.1"`, `package-lock.json` present (923 KB, lockfile committed).
+**Deployment runtime:** Vercel Nitro preset, Node serverless functions on `nodejs22.x` (see `vite.config.ts` → `nitro({ preset: 'vercel', vercel: { entryFormat: 'node', functions: { runtime: 'nodejs22.x' } } })`). Note `.vercel/project.json` currently reports `nodeVersion: "24.x"` — a source-vs-project-runtime discrepancy flagged in memory.
 
 ## Frameworks
+**Core:**
+- **React 19.2.7** (+ `react-dom`) — UI.
+- **TanStack Start / React Router 1.x** (`@tanstack/react-start` 1.168.26, `@tanstack/react-router` 1.170.16) — SSR/SSG-ish file-route application shell; routes in `src/routes/`, `src/router.tsx`, `src/start.ts`.
+- **TanStack AI** (`@tanstack/ai` ^0.38.0) — AI/harness integration layer.
+- **TanStack React Table** (`@tanstack/react-table` ^8.21.3) — operator data tables.
+- **Convex 1.42.0** — durable backend / single source of truth; server functions in `convex/`, schema composed from `src/modules/**/internal/schema.ts`.
+- **AI SDK** (`ai` ^7.0.44) — model gateway; see `src/modules/model-gateway/public.ts`.
+- **Nitro** (pinned nightly `nitro: npm:nitro-nightly@^3.0.1-...`) — server/edge functions and routing layer for webhooks via Vite plugin.
 
-**Frontend & server framework:**
-- TanStack Start 1.168.26 (`@tanstack/react-start`) - Full-stack framework on Vite; `src/start.ts` boots the app, `src/router.tsx` + `src/routeTree.gen.ts` define routes, `src/routes/` holds route handlers (page, `api.*`, `_operator/*`).
-- TanStack React Router 1.170.16 (`@tanstack/react-router`) - Client/SSR routing; file-based under `src/routes/` with path aliases `@/routes/...` mapped in `tsconfig.json`.
-- React 19.2.7 / react-dom 19.2.7 - UI; `@vitejs/plugin-react` (vite 6.0.3) for fast refresh.
-- Vite 8.1.0 - Dev server (port 3000, `allowedHosts`) and production build; `@tailwindcss/vite` for Tailwind CSS v4.
+**Testing:** Vitest 4.1.9 (+ `convex-test` ^0.0.54, `@testing-library/react`, `jsdom`), Playwright 1.61.1 (@playwright/test), promptfoo ^0.121.17 for LLM evals.
+**Build/Dev:** Vite 8.1.0, `vite build`, `tsc --noEmit` typecheck, `tsx` for scripts, oxlint for linting, Tailwind CSS 4.
 
-**Backend (deploy) framework:**
-- Nitro (`nitro` = `npm:nitro-nightly@^3.0.1-20260628-090458-3df69609`) - Server runtime for TanStack Start; configured in `vite.config.ts` via `nitro({ preset: 'vercel', vercel: { entryFormat: 'node', functions: { runtime: 'nodejs22.x' } } })`. Hosted webhook routes (Resend/Novu dispatch) use raw `Request` bodies plus Node/WebCrypto signature verification.
-- Convex 1.42.0 (`convex`) - Durable backend database + server functions; `convex.config.ts` defines the app and registers components. `convex/_generated/` is codegen output, regenerated by `convex codegen`.
+## Key Dependencies
+**Critical:**
+- **convex 1.42.0** — backend, schema, server functions, mutations/queries/actions, codegen.
+- **ai ^7.0.44 + @openrouter/ai-sdk-provider ^3.0.0** — the single model-gateway seam (OpenRouter); every model call routes through it (see `src/modules/model-gateway/public.ts`).
+- **@tanstack/react-start 1.168.26 / @tanstack/react-router 1.170.16** — app shell, SSR, file routes, server functions.
+- **@clerk/tanstack-react-start 1.4.9** — authentication (Clerk) bound to the TanStack Start server (`src/start.ts` `clerkMiddleware`).
+- **@x402/core / @x402/evm / @x402/extensions 2.18.0** — HTTP message-signatures / x402 payment + Web Bot Auth primitives (quarantined to `src/modules/x402-*`-style signing paths per import-boundary tests).
+- **@convex-dev/workflow ^0.4.4 + @convex-dev/workpool ^0.4.9 + @convex-dev/rate-limiter ^0.3.2 + @convex-dev/aggregate ^0.2.2** — Convex components for long-running route execution, work pools, rate limiting, and aggregate projections (`convex/convex.config.ts`).
+- **zod 4.4.3** — schema validation across domain/contract boundaries and Convex validators.
+- **viem 2.55.2 + @noble/curves/@noble/hashes** — EVM / cryptographic signing for x402 and message signatures.
 
-**UI component layer:**
-- `radix-ui` 1.6.7 + `@radix-ui/react-use-controllable-state` - Headless primitives (`src/components/ui/` is a shadcn/ui-style library under `components.json`).
-- Tailwind CSS 4.3.1 + `tailwind-merge` + `class-variance-authority` + `clsx` - Styling and variant composition.
-- `lucide-react` 1.21.0 (icons), `motion` 12.42.0 (animation), `sonner` 2.0.7 (toasts), `react-arborist` 3.16.0 + `cmdk` 1.1.1 + `use-stick-to-bottom` (interactive/chat UI), `@streamdown/*` + `streamdown` 2.5.0 (rich content rendering: cjk/code/math/mermaid).
-
-**AI / model stack:**
-- Vercel AI SDK `ai` 7.0.44 - Language-model client, tool-calling, and structured output; `@openrouter/ai-sdk-provider` 3.0.x is the model provider adapter; `@ai-sdk/provider-utils` 5.0.16.
-- Convex agent/workflow components: `@convex-dev/workflow` 0.4.4, `@convex-dev/workpool` 0.4.9, `@convex-dev/rate-limiter` 0.3.2, `@convex-dev/aggregate` 0.2.2 (see `.planning/codebase/INTEGRATIONS.md`).
-
-**State / logic:**
-- `xstate` 5.32.5 - State machines for customer-request route execution (`src/modules/customer-request/route-execution/machines/*`).
-- `graphology` 0.26.0 + `graphology-dag` 0.4.1 - Capability dependency graph support (`src/modules/capability-supply/internal/graph/*`, `src/modules/customer-request/application/interpret-compile/graph.ts`).
-- `zod` 4.4.3 - Schema validation; `@cfworker/json-schema` 4.1.1 - JSON Schema validation for capability contracts and curated OpenAPI documents.
-- `nanoid` 5.1.16, `date-fns` 4.4.0, `es-toolkit` 1.50.0, `fastest-levenshtein` 1.0.16, `@flatten-js/interval-tree`, `@sindresorhus/slugify`, `yaml` 2.9.0 - General utilities.
-
-**Crypto / payments:**
-- `@noble/curves` 1.9.1 + `@noble/hashes` 1.8.0 - WebCrypto-adjacent primitives.
-- `viem` 2.55.2 - EVM interaction.
-- `@x402/core`, `@x402/evm`, `@x402/extensions` (2.18.0) - x402 protocol for observed Agentic-Market listings (discovery/evidence only; no payment executed).
-- `undici` 7.28.0 - HTTP client (bounded fetch).
-
-**Auth:**
-- Clerk (`@clerk/tanstack-react-start` 1.4.9) - TanStack Start + React integration; `convex/auth.config.ts` wires JWT trust to Convex.
-
-**Notifications / email:**
-- `@react-email/components` 1.0.12 + `@react-email/render` 2.1.0 - Email templates/rendering; dispatch handled by bounded server fetch adapters (Resend, Novu).
-
-**Observability:**
-- `@sentry/node` 10.63.0, `@sentry/react` 10.63.0, `@sentry/vite-plugin` 5.3.0 - Error monitoring + build-time sourcemaps.
-- `posthog-js` 1.398.2 + `posthog-node` 5.39.0 - Product analytics (client + server in `src/lib/observability/`).
-
-## Testing & Build Tooling
-
-**Test runners:**
-- Vitest 4.1.9 - Unit, integration, type, import-boundary, SEO, and UI-contract suites under `tests/` plus `convex/**/*.test.ts` (`vitest.config.ts`); run via `tools/dev/run-with-cleanup.mjs` which snapshots processes and reaps only test-owned browsers.
-- Playwright (`@playwright/test` 1.61.1) - E2E / deploy-smoke suites across `playwright.config.ts`, `playwright.deploy-smoke.config.ts`, and `playwright.paid-operation.config.ts`.
-- `convex-test` 0.0.54 - Convex-specific test helpers.
-- `promptfoo` 0.121.17 - LLM/eval harness under `eval/` (config `eval/answer/promptfooconfig.yaml`, `PROMPTFOO_CONFIG_DIR=.promptfoo-home`).
-
-**Linters / type / quality gates:**
-- `oxlint` 1.73.0 - `npm run lint` (`oxlint src convex tests tools --deny-warnings`).
-- TypeScript 6.0.3 - `npm run typecheck` (`tsc --noEmit`).
-- `react-doctor` 0.7.7 - `npm run doctor`.
-- Custom gate scripts: `check:convex-codegen` (`convex codegen --dry-run`), `check:kernel-retirement` (`tools/release/verify-kernel-retirement.mjs`), import-boundary tests in `tests/imports/*`.
-
-**Build / tooling:**
-- `tsx` 4.20.5 - TS-to-JS execution for `tools/` scripts and the `ae` CLI.
-- `jsdom` 29.1.1 + `@testing-library/react` 16.3.2 - DOM testing.
-- `convex` CLI - codegen + `npm run seed:dev` (`convex run devSeed:seedDevCatalog`).
+**Infrastructure (runtime/networking):**
+- **@apidevtools/json-schema-ref-parser ^11.0.0** — OpenAPI deref for capability-admission (kept OUT of the convex-reachable graph; lives in `src/modules/capability-supply/internal/schema-deref.ts`, node-side only).
+- **@sentry/node + @sentry/react ^10.63.0 + @sentry/vite-plugin** — error observability.
+- **posthog-js ^1.398.2 / posthog-node ^5.39.0** — funnel analytics.
+- **@react-email/components @react-email/render** — transactional email rendering.
+- **@modelcontextprotocol/sdk 1.30.0** — MCP adapter (`src/routes/mcp.ts`, `src/lib/server/mcp-api.ts`).
+- **motion ^12.42.0, thinking-orbs ^0.2.0** — UI animation layer.
 
 ## Configuration
-
-- `tsconfig.json` - Strict TS config; path aliases `@/*` and `~/*` → `./src/*`; `@/routes/*` redirects into `src/routes/_operator/`.
-- `vite.config.ts` - Vite/Nitro/TanStack Start/Sentry plugin wiring; Vercel Node 22 preset; dev port 3000.
-- `convex.config.ts` - App definition, Convex env var declarations (`OPENROUTER_API_KEY`, `AE_CUSTOMER_REQUEST_MODEL`, `AE_SITE_URL`, `CLERK_JWT_ISSUER_DOMAIN`, `AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_ROUTE_CALL_SIGNING_SECRET`, `AE_ROUTE_CALL_SIGNING_KEY_ID`), and mounted components (workflow, workpool, rate-limiter, aggregate `ownerActivationByStage`).
-- `vitest.config.ts` - Node environment, test globs, setup files (`tests/setup/web-storage.ts`, `no-search-gap-writes.ts`, `resize-observer.ts`, `http-rate-limit.ts`).
-- `components.json` - shadcn/ui component config.
-- `doctor.config.ts` - react-doctor configuration.
-- `playwright*.config.ts` - E2E/deploy/paid-operation play configurations.
-- `skills-lock.json` - Installed-skill lockfile.
-- `.github/workflows/kernel-release-gate.yml` - CI gate (Node 22, npm 11.5.1) running the `test:release:source` chain.
+**Environment:** `.env.example` (documented names, canonical reference) + `.env.local` (local dev secrets, gitignored). See `INTEGRATIONS.md` → Environment Configuration for the full var-name inventory. No committed `.env` values.
+**Build:** `vite.config.ts` (plugins: `tanstackStart`, `nitro` vercel preset, `viteReact`, `tailwindcss`, optional `sentryVitePlugin` gated on `SENTRY_AUTH_TOKEN/ORG/PROJECT`); `tsconfig.json` (path aliases `@/*` and `~/*` → `./src/*`, plus route-ng aliases `@/routes/owner.*`, `@/routes/admin.*`, `@/routes/developers.discovery`); `.oxlintrc.json`; `vitest.config.ts`; `components.json` (shadcn); `convex/convex.config.ts` (app env + `defineApp` with Convex components).
+**No wrangler config** (Cloudflare not wired into source); the `.env.local` `CLOUDFLARE_*`/`R2_*`/`MEILISEARCH_*`/`AZURE_OPENAI_*`/`HANDSHAKE_*` names are **not referenced** in `src/`/`convex/`/`tools/` — treated as stale/experimental leftovers, not live stack.
 
 ## Platform Requirements
-
-- Node.js >=22 local runtime and Node 22 serverless target (`nodejs22.x`) on Vercel.
-- npm 11.5.1.
-- Convex cloud deployment (URL from `CONVEX_URL` / `VITE_CONVEX_URL`).
-- Vercel for hosted routing/webhook deployment (Nitro `vercel` preset).
-- `engine` also exercises a CLI (`tools/ae/cli.ts`) and a local dev server (`tools/dev/local-dev.mjs`, dev port 3000).
-
-*STACK analysis: 2026-08-05*
+**Development:** macOS (Apple Silicon M4 Max), Node.js >= 22, npm 11.5.1. Vite dev server on port 3000 (`vite.config.ts`), host `127.0.0.1` via `npm run dev`; local dev helpers under `tools/dev/`.
+**Production:** Vercel (deployment URL `https://agentic-economy-phi.vercel.app`), Nitro vercel preset with Node serverless functions `nodejs22.x`, plus a Convex deployment (functions + schema). Network/host allowlisting for provider calls (`AE_CANONICAL_HOST_ALLOWLIST`, provider-host allowance in `money`/`notification` paths). Node runtime `>=22`.
+---
+*Stack analysis: 2026-08-06*

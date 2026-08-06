@@ -1,92 +1,54 @@
-<!-- refreshed: 2026-08-05 -->
-
 # External Integrations
+**Analysis Date:** 2026-08-06
 
-**Analysis Date:** 2026-08-05
+## APIs & External Services
+- **OpenRouter (LLM provider)** — sole language-model gateway; every model call goes through the Vercel AI SDK with the OpenRouter provider (`src/modules/model-gateway/public.ts`, `@openrouter/ai-sdk-provider`). Auth: `OPENROUTER_API_KEY` (Bearer, set on the provider factory), optional `AE_OPENROUTER_API_BASE_URL` + `SITE_URL` overrides. Env: `OPENROUTER_API_KEY`, `AE_LLM_MODEL` (default `deepseek/deepseek-v4-flash`), `AE_LLM_MODELS`, `AE_OPENROUTER_API_BASE_URL`, `SITE_URL`. Convex env also declares `OPENROUTER_API_KEY`, `AE_CUSTOMER_REQUEST_MODEL`, `AE_SITE_URL` (`convex/convex.config.ts`).
+- **Clerk (auth)** — authentication/identity via `@clerk/tanstack-react-start`; `clerkMiddleware` in `src/start.ts`. Env: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN` (also in Convex app env). Tokens validated against `CLERK_JWT_ISSUER_DOMAIN` issuer; Convex auth via Clerk (see `convex/auth.config.ts`).
+- **x402 / HTTP Message Signatures / Web Bot Auth (WBx)** — `@x402/*` 2.18.0 for x402 payment + signature-agent transport (message signatures, JWK directory). Public key directory served at `/.well-known/http-message-signatures-directory` from `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`; OAuth AS/RS + UCP at `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`, `/.well-known/ucp` (`src/routes/[.]well-known/`). Env: `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `AE_WBA_SIGNATURE_AGENT_ALLOWLIST`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`, dev-only `AE_DEV_WBA_SMOKE_*`/`AE_DEV_WBA_SIGNATURE_AGENT`. Agentic Market / CDP Bazaar remain external candidate-supply sources.
+- **Stripe (billing/top-up)** — credit top-up via `payment_intent.succeeded` webhook (`src/modules/money/internal/stripe-webhook.ts`, `live-money-gate.ts`). Auth: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (verify `stripe-signature` header). Provider host allowlisted. Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `AE_PROVIDER_STRIPE_MODE`.
+- **Autumn (billing/fintech provider)** — second billing path; host allowlist `api.useautumn.com`. Env: `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, `AUTUMN_PORTAL_RETURN_BASE_URL` (+ `AE_AUTUMN_*`/`AE_PROVIDER_AUTUMN_MODE` variants in `.env.local`).
+- **Resend (email)** — transactional mail (React Email render). Env: `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_API_BASE_URL`, `RESEND_WEBHOOK_SECRET`. Dispatch/adapter: `src/lib/server/notification-provider.ts`, `src/modules/notification-outbox/`.
+- **Novu (notifications)** — primary notification dispatch route. Env: `NOVU_SECRET_KEY`, `NOVU_API_BASE_URL`, `NOVU_WORKFLOW_INQUIRY_OWNER`, `NOVU_WORKFLOW_INQUIRY_CUSTOMER`.
+- **PostHog (analytics)** — funnel analytics (client `posthog-js`, server `posthog-node`). DSN/key via `VITE_POSTHOG_KEY`/`POSTHOG_HOST`/`POSTHOG_APP_URL` (+ server `POSTHOG_KEY`/`POSTHOG_HOST`/`POSTHOG_APP_URL`); opt-out `VITE_AE_DISABLE_OBSERVABILITY`, brake `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`. See `src/modules/observability/`.
+- **Sentry (error monitoring)** — client + server error capture, sourcemaps via `@sentry/vite-plugin` (enabled when `SENTRY_AUTH_TOKEN/ORG/PROJECT` present). Env: `VITE_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`.
+- **Google Maps (embed)** — optional generative location/map artifacts. Env: `VITE_GOOGLE_MAPS_API_KEY`.
+- **OpenAI / Expo-style provider adapters** — demo/provider adapters under `src/routes/api.demo-provider.*` (health, quote) used for local/dev provider smoke; not a production external dependency.
+- **Agentic Market / CDP Bazaar** — external candidate-supply discovery source (curated/provider import domain), not a runtime API dependency in the shipped app.
 
-## Data Storage & Backend
+## Data Storage
+- **Convex** — single source of truth. Client: `convex` 1.42.0 (`VITE_CONVEX_URL` for the browser client, `CONVEX_DEPLOYMENT`/`CONVEX_DEPLOY_KEY` for CLI/server). Schema composed in `convex/schema.ts` from bounded-context tables in `src/modules/**/internal/schema.ts`; migrations in `convex/migrations.ts` + `@convex-dev/migrations` patterns. Local dev via `convex dev` and seeding (`npm run seed:dev` → `convex/devSeed.ts`, `convex/curatedProviders.ts`).
+- No external SQL/NoSQL DB besides Convex; provider-owned data (Stripe/Autumn/Resend/Novu) is read back into Convex rows for durable evidence.
 
-**Convex 1.42.0** - Durable backend database and server-function runtime; the source of truth for all domains. Functions live in `convex/` (e.g. `capabilitySupply.ts`, `capabilitySupplyOperations.ts`, `curatedProviders.ts`, `customerRequestRouteMandate.ts`, `devSeed.ts`, `moneyLedger.ts`); client/gateway call them via `convex/_generated/`.
-- Components (mounted in `convex.config.ts`): `@convex-dev/workflow` (durable workflows), `@convex-dev/workpool`, `@convex-dev/rate-limiter`, and `@convex-dev/aggregate` under the name `ownerActivationByStage`.
-- Deployment URL from `CONVEX_URL` / `VITE_CONVEX_URL` / `NEXT_PUBLIC_CONVEX_URL`; the seed entrypoint is `npm run seed:dev` → `convex run devSeed:seedDevCatalog` (`convex/devSeed.ts`), which calls `internal.curatedProviders.seed`.
-- Deterministic kernel principle: validation/persistence live in Convex (authority), while the model emits typed proposals — see `.planning/codebase/PROMPT-DATA-FLOW.md`.
+## Authentication & Identity
+- **Clerk** — primary human/operator auth; sign-in/sign-up routes `sign-in.$.tsx`/`sign-up.$.tsx`; tokens bound to `CLERK_JWT_ISSUER_DOMAIN`; Convex authz in `convex/authz.ts` + `requireIdentity` patterns; `AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID`/`AE_CUSTOMER_REQUEST_CLERK_SUBJECT`/`AE_WORK_TREE_CLERK_INSTANCE_ID` used by release smoke automation.
+- **x402 / agent principals** — signature-agent (WBA) + message-signature auth for agent/bot callers (`src/modules/security/`, `[.]well-known/*`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`).
+- **Source-write admission** — scoped HMAC source keys for trusted server→Convex writes; `AE_SOURCE_WRITE_SECRET` (non-prod HKDF) or per-family `AE_SOURCE_WRITE_KEY_*`/`AE_SOURCE_WRITE_PREVIOUS_KEYS_*` (`src/lib/server/source-write-admission.ts`, `src/modules/security/source-write-admission.ts`). Convex env also carries `AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_ROUTE_CALL_SIGNING_SECRET`/`AE_ROUTE_CALL_SIGNING_KEY_ID`.
+- **OAuth** (in-app) — OAuth authorization-server routes (`oauth.authorize.ts`, `oauth.token.ts`, `oauth.device_authorization.ts`, `oauth.register.ts`) + `/.well-known/oauth-*` discovery.
+- **CSRF** — `createCsrfMiddleware` in `src/start.ts`.
 
-## Identity & Authentication
+## Monitoring & Observability
+- **PostHog** — product/funnel analytics (`src/modules/observability/funnel.*`, `api.observability.funnel.ts`).
+- **Sentry** — server+client error capture `initSentryServer`/`captureServerException` (`src/lib/observability/sentry.server.ts`). Env as above.
+- **Convex logs/insights** — server function logs, crons (`convex/crons.ts`), rate limiting (`@convex-dev/rate-limiter`, `src/modules/common/…`, `convex/rateLimit.ts`).
+- Release evidence pipelines write JSON reports under `output/release/` (source/hosted gates), uploaded as CI artifacts.
 
-**Clerk** - Sign-in/sign-up, TanStack server sessions, Convex JWT trust, and customer-request agent API-key lifecycle.
-- SDK/Client: `@clerk/tanstack-react-start` in `src/start.ts`, `src/routes/__root.tsx`, `src/routes/sign-in.$.tsx` / `sign-up.$.tsx`, and `src/lib/server/require-clerk-server-session.ts`.
-- Convex trust: `convex/auth.config.ts` reads `CLERK_JWT_ISSUER_DOMAIN` and validates Clerk JWTs; server ops use `CLERK_SECRET_KEY`.
-- Agent/key operations: `src/lib/server/customer-request-agent-auth.ts` and `src/modules/customer-request/agent-access.functions.ts`; instance/subject via `AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID` / `AE_CUSTOMER_REQUEST_CLERK_SUBJECT`; local E2E bypass via `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`.
+## CI/CD & Deployment
+- **GitHub Actions** — `.github/workflows/kernel-release-gate.yml` (on push/PR to `main`): `source-proof` job runs `npm ci`, `check:convex-codegen`, `test:release:source:after-codegen` (lint, typecheck, unit/integration/types/imports/ts-standards/seo/ui-contract, build) on Node 22 + npm 11.5.1; `hosted-proof` job (main, non-PR, production env) deploys the exact clean revision to Vercel with `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`, deploys Convex with `CONVEX_DEPLOY_KEY`, verifies env (`AE_ROUTE_CALL_SIGNING_SECRET`/`AE_ROUTE_CALL_SIGNING_KEY_ID`/`AE_SITE_URL`), seeds curated supply, and runs hosted Request-lifecycle + WorkTree parity smokes against `https://agentic-economy-phi.vercel.app`. `.github/workflows/react-doctor.yml` — advisory React Doctor PR/push scan (non-blocking).
+- **Local release scripts** — `tools/release/deploy-customer-request-git-source.ts`, `customer-request-production-smoke.ts`, `verify-*` etc.
+- **Vercel** — deployment target via Nitro vercel preset; `VITE_*` env for client; project `agentic-economy` (`.vercel/project.json`).
 
-## AI & Model Providers
+## Environment Configuration
+- **Dev:** `.env.local` (gitignored) + `.env.example` (documented names, committed). Local dev via `npm run dev` (Vite 3000) + `convex dev`.
+- **Staging/Prod:** vars set on Vercel (prefixed `VITE_*` exposed to client; others server-only) and on the Convex deployment (`convex env set`). Secret/sensitive vars are server-only.
+- **Canonical var-name inventory** (names only, from `.env.example`): `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `VITE_CONVEX_URL`, `CLERK_JWT_ISSUER_DOMAIN`, source-write family (`AE_SOURCE_WRITE_SECRET`, `AE_SOURCE_WRITE_KEY_*`, `AE_SOURCE_WRITE_PREVIOUS_KEYS_*`, `AE_SOURCE_WRITE_DERIVED_KEY_ID_*`), WBA family (`AE_WBA_*`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`), canonical URL (`AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`, `AE_CSP_REPORT_ONLY`), billing (`AUTUMN_*`, `STRIPE_*`), notifications (`RESEND_*`, `NOVU_*`, `AE_NOTIFICATION_OUTBOX_SECRET`), model (`OPENROUTER_API_KEY`, `AE_LLM_MODEL`, `AE_LLM_MODELS`, `AE_ANSWER_EVAL_PASSED`, `VITE_AE_ANSWER_MODE`), observability (`SENTRY_*`, `POSTHOG_*`/`VITE_POSTHOG_*`, `VITE_AE_DISABLE_OBSERVABILITY`, `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`), Google Maps `VITE_GOOGLE_MAPS_API_KEY`, `AE_ROUTING_PUBLIC_BASE_URL`, Convex app env (`AE_CUSTOMER_REQUEST_MODEL`, `AE_SITE_URL`, `AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_ROUTE_CALL_SIGNING_SECRET`, `AE_ROUTE_CALL_SIGNING_KEY_ID`). Never commit values; secrets stay in the deployment secret stores.
 
-**OpenRouter** - Primary LLM provider via the Vercel AI SDK.
-- SDK/Client: `ai` 7.0.44 + `@openrouter/ai-sdk-provider`, centralized by `src/modules/model-gateway/public.ts` (`openRouterGatewayConfig`, `openRouterModel`, `openRouterCostUsd`). Default model `deepseek/deepseek-v4-flash` (`DEFAULT_OPENROUTER_MODEL`).
-- Consumers: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/customer-request/openrouter-transport.ts`, `src/modules/customer-request/application/interpret-compile/interpreter.ts`, `src/modules/answer/internal/answer-llm-prompts.ts`, `src/modules/storefront/internal/business-enrichment.ts`, `src/modules/answer-thread/internal/answer-response-planner.ts`.
-- Model catalog: `src/modules/answer/internal/openrouter-models.ts` fetches `https://openrouter.ai/api/v1/models` (cached 2 min, 10 s timeout, bounded response) and filters out non-generation capabilities.
-- Auth: `OPENROUTER_API_KEY`; controls: `AE_OPENROUTER_API_BASE_URL`, `AE_LLM_MODEL`, `AE_LLM_MODELS`, `AE_CUSTOMER_REQUEST_MODEL` (Convex env), `SITE_URL` / `AE_SITE_URL`.
-
-## External Capability Catalog (curated providers)
-
-The engine exposes a curated capability catalog of real external APIs, admitted via the deterministic admission normalizer (`src/modules/capability-supply/internal/admit-provider-schema.ts`) and published from `src/modules/capability-supply/curated-{cluster-a,cluster-b,cluster-c}-publications.ts` + `curated-provider-publications.ts`. Credential refs are `none` (keyless), `env:<NAME>` (real env credential), matched by `src/modules/capability-supply/internal/transport-adapters.ts` and probed by `src/modules/capability-supply/internal/readiness-probe.ts`.
-
-**Cluster A - Keyless public HTTP operations (`ae:public`, credential `none`):**
-- Open-Meteo weather forecast - `open-meteo.forecast` (`https://api.open-meteo.com/v1/forecast`).
-- Open-Meteo geocoding - `open-meteo.geocoding` (`https://geocoding-api.open-meteo.com/v1/search`).
-- Wikipedia REST summary - `wikipedia-rest.page-summary` (`https://en.wikipedia.org/api/rest_v1/page/summary`).
-- TheCatAPI image search - `thecatapi.image-search` (`https://api.thecatapi.com/v1/images/search`).
-- CoinGecko simple price (keyless) - `coingecko.simple-price` (`https://api.coingecko.com/api/v3/simple/price`).
-- ipify public IP - `ipify.public-ip` (`https://api.ipify.org`).
-
-**Cluster B - Keyed HTTP operations (env credentials; readiness gated on credential + health probe):**
-- OpenWeatherMap current weather - `openweathermap.current-weather` — `env:OPENWEATHER_API_KEY` (`https://api.openweathermap.org/data/2.5/weather`).
-- Tavily search - `tavily.search` — `env:TAVILY_API_KEY` (`https://api.tavily.com/search`).
-- SerpAPI Google search - `serpapi.google-search` — `env:SERPAPI_API_KEY` (`https://serpapi.com/search`).
-- CoinGecko simple price (demo) - `coingecko.simple-price-demo` — `env:COINGECKO_DEMO_API_KEY` (`https://api.coingecko.com/api/v3/simple/price`, `x-cg-demo-api-key` header).
-
-**Curated Agentic-Market (real Exa) + ECB rates** in `src/modules/capability-supply/curated-provider-publications.ts`:
-- Exa web search - `exa.search` and Exa web contents - `exa.contents` under business `agentic-market-exa`; credential `env:EXA_API_KEY`, price `USD 1 minor unit`. Source evidence pinned to `https://api.exa.ai/search` and the Exa docs.
-- Frankfurter ECB single-pair rate - `frankfurter.single-rate` under business `frankfurter-ecb-rates`; keyless (`credential: none`), daily ECB reference rates via `https://api.frankfurter.app`.
-
-**Cluster C - Observed Agentic-Market x402 listings (discovery only, NOT executed or paid):** registered for discovery and marked `not_available_yet` / "Not verified by AE" with `credentialRef: 'none'`:
-- `exa-search-x402` (Exa search via Agentic Market), `timezone-convert-x402`, `wolframalpha-query-x402`, `coinmarketcap-quotes-x402`, `flightaware-nearby-x402`, `bizintel-forex-rate-x402`, `tavily-search-x402`.
-- All observed 2026-08-05 via the Agentic Market public services search endpoint (`https://api.agentic.market/v1/services/search`); none carry an AE credential or trigger any payment. x402 protocol types come from `@x402/core`, `@x402/evm`, `@x402/extensions` (2.18.0); see `src/modules/capability-supply/internal/x402-payment-signer.ts` and `src/modules/action-invocation/x402-payment-attempt.ts`.
-
-## Notifications & Messaging
-
-**Resend** - Owner/customer email delivery and signed delivery-event ingestion.
-- SDK/Client: bounded server `fetch` adapter in `src/lib/server/notification-provider.ts` (`https://api.resend.com`); dispatch/webhook routes `src/routes/api.notification.resend-dispatch.ts` and `src/routes/api.notification.resend-webhook.ts`; email rendering via `@react-email/*`.
-- Auth: `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_WEBHOOK_SECRET`, `RESEND_API_BASE_URL`; outbox signing secret `AE_NOTIFICATION_OUTBOX_SECRET`.
-
-**Novu** - Push/notification workflow trigger with readback.
-- SDK/Client: bounded server adapter in `src/lib/server/notification-provider.ts` (`https://api.novu.co`); dispatch route `src/routes/api.notification.novu-dispatch.ts`.
-- Auth: `NOVU_SECRET_KEY`; workflow ids `NOVU_WORKFLOW_INQUIRY_OWNER`, `NOVU_WORKFLOW_INQUIRY_CUSTOMER`; `NOVU_API_BASE_URL`.
-
-## Observability & Analytics
-
-**Sentry** - Error monitoring; `@sentry/node`/`@sentry/react` + `@sentry/vite-plugin` (sourcemaps gated on `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT`).
-- Env: `SENTRY_DSN`/`VITE_SENTRY_DSN`, `SENTRY_ENVIRONMENT`/`VITE_SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`.
-
-**PostHog** - Product analytics; `posthog-js` (client, `src/lib/observability/posthog.client.ts`) and `posthog-node` (server, `src/lib/observability/posthog.server.ts`).
-- Env: `POSTHOG_KEY`/`VITE_POSTHOG_KEY`, `POSTHOG_HOST`/`VITE_POSTHOG_HOST` (default `https://us.i.posthog.com`), `POSTHOG_APP_URL`/`VITE_POSTHOG_APP_URL`; disable via `AE_DISABLE_OBSERVABILITY` / `VITE_AE_DISABLE_OBSERVABILITY`.
-
-## Deployment & Platform
-
-- **Vercel** - Hosted routing/webhooks via Nitro `vercel` preset (Node 22 serverless, `nodejs22.x`) in `vite.config.ts`; release tagging via `VERCEL_GIT_COMMIT_SHA`.
-- **Convex cloud** - Backend deployment.
-- **Sandbox/staging providers** - Route quoter/resolver/workflow origins under `AE_SANDBOX_*` envs; provider key `AE_SANDBOX_PROVIDER_KEY`; workflow origin `AE_SANDBOX_WORKFLOW_ORIGIN`.
-- Web Browser Assertion directory JWK (`AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`) and site/routing URLs (`SITE_URL`, `AE_SITE_URL`, `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`, `AE_ROUTING_PUBLIC_BASE_URL`, `AE_CLI_BASE_URL`).
-
-## Environment Variables (names only; values are secret-scoped)
-
-- **AI/OpenRouter:** `OPENROUTER_API_KEY`, `AE_OPENROUTER_API_BASE_URL`, `AE_LLM_MODEL`, `AE_LLM_MODELS`, `AE_CUSTOMER_REQUEST_MODEL`.
-- **Convex:** `CONVEX_URL`, `VITE_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_URL`, `CONVEX_DEPLOYMENT`, `CONVEX_DEPLOYMENT_ID`, `AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_SOURCE_WRITE_SECRET`.
-- **Auth (Clerk):** `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`, `AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID`, `AE_CUSTOMER_REQUEST_CLERK_SUBJECT`, `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`.
-- **Notifications:** `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_API_BASE_URL`, `RESEND_WEBHOOK_SECRET`, `AE_NOTIFICATION_OUTBOX_SECRET`, `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, `NOVU_API_BASE_URL`.
-- **Observability (Sentry/PostHog):** `SENTRY_DSN`, `VITE_SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `VITE_SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `POSTHOG_KEY`, `VITE_POSTHOG_KEY`, `POSTHOG_HOST`, `VITE_POSTHOG_HOST`, `POSTHOG_APP_URL`, `VITE_POSTHOG_APP_URL`, `AE_DISABLE_OBSERVABILITY`, `VITE_AE_DISABLE_OBSERVABILITY`.
-- **Curated capability credentials:** `EXA_API_KEY`, `OPENWEATHER_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `COINGECKO_DEMO_API_KEY`.
-- **Site/routing/signing:** `SITE_URL`, `AE_SITE_URL`, `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`, `AE_ROUTING_PUBLIC_BASE_URL`, `AE_CLI_BASE_URL`, `AE_ROUTE_CALL_SIGNING_SECRET`, `AE_ROUTE_CALL_SIGNING_KEY_ID`.
-- **Sandbox:** `AE_SANDBOX_PROVIDER_KEY`, `AE_SANDBOX_PROVIDER_ORIGIN`, `AE_SANDBOX_ROUTE_QUOTER_ORIGIN`, `AE_SANDBOX_ROUTE_QUOTER_V4_ORIGIN`, `AE_SANDBOX_ROUTE_RESOLVER_ORIGIN`, `AE_SANDBOX_ROUTE_RESOLVER_V4_ORIGIN`, `AE_SANDBOX_WORKFLOW_ORIGIN`.
-- **CI/eval/misc:** `AE_ANSWER_EVAL_PASSED`, `AE_ANSWER_EVAL_REGISTRY_SEED`, `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`, `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `NODE_ENV`, `VERCEL_ENV`, `VERCEL_GIT_COMMIT_SHA`, `GITHUB_SHA`.
-
-*INTEGRATIONS analysis: 2026-08-05*
+## Webhooks & Callbacks
+- **Incoming:**
+  - **Stripe** — `POST /api/...` Stripe webhook handling (`src/modules/money/internal/stripe-webhook.ts`): verifies `stripe-signature` with `STRIPE_WEBHOOK_SECRET`, enforces bounded body (256 KB), applies `payment_intent.succeeded` to the money ledger.
+  - **Resend** — `POST /api/notification/resend-webhook` (`src/routes/api.notification.resend-webhook.ts`): bounded body, `RESEND_WEBHOOK_SECRET` signature verification, then notifies Convex via source-mutation.
+  - **Novu** — dispatch route `api.notification.novu-dispatch.ts` (+ `resend-dispatch.ts`); inbound webhook resolution in `src/modules/notification-outbox/operator/resolve-webhook-dispatch.ts` (verifier driven by `AE_NOTIFICATION_OUTBOX_SECRET` / provider secrets).
+  - **Autumn** — webhook secret `AUTUMN_WEBHOOK_SECRET` (verification enforced on the Autumn path).
+- **Outgoing callbacks:** notification outbox dispatches to Resend/Novu on provider events; money top-up portal returns via `AUTUMN_PORTAL_RETURN_BASE_URL`.
+- **Verification pattern:** server-side webhooks are signature-verified against provider secrets over the raw bounded request body (Node + WebCrypto — which is why Nitro is pinned to the `nodejs22.x` Node serverless format rather than edge). Inbound write callbacks that must reach Convex use the source-write HMAC admission envelope.
+---
+*Integration audit: 2026-08-06*
