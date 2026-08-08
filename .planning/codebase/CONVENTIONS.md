@@ -1,50 +1,113 @@
 # Coding Conventions
-**Analysis Date:** 2026-08-06
+
+**Analysis Date:** 2026-08-08
 
 ## Naming Patterns
-- **Files:** kebab-case for modules and helpers (`stable-hash.ts`), PascalCase for React components (`AeServiceRow.tsx`), camelCase for hooks (`useErrorShake.ts`). Convex functions use camelCase file names (`customerRequestRouteMandate.ts`). Test files mirror source: `<name>.test.ts` / `<name>.test.tsx` trailing `.test`.
-- **Functions:** camelCase, verb-first for actions (`defineCapabilityContract`, `rehydrateCapabilitySelectionKey`, `openCapabilityDecisionModel`). Predicates use `is*`/`has*`/`same*`/`valid*` (`isBoundedJsonValue`, `sameCapabilityContractRef`, `instancePointerExists`).
-- **Variables/constants:** `UPPER_SNAKE_CASE` for module-level constants (`MAX_CONTRACT_JSON_BYTES`, `CAPABILITY_CONTRACT_FORMAT`); `camelCase` for locals; `kebab-case` for public API DTO suffixes (`api-key`).
-- **Types/interfaces:** PascalCase, prefixed with the owning domain (`CapabilityContract`, `CapabilityInputFact`, `ValidationError`). DTOs end in `Dto` (`PublicBusinessCatalogApiV2Dto`).
-- **Branded types:** nominal brands declared via a `declare const ...Brand: unique symbol` and a `string & Readonly<{ [Brand]: true }>` alias (`CapabilitySelectionKey`, `PointedSchemaIdentity`), rehydrated through `rehydrate*` functions.
-- **Discriminated unions / tagged results:** `kind` field, often with a `stage` (`CapabilityInputAssessment` = `viable | needs_information | incompatible`; `CapabilityDocumentValidation` = `valid | invalid`).
+
+**Files:**
+- Use kebab-case for application modules and helpers, with role suffixes such as `*.actions.ts`, `*.functions.ts`, `public.ts`, and `internal/`; examples include `src/modules/capability-execution/operation-execute.actions.ts` and `src/modules/customer-request/customer-request.functions.ts`.
+- Use PascalCase filenames for React components, for example `src/components/ae/action-invocation/AePaidOperationCard.tsx`.
+- TanStack file routes use dot-separated route segments and `$` parameters, for example `src/routes/api.v1.requests.$requestRef.messages.ts` and `src/routes/t.$threadId.tsx`; generated route output is `src/routeTree.gen.ts`.
+- Keep Vitest tests in the separate `tests/` tree as `*.test.ts` or `*.test.tsx`; browser tests use `*.spec.ts` under `tests/e2e/` or `tests/deploy-smoke/`. There are no collocated `src/**/*.test.*` files in the current tree.
+
+**Functions:**
+- Use camelCase and named verbs that expose the operation (`create*`, `read*`, `project*`, `parse*`, `validate*`, `handle*`), as in `src/lib/server/convex-source.ts`, `src/modules/money/internal/exact-amount.ts`, and `src/routes/api.businesses.ts`.
+- Async functions have no special name prefix. HTTP handlers conventionally use `handle...Request` or `handle...Post`, while pure transforms use `project...` or `parse...`.
+
+**Variables:**
+- Use camelCase for variables, parameters, and local functions; use `UPPER_SNAKE_CASE` for module constants such as `LIST_QUERY_PARAMS` in `src/routes/api.businesses.ts` and `SEARCH_STOP_WORDS` in `convex/registry.ts`.
+- Prefer `const`; mutable state is local and explicit (for example, the `initialized` flag in `src/lib/observability/sentry.server.ts`).
+
+**Types:**
+- Use PascalCase type names without an `I` prefix. Public records and option objects commonly use `Readonly<{ ... }>`; see `src/modules/common/action.ts` and `src/modules/money/internal/exact-amount.ts`.
+- Model finite outcomes as discriminated unions, usually keyed by `kind` or `status`, and validate the same discriminator at boundaries with Zod or Convex validators; see `src/modules/capability-execution/operation-execute.actions.ts` and `convex/registry.ts`.
+- Use branded string types with `unique symbol` declarations when an identifier must not be confused with another string, as in `src/modules/capability-supply/public.ts`.
 
 ## Code Style
-- **Formatting:** Prettier defaults with **no** `.prettierrc`/`.prettierrc.json` config committed — single quotes, semicolons, trailing commas, 2-space indent, 80-col soft wrap. Formatting is convention, not tool-enforced (no `prettier` dependency).
-- **Linting:** `oxlint` via `.oxlintrc.json`, run as `npm run lint` = `oxlint src convex tests tools --deny-warnings`. `correctness` category is `error`, `suspicious` is `off`. Enabled plugins: `typescript`, `oxc`. Defaults flipped: `no-debugger` error, `no-control-regex`/`no-underscore-dangle`/`no-unused-vars`/`no-useless-escape` off. Ignores `convex/_generated/**`, `tests/fixtures/**`, `vendor/**`.
-- **Types:** `strict` with `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride` all on (`tsconfig.json`).
-- **Readonly culture:** public types are `Readonly<{...}>` / `readonly T[]` pervasively; module-level tables are `ReadonlySet`/`ReadonlyMap`. Write types never leak to public projection surfaces.
+
+**Formatting:**
+- The dominant application TypeScript/TSX style is two-space indentation, single-quoted strings, no semicolons, trailing commas in multiline literals/calls, and braces on the same line; examples are `src/lib/errors.ts` and `src/components/ae/action-invocation/AePaidOperationCard.tsx`.
+- No repository Prettier configuration is present. Do not use the semicolon/double-quote style in the retained donor component `src/components/ai-elements/code-block.tsx` as the baseline for new application code.
+- TypeScript is strict and uses `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, and `noImplicitOverride` in `tsconfig.json`.
+
+**Linting:**
+- Use Oxlint with the TypeScript and Oxc plugins, configured in `.oxlintrc.json`; correctness violations are errors, generated Convex code, fixtures, and `vendor/` are ignored.
+- The repository lint command is `npm run lint`, defined in `package.json`; do not add an ESLint-specific convention beside the existing Oxlint gate.
 
 ## Import Organization
-- **Order:** Node builtins first (`node:fs`, `node:path`), then external packages (alphabetical), then internal aliases — one blank line between groups. See `tests/unit/ui/trust-projection.test.ts` (node → vitest → `@/...`).
-- **Path aliases** (`tsconfig.json` + `vite.config.ts` + `vitest.config.ts` via `resolve.tsconfigPaths`): `@/*` and `~/*` → `./src/*`. Prefer `@/` everywhere in source and tests. Special operator route aliases: `@/routes/owner.*`, `@/routes/admin.*`, `@/routes/developers.discovery` → `./src/routes/_operator/...`.
-- **Barrel files:** domain `public.ts` files export the public surface, then re-export `type` separately (`import type { ... }` for type-only pulls, erased at runtime).
+
+**Order:**
+1. External package imports.
+2. Internal `@/` alias imports, with `import type` used for type-only dependencies.
+3. Relative imports for same-module or adjacent implementation details.
+4. Generated Convex imports and relative host-adapter imports stay near the boundary in `convex/*.ts`.
+
+**Grouping:**
+- Separate meaningful import groups with blank lines. Keep related value and type imports together when they come from one module; representative examples are `src/modules/capability-supply/public.ts`, `src/routes/api.businesses.ts`, and `convex/registry.ts`.
+- Do not assume alphabetical ordering: current files prioritize external/internal/relative boundaries and semantic proximity rather than a repository-wide alphabetizer.
+
+**Path Aliases:**
+- Use `@/*` for `src/*`; `~/*` is also configured but current production imports overwhelmingly use `@/`. Route-specific `@/routes/owner.*`, `@/routes/admin.*`, and `@/routes/developers.discovery` mappings are defined in `tsconfig.json`.
+- Vitest mirrors the `@` mapping to `src/` in `vitest.config.ts`, including tests that import `tools/ae` modules through the same alias.
 
 ## Error Handling
-- **Validation-driven:** inputs are validated with `zod` (`z.strictObject`, `z.union`, `z.lazy`); failures throw typed errors or return tagged result unions — prefer returning a `{ kind: 'invalid'; issues }` result over throwing for expected invalid input.
-- **Assertions:** internal invariants via `assert*` helper functions (`assertSchemaIsSafeAndValid`, `assertUniqueSemanticIds`).
-- **Unknown catches:** `useUnknownInCatchVariables` — narrow with `isRecord`/type guards before use; see `src/modules/common/is-record.ts`.
-- **Optionality errors:** refusal enums are engine error **codes** and must not be renamed when reworded (e.g. `adapter_not_registered`, `payment_required_invalid`).
-- **Refusal strings** (user-facing) are owner language; codes are stable identifiers.
+
+**Patterns:**
+- Return expected domain outcomes as tagged results or `undefined` instead of throwing: `src/modules/capability-execution/operation-execute.actions.ts` defines `ok`/`refused`/`error`, while `src/modules/money/internal/exact-amount.ts` returns `undefined` for invalid amounts.
+- Throw for unavailable configuration, invalid runtime dependencies, or violated host invariants; `src/lib/server/convex-source.ts` uses the typed `ConvexSourceError` for missing auth/deployment configuration.
+- Catch at external or framework boundaries, preserve stable machine codes, and map to the canonical HTTP problem response. `src/lib/errors.ts` owns the RFC 9457 model, `src/lib/server/problem.ts` emits `application/problem+json`, and `src/routes/api.businesses.ts` uses `safeParse` plus `problem(...)` for query failures.
+
+**Error Types:**
+- Prefer stable `kind`/`code`/`reason` fields for expected refusals and errors; do not expose raw provider or exception messages in public envelopes. `src/modules/capability-execution/operation-execute.actions.ts` and `tests/unit/lib/errors.test.ts` exercise this contract.
+- Use `try/catch/finally` around network, provider, and observability boundaries. Deliberate cleanup-only suppression is explicit (for example, `flushPostHogServer().catch(() => undefined)` in `src/start.ts`).
 
 ## Logging
-- **Sentry** for runtime observability: `@sentry/react` wired in `vite.config.ts`, with `sentryVitePlugin` enabled when `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` env vars are set (release from `SENTRY_RELEASE` or `VERCEL_GIT_COMMIT_SHA`).
-- **No ad-hoc `console.*`** that would trip lint — capture context keys (`SENTRY_*`) only by name in docs/tests, never values.
+
+**Framework:**
+- There is no application-wide pino/winston logger in `package.json`; operational logging uses `console.error`/`console.warn` at boundaries plus Sentry and PostHog integrations in `src/lib/observability/sentry.server.ts`, `src/lib/observability/sentry.client.ts`, and `src/start.ts`.
+
+**Patterns:**
+- Log machine-readable event names and redacted context, not raw credentials or provider payloads. `src/modules/customer-request/application/interpret-compile/interpreter.ts` logs an exhausted provider 4xx fallback but keeps routine model degradation silent; `src/lib/server/notification-provider.ts` logs the missing secret name while its wire detail remains parameter-free.
+- Capture unhandled server exceptions in Sentry with a route tag and rethrow them through the request middleware in `src/start.ts`; keep pure projection/validation helpers free of logging.
 
 ## Comments
-- **JSDoc/TSDoc:** `/** ... */` for public exports that need explanation (e.g. the contract mirrors Vercel AI SDK `inputExamples` shape); one-line intent above non-obvious helpers.
-- **Rationale comments:** explain *why* for non-obvious deterministic rules (e.g. greedy uncovered-token selection, observed-x402 pool gate).
-- **TODO/FIXME:** tracked in `.planning/codebase/CONCERNS.md`; use a plain `TODO:`/`FIXME:` line where unavoidable.
+
+**When to Comment:**
+- Explain why, invariant, safety boundary, or fallback behavior rather than restating the next statement. Examples include the unsupported-query rationale in `src/routes/api.businesses.ts`, the middleware ordering explanation in `src/start.ts`, and the credential-free probe rules in `src/modules/capability-supply/internal/readiness-probe.ts`.
+- Use comments to record a non-obvious compatibility seam or intentional exception; `src/lib/server/convex-source.ts` marks a test-required transport seam with `ponytail: intentional seam`.
+
+**JSDoc/TSDoc:**
+- Document exported contracts and public projections with `/** ... */`, including the RFC model in `src/lib/errors.ts`, the action contract in `src/modules/common/action.ts`, and customer-facing component semantics in `src/components/ae/action-invocation/AePaidOperationCard.tsx`.
+- Internal helpers generally rely on self-explanatory signatures; add documentation when the helper encodes a business rule, wire contract, or security constraint.
+
+**TODO Comments:**
+- No `TODO`, `FIXME`, or `HACK` markers were found in the current `src/`, `convex/`, `tools/`, or `tests/` scan. Keep unfinished work out of comments; express a real contract in code or in the tracked planning artifacts.
 
 ## Function Design
-- **Small, single-purpose, verb-named;** pure where the domain allows (validation, projection, normalization).
-- **Deterministic kernel:** functions that gate execution (eligibility, selection, contract validation) are pure and deterministic; model/provider observations are never trusted until validated.
-- **Parameters:** prefer a single typed options object for >2 args; return values are typed, Readonly, and often result unions rather than throwing.
+
+**Size:**
+- Keep new functions single-purpose and extract normalization, validation, projection, and formatting helpers; current examples include the small helpers in `src/modules/money/internal/exact-amount.ts` and the route query helpers in `src/routes/api.businesses.ts`.
+- There is no numeric line-limit rule in the repository. Larger orchestration functions are acceptable at adapter boundaries when they preserve the sequencing contract, as in `src/start.ts` and `src/modules/customer-request/application/interpret-compile/interpreter.ts`.
+
+**Parameters:**
+- Prefer one typed options object for multi-field operations and mark immutable inputs `Readonly`; see `src/lib/server/convex-source.ts` and `src/modules/common/action.ts`.
+- Keep boundary inputs explicitly typed and schema-validated rather than accepting broad `any`; `tsconfig.json` strictness and `tests/imports/ts-standards.test.ts` enforce this direction.
+
+**Return Values:**
+- Use explicit return types on exported boundary functions and route handlers; return early for invalid input, unavailable state, or refusal branches.
+- Preserve discriminated result identity and evidence fields through projections; do not turn an expected refusal into a thrown generic error. See `src/lib/errors.ts` and `src/modules/capability-execution/operation-execute.actions.ts`.
 
 ## Module Design
-- **Per-domain folders** under `src/modules/<domain>/` with a `public.ts` entry that exports only the domain's public API; private helpers stay non-exported in the module.
-- **Convex separation:** `src/modules/*/public.ts` (pure logic) + `*.functions.ts` (Convex port adapters) + `convex/*.ts` (durable functions/writes). Domain logic is not duplicated across routes/MCP/CLI/UI — routes consume redacted projections from `public.ts`.
-- **Single registry:** `src/modules/actions/index.ts` is the one cross-surface action registry; no parallel copies.
-- **Byte-economy:** avoid needless allocations/copies (deep-freeze once, reuse compilers via caches like `compiledContracts` Map).
+
+**Exports:**
+- Prefer named exports for application modules and React components; public module contracts are gathered through `public.ts`, for example `src/modules/capability-supply/public.ts` and `src/modules/registry/public.ts`.
+- Default exports are reserved mainly for framework registrations/configuration such as `convex/schema.ts`, `convex/http.ts`, `convex/crons.ts`, and `vite.config.ts`.
+
+**Barrel Files:**
+- Treat each module's `public.ts` as the import boundary and keep implementation helpers under `internal/`; `src/modules/capability-supply/public.ts` re-exports public types/functions while `src/modules/capability-supply/internal/` remains implementation detail.
+- Convex host files should adapt and call module exports rather than duplicate domain rules; `convex/registry.ts` imports registry/catalog/money projections from `src/modules/` and exposes typed query handlers. Import-boundary checks live in `tests/imports/`.
+
 ---
-*Convention analysis: 2026-08-06*
+
+*Convention analysis: 2026-08-08*
+*Update when patterns change*
