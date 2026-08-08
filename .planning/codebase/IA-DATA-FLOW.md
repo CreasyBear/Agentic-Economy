@@ -25,7 +25,7 @@
                                       └──────────────┬───────────────────────┘
                                                      │
       buyer/public reads                             │ source writes/readbacks
-  / → services + plan → /$slug → /$slug/inquiry       │ /claim → /owner/supply
+  / → static ask/category/examples → /t/new                  │ source writes/readbacks
   /t/new → /t/$threadId → /api/answer/turn             │ curated/admin admission
                                                      ▼
                         deterministic projections, gates, and evidence
@@ -68,8 +68,8 @@ Personas and current entry points:
   `projectConsumerPlan` (`src/modules/customer-request/application/consumer-plan-projection.ts:1-193`)
   rehydrate options from the same services page; `MAX_PLAN_BYTES=120_000` is a separate cap.
 - Route authority is `RouteMandate`/steps/principals/authorization and compile/verify results
-  (`src/modules/customer-request/application/route-mandate.ts`); durable V2 and route-mandate tables
-  are composed by `src/modules/customer-request/internal/convex-schema.ts:239-286`.
+  (`src/modules/customer-request/route-mandate.ts`); durable V2 and route-mandate tables are
+  composed by `src/modules/customer-request/internal/convex-schema.ts:239-286`.
 
 ### 2.2 Business, catalog, registry, and canonical Service DTOs
 
@@ -89,7 +89,8 @@ Personas and current entry points:
   (`src/modules/registry/internal/service-projection.ts:24-113`). A service is one business with
   flat `endpoints[]`, `networks[]`, `integrationType`, optional `priceSummary`, and `ae.source`
   (`business_published` or `ae_sandbox`). Endpoint `ae` carries `operationRef?`, `offeringRef`,
-  provenance, access, and settlement support.
+  provenance, access, authentication, execution, optional authority/source-kind metadata, and
+  settlement support.
 - `PublicServicesApiSchemaVersion='public-services-api:v2'` and the single producer
   `projectServiceFromBusinessDto` (`src/modules/registry/internal/services-api-projection.ts:25-305`)
   join a service endpoint to an operation only on an exact, unambiguous offering operation-map link.
@@ -136,11 +137,15 @@ Personas and current entry points:
 - `convex/capabilitySupplyOperations.ts:99-160,292-456,571-650,708-748` validates and reads
   current routeable operations, recomputes the operation ref, and builds the offeringRef-keyed map
   only for exact admitted/integrated catalog-origin links.
-- Generic keyless execution is `operation.execute`
-  (`src/modules/capability-execution/operation-execute.functions.ts:1-305`,
-  `operation-execute.actions.ts:13-140`). It reads the DB descriptor by operationRef, validates
-  caller input against the DB contract, constructs one bounded HTTP request, and returns a
-  validated result/evidence or refusal; it does not hand-register providers.
+- Keyless execution keeps `operation.execute` as an internal durable evidence action, not a
+  model-facing callable tool. `executeKeylessOperation`
+  (`src/modules/capability-execution/operation-execute.server.ts:14-40`) injects the same
+  descriptor source plus guarded public-target preflight and Undici fetch into
+  `executeOperation` (`src/modules/capability-execution/operation-execute.functions.ts:9-21,75-259`).
+  The executor accepts canonical `operation:v1:<64hex>` refs, validates caller input against the
+  descriptor contract, reads a response through the 512 KiB bound, and returns validated
+  result/evidence or a typed refusal/error; strict per-operation model binding is covered in
+  `PROMPT-DATA-FLOW.md`.
 
 ### 2.5 Inquiry and notification outbox
 
@@ -198,21 +203,19 @@ Personas and current entry points:
 
 ## 3. DATA-FLOW ROUTES (every numbered journey)
 
-### J1 — Buyer Ask → shortlist → detail/inquiry
+### J1 — Buyer ask → new thread or project work tree → detail/inquiry
 
-**R1 Ask → services + plan (parallel read tracks):** `/` search validation and loader
-(`src/routes/index.tsx:70-96,143`) call `loadOneViewReadback` (`:104`), which runs registry service
-search and `customerRequestPlanPreviewAction` in parallel. Registry search is
-`src/modules/registry/registry.actions.ts:549-665` → public business read → inquiry admission →
-`projectServiceFromBusinessDto`. Plan preview is `src/modules/customer-request/application/plan-preview.actions.ts`
-→ `convex/customerRequestApplication.ts` → `previewCustomerRequest` with descriptor discovery,
-proposal/compile recovery, bounded options, expiry, and honest unavailable/needs-information output.
-The page projects the result through `projectConsumerPlan` and renders `AeServiceList`/
-`AeConsumerPlan` (`src/routes/index.tsx:171`, `src/components/ae/listing/AeServiceList.tsx`,
-`src/components/ae/plan/AeConsumerPlan.tsx`).
+**R1 static home / project read:** `/` validates bounded `q`/`project`
+(`src/routes/index.tsx:18-21,59-75`). The home renders static ask/category/example navigation
+(`:23-29,102-181`) and the ask form navigates to `/t/new`. A non-empty `q` without `project`
+redirects in `beforeLoad` to `/t/new` while preserving `q` (`:69-72`). `loadRootRoute` returns
+no readback without a project and calls `readRootWorkTreeServer` only for an explicit project
+(`:37-56`); `RootWorkTreeLoop` renders that project-only readback (`:183-185`). There is no
+homepage services, plan-preview, or web-discovery loader.
 
-**R2 refine:** `AeConsumerPlan` needs-information output navigates back to `/?q=...`
-(`src/components/ae/plan/AeConsumerPlan.tsx:58-116`), re-running R1.
+**R2 thread continuation:** `/t/new` receives the ask and starts the answer thread; an explicit
+`/?project=...` remains the work-tree entry. Service discovery and customer-request plan preview
+are separate route/action seams, not hidden homepage reads.
 
 **R3 detail:** a service row links to `/$slug`; the open endpoint CTA is an executable/quote
 next action, while “business details” uses the public business DTO.
@@ -227,8 +230,9 @@ rebuilt into `BusinessSupplyProjection` (`convex/capabilitySupplyProjection.ts:3
 **R5 API/read ports:** `src/modules/registry/registry.functions.ts` and
 `registry.actions.ts` expose list/search/services/detail; `/api/businesses*` and
 `/api/v1/services*` (`src/routes/api.businesses.ts`, `api.businesses.search.ts`,
-`api.businesses.$slug.ts`, `api.v1.services.ts`, `api.v1.services.search.ts`) use the same
-projection/admission path and RFC 9457 error helper where boundary errors are mapped.
+`api.businesses.$slug.ts`, `api.v1.services.ts`, `api.v1.services.search.ts`,
+`api.v1.services.$serviceId.ts`) use the same projection/admission path and RFC 9457
+error helper where boundary errors are mapped.
 
 **R6 detail:** `src/modules/catalog/public-route.functions.ts:12-55` loads the public page and
 registry detail, computes supply/inquiry/SEO, and `src/routes/$slug.tsx:24-50` renders
@@ -237,7 +241,7 @@ registry detail, computes supply/inquiry/SEO, and `src/routes/$slug.tsx:24-50` r
 
 **R7 inquiry submit:** `/$slug/inquiry` reads `readPublicTargetAdmissionServer`, validates the
 form, calls the inquiry route readback/submit path, and returns a receipt containing thread/access
-references (`src/modules/inquiries/route-readbacks.ts`, `src/modules/inquiries/route-actions.ts`).
+references (`src/modules/inquiries/route-readbacks.ts`, `src/modules/inquiries/inquiry.functions.ts`).
 
 ### J3 — Owner supply and capability admission
 
@@ -271,20 +275,39 @@ durable supply seams.
 
 ### J4 — Agent thread, engine, execution, and money
 
-**R13 SSE turn:** `/t/new` and `/t/$threadId` submit to `POST /api/answer/turn`
-(`src/routes/api.answer.turn.ts:28-42,56-158`). Body, content type, rate, session/access, and
-`x-ae-turn-key` idempotency are bounded before `streamAnswerTurn`
-(`src/modules/answer-thread/internal/turn-orchestrator.ts:124`). Retrieval-first reads
-registry operations or web discovery; finalization validates allowed slugs/checksums, emits typed
-events, and persists answer/thread evidence.
+**R13 SSE turn + capability execution:** `/t/new` and `/t/$threadId` submit to `POST /api/answer/turn`
+(`src/routes/api.answer.turn.ts:28-42,56-158`). Body, content type, rate, and session/access are
+bounded before `streamAnswerTurn`; `x-ae-turn-key` provides only a process-local 30-second duplicate
+claim (`src/modules/answer-thread/internal/turn-guard.ts:8-29`), not durable turn replay. Retrieval-first
+reads registry operations or web discovery; finalization validates allowed slugs/checksums, emits
+typed events, and persists answer/thread evidence.
+
+For capability-eligible asks, `turn-orchestrator.ts:385-433` resolves one
+`KeylessExecutableSourcePort` snapshot and passes that same source into
+`runAnswerToolUseAgent`. `resolveKeylessDataAsk`
+(`src/modules/answer/internal/keyless-data-ask.ts:7-54`) drops schema-invalid descriptors, rejects
+duplicate refs, and selects only exact canonical `operation:v1:<64hex>` identity.
+`defaultKeylessExecutableSource`
+(`src/modules/capability-execution/operation-execute.actions.ts:66-91`) is Convex-backed by
+default; the explicit seed adapter is selected only for local-E2E bypass with both Convex URLs
+absent (tests/evals may inject a fixture source).
+
+The selected descriptor alone becomes the model-facing strict per-operation capability tool; the
+model supplies only its published input schema while the closure keeps `operationRef` private.
+Durable evidence remains `operation.execute`; `executeKeylessOperation`
+(`src/modules/capability-execution/operation-execute.server.ts:14-40`) re-reads through the same
+source and injects Undici DNS/private-target guards into `executeOperation`
+(`src/modules/capability-execution/operation-execute.functions.ts:82-259`), whose response body
+read is bounded at 512 KiB (`:33,197-218`). Detailed AI SDK prompt/tool-loop mechanics are owned
+by `PROMPT-DATA-FLOW.md`.
 
 **R14 thread readback:** `/t/$threadId` → `readThreadRouteServer`
 (`src/routes/t.$threadId.tsx`) → `getPublicThreadProjection` → redacting
 `buildPublicThreadProjection` → `AeChat`.
 
-**R15 separate plan producer:** customer-request preview (R1) produces `ConsumerPlanResult`;
-the answer artifact union mentions `consumer-plan`, but plan preview remains the current live
-producer.
+**R15 separate plan producer:** customer-request preview produces `ConsumerPlanResult` for its own
+plan UI. The answer artifact union has no consumer-plan member, and the answer turn does not call
+Customer Request confirm/run; these remain separate seams.
 
 **R16 confirm/run:** `customerRequestConfirmAction`/`customerRequestRunAction`
 (`src/modules/customer-request/customer-request.actions.ts`) call
@@ -336,23 +359,20 @@ admin membership.
   `buildPublicThreadProjection`, and admin readbacks expose DTOs/refs/hashes, not raw durable rows or
   private harness evidence.
 - **Idempotency/replay:** operation keys and request hashes guard publication/contract writes;
-  `x-ae-turn-key` guards answer turns; route commands, dispatch attempts, and money charges use
-  operation/attempt/effect identity and replay-safe transitions.
+  route commands, dispatch attempts, and money charges use durable operation/attempt/effect identity
+  and replay-safe transitions. `x-ae-turn-key` is only a process-local 30-second duplicate claim.
 - **Evidence ladder:** readiness/test/route outcomes, capability call events, money receipts, and
   frozen answer evidence are recorded before a claim is projected as source-owned/complete. A
   provider result is not completion evidence merely because a model described it.
 - **HTTP boundary:** `src/lib/server/problem.ts:1-21` builds RFC 9457 `application/problem+json`
-  responses from the shared problem model. Routes explicitly guard unsupported methods and map
-  source failures; HTTP-200 domain outcomes/SSE/HTML remain separate contracts.
+  responses from the shared problem model. Participating routes can explicitly guard unsupported
+  methods and map source failures; HTTP-200 domain outcomes/SSE/HTML remain separate contracts, and
+  coverage is not uniform across every route.
 
 ---
 
 ## 5. Reachable gaps and risks (source-proven on 2026-08-08)
 
-- **Registry operation schema omission:** `src/modules/registry/operations.actions.ts:66-95`
-  defines a `catalogPrice` schema but the descriptor output does not include it, while the canonical
-  operation projection (`src/modules/capability-supply/operation-projection.ts:331-344`) does.
-  The action wire declaration can therefore under-report a current price field.
 - **Detail provenance mismatch:** `AeProviderListingPage` hardcodes `business_published`
   (`src/components/ae/listing/AeProviderListingPage.tsx:230-234`), while canonical services carry
   `ae.source`; a detail page cannot currently show sandbox provenance.
@@ -363,17 +383,10 @@ admin membership.
 - **Provider earnings are bounded:** `convex/moneyLedger.ts:646-662` reads the newest 100 ledger
   rows and returns `truncated: rows.length === 100`; consumers must not treat a truncated response
   as a complete historical statement.
-- **Answer consumer-plan artifact remains a separate seam:** the answer artifact allow-list names
-  `consumer-plan`, while `buildArtifactsFromSnapshot` (`src/modules/answer/internal/snapshot-artifacts.ts`)
-  does not construct that artifact; live plan data still comes from customer-request preview.
-- **Public thread query contract is weaker than private thread queries:** `getPublicThreadProjection`
-  accepts only `threadId` (`convex/answerThreads.ts:591-594`), unlike `getAnswerThread` and
-  `getThreadTurns` which require `pseudonymousSessionId` (`:522-532,430-444`). The public route's
-  private-record access-key path is the compensating boundary and should remain explicit.
-- **Preview degradation:** `projectConsumerPlan` caps serialized plans at 120,000 bytes and
-  `loadOneViewReadback` converts preview failures into an unavailable branch
-  (`src/routes/index.tsx:104-113`); this is honest but does not distinguish every failure cause
-  to the buyer.
+- **Answer retry idempotency is not durable:** `claimAnswerTurnIdempotency`
+  (`src/modules/answer-thread/internal/turn-guard.ts:8-29`) keeps process-local keys for 30 seconds,
+  while accepted turns receive a fresh UUID (`src/modules/answer-thread/internal/turn-orchestrator.ts:128-133`);
+  retry after response loss, expiry, restart, or another instance can append a duplicate durable turn.
 - **RFC route audit remains necessary:** registry route parsing and action schema validation are
   split across `src/routes/api.businesses.ts:32-77` and `src/modules/registry/registry.actions.ts`;
   any parse thrown outside the shared `problem()` mapper can bypass the intended RFC 9457 envelope.

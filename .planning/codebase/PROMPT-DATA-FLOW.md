@@ -77,8 +77,8 @@ flowchart TD
   RET -->|direct hit / qualifying empty| SNAP["deterministic snapshot"]
   RET -->|non-qualifying empty| AGENT["AI SDK v7 generateText loop"]
   ROUTE -->|boundary / frozen / inquiry| DET["deterministic path"]
-  AGENT --> TOOLS["five discovery reads + strict per-op tools + generic execute_operation"] --> AGENT
-  TOOLS -->|"live-data match / forced toolChoice"| EXEC["operation.execute evidence record -> executeOperation keyless fetch"]
+  AGENT --> TOOLS["five discovery reads + one selected strict per-op capability tool"] --> AGENT
+  TOOLS -->|"selected canonical operationRef / forced toolChoice"| EXEC["operation.execute evidence record -> guarded keyless fetch"]
   EXEC --> AGENT
   AGENT --> GATE["sanitize + grounding + safety gate"]
   SNAP --> GATE
@@ -105,10 +105,10 @@ flowchart TD
 | response plan | `src/modules/answer-thread/internal/answer-response-planner.ts:15-72,88-160` | query/prior count/searchContext → clarification, provider/artifact budgets, and one-call policy → typed plan | domain; source-shape |
 | retrieval-first | `src/modules/answer-thread/internal/turns/retrieval-first.ts:44-183,265-323,355-411`; `src/modules/registry/registry.actions.ts:397-468`; `convex/registry.ts:188-239` | plan/query/context → canonical read-only `registry.search` first; direct hit becomes snapshot; qualifying location/service empty may call one `web.discover` and preserve imported claims separately; non-qualifying empty invokes `registry.operations.search` recovery before the model path → snapshot, operation/provider tool records, timings, imported web claims, or no snapshot | domain + action/Convex base; source-shape |
 | model dispatch | `src/modules/answer-thread/internal/turn-orchestrator.ts:314-387`; `src/modules/answer-thread/internal/turns/boundary.ts:21-44,78-88`; `src/modules/answer-thread/internal/turns/frozen-known.ts:1-81`; `src/modules/answer-thread/internal/turns/inquiry-handoff.ts:1-130` | route/retrieval → deterministic boundary/frozen/inquiry/clarification branches avoid model calls; unresolved `tool_search` enters agent path → path result or model input | domain; source-shape |
-| prompt assembly | `src/modules/answer/internal/answer-llm-prompts.ts:9-115`; `src/modules/answer/internal/action-to-tool-spec.ts:35-78`; `src/modules/answer/internal/capability-tool-examples.ts:62-74` | query, searchContext, intent, prior public providers, tool policy, current capability names from the Convex-first/seed-fallback list → versioned instructions/user payload with sanitized inert catalog facts, model-safe action aliases, worked per-op descriptions, and live-data steering for strict per-op tools or generic `execute_operation`; credentials, authority, mandate, spend, and raw DB documents are absent | domain; source-shape |
-| AI SDK v7 model loop | `src/modules/answer/internal/answer-tool-use-agent.ts:240-519,607-725` | gateway model, prompts, five discovery tool specs, strict DB/seed per-op tools, and generic open-object `executeOperation` tool, abort → `generateText` + `Output.object`, maxRetries 0, serialized tool queue, final tool-less prose step, custom stop condition; when deterministic `matchKeylessDataAsk` finds a live-data match but no capability ran, one bounded forced `toolChoice` call executes the generic tool before grounded prose; unsupported provider claims still get one repair then published-fact fallback → typed `AnswerProse`, tool records, model observations | AI SDK mechanics + AE budgets/schema/gate/fallback; source-shape |
+| prompt assembly | `src/modules/answer/internal/answer-llm-prompts.ts:9-115`; `src/modules/answer/internal/action-to-tool-spec.ts:35-78`; `src/modules/answer/internal/capability-tool-examples.ts:62-74` | query, searchContext, intent, prior public providers, tool policy, and one resolved descriptor snapshot → versioned instructions/user payload with sanitized inert catalog facts, model-safe action aliases, worked per-op descriptions, and live-data steering for the selected strict per-op tool; credentials, authority, mandate, spend, and raw DB documents are absent | domain; source-shape |
+| AI SDK v7 model loop | `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-629` | gateway model, prompts, five discovery tool specs, at most one selected strict per-op tool, abort → `generateText` + `Output.object`, `prepareStep`, `stopWhen`, `onStepEnd`, `maxRetries: 0`, `parallelToolCalls: false`, and a serial AE tool queue; a selected capability is forced on step 0 and every later step is tool-less, while no selection keeps the bounded auto-tool loop → typed `AnswerProse`, tool records, model observations | AI SDK mechanics + AE budgets/schema/gate; source-shape |
 | model accounting | `src/modules/answer/internal/answer-tool-use-agent.ts:278-307,444-470`; `src/modules/answer-thread/internal/turns/agent.ts:78-90`; `src/modules/storefront/internal/business-enrichment.ts:261-318` | each provider SDK step or web-discovery action → one model observation with status, usage, cost or unavailable reason; direct agent callback feeds the live collector without an outer duplicate → private harness model summary | domain collector + SDK callback; source-shape |
-| read-tool admission | `src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-32`; `src/modules/answer-thread/internal/tool-runner.ts:62-161,265-313`; `src/modules/answer/internal/answer-tool-use-agent.ts:259-287,531-588` | model alias/input or deterministic call → the five discovery aliases resolve to read-only strict actions through `runAnswerToolCall`; per-op and generic capability calls bypass that action admission, validate their envelope in `runOperationToolCall`, then call the fail-closed executor and hash an `operation.execute` record → `complete`, `error`, or `refused` tool evidence | domain runner/executor + action/Convex base; source-shape |
+| read-tool admission | `src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-32`; `src/modules/answer-thread/internal/tool-runner.ts:62-161,265-313`; `src/modules/answer/internal/answer-tool-use-agent.ts:307-335,474-547` | model alias/input or deterministic call → the five discovery aliases resolve to read-only strict actions through `runAnswerToolCall`; the selected per-op closure binds one canonical operation reference, validates its strict model input through the source descriptor, then calls the guarded executor and hashes one `operation.execute` record → `complete`, `error`, or `refused` tool evidence | domain runner/executor + action/Convex base; source-shape |
 | gates | `src/modules/answer/internal/answer-gate.ts:25-58,61-106`; `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`; `src/modules/answer-thread/internal/turn-orchestrator.ts:389-431` | snapshot/prose/allowed slugs → sanitization, slug grounding, location, epistemic-vocabulary, injection-upgrade, provider-overclaim, and verbatim published price/availability checks → accepted snapshot + gate summary or typed error/copy ID | domain; source-shape |
 | assembly/frames | `src/modules/answer/internal/emit-snapshot-events.ts:31-107`; `src/modules/answer-thread/internal/turn-orchestrator.ts:432-447,614-660` | accepted snapshot → ordered plan/work/thinking/one-line/sources/artifacts/next-step/summary deltas; deferred assembly omits `complete` → transient typed event sequence | domain event contract + AI SDK framing; source-shape |
 | durable answer persistence | `src/modules/answer-thread/internal/answer-turn-finalization.ts:150-253`; `convex/answerThreads.ts:240-338` | snapshot/error, evidence, tool/model records → canonical snapshot/evidence hashes, answer/harness summaries, atomic thread+turn+tool rows, source-write admission and 25-turn/session checks → durable `answerThreads`, `answerTurns`, `answerToolCalls` | domain + Convex base; source-shape |
@@ -127,11 +127,11 @@ discovery tool, also used on the recovery path) (`src/modules/answer-thread/answ
 `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-32`).
 Writes never enter that action-derived set (`src/modules/answer-thread/internal/tool-runner.ts:68-82`;
 `src/modules/common/action.ts:139-187`). The answer agent additionally exposes one strict
-`capability_<id>` tool for each Convex-first/seed-fallback keyless descriptor and a generic
-`executeOperation` tool with an open `input` object; both route through the single
-`operation.execute` evidence record and `runOperationToolCall`, so a completed capability call is
-kept out of `buildNoMatchesProse` and renders as a plain live answer
-(`src/modules/answer/internal/answer-tool-use-agent.ts:607-725,749-753`).
+operation-bound capability tool for the selected descriptor only; `operation.execute` is the
+durable record id behind that closure, not a model-facing executor. The closure binds the canonical
+operation reference and the model supplies only that operation's strict schema input, so a completed
+capability call is kept out of `buildNoMatchesProse` and renders as a plain live answer
+(`src/modules/answer/internal/answer-tool-use-agent.ts:337-344,561-618`).
 The in-memory answer test port omits production Convex durability; production writes the three-row
 contract (`tests/helpers/answer-thread-test-port.ts:18-83`; `convex/answerThreads.ts:240-338`).
 
@@ -139,39 +139,46 @@ contract (`tests/helpers/answer-thread-test-port.ts:18-83`; `convex/answerThread
 
 ```mermaid
 flowchart TD
-  AGT["answer agent picks capability_<op> or execute_operation"] --> SEED["tool binds operationRef + model inputs"]
-  SEED --> EXEC["runOperationToolCall -> executeOperation(input, { readDescriptor })"]
-  EXEC --> VAL["input validated against DB inputSchema (@cfworker/json-schema)"]
+  AGT["answer agent selects one capability.<canonical-ref> tool or no capability tool"] --> BIND["closure binds canonical operationRef; model supplies strict input only"]
+  BIND --> EXEC["runOperationToolCall -> executeKeylessOperation(input, source)"]
+  EXEC --> VAL["input validated against source descriptor inputSchema (@cfworker/json-schema)"]
   VAL -->|invalid| R1["refused input_invalid"]
   VAL --> GATE["fail-closed keyless gate: credential 'none', http-json GET, not x402"]
   GATE -->|fails| R2["refused operation_not_keyless / operation_not_executable"]
-  GATE --> HTTPS["HTTPS endpoint from descriptor (HTTPS validation; no private-IP/DNS proof)"]
-  HTTPS -->|fail| R3["refused endpoint_invalid"]
-  HTTPS --> FETCH["bounded fetch (http-json mapping, ~512KB, AbortSignal.timeout)"]
+  GATE --> TARGET["validPublicHttpsEndpoint + guarded DNS/private-target preflight"]
+  TARGET -->|fail| R3["refused endpoint_invalid"]
+  TARGET --> FETCH["guarded Undici fetch + bounded upstream body (512 KiB)"]
   FETCH --> OUT["output validated against descriptor outputSchema"]
   OUT -->|bad| E["error response_invalid / provider_error"]
-  OUT --> REC["operation.execute evidence record (complete)"]
+  OUT --> LIMIT["sanitized JSON result ≤64 KiB for model and persisted evidence"]
+  LIMIT -->|over| R4["refused result_too_large with full-result digest"]
+  LIMIT --> REC["operation.execute evidence record (complete)"]
 ```
 
 | stage | source evidence | input → processing → output | owner/evidence ceiling |
 |---|---|---|---|
-| per-op and generic tools | `src/modules/answer/internal/answer-tool-use-agent.ts:607-725`; `src/modules/capability-execution/operation-execute.actions.ts:24-64`; `convex/capabilitySupplyOperations.ts:456-665` | DB `listKeylessExecutable` first, then curated seed fallback → strict `capability_<id>` tools from closed schemas plus a direct generic `execute_operation` model tool with open `input.additionalProperties: true`; strict-schema failures skip only per-op tools, and soft-required live-data recovery pins the generic tool → AI SDK tools whose calls bind or forward an operation reference | domain tool builder + Convex/seed base; source-shape, with the open generic tool and global descriptor discovery remaining the unlanded W7 boundary |
-| executor | `src/modules/capability-execution/operation-execute.functions.ts:1-235`; `src/modules/capability-execution/operation-execute.actions.ts:24-64` | caller `{operationRef, input}` + DB descriptor or curated seed descriptor → fail-closed keyless gate (keyed/x402 refuse without executing), input validated against descriptor `inputSchema`, HTTPS endpoint from descriptor only, bounded fetch via query/fixedQuery mapping, output validated against descriptor `outputSchema` → typed `ok`/`refused`/`error` result + canonical-digest evidence hash | domain executor + base fetch; source-shape |
-| record seam | `src/modules/answer/internal/answer-tool-use-agent.ts:531-588`; `src/modules/answer-thread/answer-thread.schema.ts:31-41` | per-op/generic tool execute → `runOperationToolCall` → one `operation.execute` `AnswerToolCallRecord` (`complete`/`refused`/`error`) so coverage/prose/persistence key on one id → durable evidence row; `operation.execute` is the record id while `execute_operation` reaches `executeOperation` through direct model tools | domain + Convex base; source-shape |
-| descriptor readers | `convex/capabilitySupplyOperations.ts:456-665`; `src/modules/capability-execution/operation-execute.actions.ts:24-64`; `src/modules/capability-execution/seed-supply.ts:98-164` | DB reader enforces published/admitted/conformant/current/ready keyless HTTP-JSON GET supply; action reader falls back on DB null/error/empty to static normalized Cluster A/B/C descriptors, which do not perform DB readiness checks and emit readable `operation:v1:<capabilityId>` refs → descriptor or null/[] | domain + Convex/seed base; source-shape |
+| selected per-op capability tool | `src/modules/answer/internal/answer-tool-use-agent.ts:294-344,561-618`; `src/modules/answer/internal/keyless-data-ask.ts:18-55`; `src/modules/capability-execution/operation-execute.actions.ts:9-91`; `convex/capabilitySupplyOperations.ts:583-671` | one descriptor snapshot from the selected source → invalid schemas are dropped, duplicate canonical refs are unavailable, and only the selected descriptor becomes one strict operation-bound tool; the model supplies no operation reference, while `operation.execute` remains the durable record id → AI SDK tool whose closure carries the canonical ref | domain tool builder + Convex/explicit local seed source; source-shape |
+| executor | `src/modules/capability-execution/operation-execute.functions.ts:1-259`; `src/modules/capability-execution/operation-execute.server.ts:1-41` | closure-bound `{operationRef, input}` + source descriptor → fail-closed keyless gate, input validation, `validPublicHttpsEndpoint`, guarded DNS/private-target preflight, guarded Undici fetch, and bounded response body (512 KiB); sanitized model/persisted result JSON has a separate 64 KiB ceiling → typed `ok`/`refused`/`error` result + canonical-digest evidence hash | AE executor + guarded server adapter; source-shape |
+| record seam | `src/modules/answer/internal/answer-tool-use-agent.ts:474-547`; `src/modules/answer-thread/answer-thread.schema.ts:31-41` | selected per-op closure → `runOperationToolCall` → one `operation.execute` `AnswerToolCallRecord` (`complete`/`refused`/`error`) so coverage/prose/persistence key on one id; private input evidence retains the canonical ref, but the model sees only strict schema input and typed result → durable evidence row | domain + Convex base; source-shape |
+| descriptor readers | `convex/capabilitySupplyOperations.ts:577-753`; `src/modules/capability-execution/operation-execute.actions.ts:27-91`; `src/modules/capability-execution/seed-supply.ts:110-194` | Convex `list`/`read` is the production source and enforces published/admitted/conformant/current/ready keyless HTTP-JSON GET supply; the seed source is selected only for the explicit local-E2E bypass when both Convex URLs are absent, and derives the same canonical `operation:v1:<64-hex>` refs → descriptor or null/[]; production does not switch to seed data when Convex is unavailable | domain + Convex/explicit local seed adapter; source-shape |
 
 **Flow A′ invariants.** No keyed, x402, or non-`http-json`-GET descriptor is offered by the
-Convex/seed keyless readers or executed; the endpoint/credential/config/schema comes from the
-descriptor and the caller supplies no host, but the visible source validates HTTPS rather than
-demonstrating a private-IP/DNS SSRF block (`src/modules/capability-execution/operation-execute.functions.ts:80-123`;
-`src/modules/capability-execution/operation-execute.actions.ts:24-64`). Customer Request/public
-registry and the registered action require canonical `operation:v1:<64-hex>` refs, but
-`executeOperation` itself resolves whatever descriptor reader accepts; curated seed fallback and
-answer forced execution therefore use readable `operation:v1:<capabilityId>` refs through the seed
-adapter (`src/modules/capability-supply/public.ts:61-80`;
-`src/modules/capability-execution/seed-supply.ts:119-164`;
-`src/modules/answer/internal/keyless-data-ask.ts:18-43`;
-`src/modules/capability-execution/operation-execute.functions.ts:1-235`).
+Convex source or explicit local seed source, or executed; the endpoint/credential/config/schema
+comes from that source descriptor and the model supplies no host or operation reference. Admission
+performs synchronous HTTPS/credential/private-literal validation, while the server adapter performs
+DNS/private-target preflight and guarded Undici connection (`src/modules/capability-execution/operation-execute.functions.ts:86-173`;
+`src/modules/capability-execution/operation-execute.server.ts:14-40`;
+`src/modules/network-guard/public.ts:1-200`). Every descriptor uses the canonical
+`operation:v1:<64-lowercase-hex>` identity, including explicit local seed descriptors; bare
+capability IDs and noncanonical refs do not resolve or execute
+(`src/modules/capability-supply/public.ts:61-80`;
+`src/modules/capability-execution/seed-supply.ts:140-168`;
+`src/modules/answer/internal/keyless-data-ask.ts:18-55`;
+`src/modules/capability-execution/operation-execute.actions.ts:37-91`).
+The upstream response bound is 512 KiB; the answer layer separately refuses sanitized result JSON
+above 64 KiB before model return or persistence, retaining only a typed refusal and full-result digest
+(`src/modules/capability-execution/operation-execute.functions.ts:29-34,197-218`;
+`src/modules/answer/internal/answer-tool-use-agent.ts:499-514`).
 An unexecuted test is not execution proof (`tests/unit/capability-execution/operation-execute.test.ts:1-125`).
 A live keyless result observed in-session is provider data for that call, not a named provider
 receipt, so it stays below the provider-evidence ceiling in this map.
@@ -180,10 +187,10 @@ receipt, so it stays below the provider-evidence ceiling in this map.
 
 ```mermaid
 flowchart TD
-  HOME["/?q= root loader"] --> READBACK["registry services + planPreview + optional web claims"]
-  READBACK --> SHELL["ServicesRoute shell/composer"]
-  SHELL --> NEW["/t/new -> AeChat initialQuery"]
-  READBACK -. computed but not mounted .-> CONSUMER["consumer plan / service projection"]
+  HOME["static home: ask + categories + examples"] -->|q without project| NEW["/t/new -> AeChat initialQuery"]
+  HOME -->|project present| TREE["RootWorkTreeLoop / project readback"]
+  TREE --> SHELL["project work-tree shell"]
+  NEW --> SHELL
   AGENT["browser / authenticated agent POST"] --> ADMIT["bounded body + identity/rate/idempotency"] --> DURABLE_SHELL["durable submission shell"] --> GRAPH["routeable capability graph"] --> DISCOVER["provider discovery"]
   DISCOVER --> PROPOSAL["model/deterministic proposal"] --> VALIDATE["strict semantic validation"]
   VALIDATE --> COMPILE["deterministic compiler"] --> COMMIT["revision/head/command commit"]
@@ -200,18 +207,19 @@ flowchart TD
 There is **no separate live Agent Engine plan runtime**. Dedicated `enginePlans`, decision-map,
 `plan-proposal`, and `AePlanWork` hosts are retired by a source-level retirement contract, and the
 current Convex schema composes Customer Request V2 tables instead (`tests/imports/legacy-engine-retirement.test.ts:7-48`; `convex/schema.ts:1-49`; `src/modules/customer-request/internal/convex-v2-schema.ts:669-734`).
-The implemented Agent Engine-shaped branch is the Home loader's **inspect-only** preview; it does not
-create a Customer Request or effect. The current `ServicesRoute` renders the shell/composer and
-navigation to `/t/new`; it does not mount `AeServiceList` or render the computed services/consumer
-plan (`src/routes/index.tsx:91-169,171-263`; `src/routes/t.new.tsx:1-36`;
-`src/components/ae/services/AeServiceList.tsx:13-40`; `src/modules/customer-request/plan-preview.actions.ts:46-82`).
+The root route is now static unless an explicit project is present: non-empty `q` without `project`
+redirects before loading to `/t/new`, while `project` loads only the source-backed work tree. It no
+longer runs services, plan-preview, or web-discovery loaders, and the Home shell does not mount
+`AeServiceList` or `AeConsumerPlan` (`src/routes/index.tsx:18-85,88-189`; `src/routes/t.new.tsx:1-36`).
+Customer Request preview remains a separate inspect-only application path; it does not create a
+Request or effect (`src/modules/customer-request/plan-preview.actions.ts:46-82`; `convex/customerRequestApplication.ts:648-697`).
 The curated provider seed enumerates Exa/Frankfurter, six keyless operations, four keyed operations,
 and seven observed x402 listings; the dev fixture module remains the source bundle filtered by that
 list rather than evidence that every fixture is live (`convex/curatedProviders.ts:34-57,87-91`;
 `src/modules/dev/internal/dev-seed-business-fixtures.ts:44-91`).
 
-| inspect-only Home readback | `src/routes/index.tsx:81-97,122-158`; `src/modules/customer-request/plan-preview.actions.ts:46-82`; `convex/customerRequestApplication.ts:648-697` | public `/?q=` → root loader invokes `registry.search`, `customerRequest.planPreview`, and optional one-call `web.discover` for an empty service result; `ServicesRoute` receives the computed page but renders only shell/composer/navigation, not `AeServiceList` or `AeConsumerPlan` → five-minute inspect-only plan/services readback or bounded refusal; no Request, authority, reservation, contact, charge, or dispatch | domain public read + base route; source-shape, not durable Request evidence |
-| preview composition/projection | `src/modules/customer-request/application/interpret-compile/preview.ts:9-139,57,90,97-139`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`; `src/routes/index.tsx:132-158`; `src/components/ae/services/AeServiceList.tsx:13-50`; `src/components/ae/plan/AeConsumerPlan.tsx:22-65` | customer job/network → bounded graph, deterministic provider discovery narrows the descriptor pool, then a bounded attempt ladder calls `proposeThenCompile(finalAttempt: false)` and retries once with `finalAttempt: true` on a transient propose failure, max 32 steps/64 refs/5-minute expiry, public-supply join capped at three options per step → consumer-neutral frontier/queued/attention plan or typed `needs_information` ask; page projection is computed in the loader but currently not mounted by `ServicesRoute` | domain projection; source-shape |
+| Home/project route | `src/routes/index.tsx:18-85,88-189`; `src/routes/t.new.tsx:1-36`; `src/modules/work-tree/human-root.functions.ts:1-120` | static Home ask/category/example shell → non-empty `q` without `project` redirects to `/t/new`; an explicit `project` alone loads `readRootWorkTreeServer`/`RootWorkTreeLoop` → chat navigation or project work-tree readback; no services/plan-preview/web-discovery readback | domain route + base router; source-shape |
+| preview composition/projection | `src/modules/customer-request/application/interpret-compile/preview.ts:9-139,57,90,97-139`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`; `src/modules/customer-request/plan-preview.actions.ts:46-82`; `src/components/ae/services/AeServiceList.tsx:13-50`; `src/components/ae/plan/AeConsumerPlan.tsx:22-65` | authenticated Customer Request preview → bounded graph, deterministic provider discovery narrows the descriptor pool, then a bounded attempt ladder calls `proposeThenCompile(finalAttempt: false)` and retries once with `finalAttempt: true` on a transient propose failure, max 32 steps/64 refs/5-minute expiry, public-supply join capped at three options per step → consumer-neutral frontier/queued/attention plan or typed `needs_information`; it is not mounted by Home and cannot create authority/effects | domain application + base route; source-shape, not durable Request evidence |
 | public transports | `src/routes/api.requests.ts:1-6`; `src/routes/api.v1.requests.ts:1-6`; `src/lib/server/customer-request-browser-api.ts:42-154`; `src/lib/server/customer-request-agent-api.ts:45-124,264-313` | browser or authenticated agent → browser session/service assertion or principal-authenticated agent API → common application command | base transport + domain identity; source-shape |
 | admission | `src/lib/server/customer-request-api.ts:19-47`; `src/lib/server/customer-request-route-action-api.ts:43-124` | raw submit/refinement/route-action body → 32 KiB submit or 4 KiB route-action bound, strict schema, sensitive-input refusal, identity/rate/idempotency checks → admitted input or typed refusal | base + domain; source-shape |
 | durable shell | `convex/customerRequestApplication.ts:701-769`; `convex/customerRequestV2.ts:145-300` | command/authority/digest → rate-limited authenticated caller, replay/conflict check, durable reservation before provider work → shell, replay, or refusal | domain + Convex; source-shape |
@@ -222,7 +230,7 @@ list rather than evidence that every fixture is live (`convex/curatedProviders.t
 | deterministic compile | `src/modules/customer-request/compiler.ts:67-166,234-426,600-746,784-809` | proposal + exact models/bindings/facts → derive actions, dependencies, routes, prices, data use, effects, recovery, cancellation, evidence, and digests; refuse unknown/on-request cost route generation → aggregate/plan/generation or refusal | AE domain; source-shape |
 | revision/head commit | `src/modules/customer-request/application/interpret-compile/compile.ts:34-153`; `convex/customerRequestV2.ts:145-300` | compiled aggregate + expected lineage/command → replay/conflict/stale graph checks and OCC-style commit → persisted V2 revision/head/route generation/command | domain + Convex; source-shape |
 | customer decision projection | `src/modules/customer-request/customer-projection.ts:129-168,395-431,493-605`; `src/modules/customer-request/application/consumer-plan-projection.ts:121-211` | stored aggregate/preview → bounded criteria, options, decision, recovery, available actions; deterministic fallback is labeled `keyword_match`; raw model/binding/credential docs remain private → customer-safe decision/consumer plan | domain projection; source-shape |
-| confirmation/mandate | `src/modules/customer-request/application/confirm-route/confirm.ts:11-77`; `src/modules/customer-request/route-mandate-mutation/issue.ts:11-170`; `convex/customerRequestApplication.ts:878-899` | exact displayed revision/generation/route + authenticated principal → freshness/current graph/known maximum cost/authority checks; persist command-idempotent route mandate without starting work → confirmation receipt + bounded mandate | domain authority; source-shape |
+| confirmation/mandate | `src/modules/customer-request/application/confirm-route/confirm.ts:11-75`; `src/modules/customer-request/route-mandate-mutation/issue.ts:11-170`; `convex/customerRequestApplication.ts:878-899` | exact displayed revision/generation/route + authenticated principal → freshness/current graph/known maximum cost/authority checks; persist command-idempotent route mandate without starting work → confirmation receipt + bounded mandate | domain authority; source-shape |
 | standing repeat permission | `convex/customerRequestApplication.ts:901-1045`; `src/modules/customer-request/route-mandate.ts:95-190` | authenticated owner/agent + exact route, occurrences, cumulative spend, expiry → list/allow/use/inspect/revoke bounded standing permission → attenuated authority or refusal | domain authority; source-shape |
 | per-step grant | `convex/customerRequestRouteMandateAdmission.ts:60-263`; `src/modules/customer-request/route-mandate-admission.ts:62-246` | mandate + exact step/supply/contract → verify mandate/supply digests, attenuate scope, reserve cumulative spend and data/effect use → admitted/replayed grant | domain authority; source-shape |
 | run journal/outbox | `convex/customerRequestApplication.ts:1047-1078`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`; `convex/customerRequestRouteExecutionJournalPorts.ts:279-373` | active mandate/principal/key → replay/resume/cancel-prior checks, materialize input, write run/head/queued attempt/pending outbox/command → pending dispatch | domain + Convex; source-shape |
@@ -249,13 +257,13 @@ domain guard (`src/modules/customer-request/application/interpret-compile/interp
 ## Service endpoint projection and operation identity
 
 The public registry now has one canonical `ServiceDto` per business with a flat
-`endpoints[]` array, nested `ae.offerings[]`, decimal endpoint pricing, aggregate
-`priceSummary`, and `networks[]` (`src/modules/registry/internal/service-projection.ts:4-20,23-111`;
-`src/modules/registry/internal/services-api-projection.ts:88-163`). The producer flattens only
-`external_operation` access paths; it enriches an endpoint with `operationRef`, parameters, and
-catalog pricing only when the DB origin map proves one exact integrated operation for that offering.
-Unlinked or ambiguous offerings remain un-enriched rather than fabricated
-(`src/modules/registry/internal/services-api-projection.ts:112-120,165-211`;
+`endpoints[]` array, nested `ae.offerings[]`, decimal endpoint pricing, aggregate `priceSummary`,
+`networks[]`, and endpoint detail navigation. Each endpoint can carry the current auth,
+execution, authority, source-kind, provenance, parameters, and `operationRef` fields; the producer
+enriches those operation fields only when the DB origin map proves one exact integrated operation
+for that offering. Unlinked or ambiguous offerings remain un-enriched rather than fabricated
+(`src/modules/registry/internal/service-projection.ts:4-20,23-111`;
+`src/modules/registry/internal/services-api-projection.ts:88-163,165-211`;
 `convex/capabilitySupplyOperations.ts:398-454`).
 
 `Service.networks` is the sorted unique set of endpoint pricing payment networks; keyless
@@ -270,15 +278,18 @@ routeability is separately derived from active admitted/conformant supply plus c
 public Service type has no `subCent` field (`src/modules/registry/internal/services-api-projection.ts:254-356`;
 `src/modules/registry/internal/service-projection.ts:23-30,52-58`).
 
-W8 is therefore partial: publication, registry, and Customer Request graph paths recompute and
-validate canonical `operation:v1:<64-lowercase-hex>` refs, while the in-process answer/CLI seed
-fallback still emits readable `operation:v1:<capabilityId>` aliases and the CLI explicitly bridges
-the two dialects (`src/modules/capability-supply/public.ts:61-80`;
+Canonical operation identity is now consistent across publication, registry, Customer Request,
+answer, and CLI paths: every executable ref is `operation:v1:<64-lowercase-hex>`, and the explicit
+local seed adapter derives the same publication identity rather than an alias. Production/default
+descriptor selection is Convex-only; seed data is available only when the existing local-E2E bypass
+is enabled and both `CONVEX_URL` and `VITE_CONVEX_URL` are absent. CLI feed IDs are those canonical
+operation refs; capability IDs remain display/search metadata, and bare/noncanonical aliases never
+resolve (`src/modules/capability-supply/public.ts:61-80`;
 `src/modules/capability-supply/internal/publication/publish.ts:146-159`;
-`convex/capabilitySupplyOperations.ts:730-747`;
+`convex/capabilitySupplyOperations.ts:577-753`;
 `src/modules/customer-request/application/interpret-compile/graph.ts:72-126`;
-`src/modules/capability-execution/seed-supply.ts:128-163`;
-`tools/ae/lib/feeds.ts:147-235`; `tools/ae/commands/actions.ts:52-67`).
+`src/modules/capability-execution/seed-supply.ts:140-194`;
+`tools/ae/lib/feeds.ts:1-63`; `tools/ae/commands/run.ts:54-70`).
 
 
 ## Flow C — eval, Promptfoo probe, study, and external-run protocols
@@ -299,8 +310,8 @@ flowchart TD
 | shared v3 case catalog | `eval/answer/lib/cases.ts:142-186,204-313`; `eval/answer/lib/evaluators.ts:127-151,463-628,759-845` | turn/thread/harness cases + deterministic registry → route evaluator checks persisted evidence, timing, model/tool counts, copy, artifacts, and safe next step → case result | fixture/source unless runner packet is named |
 | broad seed | `eval/answer/lib/registry-seed.ts:21-25,27-38,40-138` | eval-only fixture composition → 100 businesses across 10 industries and 10 Australian locales → broad-catalog case supply | fixture only |
 | coverage/synchronization | `eval/answer/lib/coverage.ts:60-150,152-207`; `eval/answer/scripts/audit-coverage.ts:8-38` | shared cases + Promptfoo YAML → duplicate/missing/unknown/mode-mismatch, required-tag, broad-seed, and shape audit → JSON success or nonzero process status | source contract; execution only when a named packet records it |
-| scoring/report | `eval/answer/lib/scoring.ts:14-50,87-116`; `eval/answer/scripts/run-suite.ts:5-41`; `eval/answer/README.md:126-173` | evaluator results → 7 dimensions, score/rank, `userOutcome`, 9/10 threshold, aggregate usage/cost availability and p95/max route clocks → `answer-eval-suite-report:v3` JSON | local eval/fixture; `output/eval/answer-suite-report.json:1-47` is a historical successful packet (12 cases/14 turns) whose case list predates the current capability-tool case; not hosted/provider/customer proof |
-| Promptfoo | `eval/answer/promptfooconfig.yaml:7-9,152-310`; `eval/answer/providers/gate.mjs:10-24`; `eval/answer/lib/evaluators.ts:1008-1068` | vars + dev fixture/captured provider → direct `runAnswerToolUseAgent` or gate/chip assertion; answer-turn/thread modes use the in-process evaluator, while all modes bypass live deployment/Convex persistence/public readback → model/tool/gate fixture result | Promptfoo fixture only; nested AI SDK v6 is not production runtime |
+| scoring/report | `eval/answer/lib/scoring.ts:14-50,87-116`; `eval/answer/lib/evaluators.ts:127-151,463-628,759-845,1100-1218`; `eval/answer/scripts/run-suite.ts:5-41`; `eval/answer/README.md:126-173` | evaluator results → 7 dimensions, score/rank, `userOutcome`, 9/10 threshold, aggregate usage/cost availability and p95/max route clocks, plus capability-only `capabilityToolCounts`, canonical/readable/invalid/missing `capabilityOperationRefDialects`, and `capabilityEvidenceCompleteTurnCount` → `answer-eval-suite-report:v3` JSON | local eval/fixture; `output/eval/answer-suite-report.json:1-47` is a historical successful packet (12 cases/14 turns) whose case list predates the current capability-tool case; not hosted/provider/customer proof |
+| Promptfoo | `eval/answer/promptfooconfig.yaml:7-9,152-310`; `eval/answer/providers/gate.mjs:10-24`; `eval/answer/lib/evaluators.ts:1008-1068` | vars + dev fixture/captured provider and explicit local descriptor source → direct `runAnswerToolUseAgent` or gate/chip assertion; answer-turn/thread modes use the in-process evaluator, while all modes bypass live deployment/Convex persistence/public readback → model/tool/gate fixture result | Promptfoo fixture only; nested AI SDK v6 is eval-only and cannot establish hosted/provider/customer evidence |
 | answer runtime smoke | `tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100,191-217,334-411`; `tests/deploy-smoke/answer-runtime-production-smoke-selection.ts:20-64` | deployed public catalog → paginate all rows, exclude development/eval slugs, choose reproducible unique subject, exercise direct and literal-miss recovery via public UI/API, reload and GET readback → packet-scoped hosted terminal/readback receipt when executed | hosted/provider boundary for what receipt records; `output/release/playwright-answer-runtime-smoke.json:67-126` is a named passed packet with a receipt, but does not expose private model counts or provider cost |
 | Phase 1 deployment smoke | `tests/deploy-smoke/phase1-deploy-smoke.spec.ts:33-174` | deployed base/config → public routes/APIs/discovery files, security headers, private/admin isolation, explicit Convex reachability → route/readback contract result | hosted packet only when executed |
 | cold human Customer Request smoke | `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts:19-88,90-157` | cold browser + disclosed choice → preview/options, pre-approval disclosures, confirmation, start, completion or unknown recovery, reload parity, evidence readback → `AE_HUMAN_REQUEST_OBSERVATION` packet | customer/hosted observation only for a named run; `output/release/playwright-deploy-smoke.json:68-125` records a historical failed attempt (`hosted_human_journey_did_not_reach_choice`), not a passed observation |
@@ -319,7 +330,7 @@ calls (`eval/answer/README.md:64-107,126-153`).
 
 | callsite | prompt/input assembly | installed primitive | boundary and evidence |
 |---|---|---|---|
-| answer agent | `buildToolUseAgentSystemPrompt`/`buildToolUseAgentUserPrompt`; five action-derived read aliases plus dynamic strict per-op capability tools and the direct generic `execute_operation` model tool (`src/modules/answer/internal/answer-llm-prompts.ts:44-115`; `src/modules/answer/internal/action-to-tool-spec.ts:35-72`; `src/modules/answer/internal/answer-tool-use-agent.ts:323-430,607-725`) | Production AI SDK v7 `generateText`, `Output.object`, `tool`, `prepareStep`, `stopWhen`, `onStepEnd` (`src/modules/answer/internal/answer-tool-use-agent.ts:330-349,400-430,472-489`) | tool input is evidence, not authority; serialized tool order, max calls, final tool-less prose, soft-required live-data pin, gate, and private one-record-per-step accounting remain AE-owned (`src/modules/answer-thread/internal/tool-runner.ts:62-161`; `src/modules/answer/internal/answer-tool-use-agent.ts:240-307,440-518`) |
+| answer agent | `buildToolUseAgentSystemPrompt`/`buildToolUseAgentUserPrompt`; five action-derived read aliases plus at most one selected strict per-op capability tool; the operation reference is closure-bound and absent from model input (`src/modules/answer/internal/answer-llm-prompts.ts:44-115`; `src/modules/answer/internal/action-to-tool-spec.ts:35-72`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-618`) | Production AI SDK v7 `generateText`, `Output.object`, `tool`, `prepareStep`, `stopWhen`, `onStepEnd`, serial tool queue, `parallelToolCalls: false`, and `maxRetries: 0` (`src/modules/answer/internal/answer-tool-use-agent.ts:384-451`) | typed tool input is evidence, not authority; descriptor selection is deterministic, operation execution is guarded/bounded, `operation.execute` is the durable record id, and final prose is tool-less |
 | follow-up chips | query + public provider facts (`src/modules/answer/internal/answer-llm-prompts.ts:115-133`) | v7 `generateText` + `Output.object`, maxRetries 0 (`src/modules/answer-thread/internal/llm-follow-up-chips.ts:46-78`) | optional feature gate requires eval pass and API key; no-key/error returns empty; unpersisted and outside turn harness (`src/modules/answer/internal/llm-config.ts:1-10`) |
 | Customer Request semantic interpreter | versioned v12 instruction + bounded public descriptors/opaque keys; `publicDescriptor` now projects `inputExamples` onto the model-facing descriptor while `searchTerms`/`domain` stay server-side (`src/modules/customer-request/semantic-interpreter.ts:222-250,270-325,937-950`) | v7 `generateText` + `Output.object`, timeout, one SDK retry (`src/modules/customer-request/openrouter-transport.ts:64-117`) | tolerant wire output is normalized and strict-validated; compiler owns routes/effects/authority (`src/modules/customer-request/compiler.ts:234-426`) |
 | semantic interpreter configuration | env model/key/site plumbing + deterministic recovery (`src/modules/customer-request/application/interpret-compile/interpreter.ts:22-62`; `convex/customerRequestApplication.ts:686-695,1748-1753`) | AE configuration around the shared gateway | no key selects deterministic token matching; keyed path uses OpenRouter first, and when a routeable/domain-appropriate pool exists but the model returns zero or unrecoverable selections, `recoverFromPool` falls through to the deterministic interpreter with a bounded multi-step compose (domain guard + identity dedupe, `MAXIMUM_SELECTIONS` 2, geocode-prior-step) or a typed `needs_information` ask; source-shape only |
@@ -327,7 +338,7 @@ calls (`eval/answer/README.md:64-107,126-153`).
 | direct model catalog | no model prompt; bounded authenticated GET `/api/v1/models` (`src/modules/answer/internal/openrouter-models.ts:22-25,173-209`) | direct `fetch` with timeout/cache/whitelist/fallback, not `openRouterModel` generation | separate provider HTTP path; model-selector context is intentionally disabled/no live caller (`src/components/ae/chat/AeAnswerModelContext.tsx:1-39`) |
 | answer HTTP stream | no model prompt; only transient typed AE data part (`src/routes/api.answer.turn.ts:115-156`) | v7 `createUIMessageStream`/`createUIMessageStreamResponse` plus provider-utils `parseJsonEventStream` (`src/modules/answer/answer-ui-stream.ts:1-68`) | SDK owns framing; AE owns payload, abort, admission, persistence, and terminal gating |
 | external MCP response stream | registered route input/authority, not an answer prompt (`src/modules/capability-supply/route-transport-runtime.ts:566-649`) | provider-utils `parseJsonEventStream` for bounded `text/event-stream`, JSON-RPC ID matching, or bounded JSON fallback (`src/modules/capability-supply/route-transport-runtime.ts:892-927`) | transport observation is untrusted until release/output/evidence validation; source-shape |
-| answer read tools + capability tools | action metadata and strict schema conversion (`src/modules/harness/tool-contract.ts:239-256`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-23`) | AI SDK `tool` wrapper with AE runner for the five discovery tools; dynamic `capability_<id>` tools use each descriptor's strict closed schema, while direct `execute_operation` uses an open record input and routes to the same executor (`src/modules/answer/internal/answer-tool-use-agent.ts:607-725`) | the five direct discovery IDs are `registry.search`, `registry.detail`, `sandbox.checkup_quote`, `web.discover`, and `registry.operations.search`; `operation.execute` is the evidence-record ID, not the generic model-tool name, and is deliberately excluded from `ANSWER_READ_TOOL_IDS` (`src/modules/answer-thread/answer-thread.schema.ts:31-41`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-23`) |
+| answer read tools + capability tools | action metadata and strict schema conversion (`src/modules/harness/tool-contract.ts:239-256`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-23`) | AI SDK `tool` wrapper with AE runner for the five discovery tools; only the selected descriptor becomes a strict operation-bound capability tool, whose closure supplies the canonical ref and whose model input contains only that operation's schema fields; the shared `operation.execute` id is evidence-only (`src/modules/answer/internal/answer-tool-use-agent.ts:561-618`) | the five direct discovery IDs are `registry.search`, `registry.detail`, `sandbox.checkup_quote`, `web.discover`, and `registry.operations.search`; writes remain outside the answer set |
 | schema conversion | canonical action/harness schemas; business prepare/invoke schemas; sandbox workflow input schema (`src/modules/common/action.ts:269-284`; `src/modules/harness/tool-contract.ts:239-256`; `src/modules/business-tools/discovery.ts:16-49`; `src/lib/server/sandbox-capability-provider.ts:680-691`) | `@tanstack/ai` `convertSchemaToJsonSchema` | conversion only; canonical IDs, effect metadata, authority, execution, and source-write gates remain AE-owned |
 | Promptfoo direct probe | vars/config rows (`eval/answer/promptfooconfig.yaml:152-310`) | dev-only Promptfoo provider process + `tsx` eval runner (`eval/answer/providers/gate.mjs:10-24`) | nested AI SDK v6 is eval-only; route/harness/persistence are intentionally bypassed |
 
@@ -335,9 +346,9 @@ calls (`eval/answer/README.md:64-107,126-153`).
 agent, follow-up chips, Customer Request semantic transport, and storefront enrichment/discovery
 (`src/modules/answer/internal/answer-tool-use-agent.ts:1-12`; `src/modules/answer-thread/internal/llm-follow-up-chips.ts:1-2`; `src/modules/customer-request/openrouter-transport.ts:1-14`; `src/modules/storefront/internal/business-enrichment.ts:1-7`).
 The answer agent has a tool loop and final prose step; this does not make a fifth family, and the
-dynamic per-op capability tools ride the SAME answer-agent `generateText` (their execution is a plain
-keyless fetch via `executeOperation`, not a model call, so it adds no generation family)
-(`src/modules/capability-execution/operation-execute.functions.ts:1-235`). No
+dynamic per-op capability tools ride the SAME answer-agent `generateText` (their execution is a
+guarded keyless fetch through `executeKeylessOperation`, not a model call, so it adds no generation
+family) (`src/modules/capability-execution/operation-execute.server.ts:14-41`). No
 production import uses `streamText`, `ToolLoopAgent`, `createAgentUIStream`, `generateObject`, SDK
 telemetry, SDK `toolApproval`, or `@convex-dev/agent` (`src/routes/api.answer.turn.ts:1-8`; `src/modules/answer/answer-ui-stream.ts:1-2`; `package.json:60-123`). Direct model-list GET and external MCP SSE parsing are separate provider/stream-adjacent seams, not generation families.
 
@@ -354,7 +365,7 @@ that verdict.
 |---|---|---|---|
 | v7 model/provider transport | **retain library** | AI SDK/OpenRouter own request encoding, structured output, retries, abort, usage, and typed errors; AE keeps gateway config, credential refusal, model policy, and cost taxonomy | `src/modules/model-gateway/public.ts:94-139`; `node_modules/ai/package.json:1-10,44-48` |
 | v7 structured output | **retain library, retain AE validation** | `Output.object` parses a generated object; AE still normalizes tolerant Customer Request wire data, enforces strict domain schemas, digests, and proposal compile | `node_modules/ai/docs/03-ai-sdk-core/10-generating-structured-data.mdx:11-56`; `src/modules/customer-request/semantic-interpreter.ts:287-325` |
-| answer tool loop + capability tools | **retain current seam / defer replacement** | `generateText` mechanics are useful; AE retains five-tool discovery membership, DB-derived per-op tools plus curated seed fallback, the direct open `execute_operation` tool, serial evidence, budgets, final tool-less step, gate, and harness accounting; `ToolLoopAgent` parity and W7 bounded endpoint selection remain deferred | `src/modules/answer/internal/answer-tool-use-agent.ts:240-307,323-430,440-518,607-725`; `src/modules/answer-thread/internal/tool-runner.ts:62-161`; `src/modules/capability-execution/operation-execute.actions.ts:24-64` |
+| answer tool loop + capability tools | **retain current seam** | `generateText` mechanics, `prepareStep`, `stopWhen`, and `onStepEnd` remain the loop primitives; AE retains five-tool discovery membership, one selected strict operation-bound tool, serial evidence, `parallelToolCalls: false`, budgets, final tool-less step, gate, and harness accounting. The descriptor source and guarded executor are explicit seams; no generic model-facing executor is registered | `src/modules/answer/internal/answer-tool-use-agent.ts:294-451`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-32`; `src/modules/answer-thread/internal/tool-runner.ts:62-161`; `src/modules/capability-execution/operation-execute.actions.ts:9-91`; `src/modules/capability-execution/operation-execute.server.ts:1-41` |
 | `ToolLoopAgent` | **defer** | Installed v7 source offers reusable loop defaults, but parity is missing for AE run IDs, ordered records, budget/refusal, final-step tool removal, abort, and report/finalization | `node_modules/ai/src/agent/tool-loop-agent.ts:34-68,120-180`; `src/modules/answer/internal/answer-tool-use-agent.ts:351-380,444-470` |
 | SDK `toolApproval` | **defer for answer reads; not authority** | Read tools are public-read actions. Approval/mandate/payment/source-write authority belongs to AE Customer Request gates, not an SDK model-call protocol | `node_modules/ai/docs/03-ai-sdk-core/15-tools-and-tool-calling.mdx:159-168,243-265`; `convex/customerRequestRouteMandateAdmission.ts:60-263` |
 | UI stream framing | **retain library** | AI SDK owns SSE/UI lifecycle framing and provider-utils parsing; AE owns transient `data-answer-event`, redaction, abort, and terminal-complete semantics | `src/modules/answer/answer-ui-stream.ts:1-68`; `src/routes/api.answer.turn.ts:115-156` |
@@ -375,7 +386,7 @@ that verdict.
 |---|---|---|---|
 | model gateway | OpenRouter factory, SDK request encoding/errors/abort/usage (`src/modules/model-gateway/public.ts:1-11,94-139`) | model selection, credential refusal, gateway-only generation boundary, cost-unavailable reasons | captured provider fixture plus a named redacted provider receipt; source alone remains source-shape |
 | prompt/input | v7 accepts instructions/prompt/tools/output schema (`node_modules/ai/src/generate-text/generate-text.ts:299-491`) | versioned instructions, bounded/inert payload, searchContext, public copy, `inputExamples` teaching surface (server-side `searchTerms`/`domain` excluded), no authority/credential facts (`src/modules/answer/internal/answer-llm-prompts.ts:44-112`; `src/modules/customer-request/semantic-interpreter.ts:222-248,937-950`) | prompt snapshot/injection cases; fixture until executed |
-| actions/tools | AI SDK `tool` wrapper and `@tanstack/ai` schema conversion (`src/modules/answer/internal/answer-tool-use-agent.ts:443-725`; `src/modules/common/action.ts:269-284`) | canonical registry, five discovery read IDs, strict per-op capability tools plus the direct open `execute_operation` tool, one `operation.execute` record seam, effect/authority metadata, strict input/output/evidence, source-write boundaries (`src/modules/common/action.ts:139-187,216-284`; `src/modules/actions/index.ts:52-120`; `src/modules/capability-execution/operation-execute.functions.ts:1-235`) | unknown/malformed/write/refused tool cases plus membership parity; W7/W8 cutovers are not complete |
+| actions/tools | AI SDK `tool` wrapper and `@tanstack/ai` schema conversion (`src/modules/answer/internal/answer-tool-use-agent.ts:561-618`; `src/modules/common/action.ts:269-284`) | canonical registry, five discovery read IDs, one selected strict per-op capability tool, one `operation.execute` record seam, effect/authority metadata, strict input/output/evidence, source-write boundaries (`src/modules/common/action.ts:139-187,216-284`; `src/modules/actions/index.ts:52-120`; `src/modules/capability-execution/operation-execute.functions.ts:1-259`) | unknown/malformed/write/refused tool cases plus membership parity; operation identity and source selection are canonical |
 | answer harness | AI SDK callbacks + collector private model records (`src/modules/answer/internal/answer-tool-use-agent.ts:278-307`; `src/modules/harness/run-collector.ts:86-157`) | run identity/phases/status dominance, private summary, redacted journal, finalization hash, public projection (`src/modules/harness/run-loop.ts:158-205`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:256-325`) | one summary record per SDK step and separate journal-kind contract |
 | answer browser/SSR replay | React fetch/SSE, SSR loader, Convex query (`src/components/ae/chat/turn-stream-session.ts:24-98`; `src/components/ae/chat/AeThreadTurnStreamSection.tsx:93-182`; `src/routes/t.$threadId.tsx:15-22,54-68`; `convex/answerThreads.ts:591-615`) | server-wins projection merge, stop/generation abort boundary, ordinary unmount detach only, no durable stopped claim; public GET/SSR has no session/owner check | cold reload/readback packet; local session cache is not durability |
 | Customer Request durable workflow | Convex transactions, Workflow/Workpool/scheduler mechanics (`convex/customerRequestRouteWorkpool.ts:1-10`; `convex/projectSpine.ts:53-104`) | caller identity, graph lineage, proposal-only compiler, revision/head, mandate/grant, effects, output/evidence, cancellation/recovery (`src/modules/customer-request/compiler.ts:234-426`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`) | Convex restart/cancel/replay and source-write gates |
@@ -412,11 +423,17 @@ that verdict.
 8. **Protocol-specific evaluation gates.** v3 answer scoring, RFX journal replay, and ExternalRun
    PASS/FAIL/KILL each have distinct denominators and evidence classes; no single library can safely
    collapse them (`eval/answer/lib/scoring.ts:87-116`; `src/modules/study/internal/rfx-machine.ts:204-283`; `src/modules/external-run/internal/gate.ts:160-298`).
-9. **Keyless capability executor.** `operation.execute`'s `executeOperation` is a self-contained
-   bounded fetch (keyless-only, DB-schema-validated, HTTPS-from-DB, ~512KB, `AbortSignal.timeout`)
-   rather than the paid `route-transport` `invokeHttp` because the chat surface is read-only and
-   must not pull in prepared-ref/release/authority/money custody. Reuses the repo-canonical
-   `@cfworker/json-schema` `Validator` from `capability-contract` (`src/modules/capability-execution/operation-execute.functions.ts:1-160`; `src/modules/capability-contract/public.ts:699`).
+9. **Keyless capability executor.** `operation.execute` is the durable evidence-record id behind a
+closure-bound keyless operation; the pure `executeOperation` path validates source-held schema and
+constructs one bounded fetch (keyless-only, `validPublicHttpsEndpoint`, 512 KiB upstream body), while
+the server adapter adds DNS/private-target preflight and guarded Undici transport. The answer layer
+keeps a separate 64 KiB sanitized JSON ceiling for model return and persisted evidence, refusing
+oversize results with a full-result digest rather than truncating. It remains separate from paid
+`route-transport` invocation because the chat surface is read-only and must not pull in
+prepared-ref/release/authority/money custody (`src/modules/capability-execution/operation-execute.functions.ts:29-34,75-218`;
+`src/modules/capability-execution/operation-execute.server.ts:14-41`;
+`src/modules/network-guard/public.ts:1-200`). Input/output validation reuses the repo-canonical
+`@cfworker/json-schema` `Validator` from `capability-contract`.
 
 ## Deletion and simplification candidates
 
@@ -430,7 +447,7 @@ These are bounded candidates, not edits performed by this map refresh.
 | local answer persistence port | in-memory port intentionally omits Convex three-row durability (`tests/helpers/answer-thread-test-port.ts:6-18,104-133`) | retain until an equivalent deterministic Convex seam covers route/harness assertions |
 | semantic JSON salvage | `NoObjectGeneratedError.text` salvage preserves a known semantic failure taxonomy (`src/modules/customer-request/semantic-interpreter.ts:287-308`) | remove only after provider/version fixtures prove no usable response is lost |
 | flat OpenRouter parameter projection | provider flat schema and server Zod schema have different contracts (`src/modules/answer/internal/action-to-tool-spec.ts:35-72`) | retain until schema parity proves refusals and boundaries unchanged |
-| duplicated discovery/capability-tool membership | the five discovery IDs are repeated in answer schema, harness exposure, and registry; the answer builder also appends a manually bound generic `execute_operation` tool beside Convex/seed-derived strict per-op tools (`src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-20`; `src/modules/answer/internal/answer-tool-use-agent.ts:607-725`) | derive the five discovery IDs once and complete W7 endpoint-bound selection only with a source-shape and persisted-evidence migration plan; retain the current seed fallback and generic-tool behavior until that cutover |
+| duplicated discovery membership | the five discovery IDs remain repeated in answer schema, harness exposure, and registry; the capability closure is now built from one descriptor snapshot and selected deterministically, so there is no second model-facing executor or alternate operation identity (`src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-20`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-344,561-618`) | derive the five discovery IDs once when their public contracts permit; keep operation.execute as the evidence seam and preserve the explicit source/guarded transport boundaries |
 
 ## Proposed SLOs (release targets, not current measurements)
 
@@ -453,10 +470,10 @@ row is an observed production metric (`src/routes/api.answer.turn.ts:34-72`; `ev
 
 1. **Static source shape:** verify production generation callsites use the gateway, root AI SDK is v7,
    Promptfoo's nested v6 stays dev-only, the five answer discovery tools resolve canonical read-only
-   actions, dynamic per-op capability tools are strict-shaped from DB/seed descriptors, and the
-   manually appended generic `execute_operation` tool remains explicitly open-object until W7
-   replaces it with bounded Service endpoint candidates; no write action enters the answer set, no
-   separate Agent Engine plan runtime exists, and citations resolve (`src/modules/model-gateway/public.ts:4-11`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-22`; `src/modules/answer/internal/answer-tool-use-agent.ts:607-725`; `tests/imports/legacy-engine-retirement.test.ts:7-48`).
+   actions, dynamic capability tools strict-shaped from one resolved descriptor snapshot, and the
+   selected closure bound to a canonical operation ref; `operation.execute` is evidence-only, no
+   write action enters the answer set, no separate Agent Engine plan runtime exists, and citations
+   resolve (`src/modules/model-gateway/public.ts:4-11`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-22`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-618`; `tests/imports/legacy-engine-retirement.test.ts:7-48`).
 2. **Schema/prompt fixtures:** malformed model JSON, unknown opaque keys, prompt injection in
    descriptors/catalog data, invalid tool inputs/outputs, unsupported preview, and ungrounded prose
    refuse without effects (`src/modules/customer-request/semantic-interpreter.ts:222-248,287-325`; `src/modules/answer-thread/internal/tool-runner.ts:68-91`; `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`).
@@ -484,10 +501,12 @@ records it (`output/eval/answer-suite-report.json:1-83`; `output/release/playwri
 ## Migration sequence
 
 1. **Freeze the inventory:** keep four production generation families, the direct model-list GET,
-   external MCP SSE parser, five discovery answer read tools, DB/seed-derived strict per-op tools,
-   the manually appended open-object `execute_operation` tool, SSR projection loader, and browser
-   stream-session replay seam explicit; reconcile source/output Node 22 with project metadata Node 24
-   (`src/modules/answer/internal/openrouter-models.ts:173-209`; `src/modules/capability-supply/route-transport-runtime.ts:892-927`; `src/modules/answer/internal/answer-tool-use-agent.ts:443-725`; `vite.config.ts:57-67`; `.vercel/project.json:5-15`).
+   external MCP SSE parser, five discovery answer read tools, the selected strict per-op capability
+   tool, SSR project readback, and browser stream-session replay seam explicit; reconcile source/output
+   Node 22 with project metadata Node 24 (`src/modules/answer/internal/openrouter-models.ts:173-209`;
+   `src/modules/capability-supply/route-transport-runtime.ts:892-927`;
+   `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-618`; `vite.config.ts:57-67`;
+   `.vercel/project.json:5-15`).
 2. **Harden shared seams:** preserve the gateway, v7 structured output, action registry, bounded
    requests, private model summaries, model-free live journal kinds, source-write finalization, and
    public redaction; add parity checks for duplicated five-tool discovery membership (`src/modules/answer-thread/internal/answer-turn-finalization.ts:150-193,455-560`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-20`).
@@ -528,7 +547,7 @@ records it (`output/eval/answer-suite-report.json:1-83`; `output/release/playwri
 | A1 | retrieval may search registry before model recovery searches again | **accepted deterministic-first policy**; initial registry search and model recovery are separate evidence calls; qualifying empty may add one web-discovery call | `src/modules/answer-thread/internal/turns/retrieval-first.ts:59-183`; `src/modules/answer-thread/internal/turns/agent.ts:31-177` |
 | A2 | response-plan tool policy and assembly budgets can be derived in different places | **split status:** tool-call policy is passed once into `agentTurnPath`; final assembly budgets remain a drift seam until one canonical plan is consumed | `src/modules/answer-thread/internal/turn-orchestrator.ts:291-313,370-380`; `src/modules/answer-thread/internal/turns/agent.ts:31-46`; `src/modules/answer/internal/emit-snapshot-events.ts:129-175` |
 | A3 | prose is checked by model gate, safety adapter, and orchestrator | **accepted defense in depth**; retain until equivalent invariant proof | `src/modules/answer/internal/answer-gate.ts:17-49`; `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`; `src/modules/answer-thread/internal/turn-orchestrator.ts:389-431` |
-| A4 | prompt/tool registry can drift | **partially resolved:** five discovery IDs remain manually repeated; per-op tools are dynamically built from DB/curated seed descriptors, while the generic `execute_operation` tool is manually appended with an open input object; preserve membership parity and finish W7 endpoint binding before simplifying | `src/modules/answer/internal/answer-llm-prompts.ts:1-12`; `src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-20`; `src/modules/answer/internal/answer-tool-use-agent.ts:607-725` |
+| A4 | prompt/tool registry can drift | **resolved for current capability execution:** the five discovery IDs remain repeated by their public contracts, but each turn resolves one descriptor snapshot, filters strict schemas, selects at most one canonical operation, and derives its sole capability tool from that descriptor; `operation.execute` is only the evidence-record id. Keep a parity check for the fixed discovery set and selected closure | `src/modules/answer/internal/keyless-data-ask.ts:18-55`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-344,561-618`; `src/modules/answer-thread/answer-thread.schema.ts:27-41` |
 | A5 | optimized answer writes coexist with compatibility reads | **accepted compatibility path**; remove read fallback only after host retirement | `src/modules/answer-thread/answer-thread.functions.ts:237-301,394-416`; `convex/answerThreads.ts:240-338` |
 | A6 | live reducer and durable projection both assemble artifacts | **accepted dual representation**; durable server turn IDs win on readback and pending optimistic turns are merged only when absent | `src/components/ae/chat/answer-turn-state.ts:40-176`; `src/modules/answer-thread/internal/public-projection.ts:45-101`; `src/components/ae/chat/AeChat.tsx:630-668` |
 | A7 | `AnswerSynthesizer` names remain beside ordered paths | **open deletion candidate**, not removed; preserve public event/projection types during migration | `src/modules/answer/answer-synthesizer.ts:7-33,119-171`; `src/modules/answer-thread/internal/turn-orchestrator.ts:432-447` |
@@ -553,11 +572,11 @@ records it (`output/eval/answer-suite-report.json:1-83`; `output/release/playwri
 
 - Runtime/package truth: `package.json:60-158`; `package-lock.json:11-98,152-169,21435-21451,21688-21705`; `node_modules/ai/package.json:1-10,44-48`; `node_modules/@ai-sdk/provider-utils/package.json:1-49`; `node_modules/@openrouter/ai-sdk-provider/package.json:1-49`; `node_modules/promptfoo/package.json:42-47,319-344`.
 - Runtime/deployment metadata: `vite.config.ts:57-67`; `.vercel/output/nitro.json:1-26`; `.vercel/project.json:5-15`.
-- Gateway and production generation: `src/modules/model-gateway/public.ts:1-139`; `src/modules/answer/internal/answer-tool-use-agent.ts:1-12,229-565`; `src/modules/answer-thread/internal/llm-follow-up-chips.ts:1-78`; `src/modules/customer-request/openrouter-transport.ts:1-118`; `src/modules/storefront/internal/business-enrichment.ts:1-318`.
-- Capability execution seam: `src/modules/capability-execution/operation-execute.functions.ts:1-160`; `src/modules/capability-execution/operation-execute.actions.ts:1-90`; `src/modules/capability-execution/public.ts:1-20`; `convex/capabilitySupplyOperations.ts:318-400`; `tests/unit/capability-execution/operation-execute.test.ts:1-125`; `tests/unit/answer/answer-tool-dynamic-ops.test.ts:1-60`.
+- Gateway and production generation: `src/modules/model-gateway/public.ts:1-139`; `src/modules/answer/internal/answer-tool-use-agent.ts:1-12,279-629`; `src/modules/answer-thread/internal/llm-follow-up-chips.ts:1-78`; `src/modules/customer-request/openrouter-transport.ts:1-118`; `src/modules/storefront/internal/business-enrichment.ts:1-318`.
+- Capability execution/source/guard seam: `src/modules/capability-execution/operation-execute.functions.ts:1-310`; `src/modules/capability-execution/operation-execute.server.ts:1-41`; `src/modules/capability-execution/operation-execute.actions.ts:1-91`; `src/modules/capability-execution/seed-supply.ts:110-194`; `src/modules/capability-execution/public.ts:1-16`; `src/modules/capability-supply/public.ts:61-80`; `src/modules/network-guard/public.ts:1-200`; `convex/capabilitySupplyOperations.ts:577-753`; `tests/unit/capability-execution/operation-execute.test.ts:1-125`; `tests/unit/answer/answer-tool-dynamic-ops.test.ts:1-60`.
 - Answer prompt/tools/stream/persistence: `src/modules/answer/internal/answer-llm-prompts.ts:1-133`; `src/modules/answer/internal/action-to-tool-spec.ts:1-72`; `src/modules/answer-thread/answer-thread.schema.ts:1-120`; `src/modules/harness/tool-contract.ts:1-83,239-256`; `src/modules/answer-thread/internal/tool-runner.ts:62-313`; `src/modules/answer/answer-ui-stream.ts:1-68`; `src/routes/api.answer.turn.ts:46-143`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:150-325,431-769`; `convex/answerThreads.ts:240-338,598-621`; `convex/harnessSessions.ts:186-445`.
 - Answer SSR/browser seams: `src/routes/t.$threadId.tsx:29-40,54-69`; `src/components/ae/chat/answer-stream.ts:62-93`; `src/components/ae/chat/turn-stream-session.ts:24-98`; `src/components/ae/chat/AeThreadTurnStreamSection.tsx:94-183`; `src/components/ae/chat/AeChat.tsx:127-166,208-235,630-668`.
-- Customer Request preview/compile/authority: `src/routes/index.tsx:186-221`; `src/modules/customer-request/plan-preview.actions.ts:46-82`; `src/modules/customer-request/application/interpret-compile/preview.ts:9-138`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`; `src/modules/customer-request/application/interpret-compile/interpret.ts:76-203`; `src/modules/customer-request/application/compare-resume/refresh.ts:57-107`; `src/modules/customer-request/compiler.ts:234-426`; `convex/customerRequestApplication.ts:648-769,878-1078,1708-1791`.
+- Customer Request/Home preview/compile/authority: `src/routes/index.tsx:18-85,88-189`; `src/modules/customer-request/plan-preview.actions.ts:46-82`; `src/modules/customer-request/application/interpret-compile/preview.ts:9-138`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`; `src/modules/customer-request/application/interpret-compile/interpret.ts:76-203`; `src/modules/customer-request/application/compare-resume/refresh.ts:57-107`; `src/modules/customer-request/compiler.ts:234-426`; `convex/customerRequestApplication.ts:648-769,878-1078,1708-1791`.
 - Customer Request execution/payment: `src/modules/customer-request/route-mandate-admission.ts:62-246`; `convex/customerRequestRouteMandateAdmission.ts:60-263`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`; `src/modules/customer-request/route-execution/machines/mark-dispatched.ts:7-77`; `src/modules/customer-request/route-execution/machines/record-outcome.ts:8-93`; `convex/customerRequestRouteExecutionJournalPorts.ts:110-153,389-473,646-783`; `src/modules/capability-supply/route-transport-runtime.ts:397-540,566-653,655-776,892-927`; `convex/customerRequestRouteExecution.ts:418-604`; `src/modules/customer-request/internal/route-mandate-convex-schema.ts:745-776`.
 - Agent Engine retirement/schema: `tests/imports/legacy-engine-retirement.test.ts:7-48`; `convex/schema.ts:1-49`; `src/modules/customer-request/internal/convex-v2-schema.ts:669-734`.
 - Eval/Promptfoo/v3: `eval/answer/README.md:1-12,64-107,126-173`; `eval/answer/lib/cases.ts:142-186,204-313`; `eval/answer/lib/coverage.ts:60-207`; `eval/answer/lib/scoring.ts:14-50,87-116`; `eval/answer/lib/registry-seed.ts:21-25,27-138`; `eval/answer/scripts/audit-coverage.ts:8-38`; `eval/answer/scripts/run-suite.ts:5-41`; `eval/answer/promptfooconfig.yaml:7-9,152-303`; `eval/answer/providers/gate.mjs:10-24`.
@@ -567,35 +586,32 @@ records it (`output/eval/answer-suite-report.json:1-83`; `output/release/playwri
 ## Verification record
 
 - **2026-08-08 current-tree refresh:** re-walked the maintained prompt/model/tool/stream/eval/runtime,
-  Customer Request recovery/compile, keyless execution, Service endpoint projection, W7/W8, study,
-  ExternalRun, deployment-smoke, and output-packet seams cited in this map. This refresh ran no
+  Customer Request recovery/compile, canonical keyless execution, Service endpoint projection, W7/W8,
+  study, ExternalRun, deployment-smoke, and output-packet seams cited in this map. This refresh ran no
   formatter, linter, build, test, package-manager, or git command; source-level tests remain
   contracts unless a named packet below records execution.
-- **2026-08-08 answer execution finding:** the fixed direct registry read set remains five IDs
-  (`registry.search`, `registry.detail`, `sandbox.checkup_quote`, `web.discover`,
-  `registry.operations.search`), but the answer builder currently appends both DB/seed-derived
-  strict `capability_<id>` tools and a generic `execute_operation` model tool whose nested input
-  allows additional properties. Both routes feed `runOperationToolCall` and the single
-  `operation.execute` evidence record before `executeOperation`; the generic tool and global
-  descriptor pool mean W7 bounded Service endpoint selection is not landed
-  (`src/modules/answer-thread/internal/answer-tool-registry.ts:8-23`;
-  `src/modules/answer/internal/answer-tool-use-agent.ts:456-531,607-725`;
-  `src/modules/capability-execution/operation-execute.actions.ts:18-73`).
-- **2026-08-08 keyless/W8 finding:** authoritative publication, registry, and Customer Request
-  graph paths recompute/validate `operation:v1:<64-lowercase-hex>` refs, while curated in-process
-  seed fallback and CLI feeds emit readable `operation:v1:<capabilityId>` aliases and bridge the
-  two dialects locally. The DB reader enforces publication/admission/readiness; seed fallback does
-  not perform those DB readiness checks (`src/modules/capability-supply/public.ts:61-80`;
-  `src/modules/capability-supply/internal/publication/publish.ts:146-159`;
-  `convex/capabilitySupplyOperations.ts:463-665,730-747`;
-  `src/modules/customer-request/application/interpret-compile/graph.ts:72-126`;
-  `src/modules/capability-execution/seed-supply.ts:128-163`;
-  `tools/ae/lib/feeds.ts:147-235`; `tools/ae/commands/actions.ts:52-67`).
-- **2026-08-08 Customer Request/Home finding:** `/?q=` still computes registry services,
-  inspect-only `planPreview`, and optional web claims, but the visible Home route mounts only the
-  shell/composer and navigates asks to `/t/new`/`AeChat`; it does not mount `AeServiceList` or
-  `AeConsumerPlan`. Preview remains bounded, expires, and cannot create authority/effects
-  (`src/routes/index.tsx:81-97,122-158,171-263`; `src/routes/t.new.tsx:1-36`;
+- **2026-08-08 answer execution finding:** the answer agent now resolves one descriptor snapshot from
+  the same source used for execution. It exposes the five discovery reads plus at most one strict,
+  operation-bound capability tool; `operation.execute` is only the durable evidence-record id.
+  Step 0 can force the selected tool, later steps remove tools, the tool queue is serial, and
+  `parallelToolCalls` is false. The model supplies only strict schema inputs; the canonical ref is
+  closure/private evidence. Refused/error/oversized results stay in the same loop, with a separate
+  64 KiB sanitized model/persisted-result ceiling (`src/modules/answer/internal/keyless-data-ask.ts:18-55`;
+  `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,474-547,561-618`).
+- **2026-08-08 keyless/W8 finding:** publication, registry, Customer Request, answer, and CLI paths
+  use canonical `operation:v1:<64-lowercase-hex>` refs. Convex is the production/default descriptor
+  source; the curated seed adapter is selected only for the explicit local-E2E bypass with both
+  Convex URLs absent, and derives publication-identical refs. Bare/noncanonical refs do not execute.
+  The pure executor validates HTTPS/private literals, while the server adapter adds guarded DNS and
+  Undici private-target protection; upstream responses are capped at 512 KiB, separately from the
+  answer layer's 64 KiB model/persisted-result cap (`src/modules/capability-execution/operation-execute.actions.ts:27-91`;
+  `src/modules/capability-execution/operation-execute.server.ts:14-41`;
+  `src/modules/capability-execution/operation-execute.functions.ts:29-34,75-218`;
+  `src/modules/capability-execution/seed-supply.ts:140-194`).
+- **2026-08-08 Customer Request/Home finding:** Home is a static ask/category/example shell unless
+  `project` is present. A non-empty `q` without `project` redirects to `/t/new`; `project` loads only
+  the source-backed work tree. Customer Request preview remains a separate inspect-only path and
+  cannot create authority/effects (`src/routes/index.tsx:18-85,88-189`;
   `src/modules/customer-request/plan-preview.actions.ts:46-82`).
 - **2026-08-08 eval/evidence finding:** current source has 10 answer-turn cases plus 2 thread
   cases, including `turn-capability-tool-executes`, and Promptfoo mirrors that row. The named
@@ -617,11 +633,10 @@ records it (`output/eval/answer-suite-report.json:1-83`; `output/release/playwri
 - **Current architecture conclusion:** production model transport is AI SDK v7/OpenRouter through
   the AE gateway; deterministic retrieval, Customer Request compile, route/mandate/release/outcome,
   answer evidence/finalization, public redaction, and payment/reconciliation remain AE-owned.
-  Fixed discovery tools, strict DB/seed per-op tools, and the open generic `execute_operation` tool
-  are distinct model memberships; `operation.execute` is the shared evidence-record ID. Home
-  planning is inspect-only; Customer Request V2 owns durable paid execution; private model
-  summaries and live journal entries have different contracts; C7 status parity does not imply
-  shared hash reuse.
+  Fixed discovery tools and at most one selected strict per-op capability tool are distinct model
+  memberships; `operation.execute` is the shared evidence-record ID only. Home is static/project
+  work-tree routing; Customer Request V2 owns durable paid execution; private model summaries and
+  live journal entries have different contracts; C7 status parity does not imply shared hash reuse.
 - **Evidence conclusion:** source shape, fixtures, named packets, hosted/provider/customer
   observations, and ExternalRun verdicts remain separate trust domains. No claim in this map
   upgrades one class into another without a matching receipt, readback, or study artifact.
