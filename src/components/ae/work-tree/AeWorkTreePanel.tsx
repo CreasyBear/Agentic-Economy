@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { formatMoney } from '@/lib/ui/format-money'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import type { WorkNode, WorkTree } from '@/modules/work-tree/public'
 
 // Pattern provenance: disclosure tree/list composition adapted from
@@ -154,9 +154,9 @@ function formatTiming(node: WorkNode): string {
 function formatCost(node: WorkNode): string {
   const cost = node.cost
   if (cost === undefined) return 'open'
-  const amount = cost.committedMinor ?? cost.estimateMinor ?? cost.envelopeMinor
+  const amount = cost.committed ?? cost.estimate ?? cost.envelope
   if (amount === undefined) return 'open'
-  return `${formatMoney(cost.currency, amount)}${cost.envelopeMinor === undefined ? '' : `/${formatMoney(cost.currency, cost.envelopeMinor)}`}`
+  return `${formatCurrencyAmount(amount)}${cost.envelope === undefined ? '' : `/${formatCurrencyAmount(cost.envelope)}`}`
 }
 
 function formatScope(node: WorkNode): string {

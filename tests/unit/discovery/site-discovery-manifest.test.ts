@@ -95,6 +95,7 @@ describe('Site discovery manifest', () => {
     expect(pathsByKind.get('catalog_search')).toEqual(['/api/businesses/search?q='])
     expect(pathsByKind.get('business_manifest')).toEqual(['/{slug}/ucp'])
     expect(pathsByKind.get('customer_request_submit')).toEqual(['/api/v1/requests'])
+    expect(pathsByKind.get('answer_turn')).toEqual(['/api/answer/turn'])
     expect(pathsByKind.get('customer_request_schema')).toEqual(['/api/v1/requests/schema'])
     expect(pathsByKind.get('discovery_artifact')).toEqual([
       '/api/discovery/schema',
@@ -107,16 +108,28 @@ describe('Site discovery manifest', () => {
 
   it('states the authentication each endpoint actually enforces', () => {
     const submit = manifest.endpoints.find((endpoint) => endpoint.kind === 'customer_request_submit')
+    const answerTurn = manifest.endpoints.find((endpoint) => endpoint.kind === 'answer_turn')
 
     // An agent that reads this as an open GET would fail its first real call.
     expect(submit).toMatchObject({
       method: 'POST',
-      authentication: 'ae_api_key',
+      authentication: 'clerk_api_key',
       requiredScope: 'customer_requests:create',
     })
     expect(manifest.customerRequest.requiredScope).toBe('customer_requests:create')
+    expect(answerTurn).toMatchObject({
+      method: 'POST',
+      authentication: 'none',
+      mediaType: 'text/event-stream',
+      requiredHeaders: {
+        'Content-Type': 'application/json',
+        'X-AE-Turn-Key': expect.stringContaining('not a credential'),
+      },
+    })
 
-    const publicReads = manifest.endpoints.filter((endpoint) => endpoint.kind !== 'customer_request_submit')
+    const publicReads = manifest.endpoints.filter(
+      (endpoint) => endpoint.kind !== 'customer_request_submit' && endpoint.kind !== 'answer_turn',
+    )
     expect(publicReads.every((endpoint) => endpoint.method === 'GET')).toBe(true)
     expect(publicReads.every((endpoint) => endpoint.authentication === 'none')).toBe(true)
   })

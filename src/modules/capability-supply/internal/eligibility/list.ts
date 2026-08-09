@@ -7,10 +7,10 @@ import {
   type AdmittedOperationRef,
   type PublicOperationRef,
 } from '@/modules/capability-supply/public'
-
+import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
 import { bindingIntegrityIsValid } from '../binding/integrity'
-import { contractRefFromRow } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
+import { contractRefFromRow } from '../offering/registration'
 import { publicationLifecycle } from '../publication/lifecycle'
 
 import { bindingEligibilityIsValid, offeringEligibilityIsValid } from './integrity'
@@ -27,7 +27,7 @@ export const MAX_ELIGIBLE_SUPPLY = 256
 
 export async function listIntegratedCapabilitySupply(
   ports: EligibleSupplyPorts,
-  input: Readonly<{ networkId: string; limit: number; now?: number }>,
+  input: Readonly<{ networkId: string; limit: number; now: number }>,
 ) {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_ELIGIBLE_SUPPLY) {
     return { kind: 'unavailable' as const, reason: 'limit_invalid' as const }
@@ -46,10 +46,11 @@ export async function listIntegratedCapabilitySupply(
       revision: number
       readinessValidUntil: number
       operationRef: PublicOperationRef
+      connectionAuthority?: CapabilityConnectionAuthoritySnapshot
       admittedOperation: AdmittedOperationRef
     }>
   }> = []
-  const now = input.now ?? Date.now()
+  const now = input.now
   for (const binding of bindings) {
     if (!bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
       return { kind: 'unavailable' as const, reason: 'supply_integrity_failure' as const }
@@ -71,6 +72,9 @@ export async function listIntegratedCapabilitySupply(
     const contract = await ports.getActiveExactCapabilityContract(contractRef)
     if (contract.kind !== 'found') continue
     const publication = await ports.loadCurrentPublicationByBindingId(binding.bindingId)
+    const currentConnection = binding.authority.kind === 'provider_connection'
+      ? await ports.loadProviderConnection(binding.authority.connectionRef)
+      : undefined
     if (
       publication === null
       || publication.businessId !== offering.businessId
@@ -81,7 +85,7 @@ export async function listIntegratedCapabilitySupply(
       || publication.version !== contractRef.version
       || publication.contractDigest !== contractRef.contractDigest
       || publication.readinessValidUntil === undefined
-      || publicationLifecycle(publication, offering, binding, now).state !== 'active'
+      || publicationLifecycle(publication, offering, binding, now, currentConnection).state !== 'active'
     ) continue
     const admittedOperation = deriveAdmittedOperation(
       publication, offering, binding, contract.registeredAt, contract.documentJson, now,
@@ -95,6 +99,9 @@ export async function listIntegratedCapabilitySupply(
         revision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
         operationRef: publication.operationRef,
+        ...(publication.connectionAuthority === undefined
+          ? {}
+          : { connectionAuthority: publication.connectionAuthority }),
         admittedOperation,
       },
     })
@@ -158,6 +165,9 @@ function deriveAdmittedOperation(
           sourceDigest: publication.sourceDigest,
           registrationEvidenceRefs: publication.registrationEvidenceRefs,
           readinessEvidenceRefs: publication.readinessEvidenceRefs,
+          ...(publication.connectionAuthority === undefined
+            ? {}
+            : { connectionAuthority: publication.connectionAuthority }),
         },
         offering: {
           offeringId: offering.offeringId,
@@ -169,6 +179,9 @@ function deriveAdmittedOperation(
           registrationHash: binding.registrationHash,
           eligibilityHash: binding.eligibilityHash,
           configDigest: binding.configDigest,
+          ...(binding.connectionAuthority === undefined
+            ? {}
+            : { connectionAuthority: binding.connectionAuthority }),
         },
       }),
       readinessValidUntil: publication.readinessValidUntil ?? 0,
@@ -183,7 +196,7 @@ function deriveAdmittedOperation(
 
 export async function listRouteableCapabilitySupply(
   ports: EligibleSupplyPorts,
-  input: Readonly<{ networkId: string; limit: number; now?: number }>,
+  input: Readonly<{ networkId: string; limit: number; now: number }>,
 ) {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_ELIGIBLE_SUPPLY) {
     return { kind: 'unavailable' as const, reason: 'limit_invalid' as const }

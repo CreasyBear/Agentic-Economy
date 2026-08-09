@@ -1,16 +1,29 @@
 import { z } from 'zod'
-import type { ConsumerPlanResult } from '@/modules/customer-request/application/public'
 import type { AnswerSource } from './answer-synthesizer'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 
-const importedClaimSchema = z.object({
+export const WebDiscoveryClaimSchema = z.strictObject({
   businessName: z.string(),
   suburb: z.string(),
-  phone: z.string().optional(),
-  websiteUrl: z.string().optional(),
-  serviceSummary: z.string().optional(),
+  phone: z.string().exactOptional(),
+  websiteUrl: z.string().exactOptional(),
+  serviceSummary: z.string().exactOptional(),
   sourceUrl: z.string(),
 })
+const importedClaimSchema = WebDiscoveryClaimSchema
+export const AnswerArtifactKindValues = [
+  'one-line',
+  'selected-provider',
+  'provider-cards',
+  'provider-compare-table',
+  'imported-claims',
+  'recovery-prompts',
+  'location-map',
+  'prose',
+  'what-to-do-now',
+  'agent-json',
+  'protected-by-ae',
+] as const
 export const AnswerSourceSchema = z.object({
   citationIndex: z.number().int().positive(),
   slug: z.string(),
@@ -24,113 +37,35 @@ export const AnswerSourceSchema = z.object({
   trustLabel: z.string(),
   responseTimeLabel: z.string(),
   trustCue: z.string(),
-  freshnessLabel: z.string().optional(),
-  photoUrl: z.string().optional(),
-  pricingSummary: z.string().optional(),
-  availabilitySummary: z.string().optional(),
+  freshnessLabel: z.string().exactOptional(),
+  photoUrl: z.string().exactOptional(),
+  pricingSummary: z.string().exactOptional(),
+  availabilitySummary: z.string().exactOptional(),
   nextStepLabel: z.string(),
   detailUrl: z.string(),
-  inquiryUrl: z.string().optional(),
-  publishedPhone: z.string().optional(),
+  inquiryUrl: z.string().exactOptional(),
+  publishedPhone: z.string().exactOptional(),
   services: z.array(
     z.object({
       name: z.string(),
       category: z.string(),
       summary: z.string(),
-      pricingSummary: z.string().optional(),
-      availabilitySummary: z.string().optional(),
+      pricingSummary: z.string().exactOptional(),
+      availabilitySummary: z.string().exactOptional(),
     }),
   ),
 })
 
 export const AnswerCompareFieldSchema = z.enum(['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep'])
 
-const consumerNextActionSchema = z.strictObject({
-  kind: z.enum(['inspect', 'compare', 'quote', 'start_request', 'revise', 'wait']),
-  label: z.string(),
-  href: z.string().optional(),
-})
-const consumerDecisionRecordSchema = z.strictObject({
-  step: z.number().int().positive(),
-  optionRef: z.string().optional(),
-  action: z.enum(['inspected', 'compared', 'quoted', 'approved', 'started', 'completed', 'refused', 'needs_attention']),
-  authority: z.enum(['inspect_only', 'approve_each', 'bounded_mandate', 'full_yolo']),
-  summary: z.string(),
-  observedAt: z.number(),
-  evidenceRefs: z.array(z.string()),
-  nextAction: consumerNextActionSchema,
-})
-const consumerPlanOptionSchema = z.strictObject({
-  optionRef: z.string(),
-  business: z.strictObject({ slug: z.string(), name: z.string(), location: z.string().optional() }),
-  offering: z.strictObject({ name: z.string(), summary: z.string() }),
-  price: z.union([
-    z.strictObject({
-      kind: z.literal('published'),
-      published: z.strictObject({
-        kind: z.enum(['fixed', 'from', 'range', 'quote_only']),
-        currency: z.string(),
-        amountMinor: z.number().optional(),
-        maximumAmountMinor: z.number().optional(),
-        unit: z.enum(['job', 'visit', 'hour', 'day', 'month', 'item', 'request']).optional(),
-        taxTreatment: z.enum(['inclusive', 'exclusive', 'unknown']),
-      }),
-      summary: z.string().optional(),
-    }),
-    z.strictObject({ kind: z.literal('not_published'), summary: z.string().optional() }),
-  ]),
-  availability: z.union([
-    z.strictObject({ kind: z.literal('published'), summary: z.string().optional(), validUntil: z.number().optional() }),
-    z.strictObject({ kind: z.literal('needs_confirmation'), summary: z.string().optional() }),
-  ]),
-  nextAction: consumerNextActionSchema,
-  evidence: z.strictObject({
-    observedAt: z.number().optional(),
-    source: z.enum(['business_published', 'ae_sandbox']),
-  }),
-})
-const consumerPlanStepSchema = z.strictObject({
-  step: z.number().int().positive(),
-  title: z.string(),
-  purpose: z.string(),
-  state: z.enum(['frontier', 'queued', 'running', 'completed', 'needs_attention', 'blocked']),
-  dependsOn: z.array(z.number().int().positive()),
-  options: z.array(consumerPlanOptionSchema),
-  nextAction: consumerNextActionSchema,
-  record: consumerDecisionRecordSchema.optional(),
-})
-const consumerPlanResultSchema = z.discriminatedUnion('kind', [
-  z.strictObject({
-    kind: z.literal('plan'),
-    destination: z.strictObject({ label: z.string(), request: z.string() }),
-    steps: z.array(consumerPlanStepSchema),
-    frontier: z.strictObject({ step: z.number().int().positive(), availableActions: z.array(consumerNextActionSchema) }),
-    decisions: z.array(consumerDecisionRecordSchema),
-    authority: z.enum(['inspect_only', 'approve_each', 'bounded_mandate', 'full_yolo']),
-  }),
-  z.strictObject({
-    kind: z.literal('needs_information'),
-    prompt: z.string(),
-    destination: z.strictObject({ label: z.string(), request: z.string() }),
-    decisions: z.array(consumerDecisionRecordSchema),
-  }),
-  z.strictObject({
-    kind: z.literal('unavailable'),
-    reason: z.enum(['no_current_supply', 'preview_unavailable', 'options_changed', 'rate_limited']),
-    destination: z.strictObject({ label: z.string(), request: z.string() }),
-    decisions: z.array(consumerDecisionRecordSchema),
-  }),
-]) as z.ZodType<ConsumerPlanResult>
-
 export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('consumer-plan'), plan: consumerPlanResultSchema }),
   z.object({ kind: z.literal('one-line'), text: z.string() }),
   z.object({ kind: z.literal('selected-provider'), provider: AnswerSourceSchema }),
   z.object({ kind: z.literal('provider-cards'), providers: z.array(AnswerSourceSchema) }),
   z.object({
     kind: z.literal('provider-compare-table'),
     providers: z.array(AnswerSourceSchema),
-    fields: z.array(AnswerCompareFieldSchema).optional(),
+    fields: z.array(AnswerCompareFieldSchema).exactOptional(),
   }),
   z.object({
     kind: z.literal('imported-claims'),
@@ -138,9 +73,9 @@ export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('recovery-prompts'),
-    title: z.string().optional(),
+    title: z.string().exactOptional(),
     prompts: z.array(z.object({ label: z.string(), query: z.string() })).min(1).max(4),
-    links: z.array(z.object({ label: z.string(), href: z.enum(['/claim']) })).max(2).optional(),
+    links: z.array(z.object({ label: z.string(), href: z.enum(['/claim']) })).max(2).exactOptional(),
   }),
   z.object({
     kind: z.literal('location-map'),
@@ -168,12 +103,11 @@ export const AeAnswerArtifactsSchema = z.object({
       label: z.string(),
       placeQuery: z.string(),
     })
-    .optional(),
+    .exactOptional(),
   agentJsonUrl: z.string(),
 })
 
 export type AnswerArtifact =
-  | { kind: 'consumer-plan'; plan: ConsumerPlanResult }
   | { kind: 'one-line'; text: string }
   | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'provider-cards'; providers: readonly AnswerSource[] }

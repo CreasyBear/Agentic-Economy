@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { exactAmountSchema } from '@/modules/money/public'
 export const workTreeLineageSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('customer_request'),
@@ -72,13 +73,21 @@ export const workNodeTimingSchema = z.strictObject({
   leadTimeDays: z.number().int().min(0).optional(),
 })
 
-/** cost — minor units; estimate vs committed never merge; envelope is the authority ceiling. */
+/** cost — exact nonnegative amounts; estimate vs committed never merge; envelope is the authority ceiling. */
 export const workNodeCostSchema = z.strictObject({
-  currency: z.string().length(3),
-  estimateMinor: z.number().int().min(0).optional(),
-  committedMinor: z.number().int().min(0).optional(),
+  estimate: exactAmountSchema.optional(),
+  committed: exactAmountSchema.optional(),
   /** Spend ceiling granted for this subtree; rollup flags any breach. */
-  envelopeMinor: z.number().int().min(0).optional(),
+  envelope: exactAmountSchema.optional(),
+}).superRefine((cost, ctx) => {
+  const amounts = [cost.estimate, cost.committed, cost.envelope]
+  const first = amounts.find((amount) => amount !== undefined)
+  if (first === undefined) return
+  for (const [field, amount] of [['estimate', cost.estimate], ['committed', cost.committed], ['envelope', cost.envelope]] as const) {
+    if (amount !== undefined && amount.currency !== first.currency) {
+      ctx.addIssue({ code: 'custom', message: 'cost_currency_mismatch', path: [field, 'currency'] })
+    }
+  }
 })
 
 /** resources — who carries the node; exclusive interval for conflict detection (half-open [start, end)). */

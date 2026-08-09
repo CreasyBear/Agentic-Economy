@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 import { loadEnv } from 'vite'
 
+import { isRecord } from '../../src/modules/common/is-record'
 import { trimTrailingSlashes } from '../../src/modules/common/trim-trailing-slashes'
 import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
 import {
@@ -16,6 +17,7 @@ import {
   runSignedHostedCustomerRequestJourney,
   verifyCustomerRequestJourneyProof,
 } from '../../src/modules/customer-request/journey-proof-attestation'
+import type { HostedCustomerRequestJourneyProof } from '../../src/modules/customer-request/hosted-agent-journey'
 import { withTemporaryClerkApiKey } from '../release/customer-request-production-credential'
 import {
   customerRequestProductionSmokeConfigFromEnvironment,
@@ -209,17 +211,30 @@ export async function runCustomerRequestDevelopmentSmoke(
     agent: { name: 'frozen-direct-development-integrator', version: '1' },
     fetch: config.fetch,
   })
+  const directForComparison: Parameters<typeof compareAgentJourneys>[0]['direct'] =
+    'recovery' in direct ? direct : { ...direct, recovery: { state: 'unsupported' } }
   if (proof.final.state === 'in_progress') {
     throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
   }
   const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
     structuredClone(config.directBaseline.cohort),
   ))
-  const terminalProof = {
+  const terminalProof: Parameters<typeof compareAgentJourneys>[0]['ae'] = {
     ...proof,
+    final: {
+      ...proof.final,
+      state: terminalJourneyState(proof.final.state),
+      resumedState: terminalJourneyState(proof.final.resumedState),
+    },
+    measurements: {
+      ...proof.measurements,
+      hardConstraintAccuracy: { state: hardConstraintState(proof) },
+    },
     cohortInputDigest: aeCohort.digest,
-  } as Parameters<typeof compareAgentJourneys>[0]['ae']
-  const comparison = compareAgentJourneys({ direct, ae: terminalProof, cohort: aeCohort })
+  }
+  const comparison = compareAgentJourneys({
+    direct: directForComparison, ae: terminalProof, cohort: aeCohort,
+  })
   const combined = {
     kind: 'development_customer_request_comparison' as const,
     release: { revision: config.sourceRevision, deploymentId: config.convexDeployment },
@@ -231,6 +246,26 @@ export async function runCustomerRequestDevelopmentSmoke(
     throw new Error(`customer_request_comparison_failed:${comparison.failures.join(',')}`)
   }
   return combined
+}
+
+type TerminalJourneyState = Exclude<HostedCustomerRequestJourneyProof['final']['state'], 'in_progress'>
+
+function terminalJourneyState(
+  value: HostedCustomerRequestJourneyProof['final']['state'],
+): TerminalJourneyState {
+  if (value === 'in_progress') throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
+  return value
+}
+
+function hardConstraintState(
+  proof: HostedCustomerRequestJourneyProof,
+): 'satisfied' | 'not_evaluated' {
+  const measurements: unknown = proof.measurements
+  const accuracy = isRecord(measurements) ? measurements.hardConstraintAccuracy : undefined
+  if (!isRecord(accuracy) || (accuracy.state !== 'satisfied' && accuracy.state !== 'not_evaluated')) {
+    throw new Error('customer_request_comparison_hard_constraint_accuracy_missing')
+  }
+  return accuracy.state
 }
 
 function currentSourceRevision(): string {

@@ -153,7 +153,7 @@ describe('capability-supply operation-ledger', () => {
       presentation: {
         label: 'Sandbox reference lookup',
         summary: 'A labelled sandbox capability used only for source verification.',
-        price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1_200 },
+        price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
         materialTerms: [{ termId: 'sandbox', label: 'Environment', value: 'Sandbox only' }],
         commercialRelationship: {
           kind: 'none' as const,
@@ -335,7 +335,7 @@ describe('capability-supply operation-ledger', () => {
       version: 1,
       contractDigest: digest,
       endpointUrl: 'https://example.test',
-      credentialRef: 'credential:demo',
+      authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
       continuation: { kind: 'single_response' as const, evidenceRefs: [] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: [] },
       adapterId: 'http-json:v1',

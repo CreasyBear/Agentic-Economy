@@ -1,8 +1,6 @@
 import {
-  projectCustomerCriteria,
   projectNeedsAttention,
 } from '@/modules/customer-request/customer-projection'
-
 import type { CustomerRequestActionResult } from '../action-result'
 import { interpreterFailureCode } from '../interpret-compile/interpreter'
 import { proposeThenCompile } from '../interpret-compile/interpret'
@@ -162,17 +160,7 @@ export async function projectGenerationRefreshResult(
     summary: 'AE could not refresh the available options. Try again.',
   })
   if (result.kind === 'needs_information' || result.kind === 'unsupported') {
-    if (result.kind === 'needs_information') {
-      return projectStoredAggregate(result.aggregate, undefined)
-    }
-    return {
-      kind: 'request', requestRef: result.aggregate.snapshot.requestId,
-      revision: result.aggregate.snapshot.revision, state: 'unsupported',
-      summary: 'AE cannot arrange this request end to end yet.',
-      nextAction: 'revise_request', missingFields: [],
-      criteria: projectCustomerCriteria(result.aggregate.evaluation.criteria),
-      options: [],
-    }
+    return projectStoredAggregate(result.aggregate, undefined)
   }
   if (result.kind !== 'unchanged' && result.kind !== 'superseded') {
     return projectNeedsAttention({

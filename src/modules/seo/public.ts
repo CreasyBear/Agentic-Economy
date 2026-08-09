@@ -59,4 +59,18 @@ export type BuildPublicThreadSeoInput = {
 
 export { buildPublicThreadSeo } from './internal/public-thread-seo'
 
+export type PublicSharedThreadSeoContract = Omit<PublicThreadSeoContract, 'threadId'> & {
+  shareToken: string
+}
+
+export type BuildSharedThreadSeoInput = {
+  threadId: string
+  shareToken: string
+  title: string
+  firstTurnOneLine?: string
+  options?: BuildPublicThreadSeoOptions
+}
+
+export { buildSharedThreadSeo } from './internal/public-thread-seo'
+
 export type { JsonLdObject }

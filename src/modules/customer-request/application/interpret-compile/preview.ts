@@ -1,9 +1,9 @@
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import type { CustomerRequestAmendment } from '@/modules/customer-request/semantic-interpreter'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 
 import { createConfiguredRequestInterpreter, type InterpreterEnvironment } from './interpreter'
-import { proposeThenCompile } from './interpret'
+import { proposeThenCompile, type ProposeThenCompileResult } from './interpret'
 import {
   discoverAndFilterDescriptors,
   type DiscoverCapabilities,
@@ -82,25 +82,40 @@ export async function previewCustomerRequest(
   }
 
   const interpreter = createConfiguredRequestInterpreter(interpreterEnvironment)
-  const compiled = await proposeThenCompile({
+  const capabilities = await discoverAndFilterDescriptors(customerJob, graph, ports.discoverCapabilities)
+  const compileBase = {
+    commandKey: `preview:${network}`,
+    commandDigest: `preview:${customerJob}`,
+    requestId: `preview:${network}`,
+    expectedRevision: 0,
+    expectedRouteGeneration: 0,
+    principalId: 'preview',
+    delegatedAgentId: 'preview',
+    networkId: network,
+    now,
+  }
+  // Bounded attempt ladder mirroring interpretCompileCommit: a transient provider/transport error on
+  // the non-final call is rethrown (finalAttempt: false) and retried once; only the exhausted
+  // attempt degrades to the deterministic recovery pool (finalAttempt: true). A preview must survive
+  // a single OpenRouter blip the same way a submitted request does.
+  const proposalConfig = {
     intent: customerJob,
     ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
     priorFacts: [],
     graph,
-    capabilities: await discoverAndFilterDescriptors(customerJob, graph, ports.discoverCapabilities),
-    finalAttempt: true,
-    compileBase: {
-      commandKey: `preview:${network}`,
-      commandDigest: `preview:${customerJob}`,
-      requestId: `preview:${network}`,
-      expectedRevision: 0,
-      expectedRouteGeneration: 0,
-      principalId: 'preview',
-      delegatedAgentId: 'preview',
-      networkId: network,
-      now,
-    },
+    capabilities,
+    compileBase,
+  } as const
+  let compiled: ProposeThenCompileResult = await proposeThenCompile({
+    ...proposalConfig,
+    finalAttempt: false,
   }, interpreter)
+  if (compiled.kind === 'propose_failed') {
+    compiled = await proposeThenCompile({
+      ...proposalConfig,
+      finalAttempt: true,
+    }, interpreter)
+  }
   if (compiled.kind === 'propose_failed') {
     return { kind: 'unavailable', reason: 'preview_unavailable', destination }
   }
@@ -111,6 +126,18 @@ export async function previewCustomerRequest(
   }
 
   const actions = compiled.preview.aggregate.plan.actions
+  // stopWhen pattern: a compiled request whose outcome is a typed needs_information (e.g. the
+  // interpreter surfaced an intent-direction ask) is a bounded question, not an empty plan. It
+  // must reach the customer as a real ask instead of collapsing to an opaque preview_unavailable.
+  if (actions.length === 0 && compiled.preview.aggregate.outcome === 'needs_information') {
+    const requirement = compiled.preview.aggregate.evaluation.nextRequirement
+    const prompt = requirement !== undefined && requirement.kind === 'intent_direction' ? requirement.prompt : undefined
+    return {
+      kind: 'needs_information',
+      prompt: prompt && prompt.length > 0 ? prompt : 'What exactly would you like us to find or produce?',
+      destination,
+    }
+  }
   if (actions.length === 0 || actions.length > MAX_PREVIEW_STEPS) {
     return { kind: 'unavailable', reason: 'preview_unavailable', destination }
   }
@@ -122,7 +149,7 @@ export async function previewCustomerRequest(
     const routeStep = routeByAction.get(action.actionId)
     const matchingBindings = graph.bindings.filter((binding) => sameCapabilityContractRef(binding.contractRef, action.contractRef))
     const routeOfferingRefs = routeStep === undefined ? [] : [routeStep.offeringId]
-    const offeringRefs = stableUnique([...routeOfferingRefs, ...matchingBindings.map((binding) => binding.offeringId)])
+    const offeringRefs = uniq([...routeOfferingRefs, ...matchingBindings.map((binding) => binding.offeringId)])
       .slice(0, MAX_PREVIEW_OPTIONS)
     return {
       step: index + 1,

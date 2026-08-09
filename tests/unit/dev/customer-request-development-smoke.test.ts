@@ -244,12 +244,12 @@ describe('customer Request development smoke configuration', () => {
       ]),
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider-secret',
       AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
-      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: JSON.stringify({ currency: 'AUD', amountMinor: 1_000 }),
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: JSON.stringify({ currency: 'AUD', units: '1000', exponent: 2 }),
       AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(developmentComparisonCohort()),
     }, 'a'.repeat(40))).toMatchObject({
       directBaseline: {
         predeclaredGain: 'recoverable_progress',
-        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
       },
     })
   })
@@ -277,7 +277,7 @@ function developmentComparisonCohort() {
       'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-resolver',
       'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-quoter',
     ],
-    maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+    maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
     authorityScope: {
       recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       purposes: ['resolve_sandbox_service_reference', 'prepare_sandbox_service_quote'],

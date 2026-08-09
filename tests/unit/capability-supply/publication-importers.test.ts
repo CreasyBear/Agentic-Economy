@@ -2,17 +2,27 @@ import { describe, expect, it } from 'vitest'
 
 import {
   admitRegisteredTransport,
+  importAgentPluginMcpCapability,
   importMcpCapability,
   importOpenApiHttpCapability,
   importX402Capability,
   normalizeCapabilityPublication,
+  type CapabilityTransportAuthority,
 } from '@/modules/capability-supply/public'
 
 const JSON_SCHEMA = 'https://json-schema.org/draft/2020-12/schema'
+const providerAuthority = {
+  kind: 'provider_connection',
+  connectionRef: 'connection:independent',
+  providerRef: 'provider:reference',
+} as const
+const keylessAuthority = { kind: 'keyless' } as const
+
+
 
 describe('capability publication importers', () => {
-  it('normalizes OpenAPI 3.1 POST JSON through the canonical publication draft', () => {
-    const result = importOpenApiHttpCapability({
+  it('normalizes OpenAPI 3.1 POST JSON through the canonical publication draft', async () => {
+    const result = await importOpenApiHttpCapability({
       kind: 'openapi_http',
       document: openApiDocument(),
       operation: { path: '/lookup', method: 'post' },
@@ -39,7 +49,7 @@ describe('capability publication importers', () => {
     }
   })
 
-  it('normalizes and admits OpenAPI 3.1 GET with an exact query mapping', () => {
+  it('normalizes and admits OpenAPI 3.1 GET with an exact query mapping', async () => {
     const document = openApiDocument()
     document.paths['/lookup'] = {
       get: {
@@ -49,7 +59,7 @@ describe('capability publication importers', () => {
         responses: { '200': { content: { 'application/json': { schema: outputSchema() } } } },
       },
     } as never
-    const result = importOpenApiHttpCapability({
+    const result = await importOpenApiHttpCapability({
       kind: 'openapi_http',
       document,
       operation: { path: '/lookup', method: 'get' },
@@ -76,7 +86,7 @@ describe('capability publication importers', () => {
       expect(admitRegisteredTransport({
         adapterId: result.draft.binding.adapter.adapterId,
         endpointUrl: result.draft.binding.endpointUrl,
-        credentialRef: result.draft.binding.credentialRef,
+        authority: result.draft.binding.authority,
         continuation: result.draft.binding.continuation,
         cancellation: result.draft.binding.cancellation,
         config: result.draft.binding.adapter.config,
@@ -84,7 +94,7 @@ describe('capability publication importers', () => {
     }
   })
 
-  it('maps an admitted OpenAPI query name to a distinct contract input name', () => {
+  it('maps an admitted OpenAPI query name to a distinct contract input name', async () => {
     const document = openApiDocument()
     document.paths['/lookup'] = {
       get: {
@@ -100,7 +110,7 @@ describe('capability publication importers', () => {
         responses: { '200': { content: { 'application/json': { schema: outputSchema() } } } },
       },
     } as never
-    const result = importOpenApiHttpCapability({
+    const result = await importOpenApiHttpCapability({
       kind: 'openapi_http',
       document: structuredClone(document) as unknown,
       contract: {
@@ -141,8 +151,8 @@ describe('capability publication importers', () => {
     }
   })
 
-  it('normalizes one MCP tool with a distinct admitted JSON-RPC transport', () => {
-    const result = importMcpCapability({
+  it('normalizes one MCP tool with a distinct admitted JSON-RPC transport', async () => {
+    const result = await importMcpCapability({
       kind: 'mcp',
       serverUrl: 'https://tools.example.test/mcp',
       protocolVersion: '2025-06-18',
@@ -169,12 +179,64 @@ describe('capability publication importers', () => {
       expect(admitRegisteredTransport({
         adapterId: result.draft.binding.adapter.adapterId,
         endpointUrl: result.draft.binding.endpointUrl,
-        credentialRef: result.draft.binding.credentialRef,
+        authority: result.draft.binding.authority,
         continuation: result.draft.binding.continuation,
         cancellation: result.draft.binding.cancellation,
         config: result.draft.binding.adapter.config,
       })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'mcp-jsonrpc:v1' } })
     }
+  })
+ 
+  it('normalizes an Agent Plugin MCP server through the canonical MCP importer', async () => {
+    const result = await importAgentPluginMcpCapability({
+      kind: 'agent_plugin_mcp',
+      manifest: {
+        name: 'Reference Plugin',
+        mcpServers: {
+          reference: { type: 'http', url: 'https://tools.example.test/mcp' },
+        },
+      },
+      serverName: 'reference',
+      protocolVersion: '2025-06-18',
+      tool: { name: 'reference_lookup', inputSchema: inputSchema(), outputSchema: outputSchema() },
+      contract: contractMetadata('independent.agent-plugin-mcp'),
+      commercial: commercialInput(),
+      evidenceRefs: ['source:agent-plugin'],
+    })
+
+    expect(result).toMatchObject({
+      kind: 'normalized',
+      draft: {
+        source: {
+          kind: 'agent_plugin_mcp',
+          selector: { serverName: 'reference', toolName: 'reference_lookup', protocolVersion: '2025-06-18' },
+        },
+        binding: {
+          endpointUrl: 'https://tools.example.test/mcp',
+          adapter: { adapterId: 'mcp-jsonrpc:v1' },
+        },
+      },
+    })
+  })
+
+  it.each([
+    [{ name: '', mcpServers: { reference: { type: 'http', url: 'https://tools.example.test/mcp' } } }, 'source_invalid'],
+    [{ name: 'Reference Plugin' }, 'source_invalid'],
+    [{ name: 'Reference Plugin', mcpServers: { reference: 'https://tools.example.test/mcp' } }, 'transport_unsupported'],
+    [{ name: 'Reference Plugin', mcpServers: { reference: { type: 'stdio', command: 'node' } } }, 'transport_unsupported'],
+    [{ name: 'Reference Plugin', mcpServers: { reference: { type: 'http', url: 'https://tools.example.test/mcp', command: 'node' } } }, 'transport_unsupported'],
+    [{ name: 'Reference Plugin', mcpServers: { reference: { type: 'http', url: '/local/mcp' } } }, 'transport_unsupported'],
+  ] as const)('rejects unresolved or local Agent Plugin MCP server manifests', async (manifest, reason) => {
+    await expect(importAgentPluginMcpCapability({
+      kind: 'agent_plugin_mcp',
+      manifest,
+      serverName: 'reference',
+      protocolVersion: '2025-06-18',
+      tool: { name: 'reference_lookup', inputSchema: inputSchema(), outputSchema: outputSchema() },
+      contract: contractMetadata('independent.agent-plugin-invalid'),
+      commercial: commercialInput(),
+      evidenceRefs: ['source:agent-plugin:invalid'],
+    })).resolves.toEqual({ kind: 'refused', reason })
   })
 
   it('normalizes x402 metadata into its registered bounded transport', () => {
@@ -184,14 +246,17 @@ describe('capability publication importers', () => {
         resourceUrl: 'https://api.example.test/lookup',
         inputSchema: inputSchema(),
         outputSchema: outputSchema(),
-        price: { currency: 'AUD', amountMinor: 1_200 },
+        price: { currency: 'AUD', units: '1200', exponent: 2 },
         scheme: 'exact', network: 'eip155:84532',
         asset: '0x0000000000000000000000000000000000000001',
         payTo: '0x0000000000000000000000000000000000000002',
         routeAmountExponent: 2, assetAmountExponent: 6,
       },
       contract: contractMetadata('independent.x402-lookup'),
-      commercial: commercialInput({ price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } }),
+      commercial: commercialInput({
+        price: { kind: 'fixed', amount: { currency: 'AUD', units: '1200', exponent: 2 } },
+        authority: providerAuthority,
+      }),
       evidenceRefs: ['source:x402'],
     })
 
@@ -199,7 +264,7 @@ describe('capability publication importers', () => {
       kind: 'normalized',
       draft: {
         source: { kind: 'x402', selector: { resourceUrl: 'https://api.example.test/lookup' } },
-        offering: { presentation: { price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } } },
+        offering: { presentation: { price: { kind: 'fixed', amount: { currency: 'AUD', units: '1200', exponent: 2 } } } },
         binding: { adapter: { adapterId: 'x402-fetch:v2' } },
       },
     })
@@ -222,14 +287,17 @@ describe('capability publication importers', () => {
           : {}),
         inputSchema: inputSchema(),
         outputSchema: outputSchema(),
-        price: { currency: 'AUD', amountMinor: 1_200 },
+        price: { currency: 'AUD', units: '1200', exponent: 2 },
         scheme: 'exact', network: 'eip155:84532',
         asset: '0x0000000000000000000000000000000000000001',
         payTo: '0x0000000000000000000000000000000000000002',
         routeAmountExponent: 2, assetAmountExponent: 6,
       },
       contract: contractMetadata(`independent.x402-${method.toLowerCase()}`),
-      commercial: commercialInput({ price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } }),
+      commercial: commercialInput({
+        price: { kind: 'fixed', amount: { currency: 'AUD', units: '1200', exponent: 2 } },
+        authority: providerAuthority,
+      }),
       evidenceRefs: [`source:x402:${method}`],
     })
     expect(result).toMatchObject({
@@ -240,7 +308,7 @@ describe('capability publication importers', () => {
       expect(admitRegisteredTransport({
         adapterId: result.draft.binding.adapter.adapterId,
         endpointUrl: result.draft.binding.endpointUrl,
-        credentialRef: result.draft.binding.credentialRef,
+        authority: result.draft.binding.authority,
         continuation: result.draft.binding.continuation,
         cancellation: result.draft.binding.cancellation,
         config: result.draft.binding.adapter.config,
@@ -248,30 +316,94 @@ describe('capability publication importers', () => {
     }
   })
 
-  it('dispatches direct envelopes without changing their canonical material', () => {
+  it('admits a matching sub-cent x402 PaymentRequired claim after exact rescaling', () => {
+    const result = importX402Capability(matchingX402Import())
+
+    expect(result).toMatchObject({
+      kind: 'normalized',
+      draft: { binding: { adapter: { adapterId: 'x402-fetch:v2' } } },
+    })
+  })
+
+  it('admits a fully matching V1 claim as publication evidence', () => {
+    const base = matchingX402Import()
+    const result = importX402Capability({
+      ...base,
+      resource: {
+        ...base.resource,
+        paymentRequired: {
+          x402Version: 1 as const,
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:84532',
+            maxAmountRequired: '1234500',
+            resource: 'https://api.example.test/lookup',
+            description: 'Reference lookup',
+            mimeType: 'application/json',
+            outputSchema: {},
+            payTo: '0x0000000000000000000000000000000000000002',
+            maxTimeoutSeconds: 60,
+            asset: '0x0000000000000000000000000000000000000001',
+            extra: {},
+          }],
+        },
+      },
+    })
+
+    expect(result).toMatchObject({ kind: 'normalized' })
+  })
+
+  it.each([
+    ['URL', { resourceUrl: 'https://other.example.test/lookup' }],
+    ['network', { network: 'eip155:8453' }],
+    ['asset', { asset: '0x0000000000000000000000000000000000000003' }],
+    ['payTo', { payTo: '0x0000000000000000000000000000000000000004' }],
+    ['amount', { amount: '1234501' }],
+  ] as const)('refuses an x402 PaymentRequired claim with a mismatched %s', (_label, override) => {
+    const result = importX402Capability(matchingX402Import(override))
+
+    expect(result).toEqual({ kind: 'refused', reason: 'payment_required_invalid' })
+  })
+
+  it('accepts one matching x402 PaymentRequired requirement among other syntactically valid entries', () => {
+    const input = matchingX402Import()
+    input.resource.paymentRequired.accepts.unshift({
+      scheme: 'exact',
+      network: 'eip155:8453',
+      amount: '1234500',
+      asset: '0x0000000000000000000000000000000000000001',
+      payTo: '0x0000000000000000000000000000000000000002',
+      maxTimeoutSeconds: 60,
+      extra: {},
+    })
+
+    expect(importX402Capability(input)).toMatchObject({ kind: 'normalized' })
+  })
+
+  it('dispatches direct envelopes without changing their canonical material', async () => {
     const documentJson = JSON.stringify({
       contractFormat: 'ae.capability-contract:v2', ...contractMetadata('independent.direct'),
       inputSchema: inputSchema(), outputSchema: outputSchema(),
     })
-    const result = normalizeCapabilityPublication({
+    const result = await normalizeCapabilityPublication({
       kind: 'ae_envelope', documentJson, offering: commercialInput().offering,
       binding: directBinding(), evidenceRefs: ['source:direct'],
     })
     expect(result).toMatchObject({ kind: 'normalized', draft: { source: { kind: 'ae_envelope' } } })
   })
 
-  it('fails closed on remote refs, insecure endpoints, ambiguous OpenAPI servers, and inconsistent x402 price', () => {
+  it('fails closed on remote refs, insecure endpoints, ambiguous OpenAPI servers, and inconsistent x402 price', async () => {
     const remote = openApiDocument()
     const remoteSchema = remote.paths['/lookup'].post.requestBody.content['application/json'] as {
       schema: Record<string, unknown>
     }
     remoteSchema.schema = { $ref: 'https://evil.test/schema' }
-    expect(importOpenApiHttpCapability({
+    expect(await importOpenApiHttpCapability({
       kind: 'openapi_http', document: remote, operation: { path: '/lookup', method: 'post' },
       contract: contractMetadata('independent.remote'), commercial: commercialInput(), evidenceRefs: ['source:test'],
     })).toEqual({ kind: 'refused', reason: 'schema_profile_unsupported' })
 
-    expect(importMcpCapability({
+    expect(await importMcpCapability({
       kind: 'mcp', serverUrl: 'http://tools.example.test/mcp', protocolVersion: '2025-06-18',
       tool: { name: 'lookup', inputSchema: inputSchema(), outputSchema: outputSchema() },
       contract: contractMetadata('independent.insecure'), commercial: commercialInput(), evidenceRefs: ['source:test'],
@@ -279,26 +411,53 @@ describe('capability publication importers', () => {
 
     const ambiguous = openApiDocument()
     ambiguous.servers.push({ url: 'https://other.example.test' })
-    expect(importOpenApiHttpCapability({
+    expect(await importOpenApiHttpCapability({
       kind: 'openapi_http', document: ambiguous, operation: { path: '/lookup', method: 'post' },
       contract: contractMetadata('independent.ambiguous'), commercial: commercialInput(), evidenceRefs: ['source:test'],
     })).toEqual({ kind: 'refused', reason: 'transport_unsupported' })
 
     expect(importX402Capability({
       kind: 'x402',
-      resource: { resourceUrl: 'https://api.example.test/lookup', inputSchema: inputSchema(), outputSchema: outputSchema(), price: { currency: 'USD', amountMinor: 1_200 } },
-      contract: contractMetadata('independent.price-conflict'), commercial: commercialInput(), evidenceRefs: ['source:test'],
+      resource: { resourceUrl: 'https://api.example.test/lookup', inputSchema: inputSchema(), outputSchema: outputSchema(), price: { currency: 'USD', units: '1200', exponent: 2 } },
+      contract: contractMetadata('independent.price-conflict'),
+      commercial: commercialInput({ authority: keylessAuthority }), evidenceRefs: ['source:test'],
     })).toEqual({ kind: 'refused', reason: 'commercial_metadata_inconsistent' })
   })
 
-  it('produces stable descriptor identity regardless of object key order', () => {
-    const first = importOpenApiHttpCapability({
+  it('refuses x402 prices that the payment asset cannot represent exactly', () => {
+    const result = importX402Capability({
+      kind: 'x402',
+      resource: {
+        resourceUrl: 'https://api.example.test/lookup',
+        inputSchema: inputSchema(),
+        outputSchema: outputSchema(),
+        price: { currency: 'USD', units: '7', exponent: 3 },
+        scheme: 'exact',
+        network: 'eip155:84532',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        routeAmountExponent: 2,
+        assetAmountExponent: 2,
+      },
+      contract: contractMetadata('independent.x402-unrepresentable'),
+      commercial: commercialInput({
+        price: { kind: 'fixed', amount: { currency: 'USD', units: '7', exponent: 3 } },
+        authority: providerAuthority,
+      }),
+      evidenceRefs: ['source:x402'],
+    })
+
+    expect(result).toEqual({ kind: 'refused', reason: 'transport_unsupported' })
+  })
+
+  it('produces stable descriptor identity regardless of object key order', async () => {
+    const first = await importOpenApiHttpCapability({
       kind: 'openapi_http', document: openApiDocument(), operation: { path: '/lookup', method: 'post' },
       contract: contractMetadata('independent.stable'), commercial: commercialInput(), evidenceRefs: ['source:test'],
     })
     const document = openApiDocument()
     const reordered = { paths: document.paths, servers: document.servers, info: document.info, openapi: document.openapi }
-    const second = importOpenApiHttpCapability({
+    const second = await importOpenApiHttpCapability({
       kind: 'openapi_http', document: reordered, operation: { path: '/lookup', method: 'post' },
       contract: contractMetadata('independent.stable'), commercial: commercialInput(), evidenceRefs: ['source:test'],
     })
@@ -320,8 +479,8 @@ describe('capability publication importers', () => {
     'https://169.254.169.254/latest/meta-data',
     'https://2130706433/lookup',
     'https://0x7f000001/lookup',
-  ])('rejects statically private transport target %s at import and admission', (endpointUrl) => {
-    expect(importMcpCapability({
+  ])('rejects statically private transport target %s at import and admission', async (endpointUrl) => {
+    expect(await importMcpCapability({
       kind: 'mcp', serverUrl: endpointUrl, protocolVersion: '2025-06-18',
       tool: { name: 'lookup', inputSchema: inputSchema(), outputSchema: outputSchema() },
       contract: contractMetadata('independent.private-target'),
@@ -329,7 +488,7 @@ describe('capability publication importers', () => {
     })).toEqual({ kind: 'refused', reason: 'transport_unsupported' })
 
     expect(admitRegisteredTransport({
-      adapterId: 'http-json:v1', endpointUrl, credentialRef: 'env:CAPABILITY_KEY',
+      adapterId: 'http-json:v1', endpointUrl, authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['transport:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['transport:no-cancellation'] },
       config: { method: 'POST', requestTimeoutMs: 5_000 },
@@ -362,13 +521,62 @@ function outputSchema() {
   return { $schema: JSON_SCHEMA, type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false }
 }
 
-function commercialInput(overrides: { price?: { kind: 'fixed'; currency: string; amountMinor: number } } = {}) {
+type MatchingX402Overrides = Readonly<{
+  resourceUrl?: string
+  network?: string
+  asset?: string
+  payTo?: string
+  amount?: string
+}>
+
+function matchingX402Import(overrides: MatchingX402Overrides = {}) {
+  const price = { currency: 'USD', units: '12345', exponent: 4 }
+  const network = 'eip155:84532'
+  const asset = '0x0000000000000000000000000000000000000001'
+  const payTo = '0x0000000000000000000000000000000000000002'
+  return {
+    kind: 'x402' as const,
+    resource: {
+      resourceUrl: 'https://api.example.test/lookup',
+      inputSchema: inputSchema(),
+      outputSchema: outputSchema(),
+      price,
+      scheme: 'exact',
+      network,
+      asset,
+      payTo,
+      routeAmountExponent: 4,
+      assetAmountExponent: 6,
+      paymentRequired: {
+        x402Version: 2 as const,
+        resource: { url: overrides.resourceUrl ?? 'https://api.example.test/lookup' },
+        accepts: [{
+          scheme: 'exact',
+          network: overrides.network ?? network,
+          amount: overrides.amount ?? '1234500',
+          asset: overrides.asset ?? asset,
+          payTo: overrides.payTo ?? payTo,
+          maxTimeoutSeconds: 60,
+          extra: {},
+        }],
+      },
+    },
+    contract: contractMetadata('independent.x402-payment-required'),
+    commercial: commercialInput({ price: { kind: 'fixed' as const, amount: price }, authority: providerAuthority }),
+    evidenceRefs: ['source:x402:payment-required'],
+  }
+}
+
+function commercialInput(overrides: {
+  price?: { kind: 'fixed'; amount: { currency: string; units: string; exponent: number } }
+  authority?: CapabilityTransportAuthority
+} = {}) {
   return {
     offering: {
       offeringId: 'offering:independent:lookup', networkId: 'ae:public',
       presentation: {
         label: 'Reference lookup', summary: 'Returns one structured result.',
-        price: overrides.price ?? { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1_200 },
+        price: overrides.price ?? { kind: 'fixed' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
         materialTerms: [],
         commercialRelationship: {
           kind: 'none' as const, summary: 'No commercial influence.', influencesEligibility: false,
@@ -377,7 +585,7 @@ function commercialInput(overrides: { price?: { kind: 'fixed'; currency: string;
       },
       searchTerms: ['reference'], registrationEvidenceRefs: ['registration:offering'],
     },
-    bindingId: 'binding:independent:lookup', credentialRef: 'env:CAPABILITY_KEY',
+    bindingId: 'binding:independent:lookup', authority: overrides.authority ?? providerAuthority,
     registrationEvidenceRefs: ['registration:binding'], requestTimeoutMs: 5_000,
   }
 }
@@ -385,7 +593,7 @@ function commercialInput(overrides: { price?: { kind: 'fixed'; currency: string;
 function directBinding() {
   return {
     bindingId: 'binding:independent:lookup', endpointUrl: 'https://api.example.test/lookup',
-    credentialRef: 'env:CAPABILITY_KEY',
+    authority: providerAuthority,
     continuation: { kind: 'single_response' as const, evidenceRefs: ['transport:response'] },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['transport:no-cancellation'] },
     adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },

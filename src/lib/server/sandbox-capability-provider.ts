@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
+import { problem } from '@/lib/server/problem'
 import { response as json } from '@/lib/server/no-store-response'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -80,7 +81,7 @@ export async function readSandboxRouteProviderDiscovery(
       method: 'POST',
       endpoint: endpoint.href,
       authentication: { scheme: 'bearer' },
-      maximumCost: money(profile.amountMinor),
+      maximumCost: profile.amount,
       inputSchema: profile.contract.inputSchema,
       outputSchema: profile.contract.outputSchema,
     },
@@ -101,8 +102,8 @@ export async function handleSandboxRouteProviderRequest(
   const body = await readBoundedRequestJson(request, MAX_BODY_BYTES)
   if (!body.ok) {
     return body.code === 'payload_too_large'
-      ? json({ kind: 'refused', reason: 'request_too_large' }, 413)
-      : json({ kind: 'refused', reason: 'request_invalid' }, 400)
+      ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large', detail: 'request_too_large' })
+      : problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
   }
   return await routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], body.value, request, options)
 }
@@ -112,7 +113,7 @@ export async function readSandboxWorkflowProviderDiscovery(
   request: Request,
 ): Promise<Response> {
   const profile = workflowProfile(providerKey)
-  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  if (profile === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'sandbox_profile_unknown', detail: 'sandbox_profile_unknown' })
   const endpoint = providerDiscoveryEndpoint(request)
   endpoint.searchParams.set('provider', providerKey)
   endpoint.hash = ''
@@ -125,7 +126,7 @@ export async function readSandboxWorkflowProviderDiscovery(
       method: 'POST',
       endpoint: endpoint.href,
       authentication: { scheme: 'bearer' },
-      maximumCost: money(profile.amountMinor),
+      maximumCost: profile.amount,
       inputSchema: workflowObjectSchema(
         profile.inputField,
         profile.decisionInputs,
@@ -148,19 +149,19 @@ export async function handleSandboxWorkflowProviderRequest(
   const authenticationFailure = authenticateSandboxProvider(request, options)
   if (authenticationFailure !== undefined) return authenticationFailure
   const profile = workflowProfile(providerKey)
-  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  if (profile === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'sandbox_profile_unknown', detail: 'sandbox_profile_unknown' })
   const body = await readBoundedRequestJson(request, MAX_BODY_BYTES)
   if (!body.ok) {
     return body.code === 'payload_too_large'
-      ? json({ kind: 'refused', reason: 'request_too_large' }, 413)
-      : json({ kind: 'refused', reason: 'request_invalid' }, 400)
+      ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large', detail: 'request_too_large' })
+      : problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
   }
   const probe = requestBody.safeParse(body.value)
   if (probe.success && probe.data.operation === 'quote') {
     if (
       probe.data.bindingId !== profile.bindingId
       || probe.data.capabilityContractId !== `sandbox.workflow.${providerKey}`
-    ) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+    ) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
     const quoteDigest = canonicalDigest({
       providerKey,
       bindingId: probe.data.bindingId,
@@ -168,8 +169,8 @@ export async function handleSandboxWorkflowProviderRequest(
     }).slice(7, 31)
     return json({
       kind: 'quoted',
-      expectedCost: money(profile.amountMinor),
-      maximumCost: money(profile.amountMinor),
+      expectedCost: profile.amount,
+      maximumCost: profile.amount,
       expectedLatencyMs: 50,
       dataFields: [],
       disclosures: [],
@@ -184,7 +185,7 @@ export async function handleSandboxWorkflowProviderRequest(
     profile.optionalInputs?.map(({ field }) => field) ?? [],
   )
   if (input === undefined) {
-    return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
   }
   const digest = canonicalDigest({
     cohortId: profile.cohortId,
@@ -195,9 +196,8 @@ export async function handleSandboxWorkflowProviderRequest(
   const providerDenialScenario = hasWorkflowProviderDenialScenario(input)
   const eventFailure = eventWorkflowFailure(providerKey, input)
   if (eventFailure !== undefined) {
-    return json(
-      { kind: 'refused', reason: eventFailure },
-      409,
+    return problem(
+      { status: 409, kind: 'ALREADY_EXISTS', code: eventFailure, detail: eventFailure },
       { 'Provider-Receipt': `sandbox-workflow-refusal:${providerKey}:${digest}` },
     )
   }
@@ -205,9 +205,8 @@ export async function handleSandboxWorkflowProviderRequest(
     profile.completionEvidence
     && providerDenialScenario
   ) {
-    return json(
-      { kind: 'refused', reason: 'sandbox_provider_declined' },
-      409,
+    return problem(
+      { status: 409, kind: 'ALREADY_EXISTS', code: 'sandbox_provider_declined', detail: 'sandbox_provider_declined' },
       { 'Provider-Receipt': `sandbox-workflow-denial:${providerKey}:${digest}` },
     )
   }
@@ -393,23 +392,23 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   const routeKey = url.searchParams.get('route') as SandboxRouteProviderProfileKey | null
   const routeProfile = routeKey === null ? undefined : SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey]
   const profile = SANDBOX_PROVIDER_PROFILES[url.searchParams.get('profile') as keyof typeof SANDBOX_PROVIDER_PROFILES]
-  if (profile === undefined && routeProfile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  if (profile === undefined && routeProfile === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'sandbox_profile_unknown', detail: 'sandbox_profile_unknown' })
   const bindingVersion = url.searchParams.get('binding')
   if (bindingVersion !== null && bindingVersion !== 'v2' && bindingVersion !== 'v3' && bindingVersion !== 'v4' && bindingVersion !== 'v5') {
-    return json({ kind: 'refused', reason: 'sandbox_binding_unknown' }, 404)
+    return problem({ status: 404, kind: 'NOT_FOUND', code: 'sandbox_binding_unknown', detail: 'sandbox_binding_unknown' })
   }
   const scenarioResult = scenarioValue.safeParse(url.searchParams.get('scenario') ?? 'success')
-  if (!scenarioResult.success) return json({ kind: 'refused', reason: 'sandbox_scenario_unknown' }, 400)
+  if (!scenarioResult.success) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'sandbox_scenario_unknown', detail: 'sandbox_scenario_unknown' })
   const scenario = scenarioResult.data
   const body = await readBoundedRequestJson(request, MAX_BODY_BYTES)
   if (!body.ok) {
     return body.code === 'payload_too_large'
-      ? json({ kind: 'refused', reason: 'request_too_large' }, 413)
-      : json({ kind: 'refused', reason: 'request_invalid' }, 400)
+      ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large', detail: 'request_too_large' })
+      : problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
   }
   const parsedJson = body.value
   if (routeKey !== null && routeProfile !== undefined) return routeProviderResponse(routeKey, routeProfile, parsedJson)
-  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  if (profile === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'sandbox_profile_unknown', detail: 'sandbox_profile_unknown' })
   const preparationEgress = preparationEgressBody.safeParse(parsedJson)
   if (preparationEgress.success) {
     const bindingId = bindingVersion === 'v5'
@@ -431,7 +430,7 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
     profile.priorV3BindingId, profile.v4BindingId,
   ]
   if (!parsed.success || !registeredBindingIds.includes(parsed.data.bindingId)) {
-    return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
   }
   if (scenario === 'refusal' && (parsed.data.operation === 'quote' || parsed.data.operation === 'structured_quote')) {
     return json({ kind: 'refused', reason: 'sandbox_deterministic_refusal' }, 200)
@@ -441,7 +440,7 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   }
 
   if (parsed.data.operation === 'quote') return json({
-    kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
+    kind: 'quoted', expectedCost: profile.amount, maximumCost: profile.amount,
     expectedLatencyMs: profile.latencyMs, dataFields: [], disclosures: [],
     providerQuoteRef: quoteRef(profile, parsed.data), providerQuoteExpiresAt: expiresAt(scenario),
   }, 200)
@@ -459,11 +458,14 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
 function authenticateSandboxProvider(request: Request, options: HandlerOptions): Response | undefined {
   const expectedKey = options.providerKey ?? process.env.AE_SANDBOX_PROVIDER_KEY?.trim()
   if (expectedKey === undefined || expectedKey.length === 0) {
-    return json({ kind: 'refused', reason: 'sandbox_provider_unconfigured' }, 503)
+    return problem({ status: 503, kind: 'UNAVAILABLE', code: 'sandbox_provider_unconfigured', detail: 'sandbox_provider_unconfigured' })
   }
   const presented = request.headers.get('Authorization')
   if (presented === null || !constantTimeStringEqual(presented, `Bearer ${expectedKey}`)) {
-    return json({ kind: 'refused', reason: 'authentication_required' }, 401)
+    return problem(
+      { status: 401, kind: 'UNAUTHENTICATED', code: 'authentication_required', detail: 'authentication_required' },
+      { 'WWW-Authenticate': 'Bearer', Vary: 'Authorization' },
+    )
   }
   return undefined
 }
@@ -488,13 +490,13 @@ async function routeProviderResponse(
   }
   const probe = requestBody.safeParse(input)
   if (probe.success && probe.data.operation === 'quote') return json({
-    kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
+    kind: 'quoted', expectedCost: profile.amount, maximumCost: profile.amount,
     expectedLatencyMs: 50, dataFields: [], disclosures: [],
     providerQuoteRef: `sandbox-route-quote:${routeKey}`, providerQuoteExpiresAt: SANDBOX_OFFER_EXPIRES_AT,
   }, 200)
   if (routeKey === 'resolver') {
     const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
-    if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+    if (!parsed.success) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
     const normalizedRequest = parsed.data.request.toLowerCase()
     rememberSandboxCancellationOutcome(
       request?.headers.get('Idempotency-Key'),
@@ -516,7 +518,7 @@ async function routeProviderResponse(
     return json({ serviceReference }, 200, { 'Provider-Receipt': `sandbox-resolver:${serviceReference}` })
   }
   const parsed = z.strictObject({ serviceReference: z.string().min(1) }).safeParse(input)
-  if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  if (!parsed.success) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'request_invalid', detail: 'request_invalid' })
   if (parsed.data.serviceReference.startsWith(UNKNOWN_ROUTE_REFERENCE_PREFIX)) {
     await (options.wait ?? waitForDelay)(10_100, request?.signal ?? new AbortController().signal)
   }
@@ -525,9 +527,8 @@ async function routeProviderResponse(
   }
   if (parsed.data.serviceReference.startsWith(PROVIDER_DENIAL_REFERENCE_PREFIX)) {
     const denialRef = `sandbox-quoter-denial:${canonicalDigest(parsed.data).slice(7, 31)}`
-    return json(
-      { kind: 'refused', reason: 'sandbox_provider_declined' },
-      409,
+    return problem(
+      { status: 409, kind: 'ALREADY_EXISTS', code: 'sandbox_provider_declined', detail: 'sandbox_provider_declined' },
       { 'Provider-Receipt': denialRef },
     )
   }
@@ -570,10 +571,12 @@ function rememberSandboxCancellationOutcome(
 function sandboxCancellationResponse(input: z.infer<typeof cancellationBody>): Response {
   const outcome = observedSandboxCancellationOutcomes.get(input.operationKeyDigest)
   if (outcome === undefined) {
-    return json({
-      kind: 'cancellation_unknown',
-      reason: 'sandbox_operation_not_observed',
-    }, 409)
+    return problem({
+      status: 409,
+      kind: 'ALREADY_EXISTS',
+      code: 'sandbox_operation_not_observed',
+      detail: 'sandbox_operation_not_observed',
+    })
   }
   const providerReference = `sandbox-cancellation:${outcome}:${canonicalDigest(input).slice(7, 31)}`
   if (outcome === 'accepted') {
@@ -594,15 +597,15 @@ function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>,
   const registrationHash = typeof body.registrationHash === 'string' ? body.registrationHash : undefined
   const environment = typeof body.environment === 'string' ? body.environment : undefined
   if (version === undefined || registrationHash === undefined || environment === undefined) {
-    return json({ kind: 'refused', reason: 'structured_quote_contract_incomplete' }, 400)
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'structured_quote_contract_incomplete', detail: 'structured_quote_contract_incomplete' })
   }
   return json({
     kind: 'quoted', issuerBindingId: body.bindingId, issuerNodeId: profile.nodeId,
     capabilityContractId: body.capabilityContractId, capabilityContractVersion: version, registrationHash, environment,
-    expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor), expectedLatencyMs: profile.latencyMs,
+    expectedCost: profile.amount, maximumCost: profile.amount, expectedLatencyMs: profile.latencyMs,
     dataFields: [], disclosures: [], providerQuoteRef: quoteRef(profile, body), providerQuoteExpiresAt: expiresAt(scenario),
     offerOutputs: [{ field: 'optionSummary', valueType: 'string', value: `${profile.label} — sandbox verification only` }],
-    priceComponents: [{ label: 'Sandbox quoted amount', amountMinor: profile.amountMinor }],
+    priceComponents: [{ label: 'Sandbox quoted amount', amount: profile.amount }],
     materialTerms: [{ key: 'sandbox', label: 'Supply status', value: 'Verification only; no real service or fulfilment.' }],
     cancellation: { kind: 'unsupported', summary: 'No cancellation is needed because this sandbox cannot create an effect.' },
   }, 200)
@@ -659,7 +662,6 @@ function waitForDelay(milliseconds: number, signal: AbortSignal): Promise<void> 
   })
 }
 
-function money(amountMinor: number) { return { currency: 'AUD', amountMinor } }
 
 function workflowProfile(providerKey: string) {
   return SANDBOX_WORKFLOW_PROVIDER_PROFILES[providerKey as SandboxWorkflowProviderKey]

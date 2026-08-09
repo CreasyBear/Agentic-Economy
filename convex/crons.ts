@@ -4,6 +4,12 @@ import { internal } from './_generated/api'
 
 const crons = cronJobs()
 
+crons.interval(
+  'refresh capability supply readiness',
+  { minutes: 1 },
+  internal.capabilitySupply.scheduleDueCapabilityProbes,
+  {}
+)
 
 crons.interval(
   'cleanup expired inquiry abuse buckets',
@@ -26,11 +32,5 @@ crons.interval(
   {}
 )
 
-crons.interval(
-  'refresh due capability provider readiness',
-  { minutes: 1 },
-  internal.capabilitySupply.scheduleDueCapabilityProbes,
-  {},
-)
 
 export default crons

@@ -1,3 +1,6 @@
+import type { CustomerRequestCanonicalClaimMaterial } from '@/modules/action-invocation'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   routeAttemptIntegrityValid,
   routeDispatchIntegrityValid,
@@ -83,9 +86,9 @@ export function dispatchLifecyclePorts(ctx: MutationCtx): DispatchLifecyclePorts
 }
 
 export function dispatchLifecycleOpenPorts(ctx: QueryCtx | MutationCtx): DispatchLifecycleOpenPorts {
+  const now = Date.now()
   return {
-    now: () => Date.now(),
-
+    now: () => now,
     loadDispatchByRef: async (dispatchRef) => {
       const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
         .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', dispatchRef)).unique()
@@ -97,13 +100,18 @@ export function dispatchLifecycleOpenPorts(ctx: QueryCtx | MutationCtx): Dispatc
         .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attemptRef)).unique()
       return attempt === null ? null : toAttemptRecord(attempt)
     },
+    loadRunByRef: async (runRef) => {
+      const run = await ctx.db.query('customerRequestRouteRuns')
+        .withIndex('by_runRef', (query) => query.eq('runRef', runRef)).unique()
+      return run === null ? null : toRunRecord(run)
+    },
 
     loadActiveMandateForPrincipal: async (requestId, principalId, now) => (
       await loadActiveRouteMandate(ctx, requestId, principalId, now)
     ),
 
     loadEligibleExactCapabilitySupply: async (input) => (
-      await loadEligibleRouteSupply(ctx, input)
+      await loadEligibleRouteSupply(ctx, { ...input, now })
     ),
 
     loadPublicationAtRevision: async (publicationRef, revision) => {
@@ -122,14 +130,19 @@ export async function openDispatchFromJournal(
   const now = ports.now()
   const dispatch = await ports.loadDispatchByRef(args.dispatchRef)
   const attempt = dispatch === null ? null : await ports.loadAttemptByRef(dispatch.attemptRef)
-  if (dispatch === null || attempt === null || dispatch.state !== 'pending'
+  const run = dispatch === null ? null : await ports.loadRunByRef(dispatch.runRef)
+  if (dispatch === null || attempt === null || run === null || dispatch.state !== 'pending'
     || attempt.state !== 'queued' || dispatch.attemptRef !== attempt.attemptRef
-    || dispatch.runRef !== attempt.runRef
+    || dispatch.runRef !== attempt.runRef || dispatch.runRef !== run.runRef
+    || run.requestId !== attempt.requestId || run.principalId !== attempt.grant.principalId
     || dispatch.operationKeyDigest !== attempt.operationKeyDigest
     || !routeDispatchIntegrityValid(dispatch) || !routeAttemptIntegrityValid(attempt)
     || attempt.grant.grantRef !== `route-step-grant:v1:${attempt.grant.grantDigest}`
     || routeStepGrantDigest(attempt.grant) !== attempt.grant.grantDigest
     || attempt.grant.expiresAt <= now) {
+    return { kind: 'unavailable' }
+  }
+  if (dispatch.leaseOwner === undefined || dispatch.leaseExpiresAt === undefined) {
     return { kind: 'unavailable' }
   }
   const mandate = await ports.loadActiveMandateForPrincipal(
@@ -147,6 +160,7 @@ export async function openDispatchFromJournal(
     contractRef: attempt.grant.step.contractRef,
     expectedOfferingRegistrationHash: attempt.grant.step.offeringRegistrationHash,
     expectedBindingRegistrationHash: attempt.grant.step.bindingRegistrationHash,
+    now,
   })
   if (supply.kind !== 'available') return { kind: 'unavailable' }
   const publication = await ports.loadPublicationAtRevision(
@@ -167,10 +181,99 @@ export async function openDispatchFromJournal(
     || publication.readinessValidUntil < now) {
     return { kind: 'unavailable' }
   }
+  const acceptedBasis = mandate.mandate.authorization.kind === 'explicit'
+    ? {
+        kind: 'customer_request_mandate_use' as const,
+        mandateRef: mandate.mandate.mandateRef,
+        mandateDigest: mandate.mandate.mandateDigest,
+        requestRevision: mandate.mandate.request.requestRevision,
+        routeGeneration: mandate.mandate.route.generation,
+        authorization: {
+          kind: 'explicit' as const,
+          authorizationEvidenceRef: mandate.mandate.authorization.authorizationEvidenceRef,
+          authorizationEvidenceDigest: mandate.mandate.authorization.authorizationEvidenceDigest,
+        },
+        grantRef: attempt.grant.grantRef,
+        grantDigest: attempt.grant.grantDigest,
+      }
+    : {
+        kind: 'customer_request_mandate_use' as const,
+        mandateRef: mandate.mandate.mandateRef,
+        mandateDigest: mandate.mandate.mandateDigest,
+        requestRevision: mandate.mandate.request.requestRevision,
+        routeGeneration: mandate.mandate.route.generation,
+        authorization: {
+          kind: 'standing_low_risk' as const,
+          standingPolicyRef: mandate.mandate.authorization.standingPolicyRef,
+          standingPolicyDigest: mandate.mandate.authorization.standingPolicyDigest,
+          authorityUseRef: mandate.mandate.authorization.authorityUseRef,
+        },
+        grantRef: attempt.grant.grantRef,
+        grantDigest: attempt.grant.grantDigest,
+      }
+  const targetDigest = canonicalDigest({
+    kind: 'dispatch',
+    operationRef: attempt.grant.step.operationRef,
+    admittedOperation: attempt.grant.step.admittedOperation,
+    publicationRef: attempt.grant.step.publicationRef,
+    publicationRevision: attempt.grant.step.publicationRevision,
+    bindingId: attempt.grant.step.bindingId,
+    bindingRegistrationHash: attempt.grant.step.bindingRegistrationHash,
+    adapterId: supply.binding.adapterId,
+    configDigest: supply.binding.configDigest,
+    endpointUrl: supply.binding.endpointUrl,
+  } as StableHashValue)
+  const canonical = {
+    invocationRef: `action-invocation:customer-request-route:${dispatch.dispatchRef}`,
+    sourceRef: dispatch.dispatchRef,
+    invocationVersion: 1,
+    actor: {
+      callerRef: 'runtime:customer-request-route-worker',
+      principalRef: attempt.grant.principalId,
+    },
+    origin: {
+      kind: 'request_owned' as const,
+      requestRef: run.requestId,
+      revision: run.requestRevision,
+    },
+    action: {
+      id: attempt.grant.step.actionId,
+      contractVersion: String(attempt.grant.step.contractRef.version),
+    },
+    materialInputDigest: attempt.inputDigest,
+    authority: {
+      reference: attempt.grant.grantRef,
+      decisionDigest: attempt.grant.grantDigest,
+      targetDigest,
+      consequence: `customer_request_route_step:${canonicalDigest(
+        attempt.grant.step.effects as StableHashValue,
+      )}`,
+      limits: { amount: { ...attempt.grant.step.maximumSpend } },
+      expiresAt: new Date(attempt.grant.expiresAt).toISOString(),
+      acceptedBasis,
+    },
+    attempt: {
+      attemptRef: attempt.attemptRef,
+      attemptNumber: 1,
+      effectGeneration: 1,
+      operationKey: dispatch.operationKeyDigest,
+      leaseOwner: dispatch.leaseOwner,
+      leaseExpiresAt: new Date(dispatch.leaseExpiresAt).toISOString(),
+    },
+    recordedAt: new Date(dispatch.createdAt).toISOString(),
+  } satisfies CustomerRequestCanonicalClaimMaterial
   const invocation: DispatchInvocation = {
     dispatchRef: dispatch.dispatchRef,
     attemptRef: attempt.attemptRef,
     runRef: attempt.runRef,
+    requestId: attempt.requestId,
+    requestRevision: run.requestRevision,
+    principalId: attempt.grant.principalId,
+    mandateRef: attempt.grant.mandateRef,
+    grantRef: attempt.grant.grantRef,
+    authorityDigest: attempt.grant.authorityDigest,
+    actionId: attempt.grant.step.actionId,
+    position: attempt.grant.step.position,
     operationKeyDigest: attempt.operationKeyDigest,
     inputJson: attempt.inputJson,
     inputDigest: attempt.inputDigest,
@@ -182,6 +285,7 @@ export async function openDispatchFromJournal(
       maximumSpend: { ...attempt.grant.step.maximumSpend },
       expiresAt: attempt.grant.expiresAt,
     },
+    canonical,
   }
   return { kind: 'available', invocation }
 }

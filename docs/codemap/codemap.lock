@@ -1,0 +1,42 @@
+{
+  "commit": "4a17c63e0d201d29c5c18a3a6cb7e776609f7258",
+  "working_tree_clean": false,
+  "generated_at": "2026-08-05T22:33:21+08:00",
+  "scanned_scope": [
+    "convex",
+    "src",
+    "tests",
+    "eval",
+    "tools",
+    "scripts",
+    "docs",
+    ".planning",
+    "__root__"
+  ],
+  "excluded_directories": [
+    "vendor",
+    "node_modules",
+    "dist",
+    "build",
+    "cache",
+    "output",
+    "test-results",
+    "playwright-report",
+    ".convex/local",
+    ".vercel",
+    ".git",
+    ".promptfoo-home"
+  ],
+  "fingerprint_algorithm": "sha256 over each git-tracked file's path + current working-tree contents, sorted by path, concatenated as 'path\\n<contents>\\n'",
+  "modules": {
+    ".planning": "7d2fd9f1d6b12a2bf814c59383bdb6c792c6e13e4476d805020efe7902916c7d",
+    "__root__": "864769294085242fe874676d3443d2dd4acfd8e5ad0d47b6e69034075b42ac0f",
+    "convex": "b4e99dd2a7783fa9976891a1294660ba6ab50a3b934ef58d74520b0a0b4632a5",
+    "docs": "a370ee663f34ae63f7ca3ee0089137f0cd62f94bdeb74bc6bdfb68bf4642f4b2",
+    "eval": "b0d8f8d8724e2daeb787ef865fa1a30d0a9eb89a128a644dee7a679042ed1e3b",
+    "scripts": "a44074fee4a9dab2e185ae63a7578bd2d77c478d97edd85ee406827c021d27ad",
+    "src": "23164d2ebe38ff1164998448e6f9eb34ce2bd72cebcd10dd2846d263609c7dc4",
+    "tests": "35a53deba5afa209bb08d4caa4dff3ce86b9cf3c01599cd674f7bf5362b26bce",
+    "tools": "f71dd8aeb863df44ed0b020db486afad0d0205db3b5b90741e45f9dc5f8afda6"
+  }
+}

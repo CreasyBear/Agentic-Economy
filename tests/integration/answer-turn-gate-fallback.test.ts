@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import {
+  createAnswerThreadTestStore,
+  installAnswerThreadTestPort,
+} from '../helpers/answer-thread-test-port'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import {
   openRouterToolThenProseResponses,
@@ -30,17 +34,9 @@ describe('POST /api/answer/turn gate failure', () => {
     }))
     const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
-
-    setAnswerThreadPortForTests({
-      createThread: async (args) => ({ threadId: args.threadId }),
-      appendTurn: async (args) => {
-        turns.push(args)
-        return { turnId: args.turnId }
-      },
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
-    })
+    const store = createAnswerThreadTestStore()
+    store.persisted = turns
+    installAnswerThreadTestPort(store)
 
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -50,7 +46,7 @@ describe('POST /api/answer/turn gate failure', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'gate-fallback:paramata' },
           body: JSON.stringify({ query: 'paramata' }),
         }),
       )
@@ -66,14 +62,14 @@ describe('POST /api/answer/turn gate failure', () => {
         throw new Error('expected complete event')
       }
       expect(lastEvent.answer.providers).toEqual([])
-      expect(lastEvent.answer.oneLine).toContain('No matching listed business was found')
+      expect(lastEvent.answer.oneLine).toContain('No businesses match')
 
       expect(turns).toHaveLength(1)
       const turn = turns[0] as { status: string; errorCopyId?: string; proseJson: string }
       expect(turn.status).toBe('complete')
       expect(turn.errorCopyId).toBeUndefined()
       expect(JSON.parse(turn.proseJson)).toMatchObject({
-        oneLine: expect.stringContaining('No matching listed business was found'),
+        oneLine: expect.stringContaining('No businesses match'),
       })
       // Rejected model prose never reaches the stream or durable turn.
       expect(turn.proseJson).not.toContain('Ignore previous instructions')

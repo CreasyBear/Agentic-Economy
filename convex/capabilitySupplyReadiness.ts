@@ -3,9 +3,13 @@
 import { Agent, fetch as guardedFetch } from 'undici'
 import { v } from 'convex/values'
 import type { RegisteredAction } from 'convex/server'
-
-import { runCapabilityReadinessProbe } from '@/modules/capability-supply/public'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import {
+  runCapabilityReadinessProbe,
+  type CapabilityConnectionAuthoritySnapshot,
+  type CapabilityTransportAuthority,
+} from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
@@ -30,7 +34,20 @@ type ProbeRecordResult =
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
 type ProbeResult = ProbeRecordResult | { kind: 'unavailable' }
 type ProbeArgs = { publicationRef: string; expectedRevision: number }
-type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; probeQuery: Array<{ parameter: string; value: string }>; probeMethod: 'GET' | 'HEAD'; targetDigest: string }
+type Target = {
+  publicationRef: string
+  revision: number
+  bindingId: string
+  capabilityId: string
+  endpointUrl: string
+  authority: CapabilityTransportAuthority
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
+  adapterId: string
+  probeQuery: Array<{ parameter: string; value: string }>
+  probeInputJson?: string
+  outputSchemaJson?: string
+  targetDigest: string
+}
 
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
@@ -72,7 +89,29 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
     if (result.kind !== 'available') return { kind: 'unavailable' as const }
     const target: Target = result.target
     const observation = await runCapabilityReadinessProbe(target, {
-      resolveCredential: async (reference) => resolveCredential(reference),
+      resolveProviderConnectionCredential: async (authority) => {
+        const expected = target.connectionAuthority
+        if (authority.kind !== 'provider_connection' || expected === undefined
+          || authority.connectionRef !== expected.connectionRef
+          || authority.providerRef !== expected.providerRef) return undefined
+        const row = await ctx.runQuery(internal.capabilityProviderConnections.read, {
+          connectionRef: expected.connectionRef,
+        })
+        if (row === null
+          || row.providerRef !== expected.providerRef
+          || row.adapterId !== expected.adapterId
+          || row.authorityGeneration !== expected.authorityGeneration
+          || row.authorityDigest !== expected.authorityDigest
+          || [...row.grantedScopes].sort().join('\u0000') !== [...expected.grantedScopes].sort().join('\u0000')
+          || [...row.grantedResources].sort().join('\u0000') !== [...expected.grantedResources].sort().join('\u0000')) return undefined
+        const resolved = await ctx.runQuery(internal.capabilityProviderConnections.resolveCredentialRef, {
+          connectionRef: expected.connectionRef,
+          expectedAuthorityGeneration: expected.authorityGeneration,
+          expectedAuthorityDigest: expected.authorityDigest,
+          now: Date.now(),
+        })
+        return resolved.kind === 'resolved' ? resolved.credentialRef : undefined
+      },
       validateTarget: async (url) => isPublicHttpTarget(url, defaultDnsResolver),
       send: sendGuarded,
     })
@@ -87,16 +126,10 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
   },
 })
 
-function resolveCredential(reference: string): string | undefined {
-  // Credential names are stored data (`env:NAME`), so generated typed env access cannot express this lookup.
-  const match = /^env:([A-Z][A-Z0-9_]{1,199})$/.exec(reference)
-  return match?.[1] === undefined ? undefined : process.env[match[1]]
-}
-
 async function sendGuarded(request: Request): Promise<Response> {
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   try {
-    const response = await guardedFetch(request.url, {
+    const upstream = await guardedFetch(request.url, {
       method: request.method,
       headers: Object.fromEntries(request.headers.entries()),
       ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.text() }),
@@ -104,10 +137,10 @@ async function sendGuarded(request: Request): Promise<Response> {
       signal: request.signal,
       dispatcher,
     })
-    const body = await readBoundedResponse(response, 64 * 1024)
-    return new Response(body.ok ? body.bytes : null, {
-      status: body.ok ? response.status : 413,
-      headers: body.ok ? Object.fromEntries(response.headers.entries()) : {
+    const body = await readBoundedRequestText(upstream, 64 * 1024)
+    return new Response(body.ok ? body.text : null, {
+      status: body.ok ? upstream.status : 413,
+      headers: body.ok ? Object.fromEntries(upstream.headers.entries()) : {
         'Content-Type': 'text/plain', 'X-AE-Probe-Outcome': 'response_too_large',
       },
     })
@@ -116,27 +149,3 @@ async function sendGuarded(request: Request): Promise<Response> {
   }
 }
 
-async function readBoundedResponse(response: Awaited<ReturnType<typeof guardedFetch>>, limit: number) {
-  const declared = Number(response.headers.get('content-length'))
-  if (Number.isFinite(declared) && declared > limit) {
-    await response.body?.cancel().catch(() => undefined)
-    return { ok: false as const }
-  }
-  if (response.body === null) return { ok: true as const, bytes: new Uint8Array() }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    for (;;) {
-      const item = await reader.read()
-      if (item.done) break
-      total += item.value.byteLength
-      if (total > limit) { await reader.cancel(); return { ok: false as const } }
-      chunks.push(item.value)
-    }
-  } finally { reader.releaseLock() }
-  const bytes = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
-  return { ok: true as const, bytes }
-}

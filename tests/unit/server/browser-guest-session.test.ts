@@ -13,6 +13,11 @@ import {
   readBrowserGuestSession,
   resolveBrowserGuestSession,
 } from '@/lib/server/browser-guest-session'
+import {
+  BROWSER_GUEST_LIFETIME_SECONDS,
+  mintBrowserGuestAssertion,
+  verifyBrowserGuestAssertion,
+} from '@/lib/server/browser-guest-assertion'
 
 const signingKey = 'browser-guest-session-signing-key-for-unit-tests'
 const issuedAt = 1_754_000_000_000
@@ -163,5 +168,35 @@ describe('browser guest session seam', () => {
       writeCookie,
     })).resolves.toBeUndefined()
     expect(writeCookie).not.toHaveBeenCalled()
+  })
+
+  it('preserves signed bytes, lifetime/skew boundaries, and the derived principal', async () => {
+    const assertion = await mintBrowserGuestAssertion(signingKey, {
+      sessionId: firstSessionId,
+      issuedAt,
+    })
+    expect(assertion).toBe(
+      'v1.123e4567-e89b-42d3-a456-426614174000.1754000000000.iztw1U5BmyCzy5AyPR_S2UlVOHN7GMYJ1iec0HmczEk',
+    )
+
+    const expected = {
+      sessionId: firstSessionId,
+      issuedAt,
+      principalId: principal(firstSessionId),
+    }
+    await expect(verifyBrowserGuestAssertion(signingKey, assertion, { now: () => issuedAt })).resolves.toEqual(expected)
+    await expect(verifyBrowserGuestAssertion(signingKey, assertion, {
+      now: () => issuedAt + BROWSER_GUEST_LIFETIME_SECONDS * 1_000,
+    })).resolves.toEqual(expected)
+    await expect(verifyBrowserGuestAssertion(signingKey, assertion, {
+      now: () => issuedAt + BROWSER_GUEST_LIFETIME_SECONDS * 1_000 + 1,
+    })).resolves.toBeUndefined()
+    await expect(verifyBrowserGuestAssertion(signingKey, assertion, { now: () => issuedAt - 5_000 })).resolves.toEqual(expected)
+    await expect(verifyBrowserGuestAssertion(signingKey, assertion, { now: () => issuedAt - 5_001 })).resolves.toBeUndefined()
+
+    const tampered = `${assertion.slice(0, -1)}${assertion.endsWith('A') ? 'B' : 'A'}`
+    await expect(verifyBrowserGuestAssertion(signingKey, tampered, { now: () => issuedAt })).resolves.toBeUndefined()
+    await expect(verifyBrowserGuestAssertion(signingKey, `${assertion}.extra`, { now: () => issuedAt }))
+      .resolves.toBeUndefined()
   })
 })

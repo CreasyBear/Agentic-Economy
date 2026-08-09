@@ -10,11 +10,11 @@ import { stableStringify } from '../src/modules/common/stable-hash'
 import { isRecord } from '../src/modules/common/is-record'
 import {
   applyGardenerVerb,
+  assessWorkTreeDecisionPolicy,
   GardenerVerbError,
   gardenerPayloadDigest,
   gardenerVerbDigest,
   gardenerVerbSchema,
-  assessWorkTreeDecisionPolicy,
   workTreeNodeAuthorityAmount,
   workTreeSchema,
   type GardenerEventKind,
@@ -22,7 +22,7 @@ import {
   type WorkTree,
   type WorkTreeApprovalAuthority,
   type WorkTreeApprovalRefusalCode,
-} from '../src/modules/work-tree/public'
+} from '../src/modules/work-tree/convex'
 import { customerRouteRef } from '../src/modules/customer-request/route-plan-customer-projection'
 import {
   readBrowserGuestSigningKey,
@@ -36,13 +36,18 @@ import {
   consumeWorkTreeApproval,
 } from './workTreeApprovals'
 import { persistWorkTreeRepeatPermission } from './workTreeRepeatLedger'
-import { evaluateLiveMoneyGate } from '../src/modules/money/public'
+import { evaluateLiveMoneyGate, compareExactAmounts, exactAmountSchema, type ExactAmount } from '../src/modules/money/public'
 
 export const MAX_WORK_TREE_EVENTS = 256
 export const MAX_WORK_TREE_SNAPSHOT_BYTES = 524_288
 const MAX_WORK_TREE_EVENT_PAYLOAD_BYTES = 600_000
 const encoder = new TextEncoder()
 
+const exactAmountArg = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
 const timingArg = v.object({
   certainty: v.union(v.literal('fixed'), v.literal('window'), v.literal('fog')),
   date: v.optional(v.string()),
@@ -50,10 +55,9 @@ const timingArg = v.object({
   leadTimeDays: v.optional(v.number()),
 })
 const costArg = v.object({
-  currency: v.string(),
-  estimateMinor: v.optional(v.number()),
-  committedMinor: v.optional(v.number()),
-  envelopeMinor: v.optional(v.number()),
+  estimate: v.optional(exactAmountArg),
+  committed: v.optional(exactAmountArg),
+  envelope: v.optional(exactAmountArg),
 })
 const resourceArg = v.object({
   owner: v.union(v.literal('agent'), v.literal('human'), v.literal('business')),
@@ -166,7 +170,7 @@ const workTreeClaimArgs = {
 }
 const workTreeApprovalAuthorityArg = v.object({
   kind: v.literal('per_item'),
-  amount: v.optional(v.object({ currency: v.string(), amountMinor: v.number() })),
+  amount: v.optional(exactAmountArg),
 })
 const workTreeStepUpArg = v.object({
   acknowledgedConsequence: v.literal(true),
@@ -177,8 +181,8 @@ const workTreeStepUpArg = v.object({
 const workTreeRepeatGrantArg = v.object({
   delegatedCredentialId: v.string(),
   occurrences: v.number(),
-  perUseSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
-  cumulativeSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+  perUseSpend: exactAmountArg,
+  cumulativeSpend: exactAmountArg,
   perUseDataAllocations: v.number(),
   cumulativeDataAllocations: v.number(),
   validUntil: v.number(),
@@ -186,19 +190,24 @@ const workTreeRepeatGrantArg = v.object({
 const validRepeatGrant = (grant: WorkTreeDecisionArgs['repeatGrant']): boolean => {
   if (grant === undefined) return true
   const safeFinite = (value: number): boolean => Number.isSafeInteger(value) && Number.isFinite(value)
+  const perUseValid = exactAmountSchema.safeParse(grant.perUseSpend).success
+  const cumulativeValid = exactAmountSchema.safeParse(grant.cumulativeSpend).success
+  const spendComparison = compareExactAmounts(grant.perUseSpend, grant.cumulativeSpend)
   return safeFinite(grant.occurrences)
     && grant.occurrences > 0
-    && safeFinite(grant.perUseSpend.amountMinor)
-    && grant.perUseSpend.amountMinor >= 0
-    && safeFinite(grant.cumulativeSpend.amountMinor)
-    && grant.cumulativeSpend.amountMinor >= 0
-    && grant.perUseSpend.amountMinor <= grant.cumulativeSpend.amountMinor
+    && perUseValid
+    && cumulativeValid
+    && spendComparison !== undefined
+    && spendComparison !== 1
     && safeFinite(grant.perUseDataAllocations)
     && grant.perUseDataAllocations >= 0
     && safeFinite(grant.cumulativeDataAllocations)
     && grant.cumulativeDataAllocations >= 0
     && grant.perUseDataAllocations <= grant.cumulativeDataAllocations
     && safeFinite(grant.validUntil)
+}
+function isPositiveExactAmount(amount: ExactAmount): boolean {
+  return compareExactAmounts(amount, { ...amount, units: '0' }) === 1
 }
 const workTreeDecisionArgs = {
   projectId: v.string(),
@@ -366,8 +375,8 @@ type WorkTreeDecisionArgs = Readonly<{
   repeatGrant?: Readonly<{
     delegatedCredentialId: string
     occurrences: number
-    perUseSpend: Readonly<{ currency: string; amountMinor: number }>
-    cumulativeSpend: Readonly<{ currency: string; amountMinor: number }>
+    perUseSpend: ExactAmount
+    cumulativeSpend: ExactAmount
     perUseDataAllocations: number
     cumulativeDataAllocations: number
     validUntil: number
@@ -400,6 +409,8 @@ async function decideWorkTree(
   const current = await findCurrentTree(ctx, args.projectId)
   if (current === null) return decisionRefusal(ctx, args, 'not_found', undefined, caller)
   const commandDigest = decisionCommandDigest(args)
+  const receiptId = decisionReceiptId(args, commandDigest)
+  const now = Date.now()
   if (!callerMayOperate(current, caller)) {
     return decisionRefusal(ctx, args, 'forbidden', current, caller, commandDigest)
   }
@@ -435,6 +446,7 @@ async function decideWorkTree(
     return decisionRefusal(ctx, args, 'not_found', current, caller, commandDigest)
   }
   const decisionPolicy = assessWorkTreeDecisionPolicy(target, 'lock')
+  const protectedLock = args.kind === 'lock' && decisionPolicy.requiresStepUp
   if (args.kind === 'lock' && decisionPolicy.paid) {
     const liveMoneyGate = evaluateLiveMoneyGate()
     if (liveMoneyGate.kind === 'refused') {
@@ -444,21 +456,17 @@ async function decideWorkTree(
       return decisionRefusal(ctx, args, refusalCode, current, caller, commandDigest)
     }
   }
-  const protectedLock = args.kind === 'lock' && decisionPolicy.requiresStepUp
-  const now = Date.now()
-  const receiptId = decisionReceiptId(args, commandDigest)
   if (args.repeatGrant !== undefined && (
     args.kind !== 'lock'
     || caller.source !== 'human_source'
     || protectedLock
     || !decisionPolicy.eligibleForRepeatPermission
     || (!decisionPolicy.paid && (
-      args.repeatGrant.perUseSpend.amountMinor > 0
-      || args.repeatGrant.cumulativeSpend.amountMinor > 0
+      isPositiveExactAmount(args.repeatGrant.perUseSpend)
+      || isPositiveExactAmount(args.repeatGrant.cumulativeSpend)
     ))
     || args.repeatGrant.validUntil <= now
-    || args.repeatGrant.perUseSpend.currency !== args.repeatGrant.cumulativeSpend.currency
-    || args.repeatGrant.perUseSpend.amountMinor > args.repeatGrant.cumulativeSpend.amountMinor
+    || compareExactAmounts(args.repeatGrant.perUseSpend, args.repeatGrant.cumulativeSpend) !== 0
     || args.repeatGrant.perUseDataAllocations > args.repeatGrant.cumulativeDataAllocations
   )) {
     return decisionRefusal(ctx, args, 'forbidden', current, caller, commandDigest)

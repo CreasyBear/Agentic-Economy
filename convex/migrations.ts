@@ -17,7 +17,7 @@ const batchResult = v.object({
 /**
  * One-time widen/migrate/narrow bridge for publications created before
  * admitted operation identity and publisher provenance became mandatory.
- * Safe to replay: complete rows are not rewritten.
+ * Safe to replay: rows with canonical operation refs and complete provenance are not rewritten.
  */
 export const backfillCapabilityPublicationIdentity = internalMutation({
   args: { cursor: v.optional(v.string()), batchSize: v.optional(v.number()) },
@@ -36,7 +36,17 @@ export const backfillCapabilityPublicationIdentity = internalMutation({
         authorityMode: 'provider_owned' | 'ae_curated_external'
         provenanceDigest: string
       }>
-      if (legacy.operationRef !== undefined
+      const operationRef = createPublicOperationRef({
+        operationId: capabilityOperationId(publication.capabilityId),
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        contractRef: {
+          capabilityId: publication.capabilityId,
+          version: publication.version,
+          contractDigest: publication.contractDigest,
+        },
+      })
+      if (legacy.operationRef === operationRef
         && legacy.sourceRevision !== undefined
         && legacy.publisherRef !== undefined
         && legacy.authorityMode !== undefined
@@ -48,16 +58,7 @@ export const backfillCapabilityPublicationIdentity = internalMutation({
       const publisherRef = legacy.publisherRef ?? `legacy-owner:${String(business.ownerId)}`
       const authorityMode = legacy.authorityMode ?? 'provider_owned'
       await ctx.db.patch(publication._id, {
-        operationRef: legacy.operationRef ?? createPublicOperationRef({
-          operationId: capabilityOperationId(publication.capabilityId),
-          publicationRef: publication.publicationRef,
-          publicationRevision: publication.revision,
-          contractRef: {
-            capabilityId: publication.capabilityId,
-            version: publication.version,
-            contractDigest: publication.contractDigest,
-          },
-        }),
+        operationRef,
         sourceRevision,
         publisherRef,
         authorityMode,

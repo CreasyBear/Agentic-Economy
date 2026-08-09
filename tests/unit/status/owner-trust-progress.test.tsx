@@ -15,6 +15,16 @@ afterEach(cleanup)
 
 const businessId = brandNonEmpty('business:status-card', 'BusinessId')
 const slug = brandNonEmpty('status-card-plumbing', 'Slug')
+const offeringRef = brandNonEmpty('offering:status-card-plumbing:emergency-plumbing', 'OfferingRef')
+const accessPathRef = brandNonEmpty(
+  'access:status-card-plumbing:emergency-plumbing:inquiry',
+  'AccessPathRef',
+)
+const inquiryPathDescriptor = {
+  kind: 'human_request' as const,
+  channel: 'ae_inquiry' as const,
+  disclosure: 'Use the inquiry form for first contact.',
+}
 
 const blockerExpectations = [
   {
@@ -89,13 +99,42 @@ describe('owner request admission', () => {
       expect(screen.queryByRole('link', { name: blocker.ownerLabel })).toBeNull()
     }
   })
+  it('labels local fixture readbacks as preview and withholds discoverable controls', () => {
+    const readback = ownerReadback({
+      version: R1TargetAdmissionVersion,
+      admitted: true,
+      proof: {
+        kind: 'claimed_owner',
+        claimRef: 'claim:status-card-plumbing',
+        recipientRef: 'recipient:status-card-plumbing',
+      },
+    })
+
+    render(
+      <AeStatusCard
+        readback={{
+          ...readback,
+          projectionMode: 'local_preview',
+          nextAction: 'Preview only. Connect the public source before sharing this page.',
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Preview')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open preview' }).getAttribute('href')).toBe('/status-card-plumbing')
+    expect(screen.queryByRole('button', { name: 'Copy public URL' })).toBeNull()
+    expect(screen.queryByText('Your business page can receive requests.')).toBeNull()
+    expect(screen.getByText('Preview can receive requests in local testing only.')).toBeTruthy()
+  })
 })
+
 
 function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteReadback {
   return {
     admission,
     publicUrl: '/status-card-plumbing',
     noindex: true,
+    projectionMode: 'public_source',
     catalog: {
       schemaVersion: 'public-business-catalog-api:v2',
       businessId,
@@ -111,7 +150,7 @@ function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteRead
       photos: [],
       offerings: [
         {
-          offeringRef: 'offering:status-card-plumbing:emergency-plumbing',
+          offeringRef,
           revision: 1,
           name: 'Emergency plumbing',
           category: 'Emergency plumbing',
@@ -120,10 +159,9 @@ function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteRead
           availabilitySummary: 'Hours supplied by owner',
           accessPaths: [
             {
-              accessPathRef: 'access:status-card-plumbing:emergency-plumbing:inquiry',
-              kind: 'human_request',
-              channel: 'ae_inquiry',
-              disclosure: 'Use the inquiry form for first contact.',
+              accessPathRef,
+              offeringRevision: 1,
+              ...inquiryPathDescriptor,
             },
           ],
           support: {

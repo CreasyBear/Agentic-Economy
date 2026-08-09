@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildAnswerTurnProblem } from '@/lib/errors'
 
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import {
+  createAnswerThreadTestStore,
+  installAnswerThreadTestPort,
+  sessionCookieHeader,
+} from '../helpers/answer-thread-test-port'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { handleStopAnswerTurnRequest } from '@/routes/api.answer.turn.stop'
 
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 import {
@@ -39,17 +46,8 @@ describe('POST /api/answer/turn UI message stream', () => {
     }))
     const restoreOpenRouter = server.installEnv()
 
-    const turns: unknown[] = []
-    setAnswerThreadPortForTests({
-      createThread: async (args) => ({ threadId: args.threadId }),
-      appendTurn: async (args) => {
-        turns.push(args)
-        return { turnId: args.turnId }
-      },
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
-    })
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -58,7 +56,7 @@ describe('POST /api/answer/turn UI message stream', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'ui-stream:wedding-photographer' },
           body: JSON.stringify({ query: 'wedding photographer in parramatta' }),
         }),
       )
@@ -82,26 +80,110 @@ describe('POST /api/answer/turn UI message stream', () => {
       expect(kinds[0]).toBe('thread')
       expect(kinds.at(-1) === 'complete' || kinds.at(-1) === 'error').toBe(true)
 
-      // The durable record, not the wire, is the replay source: transient data
-      // parts must still have persisted a turn.
-      expect(turns).toHaveLength(1)
+      // The durable row, not the wire, is the replay source: transient data
+      // parts must still have persisted a terminal turn.
+      const durableTurns = [...store.turns.values()]
+      expect(durableTurns).toHaveLength(1)
+      expect(durableTurns[0]?.status).toBe('complete')
     } finally {
       process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       restoreOpenRouter()
       await server.close()
     }
   })
+  it('continues SSE sequence after an injected stream failure', async () => {
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
+    const response = await handleAnswerTurnRequest(
+      new Request('https://ae.example/api/answer/turn', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: sessionCookieHeader('stream-failure-owner'),
+          'X-AE-Turn-Key': 'ui-stream:failure',
+        },
+        body: JSON.stringify({ query: 'find a plumber' }),
+      }),
+      {
+        admit: async () => ({ ok: true }),
+        stream: async (_input, send) => {
+          send({
+            seq: 0,
+            event: { type: 'thread', threadId: 'thread:failure', turnId: 'turn:failure', turnSeq: 1 },
+          })
+          throw new Error('private orchestrator failure')
+        },
+      },
+    )
+
+    const frames = await readAnswerTurnStream(response)
+    expect(frames.map((frame) => frame.seq)).toEqual([0, 1])
+    expect(frames[1]).toEqual({
+      seq: 1,
+      event: { type: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') },
+    })
+  })
+
 
   it('refuses an oversized body before opening a stream', async () => {
     const response = await handleAnswerTurnRequest(
       new Request('https://ae.example/api/answer/turn', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', cookie: '' },
+        headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'ui-stream:oversized-body' },
         body: JSON.stringify({ query: 'x'.repeat(32 * 1024) }),
       }),
     )
 
     expect(response.status).toBe(413)
-    expect(response.headers.get('content-type')).toContain('application/json')
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+  })
+
+  it('durably stops a reserved turn and replays the stopped status', async () => {
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
+    const sessionId = 'stop-owner-session'
+    const cookie = sessionCookieHeader(sessionId)
+
+    const turnResponse = await handleAnswerTurnRequest(
+      new Request('https://ae.example/api/answer/turn', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie,
+          'X-AE-Turn-Key': 'ui-stream:stop',
+        },
+        body: JSON.stringify({ query: 'find a plumber' }),
+      }),
+      {
+        admit: async () => ({ ok: true }),
+        stream: async () => undefined,
+      },
+    )
+    await turnResponse.text()
+    const reservation = [...store.reservations.values()].at(0)
+    expect(reservation).toBeDefined()
+    if (reservation === undefined) throw new Error('Expected a reserved answer turn.')
+
+    const stopRequest = () => new Request('https://ae.example/api/answer/turn/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ threadId: reservation.threadId, turnId: reservation.turnId }),
+    })
+    const stopped = await handleStopAnswerTurnRequest(stopRequest())
+    expect(stopped.status).toBe(200)
+    await expect(stopped.json()).resolves.toEqual({
+      kind: 'stopped',
+      threadId: reservation.threadId,
+      turnId: reservation.turnId,
+    })
+
+    const replayed = await handleStopAnswerTurnRequest(stopRequest())
+    expect(replayed.status).toBe(200)
+    await expect(replayed.json()).resolves.toEqual({
+      kind: 'already_settled',
+      threadId: reservation.threadId,
+      turnId: reservation.turnId,
+      status: 'stopped',
+    })
   })
 })

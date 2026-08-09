@@ -7,7 +7,6 @@ import { z } from 'zod'
 import {
   isPublicOperationRef,
   type PublicOperationRef,
-  type RegisteredInputMappingRef,
 } from '@/modules/capability-supply/public'
 import {
   sameCapabilityContractRef,
@@ -20,6 +19,8 @@ import {
   type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { parseDecimalExactAmount } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import { isRecord as isPlainObject } from '@/modules/common/is-record'
 
 import {
@@ -64,6 +65,7 @@ export type CustomerCapabilityDescriptor = Readonly<{
   description: string
   inputs: readonly CustomerInputDescriptor[]
   evidence: readonly CustomerEvidenceDescriptor[]
+  inputExamples?: readonly CapabilityInputExample[]
 }>
 
 export type CustomerRequestAmendment = Readonly<{
@@ -601,9 +603,31 @@ function semanticProposalFailureCode(value: unknown): string {
 }
 
 
+/**
+ * Mirrors the Vercel AI SDK `inputExamples` teaching surface: an array of `{ label?, input }`
+ * worked examples whose `input` object conforms to the operation's input schema. It teaches the
+ * model how to construct inputs (e.g. that a city name must be geocoded to `{latitude,longitude}`
+ * numbers first) when the JSON schema alone does not fully specify usage.
+ */
+export type CapabilityInputExample = Readonly<{
+  label?: string | undefined
+  input: Readonly<Record<string, JsonValue>>
+}>
+
 export type ServerCapabilityDescriptor = CustomerCapabilityDescriptor & Readonly<{
   contractRef: CapabilityContractRef
   inputBindings: readonly Readonly<{ inputKey: CapabilityInputKey; inputPointer: string }>[]
+  /** Registered discovery vocabulary (registry searchTerms), surfaced to the SERVER-side
+   *  deterministic interpreter so it can match the same vocabulary discovery uses. It is NOT
+   *  projected to the model (publicDescriptor strips it), keeping the model payload lean while
+   *  letting the deterministic fallback/recovery resolve searchTerms-only queries. */
+  searchTerms?: readonly string[]
+  /** Declared, data-driven capability domain (populated from the admission contract when the
+   *  curated source declares one). When present it is authoritative for the cross-capability
+   *  guard; when absent the guard falls back to the observable contract-text signal below. Not
+   *  projected to the model. */
+  domain?: 'crypto' | 'fiat_fx' | 'none'
+  inputExamples?: readonly CapabilityInputExample[]
 }>
 
 export type CustomerRequestSemanticInterpreterInput = Readonly<{
@@ -628,6 +652,9 @@ export function bindCustomerCapabilityDescriptor(input: Readonly<{
   inputs: readonly CapabilityInputSemantic[]
   valueSchemas: readonly CustomerInputValueSchema[]
   evidence: readonly CustomerEvidenceDescriptor[]
+  searchTerms?: readonly string[]
+  domain?: 'crypto' | 'fiat_fx' | 'none'
+  inputExamples?: readonly CapabilityInputExample[]
 }>): ServerCapabilityDescriptor {
   const valueSchemas = new Map(input.valueSchemas.map((schema) => [schema.inputKey, schema.valueSchema]))
   const operationRefs = Object.freeze([...(input.operationRefs ?? [input.operationRef])])
@@ -659,6 +686,24 @@ export function bindCustomerCapabilityDescriptor(input: Readonly<{
     evidence: Object.freeze(input.evidence.map((descriptor) => ({ ...descriptor }))),
     contractRef: input.contractRef,
     inputBindings: Object.freeze(input.inputs.map(({ key, inputPointer }) => ({ inputKey: key, inputPointer }))),
+    ...(input.searchTerms === undefined || input.searchTerms.length === 0
+      ? {}
+      : { searchTerms: Object.freeze([...input.searchTerms]) }),
+    ...(input.domain === undefined ? {} : { domain: input.domain }),
+    ...(input.inputExamples === undefined ? {} : {
+      inputExamples: Object.freeze(input.inputExamples.map((example) => {
+        if (example.input === null || typeof example.input !== 'object' || Array.isArray(example.input)) {
+          throw new Error('customer_request_input_example_invalid')
+        }
+        if (example.label !== undefined && (typeof example.label !== 'string' || example.label.trim().length === 0)) {
+          throw new Error('customer_request_input_example_invalid')
+        }
+        return Object.freeze({
+          ...(example.label === undefined ? {} : { label: example.label }),
+          input: Object.freeze({ ...example.input }),
+        })
+      })),
+    }),
   })
 }
 
@@ -709,7 +754,7 @@ export function deriveCustomerDecisionPreference(customerJob: string): CustomerR
 }
 
 export type CustomerMaximumTotalCostCriterion = UnderstoodCriterion & Readonly<{
-  value: Readonly<{ currency: string; amountMinor: number }>
+  value: ExactAmount
 }>
 
 export function deriveCustomerMaterialConstraints(customerJob: string): readonly UnderstoodCriterion[] {
@@ -752,23 +797,23 @@ export function deriveCustomerMaterialConstraints(customerJob: string): readonly
 
 export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): CustomerMaximumTotalCostCriterion | undefined {
   const normalized = customerJob.normalize('NFKC')
-  let latest: Readonly<{ currency: string; amountMinor: number }> | undefined
-  for (const match of normalized.matchAll(/\b(AUD|USD|CAD|NZD|EUR|GBP)\s*\$?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\b/giu)) {
+  let latest: ExactAmount | undefined
+  for (const match of normalized.matchAll(/\b(AUD|USD|CAD|NZD|EUR|GBP)\s*\$?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\b/giu)) {
     const amount = match[2]?.replaceAll(',', '')
     if (amount === undefined) continue
     const before = normalized.slice(Math.max(0, match.index - 80), match.index).toLocaleLowerCase('en')
     if (!/\b(?:under|below|less\s+than|at\s+most|no\s+more\s+than|not\s+exceed|maximum|max|cap|budget)\b[^.!?\n]{0,56}$/u.test(before)) continue
-    const [wholeText, fractionalText = ''] = amount.split('.')
-    const amountMinor = Number(wholeText) * 100 + Number(fractionalText.padEnd(2, '0'))
+    const fractionalDigits = amount.includes('.') ? amount.length - amount.indexOf('.') - 1 : 0
     const currency = match[1]
     if (currency === undefined) throw new Error('customer_request_maximum_total_cost_currency_missing')
-    latest = { currency: currency.toLocaleUpperCase('en'), amountMinor }
+    const parsed = parseDecimalExactAmount(currency.toLocaleUpperCase('en'), amount, fractionalDigits)
+    if (parsed !== undefined) latest = parsed
   }
   if (latest === undefined) return undefined
   const inputKey = 'customer:maximum-total-cost' as CapabilityInputKey
   const inputPointer = '/customerConstraints/maximumTotalCost'
   const label = 'Maximum total cost'
-  const value = Object.freeze({ currency: latest.currency, amountMinor: latest.amountMinor })
+  const value = Object.freeze(latest)
   const basis = 'extracted_from_request' as const
   return Object.freeze({
     inputKey, inputPointer, label, value, basis,
@@ -844,6 +889,52 @@ function descriptorMatchesModel(
     && sameCapabilityContractRef(descriptor.contractRef, input.contractRef)
 }
 
+/**
+ * Deterministic compose-teaching policy (mirrors the AI SDK multi-tool loop, which teaches a
+ * chain by exposing both tools to the same loop). Given a customer's proposed selection and the
+ * full graph descriptors, it *suggests* a known-good, pre-approved prior step: when a downstream
+ * op requires numeric coordinates (latitude/longitude) that are not yet satisfied and a registered
+ * geocoding op exists in the graph, the geocode op is proposed to run first and feed coordinates in.
+ *
+ * Purely additive and inert: it is a pure function with no side effects and does not change the
+ * deterministic compiler's authority/replay/digest. It only returns a proposal; the kernel must
+ * still validate and compose it. Returns `undefined` for any unmapped input, so existing ops
+ * (and existing plans) are behaviourally untouched until live wiring invokes it.
+ */
+export type GeocodeComposeSuggestion = Readonly<{
+  geocodeDescriptor: ServerCapabilityDescriptor
+  destinationDescriptor: ServerCapabilityDescriptor
+  placeInputKey: CapabilityInputKey
+  fedInputKeys: readonly CapabilityInputKey[]
+  reason: string
+}>
+
+export function suggestGeocodePriorStep(
+  descriptors: readonly ServerCapabilityDescriptor[],
+  selection: Readonly<{ operationRef: PublicOperationRef; facts?: readonly RequestFact[] }>,
+): GeocodeComposeSuggestion | undefined {
+  const destination = descriptors.find((descriptor) => descriptor.operationRef === selection.operationRef
+    || descriptor.operationRefs.includes(selection.operationRef))
+  if (destination === undefined) return undefined
+  const latitude = destination.inputs.find((input) => input.label === 'Latitude')
+  const longitude = destination.inputs.find((input) => input.label === 'Longitude')
+  if (latitude === undefined || longitude === undefined) return undefined
+  const supplied = new Set((selection.facts ?? []).map((fact) => fact.inputKey))
+  if (supplied.has(latitude.inputKey) && supplied.has(longitude.inputKey)) return undefined
+  const geocode = descriptors.find((descriptor) => descriptor.selectionKey !== destination.selectionKey
+    && (/geocod/iu.test(descriptor.name) || /geocod/iu.test(descriptor.description)))
+  if (geocode === undefined) return undefined
+  const place = geocode.inputs.find((input) => input.role === 'request' && input.stage === 'option_selection')
+  if (place === undefined) return undefined
+  return Object.freeze({
+    geocodeDescriptor: geocode,
+    destinationDescriptor: destination,
+    placeInputKey: place.inputKey,
+    fedInputKeys: Object.freeze([latitude.inputKey, longitude.inputKey]),
+    reason: 'geocode_prior_step',
+  })
+}
+
 function publicDescriptor(descriptor: ServerCapabilityDescriptor): CustomerCapabilityDescriptor {
   return {
     operationRef: descriptor.operationRef,
@@ -853,6 +944,12 @@ function publicDescriptor(descriptor: ServerCapabilityDescriptor): CustomerCapab
     description: descriptor.description,
     evidence: descriptor.evidence.map((evidence) => ({ ...evidence })),
     inputs: descriptor.inputs.map((input) => ({ ...input })),
+    ...(descriptor.inputExamples === undefined ? {} : {
+      inputExamples: Object.freeze(descriptor.inputExamples.map((example) => Object.freeze({
+        ...(example.label === undefined ? {} : { label: example.label }),
+        input: { ...example.input },
+      }))),
+    }),
   }
 }
 

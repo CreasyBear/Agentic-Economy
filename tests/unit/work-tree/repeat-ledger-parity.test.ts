@@ -43,7 +43,7 @@ const reserveInput = {
   permissionRef: 'repeat-permission:one',
   operationKey: 'reserve:one',
   requestedOccurrences: 1,
-  requestedSpend: { currency: 'AUD', amountMinor: 400 },
+  requestedSpend: { currency: 'AUD', units: '400', exponent: 2 },
   requestedDataAllocations: 1,
 }
 
@@ -52,10 +52,10 @@ beforeEach(() => {
   sourceMocks.callSourceQuery.mockReset()
   sourceMocks.callSourceMutation.mockImplementation(async (descriptor: { name: string }) => {
     if (descriptor.name.endsWith('finalizeRepeatUse')) {
-      return { kind: 'accepted', useRef: 'repeat-use:one', operationKey: 'finalize:one', state: 'settled', releasedOccurrences: 0, releasedDataAllocations: 0, releasedSpendMinor: 100 }
+      return { kind: 'accepted', useRef: 'repeat-use:one', operationKey: 'finalize:one', state: 'settled', releasedOccurrences: 0, releasedDataAllocations: 0, releasedSpend: { currency: 'AUD', units: '100', exponent: 2 } }
     }
     if (descriptor.name.endsWith('reconcileRepeatUse')) {
-      return { kind: 'accepted', useRef: 'repeat-use:one', operationKey: 'reconcile:one', reconcileOperationKey: 'reconcile:one', state: 'settled', releasedOccurrences: 0, releasedDataAllocations: 0, releasedSpendMinor: 100 }
+      return { kind: 'accepted', useRef: 'repeat-use:one', operationKey: 'reconcile:one', reconcileOperationKey: 'reconcile:one', state: 'settled', releasedOccurrences: 0, releasedDataAllocations: 0, releasedSpend: { currency: 'AUD', units: '100', exponent: 2 } }
     }
     return {
       kind: 'accepted',
@@ -65,7 +65,7 @@ beforeEach(() => {
       state: 'reserved',
       reservedOccurrences: 1,
       reservedDataAllocations: 1,
-      reservedSpend: { currency: 'AUD', amountMinor: 400 },
+      reservedSpend: { currency: 'AUD', units: '400', exponent: 2 },
     }
   })
   sourceMocks.callSourceQuery.mockResolvedValue({
@@ -82,14 +82,14 @@ beforeEach(() => {
       delegatedCredentialId: 'credential:repeat',
       operationKey: 'reserve:one',
       requestedOccurrences: 1,
-      requestedSpend: { currency: 'AUD', amountMinor: 400 },
+      requestedSpend: { currency: 'AUD', units: '400', exponent: 2 },
       requestedDataAllocations: 1,
       reservedOccurrences: 1,
-      reservedSpend: { currency: 'AUD', amountMinor: 400 },
+      reservedSpend: { currency: 'AUD', units: '400', exponent: 2 },
       reservedDataAllocations: 1,
       state: 'reserved',
       releasedOccurrences: 0,
-      releasedSpendMinor: 0,
+      releasedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       releasedDataAllocations: 0,
     },
     permission: {
@@ -102,8 +102,8 @@ beforeEach(() => {
       delegatedCredentialId: 'credential:repeat',
       validFrom: 0,
       validUntil: 9_999_999_999_999,
-      perUseSpend: { currency: 'AUD', amountMinor: 400 },
-      cumulativeSpend: { currency: 'AUD', amountMinor: 500 },
+      perUseSpend: { currency: 'AUD', units: '400', exponent: 2 },
+      cumulativeSpend: { currency: 'AUD', units: '500', exponent: 2 },
       occurrenceLimit: 1,
       perUseDataAllocations: 1,
       cumulativeDataAllocations: 1,
@@ -111,8 +111,8 @@ beforeEach(() => {
       settledDataAllocations: 0,
       reservedOccurrences: 1,
       settledOccurrences: 0,
-      reservedSpend: { currency: 'AUD', amountMinor: 400 },
-      settledSpend: { currency: 'AUD', amountMinor: 0 },
+      reservedSpend: { currency: 'AUD', units: '400', exponent: 2 },
+      settledSpend: { currency: 'AUD', units: '0', exponent: 2 },
       status: 'active',
       issuedAt: 1,
       sourceReceiptId: 'receipt:repeat',
@@ -125,11 +125,11 @@ describe('WorkTree repeat ledger public seam', () => {
     await expect(reserveRepeatUseThroughSource(reserveInput)).resolves.toMatchObject({ kind: 'accepted', useRef: 'repeat-use:one' })
     await expect(finalizeRepeatUseThroughSource({
       useRef: 'repeat-use:one', operationKey: 'finalize:one', actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 300 }, actualDataAllocations: 1, outcome: 'settled',
+      actualSpend: { currency: 'AUD', units: '300', exponent: 2 }, actualDataAllocations: 1, outcome: 'settled',
     })).resolves.toMatchObject({ kind: 'accepted', useRef: 'repeat-use:one' })
     await expect(reconcileRepeatUseThroughSource({
       useRef: 'repeat-use:one', operationKey: 'reconcile:one', actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 300 }, actualDataAllocations: 1, outcome: 'settled',
+      actualSpend: { currency: 'AUD', units: '300', exponent: 2 }, actualDataAllocations: 1, outcome: 'settled',
     })).resolves.toMatchObject({ kind: 'accepted', useRef: 'repeat-use:one' })
     await expect(inspectRepeatUseThroughSource({ useRef: 'repeat-use:one' })).resolves.toMatchObject({ kind: 'accepted' })
 
@@ -152,18 +152,18 @@ describe('WorkTree repeat ledger public seam', () => {
       state: 'unknown',
       releasedOccurrences: 0,
       releasedDataAllocations: 0,
-      releasedSpendMinor: 0,
-      heldSpendMinor: 400,
+      releasedSpend: { currency: 'AUD', units: '0', exponent: 2 },
+      heldSpend: { currency: 'AUD', units: '400', exponent: 2 },
       heldDataAllocations: 1,
     })
     await expect(finalizeRepeatUseThroughSource({
       useRef: 'repeat-use:unknown',
       operationKey: 'finalize:unknown',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'unknown',
-    })).resolves.toMatchObject({ kind: 'unknown', state: 'unknown', heldSpendMinor: 400 })
+    })).resolves.toMatchObject({ kind: 'unknown', state: 'unknown', heldSpend: { currency: 'AUD', units: '400', exponent: 2 } })
 
     sourceMocks.callSourceMutation.mockResolvedValueOnce({
       kind: 'accepted',
@@ -173,13 +173,13 @@ describe('WorkTree repeat ledger public seam', () => {
       state: 'settled',
       releasedOccurrences: 0,
       releasedDataAllocations: 1,
-      releasedSpendMinor: 400,
+      releasedSpend: { currency: 'AUD', units: '400', exponent: 2 },
     })
     await expect(reconcileRepeatUseThroughSource({
       useRef: 'repeat-use:unknown',
       operationKey: 'reconcile:unknown',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })).resolves.toMatchObject({ kind: 'accepted', reconcileOperationKey: 'reconcile:unknown', state: 'settled' })

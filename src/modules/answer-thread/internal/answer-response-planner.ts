@@ -2,6 +2,7 @@ import {
   buildAgentJsonUrl,
   extractRequestedLocation,
   getDefaultArtifactBudgetForLayoutProfile,
+  isConfirmedSearchContext,
   type AnswerArtifact,
   type AnswerLayoutProfile,
   type AnswerSnapshot,
@@ -11,6 +12,7 @@ import {
   aeSearchContextLocationQuery,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
+
 
 export const ANSWER_SEARCH_PROVIDER_LIMIT = 3
 
@@ -113,7 +115,10 @@ export function planAnswerTurn(input: {
   const serviceSignal = hasAnswerServiceSignal(query)
   const requestedLocation = extractAnswerRequestedLocation(query)
   const contextLocation = aeSearchContextLocationQuery(input.searchContext)
-  const hasUsableLocation = requestedLocation !== undefined || contextLocation !== undefined
+  const confirmedContext = isConfirmedSearchContext(input.searchContext)
+  const hasUsableLocation = requestedLocation !== undefined || (
+    confirmedContext && contextLocation !== undefined
+  )
   const isVagueHelpRequest = /^(?:can\s+you\s+)?help\s+me[.!?]?$|^i\s+need\s+(?:a\s+)?service[.!?]?$|^(?:i\s+)?need\s+help[.!?]?$/i.test(query)
 
   if (!serviceSignal && (
@@ -122,8 +127,9 @@ export function planAnswerTurn(input: {
     || isVagueHelpRequest
   )) {
     const locationLabel = isVagueHelpRequest
-      ? aeSearchContextLocationLabel(input.searchContext)
-      : requestedLocation ?? aeSearchContextLocationLabel(input.searchContext)
+      ? (confirmedContext ? aeSearchContextLocationLabel(input.searchContext) : undefined)
+      : requestedLocation ?? (confirmedContext ? aeSearchContextLocationLabel(input.searchContext) : undefined)
+
     return buildClarifyResponsePlan({
       reason: 'missing_service',
       snapshot: buildClarificationSnapshot({
@@ -140,11 +146,14 @@ export function planAnswerTurn(input: {
     input.searchContext?.mode !== 'whole_catalogue' &&
     input.priorTurnsCount === 0
   ) {
+    const proposedLocationLabel = aeSearchContextLocationLabel(input.searchContext)
+
     return buildClarifyResponsePlan({
       reason: 'missing_place',
       snapshot: buildClarificationSnapshot({
         query,
         reason: 'missing_place',
+        ...(proposedLocationLabel === undefined ? {} : { locationLabel: proposedLocationLabel }),
       }),
     })
   }
@@ -189,25 +198,30 @@ function buildClarificationSnapshot(input: {
     const place = input.locationLabel
     return {
       query: input.query,
-      oneLine: place === undefined ? 'What do you need help with?' : `What kind of service do you need in ${place}?`,
+      oneLine: place === undefined ? 'What are you trying to get done?' : `What do you need done in ${place}?`,
       providers: [],
       summary: place === undefined
-        ? 'Tell me the service or task you want to get done, and I’ll search listed businesses.'
-        : `I can search listed businesses in ${place} once I know the service type.`,
+        ? 'Tell me what you need done, and I’ll look for businesses that can help.'
+        : `I can look for businesses that can help in ${place} once I know what you need.`,
       nextStep: place === undefined
-        ? 'Reply with the service or task; I’ll search your area.'
-        : `Reply with the service you need; I’ll keep the service and place (${place}) together in the search.`,
+        ? 'Reply with what you need; I’ll look in your area.'
+        : `Reply with what you need; I’ll keep ${place} in the search.`,
       agentJsonUrl: buildAgentJsonUrl(input.query, ANSWER_SEARCH_PROVIDER_LIMIT),
       layoutProfile: 'clarification',
     }
   }
 
+  const proposedPlace = input.locationLabel
   return {
     query: input.query,
-    oneLine: 'Which area should I search?',
+    oneLine: proposedPlace === undefined ? 'Where should I look?' : `Should I look in ${proposedPlace}?`,
     providers: [],
-    summary: 'I can compare listed businesses once I know where the service is needed.',
-    nextStep: 'Search with a suburb or city, for example “emergency plumber in Perth”.',
+    summary: proposedPlace === undefined
+      ? 'I can look for businesses that can help once I know the area.'
+      : `Your configured context proposes ${proposedPlace}, but I need you to confirm that area before I search.`,
+    nextStep: proposedPlace === undefined
+      ? 'Add a suburb or city, for example “emergency plumber in Perth”.'
+      : `Confirm ${proposedPlace}, or add a different suburb or city before I search.`,
     agentJsonUrl: buildAgentJsonUrl(input.query, ANSWER_SEARCH_PROVIDER_LIMIT),
     layoutProfile: 'clarification',
   }

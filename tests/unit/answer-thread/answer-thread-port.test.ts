@@ -8,7 +8,7 @@ describe('POST /api/answer/turn', () => {
     const response = await handleAnswerTurnRequest(
       new Request('https://ae.example/api/answer/turn', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-AE-Turn-Key': 'schema:empty-query' },
         body: JSON.stringify({ query: '   ' }),
       }),
     )

@@ -11,6 +11,8 @@ import type {
   CapabilityOfferingRegistration,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import { readJsonPointer } from '@/modules/common/json-pointer'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -80,14 +82,13 @@ type PreparedActionEvidence = Readonly<{
 }>
 
 type PreparedActionPrice = Readonly<{
-  currency: string
-  minimumAmountMinor: number
-  maximumAmountMinor: number
+  minimum: ExactAmount
+  maximum: ExactAmount
   components: readonly Readonly<{
     kind: 'registered_offering'
     label: string
-    minimumAmountMinor: number
-    maximumAmountMinor: number
+    minimum: ExactAmount
+    maximum: ExactAmount
     evidenceRefs: readonly string[]
   }>[]
 }>
@@ -396,18 +397,18 @@ function compileLowestMaximumPrice(input: Readonly<{
   })) {
     return { kind: 'not_prepared', reason: 'commercial_influence_blocks_selection' }
   }
-  const currency = prepared[0]?.price.currency
-  if (currency === undefined || prepared.some((option) => option.price.currency !== currency)) {
+  const firstMaximum = prepared[0]?.price.maximum
+  if (firstMaximum === undefined || prepared.some((option) => compareExactAmounts(option.price.maximum, firstMaximum) === undefined)) {
     return { kind: 'not_prepared', reason: 'comparison_unavailable' }
   }
   const ordered = prepared.toSorted((left, right) => (
-    left.price.maximumAmountMinor - right.price.maximumAmountMinor
+    (compareExactAmounts(left.price.maximum, right.price.maximum) ?? 0)
       || left.providerAssertion.assertionRef.localeCompare(right.providerAssertion.assertionRef)
   ))
   const selected = ordered[0]
   const next = ordered[1]
   if (selected === undefined || (next !== undefined
-    && selected.price.maximumAmountMinor === next.price.maximumAmountMinor)) {
+    && compareExactAmounts(selected.price.maximum, next.price.maximum) === 0)) {
     return { kind: 'not_prepared', reason: 'comparison_unavailable' }
   }
   const comparedAssertionRefs = prepared.map(({ providerAssertion }) => providerAssertion.assertionRef).sort()
@@ -546,17 +547,18 @@ function projectEvidence(
 function registeredPrice(candidate: PreparedActionOptionCandidate['offering']): PreparedActionPrice | undefined {
   const price = candidate.presentation.price
   if (price.kind === 'on_request') return undefined
-  const minimumAmountMinor = price.kind === 'fixed' ? price.amountMinor : price.minimumAmountMinor
-  const maximumAmountMinor = price.kind === 'fixed' ? price.amountMinor : price.maximumAmountMinor
+  const minimum = price.kind === 'fixed' ? price.amount : price.minimum
+  const maximum = price.kind === 'fixed' ? price.amount : price.maximum
+  if (!exactAmountSchema.safeParse(minimum).success || !exactAmountSchema.safeParse(maximum).success
+    || compareExactAmounts(minimum, maximum) === undefined) return undefined
   return deepFreeze({
-    currency: price.currency,
-    minimumAmountMinor,
-    maximumAmountMinor,
+    minimum,
+    maximum,
     components: [{
       kind: 'registered_offering' as const,
       label: candidate.presentation.label,
-      minimumAmountMinor,
-      maximumAmountMinor,
+      minimum,
+      maximum,
       evidenceRefs: [...candidate.registrationEvidenceRefs],
     }],
   })

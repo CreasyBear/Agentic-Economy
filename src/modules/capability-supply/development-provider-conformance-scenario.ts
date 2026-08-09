@@ -1,6 +1,8 @@
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDevelopmentDynamicPublishedSource,
-  createDevelopmentInvocationApplication,
+  createInvocationApplication,
   createDevelopmentPaidOperationApplicationService,
   createDynamicPublishedActionInvocationAdapter,
   buildDynamicPublishedInput,
@@ -146,6 +148,8 @@ async function runSelected(
   let invocationSequence = 0
   let authoritySequence = 0
   let attemptSequence = 0
+  const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+  const durablePort = createDevelopmentDurablePort(durableState)
   const scope = `${key.toLowerCase()}:${operation.identity.businessId}:${operation.operationId}:${operation.identity.publicationRevision}:${suffix}`
   const adapter = createDynamicPublishedActionInvocationAdapter({
     operation,
@@ -156,8 +160,10 @@ async function runSelected(
     nextAuthorityRef: () => `authority:${scope}:${++authoritySequence}`,
     nextAttemptRef: () => `attempt:${scope}:${++attemptSequence}`,
     verifyPaymentReconciliationEvidence: () => true,
+    durablePort,
+    developmentSnapshot: durableState,
   })
-  const application = createDevelopmentInvocationApplication({
+  const application = createInvocationApplication({
     adapter,
     sourceCommands: {
       leaseOwner: () => `worker:${scope}`,
@@ -169,7 +175,7 @@ async function runSelected(
     host,
     interpreter: interpreter(key, operation, payload),
   })
-  const prepared = host.prepare(input, 60_000)
+  const prepared = await host.prepare(input, 60_000)
   const initial = service.inspect({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: prepared.invocationVersion,
@@ -192,7 +198,10 @@ async function runSelected(
   } finally {
     Date.now = realDateNow
   }
-  const snapshot = adapter.exportSnapshot()
+  if (executed.kind !== 'accepted') {
+    throw new Error(`development_${key}_execute_${executed.code}`)
+  }
+  const snapshot = adapter.exportDevelopmentSnapshot()
   const view = host.inspect(prepared.invocationRef)
   if (view === undefined) throw new Error(`development_${key}_view_missing`)
   return {
@@ -242,7 +251,7 @@ function interpreter(
           summary: 'Retrieve one current BTC/USD measurement.',
           blocks: [{ kind: 'text' as const, label: 'Pair', value: 'BTC/USD' }],
         },
-        maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+        maximumAuthorizedCharge: { currency: 'USD', units: '1', exponent: 2 },
         queryRecipient: operation.identity.businessId,
         resultDelivery,
         environment: {
@@ -285,6 +294,19 @@ function paymentRuntime(
   }>()
   return {
     resolveCredential: () => `mock:credential:${operation.identity.businessId}`,
+    readProviderConnectionCredentialRef: (request) => {
+      const authority = operation.connectionAuthority
+      if (authority === undefined
+        || request.connectionRef !== authority.connectionRef
+        || request.providerRef !== authority.providerRef
+        || request.adapterId !== authority.adapterId
+        || request.authorityGeneration !== authority.authorityGeneration) {
+        return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+      }
+      return request.authorityDigest === authority.authorityDigest
+        ? { kind: 'resolved' as const, credentialRef: authority.connectionRef }
+        : { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    },
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
@@ -488,9 +510,8 @@ function restorePaymentIdentifierCollision(
 function reconciliationEvidenceFor(run: Awaited<ReturnType<typeof runSelected>>) {
   const paymentAttempt = run.paymentAttempt
   const attempt = run.view.attempts[0]
-  if (paymentAttempt === undefined || attempt === undefined) {
-    throw new Error('reconciliation_material_missing')
-  }
+  if (paymentAttempt === undefined) throw new Error('reconciliation_payment_attempt_missing')
+  if (attempt === undefined) throw new Error('reconciliation_action_attempt_missing')
   const observedAt = new Date(run.operation.readiness.observedAt + 1_000).toISOString()
   const actionMaterial = {
     kind: 'action_invocation_reconciliation' as const,
@@ -550,7 +571,7 @@ async function replayAReconciliationAgainstB(
 }
 
 function liveState(run: Awaited<ReturnType<typeof runSelected>>) {
-  const snapshot = run.live.adapter.exportSnapshot()
+  const snapshot = run.live.adapter.exportDevelopmentSnapshot()
   return {
     snapshot,
     snapshotDigest: canonicalDigest(snapshot),

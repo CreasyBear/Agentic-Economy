@@ -1,3 +1,7 @@
+import { CLUSTER_A_FIXTURES } from './curated-cluster-a-fixtures'
+import { CLUSTER_B_FIXTURES } from './curated-cluster-b-fixtures'
+import { CLUSTER_C_FIXTURES } from './curated-cluster-c-fixtures'
+
 type FirstRequestMode = 'inquiry_available' | 'quote_request_available' | 'not_available_yet'
 
 export type DevSeedOfferingAccessPathFixture = Readonly<{
@@ -41,7 +45,7 @@ export type DevSeedBusinessFixture = Readonly<{
  * guard requires both to be present; agentic-market-tavily is retained as the
  * third observed x402 listing.
  */
-export const DEV_SEED_BUSINESS_COUNT = 3
+export const DEV_SEED_BUSINESS_COUNT = 20
 
 export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = [
   {
@@ -66,22 +70,22 @@ export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = [
   },
   {
     requestedSlug: 'agentic-market-exa',
-    businessName: 'Agentic Market listing — Exa',
-    category: 'External x402 web search',
+    businessName: 'Exa — web search and contents',
+    category: 'External web search and content retrieval',
     suburb: 'Online',
     stateTerritory: 'External',
-    ownerMessage: 'Publicly observed Agentic Market listing; not provider-owned, endorsed, or guaranteed available.',
-    sourceLabel: 'publicly_observed / https://api.agentic.market/v1/services/search?q=exa / 2026-08-04',
+    ownerMessage: 'AE-curated external operation using the official Exa API with a provider connection; not provider-owned or endorsed.',
+    sourceLabel: 'docs_referenced / https://exa.ai/docs/exa-spec.yaml / 2026-08-05',
     offerings: [{
       name: 'Exa search and contents',
       category: 'Web search and content retrieval',
-      summary: 'First-party Exa search and content retrieval endpoints, listed by Agentic Market with x402 payment.',
+      summary: 'Searches the public web and retrieves bounded page contents through the official Exa API.',
       serviceAreaSummary: 'Online',
-      availabilitySummary: 'Execution requires a funded AE x402 credential',
+      availabilitySummary: 'Requires an EXA_API_KEY-backed provider connection; ready only once connection and readiness are confirmed by AE',
       accessPaths: [],
       firstRequestMode: 'not_available_yet',
-      publicDisclosure: 'AE-curated external operations. Search and contents remain unavailable until current readiness and spend authority are proven.',
-      noContactReason: 'Use the registered AE operations after credential, readiness, and exact route confirmation succeed.',
+      publicDisclosure: 'AE-curated external operation. Requests use the provider connection and are platform-funded; no customer payment is submitted.',
+      noContactReason: 'Use the registered AE operation after credential, readiness, and exact route confirmation succeed.',
     }],
   },
   {
@@ -101,7 +105,10 @@ export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = [
       accessPaths: [],
       firstRequestMode: 'not_available_yet',
       publicDisclosure: 'Reference data only. Source: European Central Bank via Frankfurter. Not a tradable quote, guarantee, or financial advice.',
-      noContactReason: 'Use the registered AE operation after current readiness and exact route confirmation succeed.',
+      noContactReason: '…',
     }],
   },
+  ...CLUSTER_A_FIXTURES,
+  ...CLUSTER_B_FIXTURES,
+  ...CLUSTER_C_FIXTURES,
 ] as const

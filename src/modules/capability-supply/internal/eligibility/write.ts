@@ -5,6 +5,10 @@ import {
   capabilitySupplyEligibilityHash,
 } from '@/modules/capability-supply/public'
 
+import {
+  connectionAuthoritySnapshotMatches,
+} from '../binding/registration'
+import type { ProviderConnection } from '../../provider-connection'
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import type { CapabilityBindingRow } from '../binding/registration'
 import {
@@ -57,6 +61,7 @@ export type EligibilityWritePorts = Readonly<{
   loadPublishedBusiness: (
     businessId: string,
   ) => Promise<EligibilityWritePublishedBusiness | null>
+  loadProviderConnection: (connectionRef: string) => Promise<ProviderConnection | undefined>
   patchOfferingEligibility: (
     offeringId: string,
     patch: OfferingEligibilityPatch,
@@ -117,9 +122,20 @@ export async function setCapabilitySupplyEligibility(
     if (!bindingIntegrityIsValid(binding)) {
       return { kind: 'refused' as const, reason: 'binding_integrity_failure' as const }
     }
+    if (binding.authority.kind === 'provider_connection') {
+      const connection = await ports.loadProviderConnection(binding.authority.connectionRef)
+      if (!connectionAuthoritySnapshotMatches(binding.connectionAuthority, connection, {
+        businessId: String(offering.businessId),
+        operationRef: binding.connectionAuthority?.operationRef ?? '',
+        adapterId: binding.adapterId,
+        now: updatedAt,
+      })) {
+        return { kind: 'refused' as const, reason: 'connection_authority_stale' as const }
+      }
+    }
     const contract = await ports.resolveExactContract(input.contractRef)
     if (contract.kind === 'refused') return contract
-    if (await ports.loadPublishedBusiness(offering.businessId) === null) {
+    if (await ports.loadPublishedBusiness(String(offering.businessId)) === null) {
       return { kind: 'refused' as const, reason: 'business_not_registered' as const }
     }
   }

@@ -62,6 +62,7 @@ type Aggregate = Infer<typeof customerRequestV2AggregateValue>
 type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
 
 export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2WritePorts {
+  const now = Date.now()
   return {
     ...customerRequestV2ReadPorts(ctx),
     loadCommitCommand: async (commandKey) => {
@@ -77,7 +78,6 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
         aggregate: asDomainAggregate(verified.aggregate),
       }
     },
-
     validateAggregateAgainstCurrentCapabilityGraph: async (aggregate, routeGeneration) => (
       await validateAggregateAgainstCurrentCapabilityGraph(
         ctx.db,
@@ -85,6 +85,7 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
         routeGeneration === undefined
           ? undefined
           : writableCustomerRequestRoutePlanGeneration(routeGeneration),
+        now,
       )
     ),
 
@@ -216,15 +217,16 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
     },
   }
 }
-
 async function validateAggregateAgainstCurrentCapabilityGraph(
   db: Parameters<typeof listRouteableCapabilitySupply>[0],
   aggregate: Aggregate,
   routeGeneration: RouteGeneration | undefined,
-): Promise<GraphValidationStatus> {
+  now: number,
+) {
   const currentSupply = await listRouteableCapabilitySupply(db, {
     networkId: aggregate.snapshot.networkId,
     limit: 64,
+    now,
   })
   if (currentSupply.kind !== 'available') return 'stale'
   const bindings = registeredEvaluationBindingsFromRouteableSupply(

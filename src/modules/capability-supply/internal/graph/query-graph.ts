@@ -128,6 +128,9 @@ export async function queryCapabilityGraph(
     const contract = await ports.getExactRegisteredCapabilityContract(
       contractRefFromRow(publication),
     )
+    const currentConnection = binding?.authority.kind === 'provider_connection'
+      ? await ports.loadProviderConnection(binding.authority.connectionRef)
+      : undefined
     if (
       offering === null
       || binding === null
@@ -140,7 +143,7 @@ export async function queryCapabilityGraph(
     ) {
       return { kind: 'unavailable' as const, reason: 'graph_integrity_failure' as const }
     }
-    const lifecycle = publicationLifecycle(publication, offering, binding, now)
+    const lifecycle = publicationLifecycle(publication, offering, binding, now, currentConnection)
     if (!args.includeInactive && lifecycle.state !== 'active') continue
     nodes.push(projectGraphNode({
       publication,

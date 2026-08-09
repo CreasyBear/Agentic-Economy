@@ -183,7 +183,7 @@ function issueCommandMaterial(args: IssueCommandArgs): Readonly<{
   expectedRequestRevision: number
   expectedGenerationRef: string
   selectedRoutePlanId: string
-  maximumTotalSpend: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalSpend: IssueCommandArgs['maximumTotalSpend']
   expiresAt: number
   idempotencyKey: string
 }> {

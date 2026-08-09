@@ -21,7 +21,7 @@ describe('inquiry handoff prose', () => {
     }
     expect(resolution.provider.slug).toBe('northside')
     expect(buildInquiryHandoffOneLine(resolution)).toBe(
-      "Ready to open Northside Plumbing's qualified inquiry form.",
+      'Ready to send a request to Northside Plumbing.',
     )
   })
 
@@ -32,8 +32,8 @@ describe('inquiry handoff prose', () => {
     })
 
     expect(resolution.kind).toBe('choose_provider')
-    expect(buildInquiryHandoffNextStep(resolution)).toContain('listed businesses in this answer')
-    expect(buildInquiryHandoffNextStep(resolution)).toContain('name the business')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('business from this answer')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('tell me which business')
   })
 
   it('does not imply a missing inquiry path is available', () => {
@@ -43,8 +43,8 @@ describe('inquiry handoff prose', () => {
     })
 
     expect(resolution.kind).toBe('provider_unavailable')
-    expect(buildInquiryHandoffOneLine(resolution)).toBe('Demo Plumbing does not publish an AE inquiry form yet.')
-    expect(buildInquiryHandoffNextStep(resolution)).toContain('published contact guidance')
+    expect(buildInquiryHandoffOneLine(resolution)).toBe('Demo Plumbing does not have a request form here yet.')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('contact details they provide')
   })
 
   it('routes no-provider inquiry requests back to choosing a listed business', () => {
@@ -54,8 +54,8 @@ describe('inquiry handoff prose', () => {
     })
 
     expect(resolution.kind).toBe('no_provider')
-    expect(buildInquiryHandoffSummary(resolution)).toContain('Search a service and area')
-    expect(buildInquiryHandoffNextStep(resolution)).toContain('Search nearby')
+    expect(buildInquiryHandoffSummary(resolution)).toContain('Search for what you need and where')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('Search for what you need and where')
   })
 })
 

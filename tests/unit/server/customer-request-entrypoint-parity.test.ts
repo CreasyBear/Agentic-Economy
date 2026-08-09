@@ -46,7 +46,7 @@ const projection = {
       },
       availability: 'current' as const, stepCount: 1,
       businesses: [{ businessRef: 'business:opaque', name: 'North Star Services' }],
-      maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+      maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
       dataUse: {
         recipientCount: 1,
         recipients: [{
@@ -63,7 +63,7 @@ const projection = {
       comparison: {
         outcomeRef: 'outcome:opaque', outcomeFit: 'same_promised_result' as const,
         completeness: 'complete' as const, hardConstraints: 'satisfied' as const,
-        maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+        maximumCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
         dataExposureCount: 1, irreversibleEffectCount: 1, uncertaintyCount: 0,
         duration: 'not_declared' as const, recovery: 'retry_safe' as const,
         trust: 'registered_current_option' as const, evidenceCount: 1,

@@ -1,12 +1,13 @@
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { timestampIso } from '@/lib/ui/format-time'
-import { formatCurrencyAmount } from '@/modules/customer-request/format-currency-amount'
+import { formatCurrencyAmount } from '@/modules/money/public'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -23,7 +24,7 @@ export const Route = createFileRoute('/_operator/admin/request-problems')({
   loader: () => readSupportProblemsServer(),
   head: () => ({
     meta: [
-      { title: 'Request problems | Agentic Economy' },
+      { title: 'Failed asks | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -35,14 +36,14 @@ function RequestProblemsRoute() {
 
   return <AeOperatorShell
     operatorRole="admin"
-    title="Request problems"
+    title="Failed asks"
     description="Record status updates without deciding cause, responsibility, or remedy."
     currentPath="/admin/request-problems"
   >
     {result.kind !== 'allowed'
-      ? <Card className="p-5"><p className="text-muted-foreground">{result.kind === 'unavailable' ? 'Request problems could not be loaded. Refresh the page to try again.' : 'Active support access is required.'}</p></Card>
+      ? <Card className="p-5"><p className="text-muted-foreground">{result.kind === 'unavailable' ? 'Failed asks could not be loaded. Refresh the page to try again.' : 'Active support access is required.'}</p></Card>
       : result.rows.length === 0
-        ? <Card className="p-5"><p className="text-muted-foreground">No reported Request problems need tracking.</p></Card>
+        ? <Empty className="border border-dashed p-5"><EmptyHeader><EmptyTitle>No reported Failed asks</EmptyTitle><EmptyDescription>No customer requests are being tracked for investigation right now. Reports appear here when something needs attention.</EmptyDescription></EmptyHeader></Empty>
         : <div className="grid gap-4">
           {result.rows.map((problem) => <SupportProblemCard key={problem.reportRef} problem={problem} />)}
         </div>}
@@ -228,8 +229,8 @@ export function SupportProblemReconstruction({
       <div>
         <dt className="font-semibold">Customer-confirmed limits · {reconstruction.authority.state}</dt>
         <dd className="text-muted-foreground">
-          {formatCurrencyAmount(reconstruction.authority.spend.limit.currency, reconstruction.authority.spend.limit.amountMinor)} maximum ·{' '}
-          {formatCurrencyAmount(reconstruction.authority.spend.admitted.currency, reconstruction.authority.spend.admitted.amountMinor)} admitted so far
+          {formatCurrencyAmount(reconstruction.authority.spend.limit)} maximum ·{' '}
+          {formatCurrencyAmount(reconstruction.authority.spend.admitted)} admitted so far
         </dd>
         <dd className="text-muted-foreground">
           Confirmed {timestampIso(reconstruction.choice.confirmedAt)} · valid until{' '}
@@ -240,7 +241,7 @@ export function SupportProblemReconstruction({
         <dt className="font-semibold">Information authority and release</dt>
         <dd>
           <ul className="grid gap-1 text-muted-foreground">
-            {reconstruction.authority.dataSharing.map((sharing, index) => <li key={`${sharing.recipient}:${index}`}>
+            {reconstruction.authority.dataSharing.map((sharing) => <li key={sharing.recipient}>
               {sharing.releaseState === 'authorized' ? 'Authorized' : 'Business step released'}
               {': '}
               {customerLabel(sharing.classification)} information with {sharing.recipient} for{' '}
@@ -270,7 +271,7 @@ export function SupportProblemReconstruction({
         <dt className="font-semibold">Allowed effects</dt>
         <dd>
           <ul className="grid gap-1 text-muted-foreground">
-            {reconstruction.authority.effects.map((effect, index) => <li key={`${effect.class}:${index}`}>
+            {reconstruction.authority.effects.map((effect) => <li key={effect.class}>
               {effect.releaseState === 'authorized' ? 'Authorized' : 'Business step released'}
               {': '}
               {customerLabel(effect.class)} · {customerLabel(effect.reversibility)}

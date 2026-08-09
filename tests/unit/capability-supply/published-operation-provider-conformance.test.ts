@@ -18,9 +18,21 @@ import {
   projectDevelopmentBtcUsdQuoteResult,
   type BtcUsdQuoteProjectionDecision,
   type BtcUsdQuoteResult,
+  type CapabilityOfferingRegistration,
+  type PublishedOperation,
 } from '@/modules/capability-supply/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const receivedAt = '2026-07-20T08:05:00.000Z'
+
+type FixedPrice = Extract<
+  CapabilityOfferingRegistration['presentation']['price'],
+  { kind: 'fixed' }
+>
+type X402Payment = Extract<
+  PublishedOperation['identity']['payment'],
+  { kind: 'x402' }
+>
 
 const providerARawPayload = {
   data: {
@@ -61,8 +73,8 @@ type ProviderCase = Readonly<{
         businessId: string
         publicationRevision: number
         endpoint: Readonly<{ url: string }>
-        payment: Readonly<{ kind: string; payTo?: string }>
-        price: Readonly<{ kind: string; currency?: string; amountMinor?: number }>
+        payment: PublishedOperation['identity']['payment']
+        price: PublishedOperation['identity']['price']
       }>
     }>
   }>
@@ -75,6 +87,8 @@ type ProviderCase = Readonly<{
     endpoint: string
     operationRevision: number
     payee: string
+    price: FixedPrice
+    payment: X402Payment
   }>
   assertPacketTamperingRefuses: () => void
 }>
@@ -197,6 +211,16 @@ const providers = [
       endpoint: 'https://provider.example/x402/v3/cryptocurrency/quotes/latest',
       operationRevision: 7,
       payee: '0xmock-provider-recipient',
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
+      payment: {
+        kind: 'x402',
+        network: 'eip155:8453',
+        asset: '0xmock-usdc',
+        payTo: '0xmock-provider-recipient',
+        currency: 'USD',
+        routeAmountExponent: 2,
+        assetAmountExponent: 6,
+      },
     },
     assertPacketTamperingRefuses: assertProviderAPacketTamperingRefuses,
   },
@@ -228,6 +252,16 @@ const providers = [
       endpoint: 'https://alternate-provider.example/v1/spot',
       operationRevision: 3,
       payee: '0xmock-alternate-recipient',
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
+      payment: {
+        kind: 'x402',
+        network: 'eip155:8453',
+        asset: '0xmock-usdc',
+        payTo: '0xmock-alternate-recipient',
+        currency: 'USD',
+        routeAmountExponent: 2,
+        assetAmountExponent: 6,
+      },
     },
     assertPacketTamperingRefuses: assertProviderBPacketTamperingRefuses,
   },
@@ -244,9 +278,11 @@ describe.each(providers)('$label published-operation provider conformance', (pro
       businessId: provider.expected.providerId,
       publicationRevision: provider.expected.operationRevision,
       endpoint: { url: provider.expected.endpoint },
-      payment: { kind: 'x402', payTo: provider.expected.payee },
-      price: { kind: 'fixed', currency: 'USD', amountMinor: 1 },
+      payment: provider.expected.payment,
+      price: provider.expected.price,
     })
+    expect(packet.operation.identity.payment).toEqual(provider.expected.payment)
+    expect(packet.operation.identity.price).toEqual(provider.expected.price)
   })
 
   it('normalizes its raw success payload to the shared result and presents its selected source', () => {
@@ -261,7 +297,7 @@ describe.each(providers)('$label published-operation provider conformance', (pro
         observedAt: '2026-07-20T08:04:00.000Z',
         receivedAt,
         freshness: 'fresh',
-        rawEvidenceRef: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        rawEvidenceRef: canonicalDigest(provider.rawPayload),
       },
     })
     const normalized = {

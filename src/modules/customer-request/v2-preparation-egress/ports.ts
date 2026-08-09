@@ -59,6 +59,7 @@ export type CustomerRequestV2PreparationEgressPorts = Readonly<{
   listRouteableSupplies: (input: Readonly<{
     networkId: string
     limit: number
+    now: number
   }>) => Promise<readonly EligibleSupply[] | null>
 
   loadAuthorityReservation: (
@@ -96,8 +97,10 @@ export type CustomerRequestV2PreparationEgressPorts = Readonly<{
     adapterConfigDigest: string
     adapterConfigJson: string
     endpointUrl: string
+    connectionAuthority?: EgressOperationRow['connectionAuthority']
     credentialRef: string
     projectedInputDigest: string
+    canonicalClaimMaterial: EgressOperationRow['canonicalClaimMaterial']
     state: 'allocated'
     allocatedAt: number
   }>) => Promise<void>
@@ -168,10 +171,12 @@ export type CustomerRequestV2PreparationEgressActionPorts = Readonly<{
     state?: TerminalEgressState
     endpointUrl?: string
     credentialRef?: string
+    connectionAuthority?: DispatchPayload['connectionAuthority']
     adapterId?: string
     configJson?: string
     bodyText?: string
     dispatchAttemptRef?: string
+    canonicalClaimMaterial?: DispatchPayload['canonicalClaimMaterial']
   }>
 
   resolveDispatch: (args: Readonly<{
@@ -206,8 +211,10 @@ export type CustomerRequestV2PreparationEgressActionPorts = Readonly<{
     kind: 'available' | 'unavailable'
     endpointUrl?: string
     credentialRef?: string
+    connectionAuthority?: DispatchPayload['connectionAuthority']
     adapterId?: string
     configJson?: string
+    canonicalClaimMaterial?: DispatchPayload['canonicalClaimMaterial']
   }>
 
   reconcileUncertain: (args: Readonly<{

@@ -5,6 +5,8 @@ import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
+  capabilityOperationId,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from './public'
@@ -132,7 +134,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
     presentation: {
       label: 'Latest cryptocurrency quotes',
       summary: 'MOCK/DEVELOPMENT ONLY published endpoint.',
-      price: { kind: 'fixed', currency: 'USD', amountMinor: 1 },
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
       materialTerms: [{ termId: 'mock:term:fixture', label: 'Environment', value: 'MOCK/DEVELOPMENT ONLY' }],
       commercialRelationship: {
         kind: 'none', summary: 'Fixture only.', influencesEligibility: false,
@@ -164,7 +166,11 @@ export function buildDevelopmentPublishedOperationEvidence() {
     networkId: offering.networkId,
     contractRef: contract.ref,
     endpointUrl: `https://provider.example${endpointPath}`,
-    credentialRef: 'env:MOCK_PROVIDER_CREDENTIAL',
+    authority: {
+      kind: 'provider_connection',
+      connectionRef: 'connection:mock-provider',
+      providerRef: 'provider:mock-provider',
+    },
     continuation: { kind: 'single_response', evidenceRefs: ['mock:evidence:continuation'] },
     cancellation: { kind: 'unsupported', evidenceRefs: ['mock:evidence:cancellation'] },
     adapter: { adapterId: 'x402-fetch:v2', config },
@@ -173,7 +179,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
   const admission = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
     endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
+    authority: binding.authority,
     continuation: binding.continuation,
     cancellation: binding.cancellation,
     config: binding.adapter.config,
@@ -224,6 +230,27 @@ export function buildDevelopmentPublishedOperationEvidence() {
     qualification.sources[0],
     'published_operation_source_missing',
   )
+  const connectionAuthority = binding.authority.kind === 'provider_connection'
+    ? {
+        connectionRef: binding.authority.connectionRef,
+        providerRef: binding.authority.providerRef,
+        adapterId: binding.adapter.adapterId,
+        authorityGeneration: 1,
+        authorityDigest: canonicalDigest({
+          connectionRef: binding.authority.connectionRef,
+          providerRef: binding.authority.providerRef,
+          authorityGeneration: 1,
+        }),
+        operationRef: createPublicOperationRef({
+          operationId: capabilityOperationId(contract.ref.capabilityId),
+          publicationRef: qualification.candidate.publicationRef,
+          publicationRevision: qualification.candidate.revision,
+          contractRef: contract.ref,
+        }),
+        grantedScopes: [],
+        grantedResources: [],
+      }
+    : undefined
   const operation = materializePublishedOperation({
     publication: {
       publicationRef: qualification.candidate.publicationRef,
@@ -239,6 +266,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
     binding,
     admittedTransport: admission.transport,
     qualification,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     usageObservation: {
       window: { kind: 'rolling', days: 30 },
       calls: 8,
@@ -267,6 +295,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
       offering,
       binding,
       admittedTransport: admission.transport,
+      ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
       qualification,
       ...(operation.usageObservation === undefined
         ? {}
@@ -313,8 +342,9 @@ export function verifyDevelopmentPublishedOperationEvidence(
     || descriptorDigest !== rebuiltDescriptorDigest
     || packet.operation.identity.endpoint.resource !== `GET ${endpointPath}`
     || packet.operation.identity.price.kind !== 'fixed'
-    || packet.operation.identity.price.currency !== 'USD'
-    || packet.operation.identity.price.amountMinor !== 1
+    || packet.operation.identity.price.amount.currency !== 'USD'
+    || packet.operation.identity.price.amount.units !== '1'
+    || packet.operation.identity.price.amount.exponent !== 2
     || packet.operation.identity.payment.kind !== 'x402'
     || packet.operation.identity.payment.network !== expectedPayment.network
     || packet.operation.identity.payment.asset !== expectedPayment.asset

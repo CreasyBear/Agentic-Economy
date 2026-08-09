@@ -2,7 +2,16 @@
 
 import { Agent, fetch as guardedFetch } from 'undici'
 
+import {
+  claimCanonicalInvocation,
+  persistCanonicalReleaseFence,
+  persistCanonicalTerminalOutcome,
+  type CanonicalClaimDecision,
+  type CanonicalClaimSnapshot,
+  type DurableActionInvocationPort,
+} from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
 import type {
@@ -10,8 +19,8 @@ import type {
   DispatchPayload,
   DispatchResult,
 } from '@/modules/customer-request/v2-preparation-egress'
+import type { ReconciliationEvidence } from '@/modules/customer-request/v2-preparation-egress/types'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
-
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
 
@@ -20,6 +29,7 @@ type HttpConfiguration = Readonly<{
   requestTimeoutMs: number
   reconciliation?: Readonly<{ path: string; requestTimeoutMs: number }>
 }>
+type PersistReleaseFence = () => Promise<boolean>
 
 export function customerRequestV2PreparationEgressActionPorts(
   ctx: ActionCtx,
@@ -53,41 +63,333 @@ export function customerRequestV2PreparationEgressActionPorts(
       await ctx.runMutation(internal.customerRequestV2PreparationEgressState.reconcileUncertain, args)
     ),
 
-    dispatchRegisteredAdapter: dispatchRegisteredAdapter,
-    reconcileRegisteredAdapter: reconcileRegisteredAdapter,
+    dispatchRegisteredAdapter: async (dispatch, operationRef) => {
+      const resolved = await resolveProviderDispatch(ctx, dispatch)
+      return resolved === undefined
+        ? notReleased(operationRef, 'connection_authority_unavailable')
+        : await dispatchRegisteredAdapter(resolved, operationRef, canonicalPort(ctx), () => Date.now())
+    },
+    reconcileRegisteredAdapter: async (dispatch, operationRef) => {
+      const resolved = await resolveProviderDispatch(ctx, dispatch)
+      return resolved === undefined
+        ? undefined
+        : await reconcileRegisteredAdapter(resolved, operationRef, canonicalPort(ctx), () => Date.now())
+    },
     now: () => Date.now(),
   }
 }
+async function resolveProviderDispatch(
+  ctx: ActionCtx,
+  dispatch: DispatchPayload,
+): Promise<DispatchPayload | undefined> {
+  const authority = dispatch.connectionAuthority
+  if (authority === undefined) return dispatch
+  if (dispatch.credentialRef !== authority.connectionRef
+    || dispatch.adapterId !== authority.adapterId) return undefined
+  const connection = await ctx.runQuery(internal.capabilityProviderConnections.read, {
+    connectionRef: authority.connectionRef,
+  })
+  if (connection === null
+    || connection.providerRef !== authority.providerRef
+    || connection.adapterId !== authority.adapterId) return undefined
+  const resolved = await ctx.runQuery(internal.capabilityProviderConnections.resolveCredentialRef, {
+    connectionRef: authority.connectionRef,
+    expectedAuthorityGeneration: authority.authorityGeneration,
+    expectedAuthorityDigest: authority.authorityDigest,
+    now: Date.now(),
+  })
+  return resolved.kind === 'resolved'
+    ? { ...dispatch, credentialRef: resolved.credentialRef }
+    : undefined
+}
 
-const adapterDispatchers = new Map<string, (dispatch: DispatchPayload, operationRef: string) => Promise<DispatchResult>>([
-  ['http-json:v1', dispatchHttpJson],
-])
-const adapterReconcilers = new Map<string, (
-  dispatch: DispatchPayload, operationRef: string,
-) => Promise<{
-  disposition: 'released' | 'not_released' | 'uncertain'
-  providerEvidenceRef: string
-  responseDigest: string
-} | undefined>>([
-  ['http-json:v1', reconcileHttpJson],
-])
+
+
+
+const adapterDispatchers: Record<string, (
+  dispatch: DispatchPayload,
+  operationRef: string,
+  persistReleaseFence: PersistReleaseFence,
+) => Promise<DispatchResult>> = {
+  'http-json:v1': dispatchHttpJson,
+}
+const adapterReconcilers: Record<string, (
+  dispatch: DispatchPayload,
+  operationRef: string,
+  persistReleaseFence: PersistReleaseFence,
+) => Promise<ReconciliationEvidence | undefined>> = {
+  'http-json:v1': reconcileHttpJson,
+}
+
+
+function canonicalPort(ctx: ActionCtx): Pick<
+  DurableActionInvocationPort,
+  'transact' | 'readControl' | 'readAttempt'
+> {
+  return {
+    transact: async (command) => {
+      const {
+        commandId,
+        commandDigest,
+        expectedInvocationVersion,
+        expectedEffectGeneration,
+        row,
+        currentAttemptWrite,
+        history,
+      } = command
+      const mutableRow = {
+        ...row,
+        control: {
+          ...row.control,
+          control: row.control.control.state === 'gathering_information'
+            ? {
+                ...row.control.control,
+                missingFields: [...row.control.control.missingFields],
+              }
+            : row.control.control,
+        },
+      }
+      return await ctx.runMutation(internal.actionInvocationControl.transact, {
+        commandId,
+        commandDigest,
+        expectedInvocationVersion,
+        ...(expectedEffectGeneration === undefined ? {} : { expectedEffectGeneration }),
+        row: mutableRow,
+        ...(currentAttemptWrite === undefined ? {} : { currentAttemptWrite }),
+        history,
+      })
+    },
+    readControl: async (invocationRef) => (
+      await ctx.runQuery(internal.actionInvocationControl.readControl, { invocationRef }) ?? undefined
+    ),
+    readAttempt: async (invocationRef, attemptRef) => (
+      await ctx.runQuery(internal.actionInvocationControl.readAttempt, { invocationRef, attemptRef }) ?? undefined
+    ),
+  }
+}
+
+async function readCanonicalSnapshot(
+  port: Pick<DurableActionInvocationPort, 'readControl' | 'readAttempt'>,
+  invocationRef: string,
+  attemptRef: string,
+): Promise<CanonicalClaimSnapshot | undefined> {
+  const control = await port.readControl(invocationRef)
+  if (control === undefined || control.currentAttemptRef !== attemptRef) return undefined
+  const attempt = await port.readAttempt(invocationRef, attemptRef)
+  return attempt === undefined ? undefined : { control, attempt }
+}
 
 async function dispatchRegisteredAdapter(
   dispatch: DispatchPayload,
   operationRef: string,
+  port: Pick<DurableActionInvocationPort, 'transact' | 'readControl' | 'readAttempt'>,
+  now: () => number,
 ): Promise<DispatchResult> {
-  const adapter = adapterDispatchers.get(dispatch.adapterId)
-  if (adapter === undefined) return notReleased(operationRef, 'adapter_not_registered')
-  return await adapter(dispatch, operationRef)
+  const material = dispatch.canonicalClaimMaterial
+  if (material === undefined || material.sourceRef !== operationRef) {
+    return notReleased(operationRef, 'canonical_claim_material_missing')
+  }
+  if (Date.parse(material.attempt.leaseExpiresAt) <= now()) {
+    return notReleased(operationRef, 'canonical_claim_lease_expired')
+  }
+  const decision = await claimCanonicalInvocation({
+    ...material,
+    expectedInvocationVersion: null,
+  }, port)
+  if (decision.kind !== 'claimed') return canonicalDecisionResult(operationRef, decision)
+  const claimed = await readCanonicalSnapshot(port, material.invocationRef, material.attempt.attemptRef)
+  if (claimed === undefined) return notReleased(operationRef, 'canonical_claim_snapshot_missing')
+  let fenced: CanonicalClaimSnapshot | undefined
+  const persistReleaseFence = async (): Promise<boolean> => {
+    const fence = await persistCanonicalReleaseFence({
+      snapshot: claimed,
+      recordedAt: new Date(now()).toISOString(),
+    }, port)
+    if (fence.kind !== 'applied') return false
+    fenced = await readCanonicalSnapshot(port, material.invocationRef, material.attempt.attemptRef)
+    return fenced !== undefined
+  }
+  const adapter = adapterDispatchers[dispatch.adapterId]
+  if (adapter === undefined) {
+    const result = notReleased(operationRef, 'adapter_not_registered')
+    await persistCanonicalTerminal(port, claimed, result, now())
+    return result
+  }
+  let result: DispatchResult
+  try {
+    result = await adapter(dispatch, operationRef, persistReleaseFence)
+  } catch (error) {
+    result = {
+      state: 'uncertain',
+      failureCode: 'adapter_dispatch_failed',
+      evidenceRef: `ae:adapter-dispatch-failed:${canonicalDigest({
+        operationRef,
+        error: errorName(error),
+      })}`,
+    }
+  }
+  const terminal = await persistCanonicalTerminal(port, fenced ?? claimed, result, now())
+
+  return terminal.kind === 'refused'
+    ? canonicalRefused(operationRef, 'canonical_terminal_refused')
+    : result
 }
 
-async function reconcileRegisteredAdapter(dispatch: DispatchPayload, operationRef: string) {
-  return await adapterReconcilers.get(dispatch.adapterId)?.(dispatch, operationRef)
+async function reconcileRegisteredAdapter(
+  dispatch: DispatchPayload,
+  operationRef: string,
+  port: Pick<DurableActionInvocationPort, 'transact' | 'readControl' | 'readAttempt'>,
+  now: () => number,
+): Promise<ReconciliationEvidence | undefined> {
+  const material = dispatch.canonicalClaimMaterial
+  if (material === undefined || material.sourceRef !== operationRef
+    || Date.parse(material.attempt.leaseExpiresAt) <= now()) {
+    return undefined
+  }
+  const decision = await claimCanonicalInvocation({
+    ...material,
+    expectedInvocationVersion: null,
+  }, port)
+  if (decision.kind !== 'claimed') return undefined
+  const claimed = await readCanonicalSnapshot(port, material.invocationRef, material.attempt.attemptRef)
+  if (claimed === undefined) return undefined
+  let fenced: CanonicalClaimSnapshot | undefined
+  const persistReleaseFence = async (): Promise<boolean> => {
+    const fence = await persistCanonicalReleaseFence({
+      snapshot: claimed,
+      recordedAt: new Date(now()).toISOString(),
+    }, port)
+    if (fence.kind !== 'applied') return false
+    fenced = await readCanonicalSnapshot(port, material.invocationRef, material.attempt.attemptRef)
+    return fenced !== undefined
+  }
+  let evidence: ReconciliationEvidence | undefined
+  const adapter = adapterReconcilers[dispatch.adapterId]
+  if (adapter === undefined) {
+    evidence = undefined
+  } else {
+    try {
+      evidence = await adapter(dispatch, operationRef, persistReleaseFence)
+    } catch {
+      evidence = undefined
+    }
+  }
+  const evidenceMaterial = evidence === undefined
+    ? {
+      operationRef,
+      providerEvidenceRef: 'reconciliation-unobserved',
+      responseDigest: 'reconciliation-unobserved',
+    }
+    : {
+      operationRef,
+      providerEvidenceRef: evidence.providerEvidenceRef,
+      responseDigest: evidence.responseDigest,
+    }
+  const evidenceDigest = canonicalDigest(evidenceMaterial as StableHashValue)
+  const terminal = evidence === undefined || evidence.disposition === 'uncertain'
+    ? {
+      kind: 'uncertain' as const,
+      errorDigest: evidenceDigest,
+      reconciliationRequiredAt: new Date(now() + 1).toISOString(),
+      release: 'possibly_released' as const,
+    }
+    : {
+      kind: 'returned' as const,
+      businessOutcome: 'reconciliation_observed',
+      resultRef: `ae:reconciliation-result:${evidenceDigest}`,
+      resultDigest: evidenceDigest,
+      resultReferenceable: false,
+      release: 'released' as const,
+    }
+  const persisted = await persistCanonicalTerminalOutcome({
+    snapshot: fenced ?? claimed,
+    outcome: terminal,
+    recordedAt: new Date(now()).toISOString(),
+  }, port)
+  return persisted.kind === 'refused' ? undefined : evidence
+}
+async function persistCanonicalTerminal(
+  port: Pick<DurableActionInvocationPort, 'transact'>,
+  snapshot: CanonicalClaimSnapshot,
+  result: DispatchResult,
+  now: number,
+) {
+  const recordedAt = new Date(now).toISOString()
+  const evidenceMaterial = {
+    operationRef: snapshot.control.invocationRef,
+    evidenceRef: result.evidenceRef,
+    responseStatus: result.responseStatus ?? null,
+    responseContentType: result.responseContentType ?? null,
+    responseBodyDigest: result.responseBodyDigest ?? null,
+    failureCode: result.failureCode ?? null,
+  }
+  const evidenceDigest = canonicalDigest(evidenceMaterial as StableHashValue)
+  const outcome = result.state === 'released'
+    ? {
+      kind: 'returned' as const,
+      businessOutcome: 'provider_response_observed',
+      resultRef: `ae:provider-result:${evidenceDigest}`,
+      resultDigest: evidenceDigest,
+      resultReferenceable: false,
+      release: 'released' as const,
+    }
+    : result.state === 'not_released'
+      ? {
+        kind: 'failed' as const,
+        errorDigest: evidenceDigest,
+        release: 'not_released' as const,
+      }
+      : {
+        kind: 'uncertain' as const,
+        errorDigest: evidenceDigest,
+        reconciliationRequiredAt: new Date(Date.parse(recordedAt) + 1).toISOString(),
+        release: 'possibly_released' as const,
+      }
+  return await persistCanonicalTerminalOutcome({ snapshot, outcome, recordedAt }, port)
 }
 
+function canonicalDecisionResult(
+  operationRef: string,
+  decision: Exclude<CanonicalClaimDecision, { kind: 'claimed' }>,
+): DispatchResult {
+  if (decision.kind === 'active') {
+    return {
+      state: 'uncertain',
+      canonicalDisposition: 'active',
+      failureCode: 'canonical_claim_active',
+      evidenceRef: `ae:canonical-claim-active:${canonicalDigest(operationRef)}`,
+    }
+  }
+  if (decision.kind === 'terminal_replay') {
+    const state = decision.snapshot.attempt.outcome.state === 'returned'
+      ? 'released'
+      : decision.snapshot.attempt.outcome.state === 'failed'
+        ? 'not_released'
+        : 'uncertain'
+    return {
+      state,
+      canonicalDisposition: 'terminal_replay',
+      evidenceRef: `ae:canonical-terminal-replay:${canonicalDigest({
+        operationRef,
+        outcome: decision.snapshot.attempt.outcome,
+      } as StableHashValue)}`,
+    }
+  }
+  return canonicalRefused(operationRef, decision.code)
+}
+
+function canonicalRefused(operationRef: string, code: string): DispatchResult {
+  return {
+    state: 'uncertain',
+    canonicalDisposition: 'refused',
+    failureCode: code,
+    evidenceRef: `ae:canonical-refused:${canonicalDigest({ operationRef, code } as StableHashValue)}`,
+  }
+}
 async function dispatchHttpJson(
   dispatch: DispatchPayload,
   operationRef: string,
+  persistReleaseFence: PersistReleaseFence,
 ): Promise<DispatchResult> {
   let endpoint: URL
   let configuration: HttpConfiguration
@@ -110,6 +412,9 @@ async function dispatchHttpJson(
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   let networkCallStarted = false
   try {
+    if (!await persistReleaseFence()) {
+      return notReleased(operationRef, 'canonical_release_fence_refused')
+    }
     networkCallStarted = true
     const response = await guardedFetch(endpoint, {
       method: configuration.method,
@@ -168,7 +473,11 @@ async function dispatchHttpJson(
   }
 }
 
-async function reconcileHttpJson(dispatch: DispatchPayload, operationRef: string) {
+async function reconcileHttpJson(
+  dispatch: DispatchPayload,
+  operationRef: string,
+  persistReleaseFence: PersistReleaseFence,
+) {
   let endpoint: URL
   let configuration: HttpConfiguration
   try {
@@ -186,6 +495,7 @@ async function reconcileHttpJson(dispatch: DispatchPayload, operationRef: string
   if (credential === undefined || configuration.reconciliation === undefined) return undefined
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   try {
+    if (!await persistReleaseFence()) return undefined
     const response = await guardedFetch(endpoint, {
       method: 'POST',
       redirect: 'manual',
@@ -226,7 +536,7 @@ function notReleased(operationRef: string, failureCode: string): DispatchResult 
 
 function resolveCredential(reference: string): string | undefined {
   const match = /^env:([A-Z][A-Z0-9_]{1,199})$/.exec(reference)
-  return match?.[1] === undefined ? undefined : process.env[match[1]]
+  return match?.[1] === undefined ? undefined : readTrimmedEnv(process.env, match[1])
 }
 
 function isHttpConfiguration(value: unknown): value is HttpConfiguration {

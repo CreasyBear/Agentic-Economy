@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
+import { kindForStatus } from '@/lib/errors'
 import {
   callPublicSourceMutation,
   sourceMutation,
@@ -8,6 +9,8 @@ import {
 import { notificationErrorResponse } from '@/lib/server/notification-dispatch'
 import type { NotificationRuntimeErrorResult } from '@/lib/server/notification-dispatch'
 import { response as notificationWebhookJsonResponse } from '@/lib/server/no-store-response'
+import { methodNotAllowed } from '@/lib/server/method-guard'
+import { problem } from '@/lib/server/problem'
 import {
   NotificationProviderError,
   readNotificationOutboxSystemKey,
@@ -22,6 +25,14 @@ export const Route = createFileRoute('/api/notification/resend-webhook')({
   server: {
     handlers: {
       POST: ({ request }) => handleResendWebhookRequest(request),
+      GET: () => methodNotAllowed(['POST']),
+      PUT: () => methodNotAllowed(['POST']),
+      PATCH: () => methodNotAllowed(['POST']),
+      DELETE: () => methodNotAllowed(['POST']),
+      HEAD: () => methodNotAllowed(['POST']),
+      OPTIONS: () => methodNotAllowed(['POST']),
+      TRACE: () => methodNotAllowed(['POST']),
+      CONNECT: () => methodNotAllowed(['POST']),
     },
   },
 })
@@ -85,7 +96,16 @@ export async function handleResendWebhookRequest(
     }
     const result = await (options.ingestWebhook ?? defaultIngestWebhook)(ingestArgs)
 
-    return notificationWebhookJsonResponse(result, result.kind === 'ok' ? 200 : 500)
+    if (result.kind !== 'ok') {
+      return problem({
+        status: 500,
+        kind: kindForStatus(500),
+        code: result.code,
+        detail: result.reason,
+        retryable: result.retryable,
+      })
+    }
+    return notificationWebhookJsonResponse(result, 200)
   } catch (error) {
     const normalizedError = notificationErrorResponse(error)
     if (normalizedError !== undefined) return normalizedError

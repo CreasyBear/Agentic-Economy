@@ -156,13 +156,33 @@ describe('/$slug/inquiry governed-send review', () => {
 
     expect(head?.meta).toContainEqual({ title: 'Confirm what will be sent | Agentic Economy' })
   })
+
+  it('uses unavailable metadata and a not-found view instead of the review shell', async () => {
+    const unavailableHead = await PublicInquiryRoute.options.head?.({
+      loaderData: { kind: 'unavailable', slug: 'demo-plumbing', reason: 'The source is unavailable.' },
+    } as never)
+    expect(unavailableHead?.meta).toContainEqual({ title: 'Request unavailable | Agentic Economy' })
+
+    vi.spyOn(PublicInquiryRoute, 'useLoaderData').mockReturnValue({
+      kind: 'not_found',
+      slug: 'missing-business',
+      reason: 'no_such_business',
+    } as never)
+    vi.spyOn(PublicInquiryRoute, 'useSearch').mockReturnValue({})
+    const Component = PublicInquiryRoute.options.component as ComponentType
+    renderWithRouter(<Component />)
+
+    expect(screen.getByRole('heading', { name: 'Business page not found' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
+    expect(screen.queryByRole('heading', { name: 'Confirm what will be sent' })).toBeNull()
+  })
 })
 
 describe('customer inquiry record proof boundary', () => {
   it('states exactly what the record proves and does not prove', () => {
     vi.spyOn(customerRecordClient, 'useCustomerInquiryRecord').mockReturnValue(customerRecordResult())
 
-    renderWithRouter(<AeCustomerRecord threadId="inquiry_thread:review" accessKey="private-record-key" />)
+    renderWithRouter(<AeCustomerRecord threadId="inquiry_thread:review" recordAccessKey="private-record-key" />)
 
     expect(screen.getByText('This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.')).toBeTruthy()
   })
@@ -171,7 +191,7 @@ describe('customer inquiry record proof boundary', () => {
     vi.spyOn(customerRecordClient, 'useCustomerInquiryRecord').mockReturnValue(customerRecordResult())
 
     const { container } = renderWithRouter(
-      <AeCustomerRecord threadId="inquiry_thread:review" accessKey="private-record-key" />,
+      <AeCustomerRecord threadId="inquiry_thread:review" recordAccessKey="private-record-key" />,
     )
     const summary = screen.getByRole('heading', { name: 'What you sent' }).closest('section')
     if (summary === null) throw new Error('governed record summary section missing')

@@ -3,11 +3,25 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { AnswerEvent, AnswerSource } from '@/modules/answer/public'
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { AnswerRunReport, FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
-import {
-  streamAnswerTurn,
-  type AnswerTurnRecord,
-} from '@/modules/answer-thread/public'
+import { answerTurnRequestDigest, streamAnswerTurn } from '@/modules/answer-thread/server'
+import { reserveAnswerTurn } from '@/modules/answer-thread/answer-thread.functions'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { AnswerTurnReservationRecord } from '@/modules/answer-thread/answer-thread.schema'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import {
+  createAnswerThreadTestStore,
+  installAnswerThreadTestPort,
+} from '../../helpers/answer-thread-test-port'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../../helpers/openrouter-contract-server'
+const emptyKeylessSource: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
 
 const provider: AnswerSource = {
   citationIndex: 1,
@@ -33,6 +47,7 @@ const provider: AnswerSource = {
     },
   ],
 }
+
 function currentPriorEvidence(): FrozenTurnEvidenceDraft & { answerRun: AnswerRunReport } {
   const draft: FrozenTurnEvidenceDraft = {
     providers: [provider],
@@ -52,65 +67,100 @@ function currentPriorEvidence(): FrozenTurnEvidenceDraft & { answerRun: AnswerRu
     }),
   }
 }
-
 describe('answer turn catalog grounding', () => {
   afterEach(() => {
     setAnswerThreadPortForTests(undefined)
   })
-
-  it('does not persist or complete-stream a snapshot with providers outside allowed slugs', async () => {
-    const appended: { status?: string; evidenceJson?: string; errorCopyId?: string } = {}
-    const events: AnswerEvent[] = []
-    const reset = setAnswerThreadPortForTests({
-      createThread: async (args) => ({ threadId: args.threadId }),
-      appendTurn: async (args) => {
-        appended.status = args.status
-        if (args.evidenceJson !== undefined) {
-          appended.evidenceJson = args.evidenceJson
-        }
-        if (args.errorCopyId !== undefined) {
-          appended.errorCopyId = args.errorCopyId
-        }
-        return { turnId: args.turnId }
-      },
-      appendTurnWithToolCalls: async (args) => {
-        appended.status = args.status
-        if (args.evidenceJson !== undefined) {
-          appended.evidenceJson = args.evidenceJson
-        }
-        if (args.errorCopyId !== undefined) {
-          appended.errorCopyId = args.errorCopyId
-        }
-        return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
-      },
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
+  it('emits one terminal refusal only after durable persistence', async () => {
+    const observed: {
+      event: AnswerEvent
+      durableStatus: AnswerTurnRecord['status'] | undefined
+      reservationState: AnswerTurnReservationRecord['state'] | undefined
+    }[] = []
+    const store = createAnswerThreadTestStore()
+    store.threads.set('thread-1', {
+      threadId: 'thread-1',
+      pseudonymousSessionId: 'session-1',
+      title: 'emergency plumber in Perth',
+      createdAt: 1,
+      updatedAt: 1,
     })
+    store.turns.set('prior-turn-1', buildUngroundedPriorTurn())
+    const reset = installAnswerThreadTestPort(store)
+    const requestDigest = answerTurnRequestDigest({
+      threadId: 'thread-1',
+      query: 'Can AE book this?',
+    })
+    const admission = await reserveAnswerTurn({
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      query: 'Can AE book this?',
+      requestDigest,
+      reservationKey: 'grounding:session-1:turn-1',
+      title: 'Can AE book this?',
+    })
+    if (admission.kind !== 'reserved') throw new Error(`fixture reservation ${admission.kind}`)
 
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'No prose should be needed for this boundary.',
+        summary: 'No prose should be needed for this boundary.',
+        whatToDoNow: 'Ask a supported question.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
     try {
       await streamAnswerTurn(
         {
           sessionId: 'session-1',
           threadId: 'thread-1',
           query: 'Can AE book this?',
-          precheckedAccess: { kind: 'allowed', turnCount: 1 },
+          requestDigest,
+          admission,
+          keylessExecutableSource: emptyKeylessSource,
           preloadedPriorTurns: [buildUngroundedPriorTurn()],
+          sourceWriteRequest: new Request('https://ae.test/api/answer/turn', {
+            method: 'POST',
+            headers: { 'X-AE-Turn-Key': 'grounding:turn-1' },
+          }),
         },
-        ({ event }) => events.push(event),
+        ({ event }) => {
+          const turn = store.turns.get(admission.turnId)
+          const reservation = store.reservations.get(admission.reservationKey)
+          observed.push({
+            event,
+            durableStatus: turn?.status,
+            reservationState: reservation?.state,
+          })
+        },
       )
     } finally {
+      restoreOpenRouter()
+      await server.close()
       reset()
     }
 
-    expect(events.some((event) => event.type === 'complete')).toBe(false)
-    expect(events.some((event) => event.type === 'error' && event.code === 'grounding_failed')).toBe(true)
-    expect(appended.status).toBe('error')
-    expect(appended.errorCopyId).toBeDefined()
+    const storedTurn = [...store.turns.values()].find((turn) => turn.turnId !== 'prior-turn-1')
+    const terminalFrames = observed.filter(({ event }) =>
+      event.type === 'complete' || event.type === 'error' || event.type === 'stopped',
+    )
+    expect(terminalFrames).toHaveLength(1)
+    expect(observed.at(-1)).toBe(terminalFrames[0])
+    expect(terminalFrames[0]).toMatchObject({
+      event: { type: 'error', problem: { code: 'grounding_failed' } },
+      durableStatus: 'error',
+      reservationState: 'finalized',
+    })
+    expect(storedTurn?.status).toBe('error')
+    expect(storedTurn?.errorProblemJson).toBeDefined()
 
-    const evidence = JSON.parse(appended.evidenceJson ?? '{}') as { providers?: unknown[]; allowedSlugs?: unknown[] }
+    const evidence = JSON.parse(storedTurn?.evidenceJson ?? '{}') as {
+      providers?: unknown[]
+      allowedSlugs?: unknown[]
+    }
     expect(evidence.providers).toEqual([])
     expect(evidence.allowedSlugs).toEqual([])
+
   })
 })
 

@@ -99,6 +99,16 @@ describe('runAnswerGate', () => {
     expect(result.code).toBe('unsupported_provider_claim')
   })
 
+  it('rejects unsupported provider assurances without execution promotion', () => {
+    const result = runAnswerGate({
+      snapshot: snapshot({ summary: 'Preston Plumbing can complete the work this week.' }),
+      allowedSlugs: new Set(['preston-plumbing']),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected gate failure')
+    expect(result.code).toBe('unsupported_provider_claim')
+  })
+
   it('rejects paraphrased price or availability details that are not verbatim published values', () => {
     const provider = snapshot().providers[0]!
     const result = runAnswerGate({
@@ -146,6 +156,19 @@ describe('runAnswerGate', () => {
         nextStep: 'Contact Preston Plumbing and ask whether it handles the work, what it costs, and when it is available.',
       }),
       allowedSlugs: new Set(['preston-plumbing']),
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows keyless numeric results without provider fulfilment claims', () => {
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [],
+        oneLine: 'Bitcoin is $94,213.00 USD.',
+        summary: 'The current quote is 94213.00 USD.',
+        nextStep: 'Use the returned quote for this decision.',
+      }),
+      allowedSlugs: new Set<string>(),
     })
     expect(result.ok).toBe(true)
   })

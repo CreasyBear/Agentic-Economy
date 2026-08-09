@@ -1,6 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
 import { repeatPermissionRef } from '@/modules/customer-request/application/public'
 import { compileRouteMandate } from '@/modules/customer-request/route-mandate'
 import {
@@ -27,7 +28,7 @@ import {
 import { currentRoutePlanGenerationGraphStatus } from './customerRequestV2'
 import { routeMandateIssueRecordIsValid } from './customerRequestRouteMandateIntegrity'
 
-const money = v.object({ currency: v.string(), amountMinor: v.number() })
+const money = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 const issueCommand = {
   requestId: v.string(),
   expectedRequestRevision: v.number(),
@@ -283,18 +284,22 @@ export const issue = internalMutation({
       || !delegatedCredential.scopes.includes('customer_requests:standing_authority')) {
       return { kind: 'refused' as const, reason: 'credential_not_authorized' as const }
     }
-    if (route === undefined || route.maximumTotalCost.kind !== 'known'
-      || !validIdentifier(args.delegatedCredentialId)
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+      return { kind: 'refused' as const, reason: 'policy_scope_invalid' as const }
+    }
+    const perUseComparison = compareExactAmounts(args.perUseSpend, route.maximumTotalCost.amount)
+    const cumulativeComparison = compareExactAmounts(args.cumulativeSpend, args.perUseSpend)
+    if (!validIdentifier(args.delegatedCredentialId)
       || !validPositiveCount(args.occurrences)
       || !validPositiveCount(args.perUseDataAllocations)
       || !validPositiveCount(args.cumulativeDataAllocations)
       || args.cumulativeDataAllocations < args.perUseDataAllocations
-      || !validMoney(args.perUseSpend)
-      || !validMoney(args.cumulativeSpend)
-      || args.perUseSpend.currency !== route.maximumTotalCost.currency
-      || args.perUseSpend.amountMinor < route.maximumTotalCost.amountMinor
-      || args.cumulativeSpend.currency !== route.maximumTotalCost.currency
-      || args.cumulativeSpend.amountMinor < args.perUseSpend.amountMinor
+      || !exactAmountSchema.safeParse(args.perUseSpend).success
+      || !exactAmountSchema.safeParse(args.cumulativeSpend).success
+      || perUseComparison === undefined
+      || perUseComparison < 0
+      || cumulativeComparison === undefined
+      || cumulativeComparison < 0
       || !Number.isSafeInteger(args.validUntil)) {
       return { kind: 'refused' as const, reason: 'policy_scope_invalid' as const }
     }
@@ -922,11 +927,6 @@ function validPositiveCount(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0
 }
 
-function validMoney(value: Readonly<{ currency: string; amountMinor: number }>): boolean {
-  return value.currency.trim().length > 0
-    && Number.isSafeInteger(value.amountMinor)
-    && value.amountMinor >= 0
-}
 
 function credentialBelongsToAuthenticatedRequest(
   credential: Readonly<{

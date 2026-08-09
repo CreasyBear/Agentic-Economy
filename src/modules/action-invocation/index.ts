@@ -34,6 +34,33 @@ export {
   readCompletedResultIdentity,
 } from './durable'
 export {
+  createConvexActionInvocationDurablePort,
+} from './convex-durable-port'
+export {
+  buildCanonicalClaimCommand,
+  buildCanonicalReleaseFenceCommand,
+  buildCanonicalTerminalOutcomeCommand,
+  claimCanonicalInvocation,
+  persistCanonicalReleaseFence,
+  persistCanonicalTerminalOutcome,
+} from './canonical-claim'
+export type {
+  CanonicalClaimAcceptedAuthority,
+  CanonicalClaimAuthority,
+  CanonicalClaimCommand,
+  CanonicalClaimDecision,
+  CanonicalClaimInput,
+  CanonicalClaimRefusalCode,
+  CanonicalClaimSnapshot,
+  CanonicalReleaseFenceInput,
+  CanonicalTerminalOutcome,
+  CanonicalTerminalOutcomeInput,
+  CustomerRequestCanonicalClaimMaterial,
+} from './canonical-claim'
+export type {
+  ConvexActionInvocationDurablePortOptions,
+} from './convex-durable-port'
+export {
   authorityUseIntegrityValid,
   issueStandingMandate,
   mandateIntegrityValid,
@@ -64,7 +91,7 @@ export {
 } from './dynamic-published-snapshot-verifier'
 export {
   DevelopmentProcessInterruption,
-  createDevelopmentInvocationApplication,
+  createInvocationApplication,
 } from './application-service'
 export {
   readDevelopmentHostSnapshot,
@@ -121,14 +148,13 @@ export type {
   DevelopmentHostRefusalCode,
   DevelopmentHostSourceCommands,
   DevelopmentInvocationApplication,
-  DevelopmentInvocationHost,
+  InvocationHost,
 } from './application-service'
 export type {
   DevelopmentHostKind,
   DevelopmentHostReadReceipt,
   DevelopmentHostSemanticRead,
 } from './development-host-read'
-export type { DevelopmentInvocationHost as DevelopmentActionInvocationHostSeam } from './application-service'
 export type {
   InvocationTaskSemantics,
   RichInvocationTaskProjection,

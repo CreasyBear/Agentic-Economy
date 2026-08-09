@@ -68,6 +68,7 @@ import {
   SuppressionRuleStatusValues,
 } from '../src/modules/security/public'
 import { parseRedactedPayload } from '../src/modules/notification-outbox/operator/parse-payload'
+import { exactAmountSchema } from '../src/modules/money/public'
 import type { RedactedPayload } from '../src/modules/observability/public'
 
 export type InquirySourceDocument = Readonly<Record<string, unknown> & { _id: string }>
@@ -182,17 +183,46 @@ function requiredEnum<T extends string>(row: Record<string, unknown>, field: str
   if (match === undefined) throw new Error(`inquiry_row_enum_required:${field}`)
   return match
 }
+function requiredExactAmount(row: Record<string, unknown>, field: string) {
+  const parsed = exactAmountSchema.safeParse(row[field])
+  if (!parsed.success) throw new Error(`inquiry_row_exact_amount_required:${field}`)
+  return parsed.data
+}
+
 function offeringPrice(row: Record<string, unknown>): OfferingPrice {
-  const amountMinor = optionalNumber(row, 'amountMinor')
-  const maximumAmountMinor = optionalNumber(row, 'maximumAmountMinor')
+  const kind = requiredEnum(row, 'kind', OfferingPriceKindValues)
+  const allowedFields = kind === 'quote_only'
+    ? ['kind', 'currency', 'unit', 'taxTreatment']
+    : kind === 'fixed' || kind === 'from'
+      ? ['kind', 'amount', 'unit', 'taxTreatment']
+      : ['kind', 'minimum', 'maximum', 'unit', 'taxTreatment']
+  if (Object.keys(row).some((field) => !allowedFields.includes(field))) {
+    throw new Error('inquiry_row_price_invalid')
+  }
   const unit = row.unit === undefined ? undefined : requiredEnum(row, 'unit', OfferingPriceUnitValues)
+  const taxTreatment = requiredEnum(row, 'taxTreatment', OfferingPriceTaxTreatmentValues)
+  if (kind === 'quote_only') {
+    return {
+      kind,
+      currency: requiredString(row, 'currency'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
+  if (kind === 'fixed' || kind === 'from') {
+    return {
+      kind,
+      amount: requiredExactAmount(row, 'amount'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
   return {
-    kind: requiredEnum(row, 'kind', OfferingPriceKindValues),
-    currency: requiredString(row, 'currency'),
-    ...(amountMinor === undefined ? {} : { amountMinor }),
-    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
+    kind,
+    minimum: requiredExactAmount(row, 'minimum'),
+    maximum: requiredExactAmount(row, 'maximum'),
     ...(unit === undefined ? {} : { unit }),
-    taxTreatment: requiredEnum(row, 'taxTreatment', OfferingPriceTaxTreatmentValues),
+    taxTreatment,
   }
 }
 

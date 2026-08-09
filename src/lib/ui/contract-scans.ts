@@ -174,6 +174,10 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
       && violation.excerpt.includes('v.any()')
       && violation.excerpt.includes('runtime-validated JsonValue boundary')
   ) || (
+    violation.file === 'convex/capabilitySupplyOperations.ts'
+      && violation.excerpt.includes('v.any()')
+      && violation.excerpt.includes('runtime-validated JsonValue boundary')
+  ) || (
     violation.file === 'src/modules/customer-request/internal/convex-v2-schema.ts'
       && violation.excerpt.includes('v.any()')
       && violation.excerpt.includes('runtime-validated JsonValue boundary')
@@ -344,6 +348,12 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   if (violation.rule !== 'forbidden-handshake-import') return false
   if (violation.file === 'src/modules/capability-supply/internal/x402-payment-signer.ts') {
     return /from\s+['"](?:@x402\/(?:core|evm|extensions)\/[^'"]+|viem\/accounts)['"]/.test(violation.excerpt)
+  }
+  if (violation.file === 'src/modules/capability-supply/internal/transport-adapters.ts') {
+    return /from\s+['"]@x402\/core\/schemas['"]/.test(violation.excerpt)
+  }
+  if (violation.file === 'src/modules/money/internal/exact-amount.ts') {
+    return /from\s+['"]@x402\/core\/utils['"]/.test(violation.excerpt)
   }
   // T6's adopted MCP host owns the protocol SDK construction at this exact server seam.
   return violation.file === 'src/lib/server/mcp-api.ts'

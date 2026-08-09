@@ -23,8 +23,7 @@ const account: MoneyAccount = {
   accountRef: accountRefForOperator(key.keyId, 'USD'),
   accountKind: 'operator_credit',
   principalId: `clerk_api_key:${key.keyId}`,
-  currency: 'USD',
-  balanceMinor: 2_500,
+  balance: { currency: 'USD', units: '2500', exponent: 2 },
   version: 1,
   state: 'active',
   createdAt: 1,
@@ -35,7 +34,6 @@ const usage: MoneyUsageEvent = {
   usageRef: 'usage-console-1',
   principalId: `clerk_api_key:${key.keyId}`,
   credentialId: key.keyId,
-  currency: 'USD',
   serviceRef: 'service:quote',
   offeringRef: 'offering:quote',
   businessId: 'business:one',
@@ -44,24 +42,24 @@ const usage: MoneyUsageEvent = {
   operationKey: 'quote.latest',
   priceDigest: 'price:one',
   chargeState: 'paid',
-  amountMinor: 500,
+  amount: { currency: 'USD', units: '500', exponent: 2 },
   transactionRef: 'transaction:one',
   observedAt: 10,
 }
 
 describe('agent access money seam', () => {
   it('reads exact key balance, bounded activity, and per-key spend from the public query port', async () => {
-    const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, currency: usage.currency, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpendMinor: 500, states: ['paid'] as const }]]) }
+    const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.amount.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpend: { currency: 'USD', units: '500', exponent: 2 }, states: ['paid'] as const }]]) }
     const [result] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({ ledger }))
 
     expect(result).toMatchObject({
       principalId: 'clerk_api_key:key_console_1',
-      account: { balanceMinor: 2_500, currency: 'USD', evidence: 'labelled_local_dev' },
+      account: { balance: { currency: 'USD', units: '2500', exponent: 2 }, evidence: 'labelled_local_dev' },
       dataState: 'source',
     })
     expect(result?.activity).toHaveLength(1)
-    expect(result?.activity[0]).toMatchObject({ credentialId: 'key_console_1', grossAmountMinor: 500, chargeState: 'paid' })
-    expect(result?.usage).toMatchObject({ credentialId: 'key_console_1', callCount: 1, paidCallCount: 1, grossSpendMinor: 500 })
+    expect(result?.activity[0]).toMatchObject({ credentialId: 'key_console_1', grossAmount: { currency: 'USD', units: '500', exponent: 2 }, chargeState: 'paid' })
+    expect(result?.usage).toMatchObject({ credentialId: 'key_console_1', callCount: 1, paidCallCount: 1, grossSpend: { currency: 'USD', units: '500', exponent: 2 } })
   })
 
 })

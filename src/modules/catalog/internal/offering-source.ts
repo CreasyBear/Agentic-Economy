@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import type { AccessPathRef, BusinessId, OfferingRef, SourceHash } from '@/modules/common/ids'
 
 import { normalizeOfferingPrice, type OfferingPrice, type OfferingPriceInput } from './offering-price'
@@ -224,7 +225,7 @@ function authorize(state: OfferingSourceState, authority: Authority): OfferingSo
 }
 
 function validateFacts(input: OfferingFactsInput): ValidatedOfferingFacts | undefined {
-  const clean = (value: string | undefined, maximum: number) => value?.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maximum)
+  const clean = (value: string | undefined, maximum: number) => value == null ? undefined : sanitizeText(value, maximum)
   const serviceAreaSummary = clean(input.serviceAreaSummary, 500)
   const availabilitySummary = clean(input.availabilitySummary, 500)
   const pricingSummary = clean(input.pricingSummary, 500)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 
 import { defineAction, listActions } from '@/modules/actions'
-import { AnswerToolIdValues } from '@/modules/answer-thread/answer-thread.schema'
+import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import {
   AnswerModelToolIds,
   actionToHarnessTool,
@@ -23,7 +23,10 @@ describe('harness tool contract', () => {
     const descriptors = answerContracts.map(describeHarnessToolForAnswerModel)
 
     expect(answerContracts.map((contract) => contract.id)).toEqual([...AnswerModelToolIds])
-    expect(AnswerModelToolIds).toEqual(AnswerToolIdValues)
+    // The answer model's harness toolset is exactly the DIRECT model toolset.
+    // `operation.execute` is a record-only id (the seam behind dynamic per-op
+    // capability tools), persisting to Convex but not itself a callable tool.
+    expect(AnswerModelToolIds).toEqual(ANSWER_READ_TOOL_IDS)
     expect(answerContracts.every((contract) => contract.policy.tier === 'read')).toBe(true)
     expect(answerContracts.every((contract) => contract.schemas.providerViolations.length === 0)).toBe(true)
     expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual([...AnswerModelToolIds])

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { discoveryJsonResponse } from '@/lib/http/discovery-response'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { buildSiteDiscoveryManifest } from '@/modules/discovery/public'
 
@@ -14,6 +15,14 @@ export const Route = createFileRoute('/.well-known/ucp')({
   server: {
     handlers: {
       GET: ({ request }) => handleSiteDiscoveryManifestRequest(request),
+      POST: () => methodNotAllowed(['GET']),
+      PUT: () => methodNotAllowed(['GET']),
+      PATCH: () => methodNotAllowed(['GET']),
+      DELETE: () => methodNotAllowed(['GET']),
+      HEAD: () => methodNotAllowed(['GET']),
+      OPTIONS: () => methodNotAllowed(['GET']),
+      TRACE: () => methodNotAllowed(['GET']),
+      CONNECT: () => methodNotAllowed(['GET']),
     },
   },
 })

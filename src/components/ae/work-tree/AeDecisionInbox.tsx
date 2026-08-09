@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatMoney } from '@/lib/ui/format-money'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import type { DecisionInboxExit, DecisionInboxExitKind, DecisionInboxItem, DecisionInboxProjection } from '@/modules/work-tree/public'
 
 /**
@@ -54,7 +54,7 @@ export function AeDecisionInbox({ projection, pendingExit, status, onLock, onAdj
       <div className="grid gap-1">
         <p className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">Decision inbox</p>
         <h2 id="decision-inbox-title" className="text-2xl font-semibold tracking-tight text-foreground">The decisions that matter</h2>
-        <p className="text-sm text-muted-foreground">One current frontier at a time.</p>
+        <p className="text-sm text-muted-foreground">Your project is split into decisions. Handle them one at a time.</p>
       </div>
 
       <Card className="border border-border bg-card" role="status" aria-live="polite">
@@ -214,9 +214,9 @@ function formatTiming(item: DecisionInboxItem): string {
 function formatCost(item: DecisionInboxItem): string {
   const cost = item.cost
   if (cost === undefined) return 'No cost set'
-  const amount = cost.committedMinor ?? cost.estimateMinor ?? cost.envelopeMinor
+  const amount = cost.committed ?? cost.estimate ?? cost.envelope
   if (amount === undefined) return 'Cost still open'
-  return `${formatMoney(cost.currency, amount)}${cost.envelopeMinor === undefined ? '' : ` of ${formatMoney(cost.currency, cost.envelopeMinor)} envelope`}`
+  return `${formatCurrencyAmount(amount)}${cost.envelope === undefined ? '' : ` of ${formatCurrencyAmount(cost.envelope)} envelope`}`
 }
 
 function formatScope(item: DecisionInboxItem): string {

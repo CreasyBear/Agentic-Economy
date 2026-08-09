@@ -6,12 +6,14 @@ import {
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 const contractRef = {
   capabilityId: 'reference.lookup',
   version: 1,
   contractDigest: `sha256:${'1'.repeat(64)}`,
 }
+const audAmount: ExactAmount = { currency: 'AUD', units: '1200', exponent: 2 }
 
 describe('capability supply registration contract', () => {
   it('keeps commercial offering identity separate from transport binding identity', () => {
@@ -21,8 +23,10 @@ describe('capability supply registration contract', () => {
     expect(offering).toMatchObject({
       offeringId: 'offering:sandbox-one:lookup',
       businessId: 'businesses:sandbox-one',
-      presentation: { price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } },
+      presentation: { price: { kind: 'fixed', amount: audAmount } },
     })
+    expect(offering.presentation.price).not.toHaveProperty('currency')
+    expect(offering.presentation.price).not.toHaveProperty('amountMinor')
     expect(offering).not.toHaveProperty('adapter')
     expect(offering).not.toHaveProperty('endpointUrl')
     expect(binding).toMatchObject({
@@ -32,6 +36,26 @@ describe('capability supply registration contract', () => {
     })
     expect(binding).not.toHaveProperty('presentation')
     expect(binding).not.toHaveProperty('businessId')
+  })
+  it('compares range prices by exact value across exponent scales', () => {
+    const minimum = { currency: 'USD', units: '7', exponent: 3 }
+    const maximum = { currency: 'USD', units: '1', exponent: 2 }
+    const offering = defineCapabilityOfferingRegistration({
+      ...offeringInput(),
+      presentation: {
+        ...offeringInput().presentation,
+        price: { kind: 'range' as const, minimum, maximum },
+      },
+    })
+
+    expect(offering.presentation.price).toEqual({ kind: 'range', minimum, maximum })
+    expect(() => defineCapabilityOfferingRegistration({
+      ...offeringInput(),
+      presentation: {
+        ...offeringInput().presentation,
+        price: { kind: 'range' as const, minimum: { ...maximum, units: '11' }, maximum },
+      },
+    })).toThrowError('capability_offering_invalid')
   })
 
   it('strictly rejects operation and all other undeclared registration fields', () => {
@@ -55,6 +79,19 @@ describe('capability supply registration contract', () => {
         materialTerms: [{ ...offering.presentation.materialTerms[0], undeclared: true }],
       },
     })).toThrowError('capability_offering_invalid')
+    for (const malformedAmount of [
+      { currency: 'usd', units: '1200', exponent: 2 },
+      { currency: 'AUD', units: '01200', exponent: 2 },
+      { currency: 'AUD', units: '1200', exponent: 19 },
+    ]) {
+      expect(() => defineCapabilityOfferingRegistration({
+        ...offering,
+        presentation: {
+          ...offering.presentation,
+          price: { kind: 'fixed' as const, amount: malformedAmount },
+        },
+      })).toThrowError('capability_offering_invalid')
+    }
     expect(() => defineCapabilityTransportBindingRegistration({
       ...binding,
       continuation: { ...binding.continuation, undeclared: true },
@@ -98,8 +135,12 @@ describe('capability supply registration contract', () => {
       ...offering,
       presentation: { ...offering.presentation, summary: 'Changed commercial summary.' },
     })).not.toBe(capabilityOfferingRegistrationHash(offering))
-    expect(capabilityBindingRegistrationHash({ ...binding, credentialRef: 'env:OTHER_KEY' }, admitted))
-      .not.toBe(capabilityBindingRegistrationHash(binding, admitted))
+    const authority = binding.authority
+    if (authority.kind !== 'provider_connection') throw new Error('provider_authority_missing')
+    expect(capabilityBindingRegistrationHash({
+      ...binding,
+      authority: { ...authority, connectionRef: 'connection:other' },
+    }, admitted)).not.toBe(capabilityBindingRegistrationHash(binding, admitted))
     expect(capabilityBindingRegistrationHash(binding, {
       configJson: '{"method":"POST","requestTimeoutMs":6000}',
       configDigest: `sha256:${'4'.repeat(64)}`,
@@ -134,7 +175,7 @@ function offeringInput() {
     presentation: {
       label: 'Sandbox reference lookup',
       summary: 'A labelled sandbox capability used only for source verification.',
-      price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1_200 },
+      price: { kind: 'fixed' as const, amount: audAmount },
       materialTerms: [{ termId: 'sandbox', label: 'Environment', value: 'Sandbox only' }],
       commercialRelationship: {
         kind: 'none' as const,
@@ -157,7 +198,7 @@ function bindingInput() {
     networkId: 'ae:public',
     contractRef,
     endpointUrl: 'https://example.test/api/capability',
-    credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+    authority: { kind: 'provider_connection', connectionRef: 'connection:sandbox-one', providerRef: 'provider:sandbox' },
     continuation: { kind: 'single_response' as const, evidenceRefs: ['seed:http-response'] },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['seed:no-cancellation'] },
     adapter: {

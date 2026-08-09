@@ -53,20 +53,45 @@ export const Route = createFileRoute('/$slug/inquiry')({
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind !== 'available') return readPublicInquiryRouteReadback({ slug: params.slug, page })
     const target = selectPublicInquiryTarget(page.catalog)
-    const admissionResult = target === undefined ? undefined : await readPublicTargetAdmissionServer({ data: target })
-    return readPublicInquiryRouteReadback({
-      slug: params.slug,
-      page,
-      ...(admissionResult?.kind === 'ok' ? { admission: admissionResult.admission } : {}),
-    })
+    if (target === undefined) {
+      return readPublicInquiryRouteReadback({ slug: params.slug, page })
+    }
+
+    try {
+      const admissionResult = await readPublicTargetAdmissionServer({ data: target })
+      if (admissionResult.kind === 'error') {
+        return {
+          kind: 'unavailable' as const,
+          slug: params.slug,
+          reason: 'The public business source is unavailable right now. Try again in a moment.',
+          businessName: page.catalog.name,
+        }
+      }
+      return readPublicInquiryRouteReadback({
+        slug: params.slug,
+        page,
+        admission: admissionResult.admission,
+      })
+    } catch {
+      return {
+        kind: 'unavailable' as const,
+        slug: params.slug,
+        reason: 'The public business source is unavailable right now. Try again in a moment.',
+        businessName: page.catalog.name,
+      }
+    }
   },
-  head: () => ({
-    meta: [
-      { title: 'Confirm what will be sent | Agentic Economy' },
-      { name: 'description', content: 'Review every detail before sending one request.' },
-      { name: 'robots', content: 'noindex' },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const unavailable = loaderData?.kind === 'unavailable'
+    const notFound = loaderData?.kind === 'not_found'
+    return {
+      meta: [
+        { title: unavailable ? 'Request unavailable | Agentic Economy' : notFound ? 'Business page not found | Agentic Economy' : 'Confirm what will be sent | Agentic Economy' },
+        { name: 'description', content: unavailable ? 'This request cannot be reviewed while the public business source is unavailable.' : notFound ? 'No public business page exists at this address.' : 'Review every detail before sending one request.' },
+        { name: 'robots', content: 'noindex' },
+      ],
+    }
+  },
   component: PublicInquiryRoute,
 })
 
@@ -95,8 +120,8 @@ function PublicInquiryRoute() {
   const operationKeyRef = useRef(`inquiry-review:${crypto.randomUUID()}`)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
   const origin = inquiryOrigin(search)
-
   if (readback.kind === 'unavailable') return <UnavailableInquiry readback={readback} />
+  if (readback.kind === 'not_found') return <NotFoundInquiry readback={readback} />
   const availableReadback = readback
 
   const reviewValidation = validatePublicInquiryFormInput(value)
@@ -284,12 +309,34 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
       <div className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
         <Empty className="border border-border bg-card p-5">
           <EmptyHeader>
-            <h1 className="text-lg font-medium tracking-tight">Not sent</h1>
-            <EmptyDescription>This request is not available to send right now.</EmptyDescription>
+            <h1 className="text-lg font-medium tracking-tight">Request unavailable</h1>
+            <EmptyDescription>{readback.reason}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild variant="secondary">
               <a href={`/${readback.slug}`}>Back to business page</a>
+            </Button>
+          </EmptyContent>
+        </Empty>
+      </div>
+    </AePublicShell>
+  )
+}
+
+function NotFoundInquiry({ readback }: { readback: Extract<PublicInquiryRouteReadback, { kind: 'not_found' }> }) {
+  return (
+    <AePublicShell>
+      <div className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
+        <Empty className="border border-border bg-card p-5">
+          <EmptyHeader>
+            <h1 className="text-lg font-medium tracking-tight">Business page not found</h1>
+            <EmptyDescription>
+              {readback.reason === 'no_such_business' ? 'No public business page exists at this address.' : 'This business page is not public.'}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild variant="secondary">
+              <a href="/">Back to Ask</a>
             </Button>
           </EmptyContent>
         </Empty>

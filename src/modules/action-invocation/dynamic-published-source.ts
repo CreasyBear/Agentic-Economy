@@ -4,8 +4,8 @@ import {
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import type { ActionContext } from '@/modules/common/action'
+import type { ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-
 import type {
   ActionInvocationOrigin,
   ActionInvocationView,
@@ -32,7 +32,13 @@ export type DynamicPublishedSourceRow = Readonly<{
   prepared?: PreparedInvocation
   observedResolution: ActionInvocationView<DynamicPublishedInvocationResult>['observedResolution']
   resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
-  moneyCharge?: Readonly<{ transactionRef: string; chargeState: 'free_tier' | 'paid'; amountMinor: number; currency: string; priceDigest: string }>
+  moneyCharge?: Readonly<{
+    transactionRef: string
+    principalId: string
+    chargeState: 'free_tier' | 'paid'
+    amount: ExactAmount
+    priceDigest: string
+  }>
 }>
 
 export type DynamicPublishedSharedOutcome = Readonly<{

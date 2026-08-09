@@ -56,7 +56,8 @@ export async function runProviderOperationReconciliation(input: Readonly<{
   }
   const evidence = { ...material, digest: canonicalDigest(material) }
   issued.add(canonicalDigest(evidence))
-  const reconciled = uncertain.tracer.coldResume(uncertain.view.invocationRef).reconcile({
+  const cold = await uncertain.tracer.coldResume(uncertain.view.invocationRef)
+  const reconciled = await cold.reconcile({
     invocationRef: uncertain.view.invocationRef,
     expectedInvocationVersion: uncertain.view.invocationVersion,
     attemptRef: attempt.attemptRef,
@@ -76,7 +77,7 @@ export async function runProviderOperationReconciliation(input: Readonly<{
   return { uncertain, attempt, evidence, reconciled: reconciled.view }
 }
 
-export function runCancelBeforeRelease(input: Readonly<{
+export async function runCancelBeforeRelease(input: Readonly<{
   operation: DevelopmentProviderOperationInput
   origin: ActionInvocationOrigin
 }>) {
@@ -97,18 +98,18 @@ export function runCancelBeforeRelease(input: Readonly<{
       observedResolution: { state: 'pending' },
     }),
   })
-  const prepared = tracer.prepare({
+  const prepared = await tracer.prepare({
     origin: input.origin, actor: owner, input: input.operation, context: {}, freshnessMs: 900_000,
   })
   preparedSource = prepared.prepared
-  const decision = tracer.decide({
+  const decision = await tracer.decide({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: prepared.invocationVersion,
     authorityRef: prepared.authority!.reference,
     actor: owner, origin: input.origin, accept: true,
   })
   if (decision.kind !== 'accepted') throw new Error(decision.code)
-  const cancelled = tracer.cancel({
+  const cancelled = await tracer.cancel({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: decision.view.invocationVersion,
     actor: owner, origin: input.origin,

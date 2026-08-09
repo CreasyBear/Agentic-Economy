@@ -50,7 +50,7 @@ export const TRADE_VOCABULARY: readonly TradeVocabularyEntry[] = [
     symptoms: ['ducted', 'thermostat', 'refrigerant'],
   },
   { canonical: 'mechanic', aliases: ['mechanic', 'mechanics', 'mechanical'], symptoms: ['rego', 'roadworthy', 'brakes', 'engine'] },
-  { canonical: 'legal', aliases: ['lawyer', 'lawyers', 'solicitor', 'solicitors', 'legal'], symptoms: ['conveyancing', 'custody', 'probate'] },
+  { canonical: 'lawyer', aliases: ['lawyer', 'lawyers', 'solicitor', 'solicitors', 'legal'], symptoms: ['conveyancing', 'custody', 'probate'] },
 ]
 
 const aliasToCanonical = new Map<string, string>(

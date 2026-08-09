@@ -1,3 +1,14 @@
+> **SUPERSESSION BANNER — 2026-08-08.** This file is retained for historical
+> mechanics and evidence provenance only. It is **not current authority** for
+> AE's product category, ICP, wedge, supplier model, or roadmap.
+>
+> Current authority is [`PROJECT.md`](../PROJECT.md),
+> [`VISION-conceptual-map.md`](../VISION-conceptual-map.md),
+> [`wayfinder/MAP.md`](MAP.md), [`D-013`](../records/PROJECT-RECORDS.md), and
+> the [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md).
+> Do not infer from this historical map that local trades, Australian SMBs, BAS,
+> or a one-human-work wedge is the current category or default product frame.
+
 # Wayfinder map — Agent engine on `/` (non-mechanical AE)
 
 Label: `wayfinder:map` (local-markdown tracker fallback; `gh` still unauthenticated — see [T1](tickets/T1-gh-auth.md)).

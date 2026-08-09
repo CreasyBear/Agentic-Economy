@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react'
+import { ChevronDown, ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react'
 
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList, type AeOperatorQueueRow } from '@/components/ae/operator/AeOperatorQueueList'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type {
@@ -164,7 +165,7 @@ function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQue
   return {
     id: row.rowId,
     title: `Thread ${row.threadId}`,
-    description: `Source hash ${row.sourceHash}`,
+    description: 'Source-backed inquiry reconstruction',
     badges: [
       { label: row.operatorNextAction.replaceAll('_', ' '), variant: needsAttention ? 'destructive' : 'secondary' },
       { label: row.status, variant: 'outline' },
@@ -177,34 +178,75 @@ function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQue
     ],
     body: (
       <div className="mt-2 grid gap-4">
-        <RefSection title="Message hashes" refs={row.messageRefs} renderRef={messageRefLabel} />
+        <RefDisclosure label="Source hash" raw={row.sourceHash} />
+        <RefSection title="Message hashes" refType="Message ref" refs={row.messageRefs} renderRef={messageRefLabel} />
         <RefSection
           title="Notification refs"
+          refType="Notification ref"
           refs={row.notificationRefs}
           renderRef={(ref) => `${ref.notificationId} · ${ref.status} · ${ref.payloadHash}`}
         />
-        <RefSection title="Dispatch refs" refs={row.dispatchRefs} renderRef={dispatchRefLabel} />
-        <RefSection title="Audit refs" refs={row.auditRefs} renderRef={auditRefLabel} />
-        <RefSection title="Funnel refs" refs={row.funnelRefs} renderRef={funnelRefLabel} />
-        <RefSection title="Operation refs" refs={row.operationRefs} renderRef={operationRefLabel} />
+        <RefSection title="Dispatch refs" refType="Dispatch ref" refs={row.dispatchRefs} renderRef={dispatchRefLabel} />
+        <RefSection title="Audit refs" refType="Audit ref" refs={row.auditRefs} renderRef={auditRefLabel} />
+        <RefSection title="Funnel refs" refType="Funnel ref" refs={row.funnelRefs} renderRef={funnelRefLabel} />
+        <RefSection title="Operation refs" refType="Operation ref" refs={row.operationRefs} renderRef={operationRefLabel} />
       </div>
     ),
   }
 }
 
-function RefSection<T>({ title, refs, renderRef }: { title: string; refs: readonly T[]; renderRef: (ref: T) => string }) {
+function RefSection<T>({
+  title,
+  refType,
+  refs,
+  renderRef,
+}: {
+  title: string
+  refType: string
+  refs: readonly T[]
+  renderRef: (ref: T) => string
+}) {
   return (
     <section className="grid gap-2">
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {refs.length === 0 ? (
         <p className="text-sm text-muted-foreground">No refs recorded.</p>
       ) : (
-        <AeOperatorFactGrid
-          facts={refs.map((ref, index) => ({ label: `${title} ${index + 1}`, value: renderRef(ref) }))}
-          columns={2}
-        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {refs.map((ref) => (
+            <RefDisclosure key={renderRef(ref)} label={`${refType} ${refs.indexOf(ref) + 1}`} raw={renderRef(ref)} />
+          ))}
+        </div>
       )}
     </section>
+  )
+}
+
+function RefDisclosure({ label, raw }: { label: string; raw: string }) {
+  return (
+    <Card className="gap-2 py-4">
+      <CardHeader className="gap-1 px-4">
+        <p className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</p>
+      </CardHeader>
+      <CardContent className="grid gap-2 px-4">
+        <Collapsible className="grid gap-1">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
+            >
+              View reference
+              <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <code className="block whitespace-normal break-words font-mono text-xs leading-5 text-muted-foreground">
+              {raw}
+            </code>
+          </CollapsibleContent>
+        </Collapsible>
+      </CardContent>
+    </Card>
   )
 }
 

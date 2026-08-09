@@ -26,6 +26,7 @@ type OpenRouterConfiguration = Readonly<{
   attemptTimeoutMs?: number
   reasoningEffort?: 'low' | 'medium' | 'high'
   maximumCompletionTokens?: number
+  maxRetries?: number
 }>
 
 const MAX_OPENROUTER_REQUEST_BYTES = 1_000_000
@@ -75,7 +76,7 @@ export function createOpenRouterJsonTransport(config: OpenRouterConfiguration): 
         ...(config.maximumCompletionTokens === undefined
           ? {}
           : { maxOutputTokens: config.maximumCompletionTokens }),
-        maxRetries: 1,
+        ...(config.maxRetries === undefined ? { maxRetries: 1 } : { maxRetries: config.maxRetries }),
         model,
         ...(config.reasoningEffort === undefined ? { temperature: 0 } : {}),
         instructions: systemInstruction,
@@ -102,7 +103,7 @@ export function createOpenRouterJsonTransport(config: OpenRouterConfiguration): 
           || (RetryError.isInstance(error) && NoContentGeneratedError.isInstance(error.lastError))
           || providerError?.statusCode === 200
         ) {
-          throw invalidProviderResponse(config.model, undefined)
+          throw invalidProviderResponse()
         }
         if (NoObjectGeneratedError.isInstance(error)) throw error
         if (providerError?.statusCode !== undefined) {
@@ -111,7 +112,7 @@ export function createOpenRouterJsonTransport(config: OpenRouterConfiguration): 
         throw new Error('customer_request_interpretation_provider_unavailable')
       })
       if (result.text.length === 0 || result.finishReason !== 'stop') {
-        throw invalidProviderResponse(config.model, result.finishReason)
+        throw invalidProviderResponse()
       }
       return result.output
     },
@@ -122,11 +123,12 @@ export function createOpenRouterJsonTransport(config: OpenRouterConfiguration): 
  * Surfaces WHY the provider produced nothing usable (commonly `length`, when
  * the completion budget is exhausted) without ever logging model output.
  */
-function invalidProviderResponse(model: string, finishReason: string | undefined): Error {
-  console.error(
-    'customer_request_interpretation_provider_invalid',
-    model,
-    finishReason ?? 'unknown_finish_reason',
-  )
+function invalidProviderResponse(): Error {
+  // Expected selection-decline, not a system fault: a model whose completion budget is exhausted
+  // (`length`) or which returns no usable JSON on an ordinary query is normal and the composite
+  // interpreter degrades gracefully. Return the typed error silently — logging here would alarm the
+  // operator channel (CLI/stderr) on every routine selection-decline on the hot path. Genuine
+  // provider/auth outages remain visible to operators via interpreter.ts (provider_4xx ->
+  // console.error). The return value is what matters; the message identifies the cause.
   return new Error('customer_request_interpretation_provider_invalid')
 }

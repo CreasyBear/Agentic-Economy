@@ -2,15 +2,29 @@ import { isAbortError, parseJsonEventStream } from '@ai-sdk/provider-utils'
 import type { UIMessage } from 'ai'
 import { z } from 'zod'
 
-import { isRecord } from '@/modules/common/is-record'
+import { parseAnswerTurnProblemStrict } from '@/lib/errors'
 
-type AnswerEvent = import('./answer-synthesizer').AnswerEvent
+import { AnswerTurnFrameSchema } from './answer-event-schema'
+import type { AnswerEvent } from './answer-synthesizer'
 
 /**
  * Re-exported so route handlers reach abort detection through this seam rather
  * than importing a provider SDK directly (`route-future-provider-import`).
  */
 export { isAbortError }
+
+export type AnswerTurnProtocolErrorCode = 'malformed_sse' | 'missing_stream'
+
+/** A malformed or empty answer stream is a protocol failure, not a user error. */
+export class AnswerTurnProtocolError extends Error {
+  readonly code: AnswerTurnProtocolErrorCode
+
+  constructor(code: AnswerTurnProtocolErrorCode) {
+    super(code === 'missing_stream' ? 'The answer stream contained no answer frames.' : 'The answer stream was malformed.')
+    this.name = 'AnswerTurnProtocolError'
+    this.code = code
+  }
+}
 
 /**
  * The answer turn rides the AI SDK UI message stream. AE's turn events are not
@@ -32,18 +46,10 @@ export type AnswerTurnUIMessage = UIMessage<never, AnswerTurnDataParts>
 
 /**
  * The event union is a discriminated TypeScript contract owned by
- * `answer-synthesizer`. Re-declaring it as a Zod mirror would be a second
- * source of truth that silently drifts, so the wire check is structural and the
- * reducer stays the authority on each variant.
+ * `answer-synthesizer`; its runtime schema lives beside the domain payload
+ * schemas and rejects unknown variants before they reach the reducer.
  */
-const answerEventSchema = z.custom<AnswerEvent>(
-  (value) => isRecord(value) && typeof value.type === 'string',
-)
-
-const answerTurnFrameSchema = z.object({
-  seq: z.number().int().nonnegative(),
-  event: answerEventSchema,
-})
+const answerTurnFrameSchema = AnswerTurnFrameSchema
 
 const answerTurnChunkSchema = z.object({
   type: z.string(),
@@ -51,18 +57,37 @@ const answerTurnChunkSchema = z.object({
 })
 
 /**
- * Reads an answer-turn response body as AE turn frames, skipping the SDK's
- * lifecycle chunks (`start`, `finish`, `abort`) and any malformed frame.
+ * Reads an answer-turn response body as AE turn frames. SDK lifecycle chunks
+ * are ignored, but malformed AE chunks fail closed as protocol errors.
  */
 export async function* readAnswerTurnFrames(
   body: ReadableStream<Uint8Array>,
 ): AsyncGenerator<AnswerTurnFrame> {
   const chunks = parseJsonEventStream({ stream: body, schema: answerTurnChunkSchema })
+  let sawFrame = false
+  let expectedSeq = 0
+  let terminalSeen = false
   for await (const chunk of chunks) {
-    if (!chunk.success) continue
+    if (!chunk.success) throw new AnswerTurnProtocolError('malformed_sse')
     if (chunk.value.type !== ANSWER_TURN_DATA_PART) continue
     const frame = chunk.value.data
-    if (frame === undefined) continue
-    yield frame
+    if (frame === undefined || terminalSeen || frame.seq !== expectedSeq) {
+      throw new AnswerTurnProtocolError('malformed_sse')
+    }
+    expectedSeq += 1
+    let normalizedFrame = frame
+    if (frame.event.type === 'error') {
+      const problem = parseAnswerTurnProblemStrict(frame.event.problem)
+      if (problem === undefined) throw new AnswerTurnProtocolError('malformed_sse')
+      normalizedFrame = { ...frame, event: { type: 'error', problem } }
+    }
+    terminalSeen = frame.event.type === 'complete'
+      || frame.event.type === 'pending'
+      || frame.event.type === 'stopped'
+      || frame.event.type === 'error'
+    sawFrame = true
+    yield normalizedFrame
   }
+  if (!sawFrame) throw new AnswerTurnProtocolError('missing_stream')
+  if (!terminalSeen) throw new AnswerTurnProtocolError('malformed_sse')
 }

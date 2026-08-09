@@ -24,6 +24,7 @@ export async function resumeCustomerRequest(
   input: ResumeCustomerRequestInput,
   ports: CompareResumePorts,
 ): Promise<CustomerRequestActionResult> {
+  const now = Date.now()
   const current = await ports.loadCurrent(input.requestRef)
   if (current.kind === 'resubmit_required') {
     return current.principalId === input.principalId
@@ -101,6 +102,7 @@ export async function resumeCustomerRequest(
         requestRevision: current.aggregate.snapshot.revision,
         actionId: action.actionId,
         principalId: input.principalId,
+        now,
       })
       if (preparation.kind === 'current') {
         if (preparation.preparation.kind === 'ready_for_routing') {

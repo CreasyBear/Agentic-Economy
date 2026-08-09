@@ -53,6 +53,9 @@ export function capabilitySupplyPublicationPorts(
       }
     },
     insertPublication: async (input) => {
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
+      if (binding === null) throw new Error('capability_publication_binding_missing')
       await ctx.db.insert('capabilityPublications', {
         operationRef: input.operationRef,
         publicationRef: input.publicationRef,
@@ -71,15 +74,16 @@ export function capabilitySupplyPublicationPorts(
         offeringId: input.offeringId,
         bindingId: input.bindingId,
         disposition: input.disposition,
+        ...(binding.connectionAuthority === undefined
+          ? {}
+          : { connectionAuthority: binding.connectionAuthority }),
+        ...(input.supersedesRevision === undefined ? {} : { supersedesRevision: input.supersedesRevision }),
         credentialState: 'unobserved',
         healthState: 'unobserved',
         readinessEvidenceRefs: [],
         registrationEvidenceRefs: [...input.registrationEvidenceRefs],
         createdAt: input.createdAt,
         updatedAt: input.updatedAt,
-        ...(input.supersedesRevision === undefined
-          ? {}
-          : { supersedesRevision: input.supersedesRevision }),
       })
     },
     patchPublicationSuperseded: async (publicationId, updatedAt) => {

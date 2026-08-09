@@ -14,13 +14,17 @@ const commercialRelationship = v.object({
   influencesOrder: v.boolean(),
   evidenceRefs: v.array(v.string()),
 })
+const exactAmount = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
 const price = v.union(
-  v.object({ kind: v.literal('fixed'), currency: v.string(), amountMinor: v.number() }),
+  v.object({ kind: v.literal('fixed'), amount: exactAmount }),
   v.object({
     kind: v.literal('range'),
-    currency: v.string(),
-    minimumAmountMinor: v.number(),
-    maximumAmountMinor: v.number(),
+    minimum: exactAmount,
+    maximum: exactAmount,
   }),
   v.object({ kind: v.literal('on_request') }),
 )
@@ -35,6 +39,17 @@ const offeringOrigin = v.union(
   }),
   v.object({ kind: v.literal('standalone') }),
 )
+export const connectionAuthoritySnapshotValue = v.object({
+  connectionRef: v.string(),
+  providerRef: v.string(),
+  adapterId: v.string(),
+  authorityGeneration: v.number(),
+  authorityDigest: v.string(),
+  operationRef: v.string(),
+  grantedScopes: v.array(v.string()),
+  grantedResources: v.array(v.string()),
+})
+const connectionAuthority = connectionAuthoritySnapshotValue
 const registeredOperationMappingBaseFields = {
   authority: v.literal('registered_contract_semantics'),
   sourceContractRef: v.object(contractRefFields),
@@ -112,24 +127,43 @@ export const capabilitySupplyTables = {
     networkId: v.string(),
     ...contractRefFields,
     sourceKind: v.union(
-      v.literal('ae_envelope'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402'),
+      v.literal('ae_envelope'),
+      v.literal('openapi_http'),
+      v.literal('mcp'),
+      v.literal('agent_plugin_mcp'),
+      v.literal('x402'),
     ),
     sourceRevision: v.string(),
     sourceDigest: v.string(),
     publisherRef: v.string(),
-    authorityMode: v.union(v.literal('provider_owned'), v.literal('ae_curated_external')),
+    authorityMode: v.union(
+      v.literal('provider_owned'), v.literal('ae_curated_external'),
+      v.literal('third_party_gateway'), v.literal('observed_external'),
+    ),
     provenanceDigest: v.string(),
     offeringId: v.string(),
     bindingId: v.string(),
     disposition: v.union(
-      v.literal('current'), v.literal('superseded'), v.literal('withdrawn'), v.literal('incompatible'),
+      v.literal('current'),
+      v.literal('withdrawn'),
+      v.literal('incompatible'),
+      v.literal('superseded'),
     ),
+    connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
     supersedesRevision: v.optional(v.number()),
-    credentialState: v.union(v.literal('unobserved'), v.literal('ready'), v.literal('unavailable')),
-    healthState: v.union(v.literal('unobserved'), v.literal('healthy'), v.literal('unhealthy')),
-    readinessEvidenceRefs: v.array(v.string()),
+    credentialState: v.union(
+      v.literal('unobserved'),
+      v.literal('ready'),
+      v.literal('unavailable'),
+    ),
+    healthState: v.union(
+      v.literal('unobserved'),
+      v.literal('healthy'),
+      v.literal('unhealthy'),
+    ),
     readinessObservedAt: v.optional(v.number()),
     readinessValidUntil: v.optional(v.number()),
+    readinessEvidenceRefs: v.array(v.string()),
     registrationEvidenceRefs: v.array(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -175,7 +209,15 @@ export const capabilitySupplyTables = {
     networkId: v.string(),
     ...contractRefFields,
     endpointUrl: v.string(),
-    credentialRef: v.string(),
+    authority: v.union(
+      v.object({ kind: v.literal('keyless') }),
+      v.object({
+        kind: v.literal('provider_connection'),
+        connectionRef: v.string(),
+        providerRef: v.string(),
+      }),
+    ),
+    connectionAuthority: v.optional(connectionAuthority),
     continuation: v.object({
       kind: v.union(v.literal('single_response'), v.literal('adapter_managed')),
       evidenceRefs: v.array(v.string()),
@@ -200,12 +242,70 @@ export const capabilitySupplyTables = {
     .index('by_bindingId', ['bindingId'])
     .index('by_offeringId_and_admission_and_conformance', ['offeringId', 'admission', 'conformance'])
     .index('by_networkId_admission_conformance', ['networkId', 'admission', 'conformance']),
+  capabilityProviderConnections: defineTable({
+    connectionRef: v.string(),
+    businessId: v.id('businesses'),
+    providerRef: v.string(),
+    providerAccountRef: v.string(),
+    adapterId: v.string(),
+    credentialRef: v.union(v.string(), v.null()),
+    grantedScopes: v.array(v.string()),
+    grantedResources: v.array(v.string()),
+    authorityGeneration: v.number(),
+    authorityDigest: v.string(),
+    lifecycle: v.union(
+      v.literal('active'),
+      v.literal('reauthorization_required'),
+      v.literal('revocation_pending'),
+      v.literal('revoked'),
+      v.literal('cleanup_required'),
+    ),
+    observedAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    reasonCode: v.optional(v.string()),
+    evidenceRefs: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastCommandId: v.string(),
+    lastCommandDigest: v.string(),
+  })
+    .index('by_connectionRef', ['connectionRef'])
+    .index('by_businessId_and_lifecycle', ['businessId', 'lifecycle'])
+    .index('by_providerRef_and_lifecycle', ['providerRef', 'lifecycle'])
+    .index('by_connectionRef_and_authorityGeneration', ['connectionRef', 'authorityGeneration']),
+  capabilityProviderApprovals: defineTable({
+    decisionRef: v.string(),
+    commandId: v.string(),
+    commandDigest: v.string(),
+    providerRef: v.string(),
+    providerAccountRef: v.string(),
+    connectionRef: v.string(),
+    authorityGeneration: v.number(),
+    connectionAuthorityDigest: v.string(),
+    requestedScopes: v.array(v.string()),
+    grantedScopes: v.array(v.string()),
+    requestedResources: v.array(v.string()),
+    grantedResources: v.array(v.string()),
+    decision: v.union(v.literal('granted'), v.literal('refused'), v.literal('partial')),
+    decisionDigest: v.string(),
+    decisionTime: v.number(),
+    decisionMakerAuthorityRef: v.string(),
+    reasonCode: v.string(),
+    evidenceRefs: v.array(v.string()),
+  })
+    .index('by_decisionRef', ['decisionRef'])
+    .index('by_commandId', ['commandId'])
+    .index('by_connectionRef_and_authorityGeneration', ['connectionRef', 'authorityGeneration']),
   registeredOperationMappings: defineTable({
     networkId: v.string(),
     mappingRef: v.string(),
     material: registeredOperationMappingMaterialValue,
     publisherRef: v.string(),
-    authorityMode: v.union(v.literal('provider_owned'), v.literal('ae_curated_external')),
+    authorityMode: v.union(
+      v.literal('provider_owned'), v.literal('ae_curated_external'),
+      v.literal('third_party_gateway'), v.literal('observed_external'),
+    ),
     registrationEvidenceRefs: v.array(v.string()),
     registeredAt: v.number(),
     updatedAt: v.number(),

@@ -1,10 +1,9 @@
-import type { MoneyRefusal } from '../public'
+import type { ExactAmount, MoneyRefusal } from '../public'
 
 export type CreditPaymentRequest = Readonly<{
   principalId: string
   accountRef: string
-  currency: string
-  amountMinor: number
+  amount: ExactAmount
   idempotencyKey: string
   inputDigest: string
   successReturnRef: string
@@ -15,8 +14,7 @@ export type CreditPaymentEvidence = Readonly<{
   provider: 'stripe'
   externalRef: string
   checkoutUrl?: string
-  currency: string
-  amountMinor: number
+  amount: ExactAmount
   status: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown'
   evidenceRef: string
 }>

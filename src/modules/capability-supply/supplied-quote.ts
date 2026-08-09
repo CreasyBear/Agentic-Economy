@@ -55,7 +55,7 @@ export async function prepareSuppliedCandidateQuote(input: Readonly<{
 
   return {
     kind: 'prepared',
-    view: input.tracer.prepare({
+    view: await input.tracer.prepare({
       origin: input.origin,
       actor: input.actor,
       input: input.invocationInput,

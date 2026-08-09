@@ -1,10 +1,17 @@
 /// <reference types="vite/client" />
 
-import { convexTest } from 'convex-test'
+import { convexTest, type TestConvex } from 'convex-test'
+import type { FunctionReturnType } from 'convex/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import { openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
+import {
+  normalizeCapabilityPublication,
+  frankfurterSingleRatePublicationImport,
+} from '@/modules/capability-supply/public'
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
@@ -18,10 +25,18 @@ import {
   writableCustomerRequestRoutePlanGeneration,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
-import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
+import { claimBusinessCommand } from './business'
+import { registerCapabilityContractDocument } from './capabilityContractDocuments'
+import { ensureCatalogProjectionControlsCommand, publishBusinessCatalogCommand } from './catalog'
 import { internal } from './_generated/api'
 import schema from './schema'
-import { listRouteableCapabilitySupply, setCapabilitySupplyEligibility } from './capabilitySupply'
+import {
+  listRouteableCapabilitySupply,
+  publishCapabilityForSeed,
+  registerCapabilityBindingCommand,
+  registerCapabilityOfferingCommand,
+  setCapabilitySupplyEligibility,
+} from './capabilitySupply'
 
 const modules = import.meta.glob('./**/*.ts')
 const identity = {
@@ -29,6 +44,37 @@ const identity = {
   issuer: 'https://identity.test',
   tokenIdentifier: 'https://identity.test|customer-route-mandate',
 }
+type RouteMandateBackend = TestConvex<typeof schema>
+type StandingRouteMandateResult = FunctionReturnType<
+  typeof internal.customerRequestStandingRoutePolicy.issueMandate
+>
+type RouteMandateIssueResult = FunctionReturnType<
+  typeof internal.customerRequestRouteMandate.issue
+>
+type RouteMandateAdmissionResult = FunctionReturnType<
+  typeof internal.customerRequestRouteMandateAdmission.admitStep
+>
+
+const TEST_ROUTE_BINDING_PREFIX = 'binding:test-route-mandate:'
+const TEST_ROUTE_VARIANTS = [
+  {
+    slug: 'agentic-market-exa',
+    suffix: 'one',
+    offeringId: 'offering:test-route-mandate:one',
+    bindingId: `${TEST_ROUTE_BINDING_PREFIX}one`,
+    endpointUrl: 'https://agentic-economy-phi.vercel.app/api/test/route-mandate/one',
+    price: { currency: 'AUD', units: '1200', exponent: 2 },
+  },
+  {
+    slug: 'frankfurter-ecb-rates',
+    suffix: 'two',
+    offeringId: 'offering:test-route-mandate:two',
+    bindingId: `${TEST_ROUTE_BINDING_PREFIX}two`,
+    endpointUrl: 'https://agentic-economy-phi.vercel.app/api/test/route-mandate/two',
+    price: { currency: 'AUD', units: '900', exponent: 2 },
+  },
+] as const
+
 
 describe('durable RouteMandate lifecycle', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -82,14 +128,8 @@ describe('durable RouteMandate lifecycle', () => {
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
       delegatedCredentialId: 'credential:assistant:standing',
-      perUseSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
-      cumulativeSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor * 2,
-      },
+      perUseSpend: { ...route.maximumTotalCost.amount },
+      cumulativeSpend: scaleExactAmount(route.maximumTotalCost.amount, 2),
       perUseDataAllocations: route.steps.reduce((total, step) => total + step.dataUse.length, 0),
       cumulativeDataAllocations: route.steps.reduce((total, step) => total + step.dataUse.length, 0) * 2,
       occurrences: 2,
@@ -264,14 +304,8 @@ describe('durable RouteMandate lifecycle', () => {
         expectedGenerationRef: current.routeGeneration.generationRef,
         selectedRoutePlanId: route.routePlanId,
         delegatedCredentialId: credentialId,
-        perUseSpend: {
-          currency: route.maximumTotalCost.currency,
-          amountMinor: route.maximumTotalCost.amountMinor,
-        },
-        cumulativeSpend: {
-          currency: route.maximumTotalCost.currency,
-          amountMinor: route.maximumTotalCost.amountMinor * limit.spendUses,
-        },
+        perUseSpend: { ...route.maximumTotalCost.amount },
+        cumulativeSpend: scaleExactAmount(route.maximumTotalCost.amount, limit.spendUses),
         perUseDataAllocations: dataAllocations,
         cumulativeDataAllocations: dataAllocations * limit.dataUses,
         occurrences: limit.occurrences,
@@ -301,8 +335,8 @@ describe('durable RouteMandate lifecycle', () => {
         }),
       ])
 
-      expect(results.filter(({ kind }) => kind === 'issued'), limit.name).toHaveLength(1)
-      expect(results.filter(({ kind }) => kind === 'refused'), limit.name).toEqual([{
+      expect(results.filter(({ kind }: StandingRouteMandateResult) => kind === 'issued'), limit.name).toHaveLength(1)
+      expect(results.filter(({ kind }: StandingRouteMandateResult) => kind === 'refused'), limit.name).toEqual([{
         kind: 'refused',
         reason: limit.reason,
       }])
@@ -338,14 +372,8 @@ describe('durable RouteMandate lifecycle', () => {
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
       delegatedCredentialId: credentialId,
-      perUseSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
-      cumulativeSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      perUseSpend: { ...route.maximumTotalCost.amount },
+      cumulativeSpend: { ...route.maximumTotalCost.amount },
       perUseDataAllocations: dataAllocations,
       cumulativeDataAllocations: dataAllocations,
       occurrences: 1,
@@ -407,10 +435,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:one',
     }
@@ -493,10 +518,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:delegated-owner',
     }
@@ -540,10 +562,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: 1_100,
       idempotencyKey: 'confirm:route:expiry-state',
     })
@@ -568,10 +587,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:scope',
     }
@@ -591,7 +607,7 @@ describe('durable RouteMandate lifecycle', () => {
       ...command,
       maximumTotalSpend: {
         ...command.maximumTotalSpend,
-        amountMinor: command.maximumTotalSpend.amountMinor - 1,
+        units: (BigInt(command.maximumTotalSpend.units) - 1n).toString(),
       },
       idempotencyKey: 'confirm:route:altered-spend',
     })).resolves.toEqual({ kind: 'refused', reason: 'mandate_scope_invalid' })
@@ -620,11 +636,7 @@ describe('durable RouteMandate lifecycle', () => {
       await ctx.db.patch(offering._id, {
         presentation: {
           ...offering.presentation,
-          price: {
-            kind: 'fixed',
-            currency: routeCost.currency,
-            amountMinor: routeCost.amountMinor + 1,
-          },
+          price: { kind: 'fixed', amount: offsetExactAmount(routeCost.amount, 1n) },
         },
       })
     })
@@ -635,10 +647,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: routeCost.currency,
-        amountMinor: routeCost.amountMinor,
-      },
+      maximumTotalSpend: { ...routeCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:graph-drift',
     })).resolves.toEqual({ kind: 'conflict', reason: 'route_generation_changed' })
@@ -659,10 +668,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: first.aggregate.snapshot.revision,
       expectedGenerationRef: first.routeGeneration.generationRef,
       selectedRoutePlanId: firstRoute.routePlanId,
-      maximumTotalSpend: {
-        currency: firstRoute.maximumTotalCost.currency,
-        amountMinor: firstRoute.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...firstRoute.maximumTotalCost.amount },
       expiresAt: Math.min(firstRoute.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:first-generation',
     })
@@ -704,10 +710,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: revised.aggregate.snapshot.revision,
       expectedGenerationRef: revised.routeGeneration.generationRef,
       selectedRoutePlanId: nextRoute.routePlanId,
-      maximumTotalSpend: {
-        currency: nextRoute.maximumTotalCost.currency,
-        amountMinor: nextRoute.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...nextRoute.maximumTotalCost.amount },
       expiresAt: Math.min(nextRoute.expiresAt, 40_000),
       idempotencyKey: 'confirm:route:next-generation',
     })
@@ -748,10 +751,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:revoke-proof',
     }
@@ -869,10 +869,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
     }
     const customer = backend.withIdentity(identity)
@@ -884,11 +881,11 @@ describe('durable RouteMandate lifecycle', () => {
         ...base, idempotencyKey: 'confirm:concurrent:two',
       }),
     ])
-    expect(results.map(({ kind }) => kind).sort()).toEqual(['conflict', 'issued'])
-    expect(results.find(({ kind }) => kind === 'conflict')).toEqual({
+    expect(results.map(({ kind }: RouteMandateIssueResult) => kind).sort()).toEqual(['conflict', 'issued'])
+    expect(results.find(({ kind }: RouteMandateIssueResult) => kind === 'conflict')).toEqual({
       kind: 'conflict', reason: 'active_mandate_exists',
     })
-    const winner = results.find((result) => result.kind === 'issued')
+    const winner = results.find((result: RouteMandateIssueResult) => result.kind === 'issued')
     if (winner?.kind !== 'issued') throw new Error('concurrent mandate winner missing')
     await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
       requestId: base.requestId,
@@ -911,7 +908,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: { currency: routeCost.currency, amountMinor: routeCost.amountMinor },
+      maximumTotalSpend: { ...routeCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:before-graph-drift',
     })
@@ -923,7 +920,7 @@ describe('durable RouteMandate lifecycle', () => {
       await ctx.db.patch(offering._id, {
         presentation: {
           ...offering.presentation,
-          price: { kind: 'fixed', currency: routeCost.currency, amountMinor: routeCost.amountMinor + 1 },
+          price: { kind: 'fixed', amount: offsetExactAmount(routeCost.amount, 1n) },
         },
       })
     })
@@ -947,10 +944,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:evidence-integrity',
     }
@@ -1005,10 +999,7 @@ describe('durable RouteMandate lifecycle', () => {
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: { ...route.maximumTotalCost.amount },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:admission',
     })
@@ -1057,16 +1048,19 @@ describe('durable RouteMandate lifecycle', () => {
           offeringId: mandateStep.offeringId,
           bindingId: mandateStep.bindingId,
           contractRef: mandateStep.contractRef,
-          maximumSpend: {
-            currency: route.maximumTotalCost.currency,
-            amountMinor: route.maximumTotalCost.amountMinor,
-          },
+          maximumSpend: { ...route.maximumTotalCost.amount },
           dataScope: [{
-            effectId: 'request_release',
-            inputPointer: '/requestContext',
+            effectId: 'query_release',
+            inputPointer: '/base',
             classification: 'public',
-            phase: 'preparation',
-            purposes: ['return_sandbox_result'],
+            phase: 'execution',
+            purposes: ['retrieve_ecb_reference_rate'],
+          }, {
+            effectId: 'query_release',
+            inputPointer: '/quote',
+            classification: 'public',
+            phase: 'execution',
+            purposes: ['retrieve_ecb_reference_rate'],
           }],
         },
         fallbackUse: { kind: 'primary_route' },
@@ -1089,7 +1083,7 @@ describe('durable RouteMandate lifecycle', () => {
         reservationRef: reservations[0]?.reservationRef,
         reservationDigest: reservations[0]?.reservationDigest,
       })
-      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(2)
       expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(1)
     })
   })
@@ -1232,7 +1226,7 @@ describe('durable RouteMandate lifecycle', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'mandate_scope_mismatch' })
     await backend.run(async (ctx) => {
       expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toHaveLength(1)
-      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(2)
       expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(1)
     })
   })
@@ -1283,13 +1277,12 @@ describe('durable RouteMandate lifecycle', () => {
         admissionCommand(fixture, 'admit:route-step:concurrent-two'),
       ),
     ])
-    expect(results.map((entry) => entry.kind).sort()).toEqual(['admitted', 'refused'])
-    expect(results.find((entry) => entry.kind === 'refused')).toEqual({
+    expect(results.find((entry: RouteMandateAdmissionResult) => entry.kind === 'refused')).toEqual({
       kind: 'refused', reason: 'step_already_reserved',
     })
     await backend.run(async (ctx) => {
       expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toHaveLength(1)
-      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(2)
       expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(1)
     })
   })
@@ -1437,7 +1430,7 @@ function isRouteMandateRoute(value: unknown): value is RouteMandate['route'] {
     || !isFiniteNumber(value.routeExpiresAt)
     || !Array.isArray(value.steps)
     || !value.steps.every((step) => isRouteMandateStep(step))
-    || !isMoney(value.maximumTotalSpend)
+    || !exactAmountSchema.safeParse(value.maximumTotalSpend).success
     || !isRecord(value.fallback)) {
     return false
   }
@@ -1485,22 +1478,15 @@ function isCapabilityContractRef(value: unknown): boolean {
     && isFiniteNumber(value.version)
 }
 
-function isMoney(value: unknown): boolean {
-  return isRecord(value)
-    && hasStringFields(value, ['currency'])
-    && isFiniteNumber(value.amountMinor)
-}
 
 function isRegisteredPrice(value: unknown): boolean {
   if (!isRecord(value)) return false
   if (value.kind === 'fixed') {
-    return hasStringFields(value, ['currency'])
-      && isFiniteNumber(value.amountMinor)
+    return exactAmountSchema.safeParse(value.amount).success
   }
   if (value.kind === 'range') {
-    return hasStringFields(value, ['currency'])
-      && isFiniteNumber(value.minimumAmountMinor)
-      && isFiniteNumber(value.maximumAmountMinor)
+    return exactAmountSchema.safeParse(value.minimum).success
+      && exactAmountSchema.safeParse(value.maximum).success
   }
   return value.kind === 'on_request'
 }
@@ -1592,7 +1578,7 @@ function hasStringFields(value: Record<string, unknown>, fields: readonly string
 }
 
 async function issuedAdmissionFixture(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteMandateBackend,
   suffix: string,
 ) {
   const current = await committedRequest(backend, identity.tokenIdentifier, {
@@ -1608,10 +1594,7 @@ async function issuedAdmissionFixture(
     expectedRequestRevision: current.aggregate.snapshot.revision,
     expectedGenerationRef: current.routeGeneration.generationRef,
     selectedRoutePlanId: route.routePlanId,
-    maximumTotalSpend: {
-      currency: route.maximumTotalCost.currency,
-      amountMinor: route.maximumTotalCost.amountMinor,
-    },
+    maximumTotalSpend: { ...route.maximumTotalCost.amount },
     expiresAt: Math.min(route.expiresAt, 30_000),
     idempotencyKey: `confirm:route:${suffix}`,
   })
@@ -1641,18 +1624,245 @@ function admissionCommand(
   }
 }
 
+async function seedRouteMandateTestCatalog(backend: RouteMandateBackend): Promise<void> {
+  await backend.run(async (ctx) => {
+    const actor = {
+      kind: 'authenticated_owner' as const,
+      clerkUserId: identity.subject,
+      displayName: 'Route Mandate Test Owner',
+    }
+    await ensureCatalogProjectionControlsCommand(ctx.db, {
+      actorRef: actor.clerkUserId,
+      operationKey: 'test:route-mandate:catalog-controls',
+      correlationId: 'test:route-mandate:catalog-controls',
+      reasonCode: 'test_route_mandate_catalog_setup',
+      evidenceRefs: ['test:route-mandate:catalog'],
+    }, 2_000)
+
+    for (const [index, variant] of TEST_ROUTE_VARIANTS.entries()) {
+      const correlationId = `test:route-mandate:catalog:${variant.suffix}`
+      const claim = await claimBusinessCommand(ctx.db, {
+        actor,
+        facts: {
+          name: `Route mandate test ${variant.suffix}`,
+          category: 'Data capability provider',
+          suburb: 'Perth',
+          stateTerritory: 'WA',
+          requestedSlug: variant.slug,
+          ownerMessage: 'Test-only business for RouteMandate lifecycle coverage.',
+          sourceRefs: [{
+            label: 'Route mandate test catalog',
+            evidenceRef: correlationId,
+          }],
+        },
+        operationKey: `test:route-mandate:catalog-claim:${variant.suffix}`,
+        correlationId,
+      }, 2_010 + index)
+      if (claim.kind !== 'ok') {
+        throw new Error(`route_mandate_test_claim_${claim.code}`)
+      }
+
+      const published = await publishBusinessCatalogCommand(ctx.db, {
+        actor,
+        claimId: claim.claim.claimId,
+        operationKey: `test:route-mandate:catalog-publish:${variant.suffix}`,
+        correlationId,
+        services: [{
+          name: `Frankfurter reference rate ${variant.suffix}`,
+          category: 'Data capability provider',
+          summary: 'Test-only catalog source for RouteMandate lifecycle coverage.',
+          serviceArea: 'Online',
+          hoursOrUnknown: 'Always available for tests',
+          firstRequest: {
+            mode: 'inquiry_available',
+            publicChannel: 'ae_status_only',
+            publicDisclosure: 'Test-only catalog source; no production service is supplied.',
+          },
+        }],
+      }, 2_020 + index)
+      if (published.kind !== 'ok') {
+        throw new Error(`route_mandate_test_catalog_${published.code}`)
+      }
+    }
+  })
+}
+
+async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise<void> {
+  const normalized = await normalizeCapabilityPublication(frankfurterSingleRatePublicationImport)
+  if (normalized.kind !== 'normalized') {
+    throw new Error(`route_mandate_test_curated_publication_${normalized.reason}`)
+  }
+  const curatedDraft = normalized.draft
+  await backend.run(async (ctx) => {
+    const registered = await registerCapabilityContractDocument(ctx.db, curatedDraft.documentJson, 2_090)
+    if (registered.kind !== 'registered') {
+      throw new Error(`route_mandate_test_contract_registration_${registered.reason}`)
+    }
+    const actor = { kind: 'system' as const, ref: 'system:test-route-mandate' }
+    for (const [index, variant] of TEST_ROUTE_VARIANTS.entries()) {
+      const business = await ctx.db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', variant.slug))
+        .unique()
+      if (business === null) throw new Error(`route_mandate_test_business_missing:${variant.slug}`)
+      const catalogOfferings = await ctx.db.query('businessOfferings')
+        .withIndex('by_businessId_and_status', (query) => (
+          query.eq('businessId', business._id).eq('status', 'published')
+        ))
+        .take(2)
+      if (catalogOfferings.length !== 1) {
+        throw new Error(`route_mandate_test_catalog_offering_missing:${variant.slug}`)
+      }
+      const catalogOffering = catalogOfferings[0]
+      if (catalogOffering === undefined) {
+        throw new Error(`route_mandate_test_catalog_offering_missing:${variant.slug}`)
+      }
+      const catalogRevision = await ctx.db.query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (query) => (
+          query.eq('offeringRef', catalogOffering.offeringRef)
+            .eq('revision', catalogOffering.currentRevision)
+        ))
+        .unique()
+      if (catalogRevision === null) {
+        throw new Error(`route_mandate_test_catalog_revision_missing:${variant.slug}`)
+      }
+      const origin = {
+        kind: 'catalog_offering' as const,
+        offeringRef: catalogOffering.offeringRef,
+        offeringRevision: catalogOffering.currentRevision,
+        offeringSourceHash: catalogRevision.sourceHash,
+      }
+      const correlationId = `test:route-mandate:${variant.suffix}`
+      const evidenceRefs = ['test:route-mandate-provider-supply']
+      const context = {
+        correlationId,
+        operationKey: `test:route-mandate:offering:${variant.suffix}`,
+        reasonCode: 'test_route_mandate_provider_supply',
+        evidenceRefs,
+      }
+      const presentation = {
+        label: `Route mandate test option ${variant.suffix}`,
+        summary: 'Test-labelled keyless provider option for RouteMandate lifecycle coverage.',
+        price: { kind: 'fixed' as const, amount: variant.price },
+        materialTerms: [{
+          termId: 'test_only',
+          label: 'Environment',
+          value: 'Test-only provider option; no production service is supplied.',
+        }],
+        commercialRelationship: {
+          kind: 'none' as const,
+          summary: 'Test-only option with no payment, sponsorship, rebate, or ownership relationship.',
+          influencesEligibility: false,
+          influencesInclusion: false,
+          influencesOrder: false,
+          evidenceRefs,
+        },
+      }
+      const offering = await registerCapabilityOfferingCommand(ctx.db, {
+        actor,
+        context,
+        registration: {
+          offeringId: variant.offeringId,
+          businessId: business._id,
+          networkId: curatedDraft.offering.networkId,
+          contractRef: registered.ref,
+          origin,
+          presentation,
+          searchTerms: ['route mandate test', 'frankfurter reference rate'],
+          registrationEvidenceRefs: evidenceRefs,
+        },
+      }, 2_100 + index)
+      if (offering.kind !== 'registered') {
+        throw new Error(`route_mandate_test_offering_registration_${offering.reason}`)
+      }
+      const binding = await registerCapabilityBindingCommand(ctx.db, {
+        actor,
+        context: {
+          ...context,
+          operationKey: `test:route-mandate:binding:${variant.suffix}`,
+        },
+        registration: {
+          bindingId: variant.bindingId,
+          offeringId: offering.offeringId,
+          networkId: curatedDraft.offering.networkId,
+          contractRef: registered.ref,
+          endpointUrl: curatedDraft.binding.endpointUrl,
+          authority: curatedDraft.binding.authority,
+          continuation: curatedDraft.binding.continuation,
+          cancellation: curatedDraft.binding.cancellation,
+          adapter: curatedDraft.binding.adapter,
+          registrationEvidenceRefs: evidenceRefs,
+        },
+      }, 2_110 + index)
+      if (binding.kind !== 'registered') {
+        throw new Error(`route_mandate_test_binding_registration_${binding.reason}`)
+      }
+      const eligibility = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: registered.ref,
+        decision: 'admit',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: evidenceRefs,
+        conformanceEvidenceRefs: evidenceRefs,
+      }, 2_120 + index)
+      if (eligibility.kind !== 'eligible') {
+        throw new Error(`route_mandate_test_eligibility_${eligibility.kind}`)
+      }
+      const persistedBinding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', binding.bindingId))
+        .unique()
+      if (persistedBinding === null) {
+        throw new Error(`route_mandate_test_binding_missing:${variant.suffix}`)
+      }
+      const published = await publishCapabilityForSeed(ctx, {
+        businessId: String(business._id),
+        source: { kind: 'ae_envelope', documentJson: curatedDraft.documentJson },
+        offering: {
+          offeringId: offering.offeringId,
+          networkId: curatedDraft.offering.networkId,
+          origin,
+          presentation,
+          searchTerms: ['route mandate test', 'frankfurter reference rate'],
+          registrationEvidenceRefs: evidenceRefs,
+        },
+        binding: {
+          bindingId: persistedBinding.bindingId,
+          endpointUrl: persistedBinding.endpointUrl,
+          authority: persistedBinding.authority,
+          continuation: persistedBinding.continuation,
+          cancellation: persistedBinding.cancellation,
+          adapter: { adapterId: persistedBinding.adapterId, config: JSON.parse(persistedBinding.configJson) },
+          registrationEvidenceRefs: persistedBinding.registrationEvidenceRefs,
+        },
+        operationKey: `test:route-mandate:publication:${variant.suffix}`,
+        correlationId,
+        reasonCode: 'test_route_mandate_provider_publication',
+        evidenceRefs,
+        origin,
+        now: 2_130 + index,
+      })
+      if (published.kind !== 'published') {
+        throw new Error(`route_mandate_test_publication_${published.reason}`)
+      }
+    }
+  })
+}
+
 async function committedRequest(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteMandateBackend,
   principalId = identity.tokenIdentifier,
   options: Readonly<{ includeFallback?: boolean }> = {},
 ) {
-  await backend.mutation(internal.devSeed.seedDevCatalog, {})
+  await seedRouteMandateTestCatalog(backend)
+  await seedRouteMandateTestSupply(backend)
   await backend.run(async (ctx) => {
     const offerings = await ctx.db.query('capabilityOfferings').take(64)
     const bindings = await ctx.db.query('capabilityTransportBindings').take(64)
     for (const binding of bindings) {
+      if (binding.bindingId.startsWith(TEST_ROUTE_BINDING_PREFIX)) continue
       const offering = offerings.find((candidate) => candidate.offeringId === binding.offeringId)
-      if (offering === undefined) throw new Error('sandbox offering missing')
+      if (offering === undefined) throw new Error('route mandate offering missing')
       const result = await setCapabilitySupplyEligibility(ctx.db, {
         offeringId: offering.offeringId,
         bindingId: binding.bindingId,
@@ -1696,7 +1906,7 @@ async function committedRequest(
   return compiled
 }
 
-async function observeAllReady(backend: ReturnType<typeof convexTest>, phase: string) {
+async function observeAllReady(backend: RouteMandateBackend, phase: string) {
   const publications = await backend.run(async (ctx) => (
     ctx.db.query('capabilityPublications').collect()
   ))
@@ -1717,8 +1927,9 @@ async function observeAllReady(backend: ReturnType<typeof convexTest>, phase: st
   }
 }
 
+
 async function compileFixture(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteMandateBackend,
   input: Readonly<{
     expectedRevision: number
     expectedRouteGeneration: number
@@ -1729,12 +1940,34 @@ async function compileFixture(
   }>,
 ) {
   const supply = await backend.run(async (ctx) => (
-    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    await listRouteableCapabilitySupply(ctx.db, {
+      networkId: 'ae:public', limit: 64, now: input.now,
+    })
   ))
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
-  const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
-  const modelInput = model.inputs[0]
-  if (modelInput === undefined) throw new Error('sandbox input missing')
+  const contractRow = await backend.run(async (ctx) => {
+    const row = await ctx.db.query('capabilityContractDocuments')
+      .withIndex('by_status_and_capabilityId_and_version', (query) => (
+        query.eq('status', 'active').eq('capabilityId', 'frankfurter.single-rate')
+      ))
+      .order('desc')
+      .first()
+    if (row === null) throw new Error('route_mandate_curated_contract_missing')
+    const { _id: _rowId, _creationTime: _rowCreationTime, ...result } = row
+    return result
+  })
+  const decoded = decodeDurableCapabilityContract({
+    ref: {
+      capabilityId: contractRow.capabilityId,
+      version: contractRow.version,
+      contractDigest: contractRow.contractDigest,
+    },
+    documentJson: contractRow.documentJson,
+    status: contractRow.status,
+    registeredAt: contractRow.registeredAt,
+  })
+  if (decoded.kind !== 'found') throw new Error('route_mandate_curated_contract_unavailable')
+  const model = openCapabilityDecisionModel(decoded.contract)
   const publication = supply.supplies.find(({ binding }) => (
     binding.capabilityId === model.contractRef.capabilityId
   ))?.publication
@@ -1753,15 +1986,15 @@ async function compileFixture(
         operationRef: publication.operationRef,
         selectionKey: model.selectionKey,
         contractRef: model.contractRef,
-        facts: [{
+        facts: model.inputs.map((modelInput, index) => ({
           contractRef: model.contractRef,
           selectionKey: model.selectionKey,
           inputKey: modelInput.key,
           inputPointer: modelInput.inputPointer,
           schemaIdentity: modelInput.schemaIdentity,
-          value: input.intent,
+          value: index === 0 ? 'EUR' : 'USD',
           source: { kind: 'customer', assertionRef: 'assertion:route-mandate' },
-        }],
+        })),
       }],
     },
     mappings: [],
@@ -1794,7 +2027,7 @@ async function compileFixture(
   if (result.kind !== 'compiled' || result.routeGeneration === undefined) {
     throw new Error(`route compile failed: ${result.kind === 'compiled' ? 'generation_missing' : result.reason}`)
   }
-  const routeGeneration = input.includeFallback === true
+  const routeGeneration = input.includeFallback === true && result.routeGeneration.routes.length < 2
     ? routeGenerationWithFallback(result.routeGeneration, supply.supplies)
     : result.routeGeneration
   return {
@@ -1950,12 +2183,20 @@ function routeWithFallback(
   return { ...material, routeDigest: canonicalDigest(material) }
 }
 
+function scaleExactAmount(amount: ExactAmount, count: number): ExactAmount {
+  return { ...amount, units: (BigInt(amount.units) * BigInt(count)).toString() }
+}
+
+function offsetExactAmount(amount: ExactAmount, delta: bigint): ExactAmount {
+  return { ...amount, units: (BigInt(amount.units) + delta).toString() }
+}
+
 function maximumCostForPrice(price: RoutePlanStep['price']) {
   if (price.kind === 'fixed') {
-    return { kind: 'known' as const, currency: price.currency, amountMinor: price.amountMinor }
+    return { kind: 'known' as const, amount: { ...price.amount } }
   }
   if (price.kind === 'range') {
-    return { kind: 'known' as const, currency: price.currency, amountMinor: price.maximumAmountMinor }
+    return { kind: 'known' as const, amount: { ...price.maximum } }
   }
   throw new Error('fallback route requires known price')
 }

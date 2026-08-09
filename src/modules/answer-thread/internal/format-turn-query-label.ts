@@ -1,3 +1,4 @@
+import { neutralizeBidiFormattingControls } from '@/modules/answer/projection'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import { isNarrowToChipQuery, parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
 
@@ -13,31 +14,32 @@ export function formatTurnQueryLabel(input: {
   intent: FollowUpIntent
   seq: number
 }): TurnQueryLabel {
+  const query = neutralizeBidiFormattingControls(input.query)
   if (input.seq <= 1) {
-    return { text: input.query, role: 'need' }
+    return { text: query, role: 'need' }
   }
 
-  const suburb = parseNarrowToSuburb(input.query)
+  const suburb = parseNarrowToSuburb(query)
   if (suburb !== undefined) {
     return { text: `→ ${suburb}`, role: 'follow-up' }
   }
 
-  if (/^show only businesses that accept inquiries$/i.test(input.query.trim())) {
+  if (/^show only businesses that accept inquiries$/i.test(query.trim())) {
     return { text: '→ Inquiry-ready listings', role: 'follow-up' }
   }
 
-  if (/^compare the top two$/i.test(input.query.trim())) {
+  if (/^compare the top two$/i.test(query.trim())) {
     return { text: '→ Compare the top two', role: 'follow-up' }
   }
 
 
   if (input.intent === 'explain_boundary' || input.intent === 'unsupported') {
-    return { text: input.query, role: 'follow-up' }
+    return { text: query, role: 'follow-up' }
   }
 
-  if (isNarrowToChipQuery(input.query)) {
-    return { text: input.query, role: 'follow-up' }
+  if (isNarrowToChipQuery(query)) {
+    return { text: query, role: 'follow-up' }
   }
 
-  return { text: input.query, role: 'follow-up' }
+  return { text: query, role: 'follow-up' }
 }

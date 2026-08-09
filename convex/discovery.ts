@@ -21,6 +21,7 @@ import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import { trimTrailingSlashes } from '../src/modules/common/trim-trailing-slashes'
 import { hasActiveBusinessSuppression } from './catalogRuntimeQueries'
 import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
+import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 
 const routeResult = v.object({
@@ -29,18 +30,38 @@ const routeResult = v.object({
   routeTested: v.literal(true),
 })
 
-const manifestPriceResult = v.object({
-  kind: v.union(v.literal('fixed'), v.literal('from'), v.literal('range'), v.literal('quote_only')),
+const exactAmountResult = v.object({
   currency: v.string(),
-  amountMinor: v.optional(v.number()),
-  maximumAmountMinor: v.optional(v.number()),
-  unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
-  taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  units: v.string(),
+  exponent: v.number(),
 })
+
+const manifestPriceResult = v.union(
+  v.object({
+    kind: v.literal('quote_only'),
+    currency: v.string(),
+    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  }),
+  v.object({
+    kind: v.union(v.literal('fixed'), v.literal('from')),
+    amount: exactAmountResult,
+    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  }),
+  v.object({
+    kind: v.literal('range'),
+    minimum: exactAmountResult,
+    maximum: exactAmountResult,
+    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  }),
+)
 
 const manifestAccessPathResult = v.union(
   v.object({
     accessPathRef: v.string(),
+    offeringRevision: v.number(),
     kind: v.literal('human_request'),
     channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')),
     disclosure: v.string(),
@@ -48,6 +69,7 @@ const manifestAccessPathResult = v.union(
   }),
   v.object({
     accessPathRef: v.string(),
+    offeringRevision: v.number(),
     kind: v.literal('external_operation'),
     name: v.string(),
     summary: v.string(),
@@ -690,14 +712,32 @@ type AuditEventReturn = Infer<typeof auditEventResult>
 function manifestPriceForReturn(
   price: NonNullable<DiscoveryManifest['offerings'][number]['price']>,
 ): ManifestPriceReturn {
-  return {
-    kind: price.kind,
-    currency: price.currency,
-    ...(price.amountMinor === undefined ? {} : { amountMinor: price.amountMinor }),
-    ...(price.maximumAmountMinor === undefined ? {} : { maximumAmountMinor: price.maximumAmountMinor }),
-    ...(price.unit === undefined ? {} : { unit: price.unit }),
-    taxTreatment: price.taxTreatment,
+  if (price.kind === 'quote_only') {
+    return {
+      kind: price.kind,
+      currency: price.currency,
+      ...(price.unit === undefined ? {} : { unit: price.unit }),
+      taxTreatment: price.taxTreatment,
+    }
   }
+  if (price.kind === 'fixed' || price.kind === 'from') {
+    return {
+      kind: price.kind,
+      amount: { ...price.amount },
+      ...(price.unit === undefined ? {} : { unit: price.unit }),
+      taxTreatment: price.taxTreatment,
+    }
+  }
+  if (price.kind === 'range') {
+    return {
+      kind: price.kind,
+      minimum: { ...price.minimum },
+      maximum: { ...price.maximum },
+      ...(price.unit === undefined ? {} : { unit: price.unit }),
+      taxTreatment: price.taxTreatment,
+    }
+  }
+  throw new Error('unsupported discovery price kind')
 }
 
 function manifestAccessPathForReturn(
@@ -706,6 +746,7 @@ function manifestAccessPathForReturn(
   if (path.kind === 'human_request') {
     return {
       accessPathRef: path.accessPathRef,
+      offeringRevision: path.offeringRevision,
       kind: 'human_request',
       channel: path.channel,
       disclosure: path.disclosure,
@@ -715,6 +756,7 @@ function manifestAccessPathForReturn(
 
   return {
     accessPathRef: path.accessPathRef,
+    offeringRevision: path.offeringRevision,
     kind: 'external_operation',
     name: path.name,
     summary: path.summary,
@@ -1458,27 +1500,62 @@ function readManifestRoute(value: unknown): DiscoveryManifest['routes'][number] 
 
 function readManifestPrice(value: unknown): ManifestPrice {
   const row = requiredRecord(value, 'discovery_manifest_price')
-  const unit = readManifestPriceUnit(row.unit)
-  const amountMinor = optionalNumber(row.amountMinor, 'discovery_manifest_price_amount')
-  const maximumAmountMinor = optionalNumber(row.maximumAmountMinor, 'discovery_manifest_price_maximum')
-  return {
-    kind: readManifestPriceKind(row.kind),
-    currency: requiredString(row.currency, 'discovery_manifest_price_currency'),
-    ...(amountMinor === undefined ? {} : { amountMinor }),
-    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
-    ...(unit === undefined ? {} : { unit }),
-    taxTreatment: readManifestTaxTreatment(row.taxTreatment),
+  const kind = readManifestPriceKind(row.kind)
+  const allowedFields = kind === 'quote_only'
+    ? ['kind', 'currency', 'unit', 'taxTreatment']
+    : kind === 'fixed' || kind === 'from'
+      ? ['kind', 'amount', 'unit', 'taxTreatment']
+      : ['kind', 'minimum', 'maximum', 'unit', 'taxTreatment']
+  if (Object.keys(row).some((field) => !allowedFields.includes(field))) {
+    throw new Error('discovery_manifest_price_invalid')
   }
+  const unit = readManifestPriceUnit(row.unit)
+  const taxTreatment = readManifestTaxTreatment(row.taxTreatment)
+  if (kind === 'quote_only') {
+    return {
+      kind,
+      currency: requiredString(row.currency, 'discovery_manifest_price_currency'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
+  if (kind === 'fixed' || kind === 'from') {
+    return {
+      kind,
+      amount: readManifestExactAmount(row.amount, 'discovery_manifest_price_amount_invalid'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
+  const minimum = readManifestExactAmount(row.minimum, 'discovery_manifest_price_minimum_invalid')
+  const maximum = readManifestExactAmount(row.maximum, 'discovery_manifest_price_maximum_invalid')
+  const comparison = compareExactAmounts(minimum, maximum)
+  if (comparison === undefined || comparison > 0) throw new Error('discovery_manifest_price_range_invalid')
+  return {
+    kind,
+    minimum,
+    maximum,
+    ...(unit === undefined ? {} : { unit }),
+    taxTreatment,
+  }
+}
+
+function readManifestExactAmount(value: unknown, error: string) {
+  const parsed = exactAmountSchema.safeParse(value)
+  if (!parsed.success) throw new Error(error)
+  return parsed.data
 }
 
 function readManifestAccessPath(value: unknown): ManifestAccessPath {
   const row = requiredRecord(value, 'discovery_manifest_access_path')
   const accessPathRef = requiredString(row.accessPathRef, 'discovery_manifest_access_path_ref')
+  const offeringRevision = requiredNumber(row.offeringRevision, 'discovery_manifest_access_path_offering_revision')
   const kind = readManifestAccessPathKind(row.kind)
   if (kind === 'human_request') {
     const url = optionalString(row.url, 'discovery_manifest_access_path_url')
     return {
       accessPathRef,
+      offeringRevision,
       kind,
       channel: readHumanRequestChannel(row.channel),
       disclosure: requiredString(row.disclosure, 'discovery_manifest_access_path_disclosure'),
@@ -1498,6 +1575,7 @@ function readManifestAccessPath(value: unknown): ManifestAccessPath {
     : optionalString(interfaceValue.url, 'discovery_manifest_access_path_interface_url')
   return {
     accessPathRef,
+    offeringRevision,
     kind,
     name: requiredString(row.name, 'discovery_manifest_access_path_name'),
     summary: requiredString(row.summary, 'discovery_manifest_access_path_summary'),

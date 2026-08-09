@@ -13,7 +13,8 @@ import {
 } from '@react-email/components'
 import { render } from '@react-email/render'
 import type { ReactElement } from 'react'
-import { formatMoney } from '@/lib/ui/format-money'
+import { formatCurrencyAmount } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import type { WorkTreeDecisionReceipt } from '../work-tree.functions'
 import type { WorkTree } from './contract'
 import { projectDecisionInbox, type DecisionInboxProjection } from './inbox-projection'
@@ -58,9 +59,8 @@ export type WeeklyMemoData = Readonly<{
   periodLabel: string
   nextDecision: string
   cost: Readonly<{
-    currency: string
-    committedMinor: number
-    envelopeMinor: number
+    committed: ExactAmount
+    envelope: ExactAmount
   }>
   timingCriticalPathSummary: string
   effortMinutes: number
@@ -175,9 +175,8 @@ export function projectWeeklyMemo(input: WorkTreeMemoProjectionInput): WeeklyMem
     periodLabel: input.periodLabel ?? `Week ending ${new Date(nowMs).toISOString().slice(0, 10)}`,
     nextDecision: inbox.nextDecision,
     cost: {
-      currency,
-      committedMinor: rollup.cost.committedMinorByCurrency[currency] ?? 0,
-      envelopeMinor: rollup.cost.byCurrency[currency]?.envelopeMinor ?? 0,
+      committed: rollup.cost.committedByCurrency[currency] ?? { currency: 'AUD', units: '0', exponent: 2 },
+      envelope: rollup.cost.byCurrency[currency]?.envelope ?? { currency: 'AUD', units: '0', exponent: 2 },
     },
     timingCriticalPathSummary: criticalPath === undefined
       ? 'No committed timing yet'
@@ -232,8 +231,8 @@ function WeeklyMemo({ data }: Readonly<{ data: WeeklyMemoData }>): ReactElement 
             <Row>
               <Column style={metricColumnStyle}>
                 <Text style={metricLabelStyle}>Cost</Text>
-                <Text style={metricValueStyle}>{formatMoney(data.cost.currency, data.cost.committedMinor)} committed</Text>
-                <Text style={metricDetailStyle}>{formatMoney(data.cost.currency, data.cost.envelopeMinor)} envelope</Text>
+                <Text style={metricValueStyle}>{formatCurrencyAmount(data.cost.committed)} committed</Text>
+                <Text style={metricDetailStyle}>{formatCurrencyAmount(data.cost.envelope)} envelope</Text>
               </Column>
               <Column style={metricColumnStyle}>
                 <Text style={metricLabelStyle}>Timing</Text>

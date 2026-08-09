@@ -4,7 +4,7 @@ import { CliFailure, callJson, heading, line, printJson, requireOk, table } from
 
 export async function runBusinessCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const slug = args[0]?.trim()
-  if (slug === undefined || slug.length === 0) throw new CliFailure('Usage: ae business <slug>')
+  if (slug === undefined || slug.length === 0) throw new CliFailure('Usage: ae business <slug>', { kind: 'INVALID_ARGUMENT', code: 'business-usage' })
 
   const path = `/api/businesses/${encodeURIComponent(slug)}`
   const outcome = await callJson(options.baseUrl, path)
@@ -45,6 +45,10 @@ export async function runBusinessCommand(args: readonly string[], options: CliOp
     line(`  - ${String(service.name ?? '')} [${String(service.category ?? '')}]`)
     line(`    area: ${String(service.serviceArea ?? service.serviceAreaSummary ?? 'not supplied')}`)
     line(`    hours: ${String(service.hoursOrUnknown ?? service.availabilitySummary ?? 'not supplied')}`)
-    line(`    what to do now: ${String(firstRequest.mode ?? 'see access paths')} via ${String(firstRequest.publicChannel ?? 'unknown')}`)
+    const mode = String(firstRequest.mode ?? 'see access paths')
+    const channel = typeof firstRequest.publicChannel === 'string' && firstRequest.publicChannel.length > 0 ? firstRequest.publicChannel : undefined
+    // Never print a sentinel "unknown": if the channel is absent, omit the
+    // "via …" clause entirely rather than assert a fake value.
+    line(channel === undefined ? `    what to do now: ${mode}` : `    what to do now: ${mode} via ${channel}`)
   }
 }

@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { customerRequestV2Tables } from './convex-v2-schema'
 import { customerRequestRouteMandateTables } from './route-mandate-convex-schema'
 
-const money = v.object({ currency: v.string(), amountMinor: v.number() })
+const money = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 const business = v.object({ nodeId: v.string(), bindingId: v.string(), name: v.string() })
 const planInput = v.union(
   v.object({ kind: v.literal('literal'), value: v.union(v.string(), v.number(), v.boolean()) }),
@@ -13,7 +13,7 @@ const planInput = v.union(
 )
 const literalValue = v.union(v.string(), v.number(), v.boolean())
 const capabilityValueType = v.union(
-  v.literal('string'), v.literal('integer'), v.literal('boolean'), v.literal('url'), v.literal('money_minor'), v.literal('provider_offer_ref'),
+  v.literal('string'), v.literal('integer'), v.literal('boolean'), v.literal('url'), v.literal('money'), v.literal('provider_offer_ref'),
 )
 const capabilityFieldDefinition = v.object({
   valueType: capabilityValueType,
@@ -51,7 +51,7 @@ const requestUnderstanding = v.object({
   completionRequirement: v.object({
     evidenceRole: v.union(v.literal('provider_offer'), v.literal('result_artifact'), v.literal('status'), v.literal('provider_report')),
     valueType: v.union(
-      v.literal('string'), v.literal('integer'), v.literal('boolean'), v.literal('url'), v.literal('money_minor'), v.literal('provider_offer_ref'),
+      v.literal('string'), v.literal('integer'), v.literal('boolean'), v.literal('url'), v.literal('money'), v.literal('provider_offer_ref'),
     ),
   }),
   deadline: v.optional(v.number()),
@@ -126,7 +126,7 @@ export const customerRequestValue = v.object({
   understanding: requestUnderstanding,
   knownFacts: v.record(v.string(), literalValue),
   routing: v.object({
-    networkId: v.string(), currency: v.string(), maximumSpendMinor: v.number(),
+    networkId: v.string(), maximumSpend: money,
     optimizeFor: v.union(v.literal('cost'), v.literal('latency')),
   }),
   createdAt: v.number(),
@@ -169,7 +169,7 @@ export const preparedActionValue = v.object({
   }),
   allowedFallbacks: v.array(v.object({ business, trigger: v.literal('effect_not_committed'), maximumCost: money })),
   expectedCost: money, maximumGrossCost: money,
-  priceComponents: v.array(v.object({ kind: v.union(v.literal('provider'), v.literal('ae_fee'), v.literal('tax')), label: v.string(), amountMinor: v.number() })),
+  priceComponents: v.array(v.object({ kind: v.union(v.literal('provider'), v.literal('ae_fee'), v.literal('tax')), label: v.string(), amount: money })),
   disclosures: v.array(v.object({
     field: v.string(), dataCategory: v.optional(v.string()),
     timing: v.union(v.literal('already_shared_to_prepare'), v.literal('on_execution')),
@@ -191,7 +191,7 @@ export const preparedRouteCandidateSetValue = v.object({
   candidates: v.array(v.object({
     optionRef: v.string(), business: v.object({ name: v.string() }),
     expectedCost: money, maximumCost: money, expectedLatencyMs: v.number(),
-    priceComponents: v.array(v.object({ label: v.string(), amountMinor: v.number() })),
+    priceComponents: v.array(v.object({ label: v.string(), amount: money })),
     comparableOutputs: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number(), v.boolean()) })),
     materialTerms: v.array(v.string()),
     cancellation: v.object({ kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')), summary: v.string() }),
@@ -239,162 +239,7 @@ export const preparationRefusalReason = v.union(
 export const customerRequestTables = {
   ...customerRequestV2Tables,
   ...customerRequestRouteMandateTables,
-  customerRequestCapabilityContracts: defineTable({
-    ...capabilityContractValue.fields,
-    contractDigest: v.string(), status: v.union(v.literal('active'), v.literal('retired')),
-    registeredAt: v.number(), updatedAt: v.number(),
-  })
-    .index('by_capabilityContractId', ['capabilityContractId'])
-    .index('by_status_and_capabilityContractId', ['status', 'capabilityContractId']),
 
-  customerRequestHeads: defineTable({
-    requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), currentRevision: v.number(),
-    currentEvaluationId: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
-  }).index('by_requestId', ['requestId']),
-
-  customerRequestSnapshots: defineTable({
-    ...requestSnapshotValue.fields,
-  }).index('by_requestId_and_revision', ['requestId', 'revision']),
-
-  customerRequestCommands: defineTable({
-    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
-    expectedRevision: v.number(), resultingRevision: v.number(), committedAt: v.number(),
-  })
-    .index('by_commandKey', ['commandKey'])
-    .index('by_requestId_and_resultingRevision', ['requestId', 'resultingRevision']),
-
-  customerRequestEvaluations: defineTable({
-    ...requestEvaluationValue.fields,
-  })
-    .index('by_evaluationId', ['evaluationId'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
-
-  customerRequestEvaluationCandidates: defineTable({
-    evaluationId: v.string(), ...requestEvaluationCandidateValue.fields,
-  })
-    .index('by_evaluationId', ['evaluationId'])
-    .index('by_candidateRef', ['candidateRef']),
-
-  customerRequestEvaluationPreparations: defineTable({
-    preparationKey: v.string(), requestId: v.string(), requestRevision: v.number(),
-    evaluationId: v.string(), evaluationDigest: v.string(),
-    status: v.union(v.literal('preparing'), v.literal('options_prepared'), v.literal('needs_attention')),
-    candidateSet: v.optional(preparedRouteCandidateSetValue), inspectionRef: v.optional(v.string()),
-    updatedAt: v.number(),
-  })
-    .index('by_preparationKey', ['preparationKey'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
-
-  customerRequests: defineTable({
-    requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
-    compilationState: v.optional(v.union(
-      v.literal('submitted'), v.literal('needs_information'), v.literal('plan_ready'), v.literal('unsupported'),
-    )),
-    understanding: v.optional(requestUnderstanding),
-    knownFacts: v.optional(v.record(v.string(), literalValue)),
-    routing: customerRequestValue.fields.routing,
-    createdAt: v.number(),
-    requestDigest: v.string(), updatedAt: v.number(),
-  }).index('by_requestId', ['requestId']),
-
-  customerRequestRevisions: defineTable({
-    ...customerRequestValue.fields,
-    requestDigest: v.string(), recordedAt: v.number(),
-  })
-    .index('by_requestId_and_revision', ['requestId', 'revision']),
-
-  customerRequestCompilationCommands: defineTable({
-    compilationKey: v.string(), commandDigest: v.string(), requestId: v.string(), requestRevision: v.number(),
-    planRevisionId: v.optional(v.string()), committedAt: v.number(),
-    outcome: v.union(
-      v.object({ kind: v.literal('plan_ready') }),
-      v.object({ kind: v.literal('needs_information'), missingInformation: v.array(missingInformation) }),
-      v.object({
-        kind: v.literal('unsupported'),
-        reason: v.union(v.literal('no_registered_capability'), v.literal('unsafe_proposal')),
-      }),
-    ),
-  })
-    .index('by_compilationKey', ['compilationKey'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
-
-  customerRequestPlanRevisions: defineTable({
-    ...planRevisionValue.fields,
-    planDigest: v.string(),
-  })
-    .index('by_planRevisionId', ['planRevisionId'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
-
-  customerRequestPreparationCommands: defineTable({
-    preparationKey: v.string(), preparationScope: v.string(), commandDigest: v.string(),
-    requestId: v.string(), requestRevision: v.number(), planRevisionId: v.string(), actionId: v.string(),
-    status: v.union(v.literal('claimed'), v.literal('options_prepared'), v.literal('prepared'), v.literal('refused')), claimToken: v.string(), routingRequestId: v.string(),
-    claimedAt: v.number(), leaseExpiresAt: v.number(), completedAt: v.optional(v.number()),
-    preparedActionId: v.optional(v.string()), refusalReason: v.optional(preparationRefusalReason),
-    candidateSet: v.optional(preparedRouteCandidateSetValue),
-    refusalInspectionRef: v.optional(v.string()),
-  })
-    .index('by_preparationScope', ['preparationScope'])
-    .index('by_preparationKey', ['preparationKey'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision'])
-    .index('by_requestId_and_status', ['requestId', 'status'])
-    .index('by_status_and_leaseExpiresAt', ['status', 'leaseExpiresAt']),
-
-  customerRequestPreparedActions: defineTable({
-    ...preparedActionValue.fields,
-    preparationScope: v.string(), recordedAt: v.number(),
-  })
-    .index('by_preparedActionId', ['preparedActionId'])
-    .index('by_preparationScope', ['preparationScope'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision'])
-    .index('by_quoteId', ['quoteId']),
-
-  customerRequestPreparationAuthorities: defineTable({
-    authorityId: v.string(), authorityVersion: v.number(), authorityDigest: v.string(),
-    principalId: v.string(), delegatedAgentId: v.string(), requestId: v.string(), requestRevision: v.number(),
-    mode: preparationAuthorityMode, status: preparationAuthorityStatus,
-    verification: v.object({ evidenceRef: v.string(), issuerId: v.string(), signerId: v.string(), keyId: v.string() }),
-    permittedFields: v.array(v.string()), permittedRecipientKinds: v.array(preparationRecipientKind),
-    permittedRecipientBindingIds: v.array(v.string()), permittedPurposes: v.array(v.string()),
-    maximumRecipients: v.number(), maximumExposures: v.number(), maximumOperations: v.number(),
-    consumedRecipients: v.number(), consumedExposures: v.number(), consumedOperations: v.number(),
-    grantedAt: v.number(), expiresAt: v.number(), recordedAt: v.number(), updatedAt: v.number(),
-  })
-    .index('by_authorityId', ['authorityId'])
-    .index('by_requestId_and_status', ['requestId', 'status'])
-    .index('by_status_and_expiresAt', ['status', 'expiresAt']),
-
-  customerRequestPreparationDisclosureAllocations: defineTable({
-    allocationId: v.string(), allocationDigest: v.string(), operationKey: v.string(), authorityUseKey: v.string(),
-    authorityId: v.string(), authorityVersion: v.number(), authorityDigest: v.string(),
-    requestId: v.string(), requestRevision: v.number(), planRevisionId: v.string(), actionId: v.string(), capabilityContractId: v.string(),
-    recipientNodeId: v.string(), recipientBindingId: v.string(), recipientName: v.string(), recipientKind: preparationRecipientKind,
-    purpose: v.string(), purposeLabel: v.string(), fields: v.array(v.string()),
-    fieldCategories: v.array(v.object({ field: v.string(), label: v.string() })),
-    disposition: preparationDisclosureDisposition,
-    allocatedAt: v.number(), resolvedAt: v.optional(v.number()), providerEvidenceRef: v.optional(v.string()),
-    uncertainAt: v.optional(v.number()), reconciledAt: v.optional(v.number()),
-  })
-    .index('by_allocationId', ['allocationId'])
-    .index('by_operationKey', ['operationKey'])
-    .index('by_authorityId_and_allocatedAt', ['authorityId', 'allocatedAt'])
-    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
-
-  customerRequestPreparationDisclosureRecipients: defineTable({
-    authorityId: v.string(), recipientBindingId: v.string(), firstAllocatedAt: v.number(),
-  })
-    .index('by_authorityId_and_recipientBindingId', ['authorityId', 'recipientBindingId']),
-
-  customerRequestPreparationAuthorityUses: defineTable({
-    authorityId: v.string(), authorityUseKey: v.string(), firstAllocatedAt: v.number(),
-  })
-    .index('by_authorityId_and_authorityUseKey', ['authorityId', 'authorityUseKey']),
-
-  customerRequestPreparationDisclosureExposures: defineTable({
-    authorityId: v.string(), recipientBindingId: v.string(), purpose: v.string(), field: v.string(), firstAllocatedAt: v.number(),
-  })
-    .index('by_authorityId_and_recipientBindingId_and_purpose_and_field', ['authorityId', 'recipientBindingId', 'purpose', 'field'])
-    .index('by_authorityId_and_firstAllocatedAt', ['authorityId', 'firstAllocatedAt']),
   customerRequestAgentOAuthGrants: defineTable({
     grantRef: v.string(),
     flow: v.union(v.literal('device_code'), v.literal('authorization_code')),

@@ -5,6 +5,7 @@ import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { readCatalogHealth } from '@/modules/registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import {
   type PublicBusinessCatalogApiV2Dto,
   type PublicBusinessCatalogApiV2Page,
@@ -1211,7 +1212,7 @@ function normalizePublicReason(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined
   }
-  const normalized = value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 240)
+  const normalized = sanitizeText(value, 240)
   return normalized.length === 0 ? undefined : normalized
 }
 

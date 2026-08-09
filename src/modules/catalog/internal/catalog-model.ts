@@ -7,6 +7,7 @@ import type {
 } from '@/modules/business/public'
 import type { AuditEventContract } from '@/modules/common/audit-events'
 import type { CorrelationId, OperationKey, Slug } from '@/modules/common/ids'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import {
   buildBusinessSupplyProjection,
   type BusinessOfferingRecord,
@@ -235,7 +236,7 @@ function buildFirstRequestDisclosure(input: FirstRequestDisclosureInput): Public
 }
 
 function cleanText(value: string): string {
-  return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 280)
+  return sanitizeText(value, 280)
 }
 export function buildOfferingSupplyProjection(input: Readonly<{
   business: BusinessRecord

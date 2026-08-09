@@ -12,6 +12,7 @@ import type { CustomerRequestProjection } from '@/modules/customer-request/custo
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { problem } from '@/lib/server/problem'
 import type {
   CustomerRequestEvidenceResult,
   CustomerRequestConnectedAssistantsResult,
@@ -39,7 +40,7 @@ import {
   handleCustomerRequestProblemPost,
   handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
-import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
 import { withCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
 type HandlerOptions = Readonly<{
@@ -292,7 +293,7 @@ async function callAsAgent<Result = SubmitResult>(
   const key = (options.env ?? process.env).AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (key === undefined || key.length < 32) throw new Error('customer_request_service_auth_unavailable')
   const serviceAuth = await createCustomerRequestServiceAssertion({
-    key, operation, command: command as never, principal, issuedAt: (options.now ?? Date.now)(),
+    key, operation, command: toStableHashValue(command), principal, issuedAt: (options.now ?? Date.now)(),
   })
   const args = { ...command, serviceAuth }
   if (options.callAction !== undefined) return await options.callAction(name, args) as Result
@@ -307,6 +308,8 @@ function refusal(
 ): Response {
   const base = resolveCanonicalBaseUrl(request).baseUrl
   const challenge = requiredMode === undefined ? bearerChallenge(base) : bearerChallenge(base, customerRequestScopeForMode(requiredMode))
-  const headers = new Headers({ 'Cache-Control': 'no-store', Vary: 'Authorization', 'WWW-Authenticate': challenge })
-  return Response.json({ kind: 'refused', reason }, { status, headers })
+  return problem(
+    { status, kind: status === 401 ? 'UNAUTHENTICATED' : 'PERMISSION_DENIED', code: reason, detail: reason },
+    { 'WWW-Authenticate': challenge, 'Vary': 'Authorization' },
+  )
 }

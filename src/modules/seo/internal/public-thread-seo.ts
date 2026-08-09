@@ -1,6 +1,11 @@
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
-import type { BuildPublicThreadSeoInput, PublicThreadSeoContract } from '@/modules/seo/public'
+import type {
+  BuildPublicThreadSeoInput,
+  BuildSharedThreadSeoInput,
+  PublicSharedThreadSeoContract,
+  PublicThreadSeoContract,
+} from '@/modules/seo/public'
 
 /**
  * Share-page SEO for a public answer thread. Threads are user-generated query
@@ -24,3 +29,16 @@ export function buildPublicThreadSeo(input: BuildPublicThreadSeoInput): PublicTh
   }
 }
 
+export function buildSharedThreadSeo(input: BuildSharedThreadSeoInput): PublicSharedThreadSeoContract {
+  const canonicalBaseUrl = trimTrailingSlashes(input.options?.canonicalBaseUrl ?? 'https://ae.example')
+  const description = input.firstTurnOneLine?.trim() || input.title.trim()
+
+  return {
+    shareToken: input.shareToken,
+    title: `${input.title} | Agentic Economy`,
+    description,
+    canonicalUrl: `${canonicalBaseUrl}/s/${input.shareToken}`,
+    indexDirective: 'noindex',
+    ogType: 'article',
+  }
+}

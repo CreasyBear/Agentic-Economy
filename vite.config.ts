@@ -1,3 +1,7 @@
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+
+import type { Plugin as EsbuildPlugin } from 'esbuild'
 import { defineConfig } from 'vite'
 
 import { sentryVitePlugin } from '@sentry/vite-plugin'
@@ -14,6 +18,18 @@ const sentryRelease =
   process.env.VERCEL_GIT_COMMIT_SHA?.trim() ??
   process.env.GITHUB_SHA?.trim()
 const sentryPluginEnabled = sentryAuthToken !== undefined && sentryOrg !== undefined && sentryProject !== undefined
+const graphologyCjsPath = fileURLToPath(new URL('./node_modules/graphology/dist/graphology.cjs.js', import.meta.url))
+const graphologyOptimizeDepsCjs: EsbuildPlugin = {
+  name: 'graphology-optimize-deps-cjs',
+  setup(build) {
+    // Graphology's ESM class has an `import(...)` method that Vite 8 rewrites
+    // as a dynamic import. Optimize its equivalent CJS build for browsers.
+    build.onLoad({ filter: /graphology\/dist\/graphology\.(?:mjs|esm\.js)$/u }, async () => ({
+      contents: await readFile(graphologyCjsPath, 'utf8'),
+      loader: 'js',
+    }))
+  },
+}
 
 export default defineConfig({
   server: {
@@ -24,6 +40,9 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    esbuildOptions: {
+      plugins: [graphologyOptimizeDepsCjs],
+    },
     include: [
       '@clerk/backend',
       '@clerk/backend/internal',
@@ -43,6 +62,7 @@ export default defineConfig({
       '@tanstack/router-core',
       '@tanstack/router-core/isServer',
       '@tanstack/router-core/ssr/client',
+      'graphology',
       'seroval',
     ],
   },
@@ -57,6 +77,14 @@ export default defineConfig({
     nitro({
       // Scope 1 pins Vercel Node serverless, not edge: existing webhook routes
       // use raw Request bodies plus Node/WebCrypto signature verification.
+      // Register the markdown route with Nitro so Vite does not classify the
+      // `.md` suffix as a static asset for non-browser Accept headers.
+      routes: {
+        '/SKILL.md': {
+          handler: './src/routes/SKILL[.]md.ts',
+          method: 'GET',
+        },
+      },
       preset: 'vercel',
       vercel: {
         entryFormat: 'node',

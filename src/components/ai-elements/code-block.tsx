@@ -312,11 +312,7 @@ const CodeBlockContainer = ({
       className
     )}
     data-language={language}
-    style={{
-      containIntrinsicSize: "auto 200px",
-      contentVisibility: "auto",
-      ...style,
-    }}
+    style={style}
     {...props}
   />
 );
@@ -402,7 +398,10 @@ const CodeBlockContent = ({
   const tokenized = asyncResult?.code === code && asyncResult.language === language ? asyncResult.tokens : syncTokens;
 
   return (
-    <div className="relative overflow-auto">
+    <div
+      className="relative overflow-auto"
+      style={{ containIntrinsicSize: "auto 200px", contentVisibility: "auto" }}
+    >
       <CodeBlockBody showLineNumbers={showLineNumbers} tokenized={tokenized} />
     </div>
   );

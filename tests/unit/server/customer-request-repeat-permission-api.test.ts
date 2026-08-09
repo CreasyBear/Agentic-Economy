@@ -90,7 +90,7 @@ describe('Customer Request repeat-permission HTTP surface', () => {
         routeRef,
         delegatedCredentialId: 'credential:repeat',
         occurrences: 2,
-        cumulativeSpend: { currency: 'AUD', amountMinor: 2_400 },
+        cumulativeSpend: { currency: 'AUD', units: '2400', exponent: 2 },
         validUntil: 50_000,
         idempotencyKey: 'allow-repeat:no-scope',
       }),
@@ -103,7 +103,11 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     )
 
     expect(response.status).toBe(403)
-    expect(await response.json()).toEqual({ kind: 'refused', reason: 'scope_required' })
+    expect(await response.json()).toMatchObject({
+      kind: 'PERMISSION_DENIED',
+      code: 'scope_required',
+      detail: 'scope_required',
+    })
     expect(callAction).not.toHaveBeenCalled()
   })
 
@@ -113,7 +117,7 @@ describe('Customer Request repeat-permission HTTP surface', () => {
       routeRef,
       delegatedCredentialId: 'credential:repeat',
       occurrences: 2,
-      cumulativeSpend: { currency: 'AUD', amountMinor: 2_400 },
+      cumulativeSpend: { currency: 'AUD', units: '2400', exponent: 2 },
       validUntil: 50_000,
       idempotencyKey: 'allow-repeat:http',
     }
@@ -276,8 +280,8 @@ function repeatPermissionReceipt() {
     routeRef,
     delegatedCredentialId: 'credential:repeat',
     limits: {
-      perUseSpend: { currency: 'AUD', amountMinor: 1_200 },
-      cumulativeSpend: { currency: 'AUD', amountMinor: 2_400 },
+      perUseSpend: { currency: 'AUD', units: '1200', exponent: 2 },
+      cumulativeSpend: { currency: 'AUD', units: '2400', exponent: 2 },
       perUseDataAllocations: 1,
       cumulativeDataAllocations: 2,
       occurrences: 2,

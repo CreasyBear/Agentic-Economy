@@ -39,7 +39,7 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
 ): DurableActionInvocationPort<Result> {
   const { controls, attempts, history, commands, commandMaterials } = state
 
-  const transact = (command: PersistControlCommand<Result>): PersistControlResult => {
+  const transact = async (command: PersistControlCommand<Result>): Promise<PersistControlResult> => {
     const prior = commands.get(command.commandId)
     if (prior !== undefined) {
       return prior.digest === command.commandDigest
@@ -83,16 +83,26 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
 
   return {
     transact,
-    readControl: (ref) => controls.get(ref),
-    readAttempts: (ref, limit) => [...(attempts.get(ref)?.values() ?? [])]
-      .sort((a, b) => a.attemptNumber - b.attemptNumber).slice(0, Math.max(0, limit)),
-    readAttempt: (ref, attemptRef) => attempts.get(ref)?.get(attemptRef),
-    readHistory: (ref, afterVersion, limit) => (history.get(ref) ?? [])
-      .filter((row) => row.invocationVersion > afterVersion)
-      .slice(0, Math.max(0, limit)),
-    readHistoryCommand: options.readHistoryCommand ?? ((ref, commandId) =>
-      (history.get(ref) ?? []).find((row) => row.commandId === commandId)),
-    recordLateObservation(input) {
+    async readControl(ref) {
+      return controls.get(ref)
+    },
+    async readAttempts(ref, limit) {
+      return [...(attempts.get(ref)?.values() ?? [])]
+        .sort((a, b) => a.attemptNumber - b.attemptNumber).slice(0, Math.max(0, limit))
+    },
+    async readAttempt(ref, attemptRef) {
+      return attempts.get(ref)?.get(attemptRef)
+    },
+    async readHistory(ref, afterVersion, limit) {
+      return (history.get(ref) ?? [])
+        .filter((row) => row.invocationVersion > afterVersion)
+        .slice(0, Math.max(0, limit))
+    },
+    async readHistoryCommand(ref, commandId) {
+      return (options.readHistoryCommand ?? ((ref, commandId) =>
+        (history.get(ref) ?? []).find((row) => row.commandId === commandId)))(ref, commandId)
+    },
+    async recordLateObservation(input) {
       const digest = canonicalDigest({
         invocationRef: input.invocationRef,
         effectGeneration: input.effectGeneration,

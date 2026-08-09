@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_operator/admin/audit-events')({
   loader: () => readAdminAuditEventsServer(),
   head: () => ({
     meta: [
-      { title: 'Audit events | Agentic Economy' },
+      { title: 'Activity log | Agentic Economy' },
       {
         name: 'description',
         content: 'Inspect admin and recovery transitions with redacted payloads.',
@@ -30,7 +30,7 @@ function AdminAuditEventsRoute() {
   return (
     <AeOperatorShell
       operatorRole="admin"
-      title="Audit events"
+      title="Activity log"
       description="Inspect admin and recovery transitions with redacted payloads after source-owned membership is resolved."
       currentPath="/admin/audit-events"
       navBadges={{ '/admin/audit-events': readback.rows.length }}

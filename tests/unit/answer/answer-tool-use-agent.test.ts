@@ -5,13 +5,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { generateText, isStepCount } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
 import { z } from 'zod'
-
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { runAnswerToolUseAgent } from '@/modules/answer/internal/answer-tool-use-agent'
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { actionToOpenRouterTool, openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import { findAction } from '@/modules/actions'
 import { buildHarnessRunReport } from '@/modules/harness/public'
-import { buildToolUseAgentSystemPrompt } from '@/modules/answer/internal/answer-llm-prompts'
+import {
+  buildToolUseAgentSystemPrompt,
+  buildToolUseAgentUserPrompt,
+} from '@/modules/answer/internal/answer-llm-prompts'
 import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import {
   openRouterStructuredProseResponse,
@@ -24,6 +27,16 @@ import {
 const aiSdkTestState = vi.hoisted(() => ({
   generateTextCalls: [] as Array<Record<string, unknown>>,
 }))
+const emptyKeylessSource: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
+const emptyKeylessDataAsk = {
+  kind: 'resolved' as const,
+  descriptors: [],
+  candidates: [],
+}
 type AiModuleForMock = {
   readonly [key: string]: unknown
   readonly generateText: typeof generateText
@@ -217,6 +230,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
       })
       expect(result.gate.ok).toBe(true)
       expect(result.providers.map((provider) => provider.slug)).toContain(
@@ -322,8 +337,14 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     const requests = server.requests
     expect(requests).toHaveLength(2)
     expect(aiSdkTestState.generateTextCalls).toHaveLength(1)
+    // A business/listing query has no deterministic keyless selection, so the
+    // prompt names only the fixed discovery tools.
     for (const callOptions of aiSdkTestState.generateTextCalls) {
-      expect(callOptions.instructions).toBe(buildToolUseAgentSystemPrompt())
+      expect(callOptions.instructions).toContain(
+        `You have read-only tools: ${ANSWER_READ_TOOL_IDS.map(openRouterToolName).join(', ')}`,
+      )
+      expect(callOptions.instructions).not.toContain('execute_operation')
+      expect(callOptions.instructions).not.toContain('capability_')
       expect(callOptions).not.toHaveProperty('system')
     }
     expect(requests[0]?.response_format?.type).toBe('json_schema')
@@ -353,6 +374,37 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     )
   })
 
+  it('describes an unconfirmed default location as a proposal, not search scope', () => {
+    const prompt = buildToolUseAgentUserPrompt({
+      query: 'Emergency plumber',
+      searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+    })
+
+    expect(prompt).toContain('Configured search context proposes Perth, WA.')
+    expect(prompt).toContain('confirm Perth, WA')
+    expect(prompt).not.toContain('Search scope: near Perth, WA.')
+    expect(prompt).not.toContain('location="Perth, WA"')
+  })
+
+  it('uses a confirmed context as the active search scope', () => {
+    const prompt = buildToolUseAgentUserPrompt({
+      query: 'Emergency plumber',
+      searchContext: {
+        ...DEFAULT_AE_SEARCH_CONTEXT,
+        location: {
+          label: 'Perth, WA',
+          suburb: 'Perth',
+          stateTerritory: 'WA',
+          countryCode: 'AU',
+          source: 'user_selected',
+        },
+      },
+    })
+
+    expect(prompt).toContain('Search scope: near Perth, WA.')
+    expect(prompt).toContain('location="Perth"')
+  })
+
   it('fails closed if the model emits a tool call when tools are disabled', async () => {
     const modelRequests: unknown[] = []
 
@@ -368,6 +420,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       await expect(
         runAnswerToolUseAgent({
           query: 'compare the first two',
+          keylessDataAsk: emptyKeylessDataAsk,
+          keylessExecutableSource: emptyKeylessSource,
           disableTools: true,
           onModelRequest: (record) => modelRequests.push(record),
         }),
@@ -414,6 +468,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       await expect(
         runAnswerToolUseAgent({
           query: 'compare the first two',
+          keylessDataAsk: emptyKeylessDataAsk,
+          keylessExecutableSource: emptyKeylessSource,
           disableTools: true,
           onModelRequest: (record) => modelRequests.push(record),
         }),
@@ -453,6 +509,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       await expect(
         runAnswerToolUseAgent({
           query: 'paramata',
+          keylessDataAsk: emptyKeylessDataAsk,
+          keylessExecutableSource: emptyKeylessSource,
           model: 'test-model',
           onModelRequest: (record) => modelRequests.push(record),
         }),
@@ -498,7 +556,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
   })
 
-  it('recovers a misspelled query and falls back after two model overclaims', async () => {
+  it('recovers a misspelled query in one bounded model loop', async () => {
     const server = await startOpenRouterContractServer((_request, index) => {
       if (index === 0) {
         return openRouterToolResponse([
@@ -507,9 +565,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       }
       if (index === 1) {
         return openRouterStructuredProseResponse({
-          oneLine: 'This business can fix the problem.',
-          summary: 'Joondalup Rapid Plumbing can handle the work and is available now.',
-          whatToDoNow: 'Contact the business.',
+          oneLine: 'Joondalup Rapid Plumbing is listed for Emergency plumbing.',
+          summary: 'Joondalup Rapid Plumbing lists Emergency plumbing, published pricing "Demo price — $180 call-out, quoted before work starts", and published availability "Mon–Fri 7am–5pm, Sat 8am–12pm".',
+          whatToDoNow: 'Contact Joondalup Rapid Plumbing to confirm whether Emergency plumbing covers your job, whether "Demo price — $180 call-out, quoted before work starts" applies, and the earliest appointment within "Mon–Fri 7am–5pm, Sat 8am–12pm".',
         })
       }
       return openRouterStructuredProseResponse({
@@ -529,6 +587,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'jondalup',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
       })
       expect(result.providers.map((provider) => provider.slug)).toContain(
         'joondalup-rapid-plumbing',
@@ -541,12 +601,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           model: 'test-model',
           status: 'ok',
           stopReason: 'tool_calls',
-        }),
-        expect.objectContaining({
-          provider: 'openrouter',
-          model: 'test-model',
-          status: 'ok',
-          stopReason: 'stop',
         }),
         expect.objectContaining({
           provider: 'openrouter',
@@ -603,6 +657,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
       })
       const input = JSON.parse(result.toolCalls[0]!.inputJson)
       expect(input.query).toBe('parramatta')
@@ -648,6 +704,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
         maxToolCalls: 1,
       })
 
@@ -699,9 +757,11 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
 
     expect(server.requests).toHaveLength(2)
-    expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual(
-      ANSWER_READ_TOOL_IDS.map(openRouterToolName),
-    )
+    // This listing query has no selected keyless operation, so only the fixed
+    // discovery tools are exposed.
+    const firstToolNames = server.requests[0]?.tools?.map((tool) => tool.function.name) ?? []
+    expect(firstToolNames).toEqual(expect.arrayContaining(ANSWER_READ_TOOL_IDS.map(openRouterToolName)))
+    expect(firstToolNames.some((name) => name.startsWith('capability_'))).toBe(false)
     expect(server.requests[0]?.tool_choice).toBe('auto')
     expect(server.requests[1]?.tools).toBeUndefined()
     expect(server.requests[1]?.response_format?.type).toBe('json_schema')
@@ -719,7 +779,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     })
   })
 
-  it('persists active near-me context on location-free registry searches', async () => {
+  it('does not persist an unconfirmed default context on location-free registry searches', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber' } }],
       prose: {
@@ -739,16 +799,18 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'emergency plumber',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
         searchContext: DEFAULT_AE_SEARCH_CONTEXT,
       })
       const input = JSON.parse(result.toolCalls[0]!.inputJson)
       expect(input).toMatchObject({
         query: 'emergency plumber',
-        mode: 'near_me',
-        location: 'Perth',
       })
-      expect(result.snapshot.agentJsonUrl).toContain('mode=near_me')
-      expect(result.snapshot.agentJsonUrl).toContain('location=Perth')
+      expect(input.mode).toBeUndefined()
+      expect(input.location).toBeUndefined()
+      expect(result.snapshot.agentJsonUrl).not.toContain('mode=near_me')
+      expect(result.snapshot.agentJsonUrl).not.toContain('location=Perth')
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -791,6 +853,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'no-such-suburb',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
       })
       expect(result.providers).toEqual([])
       // The prose itself passed copy guards (no epistemic vocab), but the
@@ -798,9 +862,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       // snapshot has no providers so the gate does not reject on grounding.
       // This test still proves the loop runs and returns a structured result.
       expect(result.snapshot.providers).toEqual([])
-      expect(result.snapshot.oneLine).toBe('No matching listed business was found for "no-such-suburb".')
+      expect(result.snapshot.oneLine).toBe('No businesses match "no-such-suburb" yet.')
       expect(result.snapshot.summary).toBe(
-        'No matching listed business was found for "no-such-suburb". Try a location or a broader service description.',
+        'No matches found yet. Try a nearby location or a broader service description.',
       )
       expect(result.snapshot.nextStep).toBe('Try a nearby location or a broader service description.')
       expect(result.snapshot.oneLine).not.toContain('Fictional Plumbing')
@@ -847,6 +911,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
       })
       expect(result.providers).toEqual([])
       expect(result.toolCalls).toEqual([])
@@ -912,6 +978,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
 
       const result = await runAnswerToolUseAgent({
         query: 'which ones take inquiries?',
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
         priorProviders: [priorProvider],
         priorAllowedSlugs: ['parramatta-emergency-plumbing'],
         followUpIntent: 'filter_known',

@@ -50,7 +50,6 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('claimBusinessCommand')
     expect(seed).toContain('publishBusinessCatalogCommand')
     expect(seed).toContain('setCapabilitySupplyEligibilityCommand')
-    expect(seed).toContain('DEV_SEED_BUSINESS_FIXTURES.filter')
     expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
 

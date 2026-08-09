@@ -14,6 +14,7 @@ export {
   actionPreparationApprovalEvidenceV2Value,
   actionPreparationLineageV2Value,
   capabilityContractRefV2Value,
+  canonicalClaimMaterialV2Value,
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
   preparedActionRecoveryReasonV2Value,

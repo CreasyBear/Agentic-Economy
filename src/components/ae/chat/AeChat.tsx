@@ -14,7 +14,11 @@ import {
   markJourneyViewedAfterReopenWindow,
 } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { mergeThreadRecords, upsertOptimisticThread, useStoredThreadRecords, writeStoredThreadRecords } from './thread-records-store'
+import { mergeProjectionWithOptimisticTurns, type OptimisticTurnRecord } from './projection-merge'
+import { readAnswerThreadProjection } from './thread-readback'
+import { stopAnswerTurnRequest, type StopAnswerTurnResult } from './turn-stop'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
   aeSearchContextLocationLabel,
@@ -55,6 +59,7 @@ export type AeChatProps = {
 type LiveTurn = {
   query: string
   generation: number
+  clientTurnKey: string
   searchContext: AeSearchContext
   intent: FollowUpIntent
   turnId?: string
@@ -67,25 +72,28 @@ type ProjectionFetchState = {
   unavailable: boolean
 }
 
-type OptimisticTurnRecord = {
-  threadId: string
-  stableKey: string
-  turn: PublicThreadTurn
-}
-
 type ThreadRecordsUpdater =
   | readonly AnswerThreadRecord[]
   | ((current: readonly AnswerThreadRecord[]) => readonly AnswerThreadRecord[])
 
+const pageClientTurnScope = createClientTurnKey()
+
 export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
   const navigate = useNavigate()
   const routeThreadId = threadId
-  const initialRouteQuery = routeThreadId === null ? (initialQuery?.trim() ?? '') : ''
+  const [newChatDraft, setNewChatDraft] = useState(false)
+  // 'New question' enters a blank-thread draft in place: while a fresh chat is
+  // composing/settling we behave as if the route were blank (transcript cleared,
+  // composer is the landing), so the new query creates and navigates to its own
+  // thread exactly like the true blank-thread path does.
+  const effectiveRouteThreadId = newChatDraft ? null : routeThreadId
+  const initialRouteQuery = effectiveRouteThreadId === null ? (initialQuery?.trim() ?? '') : ''
   const initialLiveTurn =
     initialRouteQuery.length > 0
       ? ({
           query: initialRouteQuery,
           generation: 1,
+          clientTurnKey: canonicalDigest({ pageClientTurnScope, query: initialRouteQuery }),
           searchContext: DEFAULT_AE_SEARCH_CONTEXT,
           intent: 'refine_search',
         } satisfies LiveTurn)
@@ -99,18 +107,35 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
   const [optimisticTurns, setOptimisticTurns] = useState<readonly OptimisticTurnRecord[]>([])
   const searchContext = DEFAULT_AE_SEARCH_CONTEXT
-  const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
+  const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState<boolean | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [refinementComposerOpen, setRefinementComposerOpen] = useState(false)
   const pendingThreadIdRef = useRef<string | null>(null)
-  const mobileSidebarReturnFocusRef = useRef<HTMLElement | null>(null)
+  const mobileSidebarOpenerRef = useRef<HTMLElement | null>(null)
+  const routeFocusHeadingRef = useRef<HTMLHeadingElement | null>(null)
 
   useEffect(() => {
+    // A route change (coming back to a thread, or a fresh thread settling) ends
+    // any in-place blank-thread draft.
+    setNewChatDraft(false)
     setRefinementComposerOpen(false)
   }, [routeThreadId])
   useLayoutEffect(() => {
     threadsRef.current = threads
   }, [threads])
+
+  useLayoutEffect(() => {
+    const activeElement = document.activeElement
+    const activeControl = activeElement !== null
+      && activeElement !== document.body
+      && activeElement.matches('a[href], button, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])')
+    if (activeControl) {
+      return
+    }
+
+    const target = routeFocusHeadingRef.current ?? document.getElementById('main-content')
+    target?.focus({ preventScroll: true })
+  }, [routeThreadId])
 
   const setThreadRecords = useCallback((updater: ThreadRecordsUpdater) => {
     const nextThreads = typeof updater === 'function' ? updater(threadsRef.current) : updater
@@ -118,14 +143,13 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }, [])
 
   const initialRouteProjection =
-    routeThreadId !== null && initialProjection?.threadId === routeThreadId ? initialProjection : null
-  const fetchedRouteProjection = fetchedProjection?.threadId === routeThreadId ? fetchedProjection : null
+    effectiveRouteThreadId !== null && initialProjection?.threadId === effectiveRouteThreadId ? initialProjection : null
+  const fetchedRouteProjection = fetchedProjection?.threadId === effectiveRouteThreadId ? fetchedProjection : null
   const serverProjection =
-    routeThreadId === null ? null : (fetchedRouteProjection?.projection ?? initialRouteProjection ?? null)
+    effectiveRouteThreadId === null ? null : (fetchedRouteProjection?.projection ?? initialRouteProjection ?? null)
   const projectionUnavailable =
-    routeThreadId !== null &&
-    (initialProjection === null || (initialRouteProjection === null && fetchedRouteProjection?.unavailable === true))
-  const streamingThreadId = routeThreadId ?? sessionThreadId
+    effectiveRouteThreadId !== null && fetchedRouteProjection?.unavailable === true
+  const streamingThreadId = effectiveRouteThreadId ?? sessionThreadId
   const activeLiveTurnId = liveTurn?.turnId ?? null
   const projection = useMemo(
     () =>
@@ -155,8 +179,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     }
     return keys
   }, [streamingThreadId, optimisticTurns])
-  const showWelcome = routeThreadId === null && liveTurn === null && (projection?.turns.length ?? 0) === 0
-  const showThreadUnavailable = routeThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
+  const showWelcome = effectiveRouteThreadId === null && liveTurn === null && (projection?.turns.length ?? 0) === 0
+  const showThreadUnavailable = effectiveRouteThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
   const completedTurns = sessionProjection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const completedTurnCount = completedTurns.length
   const latestProjectedTurn = sessionProjection?.turns.at(-1)
@@ -165,13 +189,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     : null
   const composerTiming = latestProjectedTurn?.timing ?? liveTurn?.searchContext.timing ?? 'flexible'
   const composerTimingDate = latestProjectedTurn?.timingDate ?? liveTurn?.searchContext.timingDate
+  const terminalLayoutProfile = liveTurn === null && latestProjectedTurn?.status === 'complete'
+    ? latestProjectedTurn.layoutProfile
+    : undefined
+  const showBusinessComposerControls =
+    terminalLayoutProfile === undefined
+    || terminalLayoutProfile === 'discovery_full'
+    || terminalLayoutProfile === 'clarification'
+    || terminalLayoutProfile === 'refinement_compact'
+    || terminalLayoutProfile === 'compare_pair'
+  const showComposerTiming = showBusinessComposerControls
   useEffect(() => {
-    if (routeThreadId === null || terminalShortlist === null) {
+    if (effectiveRouteThreadId === null || terminalShortlist === null) {
       return
     }
 
-    const pseudonymousJourneyId = getOrCreatePseudonymousJourneyId('J2', routeThreadId)
-    if (markJourneyViewedAfterReopenWindow('J2', routeThreadId)) {
+    const pseudonymousJourneyId = getOrCreatePseudonymousJourneyId('J2', effectiveRouteThreadId)
+    if (markJourneyViewedAfterReopenWindow('J2', effectiveRouteThreadId)) {
       emitWave1JourneyEvent({
         event: 'shortlist_reopened',
         eventVersion: 1,
@@ -179,7 +213,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         pseudonymousJourneyId,
       })
     }
-  }, [routeThreadId, terminalShortlist])
+  }, [effectiveRouteThreadId, terminalShortlist])
 
 
   const wasShowingWelcomeRef = useRef(showWelcome)
@@ -199,18 +233,21 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }, [setThreadRecords])
 
   const refreshProjection = useCallback(async (id: string) => {
-    try {
-      const response = await fetch(`/api/answer/threads/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
-      if (!response.ok) {
-        setFetchedProjection({ threadId: id, projection: null, unavailable: true })
-        return
-      }
-      const body = (await response.json()) as PublicThreadProjection
-      setFetchedProjection({ threadId: id, projection: body, unavailable: false })
-    } catch {
-      setFetchedProjection({ threadId: id, projection: null, unavailable: true })
+    const result = await readAnswerThreadProjection(id)
+    if (result.kind === 'ok') {
+      setFetchedProjection({ threadId: id, projection: result.projection, unavailable: false })
+      return
     }
+    setFetchedProjection({ threadId: id, projection: null, unavailable: true })
   }, [])
+
+  const handleStopPendingTurn = useCallback(async (id: string, turnId: string): Promise<StopAnswerTurnResult> => {
+    const result = await stopAnswerTurnRequest({ threadId: id, turnId })
+    if (result.kind === 'stopped' || result.kind === 'already_settled') {
+      await refreshProjection(id)
+    }
+    return result
+  }, [refreshProjection])
 
 
   useEffect(() => {
@@ -218,14 +255,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }, [refreshThreads])
 
   useEffect(() => {
-    if (routeThreadId === null) {
+    if (effectiveRouteThreadId === null) {
       return
     }
-    if (initialProjection?.threadId === routeThreadId || initialProjection === null) {
+    if (initialProjection?.threadId === effectiveRouteThreadId) {
       return
     }
-    void refreshProjection(routeThreadId)
-  }, [routeThreadId, initialProjection, refreshProjection])
+    void refreshProjection(effectiveRouteThreadId)
+  }, [effectiveRouteThreadId, initialProjection, refreshProjection])
 
 
   useEffect(() => {
@@ -247,19 +284,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   function openMobileSidebar() {
     const activeElement = document.activeElement
-    mobileSidebarReturnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null
+    mobileSidebarOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null
     setMobileSidebarOpen(true)
   }
 
   function closeMobileSidebar() {
-    const returnFocusElement = mobileSidebarReturnFocusRef.current
     setMobileSidebarOpen(false)
-    window.requestAnimationFrame(() => {
-      if (returnFocusElement?.isConnected) {
-        returnFocusElement.focus()
-      }
-      mobileSidebarReturnFocusRef.current = null
-    })
   }
 
   function startTurn(
@@ -270,7 +300,13 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setStreamingBusy(true)
     const nextGeneration = generationRef.current + 1
     generationRef.current = nextGeneration
-    setLiveTurn({ query, generation: nextGeneration, searchContext: context, intent })
+    setLiveTurn({
+      query,
+      generation: nextGeneration,
+      clientTurnKey: createClientTurnKey(),
+      searchContext: context,
+      intent,
+    })
   }
 
   function handleSubmit(query: string, timing: NeedTiming = 'flexible', timingDate?: string) {
@@ -310,7 +346,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleSettledTurn(turn: PublicThreadTurn, generation: number) {
-    const threadIdForTurn = routeThreadId ?? sessionThreadId ?? pendingThreadIdRef.current
+    const threadIdForTurn = effectiveRouteThreadId ?? sessionThreadId ?? pendingThreadIdRef.current
     if (threadIdForTurn === null) {
       return
     }
@@ -335,14 +371,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     }
   }
 
-  function handleStreamEnd(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
+  function handleStreamEnd(outcome: 'complete' | 'pending' | 'error' | 'stopped') {
     setStreamingBusy(false)
-    if (outcome === 'complete' || pendingThreadIdRef.current !== null || routeThreadId !== null) {
+    if (outcome === 'complete' || pendingThreadIdRef.current !== null || effectiveRouteThreadId !== null) {
       handleTurnSettled(outcome)
     }
   }
 
-  function handleTurnSettled(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
+  function handleTurnSettled(outcome: 'complete' | 'pending' | 'error' | 'stopped') {
     const settledGeneration = liveTurn?.generation ?? null
     if (outcome === 'complete') {
       captureClientProductEventOnClient('answer_completed', { query_length: liveTurn?.query.length ?? 0 })
@@ -358,7 +394,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     }
 
     const pendingId = pendingThreadIdRef.current
-    if (routeThreadId === null && pendingId !== null) {
+    if (effectiveRouteThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
       void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })).finally(() => {
         clearLiveTurnIfSettled(settledGeneration)
@@ -370,8 +406,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     clearLiveTurnIfSettled(settledGeneration)
     void refreshThreads()
 
-    if (routeThreadId !== null) {
-      void refreshProjection(routeThreadId)
+    if (effectiveRouteThreadId !== null) {
+      void refreshProjection(effectiveRouteThreadId)
     }
   }
 
@@ -398,31 +434,52 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     startTurn(query, retryContext, retryIntent)
   }
 
+  function handleNewQuestion() {
+    // Reset to a fresh blank thread in place (client-only): the route stays put,
+    // but the transcript, live turn, optimistic turns and composer are cleared so
+    // the next submitted query starts a brand-new thread and navigates to it.
+    setNewChatDraft(true)
+    setStreamingBusy(false)
+    generationRef.current = 0
+    setLiveTurn(null)
+    setSessionThreadId(null)
+    pendingThreadIdRef.current = null
+    setOptimisticTurns([])
+    setRefinementComposerOpen(false)
+    setMobileSidebarOpen(false)
+  }
+
   function handleDeleteThread(deletedThreadId: string) {
     setThreadRecords((current) => current.filter((thread) => thread.threadId !== deletedThreadId))
-    if (routeThreadId === deletedThreadId) {
+    if (effectiveRouteThreadId === deletedThreadId) {
       void navigate({ to: '/', replace: true })
     }
   }
 
   const landingMode = showWelcome || leavingWelcome
 
-  const sidebarContextActive = routeThreadId !== null || liveTurn !== null
-  const showSidebarToggle = sidebarContextActive || threads.length > 0 || sidebarManuallyOpen
-  const sidebarVisible = sidebarContextActive || sidebarManuallyOpen
-  const showThreadChrome = routeThreadId !== null && projection !== null
-  // Session-level orientation (inquiry path + saved context) is premature during
-  // the very first streaming reveal - there is no settled context to orient yet,
-  // and stacking it on the live turn is the info dump we are removing. Show it
-  // once at least one turn has completed, so the first prompt streams cleanly.
-  const showSessionChrome = completedTurnCount >= 1
+  const sidebarContextActive = effectiveRouteThreadId !== null || liveTurn !== null
+  const showSidebarToggle = sidebarContextActive || threads.length > 0 || sidebarManuallyOpen === true
+  const sidebarVisible = sidebarManuallyOpen ?? sidebarContextActive
+  const showThreadChrome = effectiveRouteThreadId !== null && projection !== null
+  // Session-level business orientation is premature during the first stream and
+  // incompatible with terminal data, no-match, refusal, and boundary profiles.
+  const showSessionChrome = completedTurnCount >= 1 && showBusinessComposerControls
 
   // Keep scroller mounted while a turn streams - sessionThreadId updates mid-stream must not remount.
-  const scrollerKey = routeThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
+  const scrollerKey = effectiveRouteThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
   const defaultScrollPosition =
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
   const settleMessageId = liveTurn === null ? (completedTurns.at(-1)?.turnId ?? null) : null
-  const followUpComposerCopy = buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
+  const followUpComposerCopy =
+    showBusinessComposerControls || terminalLayoutProfile === 'data_answer'
+      ? buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
+      : {
+          placeholder: terminalLayoutProfile === 'empty_state'
+            ? 'Refine your request or ask a different question'
+            : 'Ask a different question',
+          loopHint: '',
+        }
 
   // Both large-screen column states are explicit so the content column resizes
   // smoothly and the sidebar slides in from a 0-width track instead of the
@@ -444,6 +501,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           id="ae-thread-mobile-sidebar"
           className="h-dvh w-dvw max-w-none rounded-none border-0 bg-transparent p-0 shadow-none lg:hidden"
           showCloseButton={false}
+          inert={!mobileSidebarOpen}
+          aria-hidden={!mobileSidebarOpen}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const opener = mobileSidebarOpenerRef.current
+            mobileSidebarOpenerRef.current = null
+            if (opener?.isConnected) opener.focus()
+          }}
         >
         <div className="relative h-dvh w-dvw overflow-hidden">
           <Button
@@ -475,17 +540,18 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             </div>
             <AeThreadSidebar
               threads={threads}
-              activeThreadId={routeThreadId}
+              activeThreadId={effectiveRouteThreadId}
               visible
               layout="mobile"
               onDelete={handleDeleteThread}
               onNavigate={closeMobileSidebar}
+              onNewQuestion={handleNewQuestion}
             />
           </div>
         </div>
         </DialogContent>
       </Dialog>
-      <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} />
+      <AeThreadSidebar threads={threads} activeThreadId={effectiveRouteThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} onNewQuestion={handleNewQuestion} />
       <div className="flex h-full min-h-0 w-full flex-col bg-background lg:col-start-2">
         {showSidebarToggle ? (
           <div className={cn('flex min-h-10 items-center px-4 pt-2 md:px-6', showThreadChrome && 'hidden lg:flex')}>
@@ -507,7 +573,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               size="icon"
               className="min-h-11 min-w-11 hidden text-muted-foreground lg:inline-flex"
               aria-label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
-              onClick={() => setSidebarManuallyOpen((value) => !value)}
+              onClick={() => setSidebarManuallyOpen((value) => !(value ?? sidebarContextActive))}
               aria-controls="ae-thread-sidebar"
               aria-expanded={sidebarVisible}
             >
@@ -517,14 +583,21 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         ) : null}
         {showThreadChrome ? (
           <AeThreadHeader
+            key={projection.threadId}
             title={projection.title}
             threadId={projection.threadId}
             showSidebarButton={showSidebarToggle}
             onOpenSidebar={openMobileSidebar}
             sidebarOpen={mobileSidebarOpen}
+            onNewQuestion={handleNewQuestion}
           />
         ) : null}
-        <div className="relative flex min-h-0 flex-1 flex-col">
+        {effectiveRouteThreadId === null && liveTurn !== null ? (
+          <h1 ref={routeFocusHeadingRef} className="sr-only" tabIndex={-1}>
+            Answering your question
+          </h1>
+        ) : null}
+        <div className="relative flex min-h-0 flex-1 flex-col max-sm:[&_[role=radio]]:min-h-11 max-sm:[&_input[type=date]]:min-h-11 max-sm:[&_button[type=submit]]:min-h-11 max-sm:[&_button[type=submit]]:min-w-11">
           <AeThreadScroller
             key={scrollerKey}
             autoScroll={liveTurn !== null}
@@ -562,14 +635,15 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               onThreadCreated={handleThreadCreated}
               onStreamEnd={handleStreamEnd}
               onSettledTurn={handleSettledTurn}
-              {...(routeThreadId === null ? {} : { onFollowUp: handleFollowUp })}
-              {...(routeThreadId === null ? {} : { onChangeCriteria: handleChangeCriteria })}
+              {...(effectiveRouteThreadId === null ? {} : { onFollowUp: handleFollowUp })}
+              {...(effectiveRouteThreadId === null || !showBusinessComposerControls ? {} : { onChangeCriteria: handleChangeCriteria })}
+              onStopPendingTurn={handleStopPendingTurn}
               onRetry={handleRetry}
             />
             {showThreadChrome ? (
               <div className="mx-auto w-full max-w-[56rem] px-4 pb-4 md:px-6" role="note" aria-label="Thread access and retention">
                 <p className="block text-sm text-muted-foreground">
-                  This thread has no automatic expiry. Anyone with its link can open it; the creating browser can delete it from Recent questions.
+                  Private to this browser by default. Explicit share links are read-only and remain active until revoked or this thread is deleted.
                 </p>
               </div>
             ) : null}
@@ -584,6 +658,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 defaultValue={refinementComposerOpen ? (latestProjectedTurn?.query ?? '') : ''}
                 focusOnMount={refinementComposerOpen}
                 initialTiming={composerTiming}
+                showTiming={showComposerTiming}
                 {...(composerTimingDate === undefined ? {} : { initialTimingDate: composerTimingDate })}
                 {...(followUpComposerCopy === null ? {} : { placeholder: followUpComposerCopy.placeholder })}
                 {...(followUpComposerCopy === null ? {} : { loopHint: followUpComposerCopy.loopHint })}
@@ -620,46 +695,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   )
 }
 
-function mergeProjectionWithOptimisticTurns(input: {
-  serverProjection: PublicThreadProjection | null
-  streamingThreadId: string | null
-  optimisticTurns: readonly OptimisticTurnRecord[]
-  omitTurnId?: string | null
-}): PublicThreadProjection | null {
-  if (input.streamingThreadId === null) {
-    return input.serverProjection
-  }
-
-  const scopedOptimisticTurns: PublicThreadProjection['turns'][number][] = []
-  for (const record of input.optimisticTurns) {
-    if (record.threadId === input.streamingThreadId && record.turn.turnId !== input.omitTurnId) {
-      scopedOptimisticTurns.push(record.turn)
-    }
-  }
-
-  if (scopedOptimisticTurns.length === 0) {
-    return input.serverProjection
-  }
-
-  if (input.serverProjection === null) {
-    return {
-      threadId: input.streamingThreadId,
-      title: scopedOptimisticTurns[0]?.query ?? 'New question',
-      turns: scopedOptimisticTurns,
-    } satisfies PublicThreadProjection
-  }
-
-  const serverTurnIds = new Set(input.serverProjection.turns.map((turn) => turn.turnId))
-  const pendingTurns = scopedOptimisticTurns.filter((turn) => !serverTurnIds.has(turn.turnId))
-  if (pendingTurns.length === 0) {
-    return input.serverProjection
-  }
-
-  return {
-    ...input.serverProjection,
-    turns: [...input.serverProjection.turns, ...pendingTurns].toSorted((left, right) => left.seq - right.seq),
-  } satisfies PublicThreadProjection
-}
 
 function emitChatFunnelEvents(events: readonly ChatFunnelEvent[]): void {
   for (const event of events) {
@@ -670,6 +705,12 @@ function emitChatFunnelEvents(events: readonly ChatFunnelEvent[]): void {
       payload: event.payload,
     })
   }
+}
+function createClientTurnKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 

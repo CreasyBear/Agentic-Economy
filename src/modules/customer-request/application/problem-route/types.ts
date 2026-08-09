@@ -7,6 +7,7 @@ import type {
   ProblemVisibility,
 } from '@/modules/customer-request/route-execution/problem-support'
 import type { CompareResumePorts } from '../compare-resume/types'
+import type { ExactAmount } from '@/modules/money/public'
 
 export type { ProblemCategory, ProblemVisibility }
 
@@ -262,8 +263,8 @@ export type SupportProblemExportResult = Readonly<
           state: 'current' | 'expired' | 'revoked'
           source: 'customer_confirmation'
           spend: Readonly<{
-            limit: Readonly<{ currency: string; amountMinor: number }>
-            admitted: Readonly<{ currency: string; amountMinor: number }>
+            limit: ExactAmount
+            admitted: ExactAmount
           }>
           dataSharing: readonly Readonly<{
             classification: 'public' | 'personal' | 'sensitive' | 'credential'

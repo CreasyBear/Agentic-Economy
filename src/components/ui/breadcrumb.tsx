@@ -49,12 +49,25 @@ function BreadcrumbLink({
   )
 }
 
-function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
+function BreadcrumbPage({
+  href,
+  className,
+  ...props
+}: React.ComponentProps<"span"> & { href?: string }) {
+  if (href !== undefined) {
+    return (
+      <a
+        data-slot="breadcrumb-page"
+        href={href}
+        aria-current="page"
+        className={cn("font-normal text-foreground", className)}
+        {...(props as React.ComponentProps<"a">)}
+      />
+    )
+  }
   return (
     <span
       data-slot="breadcrumb-page"
-      role="link"
-      aria-disabled="true"
       aria-current="page"
       className={cn("font-normal text-foreground", className)}
       {...props}

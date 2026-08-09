@@ -43,6 +43,13 @@ const SEARCH_STOP_WORDS = new Set([
   'the',
   'to',
 ])
+export function registrySearchTokens(query: string): readonly string[] {
+  return normalizeSearchText(query)
+    .split(' ')
+    .filter((token) => token.length > 0 && !SEARCH_STOP_WORDS.has(token))
+    .map(canonicalTradeToken)
+}
+
 
 // Every trade alias is a service word by construction. Listing them by hand is
 // how `electrical` and `sparky` came to be parsed as suburb names and filtered
@@ -202,10 +209,10 @@ export function documentMatchesRegistryQuery(
     return false
   }
 
-  const tokens = query
-    .split(' ')
-    .filter((token) => !SEARCH_STOP_WORDS.has(token))
-    .map(canonicalTradeToken)
+  const tokens = registrySearchTokens(query)
+  if (tokens.length === 0) {
+    return false
+  }
   const serviceIntentTokens = tokens.filter((token) => TRADE_CANONICAL_TOKENS.has(token))
   if (serviceIntentTokens.length > 0) {
     return serviceIntentTokens.some((token) => document.searchText.includes(token))

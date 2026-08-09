@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card } from '@/components/ui/card'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import {
@@ -35,7 +36,7 @@ export const Route = createFileRoute('/_operator/admin/search-gaps')({
   }),
   head: () => ({
     meta: [
-      { title: 'Search gaps | Agentic Economy' },
+      { title: 'Unmatched asks | Agentic Economy' },
       {
         name: 'description',
         content: 'Prioritize businesses whose missing details recur in local supply searches.',
@@ -108,18 +109,18 @@ function AdminSearchGapsRoute() {
   return (
     <AeOperatorShell
       operatorRole="admin"
-      title="Search gaps"
+      title="Unmatched asks"
       description="Prioritize businesses whose missing details recur in local supply searches."
       currentPath="/admin/search-gaps"
     >
       {readback.kind === 'denied' ? (
         <Alert variant="destructive">
-          <AlertTitle>Search gaps are not available to this account</AlertTitle>
+          <AlertTitle>Unmatched asks are not available to this account</AlertTitle>
           <AlertDescription>This view needs an active admin membership. Ask an owner admin to grant one.</AlertDescription>
         </Alert>
       ) : readback.kind === 'unavailable' ? (
         <Alert variant="destructive">
-          <AlertTitle>Search gaps could not be loaded</AlertTitle>
+          <AlertTitle>Unmatched asks could not be loaded</AlertTitle>
           <AlertDescription>The source did not answer. This is not a permission problem — refresh to try again.</AlertDescription>
         </Alert>
       ) : (
@@ -151,17 +152,26 @@ function SearchGapReadback({ readback }: Readonly<{ readback: AvailableOutreach 
             </p>
           </div>
           {readback.businesses.length === 0 ? (
-            <p className="text-muted-foreground">No searches recorded in the last 30 days.</p>
+            <Empty className="border border-dashed p-5">
+              <EmptyHeader>
+                <EmptyTitle>No search history yet</EmptyTitle>
+                <EmptyDescription>No local searches were recorded in the last 30 days. When customers search for services near your business, missing details will show here.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : repeated.length === 0 ? (
-            <p className="text-muted-foreground">
-              No business has recurred across separate days yet.
-            </p>
+            <Empty className="border border-dashed p-5">
+              <EmptyHeader>
+                <EmptyTitle>No recurring businesses yet</EmptyTitle>
+                <EmptyDescription>Businesses appeared in searches, but none has been seen on separate days yet. Check back once one recurs.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <AeOperatorDataTable
               columns={businessColumns}
               data={repeated}
               caption="Businesses worth contacting"
               filterPlaceholder="Filter businesses…"
+              emptyMessage="No businesses match this filter."
             />
           )}
         </div>
@@ -199,15 +209,19 @@ function SearchGapReadback({ readback }: Readonly<{ readback: AvailableOutreach 
             </p>
           </div>
           {readback.unanswered.length === 0 ? (
-            <p className="text-muted-foreground">
-              Every recorded search matched at least one business.
-            </p>
+            <Empty className="border border-dashed p-5">
+              <EmptyHeader>
+                <EmptyTitle>No unanswered searches</EmptyTitle>
+                <EmptyDescription>Every recorded search matched at least one business. Unanswered searches appear here when no business matches a request.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <AeOperatorDataTable
               columns={unansweredColumns}
               data={readback.unanswered}
               caption="Unanswered searches"
               filterPlaceholder="Filter searches…"
+              emptyMessage="No searches match this filter."
             />
           )}
         </div>

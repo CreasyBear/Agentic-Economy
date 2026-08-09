@@ -24,22 +24,21 @@ import {
 
 const SESSION_COOKIE = sessionCookieHeader('session-empty-state')
 
+function isSafetyModelRequest(request: {
+  messages?: readonly { role: string; content: string }[]
+  response_format?: { json_schema?: { name?: string } }
+}): boolean {
+  return request.response_format?.json_schema?.name === 'answer_query_safety'
+    || request.messages?.some((message) =>
+      message.role === 'system' && message.content.includes('Classify the user request'),
+    ) === true
+}
+
 
 function stubThreadPort(turns: unknown[]): void {
-  setAnswerThreadPortForTests({
-    createThread: async (args) => ({ threadId: args.threadId }),
-    appendTurn: async (args) => {
-      turns.push(args)
-      return { turnId: args.turnId }
-    },
-    appendTurnWithThreadAndToolCalls: async (args) => {
-      turns.push(args)
-      return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
-    },
-    listSessionThreads: async () => ({ threads: [] }),
-    getPublicThreadProjection: async () => null,
-    getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
-  })
+  const store = createAnswerThreadTestStore()
+  store.persisted = turns
+  installAnswerThreadTestPort(store)
 }
 
 describe('POST /api/answer/turn empty-state queries', () => {
@@ -79,13 +78,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       },
     }))
     const restoreOpenRouter = server.installEnv()
-    setAnswerThreadPortForTests({
-      createThread: async (args) => ({ threadId: args.threadId }),
-      appendTurn: async (args) => ({ turnId: args.turnId }),
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
-    })
+    installAnswerThreadTestPort(createAnswerThreadTestStore())
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -94,7 +87,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:no-match-brunswick' },
           body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
         }),
       )
@@ -112,10 +105,13 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.oneLine).toContain('No listed businesses match')
+      expect(isSafetyModelRequest(server.requests[0]!)).toBe(true)
+      expect(complete.answer.oneLine).toContain('No businesses match')
       expect(complete.answer.summary).toContain('Brunswick')
-      expect(server.requests).toHaveLength(1)
-      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
+      const answerRequests = server.requests.filter((request) => !isSafetyModelRequest(request))
+      expect(answerRequests).toHaveLength(1)
+      expect(answerRequests.every((request) => request.tools === undefined)).toBe(true)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -148,7 +144,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:parramatta-match' },
           body: JSON.stringify({ query: 'emergency plumber Parramatta' }),
         }),
       )
@@ -165,15 +161,20 @@ describe('POST /api/answer/turn empty-state queries', () => {
         'parramatta-emergency-plumbing',
         'plumbing-demo',
       ])
-      expect(complete.answer.oneLine).toBe('Start with an emergency plumber serving Parramatta.')
-      expect(complete.answer.summary).toContain('Scope, price, and current availability still need confirmation.')
-      expect(complete.answer.nextStep).toContain('what is the call-out price')
+      expect(complete.answer.oneLine).toBe('These 2 businesses may fit what you need in Parramatta.')
+      expect(complete.answer.summary).toContain('What they offer, price, and current availability still need confirmation.')
+      expect(complete.answer.nextStep).toContain('what it costs')
 
       const persisted = turns.at(0) as { evidenceJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
         toolCalls?: readonly { toolId?: string; inputJson?: string }[]
         timings?: readonly { name?: string }[]
-        workLog?: readonly { id?: string; status?: string; detailRows?: readonly { label?: string; value?: string }[] }[]
+        workLog?: readonly {
+          id?: string
+          phase?: string
+          status?: string
+          detailRows?: readonly { label?: string; value?: string }[]
+        }[]
       }
       expect(evidence.toolCalls?.[0]?.toolId).toBe('registry.search')
       expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}')).toMatchObject({
@@ -192,20 +193,18 @@ describe('POST /api/answer/turn empty-state queries', () => {
           'turn.persistence_prepare',
         ]),
       )
-      expect(evidence.workLog?.map((step) => step.id)).toEqual(
-        expect.arrayContaining([
-          'step-1',
-          'step-2',
-          'step-3',
-          'step-4',
-          'step-5',
-        ]),
-      )
-      const searchStep = evidence.workLog?.find((step) => step.id === 'step-2')
+      expect(evidence.workLog?.map((step) => ({ phase: step.phase, status: step.status }))).toEqual([
+        { phase: 'search', status: 'complete' },
+        { phase: 'read', status: 'complete' },
+        { phase: 'compare', status: 'complete' },
+      ])
+      const searchStep = evidence.workLog?.find((step) => step.phase === 'search')
       expect(searchStep?.status).toBe('complete')
       expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '2')).toBe(true)
-      expect(server.requests).toHaveLength(1)
-      expect(server.requests[0]?.tools).toBeUndefined()
+      // Retrieval-first already has the complete provider projection; only the
+      // explicit safety preflight spends a model request.
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(0)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -230,7 +229,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:web-provider-failure' },
           body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
         }),
       )
@@ -263,49 +262,30 @@ describe('POST /api/answer/turn empty-state queries', () => {
         providers?: unknown[]
         allowedSlugs?: unknown[]
         timings?: readonly { name?: string }[]
-        harnessRun?: {
-          summary: {
-            models?: { total: number }
-            tools?: { byName?: Record<string, { total?: number; ok?: number; refused?: number; error?: number }> }
-            errors?: { codes: readonly string[] }
-            cost?: { unavailableReasons: readonly string[] }
-          }
-          privateTelemetry?: { modelRequests: readonly { provider?: string; model?: string; status?: string }[] }
-        }
+        harnessRunRef?: string
       }
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
       const toolCalls = persisted.toolCalls
-      expect(toolCalls).toHaveLength(3)
+      expect(toolCalls).toHaveLength(2)
       expect(toolCalls.map((call) => call.toolId)).toEqual([
         'registry.search',
-        'registry.operations.search',
         'web.discover',
       ])
-      expect(toolCalls.map((call) => call.seq)).toEqual([0, 1, 2])
+      expect(toolCalls.map((call) => call.seq)).toEqual([0, 2])
       expect(new Set(toolCalls.map((call) => call.toolCallId)).size).toBe(toolCalls.length)
-      expect(toolCalls.slice(0, 1).map((call) => call.status)).toEqual(['complete'])
-      expect(toolCalls.slice(1).map((call) => call.status)).toEqual(['error', 'error'])
+      expect(toolCalls.map((call) => call.status)).toEqual(['complete', 'error'])
       expect(toolCalls.map((call) => JSON.parse(call.inputJson).query)).toEqual([
-        'Emergency plumber Brunswick',
         'Emergency plumber Brunswick',
         'Emergency plumber Brunswick',
       ])
       expect(toolCalls.every((call) => call.resultHash.startsWith('sha256:'))).toBe(true)
-      expect(evidence.harnessRun?.summary.tools?.byName?.['web.discover']).toMatchObject({
-        total: 1,
-        ok: 0,
-        refused: 0,
-        error: 1,
-      })
-      expect(evidence.harnessRun?.summary.errors?.codes).toContain('discovery_failed')
-      const modelRequests = evidence.harnessRun?.privateTelemetry?.modelRequests ?? []
-      expect(evidence.harnessRun?.summary.models?.total).toBe(modelRequests.length)
-      expect(modelRequests).toHaveLength(2)
-      expect(modelRequests.map((request) => request.status)).toEqual(['error', 'error'])
-      expect(evidence.harnessRun?.summary.cost?.unavailableReasons).toEqual(['request_failed'])
+      // The public evidence retains only the immutable run reference. Full
+      // harness telemetry lives in private harness-session entries.
+      expect(evidence.harnessRunRef).toBe(thread.turnId)
       expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
-      expect(server.requests).toHaveLength(3)
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(3)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -339,7 +319,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:wrong-location' },
           body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
         }),
       )
@@ -352,7 +332,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.oneLine).toBe('No listed businesses match "Emergency plumber Brunswick" yet.')
+      expect(complete.answer.oneLine).toBe('No businesses match "Emergency plumber Brunswick" yet.')
       expect(complete.answer.oneLine).not.toContain('Parramatta')
       expect(complete.answer.summary).not.toContain('Parramatta')
       expect(complete.answer.nextStep).not.toContain('Parramatta')
@@ -382,7 +362,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
     }
   })
 
-  it('scopes a placeless query to the active search context', async () => {
+  it('asks to confirm an unconfirmed context before scoping a placeless query', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
       prose: {
@@ -404,7 +384,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:active-context' },
           body: JSON.stringify({
             query: 'Emergency plumber',
             searchContext: DEFAULT_AE_SEARCH_CONTEXT,
@@ -419,10 +399,12 @@ describe('POST /api/answer/turn empty-state queries', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.summary).toContain('Perth')
-      expect(complete.answer.summary).not.toContain('Parramatta')
-      expect(complete.answer.agentJsonUrl).toContain('q=Emergency+plumber+near+Perth')
+      expect(complete.answer.oneLine).toContain('Perth')
+      expect(complete.answer.summary).toContain('confirm')
+      expect(complete.answer.nextStep).toContain('Confirm Perth, WA')
+      expect(complete.answer.agentJsonUrl).not.toContain('near+Perth')
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(0)
 
       const persisted = turns.at(0) as { evidenceJson: string; proseJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
@@ -455,24 +437,24 @@ describe('POST /api/answer/turn empty-state queries', () => {
         return openRouterProseResponse({
           oneLine: 'Start with an emergency plumber serving Parramatta.',
           summary:
-            'Parramatta Emergency Plumbing lists emergency pipe repair. Scope, price, and current availability still need confirmation.',
+            'Parramatta Emergency Plumbing offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
           whatToDoNow:
             'Contact the business and ask whether it handles this job, what it costs, and when it is available.',
         })
       }
       if (hasToolResult && /brunswick/i.test(latestQuery)) {
         return openRouterProseResponse({
-          oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
+          oneLine: 'No businesses match "Emergency plumber Brunswick" yet.',
           summary:
-            'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
-          whatToDoNow: 'Try a nearby suburb, browse services, or list a business that should appear here.',
+            'No matches found yet. We searched for emergency plumbers in Brunswick.',
+          whatToDoNow: 'Try a nearby suburb, see other options, or add a business that should appear here.',
         })
       }
       if (hasToolResult) {
         return openRouterProseResponse({
-          oneLine: 'One listed business matches Parramatta.',
+          oneLine: 'One business matches Parramatta.',
           summary:
-            'Parramatta Emergency Plumbing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
+            'Parramatta Emergency Plumbing offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
           whatToDoNow:
             'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
         })
@@ -484,8 +466,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
         return openRouterToolResponse([{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }])
       }
       return openRouterProseResponse({
-        oneLine: 'No two listed businesses to compare yet.',
-        summary: 'There are not two current listed businesses to compare.',
+        oneLine: 'Not enough matches to compare yet.',
+        summary: 'There are not enough matches in the latest answer to compare.',
         whatToDoNow: 'Try another search.',
       })
     })
@@ -505,6 +487,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'empty:comparison-first',
           },
           body: JSON.stringify({ query: 'Emergency plumber Parramatta' }),
         }),
@@ -530,6 +513,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'empty:comparison-second',
           },
           body: JSON.stringify({ threadId, query: 'Emergency plumber Brunswick' }),
         }),
@@ -548,6 +532,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'empty:comparison-final',
           },
           body: JSON.stringify({ threadId, query: 'Compare the top two' }),
         }),
@@ -559,7 +544,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
       expect(compareComplete.answer.providers).toEqual([])
-      expect(compareComplete.answer.oneLine).toBe('No two listed businesses to compare yet.')
+      expect(compareComplete.answer.oneLine).toBe('Not enough matches to compare yet.')
       expect(compareComplete.answer.summary).not.toContain('Parramatta')
     } finally {
       restoreOpenRouter()
@@ -571,14 +556,76 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
     }
   })
+  it('restarts one validated registry search with the prior need plus a new location', async () => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'No businesses match this refined request yet.',
+        summary: 'No matches were found after applying the retained need and new location.',
+        whatToDoNow: 'Try another suburb or revise a constraint.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
+
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const first = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie: SESSION_COOKIE, 'X-AE-Turn-Key': 'empty:recovery-first' },
+          body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
+        }),
+      )
+      const firstFrames = await readAnswerTurnStream(first)
+      const firstThread = firstFrames.find((frame) => frame.event.type === 'thread')?.event
+      if (firstThread?.type !== 'thread') throw new Error('expected first thread event')
+
+      const second = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie: SESSION_COOKIE, 'X-AE-Turn-Key': 'empty:recovery-second' },
+          body: JSON.stringify({
+            threadId: firstThread.threadId,
+            query: 'Only show options in Parramatta',
+          }),
+        }),
+      )
+      const secondFrames = await readAnswerTurnStream(second)
+      const secondComplete = secondFrames.at(-1)?.event
+      expect(secondComplete?.type).toBe('complete')
+      if (secondComplete?.type !== 'complete') throw new Error('expected second complete event')
+
+      const persisted = store.persisted.at(-1) as { query?: string; evidenceJson?: string } | undefined
+      const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
+        toolCalls?: readonly { toolId?: string; inputJson?: string }[]
+      }
+      const searches = evidence.toolCalls?.filter((call) => call.toolId === 'registry.search') ?? []
+      expect(searches).toHaveLength(1)
+      expect(JSON.parse(searches[0]?.inputJson ?? '{}')).toMatchObject({
+        query: expect.stringContaining('Emergency plumber'),
+        location: 'Parramatta',
+        mode: 'near_me',
+      })
+      expect(JSON.parse(searches[0]?.inputJson ?? '{}').query).toContain('Parramatta')
+      expect(JSON.parse(searches[0]?.inputJson ?? '{}').query).not.toContain('Brunswick')
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      else process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+    }
+  })
 
   it('recovers a misspelled query through the tool-use agent choosing registry.search("parramatta")', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
-        oneLine: 'One listed business matches this need.',
+        oneLine: 'One business may fit what you need.',
         summary:
-          'The listing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
+          'The business offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
         whatToDoNow:
           'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
@@ -594,7 +641,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:misspelled-query' },
           body: JSON.stringify({ query: 'paramata' }),
         }),
       )
@@ -613,19 +660,19 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(complete.answer.query).toBe('paramata')
       // The agent JSON URL reflects the tool's chosen search query.
       expect(complete.answer.agentJsonUrl).toContain('q=parramatta')
-      expect(complete.answer.oneLine).not.toContain('No listed businesses match')
+      expect(complete.answer.oneLine).not.toContain('No businesses match')
 
       const persisted = turns.at(0) as { evidenceJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
         toolCalls?: readonly { seq?: number; inputJson?: string }[]
         timings?: readonly { name?: string }[]
       }
-      expect(evidence.toolCalls?.map((call) => call.seq)).toEqual([0, 1, 2])
+      expect(evidence.toolCalls?.map((call) => call.seq)).toEqual([0, 1])
       expect(
         evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
-      ).toEqual(['paramata', 'paramata', 'parramatta'])
+      ).toEqual(['paramata', 'parramatta'])
       expect(evidence.toolCalls?.[1]?.seq).toBe(1)
-      expect((evidence.toolCalls as readonly { toolId?: string }[])[1]?.toolId).toBe('registry.operations.search')
+      expect((evidence.toolCalls as readonly { toolId?: string }[])[1]?.toolId).toBe('registry.search')
       expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
     } finally {
       restoreOpenRouter()
@@ -650,24 +697,16 @@ describe('POST /api/answer/turn persistence resilience', () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
-        oneLine: 'One listed business matches this need.',
+        oneLine: 'One business may fit what you need.',
         summary:
-          'The listing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
+          'The business offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
-    setAnswerThreadPortForTests({
-      createThread: async () => {
-        throw new Error('convex unavailable')
-      },
-      appendTurn: async () => {
-        throw new Error('convex unavailable')
-      },
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async () => null,
-      getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
-    })
+    const store = createAnswerThreadTestStore()
+    store.persistError = new Error('convex unavailable')
+    installAnswerThreadTestPort(store)
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -676,7 +715,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '' },
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'empty:persistence-failure' },
           body: JSON.stringify({ query: 'emergency plumber parramatta' }),
         }),
       )
@@ -692,7 +731,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
       ).toBe(false)
       expect(frames.at(-1)?.event).toMatchObject({
         type: 'error',
-        code: 'answer_turn_persist_failed',
+        problem: { code: 'answer_turn_persist_failed' },
       })
     } finally {
       restoreOpenRouter()

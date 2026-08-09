@@ -56,7 +56,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
-    <div className={immersive ? 'h-dvh overflow-hidden' : 'min-h-dvh'}>
+    <div className={immersive ? 'flex h-dvh min-h-0 flex-col overflow-hidden' : 'min-h-dvh'}>
       <AeFunnelAttributionBoot />
       <AeSkipFocusBridge />
       <a
@@ -66,7 +66,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
       >
         Skip to content
       </a>
-      <header className="border-b border-border bg-card">
+      <header className={immersive ? 'flex-none border-b border-border bg-card' : 'border-b border-border bg-card'}>
         <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 md:px-6">
           <PublicBrandLink />
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
@@ -74,8 +74,8 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
           </div>
         </div>
       </header>
-      <div id="ae-app-shell-main" tabIndex={-1}>
-        <main id="main-content" tabIndex={-1} className={immersive ? 'h-full min-h-0' : undefined}>
+      <div id="ae-app-shell-main" tabIndex={-1} className={immersive ? 'flex min-h-0 flex-1 flex-col' : undefined}>
+        <main id="main-content" tabIndex={-1} className={immersive ? 'min-h-0 flex-1' : undefined}>
           {children}
         </main>
         <PublicFooter immersive={immersive} />
@@ -147,7 +147,7 @@ function PublicBrandLink() {
 const publicFooter = cva('', {
   variants: {
     immersive: {
-      true: 'fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card',
+      true: 'flex-none border-t border-border bg-card',
       false: 'border-t border-border bg-card',
     },
   },

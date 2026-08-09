@@ -16,7 +16,10 @@ vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
 import { listActions } from '@/modules/actions'
 import { createDevelopmentEvidenceVerifier } from '@/modules/capability-supply/development-evidence-fixture'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/internal/binding'
 import type {
   CapabilityGraphPorts,
   GraphPublicationRow,
@@ -25,11 +28,18 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import {
+  createProviderConnection,
+  type CreateProviderConnectionCommand,
+  type ProviderConnection,
+} from '@/modules/capability-supply/provider-connection'
 import {
   collectSuppliedCandidateQuoteAction,
   prepareSuppliedCandidateQuote,
@@ -40,24 +50,25 @@ import {
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { resolveActionContract } from '@/modules/common/action'
-import { registryDetailAction } from '@/modules/registry/registry.actions'
 import {
-  actionToHarnessToolContract,
-  createHarnessToolBoundaryInstrumentation,
-} from '@/modules/harness/tool-contract'
-import {
+  type ActionInvocationOrigin,
+  type InvocationDecision,
+  type ActionInvocationView,
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
   createDurableActionInvocationTracer,
   createInMemoryActionInvocationTracer,
   readCompletedResultIdentity,
-  type ActionInvocationOrigin,
-  type ActionInvocationView,
   type InvocationActor,
   type PreparedInvocation,
   type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
+import { registryDetailAction } from '@/modules/registry/registry.actions'
+import {
+  actionToHarnessToolContract,
+  createHarnessToolBoundaryInstrumentation,
+} from '@/modules/harness/tool-contract'
 import {
   attachCompletedTaskReference,
   projectReferenceComposition,
@@ -87,6 +98,35 @@ const candidate = {
   bindingId: 'dev:binding',
   contractRef: contract.ref,
 }
+const operationRef = createPublicOperationRef({
+  operationId: capabilityOperationId(contract.capabilityId),
+  publicationRef: candidate.publicationRef,
+  publicationRevision: candidate.revision,
+  contractRef: contract.ref,
+})
+const providerConnectionCommand: CreateProviderConnectionCommand = {
+  commandId: 'command:create:development-quote',
+  connectionRef: 'connection:development',
+  businessId: candidate.businessId,
+  providerRef: 'provider:development',
+  providerAccountRef: 'account:development',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:DEVELOPMENT_QUOTE_SECRET',
+  requestedScopes: ['quote:read'],
+  grantedScopes: ['quote:read'],
+  requestedResources: ['account:development'],
+  grantedResources: ['account:development'],
+  evidenceRefs: ['dev:connection'],
+}
+function developmentProviderConnection(): ProviderConnection {
+  const result = createProviderConnection(providerConnectionCommand, nowMs)
+  if (result.kind !== 'applied') throw new Error(`provider connection fixture failed: ${result.kind}`)
+  return result.connection
+}
+const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
+  developmentProviderConnection(),
+  operationRef,
+)
 const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: candidate.offeringId,
   businessId: candidate.businessId,
@@ -115,7 +155,7 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   networkId: 'ae:public',
   contractRef: contract.ref,
   endpointUrl: 'https://development.invalid/quote',
-  credentialRef: 'dev:credential',
+  authority: { kind: 'provider_connection', connectionRef: 'connection:development', providerRef: 'provider:development' },
   continuation: { kind: 'single_response', evidenceRefs: ['dev:continuation'] },
   cancellation: { kind: 'unsupported', evidenceRefs: ['dev:cancellation'] },
   adapter: { adapterId: 'http-json:v1', config: null },
@@ -163,7 +203,8 @@ function binding(overrides: Partial<CapabilityBindingRow> = {}): CapabilityBindi
     networkId: 'ae:public',
     ...contract.ref,
     endpointUrl: bindingRegistration.endpointUrl,
-    credentialRef: bindingRegistration.credentialRef,
+    authority: bindingRegistration.authority,
+    connectionAuthority,
     continuation: bindingRegistration.continuation,
     cancellation: bindingRegistration.cancellation,
     adapterId: bindingRegistration.adapter.adapterId,
@@ -192,7 +233,9 @@ function publication(overrides: Partial<GraphPublicationRow> = {}): GraphPublica
   return {
     id: 'dev:publication-row',
     ...candidate,
+    operationRef,
     ...contract.ref,
+    connectionAuthority,
     sourceKind: 'openapi_http',
     sourceDigest: canonicalDigest({ fixture: 'published quote capability' }),
     disposition: 'current',
@@ -220,6 +263,7 @@ function qualificationPorts(overrides: Partial<CapabilityGraphPorts> = {}): Capa
       suppressed: false,
       currentlyPublished: true,
     }),
+    loadProviderConnection: async () => developmentProviderConnection(),
     getActiveExactCapabilityContract: async () => ({
       kind: 'found',
       ref: contract.ref,
@@ -339,7 +383,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         quote: {
           quoteRef: 'dev:transfer:quote:direct',
-          price: { amountMinor: 24_500, currency: 'AUD' },
+          price: { currency: 'AUD', units: '24500', exponent: 2 },
           validUntil: nowMs + 3_600_000,
           terms: ['Development fixture only; no provider commitment or fulfilment.'],
           evidenceRefs: ['dev:evidence:transfer-contract'],
@@ -431,7 +475,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     source.prepared = prepared.view.prepared!
     expect(controlledAdapter).not.toHaveBeenCalled()
 
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -465,15 +509,13 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     source.observedResolution = completed.view.observedResolution
     expect(controlledAdapter).toHaveBeenCalledTimes(1)
     expect(completed.view).toMatchObject({
-      persistence: 'durable_control',
       observedResolution: { state: 'returned', businessOutcome: 'completed' },
       attempts: [{ release: { state: 'released' } }],
     })
 
-    const cold = tracer.coldResume(prepared.view.invocationRef)
+    const cold = await tracer.coldResume(prepared.view.invocationRef)
     const coldView = cold.inspect(prepared.view.invocationRef)
     expect(coldView).toMatchObject({
-      persistence: 'durable_control',
       origin,
       observedResolution: { state: 'returned', businessOutcome: 'completed' },
       attempts: [{ attemptRef: 'dev:transfer:attempt:strata-repair' }],
@@ -494,14 +536,14 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       now: nowMs,
     })
     if (compiledRequest.kind !== 'compiled') throw new Error('Expected development aggregate.')
-    const attached = attachCompletedTaskReference({
+    const attached = await attachCompletedTaskReference({
       principalRef: actor.principalRef,
       callerRef: actor.callerRef,
       invocationRef: prepared.view.invocationRef,
       referencedAt: nowMs + 1,
       candidateAggregate: compiledRequest.aggregate,
     }, {
-      readCompletedResultIdentity: ({ invocationRef, actor: identityActor }) =>
+      readCompletedResultIdentity: async ({ invocationRef, actor: identityActor }) =>
         readCompletedResultIdentity(
           durablePort,
           invocationRef,
@@ -574,7 +616,6 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
               invocationRef,
               invocationVersion: 1,
               environment: 'MOCK/DEVELOPMENT ONLY',
-              persistence: 'durable_control',
               origin,
               owner: actor,
               action: {
@@ -745,7 +786,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (preparedA.kind !== 'prepared') throw new Error(preparedA.code)
     if (preparedB.kind !== 'prepared') throw new Error(preparedB.code)
 
-    const acceptedA = tracer.decide({
+    const acceptedA = await tracer.decide({
       invocationRef: preparedA.view.invocationRef,
       expectedInvocationVersion: preparedA.view.invocationVersion,
       authorityRef: preparedA.view.authority!.reference,
@@ -754,7 +795,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       accept: true,
     })
     expect(acceptedA).toMatchObject({ kind: 'accepted', view: { control: { state: 'authorized' } } })
-    expect(tracer.decide({
+    expect(await tracer.decide({
       invocationRef: preparedB.view.invocationRef,
       expectedInvocationVersion: preparedB.view.invocationVersion,
       authorityRef: preparedA.view.authority!.reference,
@@ -787,7 +828,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       environment: 'MOCK/DEVELOPMENT ONLY',
       quote: {
         quoteRef: 'dev:quote:0001',
-        price: { amountMinor: 18_500, currency: 'AUD' },
+        price: { currency: 'AUD', units: '18500', exponent: 2 },
         validUntil: nowMs + 3_600_000,
         terms: ['Development fixture; no provider commitment.'],
         evidenceRefs: ['dev:evidence:quote-contract'],
@@ -810,7 +851,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       freshUntil: new Date(quoteInput.qualificationValidUntil).toISOString(),
       dataUse: { fields: quoteInput.disclosure.fields, limits: quoteInput.disclosure.limits },
     })
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -900,7 +941,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -941,7 +982,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -1018,7 +1059,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -1107,7 +1148,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin: origins[1]!, actor, context: {}, now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    expect(tracer.decide({
+    expect(await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -1115,7 +1156,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin: origins[1]!,
       accept: true,
     })).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -1160,7 +1201,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       prepared: undefined as PreparedInvocation | undefined,
       observedResolution: { state: 'pending' } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
     }
-    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+    const create = () => createDurableActionInvocationTracer({
       action: collectSuppliedCandidateQuoteAction,
       port: createDevelopmentDurablePort(durableState),
       now: nowIso,
@@ -1170,7 +1211,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       developmentReleaseSignal: releaseSignal,
       verifyReconciliationEvidence: evidenceSource.verify,
       resolveSourceState: () => source,
-    }, resumeRef)
+    })
     const firstProcess = create()
     const prepared = await prepareSuppliedCandidateQuote({
       tracer: firstProcess,
@@ -1183,7 +1224,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     source.prepared = prepared.view.prepared!
-    const accepted = firstProcess.decide({
+    const accepted = await firstProcess.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -1200,7 +1241,6 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     expect(uncertain).toMatchObject({
       kind: 'accepted',
       view: {
-        persistence: 'durable_control',
         control: { state: 'reconciliation_required' },
         attempts: [{ release: { state: 'possibly_released' } }],
       },
@@ -1208,10 +1248,9 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (uncertain.kind !== 'accepted') throw new Error(uncertain.code)
     source.observedResolution = uncertain.view.observedResolution
 
-    const freshProcess = create(uncertain.view.invocationRef)
+    const freshProcess = await firstProcess.coldResume(uncertain.view.invocationRef)
     expect(freshProcess.inspect(uncertain.view.invocationRef)).toMatchObject({
       origin,
-      persistence: 'durable_control',
       control: { state: 'reconciliation_required' },
     })
     const reconciliationEvidence = evidenceSource.issue({
@@ -1243,7 +1282,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       ...forgedMaterial,
       digest: canonicalDigest(forgedMaterial as never),
     }
-    const refusedEvidence = [
+    const refusedEvidence: InvocationDecision<SuppliedCandidateQuoteResult>[] = []
+    for (const evidence of [
       malformedEvidence,
       {
         ...reconciliationEvidence,
@@ -1270,15 +1310,18 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         observedAt: '2026-07-19T07:59:59.999Z',
       }),
       forgedEvidence,
-    ].map((evidence) => freshProcess.reconcile({
-      invocationRef: uncertain.view.invocationRef,
-      expectedInvocationVersion: uncertain.view.invocationVersion,
-      attemptRef: uncertain.view.attempts[0]!.attemptRef,
-      actor,
-      origin,
-      evidence,
-    }))
-    expect(refusedEvidence.map((decision) => decision.kind === 'refused' ? decision.code : 'accepted'))
+    ]) {
+      refusedEvidence.push(await freshProcess.reconcile({
+        invocationRef: uncertain.view.invocationRef,
+        expectedInvocationVersion: uncertain.view.invocationVersion,
+        attemptRef: uncertain.view.attempts[0]!.attemptRef,
+        actor,
+        origin,
+        evidence,
+      }))
+    }
+    expect(refusedEvidence.map((decision: InvocationDecision<SuppliedCandidateQuoteResult>) =>
+      decision.kind === 'refused' ? decision.code : 'accepted'))
       .toEqual([
         'evidence_malformed',
         'evidence_digest_mismatch',
@@ -1291,7 +1334,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       ])
     expect(freshProcess.inspect(uncertain.view.invocationRef)).toEqual(unchangedBeforeMalformedEvidence)
 
-    const reconciled = freshProcess.reconcile({
+    const reconciled = await freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
@@ -1321,7 +1364,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
           },
         })
     if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
-    expect(freshProcess.reconcile({
+    expect(await freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
@@ -1329,7 +1372,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin,
       evidence: reconciliationEvidence,
     })).toMatchObject({ kind: 'accepted', view: { invocationVersion: reconciled.view.invocationVersion } })
-    expect(freshProcess.reconcile({
+    expect(await freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
@@ -1340,7 +1383,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         resolution: resolution === 'released' ? 'not_released' : 'released',
       }),
     })).toMatchObject({ kind: 'refused', code: 'command_identity_conflict' })
-    const coldAfterReconciliation = create(reconciled.view.invocationRef)
+    const coldAfterReconciliation = await firstProcess.coldResume(reconciled.view.invocationRef)
     const coldView = coldAfterReconciliation.inspect(reconciled.view.invocationRef)
     expect(coldView).toMatchObject({
       control: resolution === 'released' ? { state: 'terminal' } : { state: 'retryable' },
@@ -1360,11 +1403,11 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
 
     const port = createDevelopmentDurablePort(durableState)
     const persisted = JSON.stringify({
-      control: port.readControl(uncertain.view.invocationRef),
-      attempts: port.readAttempts(uncertain.view.invocationRef, 10),
-      history: port.readHistory(uncertain.view.invocationRef, 0, 20),
+      control: await port.readControl(uncertain.view.invocationRef),
+      attempts: await port.readAttempts(uncertain.view.invocationRef, 10),
+      history: await port.readHistory(uncertain.view.invocationRef, 0, 20),
     })
-    expect(port.readHistory(uncertain.view.invocationRef, 0, 20)).toContainEqual(
+    expect(await port.readHistory(uncertain.view.invocationRef, 0, 20)).toContainEqual(
       expect.objectContaining({
         kind: 'reconcile',
         current: true,
@@ -1390,7 +1433,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     expect(persisted).not.toContain(quoteInput.disclosure.purpose)
     expect(persisted).not.toContain('dev:quote:0001')
     expect(persisted).toContain(quoteInput.operationKey)
-    expect(port.readControl(uncertain.view.invocationRef)?.dataLimitSummary)
+    expect((await port.readControl(uncertain.view.invocationRef))?.dataLimitSummary)
       .toEqual(quoteInput.disclosure.limits)
   })
 })

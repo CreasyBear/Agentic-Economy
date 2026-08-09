@@ -95,6 +95,7 @@ describe('action registry', () => {
       'registry.services_list', 'registry.services_search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
+      'operation.execute',
       'sandbox.checkup_quote',
     ])
     for (const action of exposed) {
@@ -104,8 +105,38 @@ describe('action registry', () => {
       'ae_registry_services_list', 'ae_registry_services_search', 'ae_registry_detail',
       'ae_registry_operations_search', 'ae_registry_operations_detail',
       'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
+      'ae_operation_execute',
       'ae_sandbox_checkup_quote',
     ])
+  })
+
+  it('keeps operation execution MCP-only and fail-closed at the action boundary', () => {
+    const action = findAction('operation.execute')
+    expect(action).toBeDefined()
+    expect(action?.surfaces).toEqual(['mcp'])
+    expect(action?.readOnly).toBe(true)
+    expect(action?.effect).toMatchObject({
+      class: 'observation',
+      recipientKind: 'none',
+      spendExposure: 'none',
+      approval: 'none',
+    })
+    expect(action?.invocationContract.authorityRequirement).toBe('none')
+    expect(action?.schema.safeParse({
+      operationRef: `operation:v1:${'a'.repeat(64)}`,
+      input: { value: 'usd' },
+    }).success).toBe(true)
+    expect(action?.schema.safeParse({
+      operationRef: `operation:v1:${'a'.repeat(64)}`,
+      input: {},
+      endpointUrl: 'https://attacker.example',
+      method: 'POST',
+      credentialRef: 'attacker-secret',
+    }).success).toBe(false)
+    expect(action?.boundaries.join(' ')).toMatch(/keyless|public HTTPS|GET|endpoint|credential/i)
+    expect(action?.boundaries.join(' ')).toMatch(/book|pay|dispatch|inquiry|fulfil/i)
+    expect(listActions().filter((candidate) => candidate.surfaces.includes('answerThread')).map(({ id }) => id))
+      .not.toContain('operation.execute')
   })
 
   it('carries output validation schemas on every action', () => {
@@ -160,6 +191,7 @@ describe('action registry', () => {
           accessPaths: [
             {
               accessPathRef: 'legacy-access:adelaide-emergency-plumbing:emergency-pipe-repair',
+              offeringRevision: 1,
               kind: 'human_request' as const,
               channel: 'ae_inquiry' as const,
               disclosure: 'Use the inquiry form for a first contact.',
@@ -305,14 +337,23 @@ describe('action registry', () => {
     expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(33) } }).success).toBe(false)
   })
 
-  it('accepts a whole positive price ceiling and refuses a ceiling nobody can pay', () => {
+  it('accepts an exact price ceiling and refuses malformed ceilings', () => {
     const schema = findAction('registry.search')!.schema
 
     expect(schema.safeParse({ query: 'plumber' }).success).toBe(true)
-    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 25_000, hasPrice: true }).success).toBe(true)
-    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 0 }).success).toBe(false)
-    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: -1 }).success).toBe(false)
-    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 250.5 }).success).toBe(false)
+    expect(schema.safeParse({
+      query: 'plumber',
+      maxPrice: { currency: 'USD', units: '25000', exponent: 2 },
+      hasPrice: true,
+    }).success).toBe(true)
+    expect(schema.safeParse({
+      query: 'plumber',
+      maxPrice: { currency: 'USD', units: '-1', exponent: 2 },
+    }).success).toBe(false)
+    expect(schema.safeParse({
+      query: 'plumber',
+      maxPrice: { currency: 'USD', units: '250.5', exponent: 2 },
+    }).success).toBe(false)
     expect(schema.safeParse({ query: 'plumber', hasPrice: 'yes' }).success).toBe(false)
   })
 
@@ -325,12 +366,13 @@ describe('action registry', () => {
     const descriptor = describeActionForAgent(findAction('registry.search')!)
     const parameters = descriptor.parameters.map((parameter) => parameter.name)
 
-    expect(parameters).toContain('maxPriceMinor')
+    expect(parameters).toContain('maxPrice')
     expect(parameters).toContain('hasPrice')
 
     const boundaries = descriptor.boundaries.join(' ')
-    expect(boundaries).toMatch(/maxPriceMinor/)
-    expect(boundaries).toMatch(/minor units/i)
+    expect(boundaries).toMatch(/maxPrice/)
+    expect(boundaries).toMatch(/exact currency units and exponent/i)
+    expect(boundaries).not.toMatch(/minor units/i)
     expect(boundaries).toMatch(/quoted on request/i)
     expect(boundaries).toMatch(/hasPrice/)
   })

@@ -1,31 +1,47 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { jsonResponse } from './api.businesses'
+import { problem } from '@/lib/server/problem'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 import {
   appendSessionCookie,
   deleteAnswerThread,
-  getPublicThreadProjection,
+  getOwnedThreadProjection,
+  readAnswerSessionId,
   resolveOrCreateSessionId,
 } from '@/modules/answer-thread/public'
 
 export const Route = createFileRoute('/api/answer/threads/$threadId')({
   server: {
     handlers: {
-      GET: ({ params }) => handleGetAnswerThreadRequest(params.threadId),
+      GET: ({ request, params }) => handleGetAnswerThreadRequest(request, params.threadId),
       DELETE: ({ request, params }) => handleDeleteAnswerThreadRequest(request, params.threadId),
+      POST: () => methodNotAllowed(['GET', 'DELETE']),
+      PUT: () => methodNotAllowed(['GET', 'DELETE']),
+      PATCH: () => methodNotAllowed(['GET', 'DELETE']),
+      HEAD: () => methodNotAllowed(['GET', 'DELETE']),
+      OPTIONS: () => methodNotAllowed(['GET', 'DELETE']),
+      TRACE: () => methodNotAllowed(['GET', 'DELETE']),
+      CONNECT: () => methodNotAllowed(['GET', 'DELETE']),
+      ANY: () => methodNotAllowed(['GET', 'DELETE']),
     },
   },
 })
 
-export async function handleGetAnswerThreadRequest(threadId: string): Promise<Response> {
+export async function handleGetAnswerThreadRequest(request: Request, threadId: string): Promise<Response> {
+  const pseudonymousSessionId = readAnswerSessionId(request)
+  if (pseudonymousSessionId === undefined) {
+    return problem({ kind: 'NOT_FOUND', code: 'thread_not_found' })
+  }
+
   try {
-    const projection = await getPublicThreadProjection(threadId)
+    const projection = await getOwnedThreadProjection(threadId, pseudonymousSessionId)
     if (projection === null) {
-      return jsonResponse({ error: 'thread_not_found' }, { status: 404 })
+      return problem({ kind: 'NOT_FOUND', code: 'thread_not_found' })
     }
     return jsonResponse(projection)
-  } catch {
-    return jsonResponse({ error: 'thread_unavailable' }, { status: 503 })
+  } catch (error) {
+    return answerThreadFailure(error)
   }
 }
 
@@ -40,7 +56,16 @@ export async function handleDeleteAnswerThreadRequest(request: Request, threadId
     })
     const response = jsonResponse({ threadId, deleted: true })
     return appendSessionCookie(response, sessionId, setCookie, request)
-  } catch {
-    return jsonResponse({ threadId, deleted: false }, { status: 404 })
+  } catch (error) {
+    return answerThreadFailure(error)
   }
+
+}
+
+function answerThreadFailure(error: unknown): Response {
+  const message = error instanceof Error ? error.message : ''
+  if (/(?:^|[\s:])thread_(?:not_found|forbidden)(?:$|[\s:])/.test(message)) {
+    return problem({ kind: 'NOT_FOUND', code: 'thread_not_found' })
+  }
+  return problem({ kind: 'UNAVAILABLE', code: 'unavailable', retryable: true })
 }

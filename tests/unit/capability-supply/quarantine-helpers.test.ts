@@ -21,7 +21,7 @@ const binding = {
   version: 1,
   contractDigest: digest,
   endpointUrl: 'https://example.test',
-  credentialRef: 'credential:demo',
+  authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
   continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:continuation'] },
   cancellation: { kind: 'unsupported' as const, evidenceRefs: ['evidence:cancellation'] },
   adapterId: 'http-json:v1',

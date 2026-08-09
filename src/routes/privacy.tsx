@@ -7,7 +7,6 @@ import {
   SearchIcon,
   StoreIcon,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -81,36 +80,28 @@ function PrivacyRoute() {
   return (
     <AePublicShell>
       <AePageHeader
-        eyebrow="Privacy"
-        title="Your details, at a glance."
+        title="Privacy"
         description="What is shared when you ask, compare, or contact a business."
       />
       <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
-        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
+        <section className="grid gap-4">
           {detailCards.map(({ icon: CardIcon, label, title, body }) => (
-            <Card key={title} className="grid h-full gap-1.5 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                  <CardIcon className="size-4 text-foreground" aria-hidden="true" /> {title}
-                </p>
-                <Badge variant="outline">{label}</Badge>
-              </div>
-              <p className="block text-muted-foreground">{body}</p>
-            </Card>
+            <div key={title} className="grid gap-1">
+              <p className="flex items-center gap-2 font-semibold text-foreground">
+                <CardIcon className="size-4 text-foreground" aria-hidden="true" /> {title}
+                <span className="text-muted-foreground">{label}</span>
+              </p>
+              <p className="text-muted-foreground">{body}</p>
+            </div>
           ))}
         </section>
 
-        <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.72fr_1.28fr]">
-          <div className="grid content-start gap-2">
-            <h2 className="text-3xl font-semibold text-foreground">
-              What happens where.
-            </h2>
-          </div>
+        <section className="border-t border-border pt-8">
           <div className="grid gap-3">
             <Tabs defaultValue="contact">
-              <TabsList aria-label="Privacy moments" className="w-full">
+              <TabsList aria-label="Privacy moments" className="min-h-11 w-full">
                 {moments.map(({ value, label }) => (
-                  <TabsTrigger key={value} value={value} className="flex-1">{label}</TabsTrigger>
+                  <TabsTrigger key={value} value={value} className="min-h-11 flex-1">{label}</TabsTrigger>
                 ))}
               </TabsList>
               {moments.map(({ value, icon: Icon, title, points }) => (

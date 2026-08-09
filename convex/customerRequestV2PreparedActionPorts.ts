@@ -194,7 +194,7 @@ export function customerRequestV2PreparedActionPorts(
           configDigest: binding.configDigest,
           configJson: binding.configJson,
           endpointUrl: binding.endpointUrl,
-          credentialRef: binding.credentialRef,
+          authority: binding.authority,
           admission: binding.admission,
           conformance: binding.conformance,
           capabilityId: binding.capabilityId,

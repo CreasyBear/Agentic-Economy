@@ -91,7 +91,7 @@ export async function persistCompletedTaskReference(
   input: PersistCompletedTaskReferenceInput,
   ports: PersistCompletedTaskReferencePorts,
 ): Promise<PersistCompletedTaskReferenceResult> {
-  const identity = ports.readCompletedResultIdentity({
+  const identity = await ports.readCompletedResultIdentity({
     invocationRef: input.invocationRef,
     actor: { principalRef: input.principalRef, callerRef: input.callerRef },
   })
@@ -183,13 +183,13 @@ export async function persistCompletedTaskReference(
     compiled.aggregate,
     current.aggregate.completedTaskReferences ?? [],
   )
-  const attached = attachCompletedTaskReference({
+  const attached = await attachCompletedTaskReference({
     principalRef: input.principalRef,
     callerRef: input.callerRef,
     invocationRef: input.invocationRef,
     referencedAt: input.referencedAt,
     candidateAggregate: candidate,
-  }, { readCompletedResultIdentity: () => identity })
+  }, { readCompletedResultIdentity: async () => identity })
   if (attached.kind === 'refused') return attached
   const committed = await ports.commitAggregate({
     commandKey: input.commandKey,

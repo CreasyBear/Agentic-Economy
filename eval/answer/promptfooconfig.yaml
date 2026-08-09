@@ -281,6 +281,16 @@ tests:
       - type: javascript
         value: file://assertions/expect-answer-turn.mjs
 
+  - description: Answer turn executes a capability tool for a direct-data query
+    vars:
+      testId: turn-capability-tool-executes
+      mode: answer-turn
+      caseId: turn-capability-tool-executes
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
   - description: Answer thread filter uses frozen evidence
     vars:
       testId: thread-filter-uses-frozen-evidence

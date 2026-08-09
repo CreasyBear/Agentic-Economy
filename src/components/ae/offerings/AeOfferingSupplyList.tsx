@@ -12,12 +12,18 @@ import {
   PhoneIcon,
 } from 'lucide-react'
 
-import { formatOfferingPrice, type PublicOfferingSupplyProjection } from '@/modules/catalog/public'
+import { formatOfferingPrice } from '@/modules/catalog/public'
 import { formatNumericDate } from '@/lib/ui/format-time'
-import { offeringSupportCopy, plainLanguageCopy, presentOfferingAccessPath } from './offering-presentation'
+import {
+  offeringSupportCopy,
+  plainLanguageCopy,
+  presentOfferingAccessPath,
+  type PublicOfferingAccessPathView,
+  type PublicOfferingSupplyProjectionView,
+} from './offering-presentation'
 
 export type AeOfferingSupplyListProps = Readonly<{
-  offerings: readonly PublicOfferingSupplyProjection[]
+  offerings: readonly PublicOfferingSupplyProjectionView[]
   disposition?: 'current' | 'partial' | 'stale'
   observedAt?: number
   showTechnicalDetails?: boolean
@@ -62,7 +68,7 @@ export function AeOfferingSupplyList({ offerings, disposition = 'current', obser
     </section>
   )
 }
-function OfferingCard({ offering, showTechnicalDetails }: { offering: PublicOfferingSupplyProjection; showTechnicalDetails: boolean }) {
+function OfferingCard({ offering, showTechnicalDetails }: { offering: PublicOfferingSupplyProjectionView; showTechnicalDetails: boolean }) {
   const support = offeringSupportCopy(offering.support)
   const publishedPrice = offering.offering.price === undefined
     ? undefined
@@ -131,7 +137,7 @@ function OptionalFact({ icon, label, value }: { icon: ReactNode; label: string; 
   )
 }
 
-function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingSupplyProjection['accessPaths'][number]; showTechnicalDetails: boolean }) {
+function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingAccessPathView; showTechnicalDetails: boolean }) {
   const [technicalExpanded, setTechnicalExpanded] = useState(false)
   const presentation = presentOfferingAccessPath(path)
   return (

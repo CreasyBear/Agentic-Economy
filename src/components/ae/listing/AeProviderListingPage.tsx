@@ -9,10 +9,10 @@ import { Separator } from '@/components/ui/separator'
 import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenerativeMap'
 import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
+import { ProvenanceBadge } from '@/components/ae/status/ProvenanceBadge'
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
-import { ProviderFacts } from '@/components/ae/provider-facts'
-import { offeringPathLabel } from '@/components/ae/provider-facts.exports'
+import { AeOfferingCard } from '@/components/ae/primitives/AeOfferingCard'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
@@ -224,9 +224,12 @@ export function ListingFirstScreen({
           </p>
         </div>
         <div className="grid gap-2">
-          <h1 id="provider-listing-title" className="text-balance text-4xl leading-none font-semibold tracking-tight text-foreground md:text-6xl">
-            {catalog.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 id="provider-listing-title" className="text-balance text-4xl leading-none font-semibold tracking-tight text-foreground md:text-6xl">
+              {catalog.name}
+            </h1>
+            <ProvenanceBadge source="business_published" />
+          </div>
           <p className="block text-lg text-muted-foreground">{catalog.category}</p>
         </div>
 
@@ -325,32 +328,20 @@ function OfferingCardsSection({
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           {catalog.offerings.map((offering) => {
-            const humanPaths = offering.accessPaths.filter((path) => path.kind === 'human_request')
             const actionable = selectedOfferingRef === offering.offeringRef
             return (
-              <Card key={offering.offeringRef} className="grid h-full content-start gap-2 bg-card p-5">
-                <div className="grid gap-1">
-                  <p className="font-semibold text-foreground">{offering.name}</p>
-                  <p className="text-sm text-muted-foreground">{offering.summary}</p>
-                </div>
-                <ProviderFacts
-                  facts={[
-                    { term: 'Service area', description: offering.serviceAreaSummary },
-                    { term: 'Availability', description: offering.availabilitySummary },
-                    { term: 'Contact paths', description: humanPaths.length === 0 ? undefined : humanPaths.map(offeringPathLabel).join(', ') },
-                  ]}
-                />
-                {offering.support.aeSupportedAction ? (
-                  <p className="text-sm text-muted-foreground">AE can help with the next step.</p>
-                ) : null}
-                {actionable ? (
+              <AeOfferingCard
+                key={offering.offeringRef}
+                offering={offering}
+                className="h-full content-start gap-2"
+                actions={actionable ? (
                   <div className="pt-1">
                     <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>
                       <Button variant="secondary" size="sm">Send a message</Button>
                     </Link>
                   </div>
-                ) : null}
-              </Card>
+                ) : undefined}
+              />
             )
           })}
         </div>

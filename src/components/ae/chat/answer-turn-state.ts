@@ -6,20 +6,36 @@ import type {
   AnswerSource,
 } from '@/modules/answer/public'
 import { mergeAnswerArtifact } from '@/modules/answer/public'
-
-import type { ThinkingStep } from '@/modules/answer-thread/public'
-
+import type { AnswerTurnProblem } from '@/lib/errors'
+import type { AnswerTurnStatus, PublicThreadTurn, ThinkingStep } from '@/modules/answer-thread/public'
+import type {
+  AnswerStreamFrame,
+  AnswerTurnTransportError,
+  StreamAnswerResult,
+} from './answer-stream'
 import { appendThinkingStep } from './answer-stream'
 
-export type AnswerTurnPhase = 'idle' | 'streaming' | 'complete' | 'stopped' | 'error'
+export type AnswerTurnPhase = 'streaming' | 'settling' | 'pending' | 'complete' | 'stopped' | 'error'
+export type AnswerTurnStopState = 'idle' | 'requested' | 'accepted' | 'too_late' | 'failed'
+export type AnswerTurnReadbackState = 'pending' | 'ok' | 'not_found' | 'failed'
 
 type AnswerPlanState = Pick<
   Extract<AnswerEvent, { type: 'plan' }>,
   'providerBudget' | 'artifactBudget'
 >
 
+export type AnswerTurnMeta = {
+  threadId: string
+  turnId: string
+  turnSeq: number
+}
+
 export type AnswerTurnUiState = {
   phase: AnswerTurnPhase
+  stopState: AnswerTurnStopState
+  readbackState: AnswerTurnReadbackState
+  lastFrameSeq: number
+  threadMeta: AnswerTurnMeta | null
   artifacts: AnswerArtifact[]
   oneLineFallback: string
   thinkingLabel: string
@@ -28,28 +44,145 @@ export type AnswerTurnUiState = {
   workLog: readonly AnswerWorkStep[]
   layoutProfile: AnswerLayoutProfile | undefined
   plan: AnswerPlanState | undefined
-  errorMessage: string | null
+  problem: AnswerTurnProblem | null
+  transportError: AnswerTurnTransportError | null
+  stopFailure: AnswerTurnProblem | AnswerTurnTransportError | null
+  /** Kept as a read-only convenience for existing renderers; durable state owns truth. */
   complete: boolean
 }
 
+export type AnswerTurnAction =
+  | { type: 'reset' }
+  | { type: 'frame'; frame: AnswerStreamFrame }
+  | { type: 'stream_result'; result: StreamAnswerResult }
+  | { type: 'stop_requested' }
+  | { type: 'stop_accepted' }
+  | { type: 'stop_too_late'; status: Extract<AnswerTurnStatus, 'complete' | 'error' | 'stopped'> }
+  | { type: 'stop_failed'; problem?: AnswerTurnProblem; transportError?: AnswerTurnTransportError }
+  | { type: 'readback_turn'; turn: PublicThreadTurn }
+  | { type: 'readback_not_found' }
+  | { type: 'readback_failed'; problem?: AnswerTurnProblem; transportError?: AnswerTurnTransportError }
+
 export const initialAnswerTurnUiState: AnswerTurnUiState = {
   phase: 'streaming',
+  stopState: 'idle',
+  readbackState: 'pending',
+  lastFrameSeq: -1,
+  threadMeta: null,
   artifacts: [],
   oneLineFallback: '',
-  thinkingLabel: 'Searching listed businesses…',
+  thinkingLabel: 'Searching for matches…',
   thinkingSteps: [],
   thinkingStep: 'search',
   workLog: [],
   layoutProfile: undefined,
   plan: undefined,
-  errorMessage: null,
+  problem: null,
+  transportError: null,
+  stopFailure: null,
   complete: false,
 }
 
-export function reduceAnswerTurnEvent(state: AnswerTurnUiState, event: AnswerEvent): AnswerTurnUiState {
+export function reduceAnswerTurnState(
+  state: AnswerTurnUiState,
+  action: AnswerTurnAction,
+): AnswerTurnUiState {
+  switch (action.type) {
+    case 'reset':
+      return initialAnswerTurnUiState
+    case 'frame':
+      if (action.frame.seq <= state.lastFrameSeq) {
+        return state
+      }
+      return applyAnswerEvent(
+        { ...state, lastFrameSeq: action.frame.seq },
+        action.frame.event,
+      )
+    case 'stream_result':
+      if (action.result.kind === 'complete') {
+        return { ...state, phase: 'settling' }
+      }
+      if (action.result.kind === 'aborted') {
+        return state
+      }
+      if (action.result.kind === 'problem') {
+        return {
+          ...state,
+          phase: state.threadMeta === null ? 'error' : 'settling',
+          problem: action.result.problem,
+          transportError: null,
+        }
+      }
+      return {
+        ...state,
+        phase: state.threadMeta === null ? 'error' : 'settling',
+        transportError: action.result.error,
+      }
+    case 'stop_requested':
+      return state.stopState === 'idle'
+        ? { ...state, stopState: 'requested', stopFailure: null }
+        : state
+    case 'stop_accepted':
+      return {
+        ...stopRunningWorkSteps(state),
+        phase: 'stopped',
+        stopState: 'accepted',
+        readbackState: 'pending',
+        problem: null,
+        transportError: null,
+        complete: false,
+      }
+    case 'stop_too_late':
+      return {
+        ...state,
+        phase: 'settling',
+        stopState: 'too_late',
+        readbackState: 'pending',
+        stopFailure: null,
+      }
+    case 'stop_failed':
+      return {
+        ...state,
+        stopState: 'failed',
+        stopFailure: action.problem ?? action.transportError ?? null,
+      }
+    case 'readback_turn':
+      return applyDurableTurn(state, action.turn)
+    case 'readback_not_found':
+      return {
+        ...state,
+        phase: 'error',
+        readbackState: 'not_found',
+        complete: false,
+      }
+    case 'readback_failed':
+      return {
+        ...state,
+        phase: 'error',
+        readbackState: 'failed',
+        problem: action.problem ?? null,
+        transportError: action.transportError ?? null,
+        complete: false,
+      }
+    default: {
+      const _exhaustive: never = action
+      void _exhaustive
+      return state
+    }
+  }
+}
+
+function applyAnswerEvent(state: AnswerTurnUiState, event: AnswerEvent): AnswerTurnUiState {
   switch (event.type) {
     case 'thread':
-      return state
+      return {
+        ...state,
+        threadMeta: {
+          threadId: event.threadId,
+          turnId: event.turnId,
+          turnSeq: event.turnSeq,
+        },
+      }
     case 'work-step':
       return {
         ...state,
@@ -125,19 +258,59 @@ export function reduceAnswerTurnEvent(state: AnswerTurnUiState, event: AnswerEve
       return {
         ...state,
         layoutProfile: event.answer.layoutProfile,
-        phase: 'complete',
-        complete: true,
+      }
+    case 'pending':
+      return {
+        ...state,
+        phase: 'pending',
+      }
+    case 'stopped':
+      return {
+        ...stopRunningWorkSteps(state),
+        phase: 'stopped',
+        stopState: 'accepted',
+        complete: false,
       }
     case 'error':
       return {
         ...state,
-        phase: 'error',
-        errorMessage: 'The answer could not be built right now. Try again or browse services.',
+        problem: event.problem,
       }
     default: {
       const _exhaustive: never = event
       void _exhaustive
       return state
+    }
+  }
+}
+
+function applyDurableTurn(state: AnswerTurnUiState, turn: PublicThreadTurn): AnswerTurnUiState {
+  const problem = 'problem' in turn ? (turn.problem ?? null) : null
+  const next = {
+    ...state,
+    readbackState: 'ok' as const,
+    workLog: turn.workLog,
+    artifacts: [...turn.artifacts],
+    oneLineFallback: turn.oneLine,
+    layoutProfile: turn.layoutProfile,
+    problem,
+    transportError: null,
+    stopFailure: null,
+  }
+
+  switch (turn.status) {
+    case 'pending':
+      return { ...next, phase: 'pending', complete: false }
+    case 'complete':
+      return { ...next, phase: 'complete', complete: true }
+    case 'stopped':
+      return { ...next, phase: 'stopped', stopState: 'accepted', complete: false }
+    case 'error':
+      return { ...next, phase: 'error', complete: false }
+    default: {
+      const _exhaustive: never = turn.status
+      void _exhaustive
+      return next
     }
   }
 }
@@ -178,7 +351,7 @@ function artifactForPlan(
   return providers.length === 0 ? undefined : { kind: 'provider-cards', providers }
 }
 
-export function stopRunningWorkSteps(state: AnswerTurnUiState): AnswerTurnUiState {
+function stopRunningWorkSteps(state: AnswerTurnUiState): AnswerTurnUiState {
   const stoppedAt = Date.now()
   const workLog = state.workLog.map((step) => {
     if (step.status !== 'running') {

@@ -48,9 +48,10 @@ describe('business tool calling over HTTP', () => {
     )
 
     expect(response.status).toBe(401)
-    expect(await readJson(response)).toEqual({
-      kind: 'refused',
+    expect(await readJson(response)).toMatchObject({
+      kind: 'UNAUTHENTICATED',
       code: 'authentication_required',
+      detail: 'Present a current AE API key.',
       reason: 'Present a current AE API key.',
     })
   })
@@ -64,7 +65,7 @@ describe('business tool calling over HTTP', () => {
     )
 
     expect(response.status).toBe(403)
-    expect(await readJson(response)).toMatchObject({ kind: 'refused', code: 'scope_required' })
+    expect(await readJson(response)).toMatchObject({ kind: 'PERMISSION_DENIED', code: 'scope_required' })
   })
 
   /**
@@ -80,7 +81,7 @@ describe('business tool calling over HTTP', () => {
     )
 
     expect(refusedByWrongTool.status).toBe(404)
-    expect(await readJson(refusedByWrongTool)).toMatchObject({ kind: 'refused', code: 'unknown_tool' })
+    expect(await readJson(refusedByWrongTool)).toMatchObject({ kind: 'NOT_FOUND', code: 'unknown_tool' })
   })
 
   it('rejects a payload that does not match the published schema', async () => {
@@ -93,7 +94,7 @@ describe('business tool calling over HTTP', () => {
 
     expect([400, 404, 409]).toContain(response.status)
     const payload = await readJson(response)
-    expect(payload.kind).toBe('refused')
+    expect(payload.kind).toBe('INVALID_ARGUMENT')
   })
 
   /**
@@ -113,6 +114,6 @@ describe('business tool calling over HTTP', () => {
     )
 
     expect(response.status).toBe(400)
-    expect(await readJson(response)).toMatchObject({ kind: 'refused', code: 'invalid_input' })
+    expect(await readJson(response)).toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_input' })
   })
 })

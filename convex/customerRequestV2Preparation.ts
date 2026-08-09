@@ -58,7 +58,10 @@ export const prepare = internalMutation({
 })
 
 export const resume = internalQuery({
-  args: { requestId: v.string(), requestRevision: v.number(), actionId: v.string(), principalId: v.string() },
+  args: {
+    requestId: v.string(), requestRevision: v.number(), actionId: v.string(),
+    principalId: v.string(), now: v.number(),
+  },
   returns: resumeResultValue,
   handler: async (ctx, args): Promise<Infer<typeof resumeResultValue>> => (
     await resumeActionPreparationMachine(

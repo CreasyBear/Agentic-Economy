@@ -176,15 +176,16 @@ describe('customer Request workspace', () => {
         kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'options_ready',
         summary: 'Compare suitable options', nextAction: 'inspect_options', missingFields: [], options: [{
           optionRef: 'option_1', business: { name: 'Sandbox Option Two' },
-          expectedCost: { currency: 'AUD', amountMinor: 900 }, maximumCost: { currency: 'AUD', amountMinor: 900 }, expectedLatencyMs: 180,
-          priceComponents: [{ label: 'Sandbox amount', amountMinor: 900 }], comparableOutputs: [{ label: 'Option', value: 'Sandbox verification only' }],
+          expectedCost: { currency: 'AUD', units: '900', exponent: 2 }, maximumCost: { currency: 'AUD', units: '900', exponent: 2 }, expectedLatencyMs: 180,
+          priceComponents: [{ label: 'Sandbox amount', amount: { currency: 'AUD', units: '900', exponent: 2 } }], comparableOutputs: [{ label: 'Option', value: 'Sandbox verification only' }],
           materialTerms: ['Verification only; no real service or fulfilment.'], cancellation: { kind: 'unsupported', summary: 'No effect.' },
           commercialInfluence: {
             status: 'disclosed', relationship: 'commission', summary: 'AE may receive a fixed referral fee.',
             payerName: 'Sandbox Option Two', beneficiaryName: 'Agentic Economy', compensationBasis: 'Fixed referral fee',
             influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
           },
-          expiresAt: 10_000, inspectionRef: 'evidence_1',
+          expiresAt: 10_000,
+          provenance: { kind: 'provider_assertion', observedAt: 1_000, validUntil: 10_000 },
         }], optionSet: {
           cardinality: 'single', optionCount: 1,
           ordering: { kind: 'not_applicable', commercialInfluence: 'unknown' },
@@ -215,7 +216,7 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Commercial relationship disclosed')).toBeTruthy()
     expect(screen.getByText('Sandbox Option Two pays Agentic Economy: Fixed referral fee.')).toBeTruthy()
     expect(screen.getByText('Registered as not influencing eligibility, inclusion, or ordering.')).toBeTruthy()
-    expect(screen.getByText('$9.00')).toBeTruthy()
+    expect(screen.getByText('AUD 9.00')).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/requests', expect.objectContaining({ method: 'POST' }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/options', expect.objectContaining({ method: 'POST' }))
   })
@@ -223,10 +224,10 @@ describe('customer Request workspace', () => {
   it('explains an evidence-bound price recommendation without implying commitment', async () => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
-    const option = (key: string, name: string, amountMinor: number) => ({
+    const option = (key: string, name: string, units: number) => ({
       optionRef: `option_${key}`, business: { name },
-      expectedCost: { currency: 'AUD', amountMinor }, maximumCost: { currency: 'AUD', amountMinor }, expectedLatencyMs: 180,
-      priceComponents: [{ label: 'Provider amount', amountMinor }], comparableOutputs: [{ label: 'Service', value: 'Registered service' }],
+      expectedCost: { currency: 'AUD', units: String(units), exponent: 2 }, maximumCost: { currency: 'AUD', units: String(units), exponent: 2 }, expectedLatencyMs: 180,
+      priceComponents: [{ label: 'Provider amount', amount: { currency: 'AUD', units: String(units), exponent: 2 } }], comparableOutputs: [{ label: 'Service', value: 'Registered service' }],
       materialTerms: ['Provider term'], cancellation: { kind: 'unsupported', summary: 'No cancellation.' },
       commercialInfluence: { status: 'none', summary: 'No registered commercial relationship.' },
       expiresAt: 10_000, provenance: { kind: 'provider_assertion', observedAt: 1_000, validUntil: 10_000 },
@@ -684,7 +685,7 @@ describe('customer Request workspace', () => {
             { businessRef: 'business:one', name: 'North Star Services' },
             { businessRef: 'business:two', name: 'City Ledger' },
           ],
-          maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
+          maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '1400', exponent: 2 } },
           dataUse: {
             recipientCount: 2,
             recipients: [
@@ -736,11 +737,11 @@ describe('customer Request workspace', () => {
               kind: 'maximum_cost',
               before: [{
                 resultRef: 'route:opaque',
-                cost: { kind: 'known', currency: 'AUD', amountMinor: 1_600 },
+                cost: { kind: 'known', amount: { currency: 'AUD', units: '1600', exponent: 2 } },
               }],
               after: [{
                 resultRef: 'route:opaque',
-                cost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
+                cost: { kind: 'known', amount: { currency: 'AUD', units: '1400', exponent: 2 } },
               }],
             },
             {
@@ -774,10 +775,10 @@ describe('customer Request workspace', () => {
     expect(await screen.findByRole('heading', { name: 'One way forward is available.' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Prepare a governed result.' })).toBeTruthy()
     expect(screen.getByText('Through North Star Services and City Ledger')).toBeTruthy()
-    expect(screen.getByText('Maximum $14.00')).toBeTruthy()
+    expect(screen.getByText('Maximum AUD 14.00')).toBeTruthy()
     expect(screen.queryByText(/Option fingerprint/i)).toBeNull()
     expect(screen.getByText('What matters changed. Before: Meeting time: 15:00. Now: Meeting time: 09:00.')).toBeTruthy()
-    expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
+    expect(screen.getByText('The maximum for Prepare a governed result changed from AUD 16.00 to AUD 14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
     expect(screen.getByText('The businesses can return the stated result. Some details in your request still need confirmation.')).toBeTruthy()
     expect(screen.getByText('2 information recipients')).toBeTruthy()
@@ -802,7 +803,7 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review this option' }))
     expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
     expect(screen.getByText('Prepare a governed result.')).toBeTruthy()
-    expect(screen.getByText('Maximum $14.00')).toBeTruthy()
+    expect(screen.getByText('Maximum AUD 14.00')).toBeTruthy()
     expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText(/cannot be reversed automatically/)).toBeTruthy()
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
@@ -903,10 +904,10 @@ describe('customer Request workspace', () => {
     const baseLower = routeChoice('route:lower', 'current')
     const lower = {
       ...baseLower,
-      maximumTotalCost: { ...baseLower.maximumTotalCost, amountMinor: 900 },
+      maximumTotalCost: { ...baseLower.maximumTotalCost, amount: { ...baseLower.maximumTotalCost.amount, units: '900' } },
       comparison: {
         ...baseLower.comparison,
-        maximumCost: { ...baseLower.comparison.maximumCost, amountMinor: 900 },
+        maximumCost: { ...baseLower.comparison.maximumCost, amount: { ...baseLower.comparison.maximumCost.amount, units: '900' } },
         commercialInfluence: {
           status: 'disclosed' as const,
           summaries: ['AE may receive a fixed referral fee.'],
@@ -1043,6 +1044,51 @@ describe('customer Request workspace', () => {
     }))
     expect(JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body))).toEqual({
       idempotencyKey: 'run:request:confirm:confirmation:opaque',
+    })
+  })
+
+  it('sends one cancellation command and renders the stopped transition', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:cancel', savedAt: Date.now(),
+    }))
+    const inProgress = {
+      kind: 'request', requestRef: 'request:cancel', revision: 4, state: 'in_progress',
+      summary: 'Your request is in progress.', nextAction: 'wait', missingFields: [], options: [],
+      progress: { completed: 0, total: 1, current: { step: 1, state: 'awaiting_result' } },
+      activity: {
+        actor: 'business', certainty: 'pending', updatedAt: 123, nextCheckAt: 456,
+        retry: 'not_needed', cancellation: { state: 'available', releaseMayStartAt: 456 },
+      },
+    } as const
+    const stopped = {
+      ...inProgress,
+      state: 'cancelled',
+      summary: 'Stopped before the business step began.',
+      nextAction: 'revise_request',
+      activity: {
+        ...inProgress.activity,
+        actor: 'none',
+        certainty: 'cancelled',
+        cancellation: { state: 'stopped', stoppedAt: 789 },
+      },
+    } as const
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(inProgress))
+      .mockResolvedValueOnce(Response.json(stopped))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AeCustomerRequestWorkspace />)
+    pickUpSavedRequest()
+    expect(await screen.findByRole('button', { name: 'Stop before the next step' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop before the next step' }))
+
+    expect(await screen.findByRole('heading', { name: 'Stopped before the business step began.' })).toBeTruthy()
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Acancel/cancellation', expect.objectContaining({
+      method: 'POST',
+    }))
+    expect(JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))).toEqual({
+      idempotencyKey: 'cancellation:request:cancel:123',
     })
   })
 
@@ -1499,6 +1545,102 @@ describe('customer Request workspace', () => {
     expect(await screen.findByRole('button', { name: 'Show available options' })).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/requests/request%3Aconflict')
   })
+
+  it('does not parse a success-shaped compare body from a non-2xx response', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'compare-status-gate' })
+    const requestView = {
+      kind: 'request' as const, requestRef: 'request:compare-status-gate', revision: 1,
+      state: 'ready_to_compare' as const, summary: 'Find a current option',
+      nextAction: 'prepare_options' as const, missingFields: [], options: [],
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(requestView))
+      .mockResolvedValueOnce(Response.json(requestView, { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a current option' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Find options' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
+
+    expect(await screen.findByRole('heading', { name: 'Request unavailable' })).toBeTruthy()
+    expect(screen.getByText('AE could not prepare comparable options for this request.')).toBeTruthy()
+  })
+
+  it('maps a non-JSON compare failure into the recoverable workspace state', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'compare-non-json' })
+    const requestView = {
+      kind: 'request' as const, requestRef: 'request:compare-non-json', revision: 1,
+      state: 'ready_to_compare' as const, summary: 'Find a current option',
+      nextAction: 'prepare_options' as const, missingFields: [], options: [],
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(requestView))
+      .mockResolvedValueOnce(new Response('upstream unavailable', {
+        status: 503, headers: { 'Content-Type': 'text/plain' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a current option' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Find options' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
+
+    expect(await screen.findByRole('heading', { name: 'Request unavailable' })).toBeTruthy()
+    expect(screen.getByText('AE could not prepare comparable options for this request.')).toBeTruthy()
+  })
+
+  it('maps an RFC problem from confirm into the recoverable workspace state', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'confirm-problem' })
+    const routeRef = 'route:confirm-problem'
+    const generationRef = 'generation:confirm-problem'
+    const route = routeChoice(routeRef, 'current')
+    const projection = {
+      kind: 'request' as const, requestRef: 'request:confirm-problem', revision: 2,
+      routeGenerationRef: generationRef, state: 'routes_ready' as const,
+      summary: 'Find a current option', nextAction: 'inspect_routes' as const,
+      missingFields: [], criteria: [],
+      decision: {
+        generationRef, requestRevision: 2,
+        outcome: {
+          kind: 'routes_available' as const, routeCount: 1,
+          summary: 'One current way forward is available.',
+        },
+        routes: [route],
+        changes: { kind: 'initial' as const },
+        comparison: {
+          kind: 'single' as const,
+          summary: 'One current way forward is available. This is not a comparison or recommendation.',
+        },
+        actions: routeDecisionActions(),
+        nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
+      },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(projection))
+      .mockResolvedValueOnce(Response.json({
+        type: 'about:blank', title: 'Already exists', status: 409,
+        kind: 'ALREADY_EXISTS', code: 'request_conflict',
+        detail: 'This Request changed before the choice could be confirmed.',
+      }, { status: 409 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a current option' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Find options' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review this option' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm this choice' }))
+
+    expect(await screen.findByRole('heading', { name: 'Request unavailable' })).toBeTruthy()
+    expect(screen.getByText('This Request changed before the choice could be confirmed.')).toBeTruthy()
+  })
+
 })
 
 function routeChoice(routeRef: string, availability: 'current' | 'expired') {
@@ -1509,7 +1651,7 @@ function routeChoice(routeRef: string, availability: 'current' | 'expired') {
     availability,
     stepCount: 1,
     businesses: [{ businessRef: `business:${routeRef}`, name: `Business ${routeRef}` }],
-    maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+    maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
     dataUse: { recipientCount: 0, recipients: [], purposes: [] },
     effects: [], evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
     recovery: [{ step: 1, businessName: `Business ${routeRef}`, posture: 'retry_safe' as const }],
@@ -1526,7 +1668,7 @@ function routeChoice(routeRef: string, availability: 'current' | 'expired') {
 function routeComparison(
   outcomeRef: string,
   freshness: 'current' | 'expired',
-  amountMinor: number,
+  units: number,
   dataExposureCount: number,
   irreversibleEffectCount: number,
   recovery: 'retry_safe' | 'reconcile_required',
@@ -1534,7 +1676,7 @@ function routeComparison(
   return {
     outcomeRef, outcomeFit: 'same_promised_result' as const,
     completeness: 'complete' as const, hardConstraints: 'satisfied' as const,
-    maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor },
+    maximumCost: { kind: 'known' as const, amount: { currency: 'AUD', units: String(units), exponent: 2 } },
     dataExposureCount, irreversibleEffectCount, uncertaintyCount: 0,
     duration: 'not_declared' as const, recovery,
     trust: 'registered_current_option' as const, evidenceCount: 1,

@@ -9,10 +9,11 @@ import {
 } from '@/components/ui/card'
 
 import type { CustomerRequestAgentKeyInventoryItem } from '@/modules/customer-request/agent-access'
+import { addExactAmounts, type ExactAmount } from '@/modules/money/public'
 import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
 
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatMoney } from '@/lib/ui/format-money'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import { AeCreditTopUpPanel } from './AeCreditTopUpPanel'
 
 export type AgentOperatorKeyReadback = Readonly<{
@@ -32,8 +33,10 @@ export type AeAgentOperatorConsoleProps = Readonly<{
 }>
 
 export function AeAgentOperatorConsole({ items, loading, onRevoke, revokingKeyId }: AeAgentOperatorConsoleProps) {
-  const balanceMinor = items.reduce((total, item) => total + (item.account?.balanceMinor ?? 0), 0)
-  const currency = items.find((item) => item.account?.currency !== undefined)?.account?.currency ?? 'USD'
+  const balanceAmounts = items.flatMap(({ account }) => account === undefined ? [] : [account.balance])
+  const balance = balanceAmounts.reduce<ExactAmount | undefined>((total, amount, index) => (
+    index === 0 ? amount : total === undefined ? undefined : addExactAmounts(total, amount)
+  ), undefined)
   const activity = items.flatMap((item) => item.activity.map((entry) => ({ item, entry }))).sort((left, right) => right.entry.observedAt - left.entry.observedAt)
   const hasUnavailableData = items.some((item) => item.dataState === 'unavailable')
 
@@ -48,7 +51,7 @@ export function AeAgentOperatorConsole({ items, loading, onRevoke, revokingKeyId
           <Card className="border border-border bg-card">
             <CardContent className="grid gap-2">
               <p className="text-sm font-semibold text-muted-foreground">AVAILABLE CREDIT</p>
-              <p className="text-lg font-semibold text-foreground">{hasUnavailableData ? 'Balance unavailable' : formatMoney(currency, balanceMinor)}</p>
+              <p className="text-lg font-semibold text-foreground">{hasUnavailableData ? 'Balance unavailable' : formatAmount(balance)}</p>
               <p className="text-sm text-muted-foreground">{hasUnavailableData ? 'Some balance details are temporarily unavailable.' : 'Keep credit separate for each assistant.'}</p>
             </CardContent>
           </Card>
@@ -116,13 +119,15 @@ function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback;
         <p className="font-semibold text-foreground">{activityLabel(entry)}</p>
         <p className="text-sm text-muted-foreground">{item.key.name} · {formatTimestamp(entry.observedAt)}</p>
       </div>
-      <p className="font-semibold text-foreground">{formatMoney(entry.currency, entry.grossAmountMinor)}</p>
+      <p className="font-semibold text-foreground">{formatAmount(entry.grossAmount)}</p>
     </li>
   )
 }
 
 function KeyCard({ item, revoking, disabled, onRevoke }: Readonly<{ item: AgentOperatorKeyReadback; revoking: boolean; disabled: boolean; onRevoke: (keyId: string) => void }>) {
   const usage = item.usage
+  const accountBalance = item.account?.balance
+  const zeroBalance = accountBalance === undefined ? undefined : { ...accountBalance, units: '0' }
   const status = item.key.revoked ? 'Revoked' : item.key.expired ? 'Expired' : 'Connected'
   return (
     <Card className="border border-border bg-card">
@@ -135,7 +140,7 @@ function KeyCard({ item, revoking, disabled, onRevoke }: Readonly<{ item: AgentO
           <Metric label="Calls" value={String(usage?.callCount ?? 0)} />
           <Metric label="Free calls" value={String(usage?.freeCallCount ?? 0)} />
           <Metric label="Paid calls" value={String(usage?.paidCallCount ?? 0)} />
-          <Metric label="Spend" value={formatMoney(usage?.currency ?? item.account?.currency ?? 'USD', usage?.grossSpendMinor ?? 0)} />
+          <Metric label="Spend" value={formatAmount(usage?.grossSpend ?? zeroBalance)} />
         </dl>
         <div className="grid gap-1">
           <p className="text-sm text-muted-foreground">What this assistant can do: {scopeLabel(item.key.authorityMode)}.</p>
@@ -186,3 +191,6 @@ function dataLabel(state: AgentOperatorKeyReadback['dataState']): string {
   return 'Usage details are temporarily unavailable'
 }
 
+function formatAmount(amount: ExactAmount | undefined): string {
+  return amount === undefined ? '—' : formatCurrencyAmount(amount)
+}

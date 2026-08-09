@@ -34,6 +34,9 @@ describe('durable llms Offering parity', () => {
             },
             accessPaths: [{
               accessPathRef: 'path:design',
+              offeringRevision: 2,
+              offeringSourceHash: 'sha256:offering-current-design',
+              sourceHash: 'sha256:path-design',
               descriptor: {
                 kind: 'external_operation', name: 'Design API', summary: 'Declared access.',
                 url: 'https://engineering.example/api', provenance: 'business_declared',
@@ -70,8 +73,8 @@ describe('durable llms Offering parity', () => {
     const result = await backend.query(api.discovery.readLlmsTxt, {
       canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://ae.example', now: 3,
     })
-    expect(result.body).toContain('- slug=offering-engineering url=https://ae.example/offering-engineering')
-    expect(result.body).toContain('- slug=profile-only-consulting url=https://ae.example/profile-only-consulting')
+    expect(result.body).toContain('- slug=offering-engineering path=/offering-engineering')
+    expect(result.body).toContain('- slug=profile-only-consulting path=/profile-only-consulting')
     expect(result.body).toContain('- total=2; the lines above are a sample, not the catalog')
     expect(result.body).not.toContain('Retired Legacy Drilling')
     expect(result.body).not.toContain('secret:must-not-leak')

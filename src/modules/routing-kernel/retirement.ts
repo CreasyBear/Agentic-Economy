@@ -1,3 +1,5 @@
+import { problem } from '@/lib/server/problem'
+
 export const ROUTING_V1_RETIRED_PATHS = [
   '/v1/route',
   '/v1/authorize',
@@ -11,13 +13,10 @@ export const ROUTING_V1_RETIRED_PATHS = [
 ] as const
 
 export function routingV1RetiredResponse(): Response {
-  return Response.json({
-    error: {
-      code: 'routing_v1_retired',
-      requestApi: '/api/v1/requests',
-    },
-  }, {
+  return problem({
     status: 410,
-    headers: { 'Cache-Control': 'no-store' },
+    kind: 'NOT_FOUND',
+    code: 'routing_v1_retired',
+    extras: { requestApi: '/api/v1/requests' },
   })
 }

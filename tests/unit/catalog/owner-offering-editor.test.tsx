@@ -74,6 +74,48 @@ describe('owner offering editor is draft-first', () => {
     await waitFor(() => expect(readStoredOfferingDraft('business-1')).toBeUndefined())
   })
 
+  it('keeps access-path draft identity through edits and omits it from saves', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    const view = render(
+      <AeOwnerOfferingEditor
+        initialValue={emptyOwnerOfferingEditorValue}
+        onSave={onSave}
+        draftKey="business-access-path"
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Instructions for customers'), {
+      target: { value: 'Call during business hours.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
+
+    let localDraftKey: string | undefined
+    await waitFor(() => {
+      const path = readStoredOfferingDraft('business-access-path')?.accessPaths[0]
+      expect(path?.accessPathRef).toBeUndefined()
+      expect(path?.localDraftKey).toMatch(/^access-path-draft:/)
+      localDraftKey = path?.localDraftKey
+    })
+    if (localDraftKey === undefined) throw new Error('local access-path draft key missing')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    fireEvent.change(screen.getByLabelText('Service area'), { target: { value: 'Adelaide' } })
+    view.rerender(
+      <AeOwnerOfferingEditor
+        initialValue={emptyOwnerOfferingEditorValue}
+        onSave={onSave}
+        draftKey="business-access-path"
+      />,
+    )
+    await waitFor(() => {
+      expect(readStoredOfferingDraft('business-access-path')?.accessPaths[0]?.localDraftKey).toBe(localDraftKey)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0]?.[0]?.accessPaths[0]).not.toHaveProperty('localDraftKey')
+  })
+
   it('offers a one-click start from the owner previous category', async () => {
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(
@@ -97,7 +139,7 @@ function choose(select: string, option: string): void {
 }
 
 describe('owner offering editor publishes a comparable price beside the note', () => {
-  it('turns entered dollars into a minor-unit price', async () => {
+  it('turns entered dollars into an exact amount', async () => {
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
@@ -112,8 +154,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     expect(onSave.mock.calls[0]?.[0]?.price).toEqual({
       kind: 'fixed',
-      currency: 'AUD',
-      amountMinor: 12_950,
+      amount: { currency: 'AUD', units: '12950', exponent: 2 },
       unit: 'hour',
       taxTreatment: 'inclusive',
     })
@@ -131,7 +172,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     const value = onSave.mock.calls[0]?.[0]
     expect(value?.pricingSummary).toBe('Call-out fee waived for regulars.')
-    expect(value?.price).toEqual({ kind: 'from', currency: 'AUD', amountMinor: 9_000, taxTreatment: 'unstated' })
+    expect(value?.price).toEqual({ kind: 'from', amount: { currency: 'AUD', units: '9000', exponent: 2 }, taxTreatment: 'unstated' })
   })
 
   it('reveals a second amount for a range and drops the group until both bounds exist', async () => {
@@ -155,9 +196,8 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
     expect(onSave.mock.calls[1]?.[0]?.price).toEqual({
       kind: 'range',
-      currency: 'AUD',
-      amountMinor: 8_000,
-      maximumAmountMinor: 15_000,
+      minimum: { currency: 'AUD', units: '8000', exponent: 2 },
+      maximum: { currency: 'AUD', units: '15000', exponent: 2 },
       taxTreatment: 'unstated',
     })
   })
@@ -183,12 +223,12 @@ describe('owner offering editor publishes a comparable price beside the note', (
     choose('Price type', 'Fixed price')
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
     await waitFor(() => expect(readStoredOfferingDraft('business-price')?.price).toEqual({
-      kind: 'fixed', currency: 'AUD', amountMinor: 25_000, taxTreatment: 'unstated',
+      kind: 'fixed', amount: { currency: 'AUD', units: '25000', exponent: 2 }, taxTreatment: 'unstated',
     }))
 
     first.unmount()
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} draftKey="business-price" />)
-    await waitFor(() => expect(screen.getByLabelText('Amount')).toHaveProperty('value', '250'))
+    await waitFor(() => expect(screen.getByLabelText('Amount')).toHaveProperty('value', '250.00'))
   })
 })
 

@@ -23,8 +23,8 @@ describe('AE Demo Services quote endpoint', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       kind: 'quoted',
-      expectedCost: { currency: 'AUD', amountMinor: 18_900 },
-      maximumCost: { currency: 'AUD', amountMinor: 18_900 },
+      expectedCost: { currency: 'AUD', units: '18900', exponent: 2 },
+      maximumCost: { currency: 'AUD', units: '18900', exponent: 2 },
       dataFields: ['service', 'postcode'],
       disclosures: ['postcode'],
       availability: {
@@ -41,7 +41,14 @@ describe('AE Demo Services quote endpoint', () => {
       body: '{"service":',
     }))
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'invalid_request' })
+    await expect(response.json()).resolves.toEqual({
+      type: 'about:blank',
+      title: 'Invalid argument',
+      status: 400,
+      detail: 'invalid_request',
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_request',
+    })
   })
 
   it('rejects oversized JSON before parsing a quote', async () => {
@@ -52,7 +59,14 @@ describe('AE Demo Services quote endpoint', () => {
     }))
 
     expect(response.status).toBe(413)
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'request_too_large' })
+    await expect(response.json()).resolves.toEqual({
+      type: 'about:blank',
+      title: 'Payload too large',
+      status: 413,
+      detail: 'request_too_large',
+      kind: 'PAYLOAD_TOO_LARGE',
+      code: 'request_too_large',
+    })
   })
 
 
@@ -64,6 +78,13 @@ describe('AE Demo Services quote endpoint', () => {
       body: JSON.stringify({ service: 'unsupported' }),
     }))
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'invalid_request' })
+    await expect(response.json()).resolves.toEqual({
+      type: 'about:blank',
+      title: 'Invalid argument',
+      status: 400,
+      detail: 'invalid_request',
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_request',
+    })
   })
 })

@@ -1,6 +1,6 @@
 import type { CliOptions } from '../lib/args'
 import { isRecord } from '@/modules/common/is-record'
-import { CliFailure, callJson, heading, line, printJson, table } from '../lib/output'
+import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 
 /**
  * The API also accepts an optional `abn`, deliberately not exposed here:
@@ -8,20 +8,23 @@ import { CliFailure, callJson, heading, line, printJson, table } from '../lib/ou
  */
 export async function runImportCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const websiteUrl = args[0]?.trim()
-  if (websiteUrl === undefined || websiteUrl.length === 0) throw new CliFailure('Usage: ae import <websiteUrl>')
+  if (websiteUrl === undefined || websiteUrl.length === 0) throw new CliFailure('Usage: ae import <websiteUrl>', { kind: 'INVALID_ARGUMENT', code: 'import-usage' })
 
   const outcome = await callJson(options.baseUrl, '/api/storefront/import-draft', {
     method: 'POST',
     body: JSON.stringify({ websiteUrl }),
   })
+  // Non-2xx is a real failure (exit 1 via CliFailure), consistent with
+  // business/search/request — never printed as a successful data body.
+  const body = requireOk(outcome, '/api/storefront/import-draft')
 
   if (options.json) {
-    printJson({ status: outcome.status, body: outcome.body ?? outcome.bodyText })
+    printJson({ status: outcome.status, body })
     return
   }
 
   heading(`Import draft from ${websiteUrl} (${outcome.status}, ${outcome.durationMs}ms)`)
-  printDraftOutcome(outcome.body, outcome.bodyText)
+  printDraftOutcome(body, outcome.bodyText)
 }
 
 export function printDraftOutcome(body: unknown, bodyText: string): void {

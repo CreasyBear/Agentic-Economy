@@ -1,21 +1,36 @@
 import type { PaginationOptions } from 'convex/server'
+import type { ExactAmount } from './internal/exact-amount'
 import type { PricingConfig } from './internal/pricing-contract'
-export { moneyRefSchema, currencySchema, minorAmountSchema, pricingConfigSchema } from './internal/pricing-contract'
-export type { PricingConfig, PricingConfigInput } from './internal/pricing-contract'
 
+export {
+  moneyRefSchema,
+  currencySchema,
+  exactAmountSchema,
+  pricingConfigSchema,
+} from './internal/pricing-contract'
+export {
+  addExactAmounts,
+  compareExactAmounts,
+  formatCurrencyAmount,
+  formatExactAmount,
+  multiplyExactAmountByBps,
+  parseDecimalExactAmount,
+  rescaleExactAmount,
+  subtractExactAmounts,
+} from './internal/exact-amount'
+export type { ExactAmount } from './internal/exact-amount'
+export type { PricingConfig, PricingConfigInput } from './internal/pricing-contract'
 
 export type PricingResolution =
   | Readonly<{
       kind: 'free'
       reason: 'zero_price' | 'free_tier'
-      currency: string
-      amountMinor: 0
+      amount: ExactAmount
       priceDigest: string
     }>
   | Readonly<{
       kind: 'paid'
-      currency: string
-      amountMinor: number
+      amount: ExactAmount
       priceDigest: string
     }>
   | Readonly<{
@@ -62,8 +77,7 @@ export type MoneyAccount = Readonly<{
   accountKind: AccountKind
   principalId?: string
   businessId?: string
-  currency: string
-  balanceMinor: number
+  balance: ExactAmount
   version: number
   state: AccountState
   createdAt: number
@@ -75,8 +89,7 @@ export type MoneyLedgerEntry = Readonly<{
   accountRef: string
   entryType: EntryType
   direction: EntryDirection
-  amountMinor: number
-  currency: string
+  amount: ExactAmount
   transactionRef: string
   idempotencyKey: string
   principalId?: string
@@ -96,6 +109,7 @@ export type MoneyTransaction = Readonly<{
   inputDigest: string
   principalId: string
   currency: string
+  exponent: number
   state: TransactionState
   expectedAccountVersion: number
   externalRef?: string
@@ -108,7 +122,6 @@ export type MoneyUsageEvent = Readonly<{
   usageRef: string
   principalId: string
   credentialId: string
-  currency: string
   serviceRef: string
   offeringRef: string
   businessId: string
@@ -117,7 +130,7 @@ export type MoneyUsageEvent = Readonly<{
   operationKey: string
   priceDigest: string
   chargeState: ChargeState
-  amountMinor: number
+  amount: ExactAmount
   transactionRef?: string
   observedAt: number
 }>
@@ -146,6 +159,7 @@ export type MoneyStripeEvent = Readonly<{
 export type MoneyPayoutAccount = Readonly<{
   businessId: string
   currency: string
+  exponent: number
   stripeAccountId: string
   state: PayoutAccountState
   detailsSubmitted: boolean
@@ -159,11 +173,10 @@ export type MoneyPayoutAccount = Readonly<{
 export type MoneyPayout = Readonly<{
   payoutRef: string
   businessId: string
-  currency: string
-  grossAccrualMinor: number
-  rakeMinor: number
-  providerNetMinor: number
-  minimumPayoutMinor: number
+  grossAccrual: ExactAmount
+  rake: ExactAmount
+  providerNet: ExactAmount
+  minimumPayout: ExactAmount
   state: PayoutState
   periodStart: string
   periodEnd: string
@@ -179,24 +192,21 @@ export type MoneyRefusal = Readonly<{
   code: MoneyRefusalCode
   retryable: boolean
   nextAction?: 'credit_topup_required'
-  currency?: string
-  requiredAmountMinor?: number
-  availableAmountMinor?: number
+  requiredAmount?: ExactAmount
+  availableAmount?: ExactAmount
 }>
-export function isMoneyRefusal(value: object): value is MoneyRefusal {
-  return 'kind' in value && value.kind === 'refused'
+export function isMoneyRefusal(value: unknown): value is MoneyRefusal {
+  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'refused'
 }
-
 
 export type MoneyAcceptedCharge = Readonly<{
   kind: 'accepted'
   chargeState: 'free_tier' | 'paid'
-  currency: string
-  amountMinor: number
+  amount: ExactAmount
   priceDigest: string
   transactionRef?: string
-  providerNetMinor?: number
-  rakeMinor?: number
+  providerNet?: ExactAmount
+  rake?: ExactAmount
 }>
 
 export type ChargeAuthorizationResult = MoneyAcceptedCharge | MoneyRefusal
@@ -212,7 +222,7 @@ export type MoneyInvocationChargeInput = Readonly<{
   pricingConfig: PricingConfig
   priceDigest: string
   priceSourceDigest: string
-  authorityMaximumSpendMinor: number
+  authorityMaximumSpend: ExactAmount
 }>
 
 export type MoneyInvocationPort = Readonly<{
@@ -224,10 +234,10 @@ export type MoneyInvocationPort = Readonly<{
 
 export type RakeConfig = Readonly<{ rakeBps: number }>
 export type RakeSplit = Readonly<{
-  grossAmountMinor: number
+  grossAmount: ExactAmount
   rakeBps: number
-  rakeMinor: number
-  providerNetMinor: number
+  rake: ExactAmount
+  providerNet: ExactAmount
 }>
 
 export type CreditAccountQuery = Readonly<{ principalId: string; currency: string }>
@@ -250,13 +260,12 @@ export type PayoutStatusQuery = Readonly<{ businessId: string; currency: string 
 
 export type CreditAccountView = Readonly<{
   principalId: string
-  currency: string
-  balanceMinor: number
-  pendingTopup?: Readonly<{ amountMinor: number; state: 'pending' | 'outcome_unknown'; externalRef?: string }>
+  balance: ExactAmount
+  pendingTopup?: Readonly<{ amount: ExactAmount; state: 'pending' | 'outcome_unknown'; externalRef?: string }>
   autoRecharge: Readonly<{
     enabled: boolean
-    thresholdMinor: number
-    rechargeAmountMinor: number
+    threshold: ExactAmount
+    rechargeAmount: ExactAmount
   }>
   evidence: 'source' | 'labelled_local_dev'
 }>
@@ -268,8 +277,7 @@ export type CreditActivityView = Readonly<{
   offeringRef: string
   businessId: string
   operationKey: string
-  grossAmountMinor: number
-  currency: string
+  grossAmount: ExactAmount
   chargeState: ChargeState
   observedAt: number
   transactionRef?: string
@@ -280,29 +288,28 @@ export type KeyUsageView = Readonly<{
   callCount: number
   paidCallCount: number
   freeCallCount: number
-  grossSpendMinor: number
-  currency: string
+  grossSpend: ExactAmount
   states: readonly ChargeState[]
 }>
 
 export type ProviderEarningsView = Readonly<{
   businessId: string
-  currency: string
-  grossAccrualMinor: number
-  rakeMinor: number
-  providerNetMinor: number
-  paidOutMinor: number
-  heldMinor: number
+  grossAccrual: ExactAmount
+  rake: ExactAmount
+  providerNet: ExactAmount
+  paidOut: ExactAmount
+  held: ExactAmount
+  /** True when the source capped its ledger scan at the latest 100 entries. */
+  truncated: boolean
   evidence: 'source' | 'labelled_local_dev'
 }>
 
 export type PayoutStatusView = Readonly<{
   businessId: string
-  currency: string
   accountState: PayoutAccountState | 'missing'
   payoutState?: PayoutState
-  providerNetMinor: number
-  minimumPayoutMinor: number
+  providerNet: ExactAmount
+  minimumPayout: ExactAmount
   evidence: 'source' | 'labelled_local_dev'
 }>
 
@@ -351,5 +358,3 @@ export { LIVE_MONEY_COUNSEL_DECISIONS, LIVE_MONEY_GATE_POLICY, evaluateLiveMoney
 export type { LiveMoneyCounselDecision, LiveMoneyCounselSignoff, LiveMoneyGatePolicy, LiveMoneyGateResult, PaymentBinding, PaymentBindingValidation } from './internal/live-money-gate'
 export type { CreditTopupConfig, AutoRechargeSettings, CreditTopupCommand, TopupState, BeginTopupResult } from './internal/topup'
 export { createInMemoryMoneyQueryPort } from './internal/query-projections'
-export { handleStripeWebhookRequest } from './internal/stripe-webhook'
-export type { CreditTopupWebhookEvent, StripeWebhookVerifier, StripeWebhookApplier } from './internal/stripe-webhook'

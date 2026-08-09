@@ -14,20 +14,23 @@ export {
   type AnswerGateFailureCode,
 } from './internal/answer-gate'
 export {
+  classifyAnswerQuerySafety,
+  type AnswerQuerySafetyResult,
+} from './internal/answer-query-safety'
+export {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
 } from './internal/copy-guard-patterns'
+export { neutralizeBidiFormattingControls } from './projection'
 export {
   assembleAnswerEvidence,
   type AssembledAnswerEvidence,
 } from './internal/evidence-assembler'
 export {
-  runAnswerToolUseAgent,
-  isAnswerToolUseAgentError,
-  AnswerToolUseAgentError,
-  type AnswerToolUseAgentInput,
-  type AnswerToolUseAgentResult,
-} from './internal/answer-tool-use-agent'
+  filterKeylessDataAskCandidates,
+  resolveKeylessDataAsk,
+  type KeylessDataAskResolution,
+} from './internal/keyless-data-ask'
 export {
   AnswerProseSchema,
   type AnswerProse,
@@ -42,7 +45,10 @@ export { toAnswerSource } from './internal/dto-to-answer-source'
 export { emitSnapshotEvents } from './internal/emit-snapshot-events'
 export { mergeAnswerArtifact } from './internal/merge-answer-artifact'
 export { artifactsFromStructured } from './internal/structured-artifacts'
-export { extractRequestedLocation } from './internal/provider-location-filter'
+export {
+  extractRequestedLocation,
+  isConfirmedSearchContext,
+} from './internal/provider-location-filter'
 export {
   type AnswerLayoutProfile,
   AnswerLayoutProfileValues,
@@ -58,6 +64,7 @@ export {
 } from './internal/build-message-parts'
 export {
   buildCompactFollowUpProse,
+  buildRationaleFollowUpProse,
   buildProviderDecisionOneLine,
 } from './internal/follow-up-compact-prose'
 export {
@@ -69,6 +76,9 @@ export {
   buildBoundaryNextStep,
   buildBoundaryOneLine,
   buildBoundarySummary,
+  buildSafetyRefusalNextStep,
+  buildSafetyRefusalOneLine,
+  buildSafetyRefusalSummary,
   buildUnsupportedNextStep,
   buildUnsupportedOneLine,
   buildUnsupportedSummary,
@@ -112,10 +122,19 @@ export {
 } from './internal/openrouter-models'
 
 export {
+  AnswerEventSchema,
+  AnswerPlanEventSchema,
+  AnswerSnapshotSchema,
+  AnswerTurnFrameSchema,
+  AnswerWorkStepSchema,
+} from './answer-event-schema'
+export {
+  AnswerArtifactKindValues,
   AnswerArtifactSchema,
   AnswerCompareFieldSchema,
   AnswerSourceSchema,
   AeAnswerArtifactsSchema,
+  WebDiscoveryClaimSchema,
   type AnswerArtifact,
   type AnswerCompareField,
   type AeAnswerArtifacts,
@@ -136,10 +155,22 @@ export {
 
 export {
   ANSWER_TURN_DATA_PART,
+  AnswerTurnProtocolError,
   isAbortError,
   readAnswerTurnFrames,
   type AnswerTurnDataParts,
   type AnswerTurnFrame,
+  type AnswerTurnProtocolErrorCode,
   type AnswerTurnUIMessage,
 } from './answer-ui-stream'
+
+export {
+  ANSWER_TURN_PROBLEM_CODES,
+  buildAnswerTurnProblem,
+  parseAnswerTurnProblem,
+  parseAnswerTurnProblemStrict,
+  redactAnswerTurnProblem,
+  type AnswerTurnProblem,
+  type AnswerTurnProblemCode,
+} from '@/lib/errors'
 

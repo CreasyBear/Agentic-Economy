@@ -7,8 +7,10 @@ import type { CapabilityOfferingRow } from './internal/offering'
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from './public'
@@ -62,6 +64,12 @@ export const developmentEvidenceCandidate = {
   bindingId: 'mock:binding:quote',
   contractRef: contract.ref,
 }
+const operationRef = createPublicOperationRef({
+  operationId: capabilityOperationId(contract.capabilityId),
+  publicationRef: developmentEvidenceCandidate.publicationRef,
+  publicationRevision: developmentEvidenceCandidate.revision,
+  contractRef: contract.ref,
+})
 
 const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: developmentEvidenceCandidate.offeringId,
@@ -85,7 +93,7 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   networkId: 'mock:network',
   contractRef: contract.ref,
   endpointUrl: 'https://development.invalid/quote',
-  credentialRef: 'mock:credential-reference',
+  authority: { kind: 'keyless' },
   continuation: { kind: 'single_response', evidenceRefs: ['mock:continuation'] },
   cancellation: { kind: 'unsupported', evidenceRefs: ['mock:cancellation'] },
   adapter: { adapterId: 'http-json:v1', config: null },
@@ -110,7 +118,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
     bindingId: developmentEvidenceCandidate.bindingId,
     offeringId: developmentEvidenceCandidate.offeringId,
     networkId: 'mock:network', ...contract.ref,
-    endpointUrl: bindingRegistration.endpointUrl, credentialRef: bindingRegistration.credentialRef,
+    endpointUrl: bindingRegistration.endpointUrl, authority: bindingRegistration.authority,
     continuation: bindingRegistration.continuation, cancellation: bindingRegistration.cancellation,
     adapterId: bindingRegistration.adapter.adapterId, ...transport,
     registrationEvidenceRefs: bindingRegistration.registrationEvidenceRefs,
@@ -126,7 +134,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
     registeredAt: developmentEvidenceNowMs - 10_000, updatedAt: developmentEvidenceNowMs - 10_000,
   }
   const publication: GraphPublicationRow = {
-    id: 'mock:publication-row', ...developmentEvidenceCandidate, ...contract.ref,
+    id: 'mock:publication-row', ...developmentEvidenceCandidate, operationRef, ...contract.ref,
     sourceKind: 'openapi_http', sourceDigest: canonicalDigest({ fixture: true }),
     disposition: 'current', credentialState: 'ready', healthState: 'healthy',
     readinessObservedAt: developmentEvidenceNowMs - 1_000,
@@ -144,6 +152,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
       publicStatus: 'published', claimStatus: 'published',
       suppressed: false, currentlyPublished: true,
     }),
+    loadProviderConnection: async () => undefined,
     getActiveExactCapabilityContract: async () => ({
       kind: 'found', ref: contract.ref, documentJson: JSON.stringify(contract),
       registeredAt: developmentEvidenceNowMs - 10_000,

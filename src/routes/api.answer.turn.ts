@@ -2,12 +2,15 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { jsonError } from '@/lib/server/json-error'
-import { createPrefixedRandomId } from '@/modules/common/random-id'
-import { assertHttpAdmission, requestAdmissionKey, type RateLimitAdmission } from '@/lib/server/rate-limit'
+import { answerTurnSourceErrorResponse } from '@/lib/server/answer-source-error'
+import { problem } from '@/lib/server/problem'
+import { methodNotAllowed } from '@/lib/server/method-guard'
+import { assertHttpAdmission, requestAdmissionKey, type RateLimitAdmission, type RateLimitResult } from '@/lib/server/rate-limit'
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
 
 import {
   ANSWER_TURN_DATA_PART,
+  buildAnswerTurnProblem,
   isAbortError,
   type AnswerTurnFrame,
   type AnswerTurnUIMessage,
@@ -15,23 +18,32 @@ import {
 import {
   answerTurnRequestSchema,
   appendSessionCookie,
-  assertAnswerTurnAccess,
-  classifyFollowUpIntent,
-  claimAnswerTurnIdempotency,
-  readAnswerTurnAccessContext,
+  buildThreadTitle,
   resolveOrCreateSessionId,
-  streamAnswerTurn,
 } from '@/modules/answer-thread/public'
+import type {
+  AnswerTurnReservationResult,
+  streamAnswerTurn,
+} from '@/modules/answer-thread/server'
 
 export const Route = createFileRoute('/api/answer/turn')({
   server: {
     handlers: {
       POST: ({ request }) => handleAnswerTurnRequest(request),
+      GET: () => methodNotAllowed(['POST']),
+      PUT: () => methodNotAllowed(['POST']),
+      PATCH: () => methodNotAllowed(['POST']),
+      DELETE: () => methodNotAllowed(['POST']),
+      HEAD: () => methodNotAllowed(['POST']),
+      OPTIONS: () => methodNotAllowed(['POST']),
+      TRACE: () => methodNotAllowed(['POST']),
+      CONNECT: () => methodNotAllowed(['POST']),
     },
   },
 })
 
 const MAX_ANSWER_TURN_BODY_BYTES = 16 * 1024
+const MAX_CLIENT_TURN_KEY_LENGTH = 128
 const admitAnswerTurn: RateLimitAdmission = ({ request, key, keySuffix }) =>
   assertHttpAdmission(request, 'answer-turn-submit', {
     ...(key === undefined ? {} : { key }),
@@ -49,9 +61,16 @@ export async function handleAnswerTurnRequest(
 ): Promise<Response> {
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
+  if (!request.headers.get('content-type')?.includes('application/json')) {
+    return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
+  }
+
   const boundedBody = await readBoundedRequestJson(request, MAX_ANSWER_TURN_BODY_BYTES)
   if (!boundedBody.ok) {
-    return jsonError(boundedBody.code === 'payload_too_large' ? 'payload_too_large' : 'invalid_body', boundedBody.code === 'payload_too_large' ? 413 : 400)
+    return jsonError(
+      boundedBody.code === 'payload_too_large' ? 'payload_too_large' : 'invalid_body',
+      boundedBody.code === 'payload_too_large' ? 413 : 400,
+    )
   }
 
   const parsed = answerTurnRequestSchema.safeParse(boundedBody.value)
@@ -60,74 +79,112 @@ export async function handleAnswerTurnRequest(
   }
 
   const clientTurnKey = request.headers.get('x-ae-turn-key')?.trim()
+  if (
+    clientTurnKey === undefined ||
+    clientTurnKey.length === 0 ||
+    clientTurnKey.length > MAX_CLIENT_TURN_KEY_LENGTH
+  ) {
+    return jsonError('missing_turn_key', 400)
+  }
 
-  if (clientTurnKey === undefined || clientTurnKey.length === 0 || claimAnswerTurnIdempotency(sessionId, clientTurnKey)) {
-    const admission = await (options.admit ?? admitAnswerTurn)({
+  let admission: RateLimitResult
+  try {
+    admission = await (options.admit ?? admitAnswerTurn)({
       request,
       key: requestAdmissionKey(request),
     })
-    if (!admission.ok) {
-      return jsonError('rate_limited', 429, Date.now() + admission.retryAfter)
-    }
+  } catch (error) {
+    const sourceError = answerTurnSourceErrorResponse(error)
+    if (sourceError !== undefined) return sourceError
+    return problem(buildAnswerTurnProblem('unavailable'))
+  }
+  if (!admission.ok) {
+    return jsonError('rate_limited', 429, admission.retryAfter)
   }
 
-  let threadId = parsed.data.threadId
-  const historyIndependent = classifyFollowUpIntent(parsed.data.query, threadId === undefined ? 0 : 1) === 'explain_boundary'
-  let accessContext = historyIndependent
-    ? {
-        access: await assertAnswerTurnAccess({
-          sessionId,
-          ...(threadId === undefined ? {} : { threadId }),
-        }),
-        priorTurns: [],
-      }
-    : await readAnswerTurnAccessContext({
-        sessionId,
-        ...(threadId === undefined ? {} : { threadId }),
-      })
-  let { access } = accessContext
-  let preloadedPriorTurns = threadId === undefined ? undefined : accessContext.priorTurns
-  // Dev remounts can POST a thread id from SSE before Convex persistence finishes.
-  if (access.kind === 'denied' && access.code === 'thread_not_found') {
-    threadId = undefined
-    accessContext = await readAnswerTurnAccessContext({ sessionId })
-    access = accessContext.access
-    preloadedPriorTurns = undefined
+  // Static import would pull Node-only answer execution into the client route graph.
+  const {
+    answerTurnRequestDigest,
+    answerTurnReservationKey,
+    reserveAnswerTurn,
+    streamAnswerTurn: loadStreamAnswerTurn,
+  } = await import('@/modules/answer-thread/server')
+
+  const requestDigest = answerTurnRequestDigest({
+    ...(parsed.data.threadId === undefined ? {} : { threadId: parsed.data.threadId }),
+    query: parsed.data.query,
+    ...(parsed.data.searchContext === undefined ? {} : { searchContext: parsed.data.searchContext }),
+  })
+  const reservationKey = answerTurnReservationKey({
+    sessionId,
+    threadScope: parsed.data.threadId ?? 'new',
+    clientTurnKey,
+  })
+
+  let reservation: AnswerTurnReservationResult
+  try {
+    reservation = await reserveAnswerTurn({
+      sessionId,
+      ...(parsed.data.threadId === undefined ? {} : { threadId: parsed.data.threadId }),
+      query: parsed.data.query,
+      ...(parsed.data.searchContext === undefined
+        ? {}
+        : { searchContextJson: JSON.stringify(parsed.data.searchContext) }),
+      requestDigest,
+      reservationKey,
+      title: buildThreadTitle(parsed.data.query),
+      sourceWriteRequest: request,
+    })
+  } catch (error) {
+    const sourceError = answerTurnSourceErrorResponse(error)
+    if (sourceError !== undefined) return sourceError
+    return problem(buildAnswerTurnProblem('unavailable'))
   }
-  if (access.kind === 'denied') {
-    return jsonError(access.code, access.status)
+
+  if (reservation.kind === 'conflict') {
+    return jsonError('answer_turn_idempotency_conflict', 409)
+  }
+  if (reservation.kind === 'refused') {
+    return problem(buildAnswerTurnProblem(reservation.reason))
   }
 
   const stream = createUIMessageStream<AnswerTurnUIMessage>({
     execute: async ({ writer }) => {
+      let nextFrameSeq = 0
+      let terminalSent = false
       const send = (frame: AnswerTurnFrame) => {
         if (request.signal.aborted) {
           return
         }
+        nextFrameSeq = Math.max(nextFrameSeq, frame.seq + 1)
         writer.write({ type: ANSWER_TURN_DATA_PART, data: frame, transient: true })
+        terminalSent = frame.event.type === 'complete'
+          || frame.event.type === 'pending'
+          || frame.event.type === 'stopped'
+          || frame.event.type === 'error'
       }
 
       try {
-        await (options.stream ?? streamAnswerTurn)(
+        await (options.stream ?? loadStreamAnswerTurn)(
           {
             sessionId,
             query: parsed.data.query,
-            ...(threadId === undefined ? {} : { threadId }),
+            ...(parsed.data.threadId === undefined ? {} : { threadId: parsed.data.threadId }),
+            requestDigest,
+            admission: reservation,
             ...(parsed.data.searchContext === undefined ? {} : { searchContext: parsed.data.searchContext }),
-            precheckedAccess: access,
-            ...(preloadedPriorTurns === undefined ? {} : { preloadedPriorTurns }),
             signal: request.signal,
             sourceWriteRequest: request,
           },
           send,
         )
       } catch (error) {
-        if (request.signal.aborted || isAbortError(error)) {
+        if (request.signal.aborted || isAbortError(error) || terminalSent) {
           return
         }
         send({
-          seq: 0,
-          event: { type: 'error', code: 'answer_turn_failed', copyId: makeCopyId() },
+          seq: nextFrameSeq,
+          event: { type: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') },
         })
       }
     },
@@ -144,6 +201,4 @@ export async function handleAnswerTurnRequest(
 }
 
 
-function makeCopyId(): string {
-  return createPrefixedRandomId(`turn-${Date.now().toString(36)}-`)
-}
+

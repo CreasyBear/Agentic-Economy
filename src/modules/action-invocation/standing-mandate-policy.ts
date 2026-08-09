@@ -1,3 +1,9 @@
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  addExactAmounts,
+  compareExactAmounts,
+  type ExactAmount,
+} from '@/modules/money/public'
 import type {
   AuthorityUse,
   MandateDecision,
@@ -26,8 +32,8 @@ export type StandingMandatePolicyProposal = Readonly<{
   recipientRef: string
   purpose: string
   dataFields: readonly string[]
-  spend: Readonly<{ amountMinor: number; currency: string }>
-  worstCaseLoss: Readonly<{ amountMinor: number; currency: string }>
+  spend: ExactAmount
+  worstCaseLoss: ExactAmount
   fallbackRef: string
   risk: string
 }>
@@ -43,13 +49,13 @@ export type StandingMandatePolicyDecision = Readonly<{
   capacity: Readonly<{
     consumedCount: number
     reservedCount: number
-    committedSpendMinor: number
-    heldWorstCaseLossMinor: number
+    committedSpend: ExactAmount
+    heldWorstCaseLoss: ExactAmount
   }>
   fallbackOrdinal: number
-  heldWorstCaseLossMinor: number
-  proposedWorstCaseLossMinor: number
-  maximumLossMinor: number
+  heldWorstCaseLoss: ExactAmount
+  proposedWorstCaseLoss: ExactAmount
+  maximumLoss: ExactAmount
   accepted: true
   digest: string
 }>
@@ -73,29 +79,44 @@ export function evaluateStandingMandatePolicy(input: Readonly<{
   const refusal = scopeRefusal(mandate, proposal)
   if (refusal !== undefined) return { kind: 'refused', code: refusal }
   const maximumLoss = mandate.scope.maximumLoss ?? mandate.scope.maximumSpend
-  const heldWorstCaseLossMinor = input.uses
+  const relevantUses = input.uses
     .filter((use) => use.mandateRef === mandate.mandateRef && use.state !== 'not_released')
-    .reduce((sum, use) => sum + (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor), 0)
-  const committedSpendMinor = input.uses
-    .filter((use) => use.mandateRef === mandate.mandateRef && use.state !== 'not_released')
-    .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
+  const heldWorstCaseLoss = sumExactAmounts(
+    relevantUses.map((use) => use.reservedLoss ?? use.reservedSpend),
+    maximumLoss,
+  )
+  const committedSpend = sumExactAmounts(
+    relevantUses.map((use) => use.reservedSpend),
+    mandate.scope.maximumSpend,
+  )
+  const proposedCommittedSpend = committedSpend === undefined
+    ? undefined
+    : addExactAmounts(committedSpend, proposal.spend)
+  const proposedLoss = heldWorstCaseLoss === undefined
+    ? undefined
+    : addExactAmounts(heldWorstCaseLoss, proposal.worstCaseLoss)
   if (
-    !Number.isSafeInteger(heldWorstCaseLossMinor)
-    || !Number.isSafeInteger(committedSpendMinor)
-    || !Number.isSafeInteger(committedSpendMinor + proposal.spend.amountMinor)
-    || !Number.isSafeInteger(heldWorstCaseLossMinor + proposal.worstCaseLoss.amountMinor)
+    heldWorstCaseLoss === undefined
+    || committedSpend === undefined
+    || proposedCommittedSpend === undefined
+    || proposedLoss === undefined
   ) return { kind: 'refused', code: 'mandate_material_invalid' }
-  if (committedSpendMinor + proposal.spend.amountMinor > mandate.scope.maximumSpend.amountMinor) {
+  const spendComparison = compareExactAmounts(proposedCommittedSpend, mandate.scope.maximumSpend)
+  const lossComparison = compareExactAmounts(proposedLoss, maximumLoss)
+  if (spendComparison === undefined || lossComparison === undefined) {
+    return { kind: 'refused', code: 'mandate_material_invalid' }
+  }
+  if (spendComparison > 0) {
     return { kind: 'refused', code: 'mandate_spend_exceeded' }
   }
-  if (heldWorstCaseLossMinor + proposal.worstCaseLoss.amountMinor > maximumLoss.amountMinor) {
+  if (lossComparison > 0) {
     return { kind: 'refused', code: 'mandate_risk_exceeded' }
   }
   const capacity = {
     consumedCount: input.uses.filter((use) => use.state === 'released').length,
     reservedCount: input.uses.filter((use) => use.state === 'reserved' || use.state === 'uncertain').length,
-    committedSpendMinor,
-    heldWorstCaseLossMinor,
+    committedSpend,
+    heldWorstCaseLoss,
   }
   const material = {
     policyDecisionRef: input.policyDecisionRef,
@@ -107,9 +128,9 @@ export function evaluateStandingMandatePolicy(input: Readonly<{
     proposal,
     capacity,
     fallbackOrdinal: mandate.scope.permittedFallbacks.indexOf(proposal.fallbackRef),
-    heldWorstCaseLossMinor,
-    proposedWorstCaseLossMinor: proposal.worstCaseLoss.amountMinor,
-    maximumLossMinor: maximumLoss.amountMinor,
+    heldWorstCaseLoss,
+    proposedWorstCaseLoss: proposal.worstCaseLoss,
+    maximumLoss,
     accepted: true as const,
   }
   return {
@@ -135,11 +156,26 @@ function scopeRefusal(
     return 'mandate_data_widening'
   }
   if (
-    proposal.spend.currency !== mandate.scope.maximumSpend.currency
-    || proposal.worstCaseLoss.currency !== (mandate.scope.maximumLoss?.currency ?? mandate.scope.maximumSpend.currency)
+    !sameExactScale(proposal.spend, mandate.scope.maximumSpend)
+    || !sameExactScale(proposal.worstCaseLoss, mandate.scope.maximumLoss ?? mandate.scope.maximumSpend)
+    || compareExactAmounts(proposal.spend, mandate.scope.maximumSpend) === undefined
+    || compareExactAmounts(proposal.worstCaseLoss, mandate.scope.maximumLoss ?? mandate.scope.maximumSpend) === undefined
   ) return 'mandate_currency_mismatch'
   if (!mandate.scope.permittedFallbacks.includes(proposal.fallbackRef)) return 'mandate_fallback_mismatch'
   if (proposal.risk !== mandate.scope.riskCeiling) return 'mandate_risk_exceeded'
   return undefined
 }
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+function sameExactScale(left: ExactAmount, right: ExactAmount): boolean {
+  return left.currency === right.currency && left.exponent === right.exponent
+}
+
+function sumExactAmounts(amounts: readonly ExactAmount[], zeroReference: ExactAmount): ExactAmount | undefined {
+  let total: ExactAmount = { ...zeroReference, units: '0' }
+  for (const amount of amounts) {
+    if (!sameExactScale(total, amount)) return undefined
+    const next = addExactAmounts(total, amount)
+    if (next === undefined) return undefined
+    total = next
+  }
+  return total
+}

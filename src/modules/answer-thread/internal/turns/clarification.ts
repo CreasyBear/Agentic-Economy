@@ -25,18 +25,18 @@ async function streamClarificationTurn(
     id: 'route.clarify',
     phase: 'route',
     status: 'running',
-    title: 'Choosing what to ask next',
-    summary: 'I need one more detail before I can search listed businesses.',
-    detailRows: [{ label: 'Missing detail', value: plan.reason === 'missing_service' ? 'Service type' : 'Search area' }],
+    title: 'Choosing what to ask',
+    summary: 'I need one more detail before I can look for a match.',
+    detailRows: [{ label: 'Question', value: plan.reason === 'missing_service' ? 'What you need' : 'Where to look' }],
     startedAtMs: startedAt,
   })
   ctx.workLog.emit({
     id: 'route.clarify',
     phase: 'route',
     status: ctx.signal?.aborted === true ? 'stopped' : 'complete',
-    title: 'Choosing what to ask next',
-    summary: 'Asking one question before I search listed businesses.',
-    detailRows: [{ label: 'Missing detail', value: plan.reason === 'missing_service' ? 'Service type' : 'Search area' }],
+    title: 'Choosing what to ask',
+    summary: 'Asking one question before I look for a match.',
+    detailRows: [{ label: 'Question', value: plan.reason === 'missing_service' ? 'What you need' : 'Where to look' }],
     startedAtMs: startedAt,
     completedAtMs: Date.now(),
   })
@@ -44,7 +44,7 @@ async function streamClarificationTurn(
   const allowedSlugs = new Set<string>()
   const finalized = finalizeAnswerTurnSnapshot({ snapshot: plan.snapshot, allowedSlugs })
   if (!finalized.ok) {
-    return rejectBlockedSnapshot(ctx, [], allowedSlugs, finalized)
+    return rejectBlockedSnapshot([], allowedSlugs, finalized)
   }
   const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'clarification', { plan })
   return {

@@ -1,7 +1,9 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { compareExactAmounts } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import type { FrozenAgentJourneyCohort } from '@/modules/customer-request/agent-journey-cohort'
 
-type Money = Readonly<{ currency: string; amountMinor: number }>
+type Money = ExactAmount
 
 type DirectJourney = Readonly<{
   kind: 'frozen_direct_agent_baseline'
@@ -329,8 +331,7 @@ function costsMatch(
   ae: AeJourney['measurements']['totalCostAccuracy'],
 ) {
   return direct.state === 'exact' && ae.state === 'exact'
-    && direct.total.currency === ae.total.currency
-    && direct.total.amountMinor === ae.total.amountMinor
+    && compareExactAmounts(direct.total, ae.total) === 0
 }
 
 function sameStringSet(left: readonly string[], right: readonly string[]) {

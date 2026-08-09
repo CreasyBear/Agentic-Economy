@@ -4,17 +4,36 @@ import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDynamicPublishedActionInvocationAdapter,
   validateX402PaymentReconciliationEvidence,
+  type DynamicPublishedInvocationResult,
   type X402PaymentReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
+import type { ExactAmount } from '@/modules/money/public'
 import { createDevelopmentFileX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
 import type { X402PaymentAttempt, X402PaymentAuthorizationEvent } from '@/modules/action-invocation/x402-payment-attempt'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  invokePreparedRouteTransport,
+  prepareRegisteredRouteTransportInvocation,
+  type RouteTransportFetch,
+  type RouteTransportInvocation,
+  type X402PaymentAuthorizationIdentity,
+  type X402PaymentSignatureRequest,
+  type X402RouteTransportRuntime,
+} from '@/modules/capability-supply/route-transport-runtime'
 
 const now = Date.parse('2026-07-20T01:00:00.000Z')
+const routeAuthorityGeneration = 1
+const routeAuthorityDigest = canonicalDigest({
+  connectionRef: 'test:connection:x402',
+  providerRef: 'test:provider:x402',
+  authorityGeneration: routeAuthorityGeneration,
+})
 const attempt: X402PaymentAttempt = {
   paymentIdentifier: 'payment:one',
   invocationRef: 'invocation:one',
@@ -26,7 +45,7 @@ const attempt: X402PaymentAttempt = {
   network: 'eip155:8453',
   asset: '0xasset',
   payTo: '0xrecipient',
-  amount: '10000',
+  amount: amount('USD', '10000', 6),
   providerEndpoint: 'https://provider.example/paid',
   operationRevision: 'revision:one',
   authorizationDigest: canonicalDigest({ authorization: 'one' }),
@@ -66,7 +85,7 @@ describe('x402 payment reconciliation evidence', () => {
       verifySourceEvidence: () => true,
     })).toBe('payment_evidence_malformed')
     expect(validateX402PaymentReconciliationEvidence({
-      evidence: { ...evidence, amount: '10001' },
+      evidence: { ...evidence, amount: amount('USD', '10001', 6) },
       attempt,
       source: evidence.source,
       now,
@@ -92,7 +111,7 @@ describe('x402 payment reconciliation evidence', () => {
 
   it.each([
     ['not_settled', undefined],
-    ['settled', { currency: 'USD', amountMinor: 1 }],
+    ['settled', amount('USD', '10000', 6)],
   ] as const)('persists an attributable %s resolution across cold restore', async (resolution, settledAmount) => {
     const file = join(tmpdir(), `ae-x402-reconciliation-${resolution}-${process.pid}-${Date.now()}.json`)
     const port = createDevelopmentFileX402PaymentAttemptPort(file)
@@ -115,7 +134,133 @@ describe('x402 payment reconciliation evidence', () => {
       }),
     ])
   })
+  it.each([
+    ['amount', { amount: '10001' }, 'payment_exceeds_step_ceiling'],
+    ['network', { network: 'eip155:84532' }, 'payment_requirement_unsupported'],
+    ['asset', { asset: '0x0000000000000000000000000000000000000003' }, 'payment_requirement_unsupported'],
+  ] as const)('refuses a challenge with the wrong %s before a second payment attempt', async (_label, override, failureCode) => {
+    let sendCount = 0
+    let prepareCount = 0
+    const route = routeInvocation()
+    const challenge = challengeHeader(override)
+    const send: RouteTransportFetch = async () => {
+      sendCount += 1
+      return new Response(null, { status: 402, headers: { 'Payment-Required': challenge } })
+    }
+    const runtime: X402RouteTransportRuntime = {
+      send,
+      resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'credential' : undefined,
+      readProviderConnectionCredentialRef: (input) => {
+        if (
+          input.connectionRef !== 'test:connection:x402'
+          || input.providerRef !== 'test:provider:x402'
+          || input.adapterId !== 'x402-fetch:v2'
+        ) {
+          return { kind: 'unavailable' as const, reason: 'not_found' as const }
+        }
+        if (input.authorityGeneration !== routeAuthorityGeneration) {
+          return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+        }
+        if (input.authorityDigest !== routeAuthorityDigest) {
+          return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+        }
+        return { kind: 'resolved' as const, credentialRef: 'test:connection:x402' }
+      },
+      prepareX402PaymentAuthorization: async () => {
+        prepareCount += 1
+        return {
+          custodyRef: `sha256:${'b'.repeat(64)}`,
+          authorizationDigest: `sha256:${'c'.repeat(64)}`,
+        }
+      },
+      readX402PaymentAuthorization: async () => 'signed',
+      readX402PaymentAuthorizationByDigest: async () => 'signed',
+    }
+    const preparation = prepareRegisteredRouteTransportInvocation(
+      route,
+      runtime.x402PaymentSigningAvailable,
+    )
+    const observed = preparation.kind === 'refused'
+      ? preparation.observation
+      : await invokePreparedRouteTransport(preparation.prepared, runtime)
+    expect(observed).toMatchObject({ disposition: 'refused', failureCode })
+    expect(sendCount).toBe(1)
+    expect(prepareCount).toBe(0)
+  })
 })
+
+type ChallengeRequirement = Readonly<{
+  scheme: 'exact'
+  network: string
+  amount: string
+  asset: string
+  payTo: string
+  maxTimeoutSeconds: number
+  extra: Readonly<Record<string, unknown>>
+}>
+
+function routeInvocation(): RouteTransportInvocation {
+  const config = {
+    method: 'POST' as const,
+    requestTimeoutMs: 5_000,
+    scheme: 'exact' as const,
+    network: 'eip155:8453',
+    currency: 'USD',
+    routeAmountExponent: 2,
+    assetAmountExponent: 6,
+    asset: '0x0000000000000000000000000000000000000001',
+    payTo: '0x0000000000000000000000000000000000000002',
+  }
+  return {
+    binding: {
+      adapterId: 'x402-fetch:v2',
+      endpointUrl: 'https://provider.example/paid',
+      authority: {
+        kind: 'provider_connection',
+        connectionRef: 'test:connection:x402',
+        providerRef: 'test:provider:x402',
+      },
+      configJson: JSON.stringify(config),
+      configDigest: canonicalDigest(config),
+    },
+    authority: {
+      attemptRef: 'attempt:route',
+      effectGeneration: 2,
+      authorityGeneration: routeAuthorityGeneration,
+      authorityDigest: routeAuthorityDigest,
+      operationKeyDigest: 'sha256:operation',
+      mandateDigest: 'sha256:mandate',
+      grantDigest: 'sha256:grant',
+      capabilityContractDigest: 'sha256:contract',
+      maximumSpend: amount('USD', '1', 2),
+      expiresAt: Date.now() + 60 * 60 * 1_000,
+      callIdentity: { keyId: 'route-key', signature: 'route-signature' },
+    },
+    inputJson: JSON.stringify({ query: 'latest' }),
+  }
+}
+
+function challengeHeader(overrides: Partial<ChallengeRequirement> = {}): string {
+  const requirement: ChallengeRequirement = {
+    scheme: 'exact',
+    network: 'eip155:8453',
+    amount: '10000',
+    asset: '0x0000000000000000000000000000000000000001',
+    payTo: '0x0000000000000000000000000000000000000002',
+    maxTimeoutSeconds: 60,
+    extra: {},
+    ...overrides,
+  }
+  return Buffer.from(JSON.stringify({
+    x402Version: 2,
+    resource: { url: 'https://provider.example/paid' },
+    accepts: [requirement],
+  })).toString('base64')
+}
+
+function amount(currency: string, units: string, exponent: number): ExactAmount {
+  return { currency, units, exponent }
+}
 
 function issue(
   resolution: 'not_settled' | 'settled',
@@ -149,17 +294,19 @@ function createAdapter(
   paymentAttemptPort: ReturnType<typeof createDevelopmentFileX402PaymentAttemptPort>,
 ) {
   const fixture = buildDevelopmentPublishedOperationEvidence()
+  const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   return createDynamicPublishedActionInvocationAdapter({
     operation: fixture.operation,
     source: createDevelopmentDynamicPublishedSource([fixture.operation]),
     runtime: {
       send: async () => { throw new Error('not_used') },
-      resolveCredential: () => undefined,
+      resolveCredential: (_connectionRef) => undefined,
     },
     now: () => now,
     nextInvocationRef: () => 'invocation:not-used',
     nextAuthorityRef: () => 'authority:not-used',
     nextAttemptRef: () => 'attempt:not-used',
+    durablePort: createDevelopmentDurablePort(durableState),
     paymentAttemptPort,
     verifyPaymentReconciliationEvidence: () => true,
   })

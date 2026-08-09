@@ -49,10 +49,7 @@ export async function allowStandingRoute(
     expectedGenerationRef: selected.generationRef,
     selectedRoutePlanId: selected.selectedRoute.routePlanId,
     delegatedCredentialId: input.delegatedCredentialId,
-    perUseSpend: {
-      currency: selected.displayedRoute.maximumTotalCost.currency,
-      amountMinor: selected.displayedRoute.maximumTotalCost.amountMinor,
-    },
+    perUseSpend: selected.displayedRoute.maximumTotalCost.amount,
     cumulativeSpend: input.cumulativeSpend,
     perUseDataAllocations,
     cumulativeDataAllocations: perUseDataAllocations * input.occurrences,

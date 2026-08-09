@@ -5,6 +5,8 @@ import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
+  capabilityOperationId,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from './public'
@@ -103,7 +105,7 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     presentation: {
       label: 'BTC/USD spot quote',
       summary: 'MOCK/DEVELOPMENT ONLY alternate published endpoint.',
-      price: { kind: 'fixed', currency: 'USD', amountMinor: 1 },
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
       materialTerms: [
         { termId: 'mock:term:alternate-fixture', label: 'Environment', value: 'MOCK/DEVELOPMENT ONLY' },
       ],
@@ -140,7 +142,11 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     networkId: offering.networkId,
     contractRef: contract.ref,
     endpointUrl,
-    credentialRef: 'env:MOCK_ALTERNATE_PROVIDER_CREDENTIAL',
+    authority: {
+      kind: 'provider_connection',
+      connectionRef: 'connection:mock-alternate-provider',
+      providerRef: 'provider:mock-alternate-provider',
+    },
     continuation: {
       kind: 'single_response',
       evidenceRefs: ['mock:evidence:alternate-continuation'],
@@ -155,7 +161,7 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
   const admission = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
     endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
+    authority: binding.authority,
     continuation: binding.continuation,
     cancellation: binding.cancellation,
     config: binding.adapter.config,
@@ -227,11 +233,33 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     readinessValidUntil: validUntil,
     readinessEvidenceRefs: ['mock:evidence:alternate-fresh-402'],
   }
+  const connectionAuthority = binding.authority.kind === 'provider_connection'
+    ? {
+        connectionRef: binding.authority.connectionRef,
+        providerRef: binding.authority.providerRef,
+        adapterId: binding.adapter.adapterId,
+        authorityGeneration: 1,
+        authorityDigest: canonicalDigest({
+          connectionRef: binding.authority.connectionRef,
+          providerRef: binding.authority.providerRef,
+          authorityGeneration: 1,
+        }),
+        operationRef: createPublicOperationRef({
+          operationId: capabilityOperationId(contract.ref.capabilityId),
+          publicationRef: publication.publicationRef,
+          publicationRevision: publication.revision,
+          contractRef: contract.ref,
+        }),
+        grantedScopes: [],
+        grantedResources: [],
+      }
+    : undefined
   const sourceMaterial = {
     publication,
     contract,
     offering,
     binding,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     admittedTransport: admission.transport,
     qualification,
   }
@@ -274,8 +302,9 @@ export function verifyDevelopmentAlternatePublishedOperationEvidence(
     || packet.operation.identity.endpoint.url !== endpointUrl
     || packet.operation.identity.endpoint.resource !== 'GET /v1/spot'
     || packet.operation.identity.price.kind !== 'fixed'
-    || packet.operation.identity.price.currency !== 'USD'
-    || packet.operation.identity.price.amountMinor !== 1
+    || packet.operation.identity.price.amount.currency !== 'USD'
+    || packet.operation.identity.price.amount.units !== '1'
+    || packet.operation.identity.price.amount.exponent !== 2
     || packet.operation.identity.payment.kind !== 'x402'
     || packet.operation.identity.payment.network !== expectedPayment.network
     || packet.operation.identity.payment.asset !== expectedPayment.asset

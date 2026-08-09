@@ -235,7 +235,14 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     )
 
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', code: 'invalid_request' })
+    expect(response.headers.get('content-type')).toBe('application/problem+json')
+    await expect(response.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Invalid argument',
+      status: 400,
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_request',
+    })
     expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
     expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
     expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
@@ -254,11 +261,25 @@ describe('T47 registered WorkTree action and human readback parity', () => {
 
     const authentication = await invoke(async () => ({ kind: 'refused', code: 'authentication_required' }))
     expect(authentication.status).toBe(401)
-    await expect(authentication.json()).resolves.toEqual({ kind: 'refused', code: 'authentication_required', replayed: false })
+    await expect(authentication.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Unauthenticated',
+      status: 401,
+      kind: 'UNAUTHENTICATED',
+      code: 'authentication_required',
+      replayed: false,
+    })
 
     const forbidden = await invoke(async () => ({ kind: 'refused', code: 'forbidden' }))
     expect(forbidden.status).toBe(403)
-    await expect(forbidden.json()).resolves.toEqual({ kind: 'refused', code: 'forbidden', replayed: false })
+    await expect(forbidden.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Permission denied',
+      status: 403,
+      kind: 'PERMISSION_DENIED',
+      code: 'forbidden',
+      replayed: false,
+    })
 
     const malformed = await invoke(async () => ({ kind: 'refused', code: 'forbidden', replayed: true }))
     expect(malformed.status).toBe(200)
@@ -288,7 +309,14 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       { callOperation: async () => ({ kind: 'refused', reason: 'invalid_request', useRef: 'repeat-use:typed' }) },
     )
     expect(repeatInvalidRequest.status).toBe(400)
-    await expect(repeatInvalidRequest.json()).resolves.toEqual({ kind: 'refused', code: 'invalid_request', replayed: false })
+    await expect(repeatInvalidRequest.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Invalid argument',
+      status: 400,
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_request',
+      replayed: false,
+    })
   })
 
   it('lets an agent create and a person inspect the same project and revision', async () => {
@@ -432,7 +460,14 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       kind: 'park',
     })
     expect(changed.status).toBe(409)
-    await expect(changed.json()).resolves.toEqual({ kind: 'refused', code: 'digest_mismatch', replayed: false })
+    await expect(changed.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Already exists',
+      status: 409,
+      kind: 'ALREADY_EXISTS',
+      code: 'digest_mismatch',
+      replayed: false,
+    })
     const afterConflict = await source.inspect({ projectId: started.projectId })
     expect(afterConflict.kind === 'accepted' ? afterConflict.revision : undefined).toBe(revisionAfterReplay)
   })
@@ -467,20 +502,42 @@ describe('T47 registered WorkTree action and human readback parity', () => {
 
     const stale = await handleAgentWorkTree('decide', proposal)
     expect(stale.status).toBe(409)
-    await expect(stale.json()).resolves.toEqual({ kind: 'refused', code: 'stale_fence', replayed: false })
+    await expect(stale.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Already exists',
+      status: 409,
+      kind: 'ALREADY_EXISTS',
+      code: 'stale_fence',
+      replayed: false,
+    })
     const afterStale = await source.inspect({ projectId: started.projectId })
     expect(afterStale.kind === 'accepted' ? afterStale.revision : undefined).toBe(before.revision)
 
     authScopes.delete('work_trees:inspect')
     const missingScope = await handleAgentWorkTree('inspect', { projectId: started.projectId })
     expect(missingScope.status).toBe(403)
-    await expect(missingScope.json()).resolves.toMatchObject({ kind: 'refused', reason: 'scope_required' })
+    expect(missingScope.headers.get('content-type')).toBe('application/problem+json')
+    await expect(missingScope.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Permission denied',
+      status: 403,
+      kind: 'PERMISSION_DENIED',
+      code: 'scope_required',
+      detail: 'scope_required',
+    })
 
     authScopes.add('work_trees:inspect')
     authenticatedPrincipal = Object.freeze({ ...PRINCIPAL, principalId: 'clerk_api_key:other' })
     const wrongPrincipal = await handleAgentWorkTree('decide', currentProposal)
     expect(wrongPrincipal.status).toBe(403)
-    await expect(wrongPrincipal.json()).resolves.toEqual({ kind: 'refused', code: 'forbidden', replayed: false })
+    await expect(wrongPrincipal.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Permission denied',
+      status: 403,
+      kind: 'PERMISSION_DENIED',
+      code: 'forbidden',
+      replayed: false,
+    })
     const afterPrincipal = await source.inspect({ projectId: started.projectId })
     expect(afterPrincipal.kind === 'accepted' ? afterPrincipal.revision : undefined).toBe(before.revision)
   })

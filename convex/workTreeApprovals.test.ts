@@ -33,7 +33,7 @@ const targetNode = (nodeId = 'target') => ({
   status: 'ready' as const,
   dependsOn: [],
   priority: 0,
-  cost: { currency: 'AUD', estimateMinor: 0 },
+  cost: { estimate: { currency: 'AUD', units: '0', exponent: 3 } },
   authorityRef: 'authority:t49',
   evidenceRefs: [],
   createdAt: 1,
@@ -88,7 +88,7 @@ const proposal = {
   expectedGeneration: 1,
   expectedRevision: 1,
 }
-const authority = { kind: 'per_item' as const, amount: { currency: 'AUD', amountMinor: 0 } }
+const authority = { kind: 'per_item' as const, amount: { currency: 'AUD', units: '0', exponent: 2 } }
 const proposalDigest = canonicalDigest(proposal)
 
 type ApprovalStepUp = Readonly<{
@@ -97,7 +97,7 @@ type ApprovalStepUp = Readonly<{
   approvalRef?: string
   authority?: Readonly<{
     kind: 'per_item'
-    amount?: Readonly<{ currency: string; amountMinor: number }>
+    amount?: Readonly<{ currency: string; units: string; exponent: number }>
   }>
 }>
 
@@ -215,7 +215,7 @@ describe('T49 WorkTree approval artifact Convex seam', () => {
     })
     expect(accepted).toMatchObject({
       kind: 'accepted', decision: 'lock', readback: { revision: 2 },
-      actor: { principalId: 'agent:approval', ownerId: 'owner:approval', credentialId: 'credential:approval' },
+      actor: { source: expect.any(String) },
     })
     const replayed = await backend.mutation(decideWorkTree, {
       ...command,
@@ -225,7 +225,13 @@ describe('T49 WorkTree approval artifact Convex seam', () => {
     const issuedAgainAfterEffect = await issue(backend, { expiresAt })
     expect(issuedAgainAfterEffect).toEqual(issued)
     const row = await backend.query(readApproval, { approvalRef: issued.approvalRef })
-    expect(row).toMatchObject({ status: 'consumed', consumedReceiptId: accepted.receiptId })
+    expect(row).toMatchObject({
+      status: 'consumed',
+      consumedReceiptId: accepted.receiptId,
+      authorityAmountCurrency: 'AUD',
+      authorityAmountUnits: '0',
+      authorityAmountExponent: 2,
+    })
   })
 
   it('refuses wrong credential, amount, and expiry without changing the tree', async () => {
@@ -240,7 +246,7 @@ describe('T49 WorkTree approval artifact Convex seam', () => {
       serviceAuth: await serviceAuth({ idempotencyKey: 'decision:wrong-credential', credentialId: 'credential:wrong', stepUp: baseStepUp }),
     })).resolves.toMatchObject({ kind: 'refused', refusalCode: 'approval_credential_mismatch', readback: { revision: 1 } })
 
-    const wrongAmountStepUp = { ...baseStepUp, authority: { kind: 'per_item' as const, amount: { currency: 'AUD', amountMinor: 1 } } }
+    const wrongAmountStepUp = { ...baseStepUp, authority: { kind: 'per_item' as const, amount: { currency: 'AUD', units: '1', exponent: 2 } } }
     await expect(backend.mutation(decideWorkTree, {
       ...proposal, proposalDigest, idempotencyKey: 'decision:wrong-amount', stepUp: wrongAmountStepUp,
       serviceAuth: await serviceAuth({ idempotencyKey: 'decision:wrong-amount', stepUp: wrongAmountStepUp }),

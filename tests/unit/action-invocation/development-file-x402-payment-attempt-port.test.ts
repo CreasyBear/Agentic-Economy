@@ -27,7 +27,7 @@ describe('development file x402 payment attempt port', () => {
       expect.objectContaining({
         state: 'settled',
         custodyRef: `sha256:${'a'.repeat(64)}`,
-        settledAmount: { currency: 'USDC', amountMinor: 37 },
+        settledAmount: { currency: 'USDC', units: '37', exponent: 2 },
         evidenceRefs: ['sha256:settlement-evidence'],
       }),
     ])
@@ -68,7 +68,7 @@ describe('development file x402 payment attempt port', () => {
         network: 'network',
         asset: 'USDC',
         payTo: 'recipient',
-        amount: '1',
+        amount: { currency: 'USDC', units: '1', exponent: 2 },
         providerEndpoint: 'https://provider.invalid',
         operationRevision: 'revision',
         authorizationDigest: 'authorization',

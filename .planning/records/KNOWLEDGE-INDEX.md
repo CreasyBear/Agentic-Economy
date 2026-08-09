@@ -1,7 +1,7 @@
 # AE project knowledge index
 
 **Owner:** Founder
-**Last reconciled:** 2026-07-25
+**Last reconciled:** 2026-08-08
 
 This is the entry point for what the project knows. It points to authority,
 decisions, evidence, and unresolved questions. It does not restate their full
@@ -11,16 +11,28 @@ contents.
 (`ba263c10`, recoverable at `8dbef716`). Rows below now cite `PROJECT.md`,
 `UBIQUITOUS_LANGUAGE.md` or source.
 
+## Current category authority — 2026-08-08
+
+The current category sentence, Principal/delegated-agent model, supplier-hosted
+Operation boundary, closed V1 policy, and proof ceiling come from
+[`PROJECT.md`](../PROJECT.md), [`VISION-conceptual-map.md`](../VISION-conceptual-map.md),
+[`wayfinder/MAP.md`](../wayfinder/MAP.md), and the
+[Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md).
+Historical local-business, Australian-SMB, BAS, and human-service framing remains
+provenance only and cannot make the current category or wedge.
+
 ## Product identity and maturity
 
 | Knowledge | State | Authority / evidence |
 |---|---|---|
-| People should be able to ask their chosen agent for help with real businesses. | TARGET | `PROJECT.md` product promise |
-| People and agents may begin with one useful task or prior work, then stop, continue progressively, or ask AE to coordinate the remaining route. | PROPOSED TARGET | [ADR-009](../adr/ADR-009-partial-entry-without-request-ownership.md); [D-006](./PROJECT-RECORDS.md) |
-| AE's embedded agent and external agents should use the same registered actions and authoritative work records; their presentation may differ, but business meaning and outcome semantics must remain equivalent. | PROPOSED TARGET | [ADR-010](../adr/ADR-010-one-action-plane-across-human-and-agent-experiences.md); [D-007](./PROJECT-RECORDS.md) |
-| Today AE exposes published business information, comparison, qualified inquiry, the exact authenticated Request states proven through intended surfaces, and one callable priced capability against labelled sandbox supply. | CURRENT | `STATE.md`; `src/modules/actions/index.ts`; `src/routes/api.sandbox.$slug.checkup-quote.ts` |
-| AE does not currently book, charge, dispatch, or automatically fulfil. | CURRENT BOUNDARY | `src/modules/actions/index.ts` registers no payment, booking or dispatch action. The executable copy gates that also enforced this were removed on 2026-07-25. |
-| AE targets registered booking and later high-autonomy consequential operation through exact, revocable authority modes; `full_yolo` is a broad bounded standing mandate, never ambient or unlimited authority. | ACCEPTED TARGET | [ADR-019](../adr/ADR-019-authority-modes-and-consequential-operations-target.md); D-010; `PROJECT.md` |
+| The person-facing demand application is a subordinate proving ground: a Principal's agent can discover viable supplier-hosted Operations, decide within granted authority, and carry approved work through evidence and recovery. | SUBORDINATE TARGET | `PROJECT.md` product boundary |
+| Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery. | FOUNDER-CONFIRMED DESTINATION; NARROW/UNPROVEN | [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md); `PROJECT.md`; `VISION-conceptual-map.md`; `UBIQUITOUS_LANGUAGE.md` |
+| The Principal is the human or organization that owns authority and budget; the agent is its delegated shopper and distribution interface, never the Principal. | ACCEPTED TARGET | [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md); `PROJECT.md` |
+| Developers and suppliers host implementations wherever they choose. AE admits versioned callable Operations and owns the market, invocation identity, authority/policy, evidence, Qualified Use metering and reconciliation boundary. | ACCEPTED TARGET | `PROJECT.md`; [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
+| V1 is closed to one contract family and curated suppliers; wider category scope opens only under published policy after the first family proves its controls and repeat independent demand. | ACCEPTED LAUNCH POLICY | [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
+| Current source/local evidence includes published Offering/business projections, comparison and inquiry paths, Customer Request states, curated discovery for 20 heterogeneous Operations, and bounded keyless invocation/evidence; this is not hosted, provider, customer, or production-settlement proof. | CURRENT — SOURCE/LOCAL ONLY | `STATE.md`; `src/modules/actions/index.ts`; `src/modules/capability-supply/`; `src/modules/capability-execution/` |
+| Current registered actions do not establish booking, charging, dispatch, or automatic fulfilment. | CURRENT IMPLEMENTATION BOUNDARY | `src/modules/actions/index.ts`; `STATE.md` |
+| Registered consequential operations and later high-autonomy authority modes remain a subordinate application target; exact revocable authority is never ambient or unlimited. | SUBORDINATE ACCEPTED TARGET | [ADR-019](../adr/ADR-019-authority-modes-and-consequential-operations-target.md); D-010; `PROJECT.md` |
 | Internal workflow machinery is not the public product explanation. | ACCEPTED | [D-003](./PROJECT-RECORDS.md); `UBIQUITOUS_LANGUAGE.md` |
 
 ## Calling agents
@@ -35,21 +47,21 @@ contents.
 
 | Knowledge | State | Authority / evidence |
 |---|---|---|
-| AE's differentiated source is what businesses can do, for whom, under which conditions, and what next step they support. | ACCEPTED TARGET | `PROJECT.md`; [D-002](./PROJECT-RECORDS.md) |
-| Agent-usable supply includes both business information and supported actions with explicit inputs, authority, evidence, failure and recovery behavior. | PROPOSED TARGET | [ADR-009](../adr/ADR-009-partial-entry-without-request-ownership.md) |
-| The required evidence and decay period for each material business fact are not yet known. | UNKNOWN | Open decision in [PROJECT-RECORDS.md](./PROJECT-RECORDS.md) |
-| One canonical representation may serve several calling agents without changing meaning. | HYPOTHESIS | H-006 |
-| AE determines eligibility and comparable evidence from registered contracts. It recommends one option only for a supported priority explicitly present in the Request and otherwise leaves options unranked. | ACCEPTED + SOURCE-BACKED TARGET | `src/modules/customer-request/compiler.ts`; `evaluation.ts`; `customer-option-set.ts`; `route-plan-customer-projection.ts` |
-| Preference-sensitive comparative judgment beyond a supported explicit objective belongs to the person and calling agent unless later evidence justifies a new source-owned objective. | ACCEPTED TARGET BOUNDARY | [D-002](./PROJECT-RECORDS.md) |
+| The competitive unit is an admitted, versioned Market Operation with typed input/result, effect and data-use policy, price, readiness, validated usage, evidence and settlement lineage; Supplier is the portfolio rollup. | ACCEPTED TARGET | `PROJECT.md`; [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
+| Agent-usable supply is a callable Operation contract with explicit inputs, authority, evidence, failure and recovery behavior; OpenAPI, MCP and x402 are adapters, not the semantic contract. | ACCEPTED TARGET | [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md); [ADR-009](../adr/ADR-009-partial-entry-without-request-ownership.md) |
+| The required evidence, freshness and decay policy for each material Operation claim are not yet known. | UNKNOWN | Open decision in [PROJECT-RECORDS.md](./PROJECT-RECORDS.md); category thesis proof boundary |
+| One canonical Operation representation may serve several calling agents without changing meaning. | HYPOTHESIS | H-006 |
+| AE determines eligibility and comparable evidence from admitted contracts. It may recommend only for a supported objective explicitly present in the Request; otherwise options remain unranked for the Principal and calling agent. | ACCEPTED + SOURCE-BACKED TARGET | `src/modules/customer-request/compiler.ts`; `evaluation.ts`; `customer-option-set.ts`; `route-plan-customer-projection.ts`; D-002 |
+| Preference-sensitive comparative judgment beyond a supported explicit objective belongs to the Principal and calling agent unless later evidence justifies a new source-owned objective. | ACCEPTED TARGET BOUNDARY | [D-002](./PROJECT-RECORDS.md) |
 
 ## Supply and GTM
 
 | Knowledge | State | Authority / evidence |
 |---|---|---|
-| AE should prove depth in one request family before broad supply expansion. | ACCEPTED | D-005 |
-| The first request family has not been selected. | OPEN DECISION | [Workflow substitution candidate review](../research/2026-07-17-workflow-substitution-candidate-review.md) |
-| Events, strata and fit-out are an evaluation portfolio, not selected markets or current product claims. | ACTIVE EVAL | [Product Foundry program](../research/2026-07-17-product-foundry-primitive-refinery-program.md) |
-| Those benefits are sufficient to make businesses maintain AE capability information. | HYPOTHESIS, NOT PROVEN | H-002 |
+| V1 should prove depth in one closed Market Operation family before broad supply expansion; later opening requires published policy and repeat independent demand. | ACCEPTED | D-005; D-013; [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
+| The named V1 candidate is public-document structured extraction with field-level provenance; the candidate is not yet proven in the market. | OPEN PROOF FRONTIER | [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
+| Events, strata and fit-out are a historical evaluation portfolio, not selected markets, ICP, wedge, or current product claims. | HISTORICAL EVAL | [Product Foundry program](../../eval/product-foundry/README.md) |
+| The earlier hypothesis that businesses would maintain capability information for agent referrals is superseded/historical and does not define supply economics. | SUPERSEDED / HISTORICAL | H-002; D-013 proof boundary |
 
 ## Neutrality and economics
 
@@ -57,7 +69,7 @@ contents.
 |---|---|---|
 | Payment must not influence organic admission or comparison. | ACCEPTED | D-004 |
 | The paying customer and viable business model remain unresolved. | OPEN DECISION | `PROJECT-RECORDS.md` |
-| AE can use global infrastructure without conceding local supply relationships, comparison or coordination. | ACCEPTED TARGET | `PROJECT.md`; D-008 |
+| AE may use global infrastructure and distribution rails, but suppliers host implementations and AE retains the market/controlled-transaction boundary; this does not imply local supply relationships or coordination are the category. | ACCEPTED TARGET | `PROJECT.md`; D-013; [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
 
 ## Engineering and interoperability
 
@@ -66,7 +78,8 @@ contents.
 | AE should adopt established tool, authorization, checkout, and payment standards rather than recreate them. | ACCEPTED | D-002 |
 | Ordinary HTTPS remains first class; additional agent and commerce standards are adapters. | ACCEPTED TARGET | D-001 and D-002 |
 | Assistant-facing registered actions cover registry read, qualified inquiry, storefront draft import/enrich, demand capture, supplied-quote collection, owner notification preferences, and the Customer Request run/confirm/cancel/problem/evidence/repeat-permission set. | CURRENT | `src/modules/actions/index.ts` |
-| Automatic discovery, multi-business continuity, and general execution by external agents remain target capabilities. | TARGET, UNPROVEN | `PROJECT.md` |
+| Non-2xx HTTP failures use RFC 9457 Problem Details with google.rpc.Code-aligned `kind` (with explicit HTTP/repository extensions) and stable machine `code`; CLI failures consume and project the same contract. | CURRENT | [RFC 9457 error-handling closeout](../research/2026-08-07-error-handling-blast-radius.md); `src/lib/errors.ts`; `src/lib/server/problem.ts`; `tools/ae/lib/output.ts` |
+| Automatic discovery, multi-supplier continuity, and general execution by external agents remain target capabilities; they are not proof of retained market demand. | TARGET, UNPROVEN | `PROJECT.md`; [Agent Services Market category thesis](../research/2026-08-08-agent-services-market-category-thesis.md) |
 
 ## How to use this index
 

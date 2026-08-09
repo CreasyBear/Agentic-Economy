@@ -16,6 +16,7 @@ import {
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
 import { exactContractRefKey } from '@/modules/customer-request/contract-ref-key'
+import { classifyDeclaredCapabilityDomain } from './capability-domain'
 import { bindCustomerCapabilityDescriptor, type ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 import {
   requestRegistrySnapshotDigest,
@@ -64,8 +65,13 @@ export async function assembleRequestGraph(
     name: string
     description: string
     inputSchema: CapabilityContract['inputSchema']
+    inputExamples: CapabilityContract['inputExamples']
   }>>()
   const operationRefsByRef = new Map<string, Set<PublicOperationRef>>()
+  // Registry discovery vocabulary (offering searchTerms), per exact contract. Surfaced to the
+  // SERVER-side deterministic interpreter so it can match the same vocabulary discovery uses
+  // (e.g. coingecko's 'bitcoin price' searchTerms), without expanding the model payload.
+  const searchTermsByRef = new Map<string, Set<string>>()
   const bindings: RegisteredEvaluationBinding[] = []
   for (const mapping of mappings) {
     try {
@@ -120,6 +126,7 @@ export async function assembleRequestGraph(
         name: contract.name,
         description: contract.description,
         inputSchema: contract.inputSchema,
+        inputExamples: contract.inputExamples,
       })
     }
     let operationRefs = operationRefsByRef.get(key)
@@ -128,6 +135,14 @@ export async function assembleRequestGraph(
       operationRefsByRef.set(key, operationRefs)
     }
     operationRefs.add(publication.operationRef)
+    if (item.offering.searchTerms !== undefined && item.offering.searchTerms.length > 0) {
+      let searchTerms = searchTermsByRef.get(key)
+      if (searchTerms === undefined) {
+        searchTerms = new Set<string>()
+        searchTermsByRef.set(key, searchTerms)
+      }
+      for (const term of item.offering.searchTerms) searchTerms.add(term)
+    }
     bindings.push({
       operationRef: publication.operationRef,
       admittedOperation: publication.admittedOperation,
@@ -158,6 +173,11 @@ export async function assembleRequestGraph(
     const operationRef = operationRefs[0]
     if (operationRef === undefined) return { kind: 'unavailable', reason: 'graph_unreadable' }
     try {
+      const domainFromCatalog = classifyDeclaredCapabilityDomain(
+        searchTermsByRef.get(key) === undefined ? [] : [...searchTermsByRef.get(key) ?? []],
+        source.name,
+        source.description,
+      )
       const descriptor = bindCustomerCapabilityDescriptor({
         operationRef: operationRef,
         operationRefs,
@@ -175,6 +195,12 @@ export async function assembleRequestGraph(
           label, purpose, schemaIdentity, guaranteed,
           ...(semanticIdentity === undefined ? {} : { semanticIdentity }),
         })),
+        ...(searchTermsByRef.get(key) === undefined ? {} : { searchTerms: [...searchTermsByRef.get(key) ?? []] }),
+        // Declared, data-driven domain derived once from the capability's registry-taught surface
+        // (the searchTerms declared on the curated catalog source) and stamped so the cross-cap
+        // guard keys off declared domains rather than re-regexing free text on every request.
+        domain: domainFromCatalog,
+        ...(source.inputExamples === undefined ? {} : { inputExamples: source.inputExamples }),
       })
       descriptorBytes += new TextEncoder().encode(JSON.stringify(descriptor)).byteLength
       if (descriptorBytes > limits.maximumDescriptorBytes) return { kind: 'unavailable', reason: 'graph_unreadable' }

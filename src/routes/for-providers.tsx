@@ -2,10 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
-import { loadSupplyLandingReadback } from '@/modules/capability-supply/supply-funnel.functions'
+import { loadSupplyLandingReadbackServer } from '@/modules/capability-supply/supply-funnel.functions'
 
 export const Route = createFileRoute('/for-providers')({
-  loader: loadSupplyLandingReadback,
+  loader: () => loadSupplyLandingReadbackServer(),
   head: () => ({
     meta: [
       { title: 'Get your service in front of AI assistants | Agentic Economy' },

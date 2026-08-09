@@ -1,6 +1,7 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim } from '@/modules/security/public'
 import { validateOwnerPublishedPhone } from './published-phone'
 import type {
@@ -298,7 +299,7 @@ function findOrCreateOwner(
 }
 
 function normalizePublicText(value: string): string {
-  return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 240)
+  return sanitizeText(value, 240)
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {

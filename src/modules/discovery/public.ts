@@ -8,6 +8,24 @@ import type { RegistrySourceState } from '@/modules/registry/public'
 import { regenerateDiscoveryManifest } from './internal/manifest-attempts'
 import { buildLlmsTxt, buildSitemapXml } from './internal/discovery-files'
 import { createFixtureDiscoverySourceState } from './internal/source-state'
+import {
+  DiscoveryAttemptStatusValues,
+  DiscoveryManifestRouteKindValues,
+  DiscoveryManifestSchemaVersion as DiscoveryManifestSchemaVersionValue,
+  DiscoveryManifestSourceVersion as DiscoveryManifestSourceVersionValue,
+  DiscoveryPathKindValues,
+  DiscoveryRepairActionValues,
+  DiscoveryRepairResultValues,
+  DiscoveryStatusValues,
+  type DiscoveryAttemptStatus,
+  type DiscoveryManifestRouteKind,
+  type DiscoveryManifestSchemaVersion as DiscoveryManifestSchemaVersionType,
+  type DiscoveryManifestSourceVersion as DiscoveryManifestSourceVersionType,
+  type DiscoveryPathKind,
+  type DiscoveryRepairAction,
+  type DiscoveryRepairResult,
+  type DiscoveryStatus,
+} from './internal/schema-values'
 export {
   OfferingDiscoveryManifestSchemaVersion,
   buildOfferingDiscoveryManifest,
@@ -36,29 +54,26 @@ export {
 } from './internal/page-markdown'
 export type { AgentPageMarkdownOptions } from './internal/page-markdown'
 
-export const DiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const
-export type DiscoveryStatus = (typeof DiscoveryStatusValues)[number]
-
-export const DiscoveryPathKindValues = ['ae_hosted_fallback', 'business_origin_standard'] as const
-export type DiscoveryPathKind = (typeof DiscoveryPathKindValues)[number]
-
-export const DiscoveryAttemptStatusValues = ['queued', 'succeeded', 'failed', 'stale'] as const
-export type DiscoveryAttemptStatus = (typeof DiscoveryAttemptStatusValues)[number]
-
-export const DiscoveryRepairActionValues = ['regenerate_manifest', 'invalidate_manifest', 'no_repair'] as const
-export type DiscoveryRepairAction = (typeof DiscoveryRepairActionValues)[number]
-
-export const DiscoveryRepairResultValues = ['not_run', 'succeeded', 'failed'] as const
-export type DiscoveryRepairResult = (typeof DiscoveryRepairResultValues)[number]
-
-export const DiscoveryManifestSchemaVersion = 'ae-ucp-fallback:v1' as const
-export type DiscoveryManifestSchemaVersion = typeof DiscoveryManifestSchemaVersion
-
-export const DiscoveryManifestSourceVersion = 'public-catalog:v1' as const
-export type DiscoveryManifestSourceVersion = typeof DiscoveryManifestSourceVersion
-
-export const DiscoveryManifestRouteKindValues = ['business_page', 'ucp_manifest', 'api_detail'] as const
-export type DiscoveryManifestRouteKind = (typeof DiscoveryManifestRouteKindValues)[number]
+export {
+  DiscoveryAttemptStatusValues,
+  DiscoveryManifestRouteKindValues,
+  DiscoveryPathKindValues,
+  DiscoveryRepairActionValues,
+  DiscoveryRepairResultValues,
+  DiscoveryStatusValues,
+} from './internal/schema-values'
+export type {
+  DiscoveryAttemptStatus,
+  DiscoveryManifestRouteKind,
+  DiscoveryPathKind,
+  DiscoveryRepairAction,
+  DiscoveryRepairResult,
+  DiscoveryStatus,
+}
+export const DiscoveryManifestSchemaVersion = DiscoveryManifestSchemaVersionValue
+export const DiscoveryManifestSourceVersion = DiscoveryManifestSourceVersionValue
+export type DiscoveryManifestSchemaVersion = DiscoveryManifestSchemaVersionType
+export type DiscoveryManifestSourceVersion = DiscoveryManifestSourceVersionType
 
 export type DiscoveryManifestRouteContract = {
   kind: DiscoveryManifestRouteKind

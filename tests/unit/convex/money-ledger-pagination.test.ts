@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { listCreditActivity, readKeyUsage } from '../../../convex/moneyLedger'
+import type { CreditActivityView, KeyUsageView } from '../../../src/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string }
 type Filter = { op: 'eq'; field: string; value: unknown }
@@ -20,20 +21,11 @@ type KeyUsageArgs = {
 
 type ActivityResult = {
   kind: 'ok'
-  page: Array<{ activityRef: string; credentialId: string; currency: string }>
+  page: CreditActivityView[]
   isDone: boolean
   continueCursor: string
 }
-type KeyUsageResult = {
-  kind: 'ok'
-  credentialId: string
-  callCount: number
-  paidCallCount: number
-  freeCallCount: number
-  grossSpendMinor: number
-  currency: string
-  states: readonly string[]
-}
+type KeyUsageResult = { kind: 'ok' } & KeyUsageView
 
 type QueryContext = {
   db: TestDb
@@ -139,7 +131,8 @@ function activityRow(input: Readonly<{ id: number; credentialId: string; currenc
     attemptRef: `attempt:${input.id}`,
     operationKey: `operation:${input.id}`,
     priceDigest: 'price:test',
-    amountMinor: input.id,
+    amountUnits: String(input.id),
+    exponent: 2,
     chargeState: 'paid',
     observedAt: input.id,
   }
@@ -154,7 +147,7 @@ describe('Convex native money queries', () => {
     const result = await activityHandler(context([activityRow({ id: 1, credentialId: 'credential:one', currency: 'USD' }), activityRow({ id: 2, credentialId: 'credential:two', currency: 'USD' })]), { principalId: 'principal:test', credentialId: 'credential:one', currency: 'USD', paginationOpts: { numItems: 50, cursor: null } })
     expect(result).toMatchObject({ kind: 'ok', isDone: true })
     expect(result.page).toHaveLength(1)
-    expect(result.page[0]).toMatchObject({ activityRef: 'usage:1', credentialId: 'credential:one', currency: 'USD' })
+    expect(result.page[0]).toMatchObject({ activityRef: 'usage:1', credentialId: 'credential:one', grossAmount: { currency: 'USD', units: '1', exponent: 2 } })
   })
 
   it('reads one exact usage summary and returns canonical zero when absent', async () => {
@@ -163,16 +156,30 @@ describe('Convex native money queries', () => {
       principalId: 'principal:test',
       credentialId: 'credential:one',
       currency: 'USD',
+      exponent: 2,
       callCount: 2,
       paidCallCount: 1,
       freeCallCount: 1,
-      grossSpendMinor: 500,
+      grossSpendUnits: '500',
       states: ['paid', 'free_tier'],
       updatedAt: 2,
     }
     const source = context([summary, activityRow({ id: 1, credentialId: 'credential:one', currency: 'USD' })])
-    await expect(keyUsageHandler(source, { principalId: 'principal:test', credentialId: 'credential:one', currency: 'USD' })).resolves.toMatchObject({ credentialId: 'credential:one', callCount: 2, grossSpendMinor: 500, currency: 'USD' })
+    await expect(keyUsageHandler(source, { principalId: 'principal:test', credentialId: 'credential:one', currency: 'USD' })).resolves.toMatchObject({ credentialId: 'credential:one', callCount: 2, grossSpend: { currency: 'USD', units: '500', exponent: 2 } })
     expect(source.db.queriedTables).not.toContain('moneyUsageEvents')
-    await expect(keyUsageHandler(context([]), { principalId: 'principal:test', credentialId: 'credential:new', currency: 'USD' })).resolves.toEqual({ kind: 'ok', credentialId: 'credential:new', callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpendMinor: 0, currency: 'USD', states: [] })
+    const account: Row = {
+      _id: 'moneyAccounts:operator',
+      accountRef: 'account:test',
+      accountKind: 'operator_credit',
+      principalId: 'principal:test',
+      currency: 'USD',
+      exponent: 2,
+      balanceUnits: '0',
+      version: 0,
+      state: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    await expect(keyUsageHandler(context([account]), { principalId: 'principal:test', credentialId: 'credential:new', currency: 'USD' })).resolves.toEqual({ kind: 'ok', credentialId: 'credential:new', callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpend: { currency: 'USD', units: '0', exponent: 2 }, states: [] })
   })
 })

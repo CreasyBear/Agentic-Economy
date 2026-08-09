@@ -1,5 +1,5 @@
 import { ConvexSourceError } from '@/lib/server/convex-source'
-import { response } from '@/lib/server/no-store-response'
+import { problem } from '@/lib/server/problem'
 import { NotificationProviderError } from '@/lib/server/notification-provider'
 import type {
   NotificationAttemptStatus,
@@ -117,7 +117,9 @@ export function notificationErrorResponse(error: unknown): Response | undefined 
     return undefined
   }
 
-  return response({ kind: 'error', code: error.code, retryable: false, reason: error.message }, error.status)
+  const { status } = error
+  const kind = status === 404 ? 'NOT_FOUND' : status === 403 ? 'PERMISSION_DENIED' : status === 409 ? 'ALREADY_EXISTS' : 'INTERNAL'
+  return problem({ status, kind, code: error.code, detail: error.message, retryable: false })
 }
 
 export function statusForNotificationRuntimeError(code: string): number {

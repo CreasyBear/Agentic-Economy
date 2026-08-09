@@ -1,4 +1,8 @@
-import { OperatorRouteError, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
+import {
+  OperatorRouteError,
+  OperatorRouteNotFound,
+  OperatorRoutePending,
+} from '@/components/ae/layout/AeOperatorRouteStates'
 import { requireOperatorBeforeLoad } from '@/lib/server/require-operator-session'
 
 /**
@@ -8,6 +12,7 @@ import { requireOperatorBeforeLoad } from '@/lib/server/require-operator-session
 export const operatorRouteOptions = {
   pendingComponent: OperatorRoutePending,
   errorComponent: OperatorRouteError,
+  notFoundComponent: OperatorRouteNotFound,
 } as const
 
 /**
@@ -18,4 +23,5 @@ export const operatorLayoutRouteOptions = {
   beforeLoad: requireOperatorBeforeLoad,
   pendingComponent: OperatorRoutePending,
   errorComponent: OperatorRouteError,
+  notFoundComponent: OperatorRouteNotFound,
 } as const

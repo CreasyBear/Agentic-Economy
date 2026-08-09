@@ -1,16 +1,17 @@
+export { workTreeSchema } from './internal/contract'
+export type { WorkTree } from './internal/contract'
+export { assessWorkTreeDecisionPolicy } from './internal/decision-policy'
+export {
+  workTreeNodeAuthorityAmount,
+  type WorkTreeApprovalAuthority,
+  type WorkTreeApprovalRefusalCode,
+} from './internal/approval'
 export {
   applyGardenerVerb,
   GardenerVerbError,
   gardenerPayloadDigest,
   gardenerVerbDigest,
   gardenerVerbSchema,
+  type GardenerEventKind,
+  type GardenerVerb,
 } from './internal/verbs'
-export { assessWorkTreeDecisionPolicy } from './internal/decision-policy'
-export { workTreeSchema } from './internal/contract'
-
-export type { GardenerEventKind, GardenerVerb } from './internal/verbs'
-export type { WorkTree } from './internal/contract'
-export type WorkTreeStepUp = Readonly<{
-  acknowledgedConsequence: true
-  approvalKind: 'per_item'
-}>

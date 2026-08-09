@@ -1,4 +1,5 @@
 import type { AnswerArtifact } from '../answer-schema'
+import type { AnswerSource } from '../answer-synthesizer'
 import { buildAgentJsonUrl, type AnswerSnapshot } from '../answer-synthesizer'
 import { isCompactLayoutProfile, resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
 import { parseLocationIntent } from './location-intent'
@@ -13,7 +14,8 @@ export type AnswerArtifactBudget = {
 const ANSWER_PROVIDER_CARD_LIMIT = 3
 const COMPARE_PROVIDER_LIMIT = 2
 
-const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now', 'consumer-plan'] as const
+const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
+const DATA_ANSWER_ARTIFACTS = TEXT_ONLY_ARTIFACTS
 const ANSWER_ARTIFACTS = [
   'one-line',
   'provider-cards',
@@ -22,12 +24,11 @@ const ANSWER_ARTIFACTS = [
   'imported-claims',
   'what-to-do-now',
   'agent-json',
-  'consumer-plan',
 ] as const
-const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now', 'consumer-plan'] as const
-const EMPTY_ARTIFACTS = ['one-line', 'prose', 'imported-claims', 'recovery-prompts', 'what-to-do-now', 'agent-json', 'consumer-plan'] as const
-const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now', 'consumer-plan'] as const
-const HANDOFF_ARTIFACTS = ['one-line', 'selected-provider', 'what-to-do-now', 'consumer-plan'] as const
+const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
+const EMPTY_ARTIFACTS = ['one-line', 'prose', 'imported-claims', 'recovery-prompts', 'what-to-do-now', 'agent-json'] as const
+const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now'] as const
+const HANDOFF_ARTIFACTS = ['one-line', 'selected-provider', 'what-to-do-now'] as const
 
 export function buildArtifactsFromSnapshot(
   snapshot: AnswerSnapshot,
@@ -38,7 +39,7 @@ export function buildArtifactsFromSnapshot(
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
     providerCount: snapshot.providers.length,
   })
-  const selectedProvider = snapshot.selectedProvider
+  const selectedProvider = hasProviderIdentity(snapshot.selectedProvider) ? snapshot.selectedProvider : undefined
   const budget = getArtifactBudgetForSnapshot({ ...snapshot, layoutProfile: profile }, budgetOverride)
 
   const compact = isCompactLayoutProfile(profile)
@@ -73,10 +74,12 @@ export function buildArtifactsFromSnapshot(
     snapshot.summary.length > 0 &&
     (
       profile === 'discovery_full' ||
+      profile === 'data_answer' ||
       profile === 'clarification' ||
       profile === 'compare_pair' ||
       profile === 'empty_state' ||
-      profile === 'boundary_explain'
+      profile === 'boundary_explain' ||
+      profile === 'safety_refusal'
     )
 
   if (showSummary) {
@@ -118,7 +121,7 @@ export function getArtifactBudgetForSnapshot(
   })
   return withSelectedProviderBudget(
     budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile),
-    snapshot.selectedProvider !== undefined,
+    hasProviderIdentity(snapshot.selectedProvider),
   )
 }
 
@@ -143,9 +146,17 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
         maxProviderCards: 0,
       }
     case 'boundary_explain':
+    case 'safety_refusal':
       return {
         layoutProfile: profile,
         allowedKinds: TEXT_ONLY_ARTIFACTS,
+        maxArtifactCount: 3,
+        maxProviderCards: 0,
+      }
+    case 'data_answer':
+      return {
+        layoutProfile: profile,
+        allowedKinds: DATA_ANSWER_ARTIFACTS,
         maxArtifactCount: 3,
         maxProviderCards: 0,
       }
@@ -266,14 +277,51 @@ function capArtifactForBudget(
 }
 
 
+function hasProviderIdentity(provider: AnswerSource | undefined): provider is AnswerSource {
+  return provider !== undefined
+    && provider.slug.trim().length > 0
+    && provider.name.trim().length > 0
+}
+
 function buildRecoveryPrompts(query: string): { label: string; query: string }[] {
-  const normalized = query.trim()
-  const base = normalized.length > 0 ? normalized : 'local service'
+  const fields = normalizeRecoveryFields(query)
+  const service = fields.service.length > 0 ? fields.service : 'local service'
+  const nearby = fields.location === undefined
+    ? `${service} near me`
+    : `${service} near ${fields.location}`
+  const browse = fields.location === undefined
+    ? service
+    : `${service} in ${fields.location}`
   return [
-    { label: 'Search a nearby suburb', query: `${base} near me` },
-    { label: 'Try the service type only', query: stripPlaceWords(base) },
-    { label: 'Browse listed businesses', query: base },
+    { label: 'Search a nearby suburb', query: nearby },
+    { label: 'Try the service type only', query: service },
+    { label: 'Browse listed businesses', query: browse },
   ]
+}
+
+function normalizeRecoveryFields(query: string): { service: string; location?: string } {
+  const normalized = query.trim()
+  const parsedLocation = parseLocationIntent(normalized)
+  const leadingLocation = normalized.match(/^\s*([A-Z][A-Za-z' -]{1,60}),\s*[A-Z]{2,3}\b/)
+  const location = (parsedLocation?.label ?? leadingLocation?.[1])?.replace(
+    /\s+(?:is|for|please|and)\b.*$/i,
+    '',
+  ).trim()
+  let service = normalized
+  if (location !== undefined && location.length > 0) {
+    const escaped = location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    service = service
+      .replace(new RegExp(`\\b(?:near|around|in|at|serving)\\s+${escaped}\\b`, 'i'), ' ')
+      .replace(new RegExp(`\\b${escaped}\\b`, 'i'), ' ')
+  }
+  service = service
+    .replace(/\b(?:is\s+correct|please|find|search|show|look\s+for|only|options?|businesses?|providers?|the|best|way|to|contact|them|provide|details?)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return {
+    service: stripPlaceWords(service),
+    ...(location === undefined || location.length === 0 ? {} : { location }),
+  }
 }
 
 function stripPlaceWords(query: string): string {

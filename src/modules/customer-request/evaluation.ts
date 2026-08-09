@@ -12,16 +12,17 @@ import type {
   AdmittedOperationRef,
   CapabilityCancellation,
   CapabilityOfferingRegistration,
-  RegisteredInputMappingRef,
+  RegisteredOperationMappingRef,
   PublicOperationRef,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import type { ExactAmount } from '@/modules/money/public'
 
 export type RegisteredSupplyPrice =
-  | Readonly<{ kind: 'fixed'; currency: string; amountMinor: number }>
-  | Readonly<{ kind: 'range'; currency: string; minimumAmountMinor: number; maximumAmountMinor: number }>
+  | Readonly<{ kind: 'fixed'; amount: ExactAmount }>
+  | Readonly<{ kind: 'range'; minimum: ExactAmount; maximum: ExactAmount }>
   | Readonly<{ kind: 'on_request' }>
 
 export type RegisteredCommercialRelationship = CapabilityOfferingRegistration['presentation']['commercialRelationship']
@@ -164,12 +165,12 @@ export type ProposedRequestAction = Readonly<{
   semanticDigest: string
   dependsOn: readonly string[]
   inputs: readonly RequestFact[]
-  mappingRefs: readonly RegisteredInputMappingRef[]
+  mappingRefs: readonly RegisteredOperationMappingRef[]
   inputMappings: readonly RequestActionInputMapping[]
 }>
 
 export type RequestActionInputMapping = Readonly<{
-  mappingRef: RegisteredInputMappingRef
+  mappingRef: RegisteredOperationMappingRef
   kind: 'identity' | 'field' | 'array_project' | 'registered_transform'
   mappingId: string
   semanticIdentity: string

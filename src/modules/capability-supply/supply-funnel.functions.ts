@@ -2,39 +2,62 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceAction, callSourceMutation, callSourceQuery, sourceAction, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
-import { describeActionForAgent, listMcpActions, type AgentToolDescriptor } from '@/modules/actions'
+import { describeActionForAgent, listMcpActions } from '@/modules/actions'
 import type { BusinessOfferingStatus } from '@/modules/catalog/public'
 import type { PublicServicesApiPage } from '@/modules/registry/public'
 import { registryServicesListAction } from '@/modules/registry/registry.actions'
-import type { PricingConfig } from '@/modules/money/public'
+import type { PayoutStatusView, PricingConfig, ProviderEarningsView } from '@/modules/money/public'
 import type { PricingConfigPort, PricingPreview, SupplyPricingRefusal } from './internal/supply-funnel/pricing-port'
 import { realPricingConfigPort } from './internal/supply-funnel/pricing-port'
 import { admitPublicationDraft, type AdmitPublicationDraftRefusal } from './internal/publication/draft'
 import type { CapabilityPublicationImport, CapabilityPublicationImportResult } from './internal/publication-importers'
+import { dereferenceOpenApiSchema } from './internal/schema-deref'
 import { normalizeCapabilityPublication } from './public'
 
+export type SupplyLandingTool = Readonly<{
+  id: string
+  name: string
+  summary: string
+  boundaries: readonly string[]
+  inputJsonSchema?: string
+  outputJsonSchema?: string
+}>
 export type SupplyLandingReadback = Readonly<{
-  tools: readonly AgentToolDescriptor[]
+  tools: readonly SupplyLandingTool[]
   services: PublicServicesApiPage
   evidence: 'source' | 'labelled_local_dev'
 }>
 
-export async function loadSupplyLandingReadback(): Promise<SupplyLandingReadback> {
-  const tools = listMcpActions().map(describeActionForAgent).slice(0, 32)
-  const services = await registryServicesListAction.run({
-    data: registryServicesListAction.schema.parse({ limit: 10 }),
-    context: { caller: 'ui' },
+export const loadSupplyLandingReadbackServer = createServerFn({ method: 'GET' })
+  .handler(async (): Promise<SupplyLandingReadback> => {
+    const tools = listMcpActions().map(describeActionForAgent).slice(0, 32).map((tool) => ({
+      id: tool.id,
+      name: tool.name,
+      summary: tool.summary,
+      boundaries: tool.boundaries,
+      ...(tool.inputJsonSchema === undefined
+        ? {}
+        : { inputJsonSchema: JSON.stringify(tool.inputJsonSchema, null, 2) }),
+      ...(tool.outputJsonSchema === undefined
+        ? {}
+        : { outputJsonSchema: JSON.stringify(tool.outputJsonSchema, null, 2) }),
+    }))
+    const services = await registryServicesListAction.run({
+      data: registryServicesListAction.schema.parse({ limit: 10 }),
+      context: { caller: 'ui' },
+    })
+    return { tools, services, evidence: 'source' }
   })
-  return { tools, services, evidence: 'source' }
-}
 
 export type SupplyFunnelStep = 'describe' | 'endpoint' | 'readiness' | 'pricing' | 'test' | 'publish'
-export type SupplyFunnelStepState = 'not_started' | 'in_progress' | 'completed' | 'refused' | 'stale'
+export type SupplyFunnelStepState = 'not_started' | 'in_progress' | 'pending_readiness' | 'completed' | 'refused' | 'stale'
 export type SupplyFunnelRefusal =
   | 'invalid_offering' | 'invalid_access_path' | 'revision_conflict' | 'authorization_denied' | 'source_unavailable'
   | 'source_invalid' | 'source_too_large' | 'source_too_deep' | 'source_version_unsupported' | 'selector_invalid'
-  | 'operation_not_found' | 'schema_missing' | 'schema_profile_unsupported' | 'transport_unsupported'
-  | 'commercial_metadata_inconsistent' | 'payment_execution_unsupported' | 'adapter_not_registered' | 'adapter_config_invalid'
+  | 'operation_not_found' | 'schema_missing' | 'schema_profile_unsupported'
+  | 'admit_schema_circular_reference' | 'admit_schema_reference_unresolvable' | 'admit_schema_too_deep' | 'admit_schema_deref_unavailable' | 'admit_output_no_guaranteed_field'
+  | 'transport_unsupported'
+  | 'commercial_metadata_inconsistent' | 'payment_execution_unsupported' | 'payment_required_invalid' | 'adapter_not_registered' | 'adapter_config_invalid'
   | 'adapter_config_too_large' | 'credential_rejected' | 'target_not_public' | 'transport_unreachable' | 'http_redirect'
   | 'http_4xx' | 'http_5xx' | 'response_content_type_invalid' | 'response_too_large' | 'response_invalid'
   | 'credential_unavailable' | 'target_changed' | 'revision_changed' | 'price_unavailable' | 'pricing_config_invalid'
@@ -89,6 +112,25 @@ export type OwnerSupplyFunnelReadback = Readonly<{
   callLog: readonly SupplyCallLogRow[]
   liquidity: SupplyLiquiditySummary
 } | { kind: 'not_found' } | { kind: 'error'; code: 'unauthenticated' | 'source_unavailable'; reason?: string }>
+export type OwnerProviderEarningsAccountReadback = Readonly<{
+  currency: string
+  earnings: Readonly<{ kind: 'ok' } & ProviderEarningsView>
+  payout: Readonly<{ kind: 'ok' } & PayoutStatusView>
+}>
+
+export type OwnerProviderEarningsReadback = Readonly<
+  | { kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }
+  | { kind: 'not_found' }
+  | {
+      kind: 'available'
+      businessId: string
+      accounts: readonly OwnerProviderEarningsAccountReadback[]
+      accountsTruncated: boolean
+    }
+>
+
+type OwnerProviderEarningsSourceResult = OwnerProviderEarningsReadback
+
 
 export type SupplyCallLogRow = Readonly<{
   eventRef: string
@@ -111,11 +153,12 @@ export type SupplyLiquiditySummary = Readonly<{
   environment: 'local' | 'development' | 'sandbox' | 'production'
 }>
 
-const readOwnerSupplyQuery = sourceQuery<Record<string, never>, OwnerSupplyFunnelReadback>('capabilitySupply:readOwnerSupplyFunnel')
-const supplyStepMutation = sourceMutation<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupply:advanceOwnerSupplyStep')
+const readOwnerSupplyQuery = sourceQuery<Record<string, never>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel')
+const supplyStepMutation = sourceMutation<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupplyOwnerFunnel:advanceOwnerSupplyStep')
 const probeAction = sourceAction<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupplyOwnerSupply:runOwnerSupplyReadiness')
 const testAction = sourceAction<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupplyOwnerSupply:runOwnerSupplyTest')
-const publishMutation = sourceMutation<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupply:publishOwnerCapability')
+const publishMutation = sourceMutation<Record<string, unknown>, SupplyFunnelStepCompletion>('capabilitySupplyOwnerFunnel:publishOwnerCapability')
+const readOwnerProviderEarningsQuery = sourceQuery<Record<string, never>, OwnerProviderEarningsSourceResult>('moneyLedger:readOwnerProviderEarnings')
 
 export const readOwnerSupplyFunnelServer = createServerFn().handler(async (): Promise<OwnerSupplyFunnelReadback> => {
   try {
@@ -124,9 +167,19 @@ export const readOwnerSupplyFunnelServer = createServerFn().handler(async (): Pr
     return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Supply source is unavailable.' }
   }
 })
+export const readOwnerProviderEarningsServer = createServerFn().handler(async (): Promise<OwnerProviderEarningsReadback> => {
+  try {
+    return await callSourceQuery(readOwnerProviderEarningsQuery, {})
+  } catch {
+    return { kind: 'error', code: 'source_unavailable' }
+  }
+})
 
 const stepInputSchema = z.object({
   businessId: z.string().min(1), offeringRef: z.string().min(1), revision: z.number().int().positive(), operationKey: z.string().min(8).max(200), value: z.record(z.string(), z.unknown()),
+})
+const ownerSupplyPublishInputSchema = stepInputSchema.extend({
+  sourceHash: z.string().min(1),
 })
 
 export const advanceOwnerSupplyStepServer = createServerFn({ method: 'POST' })
@@ -139,7 +192,7 @@ export const runOwnerSupplyTestServer = createServerFn({ method: 'POST' })
   .validator((data) => stepInputSchema.parse(data))
   .handler(async ({ data }) => callSourceAction(testAction, data))
 export const publishOwnerCapabilityServer = createServerFn({ method: 'POST' })
-  .validator((data) => stepInputSchema.parse(data))
+  .validator((data) => ownerSupplyPublishInputSchema.parse(data))
   .handler(async ({ data }) => callSourceMutation(publishMutation, data))
 
 export type PricingStepResult = Readonly<{ kind: 'ready'; config: PricingConfig; preview: PricingPreview } | { kind: 'refused'; reason: SupplyPricingRefusal }>
@@ -156,13 +209,13 @@ export type SupplyPublicationAdmission = Readonly<
   | { kind: 'admitted'; offeringId: string; bindingId: string; sourceDigest: string; contractDigest: string; configDigest: string }
   | { kind: 'refused'; reason: SupplyFunnelRefusal }
 >
-export function admitSupplyPublicationDraft(input: Readonly<{ businessId: string; offeringRef: string; revision: number; source: CapabilityPublicationImport; evidenceRefs: readonly string[] }>): SupplyPublicationAdmission {
+export async function admitSupplyPublicationDraft(input: Readonly<{ businessId: string; offeringRef: string; revision: number; source: CapabilityPublicationImport; evidenceRefs: readonly string[] }>): Promise<SupplyPublicationAdmission> {
   let normalized: CapabilityPublicationImportResult
-  try { normalized = normalizeCapabilityPublication(input.source) } catch { return { kind: 'refused', reason: 'source_invalid' } }
+  try { normalized = await normalizeCapabilityPublication(input.source, dereferenceOpenApiSchema) } catch { return { kind: 'refused', reason: 'source_invalid' } }
   if (normalized.kind === 'refused') return normalized
   const offeringId = `capability-offering:${input.businessId}:${input.offeringRef}:${input.revision}`
   const bindingId = `capability-binding:${input.businessId}:${input.offeringRef}:${input.revision}`
-  const admitted = admitPublicationDraft({
+  const admitted = await admitPublicationDraft({
     source: { kind: 'ae_envelope', documentJson: normalized.draft.documentJson, offering: { ...normalized.draft.offering, offeringId }, binding: { ...normalized.draft.binding, bindingId }, evidenceRefs: input.evidenceRefs },
     businessId: input.businessId,
     evidenceRefs: input.evidenceRefs,

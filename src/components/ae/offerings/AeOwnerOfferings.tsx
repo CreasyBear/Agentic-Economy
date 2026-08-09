@@ -24,6 +24,9 @@ import {
   OfferingPriceUnitValues,
   normalizeOfferingPrice,
 } from '@/modules/catalog/public'
+import { formatExactAmount, parseDecimalExactAmount } from '@/modules/money/public'
+import { createPrefixedRandomId } from '@/modules/common/random-id'
+
 import type {
   BusinessOfferingProjection,
   BusinessOfferingStatus,
@@ -67,9 +70,25 @@ export type OwnerOfferingEditorValue = Readonly<{
 
 export type OwnerAccessPathEditorValue = Readonly<{
   accessPathRef?: string
+  localDraftKey?: string
   status: OfferingAccessPathStatus
   descriptor: OfferingAccessPathDescriptor
 }>
+function ensureOwnerAccessPathDraftIdentity(value: OwnerOfferingEditorValue): OwnerOfferingEditorValue {
+  return {
+    ...value,
+    accessPaths: value.accessPaths.map((path) => path.accessPathRef === undefined && path.localDraftKey === undefined
+      ? { ...path, localDraftKey: createPrefixedRandomId('access-path-draft:') }
+      : path),
+  }
+}
+
+function stripOwnerAccessPathDraftIdentity(value: OwnerOfferingEditorValue): OwnerOfferingEditorValue {
+  return {
+    ...value,
+    accessPaths: value.accessPaths.map(({ localDraftKey: _localDraftKey, ...path }) => path),
+  }
+}
 
 export type OwnerOfferingSaveResult =
   | Readonly<{ kind: 'saved'; value: OwnerOfferingEditorValue; message: string }>
@@ -199,7 +218,7 @@ export function AeOwnerOfferingEditor({
     const stored = readStoredOfferingDraft(draftKey)
     return stored === undefined ? undefined : { ...stored, price: normalizeOfferingPrice(stored.price) }
   })
-  const [value, setValue] = useState(restoredDraft ?? initialValue)
+  const [value, setValue] = useState(() => ensureOwnerAccessPathDraftIdentity(restoredDraft ?? initialValue))
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<OwnerOfferingSaveResult | undefined>()
   const [dirty, setDirty] = useState(false)
@@ -264,7 +283,7 @@ export function AeOwnerOfferingEditor({
     setPending(true)
     setResult(undefined)
     try {
-      const next = await onSave(value)
+      const next = await onSave(stripOwnerAccessPathDraftIdentity(value))
       setResult(next)
       if (next.kind === 'saved') {
         setValue(next.value)
@@ -401,13 +420,13 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
       </div>
       {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
         <ul className="m-0 grid list-none gap-2 p-0">
-          {paths.map((path, index) => (
-            <li key={path.accessPathRef ?? `${path.descriptor.kind}-${index}`} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+          {paths.map((path) => (
+            <li key={path.accessPathRef ?? path.localDraftKey} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_auto] sm:items-center">
               <div>
                 <p className="font-semibold text-foreground">{pathLabel(path.descriptor)}</p>
                 <p className="text-sm text-muted-foreground">{path.descriptor.kind === 'human_request' ? path.descriptor.disclosure : path.descriptor.summary}</p>
               </div>
-              <Button type="button" variant="secondary" size="sm" disabled={disabled || path.status === 'withdrawn'} onClick={() => onChange(paths.map((item, itemIndex) => itemIndex === index ? { ...item, status: 'withdrawn' } : item))}>Withdraw</Button>
+              <Button type="button" variant="secondary" size="sm" disabled={disabled || path.status === 'withdrawn'} onClick={() => onChange(paths.map((item) => item === path ? { ...item, status: 'withdrawn' } : item))}>Withdraw</Button>
             </li>
           ))}
         </ul>
@@ -482,7 +501,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
             const descriptor: OfferingAccessPathDescriptor = selectedKind === 'external_operation'
               ? externalOperationDescriptor(endpoint, draftDetail.trim())
               : { kind: 'human_request', channel: selectedKind, disclosure: draftDetail.trim(), ...(selectedKind === 'website' ? { url: websiteUrl.trim() } : {}) }
-            onChange([...paths, { status: 'draft', descriptor }])
+            onChange([...paths, { localDraftKey: createPrefixedRandomId('access-path-draft:'), status: 'draft', descriptor }])
             setDraftDetail('')
             setEndpoint(emptyOwnerEndpointDraft)
             setWebsiteUrl('')
@@ -675,7 +694,7 @@ type OwnerEndpointDraft = Readonly<{
 /** The one select value that means "the owner has not chosen". */
 const unsetOptionValue = 'none'
 
-/** AE supply is Australian. The owner types dollars; the record keeps minor units. */
+/** AE supply is Australian. The owner types dollars; the record keeps exact cents. */
 const ownerOfferingPriceCurrency = 'AUD'
 
 const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
@@ -684,43 +703,39 @@ const emptyOwnerEndpointDraft: OwnerEndpointDraft = { name: '', url: '', method:
 const ownerEndpointMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 const ownerInterfaceFormats = ['OpenAPI', 'JSON Schema', 'MCP', 'Other'] as const
 
-/** Dollars exactly as typed, or nothing when that is not a plain amount. */
-function dollarsToMinor(entered: string): number | undefined {
-  const trimmed = entered.trim()
-  if (!/^\d+(?:\.\d{1,2})?$/u.test(trimmed)) return undefined
-  return Math.round(Number(trimmed) * 100)
-}
-
-function minorToDollars(amountMinor: number | undefined): string {
-  if (amountMinor === undefined) return ''
-  const major = amountMinor / 100
-  return Number.isInteger(major) ? String(major) : major.toFixed(2)
-}
-
 function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPriceDraft {
   if (price === undefined) return emptyOwnerOfferingPriceDraft
+  const amount = price.kind === 'range' ? price.minimum : price.kind === 'quote_only' ? undefined : price.amount
+  const maximumAmount = price.kind === 'range' ? price.maximum : undefined
   return {
     kind: price.kind,
-    amount: minorToDollars(price.amountMinor),
-    maximumAmount: minorToDollars(price.maximumAmountMinor),
+    amount: amount === undefined ? '' : formatExactAmount(amount) ?? '',
+    maximumAmount: maximumAmount === undefined ? '' : formatExactAmount(maximumAmount) ?? '',
     unit: price.unit ?? '',
     taxTreatment: price.taxTreatment,
   }
 }
 
-/** Dollars in, minor units out, absent until the owner chooses a price type. */
+/** Dollars in, exact cents out, absent until the owner chooses a price type. */
 function offeringPriceInputFromDraft(draft: OwnerOfferingPriceDraft): OfferingPriceInput | undefined {
   if (draft.kind === '') return undefined
-  const amountMinor = dollarsToMinor(draft.amount)
-  const maximumAmountMinor = dollarsToMinor(draft.maximumAmount)
-  return {
+  const shared = {
     kind: draft.kind,
-    currency: ownerOfferingPriceCurrency,
     taxTreatment: draft.taxTreatment,
-    ...(amountMinor === undefined ? {} : { amountMinor }),
-    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
     ...(draft.unit === '' ? {} : { unit: draft.unit }),
   }
+  if (draft.kind === 'quote_only') return { ...shared, currency: ownerOfferingPriceCurrency }
+  if (draft.kind === 'range') {
+    const minimum = parseDecimalExactAmount(ownerOfferingPriceCurrency, draft.amount, 2)
+    const maximum = parseDecimalExactAmount(ownerOfferingPriceCurrency, draft.maximumAmount, 2)
+    return {
+      ...shared,
+      ...(minimum === undefined ? {} : { minimum }),
+      ...(maximum === undefined ? {} : { maximum }),
+    }
+  }
+  const amount = parseDecimalExactAmount(ownerOfferingPriceCurrency, draft.amount, 2)
+  return { ...shared, ...(amount === undefined ? {} : { amount }) }
 }
 
 /**

@@ -1,52 +1,63 @@
 import { describe, expect, it } from 'vitest'
 
 import { reserveRouteStepSpend } from '@/modules/customer-request/route-mandate-admission'
+import type { ExactAmount } from '@/modules/money/public'
 
 describe('RouteMandate step admission', () => {
   it('permits the exact cumulative ceiling and refuses one minor unit beyond it', () => {
     expect(reserveRouteStepSpend({
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       priorReservations: [
-        { currency: 'AUD', amountMinor: 250 },
-        { currency: 'AUD', amountMinor: 350 },
+        amount('250'),
+        amount('350'),
       ],
-      requestedReservation: { currency: 'AUD', amountMinor: 400 },
+      requestedReservation: amount('400'),
     })).toEqual({
       kind: 'reserved',
-      cumulativeReservedSpend: { currency: 'AUD', amountMinor: 1_000 },
+      cumulativeReservedSpend: amount('1000'),
     })
 
     expect(reserveRouteStepSpend({
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       priorReservations: [
-        { currency: 'AUD', amountMinor: 250 },
-        { currency: 'AUD', amountMinor: 350 },
+        amount('250'),
+        amount('350'),
       ],
-      requestedReservation: { currency: 'AUD', amountMinor: 401 },
+      requestedReservation: amount('401'),
     })).toEqual({ kind: 'refused', reason: 'spend_limit_exceeded' })
   })
 
-  it('fails closed on mixed currencies, negative values and unsafe integer overflow', () => {
+  it('fails closed on mixed currencies, negative values and malformed exact units', () => {
     for (const input of [
       {
-        maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
-        priorReservations: [{ currency: 'USD', amountMinor: 100 }],
-        requestedReservation: { currency: 'AUD', amountMinor: 100 },
+        maximumTotalSpend: amount('1000'),
+        priorReservations: [amount('100', 'USD')],
+        requestedReservation: amount('100'),
       },
       {
-        maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
-        priorReservations: [{ currency: 'AUD', amountMinor: -1 }],
-        requestedReservation: { currency: 'AUD', amountMinor: 100 },
+        maximumTotalSpend: amount('1000'),
+        priorReservations: [amount('-1')],
+        requestedReservation: amount('100'),
       },
       {
-        maximumTotalSpend: { currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },
-        priorReservations: [{ currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER }],
-        requestedReservation: { currency: 'AUD', amountMinor: 1 },
+        maximumTotalSpend: amount('1000'),
+        priorReservations: [amount('9007199254740991.5')],
+        requestedReservation: amount('100'),
       },
     ]) {
       expect(reserveRouteStepSpend(input)).toEqual({
         kind: 'refused', reason: 'spend_reservation_invalid',
       })
     }
+
+    expect(reserveRouteStepSpend({
+      maximumTotalSpend: amount('9007199254740991'),
+      priorReservations: [amount('9007199254740991')],
+      requestedReservation: amount('1'),
+    })).toEqual({ kind: 'refused', reason: 'spend_limit_exceeded' })
   })
 })
+
+function amount(units: string, currency = 'AUD'): ExactAmount {
+  return { currency, units, exponent: 2 }
+}

@@ -128,6 +128,7 @@ export class HarnessRunLoop {
   private readonly onEvent: HarnessRunLoopEventSink | undefined
   private readonly shouldThrowOnError: boolean
   private readonly runtimeEvents: HarnessRuntimeEvent[] = []
+  private nextModelSeq = 0
 
   private startedAt: number | undefined
   private endedAt: number | undefined
@@ -446,6 +447,12 @@ export class HarnessRunLoop {
     this.emit(event)
   }
 
+  recordModelRequest(record: HarnessModelRequestRecord): void {
+    const seq = this.nextModelSeq
+    this.nextModelSeq += 1
+    this.collector.recordModelRequest({ ...record, seq })
+  }
+
   snapshot(status?: HarnessRunStatus): HarnessRunReport {
     const derivedReport = this.collector.snapshot({
       runId: this.runId,
@@ -595,9 +602,11 @@ export class HarnessRunLoop {
   }
 
   private emit(event: HarnessRuntimeEvent): void {
+    if (event.type === 'model.completed' || event.type === 'model.failed') {
+      this.nextModelSeq = Math.max(this.nextModelSeq, (event.seq ?? this.nextModelSeq) + 1)
+    }
     this.runtimeEvents.push(event)
     this.collector.recordRuntimeEvent(event)
-
     try {
       this.onEvent?.(event)
     } catch {

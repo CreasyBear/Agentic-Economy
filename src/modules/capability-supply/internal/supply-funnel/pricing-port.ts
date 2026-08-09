@@ -4,17 +4,17 @@ import {
   pricingConfigDigest,
   pricingConfigSchema,
   resolveInvocationPrice,
+  type ExactAmount,
   type PricingConfig,
   type PricingResolution,
 } from '@/modules/money/public'
-
 export type SupplyPricingRefusal = 'price_unavailable' | 'pricing_config_invalid' | 'currency_mismatch'
 
 export type PricingPreview = Readonly<{
   resolution: PricingResolution
-  grossAmountMinor: number
-  feeAmountMinor: number
-  providerNetAmountMinor: number
+  grossAmount: ExactAmount
+  feeAmount: ExactAmount
+  providerNetAmount: ExactAmount
   currency: string
   rakeBps: number
 }>
@@ -28,7 +28,9 @@ type PricingStepResult = Readonly<{ kind: 'ready'; config: PricingConfig; previe
 
 export const DEFAULT_RAKE_BPS = 1000
 export const defaultSupplyPricingConfig: PricingConfig = {
-  version: 'pricing:v1', unit: 'call', currency: 'AUD', paidAmountMinor: 0,
+  version: 'pricing:v2',
+  unit: 'call',
+  paidAmount: { currency: 'AUD', units: '0', exponent: 2 },
 }
 
 export const realPricingConfigPort: PricingConfigPort = {
@@ -40,14 +42,14 @@ export const realPricingConfigPort: PricingConfigPort = {
     const priceDigest = input.priceDigest ?? pricingConfigDigest(input.config)
     const resolution = resolveInvocationPrice({ config: input.config, freeCallsUsed: input.freeCallsUsed, priceDigest })
     if (resolution.kind === 'refused') return { kind: 'refused', reason: resolution.code }
-    const grossAmountMinor = resolution.amountMinor
-    const split = computeRakeSplit(grossAmountMinor, { rakeBps: DEFAULT_RAKE_BPS })
-    if (!('rakeMinor' in split)) return { kind: 'refused', reason: 'price_unavailable' }
+    const grossAmount = resolution.amount
+    const split = computeRakeSplit(grossAmount, { rakeBps: DEFAULT_RAKE_BPS })
+    if ('kind' in split) return { kind: 'refused', reason: 'price_unavailable' }
     return {
       kind: 'ready', config: input.config,
       preview: {
-        resolution, grossAmountMinor, feeAmountMinor: split.rakeMinor,
-        providerNetAmountMinor: split.providerNetMinor, currency: resolution.currency, rakeBps: split.rakeBps,
+        resolution, grossAmount, feeAmount: split.rake,
+        providerNetAmount: split.providerNet, currency: grossAmount.currency, rakeBps: split.rakeBps,
       },
     }
   },
@@ -57,11 +59,11 @@ export const realPricingConfigPort: PricingConfigPort = {
 export const stubPricingConfigPort: PricingConfigPort = {
   normalize(input) {
     const parsed = pricingConfigSchema.safeParse(input)
-    if (!parsed.success || parsed.data.paidAmountMinor !== 0) return { kind: 'refused', reason: parsed.success ? 'price_unavailable' : 'pricing_config_invalid' }
+    if (!parsed.success || parsed.data.paidAmount.units !== '0') return { kind: 'refused', reason: parsed.success ? 'price_unavailable' : 'pricing_config_invalid' }
     return { kind: 'valid', config: parsed.data }
   },
   resolve(input) {
-    if (input.config.paidAmountMinor !== 0) return { kind: 'refused', reason: 'price_unavailable' }
+    if (input.config.paidAmount.units !== '0') return { kind: 'refused', reason: 'price_unavailable' }
     return realPricingConfigPort.resolve(input)
   },
 }

@@ -23,7 +23,8 @@ describe('catalogue support derivation', () => {
       })
       const bindingId = await ctx.db.insert('capabilityTransportBindings', {
         bindingId: 'binding:1', offeringId: 'co:1', networkId: 'ae:public', capabilityId: 'test.lookup', version: 1,
-        contractDigest: 'contract:1', endpointUrl: 'https://example.test', credentialRef: 'credential:1',
+        contractDigest: 'contract:1', endpointUrl: 'https://example.test',
+        authority: { kind: 'provider_connection', connectionRef: 'connection:test', providerRef: 'provider:test' },
         continuation: { kind: 'single_response', evidenceRefs: [] }, cancellation: { kind: 'unsupported', evidenceRefs: [] },
         adapterId: 'test', configJson: '{}', configDigest: 'config:1', registrationEvidenceRefs: [], registrationHash: 'registration:1',
         admission: 'admitted', conformance: 'conformant', admissionEvidenceRefs: [], conformanceEvidenceRefs: [],

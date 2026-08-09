@@ -41,7 +41,7 @@ describe('session sidebar after the first turn', () => {
         const turnResponse = await handleAnswerTurnRequest(
           new Request('https://ae.example/api/answer/turn', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-AE-Turn-Key': 'sidebar:emergency-plumber-parramatta' },
             body: JSON.stringify({ query: 'emergency plumber parramatta' }),
           }),
         )
@@ -65,7 +65,7 @@ describe('session sidebar after the first turn', () => {
         }
         expect(body.threads.length).toBeGreaterThanOrEqual(1)
         expect(body.threads[0]?.title).toBe('emergency plumber parramatta')
-        expect(server.requests.length).toBeLessThanOrEqual(2)
+        expect(server.requests.length).toBeLessThanOrEqual(3)
       } finally {
         restoreOpenRouter()
         await server.close()

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { planAnswerTurn } from '@/modules/answer-thread/internal/answer-response-planner'
+import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
+
 
 describe('answer response planner', () => {
   it('asks for the missing service before searching locator-only broad queries', () => {
@@ -45,7 +47,7 @@ describe('answer response planner', () => {
       mode: 'clarify',
       reason: 'missing_service',
       snapshot: {
-        oneLine: 'What do you need help with?',
+        oneLine: 'What are you trying to get done?',
       },
     })
     if (plan.mode !== 'clarify') throw new Error('expected clarify plan')
@@ -69,5 +71,56 @@ describe('answer response planner', () => {
     })
     if (plan.mode !== 'clarify') throw new Error('expected clarify plan')
     expect(plan.snapshot.nextStep).not.toContain('paramatta')
+  })
+
+  it('requires confirmation before using the configured default context', () => {
+    const plan = planAnswerTurn({
+      query: 'Emergency plumber',
+      priorTurnsCount: 0,
+      searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+    })
+
+    expect(plan).toMatchObject({
+      mode: 'clarify',
+      reason: 'missing_place',
+      toolPolicy: { kind: 'none' },
+      snapshot: {
+        oneLine: 'Should I look in Perth, WA?',
+        summary: expect.stringContaining('configured context'),
+        nextStep: expect.stringContaining('Confirm Perth, WA'),
+      },
+    })
+  })
+
+  it('keeps an already-confirmed context usable for a new local ask', () => {
+    const plan = planAnswerTurn({
+      query: 'Emergency plumber',
+      priorTurnsCount: 0,
+      searchContext: {
+        ...DEFAULT_AE_SEARCH_CONTEXT,
+        location: {
+          label: 'Perth, WA',
+          suburb: 'Perth',
+          stateTerritory: 'WA',
+          countryCode: 'AU',
+          source: 'user_selected',
+        },
+      },
+    })
+
+    expect(plan).toMatchObject({
+      mode: 'answer',
+      toolPolicy: { kind: 'registry.search', maxCalls: 1 },
+    })
+  })
+
+  it('keeps an explicit complex place usable without context confirmation', () => {
+    const plan = planAnswerTurn({
+      query: 'Urgent plumber in Parramatta tonight under $200',
+      priorTurnsCount: 0,
+      searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+    })
+
+    expect(plan.mode).toBe('answer')
   })
 })

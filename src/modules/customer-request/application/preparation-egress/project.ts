@@ -76,9 +76,8 @@ export function projectPreparedAction(
       offeringLabel: action.offering.label,
       summary: action.offering.summary,
       price: {
-        currency: action.price.currency,
-        minimumAmountMinor: action.price.minimumAmountMinor,
-        maximumAmountMinor: action.price.maximumAmountMinor,
+        minimum: action.price.minimum,
+        maximum: action.price.maximum,
       },
       materialTerms: action.materialTerms.map(({ label, value }) => ({ label, value })),
       cancellation: { kind: action.cancellation.kind === 'adapter_managed' ? 'available' : 'unsupported' },
@@ -103,9 +102,8 @@ export function projectPreparedAction(
       alternatives: action.alternatives.map((alternative) => ({
         businessName: alternative.business.name,
         price: {
-          currency: alternative.price.currency,
-          minimumAmountMinor: alternative.price.minimumAmountMinor,
-          maximumAmountMinor: alternative.price.maximumAmountMinor,
+          minimum: alternative.price.minimum,
+          maximum: alternative.price.maximum,
         },
         validUntil: alternative.expiresAt,
       })),

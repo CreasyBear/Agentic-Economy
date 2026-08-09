@@ -1,11 +1,12 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
-import type { ActionInvocationView } from './contracts'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   replaceAttempt,
   type DevelopmentReleaseSignal,
   type DevelopmentTimeoutSignal,
 } from './attempts'
 import { classifyActionResult } from './preparation'
+import type { ActionInvocationView } from './contracts'
 
 type AttemptTransition<Result extends ActionResult> = Pick<
   ActionInvocationView<Result>,
@@ -95,7 +96,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
       ? {
           ...attempt,
           release: { state: 'not_released' as const },
-          outcome: { state: 'failed' as const, retry: 'safe_before_release' as const, message },
+          outcome: { state: 'failed' as const, retry: 'safe_before_release' as const, errorDigest: canonicalDigest(message) },
         }
       : {
           ...attempt,
@@ -103,7 +104,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
           outcome: {
             state: 'uncertain' as const,
             retry: 'reconcile_before_retry' as const,
-            message,
+            errorDigest: canonicalDigest(message),
             reconciliationRequiredAt: input.now(),
           },
         }

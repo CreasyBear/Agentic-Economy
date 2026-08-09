@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/internal/binding'
 import type {
   CapabilityGraphPorts,
   GraphPublicationRow,
@@ -13,11 +16,18 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import {
+  createProviderConnection,
+  type CreateProviderConnectionCommand,
+  type ProviderConnection,
+} from '@/modules/capability-supply/provider-connection'
 import {
   qualifySuppliedCandidate,
   type SuppliedCandidateRef,
@@ -35,6 +45,35 @@ const candidate: SuppliedCandidateRef = {
   bindingId: 'binding:development-reference',
   contractRef: contract.ref,
 }
+const operationRef = createPublicOperationRef({
+  operationId: capabilityOperationId(contract.capabilityId),
+  publicationRef: candidate.publicationRef,
+  publicationRevision: candidate.revision,
+  contractRef: contract.ref,
+})
+const providerConnectionCommand: CreateProviderConnectionCommand = {
+  commandId: 'command:create:development-reference',
+  connectionRef: 'connection:development',
+  businessId: candidate.businessId,
+  providerRef: 'provider:development',
+  providerAccountRef: 'account:development',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:DEVELOPMENT_REFERENCE_SECRET',
+  requestedScopes: ['reference:read'],
+  grantedScopes: ['reference:read'],
+  requestedResources: ['account:development'],
+  grantedResources: ['account:development'],
+  evidenceRefs: ['fixture:connection'],
+}
+function developmentProviderConnection(): ProviderConnection {
+  const result = createProviderConnection(providerConnectionCommand, now)
+  if (result.kind !== 'applied') throw new Error(`provider connection fixture failed: ${result.kind}`)
+  return result.connection
+}
+const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
+  developmentProviderConnection(),
+  operationRef,
+)
 const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: candidate.offeringId,
   businessId: candidate.businessId,
@@ -63,7 +102,7 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   networkId: 'ae:public',
   contractRef: contract.ref,
   endpointUrl: 'https://development.invalid/reference',
-  credentialRef: 'fixture:credential-access',
+  authority: { kind: 'provider_connection', connectionRef: 'connection:development', providerRef: 'provider:development' },
   continuation: { kind: 'single_response', evidenceRefs: ['fixture:continuation'] },
   cancellation: { kind: 'unsupported', evidenceRefs: ['fixture:cancellation'] },
   adapter: { adapterId: 'http-json:v1', config: null },
@@ -107,7 +146,8 @@ function binding(overrides: Partial<CapabilityBindingRow> = {}): CapabilityBindi
     networkId: 'ae:public',
     ...contract.ref,
     endpointUrl: bindingRegistration.endpointUrl,
-    credentialRef: bindingRegistration.credentialRef,
+    authority: bindingRegistration.authority,
+    connectionAuthority,
     continuation: bindingRegistration.continuation,
     cancellation: bindingRegistration.cancellation,
     adapterId: bindingRegistration.adapter.adapterId,
@@ -136,7 +176,9 @@ function publication(overrides: Partial<GraphPublicationRow> = {}): GraphPublica
   return {
     id: 'fixture:publication-row',
     ...candidate,
+    operationRef,
     ...contract.ref,
+    connectionAuthority,
     sourceKind: 'openapi_http',
     sourceDigest: canonicalDigest({ fixture: 'published capability' }),
     disposition: 'current',
@@ -164,6 +206,7 @@ function ports(overrides: Partial<CapabilityGraphPorts> = {}): CapabilityGraphPo
       suppressed: false,
       currentlyPublished: true,
     }),
+    loadProviderConnection: async () => developmentProviderConnection(),
     getActiveExactCapabilityContract: async () => ({
       kind: 'found',
       ref: contract.ref,

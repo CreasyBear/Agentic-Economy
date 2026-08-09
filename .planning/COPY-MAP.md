@@ -1,7 +1,42 @@
 # Copy Map — where copy lives and how it is managed
 
-**Status:** active register (2026-08-01). Companion to `.planning/BRAND.md` (voice authority).
+**Status:** active register (2026-08-08). Companion to `.planning/BRAND.md` (voice authority).
 Inventory sources: `history://HumanCopyInventory`, `history://MachineCopyInventory` (full tables).
+
+## Category rebaseline — 2026-08-08
+
+The current category and product language is authoritative in
+[`PROJECT.md`](PROJECT.md), [`VISION-conceptual-map.md`](VISION-conceptual-map.md),
+[`wayfinder/MAP.md`](wayfinder/MAP.md), and the
+[Agent Services Market category thesis](research/2026-08-08-agent-services-market-category-thesis.md):
+Agentic Economy is the market and controlled transaction layer where authorized
+agents discover, buy and invoke admitted third-party Market Operations, and
+suppliers are paid after contract-valid delivery. The Principal owns authority
+and budget; the agent is the delegated shopper. Suppliers host implementations.
+
+Category-aligned runtime strings belong in `src/content/brand-copy.ts` as the
+single managed source. That source was reconciled on 2026-08-08; the remaining
+legacy values listed below are residue, not category authority. No component
+may introduce local-trade, Australian-SMB, BAS, or default-business wording as
+the product category, ICP, wedge, or default frame.
+
+## Legacy product residue — remove or label subordinate demo
+
+These are current source locations, names, and heuristics that still encode the
+superseded local-business product frame. Remove them in the owning surface, or
+explicitly label them as subordinate person-facing/demo fixtures; do not let
+them teach the market category.
+
+| Residue | Current source | Required treatment |
+| --- | --- | --- |
+| Brand-core local-business promise | `src/content/brand-copy.ts`: `CORE_SENTENCE`, `HOME`, `AGENT_DOOR`, `AGENT_PAGE`, `BUSINESS_DOOR`, `DIALOG_WELCOME` | **Resolved 2026-08-08:** the managed strings now use the canonical category sentence, Principal/agent ownership, supplier-hosted Market Operations, and category-aligned door copy. |
+| Local-service prompt copy | `src/components/ae/chat/AeAnswerPromptInput.tsx`: `Find local service businesses`, `Local service need`, and `Cited answers from published business details` | Remove or explicitly label as subordinate demo copy; it must not be the market entry language. |
+| Local-service discovery heuristics | `src/modules/answer-thread/internal/answer-response-planner.ts`: `hasAnswerServiceSignal`, `isBroadLocalBrowseQuery`, `isLocatorOnlyBrowseQuery`, `extractAnswerRequestedLocation`/Parramatta normalization, `missing_place` clarification | Remove or isolate behind the subordinate demand-demo boundary; these heuristics are not canonical Market Operation eligibility/discovery. |
+| Australian trade/business onboarding | `src/components/ae/claim/ClaimFormSections.tsx`: `Trade or service type`, suburb/state, Australian phone, service-area and customer-job descriptions | Remove or label as a subordinate Australian demo; do not imply Australian SMBs are the ICP or supply category. |
+| Australian business offering defaults | `src/components/ae/offerings/AeOwnerOfferings.tsx`: business/service/customer copy, Australian-dollar price prose, `ownerOfferingPriceCurrency = 'AUD'`, and `AE supply is Australian` | Remove or label as subordinate demo; supplier-hosted Operations and declared contract pricing are canonical. |
+| Default business/listing presentation | `src/components/ae/artifacts/AeGenerativeAnswer.tsx`, `src/components/ae/chat/AeSuggestionChips.tsx`, `src/components/ae/chat/composer-copy.ts`, `src/components/ae/chat/session-context.ts`, `src/components/ae/chat/session-journey.ts`, `src/components/ae/chat/turn-context.ts` | Treat business/listing/service-area defaults as subordinate application furniture; replace category-facing wording with Market Operation/Supplier language when each surface is next touched. |
+| Australian local demo supply | `src/lib/dev/local-e2e-business-fixtures.ts` (`Demo Plumbing`, Joondalup/Fremantle/Adelaide fixtures and local-area summaries) | Keep only as labelled development/demo fixtures; never cite as current supply, ICP, category, or demand proof. |
+
 
 ## Change protocol
 

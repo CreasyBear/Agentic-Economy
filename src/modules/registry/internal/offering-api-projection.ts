@@ -1,8 +1,11 @@
+import { validateOfferingAccessPath } from '@/modules/catalog/public'
 import type {
   BusinessSupplyProjection,
+  OfferingAccessPathValidation,
   OfferingPrice,
   PublicAccessPath,
 } from '@/modules/catalog/public'
+
 import { normalizeTrustTier } from '@/modules/business/public'
 
 // Stays v2 across the `price` addition: an optional field a consumer can ignore
@@ -12,6 +15,7 @@ export const PublicBusinessCatalogApiSchemaVersion = 'public-business-catalog-ap
 export type PublicOfferingAccessPathDto =
   | Readonly<{
       accessPathRef: string
+      offeringRevision: number
       kind: 'human_request'
       channel: 'phone' | 'website' | 'ae_inquiry'
       disclosure: string
@@ -19,6 +23,7 @@ export type PublicOfferingAccessPathDto =
     }>
   | Readonly<{
       accessPathRef: string
+      offeringRevision: number
       kind: 'external_operation'
       name: string
       summary: string
@@ -122,30 +127,32 @@ export function projectBusinessSupplyToPublicApi(
    * adapter below already applies this rule; both projections owe the same one.
    */
   const dialable = (projection.business.publishedPhone ?? '').trim().length > 0
-  const offerings = projection.offerings.map((item): PublicOfferingDto => ({
-    offeringRef: item.offering.offeringRef,
-    revision: item.offering.revision,
-    name: item.offering.name,
-    category: item.offering.category,
-    summary: item.offering.summary,
-    ...(item.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.offering.serviceAreaSummary }),
-    ...spreadAvailability(item.offering.availabilitySummary),
-    ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
-    ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
-    accessPaths: item.accessPaths
-      .reduce<PublicOfferingAccessPathDto[]>((acc, path) => {
+  const offerings = projection.offerings.map((item): PublicOfferingDto => {
+    const accessPaths = sanitizeAccessPaths(item.accessPaths)
+    return {
+      offeringRef: item.offering.offeringRef,
+      revision: item.offering.revision,
+      name: item.offering.name,
+      category: item.offering.category,
+      summary: item.offering.summary,
+      ...(item.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.offering.serviceAreaSummary }),
+      ...spreadAvailability(item.offering.availabilitySummary),
+      ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
+      ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
+      accessPaths: accessPaths.reduce<PublicOfferingAccessPathDto[]>((acc, path) => {
         if (dialable || path.descriptor.kind !== 'human_request' || path.descriptor.channel !== 'phone') acc.push(projectAccessPath(path))
         return acc
       }, []),
-    support: {
-      integrated: item.support.integrated,
-      aeSupportedAction: item.support.routeable
-        && item.support.validUntil !== undefined
-        && item.support.validUntil > now,
-      ...(item.support.observedAt === undefined ? {} : { observedAt: item.support.observedAt }),
-      ...(item.support.validUntil === undefined ? {} : { validUntil: item.support.validUntil }),
-    },
-  }))
+      support: {
+        integrated: item.support.integrated,
+        aeSupportedAction: item.support.routeable
+          && item.support.validUntil !== undefined
+          && item.support.validUntil > now,
+        ...(item.support.observedAt === undefined ? {} : { observedAt: item.support.observedAt }),
+        ...(item.support.validUntil === undefined ? {} : { validUntil: item.support.validUntil }),
+      },
+    }
+  })
   const paths = offerings.flatMap((offering) => offering.accessPaths)
 
   return {
@@ -218,6 +225,67 @@ function normalizePhotos(value: unknown): readonly Readonly<{ url: string; alt: 
     return typeof url === 'string' && typeof alt === 'string' ? [{ url, alt }] : []
   })
 }
+function sanitizeAccessPaths(value: unknown): PublicAccessPath[] {
+  if (!Array.isArray(value)) return []
+  const byRef = new Map<string, { path: PublicAccessPath; fingerprint: string } | null>()
+
+  for (const valuePath of value) {
+    if (typeof valuePath !== 'object' || valuePath === null) continue
+    const accessPathRef = 'accessPathRef' in valuePath ? valuePath.accessPathRef : undefined
+    const offeringRevision = 'offeringRevision' in valuePath ? valuePath.offeringRevision : undefined
+    const offeringSourceHash = 'offeringSourceHash' in valuePath ? valuePath.offeringSourceHash : undefined
+    const sourceHash = 'sourceHash' in valuePath ? valuePath.sourceHash : undefined
+    const descriptor = 'descriptor' in valuePath ? valuePath.descriptor : undefined
+    if (
+      typeof offeringRevision !== 'number'
+      || !Number.isSafeInteger(offeringRevision)
+      || offeringRevision < 0
+      || typeof offeringSourceHash !== 'string'
+      || offeringSourceHash.trim().length === 0
+      || typeof sourceHash !== 'string'
+      || sourceHash.trim().length === 0
+      || typeof descriptor !== 'object'
+      || !('kind' in descriptor)
+      || descriptor.kind !== 'human_request' && descriptor.kind !== 'external_operation'
+    ) continue
+
+    const descriptorInput = descriptor as PublicAccessPath['descriptor']
+    if (
+      descriptorInput.kind === 'external_operation'
+      && descriptorInput.provenance !== 'business_declared'
+      && descriptorInput.provenance !== 'publicly_observed'
+    ) continue
+    let validation: OfferingAccessPathValidation
+    try {
+      validation = validateOfferingAccessPath(descriptorInput)
+    } catch {
+      continue
+    }
+    if (validation.kind !== 'valid') continue
+
+    const path: PublicAccessPath = {
+      accessPathRef: accessPathRef.trim() as PublicAccessPath['accessPathRef'],
+      offeringRevision,
+      offeringSourceHash: offeringSourceHash.trim() as PublicAccessPath['offeringSourceHash'],
+      sourceHash: sourceHash.trim() as PublicAccessPath['sourceHash'],
+      descriptor: validation.descriptor,
+    }
+    const fingerprint = JSON.stringify([
+      path.accessPathRef,
+      path.offeringRevision,
+      path.offeringSourceHash,
+      path.sourceHash,
+      path.descriptor,
+    ])
+    const existing = byRef.get(path.accessPathRef)
+    if (existing === undefined) byRef.set(path.accessPathRef, { path, fingerprint })
+    else if (existing !== null && existing.fingerprint !== fingerprint) byRef.set(path.accessPathRef, null)
+  }
+
+  return [...byRef.values()].flatMap((entry) => entry === null ? [] : [entry.path])
+}
+
+
 
 
 
@@ -225,6 +293,7 @@ function projectAccessPath(path: PublicAccessPath): PublicOfferingAccessPathDto 
   return path.descriptor.kind === 'human_request'
     ? {
         accessPathRef: path.accessPathRef,
+        offeringRevision: path.offeringRevision,
         kind: 'human_request',
         channel: path.descriptor.channel,
         disclosure: path.descriptor.disclosure,
@@ -232,6 +301,7 @@ function projectAccessPath(path: PublicAccessPath): PublicOfferingAccessPathDto 
       }
     : {
         accessPathRef: path.accessPathRef,
+        offeringRevision: path.offeringRevision,
         kind: 'external_operation',
         name: path.descriptor.name,
         summary: path.descriptor.summary,

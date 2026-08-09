@@ -1,4 +1,4 @@
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import { roundFiniteNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import {
   HarnessToolStatusValues,
@@ -225,11 +225,11 @@ export class HarnessRunCollector {
       this.gateRecords,
     )
     const toolsAvailable = stableSort([...this.availableTools])
-    const toolsInvoked = stableSort(stableUnique(this.toolRecords.map((record) => record.toolId)))
+    const toolsInvoked = stableSort(uniq(this.toolRecords.map((record) => record.toolId)))
     const invokedSet = new Set(toolsInvoked)
-    const phases = stableSort(stableUnique(this.eventRecords.map((event) => event.phase)))
-    const modelsUsed = stableSort(stableUnique(this.modelRecords.flatMap((record) => record.model === undefined ? [] : [record.model])))
-    const providersUsed = stableSort(stableUnique(this.modelRecords.flatMap((record) => record.provider === undefined ? [] : [record.provider])))
+    const phases = stableSort(uniq(this.eventRecords.map((event) => event.phase)))
+    const modelsUsed = stableSort(uniq(this.modelRecords.flatMap((record) => record.model === undefined ? [] : [record.model])))
+    const providersUsed = stableSort(uniq(this.modelRecords.flatMap((record) => record.provider === undefined ? [] : [record.provider])))
     const recordedStatuses = [
       ...this.toolRecords.map((record) => record.status),
       ...this.eventRecords.map((event) => event.status),
@@ -454,7 +454,7 @@ function summarizeErrors(
   models: readonly HarnessModelRequestRecord[],
   gates: readonly NormalizedGateRecord[],
 ): HarnessRunSummary['errors'] {
-  const codes = stableSort(stableUnique([
+  const codes = stableSort(uniq([
     ...tools.flatMap((record) => record.errorCode === undefined ? [] : [record.errorCode]),
     ...events.flatMap((event) => event.errorCode === undefined ? [] : [event.errorCode]),
     ...models.flatMap((record) => record.errorCode === undefined ? [] : [record.errorCode]),

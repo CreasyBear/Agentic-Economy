@@ -1,16 +1,18 @@
 import { jsonValueSchema, resolvePointedSchema, type CapabilityContract, type JsonValue } from '@/modules/capability-contract/public'
+import { addExactAmounts, compareExactAmounts, exactAmountSchema, formatExactAmount, rescaleExactAmount, type ExactAmount } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { createPublicOperationRef, isPublicOperationRef, type PublicOperationRef, type RegisteredOperationMapping, type RegisteredOperationMappingRef } from './public'
+import type { X402CatalogPayment } from './internal/transport-adapters'
 
 export const PublicOperationRegistrySchemaVersion = 'registry-operations:v1' as const
 export type PublicOperationRegistrySchemaVersion = typeof PublicOperationRegistrySchemaVersion
 export type PublicOperationBusinessRef = Readonly<{ businessId: string; slug: string; name: string }>
 export type PublicOperationOfferingRef = Readonly<{ offeringRef: string; revision: number; label: string; summary: string }>
 export type PublicOperationPrice =
-  | Readonly<{ kind: 'fixed'; currency: string; amountMinor: number }>
-  | Readonly<{ kind: 'range'; currency: string; minimumAmountMinor: number; maximumAmountMinor: number }>
+  | Readonly<{ kind: 'fixed'; amount: ExactAmount }>
+  | Readonly<{ kind: 'range'; minimum: ExactAmount; maximum: ExactAmount }>
   | Readonly<{ kind: 'on_request' }>
 export type PublicCommercialTerms = Readonly<{
   price: PublicOperationPrice
@@ -27,6 +29,74 @@ export type PublicEvidencePolicy = readonly Readonly<{ evidenceId: string; outpu
 export type PublicCancellationPolicy = Readonly<{ kind: 'unsupported' | 'adapter_managed' }>
 export type PublicRecoveryPolicy = Readonly<{ idempotency: 'not_applicable' | 'required'; recovery: 'retry_safe' | 'reconcile_required' }>
 export type PublicCapabilityUnavailableReason = 'setup_required' | 'temporarily_unavailable' | 'readiness_expired' | 'publisher_withdrew' | 'under_review' | 'updated_terms_require_review' | 'not_supported_by_ae'
+/**
+ * Flat, self-describing catalog parameter (agentic.market `parameters[]`),
+ * ADDITIVE to the execution contract's `inputJsonSchema`. `group` is a catalog
+ * inference: the input schema is the request body, so every derivable
+ * parameter is `body` unless its name matches a `:path` segment (not yet
+ * derivable). Never replaces `inputJsonSchema` — it is a shallow display aid.
+ */
+export type PublicOperationParameter = Readonly<{
+  group: 'body' | 'path' | 'query'
+  name: string
+  type: string
+  description?: string
+  example?: JsonValue
+  enumValues?: readonly string[]
+  default?: JsonValue
+  required: boolean
+}>
+
+/**
+ * Decimal-string catalog price (agentic.market `pricing{scheme}`), derived
+ * directly from the exact executable amount. `exact` = a fixed decimal amount;
+ * `upto` = a range with min/max. An `on_request` executable price has no
+ * derivable decimal amount, so `catalogPrice` stays absent.
+ */
+export type PublicOperationCatalogPrice = Readonly<{
+  scheme: 'exact' | 'upto'
+  amount?: string
+  minAmount?: string
+  maxAmount?: string
+  currency: string
+}>
+export type PublicOperationAuthentication =
+  | Readonly<{ kind: 'keyless' }>
+  | Readonly<{ kind: 'platform_credential'; scheme: 'api_key'; in: 'query' | 'header'; name: string }>
+  | Readonly<{ kind: 'platform_credential'; scheme: 'bearer' }>
+  | Readonly<{ kind: 'x402' }>
+  | Readonly<{ kind: 'unknown' }>
+
+export type PublicOperationReadiness = Readonly<{
+  observedAt?: number
+  validUntil?: number
+}>
+
+/**
+ * The W1 origin seam: each catalog access path has its own exact admitted
+ * operation entry. The lineage and transport match fields are intentionally
+ * public metadata (never credential refs or values); execution schemas remain
+ * behind operation detail.
+ */
+export type CatalogOfferingOperationMapEntry = Readonly<{
+  offeringRef: string
+  offeringRevision: number
+  offeringSourceHash: string
+  declaredAccessPathRef: string
+  accessPathSourceHash: string
+  endpointUrl: string
+  method: 'GET' | 'POST'
+  authorityMode: PublicOperationDescriptor['provenance']['publisher']
+  sourceKind: PublicOperationDescriptor['provenance']['sourceKind']
+  authentication: PublicOperationAuthentication
+  routeable: boolean
+  answerExecutable: boolean
+  readiness: PublicOperationReadiness
+  operationRef: PublicOperationRef
+  parameters?: readonly PublicOperationParameter[]
+  catalogPrice?: PublicOperationCatalogPrice
+  payment?: X402CatalogPayment
+}>
 export type PublicOperationAvailability = Readonly<{ posture: 'integrated' | 'routeable' | 'unavailable'; observedAt?: number; validUntil?: number; reason?: PublicCapabilityUnavailableReason }>
 export type PublicOperationNavigationRelation = Readonly<{
   relation: 'search' | 'detail' | 'compare' | 'inspect_plan' | 'authenticate' | 'create_customer_request' | 'review_route' | 'read_status' | 'reconcile' | 'cancel'
@@ -39,14 +109,17 @@ export type PublicOperationDescriptor = Readonly<{
     customerAnnotations: readonly Readonly<{ annotationId: string; document: 'input' | 'output'; pointer: string; label: string; role: CapabilityContract['customerAnnotations'][number]['role']; semanticIdentity?: string; inference?: 'allowed' | 'customer_required' }>[]
   }>
   business: PublicOperationBusinessRef; offering: PublicOperationOfferingRef; summary: string; commercial: PublicCommercialTerms; dataUse: PublicDataUsePolicy; effects: PublicEffectPolicy; evidence: PublicEvidencePolicy; cancellation: PublicCancellationPolicy; recovery: PublicRecoveryPolicy
-  provenance: Readonly<{ publisher: 'provider_owned' | 'ae_curated_external'; sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'x402' }>
+  provenance: Readonly<{ publisher: 'provider_owned' | 'ae_curated_external' | 'third_party_gateway' | 'observed_external'; sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402' }>
   availability: PublicOperationAvailability; navigation: readonly PublicOperationNavigationRelation[]
+  /** Additive catalog display aids derived from the contract/price; absent when not derivable. */
+  parameters?: readonly PublicOperationParameter[]
+  catalogPrice?: PublicOperationCatalogPrice
 }>
 export type CapabilityOperationSourceRecord = Readonly<{
   operationId: string; publicationRef: string; publicationRevision: number; networkId: string; contract: CapabilityContract; business: PublicOperationBusinessRef; offering: PublicOperationOfferingRef
   price: PublicOperationPrice; materialTerms: readonly Readonly<{ label: string; value: string }>[]
   commercialRelationship: Readonly<{ kind: 'none' | 'direct' | 'affiliate' | 'ownership'; summary: string }>
-  cancellation: PublicCancellationPolicy; provenance: Readonly<{ publisher: 'provider_owned' | 'ae_curated_external'; sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'x402' }>
+  cancellation: PublicCancellationPolicy; provenance: Readonly<{ publisher: 'provider_owned' | 'ae_curated_external' | 'third_party_gateway' | 'observed_external'; sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402' }>
   integrated: boolean; routeable: boolean; unavailableReason?: PublicCapabilityUnavailableReason; readiness: Readonly<{ observedAt?: number; validUntil?: number }>; searchTerms: readonly string[]; snapshotKey: string
 }>
 export type CapabilityOperationSourcePort = Readonly<{
@@ -54,8 +127,27 @@ export type CapabilityOperationSourcePort = Readonly<{
   loadCurrent: (operationRef: PublicOperationRef) => Promise<CapabilityOperationSourceRecord | null>
   resolveMapping?: (mappingRef: RegisteredOperationMappingRef, networkId?: string) => Promise<RegisteredOperationMapping | null>
 }>
+export type OperationSearchTextCandidate<T> = Readonly<{
+  value: T
+  operationRef: string
+  searchText: readonly string[]
+}>
+
+export function rankOperationSearchText<T>(
+  query: string,
+  candidates: readonly OperationSearchTextCandidate<T>[],
+): readonly T[] {
+  const tokens = searchTokens(query)
+  return candidates
+    .filter(({ searchText }) => tokens.length === 0 || tokens.some((token) =>
+      searchableText(searchText).some((term) => term === token || term.startsWith(token))))
+    .sort((left, right) =>
+      scoreSearchText(right.searchText, tokens) - scoreSearchText(left.searchText, tokens)
+      || left.operationRef.localeCompare(right.operationRef))
+    .map(({ value }) => value)
+}
 export type OperationSearchFilters = Readonly<{
-  networkId?: string; location?: string; effects?: readonly PublicEffectPolicy[number]['class'][]; dataUse?: readonly PublicDataUsePolicy[number]['classification'][]; availability?: readonly PublicOperationAvailability['posture'][]; currency?: string; maximumPriceMinor?: number
+  networkId?: string; location?: string; effects?: readonly PublicEffectPolicy[number]['class'][]; dataUse?: readonly PublicDataUsePolicy[number]['classification'][]; availability?: readonly PublicOperationAvailability['posture'][]; currency?: string; maximumPrice?: ExactAmount
 }>
 export type OperationSearchInput = Readonly<{ query: string; limit?: number; cursor?: string; filters?: OperationSearchFilters }>
 export type OperationSearchResult =
@@ -73,7 +165,7 @@ export type OperationComparisonValue =
   | PublicEffectPolicy
   | PublicDataUsePolicy
   | PublicOperationAvailability
-  | Readonly<{ publisher: 'provider_owned' | 'ae_curated_external'; sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'x402' }>
+  | Readonly<{ publisher: 'provider_owned' | 'ae_curated_external' | 'third_party_gateway' | 'observed_external'; sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402' }>
   | PublicRecoveryPolicy
 export type OperationComparisonFact = Readonly<{
   field: 'summary' | 'price' | 'effects' | 'dataUse' | 'availability' | 'provenance' | 'recovery'
@@ -85,7 +177,7 @@ export type OperationCompareResult =
   | Readonly<{ kind: 'unavailable'; schemaVersion: PublicOperationRegistrySchemaVersion; reason: 'query_invalid' | 'operation_not_found' | 'operation_unavailable'; navigation: readonly PublicOperationNavigationRelation[] }>
 export type InspectPlanInput = Readonly<{ operationRefs: readonly string[]; mappingRefs?: readonly string[]; expiresInMs?: number }>
 export type InspectPlanResult =
-  | Readonly<{ kind: 'ok'; schemaVersion: PublicOperationRegistrySchemaVersion; inspectPlanRef: string; operationRefs: readonly PublicOperationRef[]; mappingRefs: readonly RegisteredOperationMappingRef[]; summary: Readonly<{ maximumCost: Readonly<{ kind: 'known'; currency: string; amountMinor: number }> | Readonly<{ kind: 'requires_preparation' }>; dataUse: PublicDataUsePolicy; effects: PublicEffectPolicy; expiry: number }>; navigation: readonly PublicOperationNavigationRelation[] }>
+  | Readonly<{ kind: 'ok'; schemaVersion: PublicOperationRegistrySchemaVersion; inspectPlanRef: string; operationRefs: readonly PublicOperationRef[]; mappingRefs: readonly RegisteredOperationMappingRef[]; summary: Readonly<{ maximumCost: Readonly<{ kind: 'known'; amount: ExactAmount }> | Readonly<{ kind: 'requires_preparation' }>; dataUse: PublicDataUsePolicy; effects: PublicEffectPolicy; expiry: number }>; navigation: readonly PublicOperationNavigationRelation[] }>
   | Readonly<{ kind: 'unavailable'; schemaVersion: PublicOperationRegistrySchemaVersion; reason: 'query_invalid' | 'operation_not_found' | 'operation_unavailable' | 'mapping_unavailable' | 'mapping_incompatible' | 'mapping_cycle'; navigation: readonly PublicOperationNavigationRelation[] }>
 export type OperationSurfaceWireDescriptor = {
   operationRef: PublicOperationRef
@@ -113,6 +205,8 @@ export type OperationSurfaceWireDescriptor = {
   provenance: DeepWritable<PublicOperationDescriptor['provenance']>
   availability: DeepWritable<PublicOperationAvailability>
   navigation: OperationSurfaceWireNavigation[]
+  parameters?: DeepWritable<PublicOperationParameter[]>
+  catalogPrice?: DeepWritable<PublicOperationCatalogPrice>
 }
 type DeepWritable<Value> = Value extends string | number | boolean | bigint | null | undefined
   ? Value
@@ -184,7 +278,7 @@ const MAX_SCHEMA_DEPTH = 24
 const MAX_SCHEMA_PROPERTIES = 128
 const MAX_SCHEMA_REFS = 64
 const SCHEMA_KEYS = new Set(['$defs', '$ref', '$schema', 'additionalItems', 'additionalProperties', 'allOf', 'anyOf', 'const', 'contains', 'default', 'dependentRequired', 'dependentSchemas', 'deprecated', 'description', 'enum', 'examples', 'exclusiveMaximum', 'exclusiveMinimum', 'format', 'if', 'items', 'maxContains', 'maxItems', 'maxLength', 'maxProperties', 'maximum', 'minContains', 'minItems', 'minLength', 'minProperties', 'minimum', 'multipleOf', 'not', 'oneOf', 'pattern', 'patternProperties', 'prefixItems', 'properties', 'propertyNames', 'readOnly', 'required', 'then', 'title', 'type', 'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems', 'writeOnly'])
-const SEARCH_STOP_WORDS = new Set(['a', 'an', 'and', 'for', 'from', 'how', 'in', 'into', 'is', 'of', 'on', 'or', 'please', 'that', 'the', 'this', 'to', 'what', 'when', 'where', 'which', 'who', 'with'])
+const SEARCH_STOP_WORDS = new Set(['a', 'an', 'and', 'for', 'from', 'get', 'how', 'in', 'into', 'is', 'latest', 'lookup', 'of', 'on', 'or', 'please', 'search', 'that', 'the', 'this', 'to', 'value', 'what', 'when', 'where', 'which', 'who', 'with', 'find'])
 const SEARCH_NAVIGATION: PublicOperationNavigationRelation = { relation: 'search', method: 'POST', actionId: 'registry.operations.search', authentication: 'none' }
 const DETAIL_NAVIGATION: PublicOperationNavigationRelation = { relation: 'detail', method: 'POST', actionId: 'registry.operations.detail', authentication: 'none' }
 const COMPARE_NAVIGATION: PublicOperationNavigationRelation = { relation: 'compare', method: 'POST', actionId: 'registry.operations.compare', authentication: 'none' }
@@ -212,14 +306,18 @@ export async function searchCapabilityOperations(port: CapabilityOperationSource
   if (source.operations.length > MAX_SOURCE) return searchUnavailable('source_capacity_exceeded')
   const cursor = decodeCursor(normalized.cursor, normalized.query, normalized.filters, source.snapshotKey)
   if (normalized.cursor !== undefined && cursor === undefined) return searchUnavailable('query_invalid')
-  const projectedMatches: Array<{ operation: PublicOperationDescriptor; searchTerms: readonly string[] }> = []
+  const projectedMatches: Array<OperationSearchTextCandidate<PublicOperationDescriptor>> = []
   for (const record of source.operations) {
     const operation = projectCapabilityOperation(record, now)
-    if (matchesFilters(operation, record.searchTerms, normalized)) projectedMatches.push({ operation, searchTerms: record.searchTerms })
+    if (matchesFilters(operation, record.searchTerms, normalized)) {
+      projectedMatches.push({
+        value: operation,
+        operationRef: operation.operationRef,
+        searchText: operationSearchText(operation, record.searchTerms),
+      })
+    }
   }
-  const matches = projectedMatches
-    .sort((a, b) => score(b.operation, b.searchTerms, normalized.query) - score(a.operation, a.searchTerms, normalized.query) || a.operation.operationRef.localeCompare(b.operation.operationRef))
-    .map(({ operation }) => operation)
+  const matches = rankOperationSearchText(normalized.query, projectedMatches)
   const start = cursor?.lastOperationRef === undefined ? 0 : Math.max(0, matches.findIndex((item) => item.operationRef === cursor.lastOperationRef) + 1)
   const items = matches.slice(start, start + normalized.limit)
   const lastItem = items.at(-1)
@@ -256,7 +354,12 @@ export async function inspectCapabilityOperationPlan(port: CapabilityOperationSo
   const presentRecords = records.filter((record): record is CapabilityOperationSourceRecord => record !== null)
   if (presentRecords.length !== records.length) return { kind: 'unavailable', schemaVersion: PublicOperationRegistrySchemaVersion, reason: 'operation_not_found', navigation: NAV_NONE }
   const operations = presentRecords.map((record) => projectCapabilityOperation(record, now))
-  if (operations.some((operation) => operation.availability.posture === 'unavailable')) return { kind: 'unavailable', schemaVersion: PublicOperationRegistrySchemaVersion, reason: 'operation_unavailable', navigation: NAV_NONE }
+  // A plan may only be produced against ops that are genuinely routeable right now.
+  // Keyed ops whose credential/readiness is absent and observed x402 ops project as
+  // 'integrated' (reason 'setup_required') but are NOT routeable; they must be
+  // refused here rather than presented as a buildable plan (the commit/plan gate
+  // already requires listRouteable, so this closes the registry preview surface too).
+  if (operations.some((operation) => operation.availability.posture !== 'routeable')) return { kind: 'unavailable', schemaVersion: PublicOperationRegistrySchemaVersion, reason: 'operation_unavailable', navigation: NAV_NONE }
   const mappings: RegisteredOperationMapping[] = []
   const networkIds = new Set(presentRecords.map((record) => record.networkId))
   const networkId = networkIds.size === 1 ? [...networkIds][0] : undefined
@@ -274,12 +377,79 @@ export async function inspectCapabilityOperationPlan(port: CapabilityOperationSo
 export function projectCapabilityOperation(record: CapabilityOperationSourceRecord, now = Date.now()): PublicOperationDescriptor {
   const operationRef = createPublicOperationRef({ operationId: record.operationId, publicationRef: record.publicationRef, publicationRevision: record.publicationRevision, contractRef: record.contract.ref })
   const availability = projectAvailability(record, now)
+  const inputJsonSchema = projectPublicSchema(record.contract.inputSchema)
+  const parameters = projectParameters(inputJsonSchema)
+  const catalogPrice = projectCatalogPrice(record.price)
   return {
     operationRef, operationId: record.operationId,
-    contract: { capabilityId: record.contract.ref.capabilityId, version: record.contract.ref.version, inputJsonSchema: projectPublicSchema(record.contract.inputSchema), outputJsonSchema: projectPublicSchema(record.contract.outputSchema), customerAnnotations: record.contract.customerAnnotations.map((annotation) => ({ annotationId: annotation.annotationId, document: annotation.document, pointer: annotation.pointer, label: annotation.label, role: annotation.role, ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }), ...(annotation.inference === undefined ? {} : { inference: annotation.inference }) })) },
+    contract: { capabilityId: record.contract.ref.capabilityId, version: record.contract.ref.version, inputJsonSchema, outputJsonSchema: projectPublicSchema(record.contract.outputSchema), customerAnnotations: record.contract.customerAnnotations.map((annotation) => ({ annotationId: annotation.annotationId, document: annotation.document, pointer: annotation.pointer, label: annotation.label, role: annotation.role, ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }), ...(annotation.inference === undefined ? {} : { inference: annotation.inference }) })) },
     business: record.business, offering: record.offering, summary: record.contract.description, commercial: { price: record.price, materialTerms: record.materialTerms, relationship: record.commercialRelationship },
     dataUse: record.contract.dataUse.map((declaration) => ({ effectId: declaration.effectId, inputPointer: declaration.inputPointer, classification: declaration.classification, phase: declaration.phase, recipient: declaration.recipient.kind, purposes: declaration.purposes })), effects: record.contract.effects, evidence: record.contract.evidence, cancellation: record.cancellation, recovery: record.contract.lifecycle, provenance: record.provenance, availability, navigation: availability.posture === 'unavailable' ? NAV_NONE : NAVIGATION,
+    ...(parameters === undefined ? {} : { parameters }),
+    ...(catalogPrice === undefined ? {} : { catalogPrice }),
   }
+}
+
+/**
+ * Derive flat catalog `parameters[]` from the projected input JSON-Schema.
+ * The projected schema keeps `properties`, `required`, `type`, `description`,
+ * `examples`, `enum` and `default` (see `SCHEMA_KEYS`), so a shallow flat list
+ * is safe. `group` is `body` for every parameter because the input schema is
+ * the request body; path/query groupings are not derivable from the schema alone.
+ */
+function projectParameters(
+  schema: Readonly<Record<string, JsonValue>>,
+): readonly PublicOperationParameter[] | undefined {
+  const properties = schema.properties
+  if (!isRecord(properties)) return undefined
+  const requiredSet = new Set<string>()
+  if (Array.isArray(schema.required)) {
+    for (const name of schema.required) {
+      if (typeof name === 'string') requiredSet.add(name)
+    }
+  }
+  const parameters: PublicOperationParameter[] = []
+  for (const [name, raw] of Object.entries(properties)) {
+    const node = isRecord(raw) ? raw : {}
+    const example = node.example ?? (Array.isArray(node.examples) ? node.examples[0] : undefined)
+    parameters.push({
+      group: 'body',
+      name,
+      type: typeof node.type === 'string' ? node.type : 'any',
+      ...(typeof node.description === 'string' ? { description: node.description } : {}),
+      ...(example !== undefined ? { example: example as JsonValue } : {}),
+      ...(Array.isArray(node.enum)
+        ? { enumValues: node.enum.filter((value): value is string => typeof value === 'string') }
+        : {}),
+      ...(node.default !== undefined ? { default: node.default as JsonValue } : {}),
+      required: requiredSet.has(name),
+    })
+  }
+  return parameters.length === 0 ? undefined : parameters
+}
+
+/**
+ * Project the exact executable price into a decimal-string catalog price
+ * (agentic.market `pricing{scheme}`). `fixed` -> exact amount; `range`
+ * -> upto min/max; `on_request` has no derivable decimal amount -> absent.
+ */
+function projectCatalogPrice(price: PublicOperationPrice): PublicOperationCatalogPrice | undefined {
+  if (price.kind === 'fixed') {
+    const amount = formatExactAmount(price.amount)
+    return amount === undefined
+      ? undefined
+      : { scheme: 'exact', amount, currency: price.amount.currency }
+  }
+  if (price.kind === 'on_request' || price.minimum.currency !== price.maximum.currency) return undefined
+  const commonExponent = Math.max(price.minimum.exponent, price.maximum.exponent)
+  const minimum = rescaleExactAmount(price.minimum, commonExponent)
+  const maximum = rescaleExactAmount(price.maximum, commonExponent)
+  if (minimum === undefined || maximum === undefined) return undefined
+  const minAmount = formatExactAmount(minimum)
+  const maxAmount = formatExactAmount(maximum)
+  return minAmount === undefined || maxAmount === undefined
+    ? undefined
+    : { scheme: 'upto', minAmount, maxAmount, currency: minimum.currency }
 }
 export function serializeOperationDescriptor(operation: PublicOperationDescriptor): OperationSurfaceWireDescriptor {
   return {
@@ -338,7 +508,37 @@ export function serializeOperationDescriptor(operation: PublicOperationDescripto
     },
     availability: serializeAvailability(operation.availability),
     navigation: serializeNavigation(operation.navigation),
+    ...(operation.parameters === undefined ? {} : { parameters: operation.parameters.map(serializeParameter) }),
+    ...(operation.catalogPrice === undefined
+      ? {}
+      : {
+          catalogPrice: {
+            scheme: operation.catalogPrice.scheme,
+            ...(operation.catalogPrice.amount === undefined ? {} : { amount: operation.catalogPrice.amount }),
+            ...(operation.catalogPrice.minAmount === undefined ? {} : { minAmount: operation.catalogPrice.minAmount }),
+            ...(operation.catalogPrice.maxAmount === undefined ? {} : { maxAmount: operation.catalogPrice.maxAmount }),
+            currency: operation.catalogPrice.currency,
+          },
+        }),
   }
+}
+
+function serializeParameter(parameter: PublicOperationParameter): DeepWritable<PublicOperationParameter> {
+  return {
+    group: parameter.group,
+    name: parameter.name,
+    type: parameter.type,
+    ...(parameter.description === undefined ? {} : { description: parameter.description }),
+    ...(parameter.example === undefined ? {} : { example: serializeJsonValue(parameter.example) }),
+    ...(parameter.enumValues === undefined ? {} : { enumValues: [...parameter.enumValues] }),
+    ...(parameter.default === undefined ? {} : { default: serializeJsonValue(parameter.default) }),
+    required: parameter.required,
+  }
+}
+
+/** Deep-clone a contained JsonValue into its mutable wire form (readonly→mutable). */
+function serializeJsonValue(value: JsonValue): DeepWritable<JsonValue> {
+  return JSON.parse(JSON.stringify(value)) as DeepWritable<JsonValue>
 }
 
 export function deserializeOperationDescriptor(operation: OperationSurfaceWireDescriptor): PublicOperationDescriptor {
@@ -376,6 +576,8 @@ export function deserializeOperationDescriptor(operation: OperationSurfaceWireDe
     provenance: operation.provenance,
     availability: operation.availability,
     navigation: operation.navigation,
+    ...(operation.parameters === undefined ? {} : { parameters: operation.parameters }),
+    ...(operation.catalogPrice === undefined ? {} : { catalogPrice: operation.catalogPrice }),
   }
 }
 
@@ -551,7 +753,7 @@ export function serializeInspectPlanResult(result: InspectPlanResult): InspectPl
     mappingRefs: [...result.mappingRefs],
     summary: {
       maximumCost: result.summary.maximumCost.kind === 'known'
-        ? { kind: 'known', currency: result.summary.maximumCost.currency, amountMinor: result.summary.maximumCost.amountMinor }
+        ? { kind: 'known', amount: { ...result.summary.maximumCost.amount } }
         : { kind: 'requires_preparation' },
       dataUse: result.summary.dataUse.map(serializeDataUse),
       effects: result.summary.effects.map(serializeEffect),
@@ -587,8 +789,8 @@ export function deserializeInspectPlanResult(result: InspectPlanWireResult): Ins
 }
 
 function serializePrice(price: PublicOperationPrice): DeepWritable<PublicOperationPrice> {
-  if (price.kind === 'fixed') return { kind: 'fixed', currency: price.currency, amountMinor: price.amountMinor }
-  if (price.kind === 'range') return { kind: 'range', currency: price.currency, minimumAmountMinor: price.minimumAmountMinor, maximumAmountMinor: price.maximumAmountMinor }
+  if (price.kind === 'fixed') return { kind: 'fixed', amount: { ...price.amount } }
+  if (price.kind === 'range') return { kind: 'range', minimum: { ...price.minimum }, maximum: { ...price.maximum } }
   return { kind: 'on_request' }
 }
 
@@ -639,7 +841,7 @@ function serializeSearchFilters(filters: OperationSearchFilters): OperationSearc
     ...(filters.dataUse === undefined ? {} : { dataUse: [...filters.dataUse] }),
     ...(filters.availability === undefined ? {} : { availability: [...filters.availability] }),
     ...(filters.currency === undefined ? {} : { currency: filters.currency }),
-    ...(filters.maximumPriceMinor === undefined ? {} : { maximumPriceMinor: filters.maximumPriceMinor }),
+    ...(filters.maximumPrice === undefined ? {} : { maximumPrice: { ...filters.maximumPrice } }),
   }
 }
 
@@ -678,12 +880,10 @@ function serializeComparisonValue(
 function isPublicOperationPrice(value: unknown): value is PublicOperationPrice {
   if (!isRecord(value) || typeof value.kind !== 'string') return false
   if (value.kind === 'on_request') return true
-  if (typeof value.currency !== 'string') return false
-  return value.kind === 'fixed'
-    ? typeof value.amountMinor === 'number'
-    : value.kind === 'range'
-      && typeof value.minimumAmountMinor === 'number'
-      && typeof value.maximumAmountMinor === 'number'
+  if (value.kind === 'fixed') return exactAmountSchema.safeParse(value.amount).success
+  return value.kind === 'range'
+    && exactAmountSchema.safeParse(value.minimum).success
+    && exactAmountSchema.safeParse(value.maximum).success
 }
 
 function isPublicEffectPolicy(value: unknown): value is PublicEffectPolicy {
@@ -731,8 +931,9 @@ function isPublicAvailability(value: unknown): value is PublicOperationAvailabil
 
 function isPublicProvenance(value: unknown): value is PublicOperationDescriptor['provenance'] {
   return isRecord(value)
-    && (value.publisher === 'provider_owned' || value.publisher === 'ae_curated_external')
-    && (value.sourceKind === 'ae_envelope' || value.sourceKind === 'openapi_http' || value.sourceKind === 'mcp' || value.sourceKind === 'x402')
+    && (value.publisher === 'provider_owned' || value.publisher === 'ae_curated_external'
+      || value.publisher === 'third_party_gateway' || value.publisher === 'observed_external')
+    && (value.sourceKind === 'ae_envelope' || value.sourceKind === 'openapi_http' || value.sourceKind === 'mcp' || value.sourceKind === 'agent_plugin_mcp' || value.sourceKind === 'x402')
 }
 
 function isPublicRecoveryPolicy(value: unknown): value is PublicRecoveryPolicy {
@@ -772,26 +973,45 @@ function normalizeSearch(input: OperationSearchInput): Readonly<{ query: string;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT || input.cursor !== undefined && (input.cursor.length === 0 || input.cursor.length > MAX_CURSOR)) return undefined
   const filters = input.filters ?? {}
   if (filters.currency !== undefined && !/^[A-Z]{3}$/.test(filters.currency)) return undefined
-  if (filters.maximumPriceMinor !== undefined && (!Number.isSafeInteger(filters.maximumPriceMinor) || filters.maximumPriceMinor < 0)) return undefined
-  return { query: input.query.trim().toLowerCase(), limit, ...(input.cursor === undefined ? {} : { cursor: input.cursor }), filters: { ...(filters.networkId === undefined ? {} : { networkId: filters.networkId.trim() }), ...(filters.location === undefined ? {} : { location: filters.location.trim().toLowerCase() }), ...(filters.effects === undefined ? {} : { effects: [...new Set(filters.effects)] }), ...(filters.dataUse === undefined ? {} : { dataUse: [...new Set(filters.dataUse)] }), ...(filters.availability === undefined ? {} : { availability: [...new Set(filters.availability)] }), ...(filters.currency === undefined ? {} : { currency: filters.currency }), ...(filters.maximumPriceMinor === undefined ? {} : { maximumPriceMinor: filters.maximumPriceMinor }) } }
+  if (filters.maximumPrice !== undefined && !exactAmountSchema.safeParse(filters.maximumPrice).success) return undefined
+  return { query: input.query.trim().toLowerCase(), limit, ...(input.cursor === undefined ? {} : { cursor: input.cursor }), filters: { ...(filters.networkId === undefined ? {} : { networkId: filters.networkId.trim() }), ...(filters.location === undefined ? {} : { location: filters.location.trim().toLowerCase() }), ...(filters.effects === undefined ? {} : { effects: [...new Set(filters.effects)] }), ...(filters.dataUse === undefined ? {} : { dataUse: [...new Set(filters.dataUse)] }), ...(filters.availability === undefined ? {} : { availability: [...new Set(filters.availability)] }), ...(filters.currency === undefined ? {} : { currency: filters.currency }), ...(filters.maximumPrice === undefined ? {} : { maximumPrice: { ...filters.maximumPrice } }) } }
 }
 function matchesFilters(operation: PublicOperationDescriptor, searchTerms: readonly string[], input: Readonly<{ query: string; filters: OperationSearchFilters }>): boolean {
   const filters = input.filters
   if (filters.effects !== undefined && !filters.effects.some((effect) => operation.effects.some((candidate) => candidate.class === effect))) return false
   if (filters.dataUse !== undefined && !filters.dataUse.some((classification) => operation.dataUse.some((candidate) => candidate.classification === classification))) return false
   if (filters.availability !== undefined && !filters.availability.includes(operation.availability.posture)) return false
-  if (filters.currency !== undefined && (operation.commercial.price.kind === 'on_request' || operation.commercial.price.currency !== filters.currency)) return false
-  if (filters.maximumPriceMinor !== undefined && !priceWithin(operation.commercial.price, filters.maximumPriceMinor)) return false
+  if (filters.currency !== undefined) {
+    const currency = operation.commercial.price.kind === 'on_request'
+      ? undefined
+      : operation.commercial.price.kind === 'fixed'
+        ? operation.commercial.price.amount.currency
+        : operation.commercial.price.minimum.currency
+    if (currency !== filters.currency) return false
+  }
+  if (filters.maximumPrice !== undefined && !priceWithin(operation.commercial.price, filters.maximumPrice)) return false
   if (filters.location !== undefined && !`${operation.business.slug} ${operation.business.name}`.toLowerCase().includes(filters.location)) return false
   const tokens = searchTokens(input.query)
-  return tokens.length === 0 || tokens.some((token) => searchableText(operation, searchTerms).some((term) => term === token || term.startsWith(token)))
+  return tokens.length === 0 || tokens.some((token) =>
+    searchableText(operationSearchText(operation, searchTerms)).some((term) => term === token || term.startsWith(token)))
 }
-function score(operation: PublicOperationDescriptor, searchTerms: readonly string[], query: string): number {
-  return searchTokens(query).reduce((total, token) => total + searchableText(operation, searchTerms).reduce((best, term) => term === token ? Math.max(best, 4) : term.startsWith(token) ? Math.max(best, 2) : term.includes(token) ? Math.max(best, 1) : best, 0), 0)
+function searchTokens(query: string): string[] { return (query.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((token) => !SEARCH_STOP_WORDS.has(token)) }
+function searchableText(searchText: readonly string[]): string[] {
+  return searchText.join(' ').toLowerCase().match(/[a-z0-9]+/g) ?? []
 }
-function searchTokens(query: string): string[] { return (query.match(/[a-z0-9]+/g) ?? []).filter((token) => !SEARCH_STOP_WORDS.has(token)) }
-function searchableText(operation: PublicOperationDescriptor, searchTerms: readonly string[]): string[] { return ([operation.operationId, operation.contract.capabilityId, operation.summary, operation.business.slug, operation.business.name, operation.offering.label, operation.offering.summary, ...operation.contract.customerAnnotations.map((annotation) => annotation.label), ...searchTerms].join(' ').toLowerCase().match(/[a-z0-9]+/g) ?? []) }
-function priceWithin(price: PublicCommercialTerms['price'], maximum: number): boolean { return price.kind !== 'on_request' && (price.kind === 'fixed' ? price.amountMinor : price.minimumAmountMinor) <= maximum }
+function operationSearchText(operation: PublicOperationDescriptor, searchTerms: readonly string[]): readonly string[] {
+  return [operation.operationId, operation.contract.capabilityId, operation.summary, operation.business.slug, operation.business.name, operation.offering.label, operation.offering.summary, ...operation.contract.customerAnnotations.map((annotation) => annotation.label), ...searchTerms]
+}
+function scoreSearchText(searchText: readonly string[], tokens: readonly string[]): number {
+  return tokens.reduce((total, token) => total + searchableText(searchText).reduce((best, term) =>
+    term === token ? Math.max(best, 4) : term.startsWith(token) ? Math.max(best, 2) : term.includes(token) ? Math.max(best, 1) : best, 0), 0)
+}
+function priceWithin(price: PublicCommercialTerms['price'], maximum: ExactAmount): boolean {
+  if (price.kind === 'on_request') return false
+  const candidate = price.kind === 'fixed' ? price.amount : price.minimum
+  const comparison = compareExactAmounts(candidate, maximum)
+  return comparison !== undefined && comparison <= 0
+}
 function normalizeRefs(values: readonly string[], max: number): PublicOperationRef[] | undefined { return values.length >= 1 && values.length <= max && new Set(values).size === values.length && values.every(isPublicOperationRef) ? values as PublicOperationRef[] : undefined }
 function mappingRefIsValid(value: string): value is RegisteredOperationMappingRef { return /^mapping:v1:[0-9a-f]{64}$/.test(value) }
 function comparisonFacts(operations: readonly PublicOperationDescriptor[]): OperationComparisonFact[] {
@@ -807,15 +1027,15 @@ function comparisonValue(operation: PublicOperationDescriptor, field: OperationC
   if (field === 'provenance') return operation.provenance
   return operation.recovery
 }
-function aggregatePrice(prices: readonly PublicCommercialTerms['price'][]): Readonly<{ kind: 'known'; currency: string; amountMinor: number }> | Readonly<{ kind: 'requires_preparation' }> {
-  const priced = prices.filter((price): price is Exclude<PublicOperationPrice, Readonly<{ kind: 'on_request' }>> => price.kind !== 'on_request')
-  if (priced.length !== prices.length || priced.length === 0) return { kind: 'requires_preparation' }
-  const currencies = new Set(priced.map((price) => price.currency))
-  if (currencies.size !== 1) return { kind: 'requires_preparation' }
-  const currency = priced[0]?.currency
-  if (currency === undefined) return { kind: 'requires_preparation' }
-  const amountMinor = priced.reduce((total, price) => total + (price.kind === 'fixed' ? price.amountMinor : price.maximumAmountMinor), 0)
-  return Number.isSafeInteger(amountMinor) ? { kind: 'known', currency, amountMinor } : { kind: 'requires_preparation' }
+function aggregatePrice(prices: readonly PublicCommercialTerms['price'][]): Readonly<{ kind: 'known'; amount: ExactAmount }> | Readonly<{ kind: 'requires_preparation' }> {
+  let amount: ExactAmount | undefined
+  for (const price of prices) {
+    if (price.kind === 'on_request') return { kind: 'requires_preparation' }
+    const candidate = price.kind === 'fixed' ? price.amount : price.maximum
+    amount = amount === undefined ? candidate : addExactAmounts(amount, candidate)
+    if (amount === undefined) return { kind: 'requires_preparation' }
+  }
+  return amount === undefined ? { kind: 'requires_preparation' } : { kind: 'known', amount }
 }
 function mergeDataUse(operations: readonly PublicOperationDescriptor[]): PublicDataUsePolicy { return dedupe(operations.flatMap((operation) => operation.dataUse)) }
 function mergeEffects(operations: readonly PublicOperationDescriptor[]): PublicEffectPolicy { return dedupe(operations.flatMap((operation) => operation.effects)) }

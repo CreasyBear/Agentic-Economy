@@ -1,10 +1,12 @@
+import { kindForStatus } from '@/lib/errors'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { problem } from '@/lib/server/problem'
 import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { authenticateCustomerRequestAgent, type CustomerRequestAgentPrincipal } from './customer-request-agent-auth'
 import { resolveCanonicalBaseUrl } from './canonical-url'
 import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from './convex-source'
-import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
 import { customerRequestScopeForMode, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 import { findAction } from '@/modules/actions'
 import { workTreeApplyResultSchema, workTreeDecisionReceiptSchema, workTreeRawApplyReceiptSchema, type WorkTreeApplyResult, type WorkTreeDecisionReceipt } from '@/modules/work-tree/work-tree.functions'
@@ -110,16 +112,25 @@ const deterministicConflictCodes: Readonly<Record<string, true>> = {
 /** One authenticated adapter for registered WorkTree actions; URL operation and source rechecks remain authoritative. */
 export async function handleWorkTreeAgentAction(request: Request, operationInput: string, options: HandlerOptions = {}): Promise<Response> {
   const operation = normalizeOperation(operationInput)
-  if (operation === undefined) return response({ kind: 'refused', code: 'unknown_action' }, 404, { Vary: 'Authorization' })
+  if (operation === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'unknown_action' }, { Vary: 'Authorization' })
   const action = findAction(`workTree.${operation}`)
-  if (action === undefined) return response({ kind: 'refused', code: 'unknown_action' }, 404, { Vary: 'Authorization' })
+  if (action === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'unknown_action' }, { Vary: 'Authorization' })
   const body = await readBody(request)
-  if (!body.ok) return response({ kind: 'refused', code: body.status === 413 ? 'request_too_large' : 'invalid_input' }, body.status, { Vary: 'Authorization' })
+  if (!body.ok) return body.status === 413
+    ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large' }, { Vary: 'Authorization' })
+    : problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_input' }, { Vary: 'Authorization' })
   const parsed = action.schema.safeParse(body.value)
-  if (!parsed.success) return response({ kind: 'refused', code: 'invalid_input', reason: parsed.error.issues[0]?.message ?? 'Input did not match the action schema.' }, 400, { Vary: 'Authorization' })
+  if (!parsed.success) {
+    return problem({
+      status: 400,
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_input',
+      detail: parsed.error.issues[0]?.message ?? 'Input did not match the action schema.',
+    }, { Vary: 'Authorization' })
+  }
   const command = parsed.data as Record<string, unknown>
   if (Object.prototype.hasOwnProperty.call(command, 'guestAssertion')) {
-    return response({ kind: 'refused', code: 'invalid_request' }, 400, { Vary: 'Authorization' })
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request' }, { Vary: 'Authorization' })
   }
   const mode = requiredMode(operation)
   const admitted = await authenticateCustomerRequestAgent({
@@ -154,7 +165,7 @@ async function callWorkTreeSource(input: Readonly<{ operation: WorkTreeAgentOper
   const serviceAuth = await createCustomerRequestServiceAssertion({
     key,
     operation: `workTree.${input.operation}`,
-    command: input.command as never,
+    command: toStableHashValue(input.command),
     principal: {
       principalId: input.principal.principalId,
       ownerId: input.principal.ownerId,
@@ -251,7 +262,7 @@ function refusalResponse(
   const headers: Record<string, string> = { Vary: 'Authorization' }
   if (status === 401) headers['WWW-Authenticate'] = bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl)
   if (status === 403) headers['WWW-Authenticate'] = bearerModeChallenge(resolveCanonicalBaseUrl(request).baseUrl, mode)
-  return response({ kind: 'refused', code, replayed: false }, status, headers)
+  return problem({ status, kind: kindForStatus(status), code, extras: { replayed: false } }, headers)
 }
 
 function refusalStatus(code: string): 400 | 401 | 403 | 404 | 409 | undefined {
@@ -265,7 +276,7 @@ function refusalStatus(code: string): 400 | 401 | 403 | 404 | 409 | undefined {
 function authRefusal(request: Request, status: 401 | 403, reason: string, mode: CustomerRequestAuthorityMode): Response {
   const base = resolveCanonicalBaseUrl(request).baseUrl
   const challenge = status === 403 ? bearerModeChallenge(base, mode) : bearerChallenge(base)
-  return response({ kind: 'refused', reason }, status, { Vary: 'Authorization', 'WWW-Authenticate': challenge })
+  return problem({ status, kind: kindForStatus(status), code: reason, detail: reason }, { Vary: 'Authorization', 'WWW-Authenticate': challenge })
 }
 function unknownResponse(operation: WorkTreeAgentOperation, error: unknown): Response {
   const reason = typeof error === 'string' && error.trim().length > 0

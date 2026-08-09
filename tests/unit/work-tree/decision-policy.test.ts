@@ -31,7 +31,7 @@ describe('WorkTree decision policy', () => {
   })
 
   it.each([
-    { label: 'paid', node: decision({ cost: { currency: 'AUD', estimateMinor: 1 } }) },
+    { label: 'paid', node: decision({ cost: { estimate: { currency: 'AUD', units: '1', exponent: 2 } } }) },
     { label: 'irreversible', node: decision({ resource: { owner: 'business', exclusive: { startMs: 1, endMs: 2 } } }) },
     { label: 'authority widening', node: decision({ authorityRef: 'authority:t49' }) },
     { label: 'judgement scope', node: decision({ scope: { acceptance: 'judgement' } }) },
@@ -43,7 +43,7 @@ describe('WorkTree decision policy', () => {
   })
 
   it('keeps Adjust and Park explicit but does not apply Lock step-up policy', () => {
-    const paid = decision({ cost: { currency: 'AUD', estimateMinor: 1 }, authorityRef: 'authority:t49' })
+    const paid = decision({ cost: { estimate: { currency: 'AUD', units: '1', exponent: 2 } }, authorityRef: 'authority:t49' })
     expect(assessWorkTreeDecisionPolicy(paid, 'adjust')).toMatchObject({
       requiresStepUp: false,
       eligibleForRepeatPermission: false,

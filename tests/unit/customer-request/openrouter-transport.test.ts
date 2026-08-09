@@ -177,4 +177,35 @@ describe('OpenRouter customer request transport', () => {
     })).rejects.toThrow('customer_request_interpretation_request_too_large')
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  describe('routine provider selection-decline stays quiet on the operator channel', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    })
+
+    it('does not emit provider_declined warn/error for a `length` finish reason, but still rejects provider_invalid', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: '{"outcome":"ready"}' }, finish_reason: 'length' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      vi.stubGlobal('fetch', fetchMock)
+      const transport = createOpenRouterJsonTransport({ apiKey: 'secret', model: 'model:test' })
+      const responseSchema = z.strictObject({ outcome: z.string() })
+      const input = {
+        systemInstruction: 'system',
+        payload: { customerJob: 'x', capabilities: [] },
+        signal: new AbortController().signal,
+        responseSchema,
+      }
+
+      await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_invalid')
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        'customer_request_interpretation_provider_declined', expect.anything(), expect.anything())
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        'customer_request_interpretation_provider_declined', expect.anything())
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
+  })
 })

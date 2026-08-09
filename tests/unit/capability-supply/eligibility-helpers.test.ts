@@ -9,8 +9,12 @@ import {
   eligibleOfferingProjection,
   validEligibilityInput,
 } from '@/modules/capability-supply/internal/eligibility'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/internal/binding'
 import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
+import { createProviderConnection, type CreateProviderConnectionCommand } from '@/modules/capability-supply/provider-connection'
 
 const digest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 const eligibility = {
@@ -23,6 +27,26 @@ const eligibility = {
   admissionEvidenceRefs: ['evidence:admission'],
   conformanceEvidenceRefs: ['evidence:conformance'],
 }
+const providerConnectionCommand: CreateProviderConnectionCommand = {
+  commandId: 'command:create:eligibility',
+  connectionRef: 'connection:demo',
+  businessId: 'business-1',
+  providerRef: 'provider:demo',
+  providerAccountRef: 'account:demo',
+  adapterId: 'http.json',
+  credentialRef: 'env:DEMO_PROVIDER_SECRET',
+  requestedScopes: ['demo:read'],
+  grantedScopes: ['demo:read'],
+  requestedResources: ['account:demo'],
+  grantedResources: ['account:demo'],
+  evidenceRefs: ['evidence:connection'],
+}
+const providerConnectionResult = createProviderConnection(providerConnectionCommand, 1)
+if (providerConnectionResult.kind !== 'applied') throw new Error('eligibility_provider_connection_fixture_failed')
+const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
+  providerConnectionResult.connection,
+  'operation:demo',
+)
 
 describe('capability-supply eligibility helpers', () => {
   it('validates input and shapes desired admit/revoke state', () => {
@@ -108,7 +132,8 @@ describe('capability-supply eligibility helpers', () => {
       version: 1,
       contractDigest: digest,
       endpointUrl: 'https://example.test',
-      credentialRef: 'credential:demo',
+      authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
+      connectionAuthority,
       continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:continuation'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['evidence:cancellation'] },
       adapterId: 'http.json',

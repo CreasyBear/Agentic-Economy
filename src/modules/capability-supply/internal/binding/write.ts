@@ -3,10 +3,19 @@ import {
   admitRegisteredTransport,
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
+  createPublicOperationRef,
   defineCapabilityTransportBindingRegistration,
+  isPublicOperationRef,
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 
+import { isProviderConnectionAuthorityCurrent, type ProviderConnection } from '../../provider-connection'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  connectionAuthoritySnapshotMatches,
+  type CapabilityConnectionAuthoritySnapshot,
+} from './registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import {
   contractRefFromRow,
@@ -15,6 +24,7 @@ import {
 } from '../offering/registration'
 import { bindingIntegrityIsValid } from './integrity'
 import { transportAdmissionInput, type CapabilityBindingRow } from './registration'
+
 
 export type BindingWritePublishedBusiness = Readonly<{
   businessId: string
@@ -35,7 +45,8 @@ export type BindingInsertRow = Readonly<{
   version: number
   contractDigest: string
   endpointUrl: string
-  credentialRef: string
+  authority: CapabilityTransportBindingRegistration['authority']
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   continuation: CapabilityTransportBindingRegistration['continuation']
   cancellation: CapabilityTransportBindingRegistration['cancellation']
   adapterId: string
@@ -57,6 +68,7 @@ export type BindingWritePorts = Readonly<{
   loadPublishedBusiness: (
     businessId: string,
   ) => Promise<BindingWritePublishedBusiness | null>
+  loadProviderConnection: (connectionRef: string) => Promise<ProviderConnection | undefined>
   resolveExactContract: (ref: CapabilityContractRef) => Promise<BindingWriteContractResult>
   loadBindingByBindingId: (bindingId: string) => Promise<CapabilityBindingRow | null>
   insertBinding: (row: BindingInsertRow) => Promise<void>
@@ -70,11 +82,11 @@ export type RegisterBindingWriteResult =
     registrationHash: string
     created: boolean
   }>
-
 export async function registerCapabilityTransportBinding(
   ports: BindingWritePorts,
   input: unknown,
   registeredAt: number,
+  expectedOperationRef?: string,
 ): Promise<RegisterBindingWriteResult> {
   let registration: CapabilityTransportBindingRegistration
   try {
@@ -93,22 +105,66 @@ export async function registerCapabilityTransportBinding(
   ) {
     return { kind: 'refused' as const, reason: 'offering_binding_mismatch' as const }
   }
-  if (await ports.loadPublishedBusiness(offering.businessId) === null) {
+  if (await ports.loadPublishedBusiness(String(offering.businessId)) === null) {
     return { kind: 'refused' as const, reason: 'business_not_registered' as const }
   }
   const contract = await ports.resolveExactContract(registration.contractRef)
   if (contract.kind === 'refused') return contract
   const admission = admitRegisteredTransport(transportAdmissionInput(registration))
   if (admission.kind === 'refused') return admission
+  const operationRef = expectedOperationRef ?? createPublicOperationRef({
+    operationId: capabilityOperationId(registration.contractRef.capabilityId),
+    publicationRef: registration.offeringId,
+    publicationRevision: 1,
+    contractRef: registration.contractRef,
+  })
+  if (!isPublicOperationRef(operationRef)) {
+    return { kind: 'refused' as const, reason: 'connection_operation_mismatch' as const }
+  }
+
+  let connectionAuthority: CapabilityConnectionAuthoritySnapshot | undefined
+  let connection: ProviderConnection | null = null
+  if (registration.authority.kind === 'provider_connection') {
+    const loaded = await ports.loadProviderConnection(registration.authority.connectionRef)
+    if (loaded == null) return { kind: 'refused' as const, reason: 'connection_not_found' as const }
+    if (String(loaded.businessId) !== String(offering.businessId)) {
+      return { kind: 'refused' as const, reason: 'connection_owner_mismatch' as const }
+    }
+    if (loaded.providerRef !== registration.authority.providerRef) {
+      return { kind: 'refused' as const, reason: 'connection_provider_mismatch' as const }
+    }
+    if (loaded.adapterId !== admission.transport.adapterId) {
+      return { kind: 'refused' as const, reason: 'connection_adapter_mismatch' as const }
+    }
+    if (loaded.lifecycle !== 'active') {
+      return { kind: 'refused' as const, reason: 'connection_inactive' as const }
+    }
+    if (!isProviderConnectionAuthorityCurrent(loaded)) {
+      return { kind: 'refused' as const, reason: 'connection_authority_invalid' as const }
+    }
+    connection = loaded
+    connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(loaded, operationRef)
+  }
+
   const registrationHash = capabilityBindingRegistrationHash(registration, admission.transport)
   const existing = await ports.loadBindingByBindingId(registration.bindingId)
   if (existing !== null) {
     if (!bindingIntegrityIsValid(existing)) {
       return { kind: 'refused' as const, reason: 'binding_integrity_failure' as const }
     }
-    return existing.registrationHash === registrationHash
-      ? { kind: 'registered' as const, bindingId: registration.bindingId, registrationHash, created: false }
-      : { kind: 'refused' as const, reason: 'binding_identity_conflict' as const }
+    if (existing.registrationHash !== registrationHash) {
+      return { kind: 'refused' as const, reason: 'binding_identity_conflict' as const }
+    }
+    if (registration.authority.kind === 'provider_connection'
+      && !connectionAuthoritySnapshotMatches(existing.connectionAuthority, connection, {
+        businessId: String(offering.businessId),
+        operationRef,
+        adapterId: admission.transport.adapterId,
+        now: registeredAt,
+      })) {
+      return { kind: 'refused' as const, reason: 'connection_authority_stale' as const }
+    }
+    return { kind: 'registered' as const, bindingId: registration.bindingId, registrationHash, created: false }
   }
   const initialAdmission = 'not_admitted' as const
   const conformance = 'not_conformant' as const
@@ -126,7 +182,8 @@ export async function registerCapabilityTransportBinding(
     version: registration.contractRef.version,
     contractDigest: registration.contractRef.contractDigest,
     endpointUrl: registration.endpointUrl,
-    credentialRef: registration.credentialRef,
+    authority: registration.authority,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     continuation: { ...registration.continuation, evidenceRefs: [...registration.continuation.evidenceRefs] },
     cancellation: { ...registration.cancellation, evidenceRefs: [...registration.cancellation.evidenceRefs] },
     adapterId: admission.transport.adapterId,

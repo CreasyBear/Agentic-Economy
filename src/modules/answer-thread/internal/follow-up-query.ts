@@ -1,3 +1,4 @@
+import { extractRequestedLocation } from '@/modules/answer/public'
 import { isNarrowToChipQuery, parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
 import { classifyFollowUpIntent } from './follow-up-intent'
 
@@ -49,7 +50,22 @@ export function resolveNarrowToSearchQuery(
   if (needQuery.toLowerCase().includes(suburb.toLowerCase())) {
     return needQuery
   }
-  return `${needQuery} ${suburb}`.trim().slice(0, 200)
+
+  const priorLocation = extractRequestedLocation(needQuery)
+  const needWithoutLocation = priorLocation === undefined
+    ? needQuery
+    : needQuery
+      .replace(
+        new RegExp(
+          `(?:\\b(?:near|around|in|at|serving)\\s+)?${priorLocation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+          'i',
+        ),
+        ' ',
+      )
+      .replace(/\s+(?:near|around|in|at|serving)\s*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  return `${needWithoutLocation} ${suburb}`.trim().slice(0, 200)
 }
 
 export function resolveFollowUpRegistryQuery(

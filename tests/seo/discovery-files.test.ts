@@ -31,7 +31,7 @@ describe('discovery files', () => {
     expect(serialized).not.toContain('parramatta-emergency-plumbing')
     expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route/)
     expect(serialized).not.toMatch(
-      /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
+      /ownerId|clerkUserId|ownerClerkId|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
     )
   })
 
@@ -61,6 +61,7 @@ describe('discovery files', () => {
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
     expect(result.body).toContain('https://ae.example/api/v1/requests')
+    expect(result.body).toContain('fresh opaque X-AE-Turn-Key for every turn')
     for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
       expect(result.body).toContain(statement)
     }

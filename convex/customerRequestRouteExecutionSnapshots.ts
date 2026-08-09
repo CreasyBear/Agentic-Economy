@@ -76,8 +76,8 @@ export function toDispatchRecord(
     operationKeyDigest: dispatch.operationKeyDigest,
     state: dispatch.state,
     availableAt: dispatch.availableAt,
-    ...(dispatch.leaseOwner === undefined ? {} : { leaseOwner: dispatch.leaseOwner }),
-    ...(dispatch.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: dispatch.leaseExpiresAt }),
+    leaseOwner: dispatch.leaseOwner,
+    leaseExpiresAt: dispatch.leaseExpiresAt,
     createdAt: dispatch.createdAt,
   }
 }

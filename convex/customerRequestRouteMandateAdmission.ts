@@ -475,6 +475,7 @@ async function exactStepSupplyIsCurrent(
     contractRef: authority.step.contractRef,
     expectedOfferingRegistrationHash: authority.step.offeringRegistrationHash,
     expectedBindingRegistrationHash: authority.step.bindingRegistrationHash,
+    now,
   })
   if (supply.kind !== 'available'
     || canonicalDigest(supply.offering.presentation.price) !== canonicalDigest(mandateStep.price)

@@ -3,10 +3,12 @@ import type { AnswerSynthesizerFollowUpIntent } from '../answer-synthesizer'
 
 export const AnswerLayoutProfileValues = [
   'discovery_full',
+  'data_answer',
   'clarification',
   'refinement_compact',
   'compare_pair',
   'boundary_explain',
+  'safety_refusal',
   'empty_state',
 ] as const
 
@@ -81,5 +83,8 @@ export function inferLayoutProfileFromArtifacts(input: {
 }
 
 export function isCompactLayoutProfile(profile: AnswerLayoutProfile): boolean {
-  return profile === 'refinement_compact' || profile === 'boundary_explain' || profile === 'clarification'
+  return profile === 'refinement_compact'
+    || profile === 'boundary_explain'
+    || profile === 'safety_refusal'
+    || profile === 'clarification'
 }

@@ -13,6 +13,9 @@ import {
 } from '@/modules/capability-supply/internal/publication'
 import type { OperationKeyRecord } from '@/modules/capability-supply/internal/operation-ledger'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
+import type { CapabilityPublicationBindingDraft } from '@/modules/capability-supply/public'
+import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding/registration'
+import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering/registration'
 import { capabilityOperationId, createPublicOperationRef } from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'a'.repeat(64)}`
@@ -54,11 +57,11 @@ function offeringDraft(suffix = 'demo') {
   }
 }
 
-function bindingDraft(suffix = 'demo') {
+function bindingDraft(suffix = 'demo'): CapabilityPublicationBindingDraft {
   return {
     bindingId: `binding:${suffix}:http`,
     endpointUrl: `https://${suffix}.example.test/lookup`,
-    credentialRef: `env:${suffix.toUpperCase()}_KEY`,
+    authority: { kind: 'provider_connection', connectionRef: `connection:${suffix}`, providerRef: `provider:${suffix}` },
     continuation: { kind: 'single_response' as const, evidenceRefs: ['business:response'] },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['business:no-cancellation'] },
     adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },
@@ -162,9 +165,12 @@ function currentPublication(
   }
 }
 
-function supplyRows(publication: PublicationCommandRow) {
+function supplyRows(publication: PublicationCommandRow): Pick<
+  PublicationCommandPorts,
+  'loadOfferingByOfferingId' | 'loadBindingByBindingId'
+> {
   return {
-    loadOfferingByOfferingId: async () => ({
+    loadOfferingByOfferingId: async (): Promise<CapabilityOfferingRow> => ({
       offeringId: publication.offeringId,
       businessId: publication.businessId,
       networkId: publication.networkId,
@@ -175,13 +181,13 @@ function supplyRows(publication: PublicationCommandRow) {
       searchTerms: ['lookup'],
       registrationEvidenceRefs: ['business:publication'],
       registrationHash: digest,
-      status: 'active' as const,
+      status: 'active',
       admissionEvidenceRefs: ['evidence:admission'],
       eligibilityHash: digest,
       registeredAt: 1,
       updatedAt: 1,
     }),
-    loadBindingByBindingId: async () => ({
+    loadBindingByBindingId: async (): Promise<CapabilityBindingRow> => ({
       _id: 'binding-row',
       _creationTime: 1,
       bindingId: publication.bindingId,
@@ -191,7 +197,7 @@ function supplyRows(publication: PublicationCommandRow) {
       version: publication.version,
       contractDigest: publication.contractDigest,
       endpointUrl: 'https://demo.example.test/lookup',
-      credentialRef: 'env:DEMO_KEY',
+      authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
       continuation: { kind: 'single_response' as const, evidenceRefs: ['business:response'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['business:no-cancellation'] },
       adapterId: 'http-json:v1',
@@ -199,8 +205,8 @@ function supplyRows(publication: PublicationCommandRow) {
       configDigest: digest,
       registrationEvidenceRefs: ['business:binding'],
       registrationHash: digest,
-      admission: 'admitted' as const,
-      conformance: 'conformant' as const,
+      admission: 'admitted',
+      conformance: 'conformant',
       admissionEvidenceRefs: ['evidence:admission'],
       conformanceEvidenceRefs: ['evidence:conformance'],
       eligibilityHash: digest,
@@ -238,7 +244,7 @@ describe('capability-supply publication commands', () => {
   })
 
   it('replays publish through the operation ledger', async () => {
-    const admitted = admitPublicationDraft({
+    const admitted = await admitPublicationDraft({
       source: publicationSource(),
       offering: offeringDraft(),
       binding: bindingDraft(),

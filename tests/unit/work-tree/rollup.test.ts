@@ -80,7 +80,11 @@ describe('work-tree kernel', () => {
   it('rolls up fog timing, cost envelopes, resources, effort, and scope', () => {
     const root = node('root', 'locked', [], {
       kind: 'package',
-      cost: { currency: 'USD', estimateMinor: 0, committedMinor: 0, envelopeMinor: 100 },
+      cost: {
+        estimate: { currency: 'USD', units: '0', exponent: 2 },
+        committed: { currency: 'USD', units: '0', exponent: 2 },
+        envelope: { currency: 'USD', units: '100', exponent: 2 },
+      },
       effort: { humanMinutes: 30 },
       scope: { acceptance: 'criteria', criteria: [
         { criterionId: 'r1', label: 'Root criterion', accepted: true },
@@ -99,13 +103,13 @@ describe('work-tree kernel', () => {
     })
     const left = node('left', 'ready', [], {
       parentId: 'root',
-      cost: { currency: 'USD', estimateMinor: 60, envelopeMinor: 60 },
+      cost: { estimate: { currency: 'USD', units: '60', exponent: 2 }, envelope: { currency: 'USD', units: '60', exponent: 2 } },
       resource: { owner: 'human', ownerRef: 'sam', exclusive: { startMs: 0, endMs: 10 } },
       effort: { humanMinutes: 50 },
     })
     const right = node('right', 'ready', [], {
       parentId: 'root',
-      cost: { currency: 'USD', estimateMinor: 50, envelopeMinor: 50 },
+      cost: { estimate: { currency: 'USD', units: '500', exponent: 3 }, envelope: { currency: 'USD', units: '500', exponent: 3 } },
       resource: { owner: 'human', ownerRef: 'sam', exclusive: { startMs: 10, endMs: 20 } },
       effort: { humanMinutes: 40 },
     })
@@ -120,9 +124,18 @@ describe('work-tree kernel', () => {
       attentionBudgetMinutes: 60,
     })
     expect(result.timing).toMatchObject({ knownMinDays: 1, fogBounded: true })
-    expect(result.cost.byCurrency.USD).toMatchObject({ estimateMinor: 110, committedMinor: 0, envelopeBreached: true })
+    expect(result.cost.byCurrency.USD).toMatchObject({
+      estimate: { currency: 'USD', units: '1100', exponent: 3 },
+      committed: { currency: 'USD', units: '0', exponent: 3 },
+      envelope: { currency: 'USD', units: '2100', exponent: 3 },
+      envelopeBreached: true,
+    })
     expect(result.cost.breaches).toEqual(expect.arrayContaining([
-      expect.objectContaining({ nodeId: 'root', childEnvelopeMinor: 110, envelopeMinor: 100 }),
+      expect.objectContaining({
+        nodeId: 'root',
+        childEnvelope: { currency: 'USD', units: '1100', exponent: 3 },
+        envelope: { currency: 'USD', units: '100', exponent: 2 },
+      }),
     ]))
     expect(result.resources.conflictPairs).toHaveLength(2)
     expect(result.resources.conflictPairs.every((pair) => pair.overlap.startMs < pair.overlap.endMs)).toBe(true)

@@ -1,8 +1,11 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
+  exactAmountSchema,
   pricingConfigSchema,
 } from './pricing-contract'
+import { multiplyExactAmountByBps, subtractExactAmounts } from './exact-amount'
+import type { ExactAmount } from './exact-amount'
 import type { PricingConfig, PricingResolution, RakeConfig, RakeSplit } from '../public'
 
 export type NormalizePricingConfigResult =
@@ -16,72 +19,55 @@ export type ResolveInvocationPriceInput = Readonly<{
   expectedCurrency?: string
 }>
 
-const maxSafe = Number.MAX_SAFE_INTEGER
-
 export function normalizePricingConfig(config: unknown): NormalizePricingConfigResult {
-  const parsed = pricingConfigSchema.safeParse(config)
-  if (!parsed.success) return { kind: 'invalid', code: 'pricing_config_invalid' }
-  return { kind: 'valid', config: parsed.data }
+  try {
+    const parsed = pricingConfigSchema.safeParse(config)
+    if (!parsed.success) return { kind: 'invalid', code: 'pricing_config_invalid' }
+    return { kind: 'valid', config: parsed.data }
+  } catch {
+    return { kind: 'invalid', code: 'pricing_config_invalid' }
+  }
 }
 
 export function pricingConfigDigest(config: PricingConfig): string {
   const normalized = normalizePricingConfig(config)
   if (normalized.kind === 'invalid') return 'invalid'
-  const stableConfig = normalized.config.freeTier === undefined
-    ? {
-        version: normalized.config.version,
-        unit: normalized.config.unit,
-        currency: normalized.config.currency,
-        paidAmountMinor: normalized.config.paidAmountMinor,
-      }
-    : {
-        version: normalized.config.version,
-        unit: normalized.config.unit,
-        currency: normalized.config.currency,
-        paidAmountMinor: normalized.config.paidAmountMinor,
-        freeTier: {
-          maxCalls: normalized.config.freeTier.maxCalls,
-          window: normalized.config.freeTier.window,
-        },
-      }
-  return canonicalDigest(stableConfig)
+  return canonicalDigest(normalized.config)
 }
 
 export function resolveInvocationPrice(input: ResolveInvocationPriceInput): PricingResolution {
   const normalized = normalizePricingConfig(input.config)
   if (normalized.kind === 'invalid') return { kind: 'refused', code: 'pricing_config_invalid' }
   const config = normalized.config
-  if (input.expectedCurrency !== undefined && input.expectedCurrency !== config.currency) {
+  if (input.expectedCurrency !== undefined && input.expectedCurrency !== config.paidAmount.currency) {
     return { kind: 'refused', code: 'currency_mismatch' }
   }
   if (!Number.isSafeInteger(input.freeCallsUsed) || input.freeCallsUsed < 0) {
     return { kind: 'refused', code: 'pricing_config_invalid' }
   }
-  if (config.paidAmountMinor === 0) {
-    return { kind: 'free', reason: 'zero_price', currency: config.currency, amountMinor: 0, priceDigest: input.priceDigest }
+  const freeAmount: ExactAmount = { currency: config.paidAmount.currency, units: '0', exponent: config.paidAmount.exponent }
+  if (config.paidAmount.units === '0') {
+    return { kind: 'free', reason: 'zero_price', amount: freeAmount, priceDigest: input.priceDigest }
   }
   const freeTier = config.freeTier
   if (freeTier !== undefined && input.freeCallsUsed < freeTier.maxCalls) {
-    return { kind: 'free', reason: 'free_tier', currency: config.currency, amountMinor: 0, priceDigest: input.priceDigest }
+    return { kind: 'free', reason: 'free_tier', amount: freeAmount, priceDigest: input.priceDigest }
   }
-  return { kind: 'paid', currency: config.currency, amountMinor: config.paidAmountMinor, priceDigest: input.priceDigest }
+  return { kind: 'paid', amount: config.paidAmount, priceDigest: input.priceDigest }
 }
 
-export function computeRakeSplit(grossAmountMinor: number, config: RakeConfig): RakeSplit | Readonly<{ kind: 'refused'; code: 'rake_not_configured' }> {
-  if (!Number.isSafeInteger(grossAmountMinor) || grossAmountMinor < 0) {
+export function computeRakeSplit(grossAmount: ExactAmount, config: RakeConfig | unknown): RakeSplit | Readonly<{ kind: 'refused'; code: 'rake_not_configured' }> {
+  try {
+    const parsedGross = exactAmountSchema.safeParse(grossAmount)
+    const rakeBps = typeof config === 'object' && config !== null && 'rakeBps' in config ? config.rakeBps : undefined
+    if (!parsedGross.success || typeof rakeBps !== 'number' || !Number.isSafeInteger(rakeBps) || rakeBps < 0 || rakeBps > 10_000) {
+      return { kind: 'refused', code: 'rake_not_configured' }
+    }
+    const rake = multiplyExactAmountByBps(parsedGross.data, rakeBps, 'floor')
+    const providerNet = rake === undefined ? undefined : subtractExactAmounts(parsedGross.data, rake)
+    if (rake === undefined || providerNet === undefined) return { kind: 'refused', code: 'rake_not_configured' }
+    return { grossAmount: parsedGross.data, rakeBps, rake, providerNet }
+  } catch {
     return { kind: 'refused', code: 'rake_not_configured' }
   }
-  if (!Number.isSafeInteger(config.rakeBps) || config.rakeBps < 0 || config.rakeBps > 10_000) {
-    return { kind: 'refused', code: 'rake_not_configured' }
-  }
-  const multiplied = grossAmountMinor * config.rakeBps
-  if (!Number.isSafeInteger(multiplied)) return { kind: 'refused', code: 'rake_not_configured' }
-  const rakeMinor = Math.floor(multiplied / 10_000)
-  const providerNetMinor = grossAmountMinor - rakeMinor
-  if (!Number.isSafeInteger(providerNetMinor) || providerNetMinor < 0) {
-    return { kind: 'refused', code: 'rake_not_configured' }
-  }
-  return { grossAmountMinor, rakeBps: config.rakeBps, rakeMinor, providerNetMinor }
 }
-
-

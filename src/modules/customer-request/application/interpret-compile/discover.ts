@@ -48,9 +48,21 @@ export async function discoverAndFilterDescriptors(
   if (result.kind !== 'ok' || result.items.length === 0) {
     return graph.descriptors
   }
-  const discoveredRefs = new Set(result.items.map((item) => item.operationRef))
-  const filtered = graph.descriptors.filter((descriptor) => (
-    descriptor.operationRefs.some((operationRef) => discoveredRefs.has(operationRef))
-  ))
-  return filtered.length > 0 ? filtered : graph.descriptors
+  // Preserve the DISCOVERY relevance order (registry.operations.search ranks items by token
+  // relevance) so the recovered pool's first descriptor is the discovery-top-ranked op. Discovery
+  // is the retrieval authority (AI-SDK activeTools: surface + order the matching tools); the
+  // interpreter then picks from, but never re-ranks, that order. A descriptor with several
+  // operation refs is ranked by its earliest discovered ref.
+  const rankByRef = new Map(result.items.map((item, index) => [item.operationRef, index]))
+  const ordered = graph.descriptors
+    .flatMap((descriptor) => {
+      const ranks = descriptor.operationRefs
+        .map((operationRef) => rankByRef.get(operationRef))
+        .filter((rank): rank is number => rank !== undefined)
+      if (ranks.length === 0) return []
+      return [{ descriptor, rank: Math.min(...ranks) }]
+    })
+    .sort((left, right) => left.rank - right.rank)
+    .map((entry) => entry.descriptor)
+  return ordered.length > 0 ? ordered : graph.descriptors
 }

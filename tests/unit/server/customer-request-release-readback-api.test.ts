@@ -22,7 +22,13 @@ describe('Customer Request release readback API', () => {
       env: productionEnvironment,
     })
     expect(unauthenticated.status).toBe(401)
-    await expect(unauthenticated.json()).resolves.toEqual({ kind: 'refused', reason: 'authentication_required' })
+    expect(unauthenticated.headers.get('Cache-Control')).toBe('no-store')
+    expect(unauthenticated.headers.get('Vary')).toBe('Authorization')
+    expect(unauthenticated.headers.get('WWW-Authenticate')).toContain('Bearer resource_metadata=')
+    await expect(unauthenticated.json()).resolves.toEqual({
+      type: 'about:blank', title: 'Unauthenticated', status: 401,
+      kind: 'UNAUTHENTICATED', code: 'authentication_required', detail: 'authentication_required',
+    })
 
     const unscoped = await handleAgentCustomerRequestReleaseGet({
       authenticate: async () => ({
@@ -31,7 +37,12 @@ describe('Customer Request release readback API', () => {
       env: productionEnvironment,
     })
     expect(unscoped.status).toBe(403)
-    await expect(unscoped.json()).resolves.toEqual({ kind: 'refused', reason: 'scope_required' })
+    expect(unscoped.headers.get('Vary')).toBe('Authorization')
+    expect(unscoped.headers.get('WWW-Authenticate')).toContain('Bearer resource_metadata=')
+    await expect(unscoped.json()).resolves.toEqual({
+      type: 'about:blank', title: 'Permission denied', status: 403,
+      kind: 'PERMISSION_DENIED', code: 'scope_required', detail: 'scope_required',
+    })
   })
 
   it('returns no-store release evidence to a scoped agent', async () => {
@@ -68,8 +79,9 @@ describe('Customer Request release readback API', () => {
     })
     expect(response.status).toBe(503)
     await expect(response.json()).resolves.toEqual({
-      kind: 'unavailable',
-      reason: 'authoritative_release_identity_unavailable',
+      type: 'about:blank', title: 'Unavailable', status: 503,
+      kind: 'UNAVAILABLE', code: 'authoritative_release_identity_unavailable',
+      detail: 'Authoritative release identity unavailable.',
     })
   })
 })

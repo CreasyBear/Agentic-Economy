@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { addExactAmounts } from '@/modules/money/public'
+
 import {
   runHostedCustomerRequestJourney,
   verifyHostedCustomerRequestFrontDoor,
@@ -168,6 +170,8 @@ describe('hosted Customer Request journey', () => {
     const routeView = routesReadyView() as unknown as CustomerRequestView
     const route = routeView.decision?.routes[0]
     if (route === undefined || route.maximumTotalCost.kind !== 'known') throw new Error('route fixture missing')
+    const cumulativeSpend = addExactAmounts(route.maximumTotalCost.amount, route.maximumTotalCost.amount)
+    if (cumulativeSpend === undefined) throw new Error('route fixture cost mismatch')
     const activePermission = {
       kind: 'repeat_permission' as const,
       status: 'active' as const,
@@ -177,14 +181,8 @@ describe('hosted Customer Request journey', () => {
       routeRef: route.routeRef,
       delegatedCredentialId: 'apikey_repeat',
       limits: {
-        perUseSpend: {
-          currency: route.maximumTotalCost.currency,
-          amountMinor: route.maximumTotalCost.amountMinor,
-        },
-        cumulativeSpend: {
-          currency: route.maximumTotalCost.currency,
-          amountMinor: route.maximumTotalCost.amountMinor * 2,
-        },
+        perUseSpend: route.maximumTotalCost.amount,
+        cumulativeSpend,
         perUseDataAllocations: route.dataUse.recipientCount,
         cumulativeDataAllocations: route.dataUse.recipientCount * 2,
         occurrences: 2,
@@ -506,7 +504,7 @@ describe('hosted Customer Request journey', () => {
       integrationBurden: { requestCalls: 7, clarifications: 0 },
       turns: { total: 7 }, elapsedMs: 0,
       hardConstraintAccuracy: { state: 'satisfied' },
-      totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 900 } },
+      totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', units: '900', exponent: 2 } },
       recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
       interruptionRecovery: {
         state: 'verified',
@@ -1695,7 +1693,7 @@ function routePlan() {
     result: { resultRef: 'result:one', summary: 'Return a sandbox reference.', deliverables: ['Sandbox reference'] },
     availability: 'current', stepCount: 1,
     businesses: [{ businessRef: 'business:two', name: 'Sandbox Option Two' }],
-    maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
+    maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '900', exponent: 2 } },
     dataUse: {
       recipientCount: 1,
       recipients: [{
@@ -1713,7 +1711,7 @@ function routePlan() {
     comparison: {
       outcomeRef: 'outcome:sandbox', outcomeFit: 'same_promised_result',
       completeness: 'complete', hardConstraints: 'satisfied',
-      maximumCost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
+      maximumCost: { kind: 'known', amount: { currency: 'AUD', units: '900', exponent: 2 } },
       dataExposureCount: 1, irreversibleEffectCount: 1, uncertaintyCount: 0,
       duration: 'not_declared', recovery: 'retry_safe',
       trust: 'registered_current_option', evidenceCount: 1,

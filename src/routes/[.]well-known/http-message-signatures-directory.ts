@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
+import { methodNotAllowed } from '@/lib/server/method-guard'
+import { problem } from '@/lib/server/problem'
 
 /**
  * Public Web Bot Auth key directory for AE-owned signature agents.
@@ -10,6 +12,14 @@ export const Route = createFileRoute('/.well-known/http-message-signatures-direc
   server: {
     handlers: {
       GET: () => handleHttpMessageSignaturesDirectory(),
+      POST: () => methodNotAllowed(['GET']),
+      PUT: () => methodNotAllowed(['GET']),
+      PATCH: () => methodNotAllowed(['GET']),
+      DELETE: () => methodNotAllowed(['GET']),
+      HEAD: () => methodNotAllowed(['GET']),
+      OPTIONS: () => methodNotAllowed(['GET']),
+      TRACE: () => methodNotAllowed(['GET']),
+      CONNECT: () => methodNotAllowed(['GET']),
     },
   },
 })
@@ -17,15 +27,12 @@ export const Route = createFileRoute('/.well-known/http-message-signatures-direc
 export function handleHttpMessageSignaturesDirectory(): Response {
   const keys = readDirectoryPublicKeys(process.env.AE_WBA_DIRECTORY_PUBLIC_JWK_JSON)
   if (keys === undefined) {
-    return discoveryTextResponse(
-      JSON.stringify({
-        kind: 'error',
-        code: 'wba_directory_unconfigured',
-        reason: 'No public WBA directory keys configured.',
-      }),
-      'application/json; charset=utf-8',
-      { status: 404 },
-    )
+    return problem({
+      status: 404,
+      kind: 'NOT_FOUND',
+      code: 'wba_directory_unconfigured',
+      detail: 'No public WBA directory keys configured.',
+    })
   }
 
   return discoveryTextResponse(

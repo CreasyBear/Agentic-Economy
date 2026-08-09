@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readPublicLlmsTxt } from '@/modules/discovery/discovery.functions'
 import {
   readFixtureLlmsTxt,
@@ -11,6 +12,14 @@ export const Route = createFileRoute('/llms.txt')({
   server: {
     handlers: {
       GET: ({ request }) => handleDurableLlmsTxtRequest(request),
+      POST: () => methodNotAllowed(['GET']),
+      PUT: () => methodNotAllowed(['GET']),
+      PATCH: () => methodNotAllowed(['GET']),
+      DELETE: () => methodNotAllowed(['GET']),
+      HEAD: () => methodNotAllowed(['GET']),
+      OPTIONS: () => methodNotAllowed(['GET']),
+      TRACE: () => methodNotAllowed(['GET']),
+      CONNECT: () => methodNotAllowed(['GET']),
     },
   },
 })

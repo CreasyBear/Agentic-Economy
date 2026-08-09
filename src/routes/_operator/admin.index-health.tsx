@@ -17,7 +17,7 @@ export const Route = createFileRoute('/_operator/admin/index-health')({
   }),
   head: () => ({
     meta: [
-      { title: 'Index health | Agentic Economy' },
+      { title: 'Catalog health | Agentic Economy' },
       {
         name: 'description',
         content: 'Check catalog and projection readbacks before public discovery files ship.',
@@ -34,14 +34,14 @@ function AdminIndexHealthRoute() {
   return (
     <AeOperatorShell
       operatorRole="admin"
-      title="Index health"
+      title="Catalog health"
       description="Check catalog and projection readbacks before public discovery files are allowed to ship."
       currentPath="/admin/index-health"
       navBadges={{ '/admin/index-health': readback.rows.length }}
     >
       <div className="grid gap-6">
         <AeAdminReadbackPanel
-          title="Index readback"
+          title="Catalog readback"
           description="Denied reads return no private rows; authorized reads show source, attempt, repair, and affected public surfaces."
           readback={readback}
         />

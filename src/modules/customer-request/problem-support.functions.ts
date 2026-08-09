@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
 import { customerRequestProblemStatusChangeSchema } from '@/modules/customer-request/agent-contract'
+import { exactAmountSchema } from '@/modules/money/public'
 
 const supportProblemRowSchema = z.strictObject({
   reportRef: z.string(),
@@ -91,8 +92,8 @@ const supportProblemExportSchema = z.union([
         state: z.enum(['current', 'expired', 'revoked']),
         source: z.literal('customer_confirmation'),
         spend: z.strictObject({
-          limit: z.strictObject({ currency: z.string(), amountMinor: z.number().int().nonnegative() }),
-          admitted: z.strictObject({ currency: z.string(), amountMinor: z.number().int().nonnegative() }),
+          limit: exactAmountSchema,
+          admitted: exactAmountSchema,
         }),
         dataSharing: z.array(z.strictObject({
           classification: z.enum(['public', 'personal', 'sensitive', 'credential']),

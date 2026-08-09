@@ -1,11 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AeThinkingRail } from '@/components/ae/artifacts/AeThinkingRail'
-import { AeResearchProcess } from '@/components/ae/chat/AeResearchProcess'
+import { AeWorkDisclosure } from '@/components/ae/chat/AeWorkDisclosure'
 import {
   buildTurnContextLine,
   countListedProvidersInArtifacts,
@@ -27,16 +26,16 @@ describe('turn context line', () => {
     const artifacts: AnswerArtifact[] = [{ kind: 'provider-cards', providers: [provider()] }]
 
     expect(buildTurnContextLine({ intent: 'filter_known', seq: 2, artifacts })).toBe(
-      'Filtering 1 listed business from this thread.',
+      'Narrowing 1 match from this thread.',
     )
     expect(buildTurnContextLine({ intent: 'compare_known', seq: 2, artifacts })).toBe(
-      'Comparing 1 listed business from this thread.',
+      'Comparing 1 match from this thread.',
     )
     expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
-      'Preparing the qualified inquiry next step for Demo Plumber.',
+      'No business is selected yet. Find a match before sending a request.',
     )
     expect(buildTurnContextLine({ intent: 'refine_search', seq: 2, artifacts: [] })).toBe(
-      'Searching again for this follow-up.',
+      'Checking again with this follow-up.',
     )
   })
 
@@ -45,9 +44,31 @@ describe('turn context line', () => {
 
     expect(countListedProvidersInArtifacts(artifacts)).toBe(1)
     expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
-      'Preparing the qualified inquiry next step for Demo Plumber.',
+      'Preparing a request to Demo Plumber.',
     )
   })
+  it('requires a request route before preparing selected-business contact copy', () => {
+    const artifacts: AnswerArtifact[] = [{
+      kind: 'selected-provider',
+      provider: provider({ inquiryUrl: undefined }),
+    }]
+
+    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
+      'Demo Plumber does not have a request form here yet.',
+    )
+  })
+
+  it('neutralizes direction controls in selected-business context copy', () => {
+    const artifacts: AnswerArtifact[] = [{
+      kind: 'selected-provider',
+      provider: provider({ name: 'Demo\u202e Plumber' }),
+    }]
+
+    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
+      'Preparing a request to Demo Plumber.',
+    )
+  })
+
 
   it('keeps normal first-turn searches quiet but labels boundaries', () => {
     expect(buildTurnContextLine({ intent: 'refine_search', seq: 1, artifacts: [] })).toBeUndefined()
@@ -55,41 +76,119 @@ describe('turn context line', () => {
       "Checking the supported next step.",
     )
     expect(buildTurnContextLine({ intent: 'unsupported', seq: 1, artifacts: [] })).toBe(
-      "This request is outside AE's current inquiry path; the answer will route back to published listings.",
+      "This request is outside the current path; the answer will return to other options.",
     )
   })
 })
 
-describe('AeResearchProcess', () => {
+describe('AeWorkDisclosure', () => {
   afterEach(() => {
     cleanup()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
-  it('keeps completed public work-log details behind the trigger by default', () => {
-    const { getByText, queryByText, getByRole } = render(<AeResearchProcess isStreaming={false} steps={[workStep()]} />)
+  it('renders nothing when there is no work, thinking, or check summary', () => {
+    const { container } = render(
+      <AeWorkDisclosure isStreaming={false} workSteps={[]} thinkingSteps={[]} thinkingLabel="" />,
+    )
+    expect(container.textContent).toBe('')
+  })
 
-    // Trigger + summary are always visible; the dense trace stays collapsed on
-    // a settled turn so completed answers do not dump the full audit log.
-    expect(getByText('How AE checked this')).toBeTruthy()
-    expect(getByText('1 public check complete · 2 listed businesses found.')).toBeTruthy()
-    expect(queryByText('Public checks and listed facts, not private reasoning.')).toBeNull()
-    expect(queryByText('Searching listed businesses')).toBeNull()
+  it('keeps completed work-log details behind the disclosure by default', () => {
+    const { getByText, getByRole, queryByText } = render(
+      <AeWorkDisclosure isStreaming={false} workSteps={[workStep()]} thinkingSteps={[]} thinkingLabel="" />,
+    )
+
+    // Header line is always visible; the step rows stay collapsed on a settled turn.
+    expect(getByRole('button', { name: /Ran 1 step/ })).toBeTruthy()
+    expect(queryByText('Searching for matches')).toBeNull()
+    expect(queryByText('2 matches found.')).toBeNull()
     expect(queryByText('Results')).toBeNull()
 
-    fireEvent.click(getByRole('button', { name: /how ae checked this/i }))
+    fireEvent.click(getByRole('button', { name: /Ran 1 step/ }))
 
-    expect(getByText('Public checks and listed facts, not private reasoning.')).toBeTruthy()
-    expect(getByText('Searching listed businesses')).toBeTruthy()
-    expect(getByText('2 listed businesses found.')).toBeTruthy()
+    expect(getByText('Searching for matches')).toBeTruthy()
+    expect(getByText('2 matches found.')).toBeTruthy()
     expect(getByText('Results')).toBeTruthy()
-    expect(getByText('2')).toBeTruthy()
   })
 
-  it('summarizes public answer checks in the process header', () => {
-    const { getByText, getByRole } = render(
-      <AeResearchProcess
+  it('keeps a just-finished step visibly running for the pacing floor', () => {
+    vi.useFakeTimers()
+    stubMatchMedia(false)
+    const { getByRole, rerender } = render(
+      <AeWorkDisclosure
+        isStreaming
+        workSteps={[workStep({ status: 'running', summary: '' })]}
+        thinkingSteps={[]}
+        thinkingLabel=""
+      />,
+    )
+
+    rerender(
+      <AeWorkDisclosure
         isStreaming={false}
-        steps={[workStep()]}
+        workSteps={[workStep({ startedAtMs: 0, completedAtMs: 0, durationMs: 0 })]}
+        thinkingSteps={[]}
+        thinkingLabel=""
+      />,
+    )
+
+    expect(getByRole('button', { name: /Working/ })).toBeTruthy()
+    act(() => {
+      vi.advanceTimersByTime(699)
+    })
+    expect(getByRole('button', { name: /Working/ })).toBeTruthy()
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(getByRole('button', { name: /Ran 1 step/ })).toBeTruthy()
+  })
+
+  it('skips pacing when reduced motion is requested', () => {
+    vi.useFakeTimers()
+    stubMatchMedia(true)
+    const { getByRole, rerender } = render(
+      <AeWorkDisclosure
+        isStreaming
+        workSteps={[workStep({ status: 'running', summary: '' })]}
+        thinkingSteps={[]}
+        thinkingLabel=""
+      />,
+    )
+
+    rerender(
+      <AeWorkDisclosure
+        isStreaming={false}
+        workSteps={[workStep({ startedAtMs: 0, completedAtMs: 0, durationMs: 0 })]}
+        thinkingSteps={[]}
+        thinkingLabel=""
+      />,
+    )
+
+    expect(getByRole('button', { name: /Ran 1 step/ })).toBeTruthy()
+  })
+
+  it('shows timing and step count in the settled header when durations exist', () => {
+    const { getByRole } = render(
+      <AeWorkDisclosure
+        isStreaming={false}
+        workSteps={[workStep({ startedAtMs: 0, completedAtMs: 1250, durationMs: 1250 })]}
+        thinkingSteps={[]}
+        thinkingLabel=""
+      />,
+    )
+    expect(getByRole('button', { name: /Worked for 1\.3s.*Ran 1 step/ })).toBeTruthy()
+  })
+
+  it('summarizes public check facts in the header and exposes the fact grid when expanded', () => {
+    const { getByText, getByRole } = render(
+      <AeWorkDisclosure
+        isStreaming={false}
+        workSteps={[workStep()]}
+        thinkingSteps={[]}
+        thinkingLabel=""
         checkSummary={{
           catalogSearches: 1,
           listingsRead: 2,
@@ -101,19 +200,21 @@ describe('AeResearchProcess', () => {
       />,
     )
 
-    // Header summary shows without expanding; the fact grid lives in the trace.
-    expect(getByText('Compared 2 listed businesses; checked 5 facts; done in 1.3s.')).toBeTruthy()
-    fireEvent.click(getByRole('button', { name: /how ae checked this/i }))
+    expect(getByRole('button', { name: /Worked for 1\.3s/ })).toBeTruthy()
+    expect(getByText('compared 2 matches; checked 5 facts')).toBeTruthy()
+    fireEvent.click(getByRole('button', { name: /Worked for 1\.3s/ }))
     expect(getByText('Searches')).toBeTruthy()
-    expect(getByText('Listings read')).toBeTruthy()
+    expect(getByText('Details read')).toBeTruthy()
     expect(getByText('Checks')).toBeTruthy()
   })
 
-  it('renders a summary-only process for sparse saved turns', () => {
+  it('renders a summary-only disclosure for sparse saved turns', () => {
     const { getByText } = render(
-      <AeResearchProcess
+      <AeWorkDisclosure
         isStreaming={false}
-        steps={[]}
+        workSteps={[]}
+        thinkingSteps={[]}
+        thinkingLabel=""
         checkSummary={{
           catalogSearches: 0,
           listingsRead: 0,
@@ -125,71 +226,104 @@ describe('AeResearchProcess', () => {
       />,
     )
 
-    expect(getByText('Checked 1 fact; done in <1s.')).toBeTruthy()
+    expect(getByText('checked 1 fact')).toBeTruthy()
   })
 
-  it('keeps running and failed public work visible in the process header', () => {
-    const { getByText, rerender } = render(
-      <AeResearchProcess
+  it('keeps running and failed public work visible in the disclosure header', () => {
+    const { getByRole, getByText, rerender } = render(
+      <AeWorkDisclosure
         isStreaming
-        steps={[
+        workSteps={[
           workStep(),
           workStep({
             id: 'step-2',
             phase: 'read',
             status: 'running',
-            title: 'Reading listed business details',
+            title: 'Reading the details',
             summary: '',
             detailRows: [],
           }),
         ]}
+        thinkingSteps={[]}
+        thinkingLabel=""
       />,
     )
 
-    expect(getByText('Checking now: Reading listed business details')).toBeTruthy()
+    expect(getByRole('button', { name: /Working.*Ran 2 steps/ })).toBeTruthy()
+    expect(getByText('Reading the details')).toBeTruthy()
 
     rerender(
-      <AeResearchProcess
+      <AeWorkDisclosure
         isStreaming={false}
-        steps={[
+        workSteps={[
           workStep(),
           workStep({
             id: 'step-2',
             phase: 'read',
             status: 'error',
-            title: 'Reading listed business details',
-            summary: 'Listing details were not available.',
+            title: 'Reading the details',
+            summary: 'The details were not available.',
             detailRows: [],
           }),
         ]}
+        thinkingSteps={[]}
+        thinkingLabel=""
       />,
     )
 
-    expect(getByText('Needs attention: Reading listed business details')).toBeTruthy()
-  })
-})
-
-describe('AeThinkingRail', () => {
-  afterEach(() => {
-    cleanup()
+    expect(getByText('Reading the details (failed)')).toBeTruthy()
+    expect(getByText('The details were not available.')).toBeTruthy()
   })
 
-  it('shows the public live answer process when a detailed work log is not available yet', () => {
-    const { container, getByText } = render(
-      <AeThinkingRail visible label="Reading listed businesses..." step="read" />,
+  it('keeps the capability execution name in the visible work row', () => {
+    const { getByRole, getByText } = render(
+      <AeWorkDisclosure
+        isStreaming={false}
+        workSteps={[{
+          id: 'step-1',
+          phase: 'read',
+          status: 'complete',
+          title: 'Ran Current Bitcoin Price',
+          summary: 'Data returned.',
+          detailRows: [
+            { label: 'Source', value: 'operation:v1:coingecko.simple-price' },
+            { label: 'Result', value: 'Data returned' },
+          ],
+        }]}
+        thinkingSteps={[]}
+        thinkingLabel=""
+        query="What is the current Bitcoin price?"
+      />,
     )
 
-    expect(getByText('Visible process')).toBeTruthy()
-    expect(getByText('Reading listed businesses...')).toBeTruthy()
-    expect(getByText('AE is checking published listing facts and routing to the next safe step.')).toBeTruthy()
-    expect(getByText('Search listings')).toBeTruthy()
-    expect(getByText('Read details')).toBeTruthy()
-    expect(getByText('Prepare next step')).toBeTruthy()
-    expect(container.querySelector('[aria-current="step"]')?.textContent).toContain('Read details')
+    fireEvent.click(getByRole('button', { name: /Ran 1 step/ }))
+    expect(getByText('Ran Current Bitcoin Price')).toBeTruthy()
+    expect(getByText('Data returned.')).toBeTruthy()
+    expect(getByText('Source')).toBeTruthy()
+    expect(getByText('operation:v1:coingecko.simple-price')).toBeTruthy()
+  })
+
+  it('shows the thinking phase trail while streaming before a work log arrives', () => {
+    const { getByRole, getByText, queryByText } = render(
+      <AeWorkDisclosure
+        isStreaming
+        workSteps={[]}
+        thinkingSteps={['Finding the right matches…']}
+        thinkingLabel="Reading the details"
+        thinkingStep="read"
+      />,
+    )
+
+    expect(getByRole('button', { name: /Reading the details/ })).toBeTruthy()
+    // Thinking labels fold into the collapsed Thought cell, not the header.
+    expect(getByText('Finding the right matches…')).toBeTruthy()
+    expect(getByText('Thought…')).toBeTruthy()
+    expect(queryByText('Thought')).toBeNull()
   })
 })
 
-function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
+function provider(overrides: Omit<Partial<AnswerSource>, 'inquiryUrl'> & { inquiryUrl?: string | undefined } = {}): AnswerSource {
+  const { inquiryUrl, ...otherOverrides } = overrides
   return {
     citationIndex: 1,
     slug: 'demo-plumber',
@@ -206,8 +340,10 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     nextStepLabel: 'Send inquiry',
     detailUrl: '/demo-plumber',
     services: [],
-    inquiryUrl: '/demo-plumber/inquiry',
-    ...overrides,
+    ...otherOverrides,
+    ...(inquiryUrl === undefined
+      ? ('inquiryUrl' in overrides ? {} : { inquiryUrl: '/demo-plumber/inquiry' })
+      : { inquiryUrl }),
   }
 }
 
@@ -216,9 +352,22 @@ function workStep(overrides: Partial<AnswerWorkStep> = {}): AnswerWorkStep {
     id: 'step-1',
     phase: 'search',
     status: 'complete',
-    title: 'Searching listed businesses',
-    summary: '2 listed businesses found.',
+    title: 'Searching for matches',
+    summary: '2 matches found.',
     detailRows: [{ label: 'Results', value: '2' }],
     ...overrides,
   }
+}
+
+function stubMatchMedia(matches: boolean): void {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({
+    matches,
+    media: '(prefers-reduced-motion: reduce)',
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })))
 }

@@ -1,4 +1,7 @@
 import { v } from 'convex/values'
+import { canonicalClaimMaterialV2Value } from '@/modules/customer-request/runtime'
+import { connectionAuthoritySnapshotValue } from '@/modules/capability-supply/convex'
+import type { CapabilityConnectionAuthoritySnapshot } from '@/modules/capability-supply/public'
 
 import {
   allocateEgress as allocateEgressMachine,
@@ -38,15 +41,32 @@ export const allocate = internalMutation({
 export const beginDispatch = internalMutation({
   args: { operationRef: v.string(), principalId: v.string(), now: v.number() },
   returns: v.union(
-    v.object({ kind: v.literal('dispatch'), endpointUrl: v.string(), credentialRef: v.string(),
-      adapterId: v.string(), configJson: v.string(), bodyText: v.string(), dispatchAttemptRef: v.string() }),
+    v.object({
+      kind: v.literal('dispatch'),
+      endpointUrl: v.string(),
+      credentialRef: v.string(),
+      connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
+      adapterId: v.string(),
+      configJson: v.string(),
+      bodyText: v.string(),
+      dispatchAttemptRef: v.string(),
+      canonicalClaimMaterial: canonicalClaimMaterialV2Value,
+    }),
     v.object({ kind: v.literal('in_flight') }),
     v.object({ kind: v.literal('terminal'), state: terminalState }),
     v.object({ kind: v.literal('needs_attention') }),
   ),
-  handler: async (ctx, args) => (
-    await beginDispatchMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  ),
+  handler: async (ctx, args) => {
+    const result = await beginDispatchMachine(args, customerRequestV2PreparationEgressPorts(ctx))
+    if (result.kind !== 'dispatch') return result
+    const { connectionAuthority, ...dispatch } = result
+    return {
+      ...dispatch,
+      ...(connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: mutableAuthority(connectionAuthority) }),
+    }
+  },
 })
 
 export const resolveDispatch = internalMutation({
@@ -105,11 +125,34 @@ export const unresolvedForRequest = internalQuery({
 export const openReconciliation = internalQuery({
   args: { operationRef: v.string(), principalId: v.string() },
   returns: v.union(
-    v.object({ kind: v.literal('available'), endpointUrl: v.string(), credentialRef: v.string(),
-      adapterId: v.string(), configJson: v.string() }),
+    v.object({
+      kind: v.literal('available'),
+      endpointUrl: v.string(),
+      credentialRef: v.string(),
+      connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
+      adapterId: v.string(),
+      configJson: v.string(),
+      canonicalClaimMaterial: canonicalClaimMaterialV2Value,
+    }),
     v.object({ kind: v.literal('unavailable') }),
   ),
-  handler: async (ctx, args) => (
-    await openReconciliationMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  ),
+  handler: async (ctx, args) => {
+    const result = await openReconciliationMachine(args, customerRequestV2PreparationEgressPorts(ctx))
+    if (result.kind !== 'available') return result
+    const { connectionAuthority, ...reconciliation } = result
+    return {
+      ...reconciliation,
+      ...(connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: mutableAuthority(connectionAuthority) }),
+    }
+  },
 })
+
+function mutableAuthority(authority: CapabilityConnectionAuthoritySnapshot) {
+  return {
+    ...authority,
+    grantedScopes: [...authority.grantedScopes],
+    grantedResources: [...authority.grantedResources],
+  }
+}

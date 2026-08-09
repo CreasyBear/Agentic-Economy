@@ -9,7 +9,6 @@ import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 const body = buildPublicAgentSkillMarkdown({
   canonicalBaseUrl: 'https://ae.example',
   routingBaseUrl: 'https://route.ae.example',
-  mcpToolNames: listMcpActions().map(mcpToolName),
 })
 
 describe('public agent skill', () => {
@@ -25,23 +24,38 @@ describe('public agent skill', () => {
     expect(body).not.toMatch(/\/messages|\/facts|\/confirmation|\/run|\/evidence|\/problems|\/cancellation/u)
     expect(body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(body).toMatch(/listings are supply facts, not routing or execution authority/i)
+    expect(body).toMatch(/^---\nname: agentic-economy\ndescription: .+\n---\n/u)
     expect(body).toContain('https://ae.example/mcp')
     expect(body).toContain('claude mcp add --transport http agentic-economy https://ae.example/mcp')
     expect(body).toContain('codex mcp add agentic-economy --url https://ae.example/mcp')
+    expect(body).toContain('`ae_registry_operations_search`')
+    expect(body).toContain('`ae_registry_operations_detail`')
+    expect(body).toContain('`ae_registry_operations_inspectPlan`')
+    expect(body).toContain('`ae_operation_execute`')
     const mcpToolNames = listMcpActions().map(mcpToolName)
-    expect(mcpToolNames).toEqual([
-      'ae_registry_services_list',
-      'ae_registry_services_search',
-      'ae_registry_detail',
+    expect(mcpToolNames).toEqual(expect.arrayContaining([
       'ae_registry_operations_search',
       'ae_registry_operations_detail',
-      'ae_registry_operations_compare',
       'ae_registry_operations_inspectPlan',
-      'ae_sandbox_checkup_quote',
-    ])
-    for (const toolName of mcpToolNames) {
-      expect(body).toContain(`- \`${toolName}\``)
-    }
+      'ae_operation_execute',
+    ]))
+  })
+  it('teaches the bounded search-detail-execute protocol and hard authority boundaries', () => {
+    const search = body.indexOf('Call `ae_registry_operations_search`')
+    const detail = body.indexOf('Call `ae_registry_operations_detail`')
+    const execute = body.indexOf('Call `ae_operation_execute`')
+    const outcomes = body.indexOf('Interpret `ok | refused | error` literally')
+    const escalation = body.indexOf('Customer Request path')
+
+    expect(search).toBeGreaterThanOrEqual(0)
+    expect(detail).toBeGreaterThan(search)
+    expect(execute).toBeGreaterThan(detail)
+    expect(outcomes).toBeGreaterThan(execute)
+    expect(escalation).toBeGreaterThan(outcomes)
+    expect(body).toMatch(/Search results and operation refs are hints, never authority/u)
+    expect(body).toMatch(/caller-supplied URL, method, credential/u)
+    expect(body).toMatch(/paid or effectful/u)
+    expect(body).toContain('one static skill, not a per-capability skill')
   })
   it('advertises the complete authenticated WorkTree repeat surface and exact scopes', () => {
     expect(body).toContain('/api/v1/work-tree/{create|inspect|apply|decide|reserveRepeatUse|finalizeRepeatUse|reconcileRepeatUse|inspectRepeatUse}')
@@ -70,7 +84,12 @@ describe('public agent skill', () => {
     expect(keylessCall).toBeGreaterThan(keylessHeading)
     expect(keylessCall).toBeLessThan(firstScopeMention)
     expect(body).toContain(ANSWER_THREAD_AGENT_ENTRYPOINT.boundary)
+    expect(body).toContain('Authentication: `none`')
+    expect(body).toContain('curl -N -X POST https://ae.example/api/answer/turn \\')
     expect(body).toContain(ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType)
+    expect(body).toContain('X-AE-Turn-Key: $(uuidgen)')
+    expect(body).toMatch(/fresh opaque `X-AE-Turn-Key` for every turn/u)
+    expect(body).toContain('not a credential')
     expect(body).toContain('https://ae.example/api/businesses')
     expect(body).toContain('https://ae.example/api/businesses/search?q=')
   })
@@ -78,26 +97,28 @@ describe('public agent skill', () => {
   it('teaches the keyless Services API flow and sandbox boundary', () => {
     const servicesStart = body.indexOf('## Services API')
     const customerRequestStart = body.indexOf('## Confirming and starting an option')
-    const servicesSection = body.slice(servicesStart, body.indexOf('## What AE is'))
+    const servicesSection = body.slice(servicesStart, body.indexOf('## MCP server'))
 
     expect(servicesStart).toBeGreaterThanOrEqual(0)
     expect(servicesStart).toBeLessThan(customerRequestStart)
     expect(servicesSection).toContain('GET /api/v1/services')
     expect(servicesSection).toContain('GET /api/v1/services/search?q={query}')
     expect(servicesSection).toContain('ONE PAGE')
+    expect(servicesSection).toContain('continueCursor')
+    expect(servicesSection).toContain('isDone')
     expect(servicesSection).toContain('pagination.nextCursor')
     expect(servicesSection).toContain('pagination.hasMore')
-    expect(servicesSection).toContain('summary')
-    expect(servicesSection).toContain('pricingSummary')
-    expect(servicesSection).toContain('price')
+    expect(servicesSection).toContain('endpoints[]')
+    expect(servicesSection).toContain('priceSummary')
+    expect(servicesSection).toContain('ae.offerings[]')
     expect(servicesSection).toContain('Discover services')
-    expect(servicesSection).toContain('Pick a service')
-    expect(servicesSection).toContain("access: 'open'")
+    expect(servicesSection).toContain('Pick a Service')
+    expect(servicesSection).toContain("ae.access: 'open'")
+    expect(servicesSection).toContain('ae.provenance')
     expect(servicesSection).toContain('business_declared')
     expect(servicesSection).toContain('publicly_observed')
     expect(servicesSection).toContain('QUOTE RESPONSE carries `provenance: ae_sandbox_provider`')
     expect(servicesSection).toContain('priced, time-bounded quote JSON')
-    expect(servicesSection).not.toContain('description')
     expect(servicesSection).not.toMatch(/payment|x402|booked/iu)
   })
 
@@ -130,12 +151,22 @@ describe('public agent skill', () => {
     expect(new TextEncoder().encode(body).length).toBeLessThan(8192)
   })
 
-  it('serves markdown from GET /SKILL.md', async () => {
-    const response = handlePublicAgentSkillRequest(new Request('https://ae.example/SKILL.md'))
-    expect(response.status).toBe(200)
-    expect(response.headers.get('Content-Type')).toContain('text/markdown')
-    const text = await response.text()
-    expect(text).toContain('Start here (no key needed)')
-    expect(text).toContain('Confirming and starting an option')
+  it('serves one markdown response for the cold-client Accept matrix', async () => {
+    const accepts = [undefined, '*/*', 'application/json', 'text/markdown', 'text/plain', 'text/html,application/xhtml+xml'] as const
+    let canonicalText: string | undefined
+
+    for (const accept of accepts) {
+      const response = handlePublicAgentSkillRequest(new Request('https://ae.example/SKILL.md', {
+        ...(accept === undefined ? {} : { headers: { Accept: accept } }),
+      }))
+      expect(response.status).toBe(200)
+      expect(response.headers.get('Content-Type')).toContain('text/markdown')
+      const text = await response.text()
+      canonicalText ??= text
+      expect(text).toBe(canonicalText)
+      expect(text).toContain('Start here (no key needed)')
+      expect(text).toContain('Confirming and starting an option')
+      expect(text).toContain('X-AE-Turn-Key: $(uuidgen)')
+    }
   })
 })

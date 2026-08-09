@@ -12,6 +12,7 @@ export type AeQueryPanelProps = {
   initialTiming?: AeSearchContext['timing']
   initialTimingDate?: string
   showExamples?: boolean
+  showTiming?: boolean
   placeholder?: string
   loopHint?: string
   focusOnMount?: boolean
@@ -25,6 +26,7 @@ export function AeQueryPanel({
   initialTiming = 'flexible',
   initialTimingDate = '',
   showExamples = true,
+  showTiming = true,
   placeholder,
   loopHint,
   focusOnMount = false,
@@ -40,6 +42,7 @@ export function AeQueryPanel({
         initialTimingDate={initialTimingDate}
         busy={busy}
         examples={examples}
+        showTiming={showTiming}
         focusOnMount={focusOnMount}
         {...(placeholder === undefined ? {} : { placeholder })}
       />
@@ -47,7 +50,7 @@ export function AeQueryPanel({
         <p className="font-mono text-xs leading-snug text-muted-foreground">{loopHint}</p>
       ) : null}
       {showExamples ? (
-        <p className="font-mono text-xs leading-snug text-muted-foreground">Cited answers from published business details.</p>
+        <p className="font-mono text-xs leading-snug text-muted-foreground">Answers based on business information.</p>
       ) : null}
     </div>
   )
@@ -56,25 +59,25 @@ export function AeQueryPanel({
 function buildContextExamples(searchContext: AeSearchContext | undefined): readonly string[] {
   if (searchContext?.mode !== 'near_me') {
     return [
-      'Emergency plumber Parramatta',
-      'Compare emergency plumbers',
-      'Who can take an inquiry?',
+      'I need an emergency plumber in Parramatta',
+      'I need a locksmith right now',
+      'I need an electrician today',
     ]
   }
 
   const label = aeSearchContextLocationLabel(searchContext)
   if (label === undefined) {
     return [
-      'Emergency plumber near me',
-      'Locksmith open now',
-      'Who can take an inquiry?',
+      'I need an emergency plumber near me',
+      'I need a locksmith near me right now',
+      'I need an electrician near me today',
     ]
   }
 
   const place = label.replace(/,\s*[A-Z]{2,3}$/i, '')
   return [
-    `Emergency plumber near ${place}`,
-    `Locksmith open now near ${place}`,
-    `Who can take an inquiry near ${place}?`,
+    `I need an emergency plumber near ${place}`,
+    `I need a locksmith near ${place} right now`,
+    `I need an electrician near ${place} today`,
   ]
 }

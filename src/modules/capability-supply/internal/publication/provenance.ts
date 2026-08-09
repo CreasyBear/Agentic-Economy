@@ -6,6 +6,8 @@ import type { SupplyCommandActor } from '../shared'
 export const CAPABILITY_PUBLICATION_AUTHORITY_MODES = [
   'provider_owned',
   'ae_curated_external',
+  'third_party_gateway',
+  'observed_external',
 ] as const
 
 export type CapabilityPublicationAuthorityMode =
@@ -28,9 +30,16 @@ export function validCapabilityPublicationAuthority(
   authorityMode: CapabilityPublicationAuthorityMode,
 ): boolean {
   if (actor.ref.trim().length === 0) return false
-  return authorityMode === 'provider_owned'
-    ? actor.kind === 'owner'
-    : actor.kind === 'admin' || actor.kind === 'system'
+  switch (authorityMode) {
+    case 'provider_owned':
+      return actor.kind === 'owner'
+    case 'ae_curated_external':
+    case 'third_party_gateway':
+      return actor.kind === 'admin' || actor.kind === 'system'
+    case 'observed_external':
+      // observed entries are not yet verified: only system may admit them
+      return actor.kind === 'system'
+  }
 }
 
 export function validCapabilityPublicationSourceRevision(value: string): boolean {

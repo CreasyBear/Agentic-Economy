@@ -1,49 +1,61 @@
 import type { AnswerSource } from '../answer-synthesizer'
 
 export function buildBoundaryOneLine(): string {
-  return 'Agentic Economy compares published listings, but it cannot confirm a booking or the work.'
+  return 'The assistant compares published details, but it cannot book or start the job. Timing, price, and availability still need confirmation from the business.'
 }
 
 export function buildBoundarySummary(providers: readonly AnswerSource[]): string {
   const context =
     providers.length > 0
-      ? 'In this thread, the cards above are published listings you can compare and open.'
-      : 'Agentic Economy publishes business-supplied details for comparison.'
+      ? 'In this thread, the cards above show published details you can compare and open.'
+      : 'This page shows details supplied by businesses for comparison.'
 
   return [
     context,
-    'Use the cards to compare published services, service area, and contact path.',
+    'Use the cards to compare what is offered, service area, and how to get in touch.',
   ].join(' ')
 }
 
 export function buildBoundaryNextStep(providers: readonly AnswerSource[]): string {
   if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
-    return 'Open a listed business and send an inquiry when that option is published.'
+    return 'Open a business and send a request when that option is available.'
   }
 
-  return 'Browse services or refine your search, then contact the business when you find a match.'
+  return 'See other options or refine your search, then contact the business when you find a match.'
 }
 
 export function buildUnsupportedOneLine(): string {
-  return 'This request needs a business-supported action that is not available here.'
+  return 'This kind of request is not available here; the business would need to handle it directly.'
 }
 
 export function buildUnsupportedSummary(providers: readonly AnswerSource[]): string {
   const route =
     providers.length > 0
-      ? 'Open a listed business page and send a qualified inquiry when that option is published.'
-      : 'Browse services, then open a business page when you find a match.'
+      ? 'Open a business page and send a request when that option is available.'
+      : 'See other options, then open a business page when you find a match.'
 
   return [
     route,
-    'The business reviews your message and replies through your contact detail.',
+    'The business reviews your message and replies using the contact details you provide.',
   ].join(' ')
 }
 
 export function buildUnsupportedNextStep(providers: readonly AnswerSource[]): string {
   if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
-    return 'Send an inquiry from a listed business page.'
+    return 'Send a request from the business page.'
   }
 
-  return 'Find a listed business first, then use an inquiry option when it is published.'
+  return 'Open a business page to use its request option when available.'
+}
+
+export function buildSafetyRefusalOneLine(): string {
+  return 'I cannot help with requests that could cause physical harm.'
+}
+
+export function buildSafetyRefusalSummary(): string {
+  return 'No search, provider lookup, capability selection, or external action was run for this request.'
+}
+
+export function buildSafetyRefusalNextStep(): string {
+  return 'Try a safe question or start a new ask.'
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  connectionAuthoritySnapshotFromProviderConnection,
   registerCapabilityTransportBinding,
   type BindingInsertRow,
   type BindingWritePorts,
@@ -19,11 +20,18 @@ import {
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import {
+  createProviderConnection,
+  type CreateProviderConnectionCommand,
+  type ProviderConnection,
+} from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const contractRef = {
@@ -61,7 +69,7 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   networkId: 'ae:public',
   contractRef,
   endpointUrl: 'https://example.test/api',
-  credentialRef: 'env:AE_DEMO_PROVIDER_KEY',
+  authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
   continuation: { kind: 'single_response', evidenceRefs: ['evidence:continuation'] },
   cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
   adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
@@ -73,7 +81,33 @@ const admittedTransport = {
   configJson: '{"method":"POST","requestTimeoutMs":5000}',
   configDigest: canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 }),
 }
+const operationRef = createPublicOperationRef({
+  operationId: capabilityOperationId(contractRef.capabilityId),
+  publicationRef: offeringRegistration.offeringId,
+  publicationRevision: 1,
+  contractRef,
+})
 
+const providerConnectionCommand: CreateProviderConnectionCommand = {
+  commandId: 'command:create:demo',
+  connectionRef: 'connection:demo',
+  businessId: 'business-1',
+  providerRef: 'provider:demo',
+  providerAccountRef: 'account:demo',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:DEMO_PROVIDER_SECRET',
+  requestedScopes: ['demo:read'],
+  grantedScopes: ['demo:read'],
+  requestedResources: ['account:demo'],
+  grantedResources: ['account:demo'],
+  evidenceRefs: ['evidence:connection'],
+}
+
+function demoProviderConnection(now = 1): ProviderConnection {
+  const result = createProviderConnection(providerConnectionCommand, now)
+  if (result.kind !== 'applied') throw new Error(`provider connection fixture failed: ${result.kind}`)
+  return result.connection
+}
 function inactiveOffering(overrides: Partial<CapabilityOfferingRow> = {}): CapabilityOfferingRow {
   const registrationHash = capabilityOfferingRegistrationHash(offeringRegistration)
   return {
@@ -113,7 +147,11 @@ function inactiveBinding(overrides: Partial<CapabilityBindingRow> = {}): Capabil
     version: contractRef.version,
     contractDigest: contractRef.contractDigest,
     endpointUrl: bindingRegistration.endpointUrl,
-    credentialRef: bindingRegistration.credentialRef,
+    authority: bindingRegistration.authority,
+    connectionAuthority: connectionAuthoritySnapshotFromProviderConnection(
+      demoProviderConnection(),
+      operationRef,
+    ),
     continuation: bindingRegistration.continuation,
     cancellation: bindingRegistration.cancellation,
     adapterId: admittedTransport.adapterId,
@@ -153,6 +191,7 @@ function bindingPorts(overrides: Partial<BindingWritePorts> = {}): BindingWriteP
   return {
     loadOfferingByOfferingId: async () => inactiveOffering(),
     loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+    loadProviderConnection: async () => demoProviderConnection(),
     resolveExactContract: async () => ({ kind: 'found' }),
     loadBindingByBindingId: async () => null,
     insertBinding: async () => {},
@@ -167,6 +206,7 @@ function eligibilityPorts(overrides: Partial<EligibilityWritePorts> = {}): Eligi
     listAdmittedConformantBindings: async () => [],
     resolveExactContract: async () => ({ kind: 'found' }),
     loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+    loadProviderConnection: async () => demoProviderConnection(),
     patchOfferingEligibility: async () => {},
     patchBindingEligibility: async () => {},
     ...overrides,

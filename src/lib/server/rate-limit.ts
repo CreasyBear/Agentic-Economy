@@ -1,6 +1,8 @@
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
 import { readCookie } from '@/lib/http/cookies'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { problem } from '@/lib/server/problem'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 
 export type RateLimitName =
   | 'public-read'
@@ -11,7 +13,7 @@ export type RateLimitName =
   | 'answer-stream'
   | 'inquiry-submit'
 
-type RateLimitResult =
+export type RateLimitResult =
   | { ok: true; retryAfter?: number | undefined }
   | { ok: false; retryAfter: number }
 
@@ -46,6 +48,7 @@ export async function assertHttpAdmission(
 ): Promise<RateLimitResult> {
   const key = options.key ?? requestAdmissionKey(request, options.keySuffix)
   if (admissionForTests !== undefined) return await admissionForTests({ request, name, key })
+  if (isLocalE2EAuthBypassEnabled()) return { ok: true }
   return await callPublicSourceMutation(admitMutation, { name, key })
 }
 
@@ -68,15 +71,15 @@ export async function withHttpRateLimit(
 
 export function rateLimitedResponse(retryAfter: number): Response {
   const retryAfterSeconds = Math.max(1, Math.ceil(retryAfter / 1_000))
-  return Response.json(
-    { error: 'rate_limited' },
+  return problem(
     {
       status: 429,
-      headers: {
-        'Cache-Control': 'no-store',
-        'Retry-After': String(retryAfterSeconds),
-      },
+      kind: 'RESOURCE_EXHAUSTED',
+      code: 'rate_limited',
+      retryable: true,
+      detail: 'Rate limit exceeded. Please retry later.',
     },
+    { 'Retry-After': String(retryAfterSeconds) },
   )
 }
 

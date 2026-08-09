@@ -146,7 +146,11 @@ async function submitQuery(
   baseUrl: URL,
   query: string,
 ): Promise<string> {
-  const response = await api.post(absoluteUrl(baseUrl, '/api/answer/turn'), { data: { query }, timeout: 180_000 })
+  const response = await api.post(absoluteUrl(baseUrl, '/api/answer/turn'), {
+    data: { query },
+    headers: { 'X-AE-Turn-Key': randomUUID() },
+    timeout: 180_000,
+  })
   if (!response.ok()) throw new Error(`answer_turn_failed:${response.status()}`)
 
   const frames = await readAnswerTurnStream(new Response(await response.text(), {
@@ -157,7 +161,7 @@ async function submitQuery(
   if (thread?.type !== 'thread') throw new Error('answer_turn_thread_event_missing')
   const terminal = frames.at(-1)?.event
   if (terminal?.type !== 'complete') {
-    throw new Error(terminal?.type === 'error' ? `answer_turn_error:${terminal.code}` : 'answer_turn_terminal_event_missing')
+    throw new Error(terminal?.type === 'error' ? `answer_turn_error:${terminal.problem.code}` : 'answer_turn_terminal_event_missing')
   }
 
   const threadUrl = absoluteUrl(baseUrl, `/t/${encodeURIComponent(thread.threadId)}`)

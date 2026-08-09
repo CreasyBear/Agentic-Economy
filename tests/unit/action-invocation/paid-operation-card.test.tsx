@@ -25,7 +25,7 @@ describe('AePaidOperationCard', () => {
 
     expect(screen.getByRole('heading', { name: 'Get the latest BTC price in USD' })).toBeTruthy()
     expect(screen.getByText('Development Quote Provider')).toBeTruthy()
-    expect(screen.getByText('$0.01')).toBeTruthy()
+    expect(screen.getByText('USD 0.01')).toBeTruthy()
     expect(screen.getByText('BTC / USD')).toBeTruthy()
     expect(screen.getByText(/no payment request has been submitted/)).toBeTruthy()
     expect(screen.getAllByText('Local mock demonstration')).toHaveLength(2)
@@ -89,7 +89,7 @@ describe('AePaidOperationCard', () => {
       },
       settlement: {
         state: 'settled',
-        amount: { currency: 'USD', amountMinor: 1 },
+        amount: { currency: 'USD', units: '1', exponent: 2 },
         evidenceRefs: ['evidence:settlement'],
       },
       resultDelivery: {
@@ -119,11 +119,11 @@ describe('AePaidOperationCard', () => {
     })} />)
 
     expect(screen.getByText('67,432.12 USD per BTC')).toBeTruthy()
-    expect(screen.getByText(/Payment of \$0\.01/)).toBeTruthy()
+    expect(screen.getByText(/Payment of USD 0\.01/)).toBeTruthy()
 
     fireEvent.click(screen.getByText('Technical details'))
     expect(screen.getByText('Result validated')).toBeTruthy()
-    expect(screen.getByText('$0.01 settled')).toBeTruthy()
+    expect(screen.getByText('USD 0.01 settled')).toBeTruthy()
     expect(screen.getByText('fixture_contract_only')).toBeTruthy()
   })
 
@@ -212,7 +212,7 @@ describe('AePaidOperationCard', () => {
       },
       settlement: {
         state: 'settled',
-        amount: { currency: 'USD', amountMinor: 1 },
+        amount: { currency: 'USD', units: '1', exponent: 2 },
         evidenceRefs: ['evidence:settlement'],
       },
       resultDelivery: {
@@ -223,7 +223,7 @@ describe('AePaidOperationCard', () => {
     })} />)
 
     expect(screen.getByText('Paid — result unusable')).toBeTruthy()
-    expect(screen.getByText(/Payment of \$0\.01/)).toBeTruthy()
+    expect(screen.getByText(/Payment of USD 0\.01/)).toBeTruthy()
     expect(screen.getByText(/Do not assume another result is free/)).toBeTruthy()
   })
 
@@ -256,10 +256,10 @@ describe('AePaidOperationCard', () => {
           },
         ],
       },
-      maximumAuthorizedCharge: { currency: 'AUD', amountMinor: 250 },
+      maximumAuthorizedCharge: { currency: 'AUD', units: '250', exponent: 2 },
       settlement: {
         state: 'settled',
-        amount: { currency: 'AUD', amountMinor: 250 },
+        amount: { currency: 'AUD', units: '250', exponent: 2 },
         evidenceRefs: ['evidence:translation-payment'],
       },
       resultDelivery: {
@@ -275,7 +275,7 @@ describe('AePaidOperationCard', () => {
 
     expect(screen.getByRole('heading', { name: 'Translate a menu into French' })).toBeTruthy()
     expect(screen.getByText('Plain Language Translations will translate the supplied menu.')).toBeTruthy()
-    expect(screen.getByText('A$2.50')).toBeTruthy()
+    expect(screen.getByText('AUD 2.50')).toBeTruthy()
     expect(screen.getByText('840 words')).toBeTruthy()
     expect(screen.getByText('French menu ready')).toBeTruthy()
     expect(screen.getByText('document:menu:fr')).toBeTruthy()
@@ -285,14 +285,14 @@ describe('AePaidOperationCard', () => {
 
   it('uses ISO minor-unit exponents for JPY and KWD', () => {
     const { rerender } = render(<AePaidOperationCard semantics={fixture({
-      maximumAuthorizedCharge: { currency: 'JPY', amountMinor: 250 },
+      maximumAuthorizedCharge: { currency: 'JPY', units: '250', exponent: 0 },
     })} />)
-    expect(screen.getByText('¥250')).toBeTruthy()
+    expect(screen.getByText('JPY 250')).toBeTruthy()
 
     rerender(<AePaidOperationCard semantics={fixture({
-      maximumAuthorizedCharge: { currency: 'KWD', amountMinor: 250 },
+      maximumAuthorizedCharge: { currency: 'KWD', units: '250', exponent: 3 },
     })} />)
-    expect(screen.getByText(/KWD\s*0\.250/)).toBeTruthy()
+    expect(screen.getByText(/KWD\s*0\.25/)).toBeTruthy()
   })
 
   it('emits prepared authorize and execute continuations through the generic callback', () => {
@@ -364,7 +364,7 @@ function fixture(
         },
       ],
     },
-    maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+    maximumAuthorizedCharge: { currency: 'USD', units: '1', exponent: 2 },
     queryRelease: { state: 'not_released' },
     paymentAuthorization: { state: 'not_created' },
     paymentSubmission: { state: 'not_submitted' },

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { findAction, listActions } from '@/modules/actions'
 
 const charter = {
-  wants: [{ id: 'price', label: 'Price', weight: 1, sense: 'cost', valueKey: 'priceMinor' }],
+  wants: [{ id: 'price', label: 'Price', weight: 1, sense: 'cost', valueKey: 'price' }],
   hardNeeds: [{ kind: 'fixed_price' }],
 }
 

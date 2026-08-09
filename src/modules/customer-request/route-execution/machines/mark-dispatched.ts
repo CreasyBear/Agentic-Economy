@@ -45,6 +45,7 @@ export async function markDispatched(
     contractRef: attempt.grant.step.contractRef,
     expectedOfferingRegistrationHash: attempt.grant.step.offeringRegistrationHash,
     expectedBindingRegistrationHash: attempt.grant.step.bindingRegistrationHash,
+    now,
   })
   if (supply.kind !== 'available') {
     return { kind: 'refused', reason: 'dispatch_not_current' }

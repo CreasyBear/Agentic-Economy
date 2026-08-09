@@ -62,8 +62,6 @@ function invocation(input: Readonly<{
   return {
     invocationRef: input.ref,
     invocationVersion: input.version ?? 1,
-    environment: 'MOCK/DEVELOPMENT ONLY',
-    persistence: 'durable_control',
     origin: { kind: 'standalone', callerRef: 'mock:caller', principalRef: 'mock:principal' },
     owner: { callerRef: 'mock:caller', principalRef: 'mock:principal' },
     action: {

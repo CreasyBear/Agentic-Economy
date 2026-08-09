@@ -6,6 +6,7 @@ import {
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { formatExactAmount } from '@/modules/money/public'
 import {
   applyWorkTreeThroughSource,
   inspectWorkTreeThroughSource,
@@ -279,7 +280,11 @@ export async function completeStudyThroughSource(input: Readonly<{
     at: input.requestedAt,
     ...(sourceWrite === undefined ? {} : { sourceWrite }),
   })
-  const options = result.artifact.quotes.slice(0, 4).map((quote) => ({ optionId: quote.providerSlug, label: quote.providerName, summary: `${quote.service}: ${quote.price.currency} ${quote.price.amountMinor}` }))
+  const options = result.artifact.quotes.slice(0, 4).map((quote) => ({
+    optionId: quote.providerSlug,
+    label: quote.providerName,
+    summary: `${quote.service}: ${quote.price.amount.currency} ${formatExactAmount(quote.price.amount) ?? '—'}`,
+  }))
   const recommendation = result.artifact.recommendation?.alternativeId
   const unsignedVerb = {
     kind: 'propose_decision' as const,

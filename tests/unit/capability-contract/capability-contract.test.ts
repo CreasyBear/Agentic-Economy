@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { defineCapabilityContract } from '@/modules/capability-contract/public'
+import { defineCapabilityContract, resolvePointedSchema } from '@/modules/capability-contract/public'
 import { objectSchema } from '../../fixtures/capability-contract-v2'
 
 const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema' as const
@@ -265,6 +265,34 @@ describe('function-agnostic capability contract', () => {
     })
 
     expect(contract.customerAnnotations[1]?.pointer).toBe('/0/result')
+  })
+  it('accepts root completion evidence for dynamic-key output objects', () => {
+    const contract = defineCapabilityContract({
+      ...minimalContract(),
+      outputSchema: {
+        $schema: JSON_SCHEMA_2020_12,
+        type: 'object',
+        additionalProperties: { type: 'number' },
+      },
+      customerAnnotations: [
+        { annotationId: 'identifier', document: 'input', pointer: '/id', label: 'Identifier', role: 'request' },
+        { annotationId: 'result', document: 'output', pointer: '', label: 'Result', role: 'completion_evidence' },
+      ],
+      evidence: [{ evidenceId: 'result', outputPointer: '', purpose: 'completion' }],
+    })
+
+    expect(resolvePointedSchema(contract.outputSchema, '')).toMatchObject({
+      type: 'object',
+      additionalProperties: { type: 'number' },
+    })
+    expect(contract.evidence[0]?.outputPointer).toBe('')
+  })
+
+  it('keeps root pointers out of data-use declarations', () => {
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      dataUse: [{ ...minimalContract().dataUse[0], inputPointer: '' }],
+    })).toThrowError('capability_contract_invalid')
   })
 
   it('rejects non-canonical JSON Pointer escapes and array-index aliases', () => {

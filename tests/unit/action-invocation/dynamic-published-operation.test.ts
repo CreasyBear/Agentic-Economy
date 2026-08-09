@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDevelopmentDynamicPublishedSource,
-  createDevelopmentInvocationApplication,
+  createInvocationApplication,
   createDynamicPublishedActionInvocationAdapter,
   createInMemoryActionInvocationTracer,
   derivePaidOperationSemantics,
@@ -11,6 +13,8 @@ import {
   readDevelopmentHostSnapshot,
   materialDigest,
   type ActionInvocationOrigin,
+  type ActionInvocationView,
+  type DynamicPublishedInvocationResult,
   type InvocationActor,
 } from '@/modules/action-invocation'
 import { defineAction } from '@/modules/common/action'
@@ -20,9 +24,13 @@ import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
+  capabilityOperationId,
+  createPublicOperationRef,
+  defineCapabilityTransportBindingRegistration,
   materializePublishedOperation,
 } from '@/modules/capability-supply/public'
 import type {
+  ProviderConnectionAuthorityLookup,
   RouteTransportFetch,
   RouteTransportRuntime,
   X402PaymentAuthorizationIdentity,
@@ -30,6 +38,8 @@ import type {
   X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
+import type { ExactAmount } from '@/modules/money/public'
 import {
   attachCompletedTaskReference,
 } from '@/modules/customer-request/application/public'
@@ -60,12 +70,14 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
   it('cold-restores durable prepared and possibly-submitted payment cuts without duplicate effects', async () => {
     const prepared = paymentPreparedFixture()
     const request = paymentAuthorizationRequest()
+    expect(request.selectedRequirement.amount).toBe('10000')
+    expect(request.paymentAmount).toEqual({ currency: 'USD', units: '1', exponent: 2 })
     const durable = createInMemoryX402PaymentAttemptPort()
     let authorizations = 0
     let paidSends = 0
     const custodyRuntime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('direct_provider_send_must_not_run') },
-      resolveCredential: () => 'mock:credential',
+      resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'mock:credential' : undefined,
       prepareX402PaymentAuthorization: async () => {
         authorizations += 1
         return {
@@ -100,12 +112,15 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       network: request.selectedRequirement.network,
       asset: request.selectedRequirement.asset,
       payTo: request.selectedRequirement.payTo,
-      amount: request.selectedRequirement.amount,
+      amount: request.paymentAmount,
       providerEndpoint: request.challenge.resource.url,
       custodyRef: authorization!.custodyRef,
       authorizationDigest: authorization!.authorizationDigest,
     })
-    expect(durable.list()).toEqual([expect.objectContaining({ state: 'possibly_submitted' })])
+    expect(durable.list()).toEqual([expect.objectContaining({
+      state: 'possibly_submitted',
+      amount: request.paymentAmount,
+    })])
     paidSends += 1
 
     const restoredUncertain = createPaymentAttemptRuntime(
@@ -127,7 +142,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     let signaturesCreated = 0
     const custodyRuntime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('provider_send_must_not_run') },
-      resolveCredential: () => 'mock:credential',
+      resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'mock:credential' : undefined,
       prepareX402PaymentAuthorization: async (request) => {
         const identity = canonicalDigest({
           paymentIdentifier: request.paymentIdentifier,
@@ -197,7 +212,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     let reads = 0
     const runtime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('provider_send_must_not_run') },
-      resolveCredential: () => 'mock:credential',
+      resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'mock:credential' : undefined,
       prepareX402PaymentAuthorization: async () => {
         prepares += 1
         throw new Error('custody_prepare_must_not_repeat')
@@ -273,10 +288,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     const origin = origins[0]!
     const material = { operationKey: 'operation:malicious', target: {} }
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin, actor, input: material, context: {}, freshnessMs: 60_000,
     })
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -320,17 +335,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[0]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -375,17 +390,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[0]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -399,21 +414,27 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       leaseOwner: acquired.view.control.leaseOwner,
       effectGeneration: acquired.view.control.effectGeneration,
     })
+    const reconciliationRequired = mode === 'payment_outside_authority'
     expect(refused.kind === 'accepted' && refused.view).toMatchObject({
-      control: { state: 'terminal' },
-      observedResolution: { state: 'returned', execution: 'runner_returned' },
-      attempts: [{ release: { state: 'possibly_released' }, outcome: { state: 'returned' } }],
+      control: { state: reconciliationRequired ? 'reconciliation_required' : 'terminal' },
+      observedResolution: reconciliationRequired
+        ? { state: 'threw', execution: 'runner_threw' }
+        : { state: 'returned', execution: 'runner_returned' },
+      attempts: [{
+        release: { state: 'possibly_released' },
+        outcome: { state: reconciliationRequired ? 'uncertain' : 'returned' },
+      }],
     })
     expect(source.list()[0]?.observedResolution).toEqual(
       refused.kind === 'accepted' ? refused.view.observedResolution : undefined,
     )
-    expect(adapter.exportSnapshot().paymentAuthorizationEvents).toEqual([
+    expect(adapter.exportDevelopmentSnapshot().paymentAuthorizationEvents).toEqual([
       expect.objectContaining({
         queryRelease: 'released',
         authorization: 'not_created',
       }),
     ])
-    expect(adapter.exportSnapshot().paymentAttempts).toEqual([])
+    expect(adapter.exportDevelopmentSnapshot().paymentAttempts).toEqual([])
   })
 
   it.each(['config', 'payment_authority'] as const)(
@@ -433,7 +454,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
             ...fixture.operation,
             identity: {
               ...fixture.operation.identity,
-              price: { kind: 'fixed' as const, currency: 'EUR', amountMinor: 1 },
+              price: {
+                kind: 'fixed' as const,
+                amount: { currency: 'EUR', units: '1', exponent: 2 },
+              },
             },
           }
       const clock = operation.readiness.observedAt + 1_000
@@ -449,17 +473,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       }
       const adapter = createAdapter(operation, runtime, clock)
       const origin = origins[0]!
-      const prepared = adapter.prepare({
+      const prepared = await adapter.prepare({
         origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
       })
-      const decided = adapter.decide({
+      const decided = await adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
         actor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = adapter.acquire({
+      const acquired = await adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: prepared.authority!.reference,
@@ -487,17 +511,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     vi.spyOn(Date, 'now').mockReturnValue(clock)
     const effects = { payment: 0, provider: 0 }
     const adapter = createAdapter(fixture.operation, successRuntime(fixture.operation.binding.endpointUrl, effects), clock)
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin,
       actor,
       value: { symbol: 'BTC', convert: 'USD' },
       freshnessMs: 60_000,
     })
     expect(prepared.prepared?.dataUse.limits).toMatchObject({
-      amountMinor: 1,
+      amount: { currency: 'USD', units: '1', exponent: 2 },
       publicationRevision: 7,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -507,7 +531,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     expect(decided.kind).toBe('accepted')
     if (decided.kind !== 'accepted') return
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -555,17 +579,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -583,30 +607,29 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       state: 'reconciliation_required',
     })
     expect(effects).toEqual({ payment: 1, provider: 1 })
-    const snapshot = adapter.exportSnapshot()
-    const legacyHostSnapshot = JSON.parse(JSON.stringify(snapshot))
-    const legacyHostControl = legacyHostSnapshot.controls[0]
-    if (legacyHostControl === undefined) throw new Error('legacy_host_control_missing')
-    legacyHostControl.acceptedAuthority = legacyHostControl.control.acceptedAuthority
-    delete legacyHostControl.control.acceptedAuthority
+    const snapshot = adapter.exportDevelopmentSnapshot()
+    expect(snapshot.controls[0]?.control.acceptedAuthority).toEqual({
+      kind: 'approve_each',
+      authorityRef: prepared.authority!.reference,
+    })
     expect(readDevelopmentHostSnapshot({
       host: 'standalone_external_agent',
-      snapshot: legacyHostSnapshot,
+      snapshot,
     }).semanticRead.authority.kind).toBe('approve_each')
-    const mismatchedHostSnapshot = JSON.parse(JSON.stringify(snapshot))
-    mismatchedHostSnapshot.controls[0].acceptedAuthority = {
-      kind: 'approve_each',
-      authorityRef: 'authority:host-read-forged',
-    }
+    const malformedHostSnapshot = JSON.parse(JSON.stringify(snapshot))
+    const malformedHostControl = malformedHostSnapshot.controls[0]
+    if (malformedHostControl === undefined) throw new Error('malformed_host_control_missing')
+    malformedHostControl.control.acceptedAuthority = { kind: 'forged' }
     expect(() => readDevelopmentHostSnapshot({
       host: 'standalone_external_agent',
-      snapshot: mismatchedHostSnapshot,
-    })).toThrow('durable_control_authority_mismatch')
-    expect(snapshot.format).toBe('dynamic-published-action-invocation:development:v3')
+      snapshot: malformedHostSnapshot,
+    })).toThrow('durable_control_authority_invalid')
+    expect(snapshot.format).toBe('dynamic-published-action-invocation:development:v4')
     expect(snapshot.paymentAttempts).toEqual([
       expect.objectContaining({
         state: 'reconciliation_required',
         paymentIdentifier: expect.stringMatching(/^sha256:/),
+        amount: { currency: 'USD', units: '10000', exponent: 6 },
         custodyRef: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
         authorizationDigest: expect.stringMatching(/^sha256:/),
       }),
@@ -637,7 +660,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         summary: 'Retrieve one current BTC/USD measurement.',
         blocks: [{ kind: 'text', label: 'Pair', value: 'BTC/USD' }],
       },
-      maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+      maximumAuthorizedCharge: { currency: 'USD', units: '1', exponent: 2 },
       queryRecipient: fixture.operation.identity.businessId,
       resultDelivery: { state: 'not_delivered' },
       environment: {
@@ -683,14 +706,6 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       structuredClone(snapshot),
       snapshotAnchors,
     )
-    const legacySnapshot = JSON.parse(JSON.stringify(snapshot))
-    const legacyControl = legacySnapshot.controls[0]
-    if (legacyControl === undefined) throw new Error('legacy_snapshot_control_missing')
-    legacyControl.acceptedAuthority = legacyControl.control.acceptedAuthority
-    delete legacyControl.control.acceptedAuthority
-    const legacyLoaded = loadDynamicPublishedAdapterSnapshot(legacySnapshot, snapshotAnchors)
-    expect(legacyLoaded.durableState.controls.get(prepared.invocationRef)?.control.acceptedAuthority)
-      .toEqual(snapshotAnchors.issuedAuthority.accepted)
     const tamperCases: readonly [string, (copy: any) => void][] = [
       ['invocationRef', (copy) => { copy.paymentAttempts[0].invocationRef = 'invocation:other' }],
       ['attemptRef', (copy) => { copy.paymentAttempts[0].attemptRef = 'attempt:other' }],
@@ -703,7 +718,9 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         delete copy.paymentAuthorizationEvents[0].authorizationDigest
       }],
       ['payTo', (copy) => { copy.paymentAttempts[0].payTo = '0xother-recipient' }],
-      ['amount', (copy) => { copy.paymentAttempts[0].amount = '999999' }],
+      ['amount', (copy) => {
+        copy.paymentAttempts[0].amount = { currency: 'USD', units: '999999', exponent: 6 }
+      }],
       ['scheme', (copy) => { copy.paymentAttempts[0].scheme = 'other' }],
       ['network', (copy) => { copy.paymentAttempts[0].network = 'eip155:1' }],
       ['asset', (copy) => { copy.paymentAttempts[0].asset = '0xother-asset' }],
@@ -758,20 +775,25 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       successRuntime(fixture.operation.binding.endpointUrl, effects),
       clock + 1_000,
       coldSource,
-      loaded.durableState,
-      loaded.paymentAttempts,
-      loaded.paymentAuthorizationEvents,
-      () => true,
+      {
+        durablePort: loaded.durablePort,
+        developmentSnapshot: loaded.developmentSnapshot,
+        initialSnapshot: loaded.initialSnapshot,
+        sequenceBase: loaded.developmentSnapshot.controls.size,
+        paymentAttempts: loaded.paymentAttempts,
+        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+        verifyPaymentReconciliationEvidence: () => true,
+      },
     )
     expect(cold.inspect(prepared.invocationRef)?.control).toMatchObject({ state: 'reconciliation_required' })
-    const cancelled = cold.cancel({
+    const cancelled = await cold.cancel({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0,
       actor,
       origin,
     })
     expect(cancelled).toMatchObject({ kind: 'refused', code: 'invalid_control_state' })
-    const retry = cold.acquire({
+    const retry = await cold.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0,
       authorityRef: prepared.authority!.reference,
@@ -819,7 +841,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       ...paymentEvidenceMaterial,
       digest: canonicalDigest(paymentEvidenceMaterial),
     }
-    const invalidControlApplication = createDevelopmentInvocationApplication({
+    const invalidControlApplication = createInvocationApplication({
       adapter: cold,
       sourceCommands: {
         leaseOwner: () => 'worker:reconciliation',
@@ -835,11 +857,11 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     expect(invalidControl).toMatchObject({ kind: 'refused', code: 'evidence_digest_mismatch' })
     expect(cold.inspect(prepared.invocationRef)?.control)
       .toMatchObject({ state: 'reconciliation_required' })
-    expect(cold.exportSnapshot().paymentAttempts[0]).toMatchObject({
+    expect(cold.exportDevelopmentSnapshot().paymentAttempts[0]).toMatchObject({
       state: 'reconciliation_required',
     })
     expect(effects).toEqual({ payment: 1, provider: 1 })
-    const interruptedApplication = createDevelopmentInvocationApplication({
+    const interruptedApplication = createInvocationApplication({
       adapter: cold,
       sourceCommands: {
         leaseOwner: () => 'worker:reconciliation',
@@ -854,7 +876,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       validEvidence,
       paymentEvidence,
     )).rejects.toThrow('development_crash_after_payment_reconciliation_persist')
-    const cutSnapshot = cold.exportSnapshot()
+    const cutSnapshot = cold.exportDevelopmentSnapshot()
     expect(cutSnapshot.paymentAttempts[0]).toMatchObject({
       state: 'not_settled',
       reconciliationEvidenceRef: paymentEvidence.evidenceRef,
@@ -894,12 +916,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         cutLoaded.sourceRows,
         cutLoaded.semanticClaims,
       ),
-      cutLoaded.durableState,
-      cutLoaded.paymentAttempts,
-      cutLoaded.paymentAuthorizationEvents,
-      () => true,
+      {
+        durablePort: cutLoaded.durablePort,
+        developmentSnapshot: cutLoaded.developmentSnapshot,
+        initialSnapshot: cutLoaded.initialSnapshot,
+        sequenceBase: cutLoaded.developmentSnapshot.controls.size,
+        paymentAttempts: cutLoaded.paymentAttempts,
+        paymentAuthorizationEvents: cutLoaded.paymentAuthorizationEvents,
+        verifyPaymentReconciliationEvidence: () => true,
+      },
     )
-    const replayHost = createDevelopmentInvocationApplication({
+    const replayHost = createInvocationApplication({
       adapter: replayAdapter,
       sourceCommands: {
         leaseOwner: () => 'worker:reconciliation',
@@ -929,7 +956,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     expect(reconciled.kind === 'reconciled' && reconciled.view.control).toEqual({
       state: 'terminal',
     })
-    expect(replayAdapter.exportSnapshot().paymentAttempts[0]).toMatchObject({
+    expect(replayAdapter.exportDevelopmentSnapshot().paymentAttempts[0]).toMatchObject({
       state: 'not_settled',
       reconciliationEvidenceDigest: paymentEvidence.digest,
     })
@@ -947,13 +974,13 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       clock,
       source,
     )
-    expect(() => adapter.prepare({
+    await expect(adapter.prepare({
       origin: origins[0]!, actor, value: { symbol: 'BTC', convert: 'USD', method: 'POST' }, freshnessMs: 1_000,
-    })).toThrow('published_operation_input_invalid')
-    const prepared = adapter.prepare({
+    })).rejects.toThrow('published_operation_input_invalid')
+    const prepared = await adapter.prepare({
       origin: origins[0]!, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    expect(adapter.decide({
+    expect(await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -961,14 +988,14 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       origin: origins[0]!,
       accept: true,
     })).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin: origins[0]!, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1007,10 +1034,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[0]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1024,7 +1051,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         paymentRecipient: '0xaltered-recipient',
       },
     })
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1059,10 +1086,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[0]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1072,7 +1099,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     const next = rematerializeRevision(fixture, 8)
     expect(next.operationId).not.toBe(fixture.operation.operationId)
     source.setCurrent(next)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1107,17 +1134,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1148,14 +1175,14 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       now: clock,
     })
     if (compiled.kind !== 'compiled') throw new Error('request not compiled')
-    const attached = attachCompletedTaskReference({
+    const attached = await attachCompletedTaskReference({
       principalRef: actor.principalRef,
       callerRef: actor.callerRef,
       invocationRef: prepared.invocationRef,
       referencedAt: clock,
       candidateAggregate: compiled.aggregate,
     }, {
-      readCompletedResultIdentity: ({ invocationRef, actor: requestedActor }) =>
+      readCompletedResultIdentity: async ({ invocationRef, actor: requestedActor }) =>
         adapter.readCompletedResult(invocationRef, requestedActor),
     })
     expect(attached).toMatchObject({
@@ -1168,7 +1195,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     expect(JSON.stringify(attached)).not.toMatch(/authorityRef|acceptedAuthority|attemptRef|leaseOwner/u)
     expect(effects).toEqual(before)
-    expect(adapter.readCompletedResult(prepared.invocationRef, {
+    expect(await adapter.readCompletedResult(prepared.invocationRef, {
       ...actor,
       principalRef: 'principal:other',
     })).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
@@ -1181,7 +1208,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         result: { ...row.observedResolution.result, output: { data: { altered: true } } },
       },
     })
-    expect(adapter.readCompletedResult(prepared.invocationRef, actor)).toMatchObject({
+    expect(await adapter.readCompletedResult(prepared.invocationRef, actor)).toMatchObject({
       kind: 'refused',
       code: 'source_result_mismatch',
     })
@@ -1190,33 +1217,35 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
 
   it('derives a non-fixture fixed amount and currency from admitted operation material', async () => {
     const fixture = buildDevelopmentPublishedOperationEvidence()
-    const operation = rematerializeFixedPrice(fixture, 'AUD', 7)
+    const amount: ExactAmount = { currency: 'AUD', units: '7', exponent: 3 }
+    const operation = rematerializeFixedPrice(fixture, amount)
     const clock = operation.readiness.observedAt + 1_000
     vi.spyOn(Date, 'now').mockReturnValue(clock)
     const effects = { payment: 0, provider: 0 }
     const adapter = createAdapter(
       operation,
-      successRuntime(operation.binding.endpointUrl, effects),
+      successRuntime(operation.binding.endpointUrl, effects, '7000'),
       clock,
     )
     const origin = origins[0]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    expect(prepared.prepared?.dataUse.limits.amountMinor).toBe(7)
-    if (prepared.prepared === undefined) throw new Error('missing prepared authority')
-    expect((prepared.prepared.target as any).effect.amount).toEqual({
-      currency: 'AUD',
-      amountMinor: 7,
+    expect(prepared.prepared?.dataUse.limits).toMatchObject({
+      amount: { currency: 'AUD', units: '7', exponent: 3 },
     })
-    const decided = adapter.decide({
+    if (prepared.prepared === undefined) throw new Error('missing prepared authority')
+    expect(prepared.prepared.target).toMatchObject({
+      effect: { amount },
+    })
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1250,15 +1279,15 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const execute = async (prepared: ReturnType<typeof adapter.prepare>, worker: string) => {
-      const decided = adapter.decide({
+    const execute = async (prepared: ActionInvocationView<DynamicPublishedInvocationResult>, worker: string) => {
+      const decided = await adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
         actor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = adapter.acquire({
+      const acquired = await adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: prepared.authority!.reference,
@@ -1273,18 +1302,18 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         effectGeneration: acquired.view.control.effectGeneration,
       })
     }
-    const first = adapter.prepare({
+    const first = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
     const firstResult = await execute(first, 'worker:first')
     if (firstResult.kind !== 'accepted') throw new Error(firstResult.code)
-    const firstIdentity = adapter.readCompletedResult(first.invocationRef, actor)
-    const second = adapter.prepare({
+    const firstIdentity = await adapter.readCompletedResult(first.invocationRef, actor)
+    const second = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
     expect(second.invocationRef).not.toBe(first.invocationRef)
     expect(second.authority?.reference).not.toBe(first.authority?.reference)
-    expect(adapter.readCompletedResult(first.invocationRef, actor)).toEqual(firstIdentity)
+    expect(await adapter.readCompletedResult(first.invocationRef, actor)).toEqual(firstIdentity)
     const secondResult = await execute(second, 'worker:second')
     if (secondResult.kind !== 'accepted') throw new Error(secondResult.code)
     expect(effects).toEqual({ payment: 1, provider: 1 })
@@ -1312,15 +1341,15 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const acquire = (prepared: ReturnType<typeof adapter.prepare>, worker: string) => {
-      const decided = adapter.decide({
+    const acquire = async (prepared: ActionInvocationView<DynamicPublishedInvocationResult>, worker: string) => {
+      const decided = await adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
         actor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = adapter.acquire({
+      const acquired = await adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: prepared.authority!.reference,
@@ -1329,26 +1358,28 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
       return acquired.view
     }
-    const first = adapter.prepare({
+    const first = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const second = adapter.prepare({
+    const second = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const firstLease = acquire(first, 'worker:simultaneous:first')
-    const secondLease = acquire(second, 'worker:simultaneous:second')
+    const [firstLease, secondLease] = await Promise.all([
+      acquire(first, 'worker:simultaneous:first'),
+      acquire(second, 'worker:simultaneous:second'),
+    ])
     if (firstLease.control.state !== 'leased' || secondLease.control.state !== 'leased') {
       throw new Error('not leased')
     }
     const [firstResult, secondResult] = await Promise.all([
-      adapter.executeAcquired({
+      await adapter.executeAcquired({
         invocationRef: first.invocationRef,
         expectedInvocationVersion: firstLease.invocationVersion,
         attemptRef: firstLease.control.attemptRef,
         leaseOwner: firstLease.control.leaseOwner,
         effectGeneration: firstLease.control.effectGeneration,
       }),
-      adapter.executeAcquired({
+      await adapter.executeAcquired({
         invocationRef: second.invocationRef,
         expectedInvocationVersion: secondLease.invocationVersion,
         attemptRef: secondLease.control.attemptRef,
@@ -1376,18 +1407,18 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const lease = (worker: string) => {
-      const prepared = adapter.prepare({
+    const lease = async (worker: string) => {
+      const prepared = await adapter.prepare({
         origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
       })
-      const decided = adapter.decide({
+      const decided = await adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
         actor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = adapter.acquire({
+      const acquired = await adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: prepared.authority!.reference,
@@ -1396,12 +1427,14 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
       return { prepared, view: acquired.view }
     }
-    const first = lease('worker:uncertain:first')
-    const second = lease('worker:uncertain:second')
+    const [first, second] = await Promise.all([
+      lease('worker:uncertain:first'),
+      lease('worker:uncertain:second'),
+    ])
     if (first.view.control.state !== 'leased' || second.view.control.state !== 'leased') {
       throw new Error('not leased')
     }
-    const execute = (entry: typeof first) => adapter.executeAcquired({
+    const execute = async (entry: typeof first) => await adapter.executeAcquired({
       invocationRef: entry.prepared.invocationRef,
       expectedInvocationVersion: entry.view.invocationVersion,
       attemptRef: entry.view.control.state === 'leased' ? entry.view.control.attemptRef : '',
@@ -1432,17 +1465,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const first = adapter.prepare({
+    const first = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const firstDecided = adapter.decide({
+    const firstDecided = await adapter.decide({
       invocationRef: first.invocationRef,
       expectedInvocationVersion: first.invocationVersion,
       authorityRef: first.authority!.reference,
       actor, origin, accept: true,
     })
     if (firstDecided.kind !== 'accepted') throw new Error(firstDecided.code)
-    const firstLease = adapter.acquire({
+    const firstLease = await adapter.acquire({
       invocationRef: first.invocationRef,
       expectedInvocationVersion: firstDecided.view.invocationVersion,
       authorityRef: first.authority!.reference,
@@ -1458,7 +1491,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     expect(uncertain.kind === 'accepted' && uncertain.view.control)
       .toMatchObject({ state: 'reconciliation_required' })
-    const snapshot = adapter.exportSnapshot()
+    const snapshot = adapter.exportDevelopmentSnapshot()
     const loaded = loadDynamicPublishedAdapterSnapshot(
       structuredClone(snapshot),
       {
@@ -1476,21 +1509,26 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       successRuntime(fixture.operation.binding.endpointUrl, effects),
       clock + 1,
       coldSource,
-      loaded.durableState,
-      loaded.paymentAttempts,
-      loaded.paymentAuthorizationEvents,
+      {
+        durablePort: loaded.durablePort,
+        developmentSnapshot: loaded.developmentSnapshot,
+        initialSnapshot: loaded.initialSnapshot,
+        sequenceBase: loaded.developmentSnapshot.controls.size,
+        paymentAttempts: loaded.paymentAttempts,
+        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+      },
     )
-    const second = cold.prepare({
+    const second = await cold.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const secondDecided = cold.decide({
+    const secondDecided = await cold.decide({
       invocationRef: second.invocationRef,
       expectedInvocationVersion: second.invocationVersion,
       authorityRef: second.authority!.reference,
       actor, origin, accept: true,
     })
     if (secondDecided.kind !== 'accepted') throw new Error(secondDecided.code)
-    const secondLease = cold.acquire({
+    const secondLease = await cold.acquire({
       invocationRef: second.invocationRef,
       expectedInvocationVersion: secondDecided.view.invocationVersion,
       authorityRef: second.authority!.reference,
@@ -1523,17 +1561,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       source,
     )
     const origin = origins[1]!
-    const prepared = adapter.prepare({
+    const prepared = await adapter.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
     })
-    const decided = adapter.decide({
+    const decided = await adapter.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = adapter.acquire({
+    const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1548,7 +1586,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       invocationRef: prepared.invocationRef,
     })).toEqual({ kind: 'owner' })
     const loaded = loadDynamicPublishedAdapterSnapshot(
-      structuredClone(adapter.exportSnapshot()),
+      structuredClone(adapter.exportDevelopmentSnapshot()),
       dynamicSnapshotAnchors(fixture, prepared, origin, 'pending', 1),
     )
     const coldSource = createDevelopmentDynamicPublishedSource(
@@ -1562,9 +1600,14 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       successRuntime(fixture.operation.binding.endpointUrl, effects),
       clock + 1,
       coldSource,
-      loaded.durableState,
-      loaded.paymentAttempts,
-      loaded.paymentAuthorizationEvents,
+      {
+        durablePort: loaded.durablePort,
+        developmentSnapshot: loaded.developmentSnapshot,
+        initialSnapshot: loaded.initialSnapshot,
+        sequenceBase: loaded.developmentSnapshot.controls.size,
+        paymentAttempts: loaded.paymentAttempts,
+        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+      },
     )
     const completed = await cold.executeAcquired({
       invocationRef: prepared.invocationRef,
@@ -1609,17 +1652,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         callerRef: principal.callerRef,
         principalRef: principal.principalRef,
       }
-      const prepared = adapter.prepare({
+      const prepared = await adapter.prepare({
         origin, actor: principal, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
       })
-      const decided = adapter.decide({
+      const decided = await adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
         actor: principal, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = adapter.acquire({
+      const acquired = await adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: prepared.authority!.reference,
@@ -1642,7 +1685,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     const first = await executeFor(actor)
     await executeFor(other)
     expect(effects).toEqual({ payment: 2, provider: 2 })
-    expect(adapter.readCompletedResult(first.prepared.invocationRef, other))
+    expect(await adapter.readCompletedResult(first.prepared.invocationRef, other))
       .toEqual({ kind: 'refused', code: 'cross_principal_refused' })
   })
 
@@ -1686,7 +1729,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       ['publication', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.identity.publicationRevision = 99 }],
       ['config', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.transport.configJson = '{}' }],
       ['payment', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.identity.payment.payTo = '0xattacker' }],
-      ['price', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.identity.price.amountMinor = 999 }],
+      ['price', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.identity.price.amount.units = '999' }],
       ['input', (packet) => { packet.cases[0].snapshot.sourceRows[0].input.input.symbol = 'ETH' }],
       ['output', (packet) => { packet.cases[0].snapshot.sourceRows[0].observedResolution.result.output = { data: { forged: true } } }],
       ['challenge', (packet) => { packet.cases[0].snapshot.sourceRows[0].observedResolution.result.paymentChallengeDigest = 'sha256:forged' }],
@@ -1763,7 +1806,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
 
 function dynamicSnapshotAnchors(
   fixture: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>,
-  prepared: ReturnType<ReturnType<typeof createAdapter>['prepare']>,
+  prepared: ActionInvocationView<DynamicPublishedInvocationResult>,
   origin: ActionInvocationOrigin,
   status: 'pending' | 'completed' | 'uncertain',
   expectedEffectCount: number,
@@ -1816,15 +1859,26 @@ function createAdapter(
   runtime: RouteTransportRuntime,
   now: number,
   source = createDevelopmentDynamicPublishedSource([operation]),
-  durableState?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['durableState'],
-  paymentAttempts?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAttempts'],
-  paymentAuthorizationEvents?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAuthorizationEvents'],
-  verifyPaymentReconciliationEvidence?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['verifyPaymentReconciliationEvidence'],
+  options: Readonly<{
+    durablePort?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['durablePort']
+    developmentSnapshot?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['developmentSnapshot']
+    initialSnapshot?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['initialSnapshot']
+    sequenceBase?: number
+    paymentAttempts?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAttempts']
+    paymentAuthorizationEvents?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAuthorizationEvents']
+    verifyPaymentReconciliationEvidence?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['verifyPaymentReconciliationEvidence']
+  }> = {},
 ) {
-  const priorCount = durableState?.controls.size ?? 0
-  let invocation = priorCount
-  let authority = priorCount
-  let attempt = priorCount
+  let durablePort = options.durablePort
+  let developmentSnapshot = options.developmentSnapshot
+  if (durablePort === undefined) {
+    const state = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+    durablePort = createDevelopmentDurablePort(state)
+    developmentSnapshot = state
+  }
+  let invocation = options.sequenceBase ?? 0
+  let authority = options.sequenceBase ?? 0
+  let attempt = options.sequenceBase ?? 0
   return createDynamicPublishedActionInvocationAdapter({
     operation,
     source,
@@ -1833,12 +1887,16 @@ function createAdapter(
     nextInvocationRef: () => `invocation:${++invocation}`,
     nextAuthorityRef: () => `authority:${++authority}`,
     nextAttemptRef: () => `attempt:${++attempt}`,
-    ...(durableState === undefined ? {} : { durableState }),
-    ...(paymentAttempts === undefined ? {} : { paymentAttempts }),
-    ...(paymentAuthorizationEvents === undefined ? {} : { paymentAuthorizationEvents }),
-    ...(verifyPaymentReconciliationEvidence === undefined
+    durablePort,
+    ...(developmentSnapshot === undefined ? {} : { developmentSnapshot }),
+    ...(options.initialSnapshot === undefined ? {} : { initialSnapshot: options.initialSnapshot }),
+    ...(options.paymentAttempts === undefined ? {} : { paymentAttempts: options.paymentAttempts }),
+    ...(options.paymentAuthorizationEvents === undefined
       ? {}
-      : { verifyPaymentReconciliationEvidence }),
+      : { paymentAuthorizationEvents: options.paymentAuthorizationEvents }),
+    ...(options.verifyPaymentReconciliationEvidence === undefined
+      ? {}
+      : { verifyPaymentReconciliationEvidence: options.verifyPaymentReconciliationEvidence }),
   })
 }
 
@@ -1853,25 +1911,30 @@ function paymentPreparedFixture(): DynamicPublishedPreparedTransport {
         binding: {
           adapterId: 'x402-fetch:v2',
           endpointUrl: 'https://provider.example/paid',
-          credentialRef: 'env:EVM_PRIVATE_KEY',
+          authority: {
+            kind: 'provider_connection',
+            connectionRef: 'test:connection:x402',
+            providerRef: 'test:provider:x402',
+          },
           configJson: '{}',
           configDigest: canonicalDigest({}),
         },
         authority: {
           attemptRef: 'attempt:one',
           effectGeneration: 3,
+          authorityGeneration: 3,
+          authorityDigest: canonicalDigest({ fixture: 'test-x402-authority', generation: 3 }),
           operationKeyDigest: 'operation:paid',
           mandateDigest: 'mandate:digest',
           grantDigest: 'grant:digest',
           capabilityContractDigest: 'operation:revision',
-          maximumSpend: { currency: 'USD', amountMinor: 1 },
-          expiresAt: Date.now() + 60_000,
+          maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
+          expiresAt: 10_000,
           callIdentity: { keyId: 'key:one', signature: 'call:signature' },
         },
         inputJson: '{}',
       },
       endpoint: new URL('https://provider.example/paid'),
-      credential: 'mock:credential',
       target: new URL('https://provider.example/paid'),
       configuration: {
         method: 'POST',
@@ -1906,10 +1969,11 @@ function paymentAuthorizationRequest():
   }
   return {
     challenge,
+    challengeDigest: canonicalDigest(challenge),
     credential: 'mock:credential',
     paymentIdentifier: 'operation:paid',
     selectedRequirement: challenge.accepts[0]!,
-    challengeDigest: canonicalDigest(challenge),
+    paymentAmount: { currency: 'USD', units: '1', exponent: 2 },
     attemptRef: 'attempt:one',
     effectGeneration: 3,
   }
@@ -1930,7 +1994,7 @@ function paymentAttemptFixture(
     network: request.selectedRequirement.network,
     asset: request.selectedRequirement.asset,
     payTo: request.selectedRequirement.payTo,
-    amount: request.selectedRequirement.amount,
+    amount: request.paymentAmount,
     providerEndpoint: request.challenge.resource.url,
     operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
     authorizationDigest: canonicalDigest('raw:authorization:from-custody'),
@@ -1941,7 +2005,11 @@ function paymentAttemptFixture(
   }
 }
 
-function successRuntime(endpoint: string, effects: { payment: number; provider: number }): RouteTransportRuntime {
+function successRuntime(
+  endpoint: string,
+  effects: { payment: number; provider: number },
+  challengeAmount = '10000',
+): RouteTransportRuntime {
   return runtime(endpoint, effects, JSON.stringify({
     data: {
       BTC: {
@@ -1949,7 +2017,7 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
         quote: { USD: { price: 1, last_updated: '2026-07-20T00:00:00.000Z' } },
       },
     },
-  }))
+  }), challengeAmount)
 }
 
 function invalidOutputRuntime(endpoint: string): RouteTransportRuntime {
@@ -1976,6 +2044,7 @@ function runtime(
   endpoint: string,
   effects: { payment: number; provider: number },
   output: string,
+  challengeAmount = '10000',
 ): X402RouteTransportRuntime {
   const custody = new Map<string, Readonly<{
     custodyRef: string
@@ -1988,7 +2057,7 @@ function runtime(
     accepts: [{
       scheme: 'exact',
       network: 'eip155:8453',
-      amount: '10000',
+      amount: challengeAmount,
       asset: '0xmock-usdc',
       payTo: '0xmock-provider-recipient',
       maxTimeoutSeconds: 30,
@@ -2004,7 +2073,8 @@ function runtime(
   }
   return {
     send,
-    resolveCredential: () => 'mock:credential',
+    resolveCredential: (connectionRef) => connectionRef.length > 0 ? 'mock:credential' : undefined,
+    readProviderConnectionCredentialRef: readDevelopmentProviderCredential,
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
@@ -2038,6 +2108,26 @@ function runtime(
         candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
   }
 }
+function readDevelopmentProviderCredential(input: ProviderConnectionAuthorityLookup) {
+  if (
+    input.connectionRef !== 'connection:mock-provider'
+    || input.providerRef !== 'provider:mock-provider'
+    || input.adapterId !== 'x402-fetch:v2'
+  ) {
+    return { kind: 'unavailable' as const, reason: 'not_found' as const }
+  }
+  if (input.authorityGeneration !== 1) {
+    return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+  }
+  if (input.authorityDigest !== canonicalDigest({
+    connectionRef: 'connection:mock-provider',
+    providerRef: 'provider:mock-provider',
+    authorityGeneration: 1,
+  })) {
+    return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+  }
+  return { kind: 'resolved' as const, credentialRef: 'connection:mock-provider' }
+}
 
 function preReleaseRuntime(
   endpoint: string,
@@ -2058,7 +2148,12 @@ function preReleaseRuntime(
     }],
   }
   return {
-    resolveCredential: () => mode === 'credential_unavailable' ? undefined : 'mock:credential',
+    resolveCredential: (connectionRef) => connectionRef.length > 0 && mode !== 'credential_unavailable'
+      ? 'mock:credential'
+      : undefined,
+    readProviderConnectionCredentialRef: (input) => mode === 'credential_unavailable'
+      ? { kind: 'unavailable' as const, reason: 'credential_unavailable' as const }
+      : readDevelopmentProviderCredential(input),
     x402PaymentSigningAvailable: () => mode !== 'signing_unavailable',
     send: async () => mode === 'endpoint_refusal'
       ? response(503, JSON.stringify({ reason: 'unavailable' }), {})
@@ -2070,13 +2165,8 @@ function preReleaseRuntime(
   }
 }
 
-function response(status: number, body: string, headers: Record<string, string>) {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    headers: { get: (name: string) => headers[name.toLowerCase()] ?? headers[name] ?? null },
-    text: async () => body,
-  }
+function response(status: number, body: string, headers: Record<string, string>): Response {
+  return new Response(body, { status, headers })
 }
 
 function rematerializeRevision(
@@ -2098,40 +2188,56 @@ function rematerializeRevision(
         ? { ...source, ref: `${publication.publicationRef}@${revision}`, digest: publicationDigest }
         : source),
   }
+  const currentConnectionAuthority = fixture.sourceMaterial.connectionAuthority
+  if (currentConnectionAuthority === undefined) {
+    throw new Error('published_operation_connection_authority_missing')
+  }
+  const connectionAuthority = {
+    ...currentConnectionAuthority,
+    operationRef: createPublicOperationRef({
+      operationId: capabilityOperationId(fixture.sourceMaterial.contract.ref.capabilityId),
+      publicationRef: publication.publicationRef,
+      publicationRevision: publication.revision,
+      contractRef: fixture.sourceMaterial.contract.ref,
+    }),
+  }
   return materializePublishedOperation({
     ...fixture.sourceMaterial,
     publication,
     qualification,
+    connectionAuthority,
   })
 }
 
 function rematerializeFixedPrice(
   fixture: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>,
-  currency: string,
-  amountMinor: number,
+  amount: ExactAmount,
 ) {
   const offering = {
     ...fixture.sourceMaterial.offering,
     presentation: {
       ...fixture.sourceMaterial.offering.presentation,
-      price: { kind: 'fixed' as const, currency, amountMinor },
+      price: { kind: 'fixed' as const, amount },
     },
   }
+  const originalConfig = fixture.sourceMaterial.binding.adapter.config
+  if (!isRecord(originalConfig)) throw new Error('published_operation_config_invalid')
   const config = {
-    ...fixture.sourceMaterial.binding.adapter.config as Record<string, unknown>,
-    currency,
+    ...originalConfig,
+    currency: amount.currency,
+    routeAmountExponent: amount.exponent,
   }
-  const binding = {
+  const binding = defineCapabilityTransportBindingRegistration({
     ...fixture.sourceMaterial.binding,
     adapter: { ...fixture.sourceMaterial.binding.adapter, config },
-  }
+  })
   const admitted = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
     endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
+    authority: binding.authority,
     continuation: binding.continuation,
     cancellation: binding.cancellation,
-    config: binding.adapter.config as never,
+    config: binding.adapter.config,
   })
   if (admitted.kind !== 'admitted') throw new Error(admitted.reason)
   const offeringDigest = capabilityOfferingRegistrationHash(offering)

@@ -16,6 +16,7 @@ export async function openReadyPreparation(
   principalId: string,
 ): Promise<OpenedPreparation> {
   const row = await ports.loadActionPreparationByRef(preparationRef)
+  const now = Date.now()
   if (row === null || row.lineage.principalId !== principalId || row.preparation.kind !== 'ready_for_routing') {
     return { kind: 'needs_attention', reason: 'preparation_not_ready' }
   }
@@ -51,6 +52,7 @@ export async function openReadyPreparation(
   const live = await ports.listRouteableSupplies({
     networkId: aggregate.snapshot.networkId,
     limit: 64,
+    now,
   })
   if (live === null) return { kind: 'needs_attention', reason: 'capability_graph_changed' }
   const registryBindings = live.map(({ publication, offering, binding }) => ({

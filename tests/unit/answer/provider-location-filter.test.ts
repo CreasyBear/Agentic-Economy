@@ -4,7 +4,7 @@ import {
   extractRequestedLocation,
   filterProvidersForRequestedLocation,
 } from '@/modules/answer/internal/provider-location-filter'
-import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
+import { DEFAULT_AE_SEARCH_CONTEXT, type AeSearchContext } from '@/modules/answer/search-context'
 import type { AnswerSource } from '@/modules/answer/public'
 
 const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
@@ -93,11 +93,36 @@ describe('provider location filtering', () => {
     })
   })
 
-  it('uses the active search context when the user query names no place', () => {
+  it('does not use an unconfirmed default context as the requested location', () => {
     const result = filterProvidersForRequestedLocation({
       userQuery: 'Emergency plumber',
-      toolQuery: 'emergency plumber parramatta',
+      toolQuery: 'emergency plumber',
       searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+      providers: [provider()],
+    })
+
+    expect(result).toMatchObject({
+      location: undefined,
+      locationSource: undefined,
+      filtered: false,
+      providers: [provider()],
+    })
+  })
+  it('uses a confirmed context when the user names no place', () => {
+    const confirmedContext: AeSearchContext = {
+      ...DEFAULT_AE_SEARCH_CONTEXT,
+      location: {
+        label: 'Perth, WA',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+        countryCode: 'AU',
+        source: 'user_selected',
+      },
+    }
+    const result = filterProvidersForRequestedLocation({
+      userQuery: 'Emergency plumber',
+      toolQuery: 'emergency plumber',
+      searchContext: confirmedContext,
       providers: [provider()],
     })
 
@@ -107,6 +132,29 @@ describe('provider location filtering', () => {
       filtered: true,
       providers: [],
     })
+  })
+
+  it('keeps an explicit complex place exact and authoritative', () => {
+    const result = filterProvidersForRequestedLocation({
+      userQuery: 'Urgent plumber in Parramatta tonight under $200 and without weekend callouts',
+      toolQuery: 'urgent plumber',
+      searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+      providers: [provider()],
+    })
+
+    expect(result).toMatchObject({
+      location: 'Parramatta',
+      locationSource: 'user',
+      filtered: false,
+    })
+  })
+
+  it.each([
+    'I need a plumber in the afternoon',
+    'I need a plumber in advance',
+    'I need a plumber in need of help',
+  ])('does not extract a location from non-location "in ..." wording: %s', (query) => {
+    expect(extractRequestedLocation(query)).toBeUndefined()
   })
 
   it('lets an explicit user place override the active search context', () => {

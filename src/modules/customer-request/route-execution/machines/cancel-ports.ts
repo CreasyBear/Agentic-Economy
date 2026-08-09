@@ -70,6 +70,7 @@ export type CancelMutationPorts = Readonly<{
     }>
     expectedOfferingRegistrationHash: string
     expectedBindingRegistrationHash: string
+    now: number
   }>) => Promise<CancelSupplyLoadResult>
 
   commitCancelCommandReplay: (
@@ -128,6 +129,7 @@ export type CancelOpenPorts = Pick<
   | 'now'
   | 'loadCancellationAttempt'
   | 'loadAttemptByRef'
+  | 'loadRunByRef'
   | 'loadActiveMandateForCancellation'
   | 'loadEligibleExactCapabilitySupply'
 >

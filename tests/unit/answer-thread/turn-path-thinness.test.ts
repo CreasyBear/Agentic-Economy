@@ -79,8 +79,7 @@ describe('answer-thread turn-path thinness', () => {
     expect(handoff).toContain('inquiryHandoffProviders')
     expect(handoff).toContain('buildInquiryHandoffNextStep')
     expect(handoff).not.toMatch(/customer-request|RoutePlan|mandate|approveRoute|compileRequest/i)
-    expect(handoff).toContain('Qualified inquiry for owner review')
-    expect(handoff).toContain('The business decides whether to accept it; timing, quote, and availability are not confirmed yet')
+    expect(handoff).toContain('The business decides whether to accept it; timing, price, and availability are not confirmed yet')
   })
 })
 

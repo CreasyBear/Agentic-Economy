@@ -71,7 +71,7 @@ export async function runDevelopmentInvocations(
       kind: 'quote_returned', environment: 'MOCK/DEVELOPMENT ONLY',
       quote: {
         quoteRef: `mock:quote:${origin.kind}`,
-        price: { amountMinor: 24_500, currency: 'AUD' },
+        price: { currency: 'AUD', units: '24500', exponent: 2 },
         validUntil: nowMs + 3_600_000,
         terms: ['Fixture only; no provider commitment or fulfilment.'],
         evidenceRefs: [`mock:evidence:${origin.kind}`],
@@ -117,7 +117,7 @@ export async function runDevelopmentInvocations(
       'prepared_invocation_authority_missing',
     )
     source.prepared = preparedState
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: preparedAuthority.reference, actor, origin, accept: true,
@@ -132,9 +132,10 @@ export async function runDevelopmentInvocations(
     })
     if (executed.kind !== 'accepted') throw new Error(executed.code)
     source.observedResolution = executed.view.observedResolution
-    const cold = tracer.coldResume(prepared.view.invocationRef).inspect(prepared.view.invocationRef)
-    if (cold === undefined) throw new Error('cold_resume_invocation_view_missing')
-    views.push(cold)
+    const cold = await tracer.coldResume(prepared.view.invocationRef)
+    const coldView = cold.inspect(prepared.view.invocationRef)
+    if (coldView === undefined) throw new Error('cold_resume_invocation_view_missing')
+    views.push(coldView)
     if (origin.kind === 'standalone') {
       standalone = {
         state, port, result, sourceResultRef: source.resultIdentity.sourceResultRef,
@@ -174,7 +175,7 @@ async function runRecovery(
     prepared: undefined as PreparedInvocation | undefined,
     observedResolution: { state: 'pending' } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
   }
-  const create = (resume?: string) => createDurableActionInvocationTracer({
+  const create = () => createDurableActionInvocationTracer({
     action: collectSuppliedCandidateQuoteAction, port, now,
     nextInvocationRef: () => 'mock:invocation:recovery',
     nextAuthorityRef: () => 'mock:authority:recovery',
@@ -182,7 +183,7 @@ async function runRecovery(
     developmentReleaseSignal: release,
     verifyReconciliationEvidence: verifier.verify,
     resolveSourceState: () => source,
-  }, resume)
+  })
   const first = create()
   const prepared = await prepareSuppliedCandidateQuote({
     tracer: first, qualificationPorts: graph, invocationInput: input,
@@ -198,7 +199,7 @@ async function runRecovery(
     'recovery_prepared_invocation_authority_missing',
   )
   source.prepared = recoveryPreparedState
-  const decided = first.decide({
+  const decided = await first.decide({
     invocationRef: prepared.view.invocationRef,
     expectedInvocationVersion: prepared.view.invocationVersion,
     authorityRef: recoveryPreparedAuthority.reference, actor, origin, accept: true,
@@ -211,10 +212,10 @@ async function runRecovery(
   })
   if (uncertain.kind !== 'accepted') throw new Error(uncertain.code)
   source.observedResolution = uncertain.view.observedResolution
-  const cold = create(uncertain.view.invocationRef)
+  const cold = await first.coldResume(uncertain.view.invocationRef)
   const coldView = cold.inspect(uncertain.view.invocationRef)
   if (coldView === undefined) throw new Error('recovery_cold_view_missing')
-  const coldContinuation = structuredClone(coldView.control)
+  const coldContinuation = coldView.control
   const attempt = uncertain.view.attempts[0]
   if (attempt === undefined) throw new Error('recovery_attempt_missing')
   const evidence = verifier.issue({
@@ -224,7 +225,7 @@ async function runRecovery(
     invocationRef: uncertain.view.invocationRef, attemptRef: attempt.attemptRef,
     effectGeneration: attempt.effectGeneration, resolution: 'released', observedAt: now(),
   })
-  const reconciled = cold.reconcile({
+  const reconciled = await cold.reconcile({
     invocationRef: uncertain.view.invocationRef,
     expectedInvocationVersion: uncertain.view.invocationVersion,
     attemptRef: attempt.attemptRef, actor, origin, evidence,

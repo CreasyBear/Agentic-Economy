@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import { execFileSync } from 'node:child_process'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { exactAmountSchema } from '../../src/modules/money/internal/exact-amount.ts'
 
 const DEFAULT_ORIGIN = 'http://127.0.0.1:3000'
 const CHECK_COUNT = 7
@@ -143,7 +144,15 @@ if (chosenService === undefined || chosenEndpoint === undefined) {
     headers: { 'content-type': 'application/json' },
     body: '{}',
   })
-  const amountMinor = quote.data?.price?.amountMinor
+  const amount = quote.data?.price?.amount
+  const validAmount = (() => {
+    try {
+      const parsed = exactAmountSchema.safeParse(amount)
+      return parsed.success && BigInt(parsed.data.units) > 0n
+    } catch {
+      return false
+    }
+  })()
   const validUntilValue = quote.data?.validUntil
   const validUntil = typeof validUntilValue === 'number'
     ? validUntilValue
@@ -152,8 +161,8 @@ if (chosenService === undefined || chosenEndpoint === undefined) {
     record(5, false, requestFailure(quote))
   } else if (quote.data?.provenance !== 'ae_sandbox_provider') {
     record(5, false, 'quote provenance is not ae_sandbox_provider')
-  } else if (!(typeof amountMinor === 'number' && Number.isFinite(amountMinor) && amountMinor > 0)) {
-    record(5, false, 'quote price.amountMinor is not greater than zero')
+  } else if (!validAmount) {
+    record(5, false, 'quote price.amount is not a valid positive exact amount')
   } else if (!Number.isFinite(validUntil) || validUntil <= Date.now()) {
     record(5, false, 'quote validUntil is missing or not in the future')
   } else {

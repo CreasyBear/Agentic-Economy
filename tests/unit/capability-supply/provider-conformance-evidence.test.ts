@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { afterAll, describe, expect, it } from 'vitest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { writePhase3bProviderConformanceEvidence } from '../../../tools/dev/phase-3b-provider-conformance-evidence'
 import { verifyPhase3bProviderConformanceEvidence } from '../../../tools/dev/verify-phase-3b-provider-conformance-evidence'
@@ -40,6 +41,30 @@ describe('Phase 3B provider conformance evidence', () => {
     const packet = await writePhase3bProviderConformanceEvidence(path, 'HEAD')
     expect(packet.provenance.evidenceClass).toBe('working_tree_demonstration')
     await expect(verifyPhase3bProviderConformanceEvidence(path, 'HEAD')).resolves.toBeUndefined()
+    expect(packet.providers.A.fixedUsdAmount).toEqual({
+      currency: 'USD',
+      units: '1',
+      exponent: 2,
+    })
+    expect(packet.providers.A.x402).toEqual({
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0xmock-usdc',
+      payee: '0xmock-provider-recipient',
+    })
+    expect(packet.providers.B.fixedUsdAmount).toEqual({
+      currency: 'USD',
+      units: '1',
+      exponent: 2,
+    })
+    expect(packet.providers.B.x402).toEqual({
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0xmock-usdc',
+      payee: '0xmock-alternate-recipient',
+    })
+    const { checksum, ...packetMaterial } = packet
+    expect(checksum).toBe(canonicalDigest(packetMaterial))
   })
 
   it.each([

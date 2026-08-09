@@ -19,6 +19,7 @@ import type {
   Slug,
 } from '@/modules/common/ids'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
+import type { ExactAmount } from '@/modules/money/public'
 import type {
   IndexStatus,
   RegistrySourceState,
@@ -31,6 +32,8 @@ import {
   type PublicBusinessCatalogApiV2SearchPage,
   type PublicBusinessCatalogV2DetailResult,
 } from './offering-api-projection'
+import { registrySearchTokens } from './search-documents'
+
 const defaultLimit = 20
 const maxLimit = 50
 
@@ -47,7 +50,7 @@ export type PublicBusinessCatalogSearchInput = {
   query: string
   mode?: 'near_me' | 'whole_catalogue'
   location?: string
-  maxPriceMinor?: number
+  maxPrice?: ExactAmount
   hasPrice?: boolean
 }
 
@@ -67,7 +70,8 @@ export function searchPublicBusinessOfferingSupply(
   input: PublicBusinessCatalogSearchInput,
 ): PublicBusinessCatalogApiV2SearchPage {
   const query = normalizeSearchText(input.query)
-  if (query.length === 0) {
+  const tokens = registrySearchTokens(query)
+  if (tokens.length === 0) {
     return {
       kind: 'ok',
       schemaVersion: PublicBusinessCatalogApiSchemaVersion,
@@ -82,7 +86,6 @@ export function searchPublicBusinessOfferingSupply(
     }
   }
 
-  const tokens = query.split(' ')
   const searchableCatalogs = readPublicCatalogs(state)
   const location = input.mode === 'near_me' ? input.location : undefined
   const scopedCatalogs = location === undefined
@@ -98,6 +101,7 @@ export function searchPublicBusinessOfferingSupply(
     .map(({ item }) => item)
 
   return paginateSearchCatalogs(matches, input, query)
+
 }
 
 function matchesNativeSearch(item: PublicBusinessCatalogApiV2Dto, token: string): boolean {
@@ -392,9 +396,11 @@ function paginateCatalogs(
   input: PublicBusinessCatalogQueryInput,
 ): PublicBusinessCatalogApiV2Page {
   const requestedStart = input.paginationOpts.cursor === null ? 0 : Number(input.paginationOpts.cursor)
-  const startIndex = Number.isSafeInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0
-  const page = items.slice(startIndex, startIndex + input.paginationOpts.numItems)
-  const nextIndex = startIndex + page.length
+  if (!Number.isSafeInteger(requestedStart) || requestedStart < 0) {
+    throw new Error('registry_invalid_cursor')
+  }
+  const page = items.slice(requestedStart, requestedStart + input.paginationOpts.numItems)
+  const nextIndex = requestedStart + page.length
   return {
     kind: 'ok',
     schemaVersion: PublicBusinessCatalogApiSchemaVersion,
@@ -412,7 +418,11 @@ function paginateSearchCatalogs(
   const limit = normalizeLimit(input.limit)
   const startIndex = input.cursor === undefined
     ? 0
-    : Math.max(items.findIndex((item) => item.slug === input.cursor) + 1, 0)
+    : (() => {
+        const index = items.findIndex((item) => item.slug === input.cursor)
+        if (index < 0) throw new Error('registry_invalid_cursor')
+        return index + 1
+      })()
   const pageItems = items.slice(startIndex, startIndex + limit)
   const next = items.at(startIndex + pageItems.length)
 
@@ -430,6 +440,7 @@ function paginateSearchCatalogs(
     },
   }
 }
+
 
 function normalizeLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) {

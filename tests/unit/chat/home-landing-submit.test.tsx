@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HOME } from '@/content/brand-copy'
+import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 
 const routeState = vi.hoisted(() => {
   const state = {
@@ -67,7 +68,7 @@ describe('plan-first home', () => {
     renderHomeRoute()
 
     expect(screen.getByRole('searchbox', { name: 'What do you need done?' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Find my options' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy()
     expect(screen.queryByText('Expand the network for this ask')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -80,21 +81,23 @@ describe('plan-first home', () => {
     const examples = screen.getByRole('navigation', { name: 'Example asks' })
     const exampleLinks = Array.from(examples.querySelectorAll('a'))
     expect(exampleLinks.length).toBe(HOME.exampleAsks.length)
+    expect(screen.getByRole('link', { name: 'Show me a random cat photo' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Search the web for the latest on electric cars' })).toBeNull()
     // The router serialises `search` with URLSearchParams (spaces as `+`), not encodeURIComponent.
     // The value is pinned to the real copy; only the encoding is derived, since encoding is the
     // router's job and this test is about the home page passing the ask through to the link.
     const firstAsk = HOME.exampleAsks[0]!
     expect(exampleLinks.map((link) => link.getAttribute('href')))
-      .toContain(`/?${new URLSearchParams({ q: firstAsk }).toString()}`)
+      .toContain(`/t/new?${new URLSearchParams({ q: firstAsk }).toString()}`)
     expect(screen.getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.getAllByRole('link', { name: 'List your business' }).some((link) => link.getAttribute('href') === '/claim')).toBe(true)
+    expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/claim')).toBe(true)
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()
   })
 
-  it('hides example asks once a query is active', () => {
+  it('keeps example asks available while a query is present', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    expect(screen.queryByRole('navigation', { name: 'Example asks' })).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Example asks' })).toBeTruthy()
   })
 
   it('keeps the ask label stable while editing a submitted query', () => {
@@ -118,19 +121,42 @@ describe('plan-first home', () => {
 
     const form = screen.getByRole('search').closest('form')
     if (form === null) throw new Error('The ask box must be a form.')
-    expect(form.getAttribute('action')).toBe('/')
-    expect(form.getAttribute('method')).toBe('get')
+    expect(form).toBeTruthy()
     expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Find my options' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('keeps result fallback truthful when the plan preview is unavailable', () => {
+  it('keeps a submitted query in the ask box without speculative result copy', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    expect(screen.getByRole('heading', { name: 'Expand the network for this ask' })).toBeTruthy()
-    expect(screen.getByText(/Businesses publish what they do here so agents can bring them work/)).toBeTruthy()
+    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLInputElement
+    expect(searchbox.value).toBe('Moon dentist in Adelaide')
+    expect(screen.queryByRole('heading', { name: 'Expand the network for this ask' })).toBeNull()
     expect(document.body.textContent?.match(/available now|guaranteed availability/gi)).toBeNull()
+  })
+
+  it.each([199, 200, 201])('enforces the shared %i-character query limit', (length) => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    renderHomeRoute()
+
+    const query = 'q'.repeat(length)
+    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLInputElement
+    expect(searchbox.maxLength).toBe(QUERY_MAX_LENGTH)
+    fireEvent.change(searchbox, { target: { value: query } })
+    expect(searchbox.value).toBe(query)
+    expect(screen.getByText(`${length} / ${QUERY_MAX_LENGTH} characters`)).toBeTruthy()
+
+    const form = screen.getByRole('search')
+    fireEvent.submit(form)
+
+    if (length > QUERY_MAX_LENGTH) {
+      expect(routeState.navigate).not.toHaveBeenCalled()
+    } else {
+      expect(routeState.navigate).toHaveBeenCalledWith({ to: '/t/new', search: { q: query } })
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -139,10 +165,4 @@ function renderHomeRoute(q = '') {
   const HomeComponent = routeState.HomeComponent
   if (HomeComponent === null) throw new Error('Home route component was not captured by the router mock.')
   render(<HomeComponent />)
-}
-
-function enterQuery(query: string) {
-  fireEvent.change(screen.getByLabelText('What are you looking for?'), {
-    target: { value: query },
-  })
 }

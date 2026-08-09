@@ -1,3 +1,4 @@
+import { compareExactAmounts } from '@/modules/money/public'
 import type { WorkNode, WorkTree } from './contract'
 
 export type WorkTreeDecisionKind = 'lock' | 'adjust' | 'park'
@@ -33,10 +34,11 @@ export function assessWorkTreeDecisionPolicy(
   kind: WorkTreeDecisionKind = 'lock',
 ): WorkTreeDecisionPolicy {
   const paid = hasMoneyCommitment(node)
+  const committed = node.cost?.committed
+  const authorityWidening = node.authorityRef !== undefined && node.authorityRef.trim().length > 0
   const irreversible = node.resource?.exclusive !== undefined
     || node.scope?.acceptance === 'judgement'
-    || (node.cost?.committedMinor ?? 0) > 0
-  const authorityWidening = node.authorityRef !== undefined && node.authorityRef.trim().length > 0
+    || (committed !== undefined && compareExactAmounts(committed, { ...committed, units: '0' }) === 1)
   const requiresStepUp = kind === 'lock' && (paid || irreversible || authorityWidening)
   return {
     paid,
@@ -110,9 +112,8 @@ export function compareDecisionRanking(
 export function hasMoneyCommitment(node: WorkNode): boolean {
   const cost = node.cost
   if (cost === undefined) return false
-  return (cost.estimateMinor ?? 0) > 0
-    || (cost.committedMinor ?? 0) > 0
-    || (cost.envelopeMinor ?? 0) > 0
+  return [cost.estimate, cost.committed, cost.envelope]
+    .some((amount) => amount !== undefined && compareExactAmounts(amount, { ...amount, units: '0' }) === 1)
 }
 
 /** Return the number of nodes that explicitly depend on this decision. */

@@ -18,37 +18,43 @@ export function buildFollowUpComposerCopy(
   if (completedTurns.length === 0) {
     return null
   }
+  if (completedTurns.at(-1)?.layoutProfile === 'data_answer') {
+    return {
+      placeholder: 'Ask a follow-up or try another live data lookup',
+      loopHint: '',
+    }
+  }
 
   const state = readComposerContext(completedTurns)
   if (state.selectedProvider !== undefined) {
     return providerHasInquiryPath(state.selectedProvider)
       ? {
           placeholder: 'Ask limits, refine, or continue with the selected business',
-          loopHint: 'AE keeps that business in context. The business confirms timing, quote, availability, and the work.',
+          loopHint: 'That business stays in context. It confirms timing, quote, and availability.',
         }
       : {
-          placeholder: 'Ask limits, refine, or review the selected listing',
-          loopHint: 'This business needs a published inquiry path before AE can route contact.',
+          placeholder: 'Ask limits, refine, or review the selected business',
+          loopHint: 'This business does not have a request form yet. Review its page before contacting it.',
         }
   }
 
   if (state.hasInquiryReadyProvider) {
     return {
-      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
+      placeholder: 'Narrow, compare, or ask the business',
+      loopHint: 'Narrow or compare the matches, then ask the business when one fits.',
     }
   }
 
   if (state.hasListedProvider) {
     return {
       placeholder: 'Narrow, compare, or ask for the contact step',
-      loopHint: 'These listings need a published inquiry path before AE can route contact.',
+      loopHint: 'These options do not have a request form yet.',
     }
   }
 
   return {
-    placeholder: 'Refine the search or ask what AE can safely do',
-    loopHint: 'AE needs a listed business before it can compare options or route a qualified inquiry.',
+    placeholder: 'Refine the request or ask what can happen next',
+    loopHint: 'A match is needed before comparing options or contacting a business.',
   }
 }
 
@@ -56,33 +62,33 @@ function buildLiveComposerCopy(intent: FollowUpIntent, completedTurnCount: numbe
   switch (intent) {
     case 'filter_known':
       return {
-        placeholder: 'Filtering the listed businesses from this thread',
-        loopHint: 'AE is narrowing the known businesses before any contact step.',
+        placeholder: 'Narrowing matches from this thread',
+        loopHint: 'Narrowing the matches before any contact step.',
       }
     case 'compare_known':
       return {
-        placeholder: 'Comparing the listed businesses from this thread',
-        loopHint: 'AE is comparing published details from the businesses already found.',
+        placeholder: 'Comparing options from this thread',
+        loopHint: 'Comparing details from the businesses already found.',
       }
     case 'inquiry_handoff':
       return {
-        placeholder: 'Preparing the qualified inquiry next step',
-        loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
+        placeholder: 'Preparing a request to the business',
+        loopHint: 'Carrying the selected business into a request. It still confirms timing, quote, and availability.',
       }
     case 'explain_boundary':
       return {
-        placeholder: 'Checking the supported next step',
-        loopHint: 'AE will keep the current objective and show the next action this business supports.',
+        placeholder: 'Checking what can happen next',
+        loopHint: 'Keeping the current goal and showing the next step this business supports.',
       }
     case 'unsupported':
       return {
-        placeholder: 'Finding a supported way forward',
-        loopHint: 'AE will preserve the objective and return the nearest supported next step.',
+        placeholder: 'Finding another way forward',
+        loopHint: 'Keeping the goal and returning the nearest useful next step.',
       }
     case 'refine_search':
       return {
-        placeholder: completedTurnCount > 0 ? 'Searching again with this thread in mind' : 'Checking published business details',
-        loopHint: 'AE is checking published business details before any contact step.',
+        placeholder: completedTurnCount > 0 ? 'Checking what is available again with this thread in mind' : "Checking what's available",
+        loopHint: "Checking what's available before any contact step.",
       }
   }
 }

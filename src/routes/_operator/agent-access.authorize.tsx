@@ -110,7 +110,7 @@ function AgentAccessAuthorizeRoute() {
       <Card className="grid max-w-2xl gap-4 p-5">
         {userCode === undefined ? (
           <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your assistant.</AlertDescription></Alert>
-        ) : consentLoading || !consentReady ? (
+        ) : status !== 'error' && (consentLoading || !consentReady) ? (
           <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the assistant name and exact permission before you decide.</AlertDescription></Alert>
         ) : status === 'idle' ? (
           <>

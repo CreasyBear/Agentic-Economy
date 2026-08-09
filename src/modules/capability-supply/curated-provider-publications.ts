@@ -2,14 +2,21 @@ import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
 } from './public'
+import { CLUSTER_A_PUBLICATIONS } from './curated-cluster-a-publications'
+import { CLUSTER_B_PUBLICATIONS } from './curated-cluster-b-publications'
+import { CLUSTER_C_PUBLICATIONS } from './curated-cluster-c-publications'
 
 export const EXA_BUSINESS_SLUG = 'agentic-market-exa'
 export const FRANKFURTER_BUSINESS_SLUG = 'frankfurter-ecb-rates'
 
 const AE_PUBLIC_NETWORK = 'ae:public'
-const EXA_CREDENTIAL_REF = 'env:EXA_API_KEY'
-const EXA_PRICE = { currency: 'USD', amountMinor: 1 } as const
-const FRANKFURTER_CREDENTIAL_REF = 'none'
+const EXA_PRICE = { amount: { currency: 'USD', units: '1', exponent: 2 } } as const
+const EXA_AUTHORITY = {
+  kind: 'provider_connection',
+  connectionRef: 'connection:exa',
+  providerRef: 'provider:exa',
+} as const
+const FRANKFURTER_AUTHORITY = { kind: 'keyless' } as const
 
 const EXA_SOURCE_EVIDENCE = [
   'https://api.agentic.market/v1/services/api-exa-ai',
@@ -239,6 +246,10 @@ const exaSearchContract: CapabilityContractMetadata = {
   ],
   evidence: [{ evidenceId: 'results', outputPointer: '/results', purpose: 'completion' }],
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+  inputExamples: [
+    { label: 'web search', input: { query: 'latest AI news' } },
+    { label: 'typed search', input: { query: 'OpenAI announcement', numResults: 5, type: 'fast' } },
+  ],
 }
 
 const exaContentsContract: CapabilityContractMetadata = {
@@ -323,6 +334,10 @@ export const frankfurterContract: CapabilityContractMetadata = {
   }],
   evidence: [{ evidenceId: 'rate', outputPointer: '/0', purpose: 'completion' }],
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+  inputExamples: [
+    { label: 'EUR->USD', input: { base: 'EUR', quote: 'USD' } },
+    { label: 'AUD->GBP', input: { base: 'AUD', quote: 'GBP' } },
+  ],
 }
 
 const exaOpenApiDocument = {
@@ -406,7 +421,7 @@ export const exaSearchPublicationImport: CapabilityPublicationImport = {
       registrationEvidenceRefs: [...EXA_SEARCH_EVIDENCE],
     },
     bindingId: 'binding:agentic-market-exa:search:api-key:v2',
-    credentialRef: EXA_CREDENTIAL_REF,
+    authority: EXA_AUTHORITY,
     registrationEvidenceRefs: [...EXA_SEARCH_EVIDENCE],
     requestTimeoutMs: 30_000,
   },
@@ -444,7 +459,7 @@ export const exaContentsPublicationImport: CapabilityPublicationImport = {
       registrationEvidenceRefs: [...EXA_CONTENTS_EVIDENCE],
     },
     bindingId: 'binding:agentic-market-exa:contents:api-key:v2',
-    credentialRef: EXA_CREDENTIAL_REF,
+    authority: EXA_AUTHORITY,
     registrationEvidenceRefs: [...EXA_CONTENTS_EVIDENCE],
     requestTimeoutMs: 30_000,
   },
@@ -501,7 +516,7 @@ export const frankfurterSingleRatePublicationImport: CapabilityPublicationImport
       presentation: {
         label: 'Frankfurter ECB single-pair rate',
         summary: 'AE-curated external access to one current ECB reference rate through Frankfurter v2.',
-        price: { kind: 'fixed', currency: 'USD', amountMinor: 0 },
+        price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
         materialTerms: [
           { termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS; platform-funded provider cost is USD 0.' },
           { termId: 'source-attribution', label: 'Source', value: 'European Central Bank via Frankfurter.' },
@@ -516,11 +531,11 @@ export const frankfurterSingleRatePublicationImport: CapabilityPublicationImport
           evidenceRefs: [...FRANKFURTER_SOURCE_EVIDENCE],
         },
       },
-      searchTerms: ['frankfurter', 'exchange rates', 'ecb rates', 'currency conversion', 'single currency pair'],
+      searchTerms: ['frankfurter', 'exchange rates', 'ecb rates', 'currency conversion', 'single currency pair', 'eur', 'usd', 'currency pair', 'exchange rate', 'convert currency'],
       registrationEvidenceRefs: [...FRANKFURTER_SOURCE_EVIDENCE],
     },
     bindingId: 'binding:frankfurter-ecb-rates:single-rate:v1',
-    credentialRef: FRANKFURTER_CREDENTIAL_REF,
+    authority: FRANKFURTER_AUTHORITY,
     registrationEvidenceRefs: [...FRANKFURTER_SOURCE_EVIDENCE],
     requestTimeoutMs: 10_000,
   },
@@ -536,4 +551,7 @@ export const CURATED_PROVIDER_PUBLICATIONS = [
   { businessSlug: EXA_BUSINESS_SLUG, publication: exaSearchPublicationImport },
   { businessSlug: EXA_BUSINESS_SLUG, publication: exaContentsPublicationImport },
   { businessSlug: FRANKFURTER_BUSINESS_SLUG, publication: frankfurterSingleRatePublicationImport },
+  ...CLUSTER_A_PUBLICATIONS,
+  ...CLUSTER_B_PUBLICATIONS,
+  ...CLUSTER_C_PUBLICATIONS,
 ] as const satisfies readonly CuratedProviderPublication[]

@@ -1,11 +1,22 @@
 import {
+  buildRationaleFollowUpProse,
+  classifyAnswerQuerySafety,
   type AnswerEvent,
   type AnswerSnapshot,
   type AnswerSource,
   type AnswerWorkStep,
   collectAllowedSlugsFromToolResults,
   emitSnapshotEvents,
+  extractRequestedLocation,
+  resolveKeylessDataAsk,
+  type KeylessDataAskResolution,
+  type AnswerQuerySafetyResult,
 } from '@/modules/answer/public'
+import {
+  defaultKeylessExecutableSource,
+  type KeylessExecutableSourcePort,
+  type OperationExecuteDeps,
+} from '@/modules/capability-execution'
 import type {
   HarnessModelRequestRecord,
   HarnessRunStatus,
@@ -16,29 +27,51 @@ import {
   aeSearchContextLocationQuery,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
-import { resolveIntentRoute } from './intent-router'
 import {
+  buildAnswerTurnProblem,
+  redactAnswerTurnProblem,
+  type AnswerTurnProblem,
+} from '@/lib/errors'
+import {
+  hasAnswerServiceSignal,
   planAnswerTurn,
   type AnswerResponsePlan,
 } from './answer-response-planner'
-import { publicWorkLog, safeWorkLogUserText } from './public-worklog'
+import { isPublicWorkStep, publicWorkLog, safeWorkLogUserText } from './public-worklog'
 
 import type {
   AnswerRunGateSummary,
   AnswerToolCallRecord,
+  AnswerTurnCheckpoint,
   AnswerTurnRecord,
   AnswerTurnTimingEntry,
   FollowUpIntent,
+  FrozenTurnEvidence,
+  FrozenTurnProse,
 } from '../answer-thread.schema'
-import { assertAnswerTurnAccess } from './turn-guard'
-import type { AnswerTurnAccessDecision } from './turn-guard'
-import { toolCallRecordsToGateInput } from './tool-runner'
+import {
+  acquireAnswerTurnResumeLease,
+  getAnswerThreadWithTurns,
+  renewAnswerTurnResumeLease,
+  type AnswerHarnessFinalizationResult,
+  type AnswerTurnReservationResult,
+  type AnswerTurnResumeLeaseResult,
+  writeAnswerTurnCheckpoint,
+} from '../answer-thread.functions'
+import { normalizeAnswerTurnQuery } from './turn-digests'
+import { resolveIntentRoute, type IntentRoute } from './intent-router'
 import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
-import { filterProvidersBySuburb, parseNarrowToSuburb } from './follow-up-query'
+import {
+  findThreadNeedQuery,
+  filterProvidersBySuburb,
+  parseNarrowToSuburb,
+  resolveFollowUpRegistryQuery,
+} from './follow-up-query'
 import {
   answerHarnessFinalizationSucceeded,
   collectLatestFrozenAllowedSlugs,
   collectLatestFrozenProviders,
+  failPersistedAnswerTurnDurably,
   finalizePersistedAnswerTurnHarnessRun,
   persistAnswerTurnWithResult,
   readPriorCompleteTurns,
@@ -47,22 +80,24 @@ import {
   type PersistAnswerTurnResult,
 } from './answer-turn-finalization'
 import { finalizeAnswerTurnSnapshot } from './answer-turn-safety'
+import { toolCallRecordsToGateInput } from './tool-runner'
 import {
   createLiveAnswerHarnessOperation,
   type LiveAnswerHarnessOperation,
 } from './answer-harness-operation'
-import type { AnswerHarnessFinalizationResult } from '../answer-thread.functions'
 import { agentTurnPath } from './turns/agent'
 import { boundaryTurnPath } from './turns/boundary'
 import { clarificationTurnPath } from './turns/clarification'
+import { inquiryHandoffTurnPath } from './turns/inquiry-handoff'
 import { retrievalFirstTurnPath } from './turns/retrieval-first'
 import { insufficientFrozenTurnPath } from './turns/insufficient-frozen'
 import { frozenKnownTurnPath, selectFrozenProviders } from './turns/frozen-known'
-import { inquiryHandoffTurnPath } from './turns/inquiry-handoff'
+import { parseFrozenEvidence } from './public-projection'
 import {
   describeProviderCount,
   makeCopyId,
   reindexProviders,
+  withFollowUpLayout,
   type SnapshotAssemblyPlan,
   type SnapshotPlanMetadata,
   type TurnPathContext,
@@ -71,7 +106,156 @@ import {
   type WorkStepEmitter,
 } from './turns/types'
 
-type StreamAnswerRoute = ReturnType<typeof resolveIntentRoute>
+type StreamAnswerRoute = IntentRoute | { kind: 'rationale' } | { kind: 'safety_refusal' }
+
+const EXPLICIT_REFERENCE_DOMAIN_TOKENS: Record<string, true> = {
+  encyclopedia: true,
+  reference: true,
+  references: true,
+  wiki: true,
+  wikipedia: true,
+}
+
+function isExplicitReferenceAsk(normalizedQuery: string): boolean {
+  const tokens = normalizedQuery.match(/[a-z0-9]+/g) ?? []
+  if (tokens.some((token) => EXPLICIT_REFERENCE_DOMAIN_TOKENS[token] === true)) {
+    return true
+  }
+  return /\b(?:article|page)[-\s]+(?:extract|overview|summary)\b/.test(normalizedQuery)
+    || /\b(?:extract|overview|summary)[-\s]+(?:article|page)\b/.test(normalizedQuery)
+}
+
+function isExplicitGeneralWebSearch(query: string): boolean {
+  const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
+  return /\bsearch\s+(?:the\s+)?web\b/.test(normalized)
+    || /\bweb\s+search\b/.test(normalized)
+    || /\blook\s+up\b.{0,120}\bon\s+(?:the\s+)?web\b/.test(normalized)
+    || /\blatest\s+on\s+(?:the\s+)?[a-z0-9]/.test(normalized)
+    || isExplicitReferenceAsk(normalized)
+}
+function isRationaleFollowUpQuery(query: string): boolean {
+  const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
+  return /\b(?:why|how come|what failed|which constraints?|what constraints?|no matches?|no businesses?|couldn['’]?t find|didn['’]?t find|explain)\b/.test(normalized)
+}
+
+function isCorrectiveSearchFollowUp(query: string): boolean {
+  const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
+  return extractRequestedLocation(query) !== undefined
+    || /\b(?:only|just|licensed|registered|budget|under|within|available|tonight|today|tomorrow|this week|radius|km|exclude|must|prefer)\b/.test(normalized)
+}
+
+function buildCorrectiveRegistryQuery(
+  query: string,
+  priorTurns: readonly AnswerTurnRecordLite[],
+): string | undefined {
+  if (!isCorrectiveSearchFollowUp(query)) {
+    return undefined
+  }
+
+  const resolved = resolveFollowUpRegistryQuery(query, priorTurns)
+  if (hasAnswerServiceSignal(resolved)) {
+    return normalizeAnswerTurnQuery(resolved)
+  }
+
+  const priorNeed = findThreadNeedQuery(priorTurns)
+  if (priorNeed === undefined || resolved.toLowerCase().includes(priorNeed.toLowerCase())) {
+    return normalizeAnswerTurnQuery(resolved)
+  }
+  return normalizeAnswerTurnQuery(`${priorNeed} ${resolved}`)
+}
+
+function readPriorSearchContext(
+  priorTurns: readonly AnswerTurnRecordLite[],
+): AeSearchContext | undefined {
+  for (const turn of priorTurns.toSorted((left, right) => right.seq - left.seq)) {
+    try {
+      const context = parseFrozenEvidence(turn.evidenceJson).searchContext
+      if (context !== undefined) {
+        return context
+      }
+    } catch {
+      // Ignore malformed historical evidence and keep looking for a valid context.
+    }
+  }
+  return undefined
+}
+
+function readDurableFailureEvidence(
+  priorTurns: readonly AnswerTurnRecordLite[],
+): string | undefined {
+  for (const turn of priorTurns.toSorted((left, right) => right.seq - left.seq)) {
+    let evidence: FrozenTurnEvidence
+    try {
+      evidence = parseFrozenEvidence(turn.evidenceJson)
+    } catch {
+      continue
+    }
+
+    const failedStep = evidence.workLog.toReversed().find((step) =>
+      step.status === 'error' && isPublicWorkStep(step),
+    )
+    const summary = failedStep?.summary?.replace(/\s+/g, ' ').trim()
+    if (summary !== undefined && summary.length > 0 && !/\b(?:thought|reasoning|prompt|model|tool|capability|internal|raw)\b/i.test(summary)) {
+      return summary.slice(0, 240)
+    }
+  }
+  return undefined
+}
+
+function buildRationaleEvidence(input: {
+  query: string
+  priorTurns: readonly AnswerTurnRecordLite[]
+  searchContext: AeSearchContext | undefined
+}): {
+  constraints: string[]
+  budget?: string
+  failure?: string
+} {
+  const queries = [...input.priorTurns.map((turn) => turn.query), input.query]
+  const constraints = new Set<string>()
+  const explicitLocations = queries
+    .map((query) => extractRequestedLocation(query))
+    .filter((location): location is string => location !== undefined && location.trim().length > 0)
+  const location = explicitLocations.at(-1) ?? input.searchContext?.location?.label
+  if (location !== undefined) {
+    constraints.add(`Location: ${location}`)
+  }
+
+  const timing = input.searchContext?.timing === 'date' && input.searchContext.timingDate !== undefined
+    ? `Timing: ${input.searchContext.timingDate}`
+    : input.searchContext?.timing === undefined
+      ? queries.toReversed().find((query) => /\b(?:tonight|tomorrow(?: morning)?|today|this week|urgent)\b/i.test(query))
+      : `Timing: ${input.searchContext.timing.replace('_', ' ')}`
+  if (timing !== undefined) {
+    constraints.add(timing.startsWith('Timing:') ? timing : `Timing: ${timing.match(/\b(?:tonight|tomorrow(?: morning)?|today|this week|urgent)\b/i)?.[0] ?? timing}`)
+  }
+
+  if (queries.some((query) => /\blicen[cs]ed\b/i.test(query))) {
+    constraints.add('Licensed providers requested')
+  }
+  const radius = queries
+    .map((query) => query.match(/\b(?:within|under|less than|no more than)\s+(\d+)\s*(km|kilomet(?:re|er)s?|mi(?:le)?s?)\b/i))
+    .find((match): match is RegExpMatchArray => match !== null)
+  if (radius?.[1] !== undefined && radius[2] !== undefined) {
+    constraints.add(`Distance: ${radius[1]} ${radius[2]}`)
+  }
+
+  const budgets = queries.flatMap((query) => [...query.matchAll(/\b(?:A\$|AUD\s*|\$)\s?\d[\d,]*(?:\.\d{1,2})?\b/gi)].map((match) => match[0].replace(/\s+/g, '')))
+  const uniqueBudgets = [...new Set(budgets)]
+  const budget = uniqueBudgets.length === 0
+    ? 'Budget: no explicit budget was retained'
+    : uniqueBudgets.length === 1
+      ? `Budget retained: ${uniqueBudgets[0]}`
+      : `Budget precedence: ${uniqueBudgets.at(-1)} is the latest stated budget; earlier ${uniqueBudgets.slice(0, -1).join(' and ')} was superseded`
+  const failure = readDurableFailureEvidence(input.priorTurns)
+
+  return {
+    constraints: [...constraints],
+    budget,
+    ...(failure === undefined ? {} : { failure }),
+  }
+}
+
 
 type StreamAnswerTurnRuntimeState = {
   query: string
@@ -79,21 +263,33 @@ type StreamAnswerTurnRuntimeState = {
   turnId: string
   turnSeq: number
   isNewThread: boolean
+  reservationKey: string
+  requestDigest: string
   searchContext: AeSearchContext | undefined
+  registryQuery?: string
   priorTurns: readonly AnswerTurnRecordLite[]
   priorTurnCount: number
   priorProviders: AnswerSource[]
   priorAllowedSlugs: readonly string[]
   intent: FollowUpIntent
+  querySafety?: AnswerQuerySafetyResult | undefined
   route?: StreamAnswerRoute | undefined
   responsePlan?: AnswerResponsePlan | undefined
+  keylessDataAsk?: KeylessDataAskResolution | undefined
+  webSearchUnavailable?: boolean | undefined
   retrievalFirst?: TurnPathResult | undefined
   narrowSuburb?: string | undefined
   captured?: AnswerSnapshot | undefined
   errorCopyId?: string | undefined
+  errorProblem?: AnswerTurnProblem | undefined
+  errorProblemJson?: string | undefined
   toolCalls: readonly AnswerToolCallRecord[]
   modelRequests?: readonly HarnessModelRequestRecord[] | undefined
   allowedSlugs: ReadonlySet<string>
+  resumeCheckpoint?: AnswerTurnCheckpoint
+  resumeGeneration?: number
+  resumeLeaseOwner?: string
+  resumeLeaseExpiresAt?: number
   gate?: AnswerRunGateSummary | undefined
   finalGate?: AnswerRunGateSummary | undefined
   finalTurnStatus?: AnswerTurnRecord['status'] | undefined
@@ -106,12 +302,33 @@ type StreamAnswerTurnRuntimeState = {
 
 export type StreamAnswerTurnInput = {
   sessionId: string
-  threadId?: string
   query: string
+  threadId?: string
+  requestDigest: string
+  admission: Extract<AnswerTurnReservationResult, { kind: 'reserved' | 'replayed' }>
   searchContext?: AeSearchContext
+  resume?: {
+    checkpoint?: AnswerTurnCheckpoint
+    generation: number
+    leaseOwner: string
+    leaseExpiresAt: number
+  }
+  checkpointLease?: {
+    generation: number
+    leaseOwner: string
+    leaseExpiresAt: number
+  }
+  /** Explicit descriptor source for fixture/local-e2e answer turns. */
+  keylessExecutableSource?: KeylessExecutableSourcePort
+  /** Narrow fixture/evaluator execution dependencies; production omits this. */
+  operationExecuteDeps?: Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl'>
+  /** Narrow evaluator seam; production always uses the OpenRouter safety classifier. */
+  querySafetyClassifier?: (input: Readonly<{
+    query: string
+    signal?: AbortSignal
+  }>) => Promise<AnswerQuerySafetyResult>
   signal?: AbortSignal
   sourceWriteRequest?: Request
-  precheckedAccess?: Extract<AnswerTurnAccessDecision, { kind: 'allowed' }>
   preloadedPriorTurns?: readonly AnswerTurnRecord[]
 }
 
@@ -121,31 +338,70 @@ export type StreamAnswerTurnResult = {
   turnSeq: number
 }
 
+type FinalizedAnswerTurnReadback =
+  | { kind: 'complete'; answer: AnswerSnapshot }
+  | { kind: 'error'; problem: AnswerTurnProblem }
+
+async function readFinalizedAnswerTurn(input: {
+  threadId: string
+  turnId: string
+  sessionId: string
+}): Promise<FinalizedAnswerTurnReadback> {
+  const projection = await getAnswerThreadWithTurns(input.threadId, input.sessionId, { numItems: 25, cursor: null })
+  const turn = projection?.turns.page.find((candidate) => candidate.turnId === input.turnId)
+  if (turn === undefined) {
+    return { kind: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') }
+  }
+  if (turn.status === 'error') {
+    if (turn.errorProblemJson !== undefined) {
+      try {
+        return { kind: 'error', problem: redactAnswerTurnProblem(JSON.parse(turn.errorProblemJson) as unknown) }
+      } catch {
+        // Fall through to the safe generic problem.
+      }
+    }
+    return { kind: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') }
+  }
+  if (turn.status !== 'complete') {
+    return { kind: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') }
+  }
+  try {
+    const evidence = JSON.parse(turn.evidenceJson) as FrozenTurnEvidence
+    const prose = JSON.parse(turn.proseJson) as FrozenTurnProse
+    return {
+      kind: 'complete',
+      answer: {
+        query: turn.query,
+        oneLine: prose.oneLine,
+        providers: evidence.providers,
+        ...(evidence.importedClaims === undefined ? {} : { importedClaims: evidence.importedClaims }),
+        summary: prose.summary,
+        nextStep: prose.nextStep,
+        agentJsonUrl: evidence.agentJsonUrl,
+        ...(prose.compactLayout === true ? { compactLayout: true } : {}),
+        ...(prose.layoutProfile === undefined ? {} : { layoutProfile: prose.layoutProfile }),
+      },
+    }
+  } catch {
+    return { kind: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') }
+  }
+}
+
+
 export async function streamAnswerTurn(
   input: StreamAnswerTurnInput,
   onEvent: (frame: { seq: number; event: AnswerEvent }) => void,
 ): Promise<StreamAnswerTurnResult | undefined> {
-  const query = input.query.trim().slice(0, 200)
+  const query = normalizeAnswerTurnQuery(input.query)
   if (query.length === 0) {
     return undefined
   }
 
-  const timings = createTurnTimingCollector()
-  const stopContextTiming = timings.start('turn.context_parse')
-  const access = input.precheckedAccess ?? await assertAnswerTurnAccess({
-    sessionId: input.sessionId,
-    ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
-  })
-
-  const threadId = input.threadId ?? crypto.randomUUID()
-  const turnId = crypto.randomUUID()
-  const turnSeq = access.kind === 'allowed' ? access.turnCount + 1 : 1
-  const harness = createLiveAnswerHarnessOperation({
-    runId: turnId,
-    sessionId: input.sessionId,
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-  })
-
+  const { admission } = input
+  const threadId = admission.threadId
+  const turnId = admission.turnId
+  const turnSeq = admission.turnSeq
+  const isNewThread = input.threadId === undefined
   let seq = -1
   const send = (event: AnswerEvent) => {
     if (input.signal?.aborted === true) {
@@ -154,32 +410,117 @@ export async function streamAnswerTurn(
     seq += 1
     onEvent({ seq, event })
   }
-  const workLog = createWorkStepEmitter(send)
-
-  if (access.kind === 'denied') {
-    send({ type: 'error', code: access.code, copyId: makeCopyId() })
-    return undefined
-  }
 
   send({ type: 'thread', threadId, turnId, turnSeq })
+  if (input.resume === undefined && admission.kind === 'replayed') {
+    if (
+      admission.state === 'reserved'
+      || admission.state === 'checkpointed'
+      || admission.state === 'answer_persisted'
+    ) {
+      send({ type: 'pending' })
+      return { threadId, turnId, turnSeq }
+    }
+    if (admission.state === 'stopped') {
+      send({ type: 'stopped' })
+      return { threadId, turnId, turnSeq }
+    }
+    const replay = await readFinalizedAnswerTurn({
+      threadId,
+      turnId,
+      sessionId: input.sessionId,
+    })
+    if (replay.kind === 'complete') {
+      send({ type: 'complete', answer: replay.answer })
+    } else {
+      send({ type: 'error', problem: replay.problem })
+    }
+    return { threadId, turnId, turnSeq }
+  }
+
+  if (input.resume === undefined && admission.kind === 'reserved') {
+    const leaseOwner = crypto.randomUUID()
+    let lease: AnswerTurnResumeLeaseResult | undefined
+    try {
+      lease = await acquireAnswerTurnResumeLease({
+        reservationKey: admission.reservationKey,
+        requestDigest: input.requestDigest,
+        sessionId: input.sessionId,
+        threadId,
+        turnId,
+        turnSeq,
+        leaseOwner,
+        mode: 'initial',
+        ...(input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.sourceWriteRequest }),
+      })
+    } catch {
+      send({ type: 'error', problem: buildAnswerTurnProblem('unavailable') })
+      return { threadId, turnId, turnSeq }
+    }
+    if (lease?.kind === 'pending') {
+      send({ type: 'pending' })
+      return { threadId, turnId, turnSeq }
+    }
+    if (lease?.kind === 'settled') {
+      if (lease.status === 'stopped') {
+        send({ type: 'stopped' })
+      } else {
+        const replay = await readFinalizedAnswerTurn({
+          threadId,
+          turnId,
+          sessionId: input.sessionId,
+        })
+        send(replay.kind === 'complete'
+          ? { type: 'complete', answer: replay.answer }
+          : { type: 'error', problem: replay.problem })
+      }
+      return { threadId, turnId, turnSeq }
+    }
+    if (lease?.kind === 'conflict') {
+      send({ type: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') })
+      return { threadId, turnId, turnSeq }
+    }
+    if (lease?.kind === 'acquired') {
+      input = {
+        ...input,
+        checkpointLease: {
+          generation: lease.generation,
+          leaseOwner: lease.leaseOwner,
+          leaseExpiresAt: lease.leaseExpiresAt,
+        },
+      }
+    }
+  }
+
+  const timings = createTurnTimingCollector()
+  const stopContextTiming = timings.start('turn.context_parse')
+  const harness = createLiveAnswerHarnessOperation({
+    runId: turnId,
+    sessionId: input.sessionId,
+    ...(input.signal === undefined ? {} : { signal: input.signal }),
+  })
+  const workLog = createWorkStepEmitter(send)
   const interpretStartedAt = Date.now()
   workLog.emit({
     id: 'interpret.request',
     phase: 'interpret',
     status: 'running',
     title: 'Reading your request',
-    summary: 'Checking the need, place, and whether this is a follow-up.',
+    summary: 'Checking what you need and whether this is a follow-up.',
     detailRows: [{ label: 'Request', value: safeWorkLogUserText(query) }],
     startedAtMs: interpretStartedAt,
   })
 
-  const runResult = await harness.loop.run({
+  const resumeCheckpoint = input.resume?.checkpoint
+  const runResult = await harness.loop.run<StreamAnswerTurnRuntimeState>({
     initialState: {
       query,
       threadId,
       turnId,
       turnSeq,
-      isNewThread: input.threadId === undefined,
+      isNewThread,
+      reservationKey: admission.reservationKey,
+      requestDigest: input.requestDigest,
       searchContext: input.searchContext,
       priorTurns: [],
       priorTurnCount: 0,
@@ -187,12 +528,25 @@ export async function streamAnswerTurn(
       priorAllowedSlugs: [],
       intent: 'refine_search',
       toolCalls: [],
-      allowedSlugs: new Set(),
+      allowedSlugs: new Set<string>(),
       assembled: false,
+      ...(input.resume === undefined
+        ? input.checkpointLease === undefined
+          ? {}
+          : {
+              resumeGeneration: input.checkpointLease.generation,
+              resumeLeaseOwner: input.checkpointLease.leaseOwner,
+              resumeLeaseExpiresAt: input.checkpointLease.leaseExpiresAt,
+            }
+        : {
+            ...(resumeCheckpoint === undefined ? {} : { resumeCheckpoint }),
+            resumeGeneration: input.resume.generation,
+            resumeLeaseOwner: input.resume.leaseOwner,
+            resumeLeaseExpiresAt: input.resume.leaseExpiresAt,
+          }),
     } satisfies StreamAnswerTurnRuntimeState,
     phases: buildStreamAnswerTurnPhases({
       input,
-      accessTurnCount: access.turnCount,
       interpretStartedAt,
       stopContextTiming,
       send,
@@ -206,16 +560,42 @@ export async function streamAnswerTurn(
   const persistResult = finalState.persistResult
   const finalizationResult = finalState.finalizationResult
 
+  if (persistResult?.ok !== true) {
+    send({ type: 'error', problem: buildAnswerTurnProblem('answer_turn_persist_failed') })
+    return { threadId, turnId, turnSeq }
+  }
+  if (persistInput?.sourceWriteRequest !== undefined && !answerHarnessFinalizationSucceeded(finalizationResult)) {
+    const persistFailureProblem = buildAnswerTurnProblem('answer_turn_persist_failed')
+    const durableFailure = await failPersistedAnswerTurnDurably({
+      input: persistInput,
+      persistResult,
+      errorProblemJson: JSON.stringify(persistFailureProblem),
+    })
+    if (durableFailure?.kind === 'stopped') {
+      send({ type: 'stopped' })
+      return { threadId, turnId, turnSeq }
+    }
+    if (durableFailure?.kind === 'failed' || durableFailure?.kind === 'replayed') {
+      const readback = await readFinalizedAnswerTurn({
+        threadId,
+        turnId,
+        sessionId: input.sessionId,
+      })
+      send(readback.kind === 'complete'
+        ? { type: 'complete', answer: readback.answer }
+        : { type: 'error', problem: readback.problem })
+      return { threadId, turnId, turnSeq }
+    }
+    send({ type: 'error', problem: persistFailureProblem })
+    return { threadId, turnId, turnSeq }
+  }
   if (finalState.captured !== undefined) {
-    if (persistResult?.ok !== true) {
-      send({ type: 'error', code: 'answer_turn_persist_failed', copyId: makeCopyId() })
-      return { threadId, turnId, turnSeq }
-    }
-    if (persistInput?.sourceWriteRequest !== undefined && !answerHarnessFinalizationSucceeded(finalizationResult)) {
-      send({ type: 'error', code: 'answer_turn_persist_failed', copyId: makeCopyId() })
-      return { threadId, turnId, turnSeq }
-    }
     send({ type: 'complete', answer: finalState.captured })
+  } else {
+    send({
+      type: 'error',
+      problem: finalState.errorProblem ?? buildAnswerTurnProblem('answer_turn_failed'),
+    })
   }
 
   return { threadId, turnId, turnSeq }
@@ -223,7 +603,6 @@ export async function streamAnswerTurn(
 
 function buildStreamAnswerTurnPhases(input: {
   input: StreamAnswerTurnInput
-  accessTurnCount: number
   interpretStartedAt: number
   stopContextTiming: (metadata?: Record<string, string | number | boolean | null>) => void
   send: (event: AnswerEvent) => void
@@ -233,20 +612,68 @@ function buildStreamAnswerTurnPhases(input: {
 }): HarnessRunLoopPhaseHandlers<StreamAnswerTurnRuntimeState> {
   return {
     context: async ({ state }) => {
-      const priorTurns = input.input.preloadedPriorTurns === undefined
-        ? await readPriorCompleteTurns(input.input.threadId, input.input.sessionId)
-        : input.input.preloadedPriorTurns.filter((turn) => turn.status === 'complete')
+      const checkpoint = input.input.resume?.checkpoint
+      if (checkpoint !== undefined) {
+        for (const request of checkpoint.modelRequests) {
+          input.harness.loop.recordModelRequest(request)
+        }
+        input.timings.add(checkpoint.timings, { phase: 'resume_checkpoint' })
+        return {
+          ...state,
+          searchContext: input.input.searchContext,
+          priorTurns: [],
+          priorTurnCount: 0,
+        }
+      }
+      const querySafety = await (input.input.querySafetyClassifier ?? classifyAnswerQuerySafety)({
+        query: state.query,
+        ...(input.input.signal === undefined ? {} : { signal: input.input.signal }),
+      })
+      input.harness.recordModelRequest(querySafety.modelRequest)
+      input.timings.record('model.answer_query_safety', querySafety.modelRequest.durationMs, {
+        decision: querySafety.kind,
+        ...(querySafety.kind === 'refused' ? { reason: querySafety.reason } : {}),
+      })
+      const priorTurns = querySafety.kind === 'refused'
+        ? []
+        : input.input.preloadedPriorTurns === undefined
+          ? await readPriorCompleteTurns(input.input.admission.threadId, input.input.sessionId)
+          : input.input.preloadedPriorTurns.filter((turn) => turn.status === 'complete')
       return {
         ...state,
+        querySafety,
+        modelRequests: [querySafety.modelRequest],
+        searchContext: querySafety.kind === 'refused'
+          ? undefined
+          : input.input.searchContext ?? readPriorSearchContext(priorTurns),
         priorTurns,
-        priorTurnCount: Math.max(priorTurns.length, input.accessTurnCount),
+        priorTurnCount: priorTurns.length,
       }
     },
     intent: ({ state }) => {
+      if (input.input.resume?.checkpoint !== undefined) {
+        input.stopContextTiming({ resumed: true })
+        input.workLog.emit({
+          id: 'interpret.request',
+          phase: 'interpret',
+          status: 'complete',
+          title: 'Resuming your answer',
+          summary: 'Continuing from the saved capability result.',
+          detailRows: [{ label: 'Request', value: safeWorkLogUserText(state.query) }],
+          startedAtMs: input.interpretStartedAt,
+          completedAtMs: Date.now(),
+        })
+        return {
+          ...state,
+          intent: 'refine_search',
+          priorProviders: [],
+          priorAllowedSlugs: [],
+        }
+      }
       const intent = classifyFollowUpIntent(state.query, state.priorTurnCount)
       input.stopContextTiming({
         priorTurns: state.priorTurns.length,
-        accessTurnCount: input.accessTurnCount,
+        accessTurnCount: state.priorTurnCount,
         intent,
         isNewThread: input.input.threadId === undefined,
       })
@@ -256,8 +683,8 @@ function buildStreamAnswerTurnPhases(input: {
         status: 'complete',
         title: 'Reading your request',
         summary: state.priorTurnCount > 0
-          ? 'Using the latest answer thread to decide whether this is a follow-up.'
-          : 'Starting a new search from this request.',
+          ? 'Checking the latest answer to see whether this is a follow-up.'
+          : 'Starting with this request.',
         detailRows: [
           { label: 'Request', value: safeWorkLogUserText(state.query) },
           { label: 'Earlier answers', value: String(state.priorTurnCount) },
@@ -273,35 +700,98 @@ function buildStreamAnswerTurnPhases(input: {
         priorAllowedSlugs: collectLatestFrozenAllowedSlugs(state.priorTurns),
       }
     },
-    route: ({ state }) => ({
-      ...state,
-      route: resolveIntentRoute(state.intent),
-    }),
+    route: ({ state }) => {
+      if (input.input.resume?.checkpoint !== undefined) {
+        return { ...state, route: { kind: 'tool_search' } }
+      }
+      if (state.querySafety?.kind === 'refused') {
+        return { ...state, route: { kind: 'safety_refusal' } }
+      }
+      const baseRoute = resolveIntentRoute(state.intent)
+      const rationaleRoute = state.priorTurnCount > 0
+        && state.priorProviders.length === 0
+        && isRationaleFollowUpQuery(state.query)
+        && baseRoute.kind !== 'boundary_explain'
+        && baseRoute.kind !== 'unsupported'
+      const restartRoute = state.priorProviders.length === 0
+        && isCorrectiveSearchFollowUp(state.query)
+        && (baseRoute.kind === 'frozen_filter' || baseRoute.kind === 'frozen_compare')
+      const route = rationaleRoute || restartRoute
+        ? { kind: rationaleRoute ? 'rationale' : 'tool_search' } as StreamAnswerRoute
+        : baseRoute
+      const registryQuery = route.kind === 'tool_search' && state.priorProviders.length === 0
+        ? buildCorrectiveRegistryQuery(state.query, state.priorTurns)
+        : undefined
+      return {
+        ...state,
+        route,
+        ...(registryQuery === undefined ? {} : { registryQuery }),
+      }
+    },
     retrieval: async ({ state }) => {
+      if (input.input.resume?.checkpoint !== undefined) {
+        return {
+          ...state,
+          keylessDataAsk: { kind: 'resolved', descriptors: [], candidates: [] },
+        }
+      }
+      if (state.querySafety?.kind === 'refused') {
+        return state
+      }
       if (state.route?.kind !== 'tool_search') {
         return state
+      }
+      if (state.registryQuery !== undefined) {
+        const previousFailure = readDurableFailureEvidence(state.priorTurns)
+        if (previousFailure !== undefined) {
+          input.workLog.emit({
+            id: 'search.previous_failure',
+            phase: 'search',
+            status: 'error',
+            title: 'Using the earlier search result',
+            summary: `The earlier search did not complete: ${previousFailure}`,
+            detailRows: [{ label: 'Earlier failure', value: previousFailure }],
+            completedAtMs: Date.now(),
+          })
+        }
+      }
+
+      const keylessExecutableSource = input.input.keylessExecutableSource ?? defaultKeylessExecutableSource
+      const keylessDataAsk = await resolveKeylessDataAsk(state.query, keylessExecutableSource)
+      if (keylessDataAsk.kind === 'resolved' && keylessDataAsk.candidates.length > 0) {
+        return {
+          ...state,
+          keylessDataAsk,
+        }
+      }
+      const resolvedState = {
+        ...state,
+        keylessDataAsk,
+      }
+      if (isExplicitGeneralWebSearch(state.query)) {
+        return { ...resolvedState, webSearchUnavailable: true }
       }
 
       const narrowSuburb = parseNarrowToSuburb(state.query)
       if (narrowSuburb !== undefined && state.priorProviders.length > 0) {
-        return { ...state, narrowSuburb }
+        return { ...resolvedState, narrowSuburb }
       }
 
       const responsePlan = planAnswerTurn({
-        query: state.query,
+        query: state.registryQuery ?? state.query,
         priorTurnsCount: state.priorTurnCount,
         searchContext: state.searchContext,
       })
       if (responsePlan.mode === 'clarify') {
-        return { ...state, responsePlan }
+        return { ...resolvedState, responsePlan }
       }
 
       const retrievalFirst = await retrievalFirstTurnPath.run(
-        runtimeTurnPathContext(input, state),
+        runtimeTurnPathContext(input, resolvedState),
         responsePlan,
       )
       const nextState = {
-        ...state,
+        ...resolvedState,
         responsePlan,
         retrievalFirst,
       }
@@ -309,12 +799,14 @@ function buildStreamAnswerTurnPhases(input: {
         return nextState
       }
       if ((retrievalFirst.snapshot?.providers.length ?? 0) > 0) {
-        return nextState
+        return hasAnswerServiceSignal(state.registryQuery ?? state.query)
+          ? applyToolLedResult(nextState, retrievalFirst)
+          : nextState
       }
       return applyToolLedResult(nextState, retrievalFirst)
     },
     model: async ({ state }) => {
-      if (state.captured !== undefined || state.errorCopyId !== undefined) {
+      if (state.captured !== undefined || state.errorCopyId !== undefined || state.errorProblem !== undefined) {
         return state
       }
 
@@ -325,6 +817,58 @@ function buildStreamAnswerTurnPhases(input: {
 
       const responsePlan = state.responsePlan
       switch (route.kind) {
+        case 'safety_refusal':
+          return applyToolLedResult(
+            state,
+            await boundaryTurnPath.run(runtimeTurnPathContext(input, state), 'safety_refusal'),
+          )
+        case 'rationale': {
+          const evidence = buildRationaleEvidence({
+            query: state.query,
+            priorTurns: state.priorTurns,
+            searchContext: state.searchContext,
+          })
+          const prose = buildRationaleFollowUpProse(evidence)
+          const snapshot = withFollowUpLayout(
+            {
+              query: state.query,
+              oneLine: prose.oneLine,
+              providers: [],
+              summary: prose.summary,
+              nextStep: prose.nextStep,
+              agentJsonUrl: '',
+            },
+            state.priorTurnCount,
+            'compare_known',
+          )
+          const allowedSlugs = state.priorAllowedSlugs.length > 0
+            ? new Set(state.priorAllowedSlugs)
+            : state.allowedSlugs
+          const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
+          if (!finalized.ok) {
+            return applyToolLedResult(state, {
+              snapshot: undefined,
+              toolCalls: [],
+              allowedSlugs,
+              errorCopyId: finalized.copyId,
+              errorProblem: buildAnswerTurnProblem(finalized.code),
+              gate: finalized.gate,
+            })
+          }
+          const assembly = await runtimeTurnPathContext(input, state).emitOrDeferSnapshot(
+            finalized.snapshot,
+            'frozen_compare',
+            { planMode: 'compare' },
+          )
+          return applyToolLedResult(state, {
+            snapshot: finalized.snapshot,
+            toolCalls: [],
+            allowedSlugs,
+            errorCopyId: undefined,
+            gate: finalized.gate,
+            ...(assembly === undefined ? {} : { assembly }),
+          })
+        }
         case 'boundary_explain':
         case 'unsupported':
           return applyToolLedResult(
@@ -354,6 +898,12 @@ function buildStreamAnswerTurnPhases(input: {
           return applyToolLedResult(state, result)
         }
         case 'tool_search': {
+          if (state.webSearchUnavailable === true) {
+            return applyToolLedResult(
+              state,
+              await boundaryTurnPath.run(runtimeTurnPathContext(input, state), 'web_search_unavailable'),
+            )
+          }
           if (state.narrowSuburb !== undefined) {
             const narrowed = reindexProviders(filterProvidersBySuburb(state.priorProviders, state.narrowSuburb))
             const result = await frozenKnownTurnPath.run(
@@ -370,32 +920,124 @@ function buildStreamAnswerTurnPhases(input: {
             )
           }
           const retrieved = state.retrievalFirst
-          const result = retrieved?.snapshot !== undefined && retrieved.snapshot.providers.length > 0
+          const retrievedHasProviders = retrieved?.snapshot !== undefined && retrieved.snapshot.providers.length > 0
+          const keylessExecutableSource = input.input.keylessExecutableSource ?? defaultKeylessExecutableSource
+          const keylessDataAsk: KeylessDataAskResolution = state.keylessDataAsk
+            ?? { kind: 'resolved', descriptors: [], candidates: [] }
+          const selected = keylessDataAsk.kind === 'resolved' ? keylessDataAsk.selected : undefined
+          const resumeInput = input.input.resume
+          const resumeCheckpoint = resumeInput?.checkpoint
+          const activeLease = resumeInput === undefined
+            ? input.input.checkpointLease
+            : resumeCheckpoint === undefined
+              ? resumeInput
+              : undefined
+          const persistIntermediateCheckpoint = activeLease === undefined
+            ? undefined
+            : async (checkpoint: AnswerTurnCheckpoint): Promise<void> => {
+                const generation = state.resumeGeneration
+                const leaseOwner = state.resumeLeaseOwner
+                if (
+                  generation === undefined
+                  || leaseOwner === undefined
+                  || generation !== activeLease.generation
+                  || leaseOwner !== activeLease.leaseOwner
+                ) {
+                  throw new Error('answer_turn_resume_lease_unavailable')
+                }
+                const renewed = await renewAnswerTurnResumeLease({
+                  reservationKey: state.reservationKey,
+                  requestDigest: state.requestDigest,
+                  sessionId: input.input.sessionId,
+                  threadId: state.threadId,
+                  turnId: state.turnId,
+                  turnSeq: state.turnSeq,
+                  generation,
+                  leaseOwner,
+                  ...(input.input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.input.sourceWriteRequest }),
+                })
+                if (
+                  renewed?.kind !== 'acquired'
+                  || renewed.generation !== generation
+                  || renewed.leaseOwner !== leaseOwner
+                ) {
+                  throw new Error('answer_turn_resume_lease_unavailable')
+                }
+                const written = await writeAnswerTurnCheckpoint({
+                  reservationKey: state.reservationKey,
+                  requestDigest: state.requestDigest,
+                  sessionId: input.input.sessionId,
+                  threadId: state.threadId,
+                  turnId: state.turnId,
+                  turnSeq: state.turnSeq,
+                  generation,
+                  leaseOwner,
+                  checkpoint,
+                  ...(input.input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.input.sourceWriteRequest }),
+                })
+                if (written === undefined || written.kind === 'conflict' || written.kind === 'stopped') {
+                  throw new Error('answer_turn_checkpoint_write_failed')
+                }
+              }
+          const result = resumeCheckpoint !== undefined
             ? await agentTurnPath.run(
                 runtimeTurnPathContext(input, state),
                 {
                   query: state.query,
                   followUpIntent: state.intent,
                   searchContext: state.searchContext,
-                  priorProviders: retrieved.snapshot.providers,
-                  priorAllowedSlugs: [...retrieved.allowedSlugs],
-                  disableTools: true,
+                  keylessDataAsk,
+                  keylessExecutableSource,
+                  resumeCheckpoint,
+                  ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
                 },
-                retrieved.toolCalls,
-                state.responsePlan?.mode,
+                [],
+                undefined,
                 undefined,
               )
-            : await agentTurnPath.run(
-                runtimeTurnPathContext(input, state),
-                {
-                  query: state.query,
-                  followUpIntent: state.intent,
-                  searchContext: state.searchContext,
-                },
-                state.toolCalls,
-                undefined,
-                state.responsePlan?.toolPolicy,
-              )
+            : retrievedHasProviders
+              && keylessDataAsk.kind === 'resolved'
+              && selected === undefined
+              ? await agentTurnPath.run(
+                  runtimeTurnPathContext(input, state),
+                  {
+                    query: state.query,
+                    followUpIntent: state.intent,
+                    searchContext: state.searchContext,
+                    priorProviders: retrieved!.snapshot!.providers,
+                    priorAllowedSlugs: [...retrieved!.allowedSlugs],
+                    keylessDataAsk,
+                    keylessExecutableSource,
+                    ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
+                    disableTools: true,
+                  },
+                  retrieved!.toolCalls,
+                  state.responsePlan?.mode,
+                  undefined,
+                )
+              : await agentTurnPath.run(
+                  runtimeTurnPathContext(input, state),
+                  {
+                    query: state.query,
+                    followUpIntent: state.intent,
+                    searchContext: state.searchContext,
+                    keylessDataAsk,
+                    keylessExecutableSource,
+                    ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
+                    ...(persistIntermediateCheckpoint === undefined ? {} : { persistIntermediateCheckpoint }),
+                    // Keep surfaced operation providers as grounding when the
+                    // selected capability tool is enabled.
+                    ...(retrievedHasProviders && selected !== undefined
+                      ? {
+                          priorProviders: retrieved!.snapshot!.providers,
+                          priorAllowedSlugs: [...retrieved!.allowedSlugs],
+                        }
+                      : {}),
+                  },
+                  state.toolCalls,
+                  undefined,
+                  state.responsePlan?.toolPolicy,
+                )
           return applyToolLedResult(state, result)
         }
         default: {
@@ -407,21 +1049,25 @@ function buildStreamAnswerTurnPhases(input: {
     gate: async ({ state }) => {
       let captured = state.captured
       let errorCopyId = state.errorCopyId
+      let errorProblem = state.errorProblem
       let gate = state.gate
       const toolCalls = [...state.toolCalls]
       const allowedSlugs = state.allowedSlugs
 
-      if (captured === undefined && errorCopyId === undefined) {
+      if (captured === undefined && errorCopyId === undefined && errorProblem === undefined) {
         const copyId = makeCopyId()
         errorCopyId = copyId
-        input.send({ type: 'error', code: 'answer_turn_failed', copyId })
+        errorProblem = buildAnswerTurnProblem('answer_turn_failed')
       } else if (captured !== undefined) {
-        const finalized = finalizeAnswerTurnSnapshot({ snapshot: captured, allowedSlugs })
+        const finalized = finalizeAnswerTurnSnapshot({
+          snapshot: captured,
+          allowedSlugs,
+        })
         if (!finalized.ok) {
           captured = undefined
           errorCopyId = finalized.copyId
+          errorProblem = buildAnswerTurnProblem(finalized.code)
           gate = finalized.gate
-          input.send({ type: 'error', code: finalized.code, copyId: finalized.copyId })
         } else {
           captured = finalized.snapshot
           gate = finalized.gate
@@ -440,6 +1086,7 @@ function buildStreamAnswerTurnPhases(input: {
         ...state,
         captured,
         errorCopyId,
+        ...(errorProblem === undefined ? {} : { errorProblem, errorProblemJson: JSON.stringify(errorProblem) }),
         toolCalls,
         allowedSlugs,
         gate,
@@ -465,42 +1112,13 @@ function buildStreamAnswerTurnPhases(input: {
       return { ...state, assembled: true }
     },
     persist: async ({ state }) => {
-      const finalTurnStatus = state.finalTurnStatus ?? (state.captured === undefined ? 'error' : 'complete')
-      const finalGate = state.finalGate ?? {
-        ok: finalTurnStatus === 'complete',
-        source: 'turn_status',
-        ...(finalTurnStatus === 'error' ? { code: 'turn_error' } : {}),
-      } satisfies AnswerRunGateSummary
-      const allowedSlugs = state.allowedSlugs
-        ?? collectAllowedSlugsFromToolResults(toolCallRecordsToGateInput(state.toolCalls))
-
-      input.timings.record('turn.persistence_prepare', 0, {
-        status: finalTurnStatus,
-        toolCalls: state.toolCalls.length,
+      const persistInput = buildPersistAnswerTurnInput({
+        input: input.input,
+        state,
+        timings: input.timings,
+        workLog: input.workLog,
+        harness: input.harness,
       })
-      const persistInput: PersistAnswerTurnInput = {
-        sessionId: input.input.sessionId,
-        threadId: state.threadId,
-        isNewThread: state.isNewThread,
-        title: buildThreadTitle(state.query),
-        turnId: state.turnId,
-        turnSeq: state.turnSeq,
-        query: state.query,
-        intent: state.intent,
-        captured: state.captured,
-        errorCopyId: state.errorCopyId,
-        toolCalls: state.toolCalls,
-        ...(state.modelRequests === undefined ? {} : { modelRequests: state.modelRequests }),
-        gate: finalGate,
-        searchContext: state.searchContext,
-        timings: input.timings.entries(),
-        workLog: input.workLog.entries(),
-        allowedSlugs,
-        ...(input.input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.input.sourceWriteRequest }),
-        harnessRun: input.harness.loop.snapshot(harnessStatusForAnswerTurn(finalTurnStatus, finalGate)),
-        harnessRuntimeEvents: input.harness.events,
-        skipHarnessSessionJournal: true,
-      }
       const persistResult = await input.harness.persist(() => persistAnswerTurnWithResult(persistInput))
       return {
         ...state,
@@ -509,18 +1127,78 @@ function buildStreamAnswerTurnPhases(input: {
       }
     },
     report: async ({ state }) => {
-      const persistInput = state.persistInput
-      const persistResult = state.persistResult
+      let reportState: StreamAnswerTurnRuntimeState = state
+      let persistInput = state.persistInput
+      let persistResult = state.persistResult
+
+      if (
+        persistInput !== undefined
+        && persistResult?.failure === 'unknown'
+        && persistInput.sourceWriteRequest !== undefined
+        && !answerHarnessRunAborted(input)
+      ) {
+        const recoveredFinalization = await finalizePersistedAnswerTurnHarnessRun({
+          input: persistInput,
+          persistResult,
+          harnessRun: input.harness.loop.snapshot(harnessStatusForAnswerTurn(
+            state.finalTurnStatus ?? persistResult.status,
+            state.finalGate ?? persistInput.gate,
+          )),
+          runtimeEvents: input.harness.events,
+        })
+        if (answerHarnessFinalizationSucceeded(recoveredFinalization)) {
+          input.harness.loop.emitOperationEvent({
+            type: 'answer.harness_finalization',
+            status: recoveredFinalization.status,
+          })
+          return {
+            ...state,
+            persistResult: { ...persistResult, ok: true },
+            finalizationResult: recoveredFinalization,
+          }
+        }
+      }
+
+      if ((persistInput === undefined || persistResult?.failure === 'unknown') && !answerHarnessRunAborted(input)) {
+        const errorProblem = buildAnswerTurnProblem('answer_turn_persist_failed')
+        const failedState: StreamAnswerTurnRuntimeState = {
+          ...state,
+          captured: undefined,
+          errorCopyId: makeCopyId(),
+          errorProblem,
+          errorProblemJson: JSON.stringify(errorProblem),
+          finalGate: { ok: false, source: 'turn_status', code: 'turn_error' },
+          finalTurnStatus: 'error',
+        }
+        const recoveryPersistInput = buildPersistAnswerTurnInput({
+          input: input.input,
+          state: failedState,
+          timings: input.timings,
+          workLog: input.workLog,
+          harness: input.harness,
+        })
+        const recoveryPersistResult = await input.harness.persist(
+          () => persistAnswerTurnWithResult(recoveryPersistInput),
+        )
+        reportState = {
+          ...failedState,
+          persistInput: recoveryPersistInput,
+          persistResult: recoveryPersistResult,
+        }
+        persistInput = recoveryPersistInput
+        persistResult = recoveryPersistResult
+      }
+
       if (persistResult?.ok !== true || persistInput === undefined || persistInput.sourceWriteRequest === undefined) {
-        return state
+        return reportState
       }
 
       const finalizationResult = await finalizePersistedAnswerTurnHarnessRun({
         input: persistInput,
         persistResult,
         harnessRun: input.harness.loop.snapshot(harnessStatusForAnswerTurn(
-          state.finalTurnStatus ?? persistResult.status,
-          state.finalGate ?? persistInput.gate,
+          reportState.finalTurnStatus ?? persistResult.status,
+          reportState.finalGate ?? persistInput.gate,
         )),
         runtimeEvents: input.harness.events,
       })
@@ -537,12 +1215,76 @@ function buildStreamAnswerTurnPhases(input: {
       }
 
       return {
-        ...state,
+        ...reportState,
         finalizationResult,
       }
     },
   }
 }
+
+function buildPersistAnswerTurnInput(input: {
+  input: StreamAnswerTurnInput
+  state: StreamAnswerTurnRuntimeState
+  timings: TurnTimingCollector
+  workLog: WorkStepEmitter
+  harness: LiveAnswerHarnessOperation
+}): PersistAnswerTurnInput {
+  const finalTurnStatus = input.state.finalTurnStatus
+    ?? (input.state.captured === undefined ? 'error' : 'complete')
+  const finalGate = input.state.finalGate ?? {
+    ok: finalTurnStatus === 'complete',
+    source: 'turn_status',
+    ...(finalTurnStatus === 'error' ? { code: 'turn_error' } : {}),
+  } satisfies AnswerRunGateSummary
+  const allowedSlugs = input.state.allowedSlugs
+    ?? collectAllowedSlugsFromToolResults(toolCallRecordsToGateInput(input.state.toolCalls))
+
+  input.timings.record('turn.persistence_prepare', 0, {
+    status: finalTurnStatus,
+    toolCalls: input.state.toolCalls.length,
+  })
+  const generation = input.state.resumeGeneration
+  const leaseOwner = input.state.resumeLeaseOwner
+  if (generation === undefined || leaseOwner === undefined) {
+    throw new Error('answer_turn_lease_missing')
+  }
+  return {
+    reservationKey: input.state.reservationKey,
+    requestDigest: input.state.requestDigest,
+    generation,
+    leaseOwner,
+    sessionId: input.input.sessionId,
+    threadId: input.state.threadId,
+    isNewThread: input.state.isNewThread,
+    title: buildThreadTitle(input.state.query),
+    turnId: input.state.turnId,
+    turnSeq: input.state.turnSeq,
+    query: input.state.query,
+    intent: input.state.intent,
+    captured: input.state.captured,
+    errorCopyId: input.state.errorCopyId,
+    ...(input.state.errorProblem === undefined ? {} : { errorProblemJson: JSON.stringify(input.state.errorProblem) }),
+    toolCalls: input.state.toolCalls,
+    ...(input.state.modelRequests === undefined ? {} : { modelRequests: input.state.modelRequests }),
+    gate: finalGate,
+    searchContext: input.state.searchContext,
+    timings: input.timings.entries(),
+    workLog: input.workLog.entries(),
+    allowedSlugs,
+    ...(input.input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.input.sourceWriteRequest }),
+    harnessRun: input.harness.loop.snapshot(harnessStatusForAnswerTurn(finalTurnStatus, finalGate)),
+    harnessRuntimeEvents: input.harness.events,
+  }
+}
+
+function answerHarnessRunAborted(input: {
+  input: StreamAnswerTurnInput
+  harness: LiveAnswerHarnessOperation
+}): boolean {
+  return input.input.signal?.aborted === true
+    || input.harness.loop.snapshot().summary.run.status === 'aborted'
+}
+
 
 class AnswerHarnessFinalizationError extends Error {
   readonly code = 'answer_harness_finalization_failed'
@@ -572,6 +1314,7 @@ function runtimeTurnPathContext(
     turnId: state.turnId,
     sourceWriteRequest: input.input.sourceWriteRequest,
     query: state.query,
+    ...(state.registryQuery === undefined ? {} : { registryQuery: state.registryQuery }),
     intent: state.intent,
     priorTurnsCount: state.priorTurnCount,
     priorProviders: state.priorProviders,
@@ -611,12 +1354,33 @@ function applyToolLedResult(
     ...state,
     captured: result.snapshot,
     errorCopyId: result.errorCopyId,
+    ...(result.errorProblem === undefined ? {} : {
+      errorProblem: result.errorProblem,
+      errorProblemJson: JSON.stringify(result.errorProblem),
+    }),
     toolCalls: result.toolCalls,
-    ...(result.modelRequests === undefined ? {} : { modelRequests: result.modelRequests }),
+    ...(result.modelRequests === undefined
+      ? {}
+      : { modelRequests: appendModelRequests(state.modelRequests, result.modelRequests) }),
     allowedSlugs: result.allowedSlugs,
     gate: result.gate,
     ...(result.assembly === undefined ? {} : { assembly: result.assembly }),
   }
+}
+
+function appendModelRequests(
+  prior: readonly HarnessModelRequestRecord[] | undefined,
+  incoming: readonly HarnessModelRequestRecord[],
+): readonly HarnessModelRequestRecord[] {
+  const priorRequests = prior ?? []
+  const offset = priorRequests.length
+  return [
+    ...priorRequests,
+    ...incoming.map((request, index) => ({
+      ...request,
+      seq: offset + (request.seq ?? index),
+    })),
+  ]
 }
 
 function harnessStatusForAnswerTurn(
@@ -665,7 +1429,7 @@ async function emitTimedSnapshot(
 
 function snapshotStreamPauseMs(path: string): number {
   if (path === 'boundary_explain' || path === 'unsupported' || path === 'inquiry_handoff' || path === 'clarification') {
-    return 0
+    return 250
   }
   if (
     path === 'retrieval_first' ||
@@ -673,7 +1437,7 @@ function snapshotStreamPauseMs(path: string): number {
     path === 'frozen_filter' ||
     path === 'frozen_compare'
   ) {
-    return 20
+    return 140
   }
   return 140
 }
@@ -716,9 +1480,9 @@ async function emitSnapshotWithAssembly(
     id: 'assemble.answer',
     phase: 'assemble',
     status: 'running',
-    title: 'Preparing the answer',
-    summary: 'Building the visible answer from listed details.',
-    detailRows: [{ label: 'Listed businesses', value: String(snapshot.providers.length) }],
+    title: 'Putting together the answer',
+    summary: 'Putting the answer together from the details.',
+    detailRows: [{ label: 'Matches', value: String(snapshot.providers.length) }],
     relatedProviderSlugs: snapshot.providers.map((provider) => provider.slug),
     startedAtMs: startedAt,
   })
@@ -729,12 +1493,12 @@ async function emitSnapshotWithAssembly(
     id: 'assemble.answer',
     phase: 'assemble',
     status: input.signal?.aborted === true ? 'stopped' : 'complete',
-    title: 'Preparing the answer',
+    title: 'Putting together the answer',
     summary: input.signal?.aborted === true
       ? 'The answer stopped before it finished.'
-      : 'The answer is ready to inspect.',
+      : 'The answer is ready.',
     detailRows: [
-      { label: 'Listed businesses', value: String(snapshot.providers.length) },
+      { label: 'Matches', value: String(snapshot.providers.length) },
       { label: 'Next step', value: snapshot.nextStep },
     ],
     relatedProviderSlugs: snapshot.providers.map((provider) => provider.slug),
@@ -767,8 +1531,15 @@ function createWorkStepEmitter(send: (event: AnswerEvent) => void): WorkStepEmit
           ...(step.relatedProviderSlugs === undefined ? {} : { relatedProviderSlugs: step.relatedProviderSlugs }),
         })
       }
-      const publicSteps = publicWorkLog(steps)
-      send({ type: 'work-step', step: publicSteps[index === -1 ? publicSteps.length - 1 : index] as AnswerWorkStep })
+      if (!isPublicWorkStep(step)) {
+        return
+      }
+      const currentIndex = index === -1 ? steps.length - 1 : index
+      const publicIndex = steps.slice(0, currentIndex + 1).filter(isPublicWorkStep).length - 1
+      const publicStep = publicWorkLog(steps)[publicIndex]
+      if (publicStep !== undefined) {
+        send({ type: 'work-step', step: publicStep })
+      }
     },
     entries: () => publicWorkLog(steps),
   }
@@ -791,9 +1562,9 @@ function withWorkStepDuration(step: AnswerWorkStep): AnswerWorkStep {
 
 function describeSearchContext(searchContext: AeSearchContext | undefined): string {
   if (searchContext?.mode === 'whole_catalogue') {
-    return 'Whole catalogue'
+    return 'All available options'
   }
-  return aeSearchContextLocationQuery(searchContext) ?? 'Request only'
+  return aeSearchContextLocationQuery(searchContext) ?? 'Your request'
 }
 
 function emitFrozenProviderSteps(
@@ -806,8 +1577,8 @@ function emitFrozenProviderSteps(
     id: 'read.providers',
     phase: 'read',
     status: 'complete',
-    title: 'Using previous listed businesses',
-    summary: describeProviderCount(providers.length, 'listed business'),
+    title: 'Reading the details already found',
+    summary: describeProviderCount(providers.length, 'match'),
     detailRows: [{ label: 'From latest answer', value: String(providers.length) }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     completedAtMs: completedAt,
@@ -816,11 +1587,11 @@ function emitFrozenProviderSteps(
     id: 'compare.fit',
     phase: 'compare',
     status: 'complete',
-    title: routeKind === 'frozen_compare' ? 'Comparing listed options' : 'Checking fit',
+    title: routeKind === 'frozen_compare' ? 'Comparing the matches' : 'Checking the matches',
     summary: routeKind === 'frozen_compare'
-      ? 'Comparing the listed businesses already in the answer thread.'
-      : 'Filtering the latest listed businesses against the follow-up.',
-    detailRows: [{ label: 'Kept for answer', value: String(providers.length) }],
+      ? 'Comparing the matches already in the answer thread.'
+      : 'Checking which matches fit this request.',
+    detailRows: [{ label: 'Matches kept', value: String(providers.length) }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     completedAtMs: completedAt,
   })

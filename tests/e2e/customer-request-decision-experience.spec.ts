@@ -69,8 +69,9 @@ test('customer can give and withdraw bounded repeat permission without internal 
     throw new Error('repeat-permission fixture route missing')
   }
   const perUseSpend = {
-    currency: route.maximumTotalCost.currency,
-    amountMinor: route.maximumTotalCost.amountMinor,
+    currency: route.maximumTotalCost.amount.currency,
+    units: route.maximumTotalCost.amount.units,
+    exponent: route.maximumTotalCost.amount.exponent,
   }
   let allowBody: unknown
   let withdrawalBody: unknown
@@ -100,7 +101,7 @@ test('customer can give and withdraw bounded repeat permission without internal 
       delegatedCredentialId: 'assistant:opaque-choice',
       limits: {
         perUseSpend,
-        cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
+        cumulativeSpend: { currency: 'AUD', units: '4200', exponent: 2 },
         perUseDataAllocations: 2,
         cumulativeDataAllocations: 6,
         occurrences: 3,
@@ -123,7 +124,7 @@ test('customer can give and withdraw bounded repeat permission without internal 
       delegatedCredentialId: 'assistant:opaque-choice',
       limits: {
         perUseSpend,
-        cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
+        cumulativeSpend: { currency: 'AUD', units: '4200', exponent: 2 },
         perUseDataAllocations: 2,
         cumulativeDataAllocations: 6,
         occurrences: 3,
@@ -167,7 +168,7 @@ test('customer can give and withdraw bounded repeat permission without internal 
     routeRef: route.routeRef,
     delegatedCredentialId: 'assistant:opaque-choice',
     occurrences: 3,
-    cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
+    cumulativeSpend: { currency: 'AUD', units: '4200', exponent: 2 },
     validUntil: route.validUntil,
   })
 
@@ -495,7 +496,7 @@ function decisionView(): CustomerRequestView {
           { businessRef: 'business:north-star', name: 'North Star Services' },
           { businessRef: 'business:city-ledger', name: 'City Ledger' },
         ],
-        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
+        maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '1400', exponent: 2 } },
         dataUse: {
           recipientCount: 2, purposes: ['Find the service', 'Prepare the result'],
           recipients: [
@@ -519,7 +520,7 @@ function decisionView(): CustomerRequestView {
         validUntil, fallback: { available: false, alternatives: [] }, uncertainty: [],
         comparison: {
           outcomeRef: 'outcome:decision', outcomeFit: 'same_promised_result', completeness: 'complete',
-          hardConstraints: 'satisfied', maximumCost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
+          hardConstraints: 'satisfied', maximumCost: { kind: 'known', amount: { currency: 'AUD', units: '1400', exponent: 2 } },
           dataExposureCount: 2, irreversibleEffectCount: 1, uncertaintyCount: 0,
           duration: 'not_declared', recovery: 'reconcile_required', trust: 'registered_current_option',
           evidenceCount: 1, freshness: { state: 'current', validUntil },
@@ -567,10 +568,10 @@ function recommendedDecisionView(): CustomerRequestView {
     routeRef: 'route:other',
     quoteDigest: 'quote:other',
     businesses: [{ businessRef: 'business:other', name: 'Other Services' }],
-    maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_700 },
+    maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1700', exponent: 2 } },
     comparison: {
       ...first.comparison,
-      maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_700 },
+      maximumCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1700', exponent: 2 } },
     },
   }
   return {

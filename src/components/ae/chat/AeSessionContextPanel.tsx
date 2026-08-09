@@ -27,7 +27,11 @@ export function AeSessionContextPanel({ projection, liveTurn = null }: AeSession
             <p className="block text-sm font-medium text-muted-foreground">
               Session context
             </p>
-            <p className="block text-foreground">
+            <p
+              className="block text-foreground"
+              dir="auto"
+              style={{ unicodeBidi: 'isolate' }}
+            >
               {context.summary}
             </p>
           </div>
@@ -36,8 +40,20 @@ export function AeSessionContextPanel({ projection, liveTurn = null }: AeSession
         <dl className="grid gap-2 sm:grid-cols-2">
           {context.facts.map((fact) => (
             <div key={fact.id} className="grid min-w-0 gap-0.5 rounded-md border border-border bg-card p-2">
-              <dt className="text-xs font-medium leading-snug text-muted-foreground">{fact.label}</dt>
-              <dd className="break-words text-sm leading-snug text-foreground">{fact.value}</dd>
+              <dt
+                className="text-xs font-medium leading-snug text-muted-foreground"
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+              >
+                {fact.label}
+              </dt>
+              <dd
+                className="break-words text-sm leading-snug text-foreground"
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+              >
+                {fact.value}
+              </dd>
             </div>
           ))}
         </dl>

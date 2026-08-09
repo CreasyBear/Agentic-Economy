@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
-import type { AgentToolDescriptor } from '@/modules/actions'
+import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
 import type { ServiceDto } from '@/modules/registry/public'
+import { formatPublishedPrice } from '@/components/ae/services/money'
 
 const INITIAL_PROOF_COUNT = 3
 
@@ -10,7 +12,7 @@ export function AeSupplyAgentProof({
   tools,
   services,
 }: Readonly<{
-  tools: readonly AgentToolDescriptor[]
+  tools: readonly SupplyLandingTool[]
   services: readonly ServiceDto[]
 }>) {
   return (
@@ -38,7 +40,7 @@ export function AeSupplyAgentProof({
           ) : (
             <>
               <ul className="m-0 grid list-none gap-3 p-0">
-                {services.slice(0, INITIAL_PROOF_COUNT).map((service) => <ServiceProofRow key={`${service.id}:${service.revision}`} service={service} />)}
+                {services.slice(0, INITIAL_PROOF_COUNT).map((service) => <ServiceProofRow key={service.id} service={service} />)}
               </ul>
               {services.length > INITIAL_PROOF_COUNT ? (
                 <details className="mt-3 rounded-md border border-border">
@@ -46,7 +48,7 @@ export function AeSupplyAgentProof({
                     Show {services.length - INITIAL_PROOF_COUNT} more published services
                   </summary>
                   <ul className="m-0 grid list-none gap-3 border-t border-border p-3">
-                    {services.slice(INITIAL_PROOF_COUNT).map((service) => <ServiceProofRow key={`${service.id}:${service.revision}`} service={service} />)}
+                    {services.slice(INITIAL_PROOF_COUNT).map((service) => <ServiceProofRow key={service.id} service={service} />)}
                   </ul>
                 </details>
               ) : null}
@@ -89,46 +91,78 @@ export function AeSupplyAgentProof({
   )
 }
 
-function ToolProofRow({ tool }: Readonly<{ tool: AgentToolDescriptor }>) {
+function ToolProofRow({ tool }: Readonly<{ tool: SupplyLandingTool }>) {
   return (
     <li className="grid gap-1 rounded-md border border-border p-3">
       <p className="block font-semibold text-foreground">{tool.name}</p>
       <p className="block text-muted-foreground">{tool.summary}</p>
       <details className="text-sm text-muted-foreground">
         <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">Technical details</summary>
-        <div className="mt-2 grid gap-1">
+        <div className="mt-2 grid gap-4">
           <p className="block text-sm text-muted-foreground">{tool.boundaries.join(' ')}</p>
-          <dl className="grid gap-1">
-            <div><dt className="font-medium text-foreground">Action ID</dt><dd className="break-all">{tool.id}</dd></div>
-            <div><dt className="font-medium text-foreground">Input schema</dt><dd className="break-all">{tool.inputJsonSchema === undefined ? 'Not supplied' : JSON.stringify(tool.inputJsonSchema)}</dd></div>
-            <div><dt className="font-medium text-foreground">Output schema</dt><dd className="break-all">{tool.outputJsonSchema === undefined ? 'Not supplied' : JSON.stringify(tool.outputJsonSchema)}</dd></div>
-          </dl>
+          <RefDisclosure label="Action" raw={tool.id} />
+          <RefDisclosure
+            label="Request schema"
+            raw={tool.inputJsonSchema ?? 'Not supplied'}
+          />
+          <RefDisclosure
+            label="Response schema"
+            raw={tool.outputJsonSchema ?? 'Not supplied'}
+          />
         </div>
       </details>
     </li>
   )
 }
 
+function RefDisclosure({ label, raw }: { label: string; raw: string }) {
+  return (
+    <div className="grid gap-1">
+      <p className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</p>
+      <Collapsible className="grid gap-1">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
+          >
+            View
+            <span aria-hidden="true">{'▾'}</span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <code className="block whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground">
+            {raw}
+          </code>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  )
+}
+
 function ServiceProofRow({ service }: Readonly<{ service: ServiceDto }>) {
+  const firstOffering = service.ae.offerings[0]
+  const priceText = firstOffering?.price === undefined
+    ? (firstOffering?.pricingSummary ?? 'Price supplied in the service details')
+    : formatPublishedPrice(firstOffering.price)
   return (
     <li className="grid gap-2 rounded-md border border-border p-3">
       <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
           <p className="block font-semibold text-foreground">{service.name}</p>
-          <p className="block text-sm text-muted-foreground">{service.business.name} · {service.category}</p>
+          <p className="block text-sm text-muted-foreground">{service.category}</p>
         </div>
-        <p className="block text-sm text-muted-foreground">{service.pricingSummary ?? 'Price supplied in the service details'}</p>
+        <p className="block text-sm text-muted-foreground">{priceText}</p>
       </div>
-      <p className="block text-muted-foreground">{service.summary}</p>
+      <p className="block text-muted-foreground">{firstOffering?.summary ?? service.category}</p>
       <details className="text-sm text-muted-foreground">
         <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">Technical connection details</summary>
         <div className="mt-2 grid gap-1">
-          {service.endpoints.map((endpoint) => <div key={`${endpoint.url}:${endpoint.name}`}><span className="font-medium text-foreground">{endpoint.name}</span> · {endpoint.method ?? 'Request'} · {endpoint.url}</div>)}
+          {service.endpoints.map((endpoint) => <div key={`${endpoint.url}:${endpoint.description}`}><span className="font-medium text-foreground">{endpoint.description}</span> · {endpoint.method ?? 'Request'} · {endpoint.url}</div>)}
         </div>
       </details>
       <div className="flex flex-wrap gap-3 text-sm">
-        <a href={service.links.business} className="inline-flex min-h-11 items-center underline underline-offset-4">Business details</a>
-        <a href={service.links.manifest} className="inline-flex min-h-11 items-center underline underline-offset-4">Published service details</a>
+        <a href={service.ae.links.business} className="inline-flex min-h-11 items-center underline underline-offset-4">Business details</a>
+        <a href={service.ae.links.manifest} className="inline-flex min-h-11 items-center underline underline-offset-4">Published service details</a>
       </div>
     </li>
   )

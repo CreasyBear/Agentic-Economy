@@ -5,6 +5,7 @@ import { internalQuery, type MutationCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { compareExactAmounts, type ExactAmount } from '../src/modules/money/public'
 import {
   workTreeApprovalDigest,
   verifyWorkTreeApprovalBinding,
@@ -15,9 +16,10 @@ import {
 } from '../src/modules/work-tree/public'
 import { workTreeSchema, type WorkTree } from '../src/modules/work-tree/convex'
 
+const exactAmountArg = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 const authorityArg = v.object({
   kind: v.literal('per_item'),
-  amount: v.optional(v.object({ currency: v.string(), amountMinor: v.number() })),
+  amount: v.optional(exactAmountArg),
 })
 const issueArgs = {
   projectId: v.string(),
@@ -185,7 +187,8 @@ async function issueApproval(ctx: ApprovalContext, args: ApprovalIssueArgs): Pro
     authorityKind: args.authority.kind,
     ...(args.authority.amount === undefined ? {} : {
       authorityAmountCurrency: args.authority.amount.currency,
-      authorityAmountMinor: args.authority.amount.amountMinor,
+      authorityAmountUnits: args.authority.amount.units,
+      authorityAmountExponent: args.authority.amount.exponent,
     }),
     expectedGeneration: args.expectedGeneration,
     expectedRevision: args.expectedRevision,
@@ -199,6 +202,7 @@ async function issueApproval(ctx: ApprovalContext, args: ApprovalIssueArgs): Pro
 }
 
 function issueReceipt(row: ApprovalRow): Record<string, unknown> {
+  const amount = rowAmount(row)
   return {
     kind: 'accepted',
     approvalRef: row.approvalRef,
@@ -210,9 +214,7 @@ function issueReceipt(row: ApprovalRow): Record<string, unknown> {
     proposalDigest: row.proposalDigest,
     authority: {
       kind: row.authorityKind,
-      ...(row.authorityAmountCurrency === undefined || row.authorityAmountMinor === undefined ? {} : {
-        amount: { currency: row.authorityAmountCurrency, amountMinor: row.authorityAmountMinor },
-      }),
+      ...(amount === undefined ? {} : { amount }),
     },
     issuedAt: row.issuedAt,
     expiresAt: row.expiresAt,
@@ -220,12 +222,11 @@ function issueReceipt(row: ApprovalRow): Record<string, unknown> {
   }
 }
 
-function rowAuthority(row: Pick<ApprovalRow, 'authorityKind' | 'authorityAmountCurrency' | 'authorityAmountMinor'>): WorkTreeApprovalAuthority {
+function rowAuthority(row: Pick<ApprovalRow, 'authorityKind' | 'authorityAmountCurrency' | 'authorityAmountUnits' | 'authorityAmountExponent'>): WorkTreeApprovalAuthority {
+  const amount = rowAmount(row)
   return {
     kind: row.authorityKind,
-    ...(row.authorityAmountCurrency === undefined || row.authorityAmountMinor === undefined ? {} : {
-      amount: { currency: row.authorityAmountCurrency, amountMinor: row.authorityAmountMinor },
-    }),
+    ...(amount === undefined ? {} : { amount }),
   }
 }
 
@@ -247,13 +248,21 @@ function sameIssuedRequest(row: ApprovalRow, input: Readonly<{ ownerId: string; 
     && row.expectedRevision === input.issue.expectedRevision
 }
 
-function sameAmount(
-  left: Readonly<{ currency: string; amountMinor: number }> | undefined,
-  right: Readonly<{ currency: string; amountMinor: number }> | undefined,
-): boolean {
+function rowAmount(
+  row: Pick<ApprovalRow, 'authorityAmountCurrency' | 'authorityAmountUnits' | 'authorityAmountExponent'>,
+): ExactAmount | undefined {
+  const { authorityAmountCurrency: currency, authorityAmountUnits: units, authorityAmountExponent: exponent } = row
+  if (currency === undefined && units === undefined && exponent === undefined) return undefined
+  if (currency === undefined || units === undefined || exponent === undefined) {
+    throw new Error('approval_amount_missing')
+  }
+  return { currency, units, exponent }
+}
+
+function sameAmount(left: ExactAmount | undefined, right: ExactAmount | undefined): boolean {
   return left === undefined
     ? right === undefined
-    : right !== undefined && left.currency === right.currency && left.amountMinor === right.amountMinor
+    : right !== undefined && compareExactAmounts(left, right) === 0
 }
 
 function parseSnapshot(snapshotJson: string): WorkTree {

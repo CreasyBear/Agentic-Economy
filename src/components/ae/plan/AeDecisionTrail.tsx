@@ -15,8 +15,8 @@ export function AeDecisionTrail({ decisions }: AeDecisionTrailProps) {
         <p className="text-muted-foreground">A readable trail of what was checked and what still needs a decision.</p>
       </div>
       <ol className="m-0 grid list-none gap-3 p-0">
-        {decisions.map((record, index) => (
-          <li key={`${record.step}-${record.optionRef ?? 'step'}-${index}`}>
+        {decisions.map((record) => (
+          <li key={`${record.step}-${record.optionRef ?? 'step'}`}>
             <Card className="border border-border bg-card p-0">
               <CardHeader className="p-4">
                 <CardTitle className="text-base">Step {record.step}: {record.summary}</CardTitle>

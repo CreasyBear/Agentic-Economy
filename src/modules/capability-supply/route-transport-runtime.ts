@@ -6,18 +6,34 @@ import { parseBoundedJson } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { readJsonPointer } from '@/modules/common/json-pointer'
+import type { BoundedRequestBody } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import {
+  exactAmountSchema,
+  compareExactAmounts,
+  formatExactAmount,
+  parseDecimalExactAmount,
+  rescaleExactAmount,
+} from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 import { decodeX402PaymentRequiredHeader } from './internal/x402-payment-signer'
-import { PUBLIC_CREDENTIAL_REF, validPublicHttpsEndpoint } from './internal/transport-adapters'
+import {
+  injectHttpJsonCredential,
+  parseHttpJsonTransportConfiguration,
+  type HttpJsonFixedQueryParameter,
+  type HttpJsonQueryParameterMapping,
+  type HttpJsonTransportConfiguration,
+  validPublicHttpsEndpoint,
+} from './internal/transport-adapters'
+import {
+  isProviderConnectionCredentialRef,
+  type ProviderConnectionCredentialResolution,
+} from './provider-connection'
+import type { CapabilityTransportAuthority } from './public'
 
 const MAX_RESPONSE_BYTES = 64 * 1024
-
-type RouteTransportResponse = Readonly<{
-  status: number
-  ok: boolean
-  headers: Readonly<{ get(name: string): string | null }>
-  text(): Promise<string>
-}>
+type RouteTransportResponse = BoundedRequestBody & Readonly<{ status: number; ok: boolean }>
 
 type RouteTransportRequestInit = Readonly<{
   method?: string
@@ -32,27 +48,45 @@ export type RouteTransportFetch = (
   init?: RouteTransportRequestInit,
 ) => Promise<RouteTransportResponse>
 
-export type RouteTransportInvocation = Readonly<{
-  binding: Readonly<{
-    adapterId: string
-    endpointUrl: string
-    credentialRef: string
-    configJson: string
-    configDigest: string
-  }>
-  authority: Readonly<{
-    attemptRef: string
-    effectGeneration?: number
-    operationKeyDigest: string
-    mandateDigest: string
-    grantDigest: string
-    capabilityContractDigest: string
-    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
-    expiresAt: number
-    callIdentity: Readonly<{ keyId: string; signature: string }>
-  }>
+type RouteTransportAuthorityCommon = Readonly<{
+  attemptRef: string
+  effectGeneration?: number
+  operationKeyDigest: string
+  mandateDigest: string
+  grantDigest: string
+  capabilityContractDigest: string
+  maximumSpend: ExactAmount
+  expiresAt: number
+  callIdentity: Readonly<{ keyId: string; signature: string }>
+}>
+type RouteTransportBinding<Authority extends CapabilityTransportAuthority> = Readonly<{
+  adapterId: string
+  endpointUrl: string
+  authority: Authority
+  configJson: string
+  configDigest: string
+}>
+type KeylessRouteTransportAuthority = RouteTransportAuthorityCommon & Readonly<{
+  authorityGeneration?: never
+  authorityDigest?: never
+}>
+type ProviderRouteTransportAuthority = RouteTransportAuthorityCommon & Readonly<{
+  authorityGeneration: number
+  authorityDigest: string
+}>
+type KeylessRouteTransportInvocation = Readonly<{
+  binding: RouteTransportBinding<Extract<CapabilityTransportAuthority, { kind: 'keyless' }>>
+  authority: KeylessRouteTransportAuthority
   inputJson: string
 }>
+type ProviderRouteTransportInvocation = Readonly<{
+  binding: RouteTransportBinding<Extract<CapabilityTransportAuthority, { kind: 'provider_connection' }>>
+  authority: ProviderRouteTransportAuthority
+  inputJson: string
+}>
+export type RouteTransportInvocation =
+  | KeylessRouteTransportInvocation
+  | ProviderRouteTransportInvocation
 
 type X402Challenge = Readonly<{
   x402Version: 2
@@ -81,6 +115,7 @@ export type X402PaymentAuthorizationIdentity = Readonly<{
   challengeDigest: string
   attemptRef: string
   effectGeneration: number
+  paymentAmount: ExactAmount
 }>
 
 export type X402PreparedAuthorization = Readonly<{
@@ -96,21 +131,34 @@ export type X402PaymentAttemptEvent = Readonly<{
   network: string
   asset: string
   payTo: string
-  amount: string
+  amount: ExactAmount
   providerEndpoint: string
   custodyRef: string
   authorizationDigest: string
 }>
 
+export type ProviderConnectionAuthorityLookup = Readonly<{
+  connectionRef: string
+  providerRef: string
+  adapterId: string
+  authorityGeneration: number
+  authorityDigest: string
+}>
+
+export type ProviderConnectionAuthorityReader = (
+  input: ProviderConnectionAuthorityLookup,
+) => ProviderConnectionCredentialResolution | Promise<ProviderConnectionCredentialResolution>
+
 export type RouteTransportRuntime = Readonly<{
   send: RouteTransportFetch
-  resolveCredential: (reference: string) => string | undefined
+  resolveCredential: (reference: string) => string | undefined | Promise<string | undefined>
+  readProviderConnectionCredentialRef?: ProviderConnectionAuthorityReader
   x402PaymentSigningAvailable?: (input: Readonly<{
     credentialRef: string
     network: string
     asset: string
     payTo: string
-    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
+    maximumSpend: ExactAmount
   }>) => boolean
   prepareX402PaymentAuthorization?: (
     request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
@@ -163,11 +211,14 @@ export type RouteTransportObservation = Readonly<{
   failureCode?: string
 }>
 
-export type RouteTransportCancellationInvocation = Readonly<{
-  binding: RouteTransportInvocation['binding']
-  authority: RouteTransportInvocation['authority']
+type RouteTransportCancellationInvocationFor<Invocation extends RouteTransportInvocation> = Readonly<{
+  binding: Invocation['binding']
+  authority: Invocation['authority']
   cancellationRequestRef: string
 }>
+export type RouteTransportCancellationInvocation =
+  | RouteTransportCancellationInvocationFor<KeylessRouteTransportInvocation>
+  | RouteTransportCancellationInvocationFor<ProviderRouteTransportInvocation>
 
 export type RouteTransportCancellationObservation = Readonly<{
   disposition: 'accepted' | 'rejected' | 'unknown' | 'unsupported'
@@ -203,15 +254,7 @@ export function parseRouteTransportObservationJson(value: string): RouteTranspor
   return parsed.success ? parsed.data : undefined
 }
 
-type AuxiliaryExchange = Readonly<{ path: string; requestTimeoutMs: number }>
-type HttpConfiguration = Readonly<{
-  method: 'GET' | 'POST'
-  query?: readonly QueryParameterMapping[]
-  fixedQuery?: readonly FixedQueryParameter[]
-  requestTimeoutMs: number
-  reconciliation?: AuxiliaryExchange
-  cancellation?: AuxiliaryExchange
-}>
+type HttpConfiguration = HttpJsonTransportConfiguration
 type McpConfiguration = Readonly<{
   protocolVersion: string
   toolName: string
@@ -229,8 +272,8 @@ type X402Configuration = Readonly<{
   asset: string
   payTo: string
 }>
-type FixedQueryParameter = Readonly<{ parameter: string; value: string }>
-type QueryParameterMapping = Readonly<{ inputPointer: string; parameter: string }>
+type FixedQueryParameter = HttpJsonFixedQueryParameter
+type QueryParameterMapping = HttpJsonQueryParameterMapping
 
 type RegisteredConfiguration = HttpConfiguration | McpConfiguration | X402Configuration
 const nonBlankString = z.string().superRefine((value, context) => {
@@ -242,17 +285,6 @@ const queryParameter = z.strictObject({
   inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
   parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
 })
-const fixedQueryParameter = z.strictObject({
-  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
-  value: nonBlankString.max(200),
-})
-const fixedQueryParameters = z.array(fixedQueryParameter).max(64).superRefine((items, context) => {
-  const seen = new Set<string>()
-  for (const [index, item] of items.entries()) {
-    if (seen.has(item.parameter)) context.addIssue({ code: 'custom', path: [index], message: 'fixed_query_duplicate' })
-    seen.add(item.parameter)
-  }
-})
 const queryParameters = z.array(queryParameter).min(1).max(64).superRefine((items, context) => {
   const pointers = new Set<string>()
   const parameters = new Set<string>()
@@ -262,23 +294,6 @@ const queryParameters = z.array(queryParameter).min(1).max(64).superRefine((item
     }
     pointers.add(item.inputPointer)
     parameters.add(item.parameter)
-  }
-})
-const auxiliaryExchange = z.strictObject({
-  path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
-  requestTimeoutMs: requestTimeout,
-})
-const httpConfiguration = z.strictObject({
-  method: z.enum(['GET', 'POST']),
-  query: queryParameters.optional(),
-  fixedQuery: fixedQueryParameters.optional(),
-  requestTimeoutMs: requestTimeout,
-  reconciliation: auxiliaryExchange.optional(),
-  cancellation: auxiliaryExchange.optional(),
-}).superRefine((value, context) => {
-  if ((value.method === 'GET' && value.query === undefined)
-    || (value.method === 'POST' && value.query !== undefined)) {
-    context.addIssue({ code: 'custom', message: 'method_query_mismatch' })
   }
 })
 const mcpConfiguration = z.strictObject({
@@ -307,7 +322,6 @@ const x402Configuration = z.strictObject({
 export type PreparedRouteTransportInvocation = Readonly<{
   invocation: RouteTransportInvocation
   endpoint: URL
-  credential?: string
   configuration: RegisteredConfiguration
   requestDigest: string
   target?: URL
@@ -317,6 +331,107 @@ export type RouteTransportPreparation =
   | Readonly<{ kind: 'prepared'; prepared: PreparedRouteTransportInvocation }>
   | Readonly<{ kind: 'refused'; observation: RouteTransportObservation }>
 
+type InvocationCredential =
+  | Readonly<{ kind: 'none' }>
+  | Readonly<{ kind: 'resolved'; value: string }>
+  | Readonly<{ kind: 'unavailable'; failureCode: string }>
+
+type ProviderConnectionUnavailableReason = Extract<
+  ProviderConnectionCredentialResolution,
+  Readonly<{ kind: 'unavailable' }>
+>['reason']
+
+function providerAuthorityFailure(reason: ProviderConnectionUnavailableReason): string {
+  switch (reason) {
+    case 'not_found': return 'connection_authority_not_found'
+    case 'inactive': return 'connection_authority_inactive'
+    case 'stale_generation': return 'connection_authority_stale_generation'
+    case 'expired': return 'connection_authority_expired'
+    case 'digest_mismatch': return 'connection_authority_stale_digest'
+    case 'credential_unavailable': return 'credential_unavailable'
+    default: {
+      const _exhaustive: never = reason
+      return _exhaustive
+    }
+  }
+}
+
+type RouteTransportCredentialInvocation =
+  | RouteTransportInvocation
+  | RouteTransportCancellationInvocation
+type ProviderRouteTransportCredentialInvocation =
+  | ProviderRouteTransportInvocation
+  | RouteTransportCancellationInvocationFor<ProviderRouteTransportInvocation>
+
+export type RouteTransportCredentialPreflight =
+  | Readonly<{ kind: 'none' }>
+  | Readonly<{ kind: 'resolved'; credentialRef: string }>
+  | Readonly<{ kind: 'unavailable'; failureCode: string }>
+
+function isProviderRouteTransportInvocation(
+  invocation: RouteTransportCredentialInvocation,
+): invocation is ProviderRouteTransportCredentialInvocation {
+  return invocation.binding.authority.kind === 'provider_connection'
+}
+
+async function readProviderCredentialRefForAuthority(
+  invocation: ProviderRouteTransportCredentialInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<Exclude<RouteTransportCredentialPreflight, Readonly<{ kind: 'none' }>>> {
+  const { binding, authority } = invocation
+  if (!Number.isSafeInteger(authority.authorityGeneration)
+    || authority.authorityGeneration < 1
+    || typeof authority.authorityDigest !== 'string'
+    || !/^sha256:[0-9a-f]{64}$/.test(authority.authorityDigest)) {
+    return { kind: 'unavailable', failureCode: 'connection_authority_snapshot_invalid' }
+  }
+  const readProviderConnectionCredentialRef = runtime.readProviderConnectionCredentialRef
+  if (readProviderConnectionCredentialRef === undefined) {
+    return { kind: 'unavailable', failureCode: 'connection_authority_reader_unavailable' }
+  }
+  const resolved = await readProviderConnectionCredentialRef({
+    connectionRef: binding.authority.connectionRef,
+    providerRef: binding.authority.providerRef,
+    adapterId: binding.adapterId,
+    authorityGeneration: authority.authorityGeneration,
+    authorityDigest: authority.authorityDigest,
+  })
+  if (resolved.kind !== 'resolved') {
+    return { kind: 'unavailable', failureCode: providerAuthorityFailure(resolved.reason) }
+  }
+  return { kind: 'resolved', credentialRef: resolved.credentialRef }
+}
+
+async function preflightCredentialForInvocation(
+  invocation: RouteTransportCredentialInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<RouteTransportCredentialPreflight> {
+  if (!isProviderRouteTransportInvocation(invocation)) return { kind: 'none' }
+  return await readProviderCredentialRefForAuthority(invocation, runtime)
+}
+
+export async function preflightRouteTransportCredential(
+  invocation: RouteTransportInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<RouteTransportCredentialPreflight> {
+  return await preflightCredentialForInvocation(invocation, runtime)
+}
+
+async function resolveCredentialForAuthority(
+  invocation: RouteTransportCredentialInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<InvocationCredential> {
+  const preflight = await preflightCredentialForInvocation(invocation, runtime)
+  if (preflight.kind === 'none') return preflight
+  if (preflight.kind === 'unavailable') return preflight
+  const credential = await runtime.resolveCredential(preflight.credentialRef)
+  if (credential === undefined
+    || credential.trim().length === 0
+    || isProviderConnectionCredentialRef(credential)) {
+    return { kind: 'unavailable', failureCode: 'credential_unavailable' }
+  }
+  return { kind: 'resolved', value: credential }
+}
 
 export async function invokeRegisteredRouteCancellation(
   invocation: RouteTransportCancellationInvocation,
@@ -337,23 +452,27 @@ export async function invokeRegisteredRouteCancellation(
     || configuration.cancellation === undefined) {
     return { disposition: 'unsupported', requestDigest, failureCode: 'cancellation_not_registered' }
   }
-  const publicCredential = invocation.binding.adapterId === 'http-json:v1'
-    && invocation.binding.credentialRef === PUBLIC_CREDENTIAL_REF
-  const credential = publicCredential ? undefined : runtime.resolveCredential(invocation.binding.credentialRef)
-  if (!publicCredential && (credential === undefined || credential.length === 0)) {
+  const credentialResult = await resolveCredentialForAuthority(invocation, runtime)
+  if (credentialResult.kind === 'unavailable') {
+    return { disposition: 'unknown', requestDigest, failureCode: credentialResult.failureCode }
+  }
+  const credential = credentialResult.kind === 'resolved' ? credentialResult.value : undefined
+  const cancellationEndpoint = new URL(configuration.cancellation.path, endpoint.origin)
+  const credentialApplied = injectHttpJsonCredential(
+    configuration,
+    cancellationEndpoint,
+    callHeaders(invocation, undefined, invocation.cancellationRequestRef),
+    credential,
+  )
+  if (credentialApplied === undefined) {
     return { disposition: 'unknown', requestDigest, failureCode: 'credential_unavailable' }
   }
-  const cancellationEndpoint = new URL(configuration.cancellation.path, endpoint.origin)
   try {
-    const response = await runtime.send(cancellationEndpoint, {
+    const response = await runtime.send(credentialApplied.target, {
       method: 'POST', redirect: 'manual',
       signal: AbortSignal.timeout(configuration.cancellation.requestTimeoutMs),
       body: JSON.stringify(request),
-      headers: callHeaders(
-        { ...invocation, inputJson: JSON.stringify(request) },
-        credential,
-        invocation.cancellationRequestRef,
-      ),
+      headers: credentialApplied.headers,
     })
     if (response.status < 200 || response.status >= 300) {
       return { disposition: 'unknown', requestDigest, failureCode: `provider_http_${response.status}` }
@@ -396,7 +515,6 @@ export async function invokeRegisteredRouteCancellation(
 
 export function prepareRegisteredRouteTransportInvocation(
   invocation: RouteTransportInvocation,
-  resolveCredential: RouteTransportRuntime['resolveCredential'],
   x402PaymentSigningAvailable?: RouteTransportRuntime['x402PaymentSigningAvailable'],
 ): RouteTransportPreparation {
   const requestDigest = canonicalDigest({
@@ -416,15 +534,6 @@ export function prepareRegisteredRouteTransportInvocation(
   if (configuration === undefined
     || canonicalDigest(configuration as StableHashValue) !== invocation.binding.configDigest) {
     return { kind: 'refused', observation: refused('unknown', requestDigest, false, 'adapter_config_invalid') }
-  }
-  const publicCredential = invocation.binding.adapterId === 'http-json:v1'
-    && invocation.binding.credentialRef === PUBLIC_CREDENTIAL_REF
-  const credential = publicCredential ? undefined : resolveCredential(invocation.binding.credentialRef)
-  if (!publicCredential && (credential === undefined || credential.length === 0)) {
-    return {
-      kind: 'refused',
-      observation: refused(transportKind(invocation.binding.adapterId), requestDigest, false, 'credential_unavailable'),
-    }
   }
   const validConfiguration = invocation.binding.adapterId === 'http-json:v1'
     ? isHttpConfiguration(configuration)
@@ -469,24 +578,22 @@ export function prepareRegisteredRouteTransportInvocation(
   }
   if (invocation.binding.adapterId === 'x402-fetch:v2') {
     const x402 = typedConfiguration as X402Configuration
-    if (invocation.authority.maximumSpend.currency !== x402.currency
-      || convertAmount(
-        invocation.authority.maximumSpend.amountMinor,
-        x402.routeAmountExponent,
-        x402.assetAmountExponent,
-      ) === undefined) {
+    if (expectedX402Amount(invocation.authority.maximumSpend, x402) === undefined) {
       return {
         kind: 'refused',
         observation: refused('x402', requestDigest, false, 'payment_authority_invalid'),
       }
     }
-    if (x402PaymentSigningAvailable?.({
-      credentialRef: invocation.binding.credentialRef,
-      network: x402.network,
-      asset: x402.asset,
-      payTo: x402.payTo,
-      maximumSpend: invocation.authority.maximumSpend,
-    }) === false) {
+    if (x402PaymentSigningAvailable !== undefined
+      && !x402PaymentSigningAvailable({
+        credentialRef: invocation.binding.authority.kind === 'provider_connection'
+          ? invocation.binding.authority.connectionRef
+          : 'none',
+        network: x402.network,
+        asset: x402.asset,
+        payTo: x402.payTo,
+        maximumSpend: invocation.authority.maximumSpend,
+      })) {
       return {
         kind: 'refused',
         observation: refused('x402', requestDigest, false, 'payment_signature_unavailable'),
@@ -498,7 +605,6 @@ export function prepareRegisteredRouteTransportInvocation(
     prepared: {
       invocation,
       endpoint,
-      ...(credential === undefined ? {} : { credential }),
       configuration: typedConfiguration,
       requestDigest,
       ...(target === undefined ? {} : { target }),
@@ -510,7 +616,12 @@ export async function invokePreparedRouteTransport(
   prepared: PreparedRouteTransportInvocation,
   runtime: RouteTransportRuntime,
 ): Promise<RouteTransportObservation> {
-  const { invocation, endpoint, credential, configuration, requestDigest } = prepared
+  const { invocation, endpoint, configuration, requestDigest } = prepared
+  const credentialResult = await resolveCredentialForAuthority(invocation, runtime)
+  if (credentialResult.kind === 'unavailable') {
+    return refused(transportKind(invocation.binding.adapterId), requestDigest, false, credentialResult.failureCode)
+  }
+  const credential = credentialResult.kind === 'resolved' ? credentialResult.value : undefined
   switch (invocation.binding.adapterId) {
     case 'http-json:v1':
       return await invokeHttp(
@@ -518,12 +629,10 @@ export async function invokePreparedRouteTransport(
         runtime.send, prepared.target,
       )
     case 'mcp-jsonrpc:v1':
-      return credential === undefined
-        ? refused('mcp', requestDigest, false, 'credential_unavailable')
-        : await invokeMcp(
-            endpoint, configuration as McpConfiguration, invocation, credential, requestDigest,
-            runtime.send,
-          )
+      return await invokeMcp(
+        endpoint, configuration as McpConfiguration, invocation, credential, requestDigest,
+        runtime.send,
+      )
     case 'x402-fetch:v2':
       if (credential === undefined) return refused('x402', requestDigest, false, 'credential_unavailable')
       if (!isX402RouteTransportRuntime(runtime)) {
@@ -550,12 +659,21 @@ async function invokeHttp(
   try {
     const target = preparedTarget
     if (target === undefined) return refused('http', requestDigest, false, 'input_invalid')
-    const response = await send(target, {
+    const credentialApplied = injectHttpJsonCredential(
+      configuration,
+      target,
+      callHeaders(invocation, undefined),
+      credential,
+    )
+    if (credentialApplied === undefined) {
+      return refused('http', requestDigest, false, 'credential_unavailable')
+    }
+    const response = await send(credentialApplied.target, {
       method: configuration.method,
       redirect: 'manual',
       signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       ...(configuration.method === 'POST' ? { body: invocation.inputJson } : {}),
-      headers: callHeaders(invocation, credential),
+      headers: credentialApplied.headers,
     })
     return await normalizeJsonResponse('http', response, requestDigest, true)
   } catch (error) {
@@ -567,7 +685,7 @@ async function invokeMcp(
   endpoint: URL,
   configuration: McpConfiguration,
   invocation: RouteTransportInvocation,
-  credential: string,
+  credential: string | undefined,
   requestDigest: string,
   send: RouteTransportFetch,
 ): Promise<RouteTransportObservation> {
@@ -686,19 +804,29 @@ async function invokeX402(
   if (requirement === undefined) return {
     ...refused('x402', requestDigest, true, 'payment_requirement_unsupported'), paymentChallengeDigest,
   }
-  if (challenge.resource.url !== target.href
-    || Date.now() + (requirement.maxTimeoutSeconds * 1_000) > invocation.authority.expiresAt) {
+  if (
+    challenge.resource.url !== target.href
+    || Date.now() + requirement.maxTimeoutSeconds * 1_000 > invocation.authority.expiresAt
+  ) {
     return { ...refused('x402', requestDigest, true, 'payment_requirement_outside_authority'), paymentChallengeDigest }
   }
   if (invocation.authority.maximumSpend.currency !== configuration.currency) {
     return { ...refused('x402', requestDigest, true, 'payment_currency_mismatch'), paymentChallengeDigest }
   }
-  const ceiling = convertAmount(
-    invocation.authority.maximumSpend.amountMinor,
-    configuration.routeAmountExponent,
-    configuration.assetAmountExponent,
-  )
-  if (ceiling === undefined || BigInt(requirement.amount) > ceiling) {
+  const expectedAmount = expectedX402Amount(invocation.authority.maximumSpend, configuration)
+  if (expectedAmount === undefined) {
+    return { ...refused('x402', requestDigest, true, 'payment_authority_invalid'), paymentChallengeDigest }
+  }
+  const parsedPaymentAmount = exactAmountSchema.safeParse({
+    currency: configuration.currency,
+    units: requirement.amount,
+    exponent: configuration.assetAmountExponent,
+  })
+  if (!parsedPaymentAmount.success) {
+    return { ...refused('x402', requestDigest, true, 'payment_challenge_invalid'), paymentChallengeDigest }
+  }
+  const paymentAmount = parsedPaymentAmount.data
+  if (compareExactAmounts(paymentAmount, expectedAmount) === 1) {
     return { ...refused('x402', requestDigest, true, 'payment_exceeds_step_ceiling'), paymentChallengeDigest }
   }
   const authorizationIdentity = {
@@ -706,6 +834,7 @@ async function invokeX402(
     challengeDigest: paymentChallengeDigest,
     attemptRef: invocation.authority.attemptRef,
     effectGeneration: invocation.authority.effectGeneration ?? 0,
+    paymentAmount,
   }
   const preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
     challenge, credential,
@@ -727,13 +856,17 @@ async function invokeX402(
     network: requirement.network,
     asset: requirement.asset,
     payTo: requirement.payTo,
-    amount: requirement.amount,
+    amount: paymentAmount,
     providerEndpoint: target.href,
     custodyRef: preparedAuthorization.custodyRef,
     authorizationDigest: preparedAuthorization.authorizationDigest,
   }
+  const markX402PaymentPossiblySubmitted = runtime.markX402PaymentPossiblySubmitted
+  const observeX402PaymentAttempt = runtime.observeX402PaymentAttempt
   try {
-    await runtime.markX402PaymentPossiblySubmitted?.(paymentEvent)
+    if (markX402PaymentPossiblySubmitted !== undefined) {
+      await markX402PaymentPossiblySubmitted(paymentEvent)
+    }
     const paid = await runtime.send(target, {
       method: configuration.method, redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: { ...headers, 'Payment-Signature': paymentSignature },
@@ -742,14 +875,16 @@ async function invokeX402(
     const normalized = await normalizeJsonResponse('x402', paid, requestDigest, true)
     const paymentProof = optionalHeader(paid, 'payment-response', 'paymentProof')
     const providerReceipt = optionalHeader(paid, 'provider-receipt', 'providerReceipt')
-    await runtime.observeX402PaymentAttempt?.({
-      ...paymentEvent,
-      state: 'observed',
-      evidenceRefs: [
-        ...(paymentProof.paymentProof === undefined ? [] : [canonicalDigest(paymentProof.paymentProof)]),
-        ...(providerReceipt.providerReceipt === undefined ? [] : [canonicalDigest(providerReceipt.providerReceipt)]),
-      ],
-    })
+    if (observeX402PaymentAttempt !== undefined) {
+      await observeX402PaymentAttempt({
+        ...paymentEvent,
+        state: 'observed',
+        evidenceRefs: [
+          ...(paymentProof.paymentProof === undefined ? [] : [canonicalDigest(paymentProof.paymentProof)]),
+          ...(providerReceipt.providerReceipt === undefined ? [] : [canonicalDigest(providerReceipt.providerReceipt)]),
+        ],
+      })
+    }
     return {
       ...normalized, paymentChallengeDigest,
       queryReleaseStatus: 'released',
@@ -761,9 +896,11 @@ async function invokeX402(
       ...providerReceipt,
     }
   } catch (error) {
-    await runtime.observeX402PaymentAttempt?.({
-      ...paymentEvent, state: 'reconciliation_required', evidenceRefs: [],
-    })
+    if (observeX402PaymentAttempt !== undefined) {
+      await observeX402PaymentAttempt({
+        ...paymentEvent, state: 'reconciliation_required', evidenceRefs: [],
+      })
+    }
     return {
       ...unknown('x402', requestDigest, true, `network_${errorName(error)}`),
       paymentChallengeDigest,
@@ -800,7 +937,7 @@ async function normalizeJsonResponse(
 }
 
 function callHeaders(
-  invocation: RouteTransportInvocation,
+  invocation: Readonly<{ authority: RouteTransportAuthorityCommon }>,
   bearer: string | undefined,
   idempotencyKey = invocation.authority.operationKeyDigest,
 ): Record<string, string> {
@@ -824,7 +961,7 @@ function parseConfiguration(value: string): Readonly<Record<string, unknown>> | 
 }
 
 function isHttpConfiguration(value: Readonly<Record<string, unknown>>): value is HttpConfiguration {
-  return httpConfiguration.safeParse(value).success
+  return parseHttpJsonTransportConfiguration(value) !== undefined
 }
 
 function isMcpConfiguration(value: Readonly<Record<string, unknown>>): value is McpConfiguration {
@@ -874,7 +1011,8 @@ function decodeX402Challenge(header: string | null): X402Challenge | undefined {
     for (const candidate of parsed.accepts) {
       if (!isRecord(candidate) || !boundedString(candidate.scheme, 100)
         || !boundedString(candidate.network, 100) || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(candidate.network)
-        || !/^\d{1,78}$/.test(String(candidate.amount))
+        || typeof candidate.amount !== 'string'
+        || !/^(?:0|[1-9]\d{0,77})$/.test(candidate.amount)
         || !boundedString(candidate.asset, 200) || !boundedString(candidate.payTo, 200)
         || !Number.isSafeInteger(candidate.maxTimeoutSeconds) || !isRecord(candidate.extra)) return undefined
     }
@@ -884,9 +1022,24 @@ function decodeX402Challenge(header: string | null): X402Challenge | undefined {
   }
 }
 
-function convertAmount(amount: number, fromExponent: number, toExponent: number): bigint | undefined {
-  if (!Number.isSafeInteger(amount) || amount < 0 || toExponent < fromExponent) return undefined
-  return BigInt(amount) * (10n ** BigInt(toExponent - fromExponent))
+function expectedX402Amount(
+  routeAmount: ExactAmount,
+  configuration: X402Configuration,
+): ExactAmount | undefined {
+  if (
+    !exactAmountSchema.safeParse(routeAmount).success
+    || routeAmount.currency !== configuration.currency
+  ) return undefined
+  const rescaled = rescaleExactAmount(routeAmount, configuration.assetAmountExponent)
+  if (rescaled === undefined) return undefined
+  const decimal = formatExactAmount(routeAmount)
+  if (decimal === undefined) return undefined
+  const tokenAmount = parseDecimalExactAmount(
+    configuration.currency,
+    decimal,
+    configuration.assetAmountExponent,
+  )
+  return tokenAmount?.units === rescaled.units ? rescaled : undefined
 }
 
 async function readJsonRpc(
@@ -896,12 +1049,11 @@ async function readJsonRpc(
   const text = await readBoundedText(response)
   if (text === undefined) return undefined
   if ((response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream')) {
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`${text}\n\n`))
-        controller.close()
-      },
+    const boundedResponse = new Response(`${text}\n\n`, {
+      headers: { 'content-type': 'text/event-stream' },
     })
+    if (boundedResponse.body === null) return undefined
+    const stream = boundedResponse.body
     for await (const candidate of parseJsonEventStream({ stream, schema: z.unknown() })) {
       if (!candidate.success) continue
       if (isRecord(candidate.value) && candidate.value.id === expectedId) return candidate.value
@@ -913,10 +1065,8 @@ async function readJsonRpc(
 }
 
 async function readBoundedText(response: RouteTransportResponse): Promise<string | undefined> {
-  const declared = response.headers.get('content-length')
-  if (declared !== null && Number(declared) > MAX_RESPONSE_BYTES) return undefined
-  const text = await response.text()
-  return new TextEncoder().encode(text).byteLength <= MAX_RESPONSE_BYTES ? text : undefined
+  const bounded = await readBoundedRequestText(response, MAX_RESPONSE_BYTES)
+  return bounded.ok ? bounded.text : undefined
 }
 
 function mcpOutput(result: Readonly<Record<string, unknown>>): unknown {

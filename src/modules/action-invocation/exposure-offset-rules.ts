@@ -4,6 +4,7 @@ import {
   type Ed25519Attestation,
   type Ed25519VerificationKey,
 } from '@/modules/common/ed25519-attestation'
+import type { ExactAmount } from '@/modules/money/public'
 
 export type ExposureOffsetRuleIdentity = Readonly<{
   evidenceRuleRef: string
@@ -28,7 +29,7 @@ export type ExposureReleaseAttestationMaterial = Readonly<{
     evidenceDigest: string
   }>
   outcome: 'provider_confirmed_reversal'
-  reversedAmount: Readonly<{ amountMinor: number; currency: string }>
+  reversedAmount: ExactAmount
   observedAt: string
 }>
 

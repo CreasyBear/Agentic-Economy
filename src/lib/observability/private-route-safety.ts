@@ -1,3 +1,5 @@
+const shareTokenPathPattern = /^\/s\/[0-9a-f]{64}\/?$/i
+
 const privateAccessParameterNames = new Set([
   'k',
   'access',
@@ -41,8 +43,14 @@ export function securePrivateRecordLocation(
   history: BrowserHistoryLike,
   sessionStorage: BrowserSessionStorageLike | undefined = browserSessionStorage(),
 ): boolean {
+  if (shareTokenPathPattern.test(location.pathname)) {
+    privateRecordTelemetryBlocked = true
+    return true
+  }
+
   const threadId = privateRecordThreadId(location.pathname)
   if (threadId === undefined) return false
+
 
   const search = new URLSearchParams(location.search)
   const fragmentAccessKey = decodePrivateRecordFragment(location.hash)
@@ -87,12 +95,37 @@ export function blockTelemetryForPrivateRecord(): void {
 }
 
 export function isTelemetryAllowedForCurrentRoute(): boolean {
+  const host = globalThis as typeof globalThis & {
+    location?: BrowserLocationLike
+    history?: BrowserHistoryLike
+  }
+  if (host.location !== undefined && host.history !== undefined) {
+    securePrivateRecordLocation(host.location, host.history)
+  }
   return !privateRecordTelemetryBlocked
 }
 
 export function safeTelemetryPath(location: Readonly<{ pathname: string }>): string {
   const pathname = location.pathname.trim()
-  return pathname.startsWith('/') ? pathname : '/'
+  return pathname.startsWith('/') ? redactShareTokenPath(pathname) : '/'
+}
+
+function sanitizeTelemetryString(value: string): string {
+  const redacted = redactShareTokenPath(value.replace(
+    /([?&#]|\b)(k|access|accessKey|accessToken|token|secret|password|email|phone)=([^&#\s]*)/gi,
+    (_match, prefix: string, name: string) => `${prefix}${name}=[Filtered]`,
+  ))
+  if (!/^https?:\/\//i.test(redacted)) return redacted
+
+  try {
+    return safeTelemetryPath({ pathname: new URL(redacted).pathname })
+  } catch {
+    return '[Filtered URL]'
+  }
+}
+
+function redactShareTokenPath(value: string): string {
+  return value.replace(/\/s\/[0-9a-f]{64}(?=\/|[?#\s]|$)/gi, '/s/[Filtered]')
 }
 
 export function sanitizeTelemetryValue(value: unknown, key?: string): unknown {
@@ -163,16 +196,3 @@ function privateRecordThreadId(pathname: string): string | undefined {
   }
 }
 
-function sanitizeTelemetryString(value: string): string {
-  const redacted = value.replace(
-    /([?&#]|\b)(k|access|accessKey|accessToken|token|secret|password|email|phone)=([^&#\s]*)/gi,
-    (_match, prefix: string, name: string) => `${prefix}${name}=[Filtered]`,
-  )
-  if (!/^https?:\/\//i.test(redacted)) return redacted
-
-  try {
-    return new URL(redacted).pathname
-  } catch {
-    return '[Filtered URL]'
-  }
-}

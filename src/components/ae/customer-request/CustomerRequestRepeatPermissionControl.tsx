@@ -23,7 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatMoney } from '@/lib/ui/format-money'
+import {
+  addExactAmounts,
+  compareExactAmounts,
+  formatCurrencyAmount,
+  formatExactAmount,
+  parseDecimalExactAmount,
+} from '@/modules/money/public'
 
 import type {
   CustomerRequestConnectedAssistantsResult,
@@ -51,7 +57,9 @@ export function CustomerRequestRepeatPermissionControl({
   const [assistantRef, setAssistantRef] = useState('')
   const [occurrences, setOccurrences] = useState('2')
   const [totalCeiling, setTotalCeiling] = useState(
-    maximumCost.kind === 'known' ? minorUnitsToInput(maximumCost.amountMinor * 2) : '',
+    maximumCost.kind === 'known'
+      ? formatExactAmount(addExactAmounts(maximumCost.amount, maximumCost.amount) ?? maximumCost.amount) ?? ''
+      : '',
   )
   const [expiryChoice, setExpiryChoice] = useState('one_day')
   const [loading, setLoading] = useState(false)
@@ -95,13 +103,20 @@ export function CustomerRequestRepeatPermissionControl({
   async function allow() {
     if (maximumCost.kind !== 'known') return
     const occurrenceLimit = Number(occurrences)
-    const cumulativeAmountMinor = inputToMinorUnits(totalCeiling)
+    const cumulativeAmount = parseDecimalExactAmount(
+      maximumCost.amount.currency,
+      totalCeiling,
+      maximumCost.amount.exponent,
+    )
+    const comparison = cumulativeAmount === undefined
+      ? undefined
+      : compareExactAmounts(cumulativeAmount, maximumCost.amount)
     if (!Number.isSafeInteger(occurrenceLimit) || occurrenceLimit < 1) {
       setError('Maximum uses must be a positive whole number.')
       return
     }
-    if (cumulativeAmountMinor === undefined || cumulativeAmountMinor < maximumCost.amountMinor) {
-      setError(`The total ceiling must cover at least one use: ${formatMoney(maximumCost.currency, maximumCost.amountMinor)}.`)
+    if (cumulativeAmount === undefined || comparison === undefined || comparison < 0) {
+      setError(`The total ceiling must cover at least one use: ${formatCurrencyAmount(maximumCost.amount)}.`)
       return
     }
     if (assistantRef.length === 0) {
@@ -122,10 +137,7 @@ export function CustomerRequestRepeatPermissionControl({
             routeRef: route.routeRef,
             delegatedCredentialId: assistantRef,
             occurrences: occurrenceLimit,
-            cumulativeSpend: {
-              currency: maximumCost.currency,
-              amountMinor: cumulativeAmountMinor,
-            },
+            cumulativeSpend: cumulativeAmount,
             validUntil: repeatPermissionExpiry(expiryChoice, route.validUntil),
             idempotencyKey: allowKeyRef.current,
           }),
@@ -185,10 +197,7 @@ export function CustomerRequestRepeatPermissionControl({
         <CardTitle>Repeat permission {receipt.status === 'active' ? 'active' : 'withdrawn'}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 p-0">
-        <p>{selectedAssistant?.label ?? 'The connected assistant'} may confirm this exact choice up to {receipt.limits.occurrences} times.</p>
-        <p className="text-muted-foreground">Total ceiling {receipt.limits.cumulativeSpend.currency} {minorUnitsToInput(
-          receipt.limits.cumulativeSpend.amountMinor,
-        )}. Expires {formatTimestamp(receipt.validUntil)}.</p>
+        <p className="text-muted-foreground">Total ceiling {formatCurrencyAmount(receipt.limits.cumulativeSpend)}. Expires {formatTimestamp(receipt.validUntil)}.</p>
         <p className="text-muted-foreground">If this choice changes or a limit is reached, AE will ask you to confirm again.</p>
         {receipt.status === 'active'
           ? <>
@@ -261,7 +270,7 @@ export function CustomerRequestRepeatPermissionControl({
                         : {})}
                     />
                     {maximumCost.kind === 'known'
-                      ? <FieldDescription id="repeat-permission-total-ceiling-description">Enter the total in {maximumCost.currency}.</FieldDescription>
+                      ? <FieldDescription id="repeat-permission-total-ceiling-description">Enter the total in {maximumCost.amount.currency}.</FieldDescription>
                       : null}
                   </Field>
                 </FieldGroup>
@@ -282,7 +291,7 @@ export function CustomerRequestRepeatPermissionControl({
                 </Field>
               </FieldGroup>
               <p className="text-sm text-muted-foreground">One use can cost at most {maximumCost.kind === 'known'
-                ? formatMoney(maximumCost.currency, maximumCost.amountMinor)
+                ? formatCurrencyAmount(maximumCost.amount)
                 : 'an amount that still needs confirmation'}.</p>
               <Field orientation="horizontal" className="flex flex-wrap gap-3">
                 <Button
@@ -301,16 +310,6 @@ export function CustomerRequestRepeatPermissionControl({
   </Card>
 }
 
-function minorUnitsToInput(amountMinor: number): string {
-  return (amountMinor / 100).toFixed(2)
-}
-
-function inputToMinorUnits(value: string): number | undefined {
-  if (!/^\d+(?:\.\d{1,2})?$/u.test(value.trim())) return undefined
-  const [units = '0', fraction = ''] = value.trim().split('.')
-  const amount = Number(units) * 100 + Number(fraction.padEnd(2, '0'))
-  return Number.isSafeInteger(amount) ? amount : undefined
-}
 
 function repeatPermissionExpiry(choice: string, routeValidUntil: number): number {
   const duration = choice === 'one_hour' ? 60 * 60_000 : choice === 'one_day' ? 24 * 60 * 60_000 : Number.MAX_SAFE_INTEGER

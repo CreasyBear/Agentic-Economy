@@ -6,15 +6,27 @@ import {
 import {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
-  runAnswerToolUseAgent,
 } from '../../../src/modules/answer/public'
-import type { AnswerSnapshot, AnswerWorkStep } from '../../../src/modules/answer/public'
+import { runAnswerToolUseAgent } from '../../../src/modules/answer/server'
+import {
+  seedKeylessExecutableSource,
+  type KeylessExecutableSourcePort,
+  type OperationExecuteDeps,
+} from '../../../src/modules/capability-execution/public'
 import { validateFollowUpChip } from '../../../src/modules/answer-thread/public'
-import { resetAnswerTurnGuardForTests, setAnswerThreadPortForTests } from '../../../src/modules/answer-thread/testing'
+import { streamAnswerTurn } from '../../../src/modules/answer-thread/server'
+import {
+  setAnswerHarnessFinalizerForTests,
+  setAnswerThreadPortForTests,
+} from '../../../src/modules/answer-thread/testing'
 import type { FrozenTurnEvidence } from '../../../src/modules/answer-thread/harness'
+import type { AnswerQuerySafetyResult, AnswerSnapshot, AnswerWorkStep } from '@/modules/answer/public'
+
+import { BROAD_ANSWER_EVAL_BUSINESS_FIXTURES } from './registry-seed'
 import { handleAnswerTurnRequest } from '../../../src/routes/api.answer.turn'
 import { round2 } from '../../../src/modules/common/round-2'
 import { buildDevSeedCatalogState } from '../../../src/modules/dev/public'
+import { isRecord } from '../../../src/modules/common/is-record'
 import {
   getPublicBusinessOfferingSupplyBySlug,
   listPublicBusinessOfferingSupply,
@@ -22,15 +34,18 @@ import {
   searchPublicBusinessOfferingSupply,
 } from '../../../src/modules/registry/public'
 import { setPublicRegistrySourcePortForTests } from '../../../src/modules/registry/registry.functions'
-import { stableUnique } from '../../../src/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import { sameStringList } from '../../../src/modules/common/same-string-list'
 import {
   createAnswerThreadTestStore,
+  type AnswerThreadTestStore,
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../../../tests/helpers/answer-thread-test-port'
 import { readAnswerTurnStream, type AnswerTurnFrame } from '../../../tests/helpers/answer-turn-stream'
 import {
+  SEED_ONLY_CAPABILITY_OUTPUT,
+  SEED_ONLY_CAPABILITY_TOOL_ID,
   findAnswerThreadEvalCase,
   findAnswerTurnEvalCase,
   type AnswerThreadEvalCase,
@@ -41,7 +56,58 @@ import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../../../tests/helpers/openrouter-contract-server'
-import { BROAD_ANSWER_EVAL_BUSINESS_FIXTURES } from './registry-seed'
+
+/** Explicit seed-only/test-only transport; never a live provider dependency. */
+const seedOnlyOperationExecuteDeps = (
+  output: unknown = SEED_ONLY_CAPABILITY_OUTPUT,
+): Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl'> => ({
+  isPublicTarget: async () => true,
+  fetchImpl: async (resource) => {
+    const url = resource instanceof URL
+      ? resource
+      : resource instanceof Request
+        ? new URL(resource.url)
+        : new URL(String(resource))
+    if (
+      url.origin !== 'https://api.coingecko.com'
+      || url.pathname !== '/api/v3/simple/price'
+      || url.searchParams.get('ids') !== 'bitcoin'
+      || url.searchParams.get('vs_currencies') !== 'usd'
+    ) {
+      throw new Error('answer_eval_seed_only_query_mismatch')
+    }
+    return Response.json(output)
+  },
+})
+const EMPTY_KEYLESS_EXECUTABLE_SOURCE: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
+
+function allowEvalQuerySafety(): Promise<AnswerQuerySafetyResult> {
+  const now = Date.now()
+  return Promise.resolve({
+    kind: 'allowed',
+    modelRequest: {
+      seq: 0,
+      provider: 'openrouter',
+      model: 'test-model',
+      status: 'ok',
+      startedAt: now,
+      endedAt: now,
+      durationMs: 0,
+      responseId: 'chatcmpl-safety-allow',
+      stopReason: 'stop',
+      usage: {
+        inputTokens: 40,
+        outputTokens: 2,
+        totalTokens: 42,
+      },
+      costUnavailableReason: 'provider_metadata_missing',
+    },
+  })
+}
 
 type GateVars = {
   snapshot: string
@@ -103,6 +169,33 @@ type AnswerEvalHarnessMetrics = {
   estimatedUsd?: number
   costUnavailableReasons: readonly string[]
 }
+export type AnswerEvalCapabilityToolCounts = {
+  total: number
+  complete: number
+  refused: number
+  error: number
+}
+
+export type AnswerEvalCapabilityOperationRefDialects = {
+  canonical: number
+  readable: number
+  invalid: number
+  missing: number
+}
+
+export type AnswerEvalCapabilityMetrics = {
+  capabilityToolCounts: AnswerEvalCapabilityToolCounts
+  capabilityOperationRefDialects: AnswerEvalCapabilityOperationRefDialects
+  capabilityEvidenceComplete: boolean
+}
+
+function emptyAnswerEvalCapabilityMetrics(): AnswerEvalCapabilityMetrics {
+  return {
+    capabilityToolCounts: { total: 0, complete: 0, refused: 0, error: 0 },
+    capabilityOperationRefDialects: { canonical: 0, readable: 0, invalid: 0, missing: 0 },
+    capabilityEvidenceComplete: false,
+  }
+}
 
 function emptyAnswerEvalHarnessMetrics(): AnswerEvalHarnessMetrics {
   return {
@@ -129,12 +222,21 @@ function emptyAnswerEvalUsage(): AnswerEvalUsage {
 function readAnswerEvalHarnessMetrics(
   harnessRun: FrozenTurnEvidence['harnessRun'],
 ): AnswerEvalHarnessMetrics {
-  const modelRequestCount = finiteCount(harnessRun?.summary.models?.total)
+  const modelRequestCount = Math.max(
+    finiteCount(harnessRun?.summary.models?.total),
+    harnessRun?.privateTelemetry?.modelRequests.length ?? 0,
+  )
   const modelToolRunCount = readModelToolRunCount(harnessRun)
   const toolRunCount = finiteCount(harnessRun?.summary.tools.total)
   const usage = harnessRun?.summary.usage
   const cost = harnessRun?.summary.cost
   const estimatedUsd = finiteNonNegative(cost?.estimatedUsd)
+  const unavailableReasons = cost?.unavailableReasons
+  const costUnavailableReasons = Array.isArray(unavailableReasons)
+    ? unavailableReasons.filter(
+        (reason: unknown): reason is string => typeof reason === 'string' && reason.length > 0,
+      )
+    : []
   return {
     performancePath: modelRequestCount > 0 ? 'model' : 'deterministic',
     modelRequestCount,
@@ -149,15 +251,22 @@ function readAnswerEvalHarnessMetrics(
       totalTokens: finiteCount(usage?.totalTokens),
     },
     ...(estimatedUsd === undefined ? {} : { estimatedUsd }),
-    costUnavailableReasons: [...new Set(
-      (cost?.unavailableReasons ?? []).filter((reason): reason is string => typeof reason === 'string' && reason.length > 0),
-    )].sort((left, right) => left.localeCompare(right)),
+    costUnavailableReasons: [...new Set<string>(costUnavailableReasons)].sort(
+      (left: string, right: string) => left.localeCompare(right),
+    ),
   }
 }
 
 function readModelToolRunCount(harnessRun: FrozenTurnEvidence['harnessRun']): number {
-  return (harnessRun?.privateTelemetry?.modelRequests ?? []).reduce(
-    (count, request) => count + (isToolCallStopReason(request.stopReason) ? 1 : 0),
+  const modelRequests = harnessRun?.privateTelemetry?.modelRequests
+  if (!Array.isArray(modelRequests)) return 0
+  return modelRequests.reduce(
+    (count: number, request: unknown) => {
+      const stopReason = isRecord(request) && typeof request.stopReason === 'string'
+        ? request.stopReason
+        : undefined
+      return count + (isToolCallStopReason(stopReason) ? 1 : 0)
+    },
     0,
   )
 }
@@ -210,6 +319,7 @@ export type AnswerTurnEvalResult = {
   usage: AnswerEvalUsage
   estimatedUsd?: number
   costUnavailableReasons: readonly string[]
+  capabilityMetrics: AnswerEvalCapabilityMetrics
   hasHarnessRun: boolean
   harnessStatus?: string
   harnessToolsInvoked: readonly string[]
@@ -245,6 +355,19 @@ const INTERNAL_PUBLIC_TERMS = [
   'agent-native',
   'DTO',
   'fixture',
+] as const
+
+/**
+ * Discovery-prose telltales that signal the model answered from catalog
+ * metadata instead of executing a capability: e.g. 'the catalog lists two
+ * CoinGecko services', 'you would need to run one of those operations', or
+ * 'You can get the current bitcoin price by using ...'. A grounded answer that
+ * executed the tool contains the returned value, never these phrasings.
+ */
+const CATALOG_PROSE_FRAGMENTS = [
+  'catalog lists',
+  'would need to run',
+  'you can get the current',
 ] as const
 
 function evaluateGateCase(vars: GateVars): { ok: boolean; code?: string } {
@@ -317,6 +440,7 @@ async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<AnswerTurnE
       requestToFirstProgressMs: 0,
       requestToCompletionMs: 0,
       ...emptyAnswerEvalHarnessMetrics(),
+      capabilityMetrics: emptyAnswerEvalCapabilityMetrics(),
       hasHarnessRun: false,
       harnessToolsInvoked: [],
       harnessPhases: [],
@@ -340,7 +464,6 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
   delete process.env.OPENROUTER_API_KEY
   delete process.env.CONVEX_URL
   delete process.env.VITE_CONVEX_URL
-  resetAnswerTurnGuardForTests()
 
   try {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -359,6 +482,7 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
       requestToFirstProgressMs: 0,
       requestToCompletionMs: 0,
       ...emptyAnswerEvalHarnessMetrics(),
+      capabilityMetrics: emptyAnswerEvalCapabilityMetrics(),
       hasHarnessRun: false,
       harnessToolsInvoked: [],
       harnessPhases: [],
@@ -378,7 +502,6 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
     resetRegistryPort()
     resetThreadPort()
     setAnswerThreadPortForTests(undefined)
-    resetAnswerTurnGuardForTests()
     if (previousLocalRegistry === undefined) {
       delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     } else {
@@ -433,7 +556,6 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
   delete process.env.OPENROUTER_API_KEY
   delete process.env.CONVEX_URL
   delete process.env.VITE_CONVEX_URL
-  resetAnswerTurnGuardForTests()
 
   try {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -465,7 +587,6 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
     resetRegistryPort()
     resetThreadPort()
     setAnswerThreadPortForTests(undefined)
-    resetAnswerTurnGuardForTests()
     if (previousLocalRegistry === undefined) {
       delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     } else {
@@ -486,11 +607,6 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
     } else {
       process.env.VITE_CONVEX_URL = previousViteConvexUrl
     }
-    if (previousApiKey === undefined) {
-      delete process.env.OPENROUTER_API_KEY
-    } else {
-      process.env.OPENROUTER_API_KEY = previousApiKey
-    }
   }
 }
 
@@ -506,17 +622,87 @@ function installEvalRegistrySeed(seed: AnswerTurnEvalCase['registrySeed']): () =
   })
 }
 
+function usesSeedOnlyCapabilitySource(agent: AnswerTurnEvalCase['openRouterAgent']): boolean {
+  return agent?.toolCalls.some(({ toolId }) => toolId === SEED_ONLY_CAPABILITY_TOOL_ID) === true
+}
+
+function streamWithSeedOnlyKeylessSource(
+  agent: AnswerTurnEvalCase['openRouterAgent'],
+  store: AnswerThreadTestStore,
+  capabilityOutput?: unknown,
+): typeof streamAnswerTurn {
+  const capability = usesSeedOnlyCapabilitySource(agent)
+  return (streamInput, send) => streamAnswerTurn({
+    ...streamInput,
+    keylessExecutableSource: capability ? seedKeylessExecutableSource : EMPTY_KEYLESS_EXECUTABLE_SOURCE,
+    querySafetyClassifier: allowEvalQuerySafety,
+    // The eval finalizer captures harness evidence without mutating the test
+    // port's pending row; the consumed SSE terminal frame is authoritative.
+    preloadedPriorTurns: [...store.turns.values()].map((turn) => ({
+      ...turn,
+      status: 'complete',
+    })),
+    ...(capability ? { operationExecuteDeps: seedOnlyOperationExecuteDeps(capabilityOutput) } : {}),
+  }, send)
+}
+
+type EvalHarnessRun = NonNullable<FrozenTurnEvidence['harnessRun']>
+
+function readHarnessRunFromJournal(
+  entries: readonly { privatePayloadJson?: string }[],
+): EvalHarnessRun | undefined {
+  for (const entry of [...entries].reverse()) {
+    if (entry.privatePayloadJson === undefined) {
+      continue
+    }
+    try {
+      const payload = JSON.parse(entry.privatePayloadJson) as unknown
+      if (isRecord(payload) && isRecord(payload.harnessRun)) {
+        return payload.harnessRun as EvalHarnessRun
+      }
+    } catch {
+      continue
+    }
+  }
+  return undefined
+}
+
 async function runAnswerTurnInStore(input: {
   testCase: AnswerTurnEvalCase
-  store: ReturnType<typeof createAnswerThreadTestStore>
+  store: AnswerThreadTestStore
   sessionId: string
   turnKey: string
   threadId?: string
 }): Promise<AnswerTurnEvalResult> {
+  const stream = streamWithSeedOnlyKeylessSource(
+    input.testCase.openRouterAgent,
+    input.store,
+    input.testCase.capabilityOutput,
+  )
   const server = input.testCase.openRouterAgent === undefined
     ? undefined
     : await startOpenRouterContractServer(openRouterToolThenProseResponses(input.testCase.openRouterAgent))
   const restoreOpenRouter = server?.installEnv()
+  let persistedHarnessRun: EvalHarnessRun | undefined
+  const restoreHarnessFinalizer = setAnswerHarnessFinalizerForTests(async (write) => {
+    persistedHarnessRun = readHarnessRunFromJournal(write.entries)
+    const turn = input.store.turns.get(write.turnId)
+    if (turn !== undefined) {
+      input.store.turns.set(write.turnId, {
+        ...turn,
+        evidenceJson: write.evidenceJson,
+      })
+    }
+    const activeLeafEntryId = write.entries.at(-1)?.entryId
+    return {
+      status: 'accepted',
+      turnId: write.turnId,
+      finalizationHash: write.finalizationHash,
+      entriesAccepted: write.entries.length,
+      entriesReplayed: 0,
+      ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+    }
+  })
   try {
     const requestStartedAt = performance.now()
     let firstProgressAt: number | undefined
@@ -534,7 +720,10 @@ async function runAnswerTurnInStore(input: {
           ...(input.testCase.searchContext === undefined ? {} : { searchContext: input.testCase.searchContext }),
         }),
       }),
-      { admit: async () => ({ ok: true }) },
+      {
+        admit: async () => ({ ok: true }),
+        stream,
+      },
     )
 
     if (!response.ok) {
@@ -552,6 +741,7 @@ async function runAnswerTurnInStore(input: {
         workSteps: [],
         totalTimingMs: 0,
         ...emptyAnswerEvalHarnessMetrics(),
+        capabilityMetrics: emptyAnswerEvalCapabilityMetrics(),
         ...performanceMetrics(requestStartedAt, undefined, responseCompletedAt),
         hasHarnessRun: false,
         harnessToolsInvoked: [],
@@ -573,7 +763,7 @@ async function runAnswerTurnInStore(input: {
     const turn = readLatestTurn(input.store)
     const evidence = parseEvidence(turn?.evidenceJson)
     const timingEntries = evidence?.timings ?? []
-    const harnessRun = evidence?.harnessRun
+    const harnessRun = persistedHarnessRun
     const toolQueries = readToolQueries(evidence)
     const toolIds = (evidence?.toolCalls ?? []).map((call) => call.toolId)
     const toolStatuses = (evidence?.toolCalls ?? []).map((call) => call.status)
@@ -587,6 +777,7 @@ async function runAnswerTurnInStore(input: {
     const harnessMetrics = harnessRun === undefined
       ? emptyAnswerEvalHarnessMetrics()
       : readAnswerEvalHarnessMetrics(harnessRun)
+    const capabilityMetrics = readCapabilityEvalMetrics(evidence, complete)
     const requestMetrics = performanceMetrics(requestStartedAt, firstProgressAt, completedAt)
     const status = complete !== undefined ? 'complete' : error !== undefined ? 'error' : 'missing'
     const slugs = complete?.providers.map((provider) => provider.slug) ?? []
@@ -599,27 +790,34 @@ async function runAnswerTurnInStore(input: {
             nextStep: complete.nextStep,
             agentJsonUrl: complete.agentJsonUrl,
           }),
-      ...(error === undefined ? {} : { errorCode: error.code }),
+      ...(error === undefined ? {} : { errorCode: error.problem.code }),
     }
-    const problems = evaluateAnswerTurnExpectations({
-      testCase: input.testCase,
-      status,
-      slugs,
-      ...requestMetrics,
-      ...harnessMetrics,
-      toolQueries,
-      toolIds,
-      toolStatuses,
-      timingNames,
-      artifactKinds,
-      totalTimingMs,
-      snapshot: complete,
-      workSteps,
-      hasHarnessRun: harnessRun !== undefined,
-      ...(harnessRun?.summary.run.status === undefined ? {} : { harnessStatus: harnessRun.summary.run.status }),
-      harnessToolsInvoked,
-      harnessPhases,
-    })
+    const problems = [
+      ...evaluateAnswerTurnExpectations({
+        testCase: input.testCase,
+        status,
+        slugs,
+        ...requestMetrics,
+        ...harnessMetrics,
+        toolQueries,
+        toolIds,
+        toolStatuses,
+        timingNames,
+        artifactKinds,
+        totalTimingMs,
+        snapshot: complete,
+        workSteps,
+        hasHarnessRun: harnessRun !== undefined,
+        ...(harnessRun?.summary.run.status === undefined ? {} : { harnessStatus: harnessRun.summary.run.status }),
+        harnessToolsInvoked,
+        harnessPhases,
+      }),
+      ...evaluateCapabilityEvidenceExpectation({
+        expected: input.testCase.expected.capabilityEvidence,
+        evidence,
+        snapshot: complete,
+      }),
+    ]
 
     return {
       ok: problems.length === 0,
@@ -639,9 +837,11 @@ async function runAnswerTurnInStore(input: {
       harnessToolsInvoked,
       harnessPhases,
       problems,
+      capabilityMetrics,
       diagnostics,
     }
   } finally {
+    restoreHarnessFinalizer()
     restoreOpenRouter?.()
     if (server !== undefined) {
       await server.close()
@@ -666,12 +866,12 @@ function turnToSingleCase(
   }
 }
 
-function readLatestTurn(store: ReturnType<typeof createAnswerThreadTestStore>) {
+function readLatestTurn(store: AnswerThreadTestStore) {
   return [...store.turns.values()].sort((left, right) => right.seq - left.seq)[0]
 }
 
 function readLatestThreadId(
-  store: ReturnType<typeof createAnswerThreadTestStore>,
+  store: AnswerThreadTestStore,
   fallback: string | undefined,
 ): string | undefined {
   return [...store.threads.values()].sort((left, right) => right.updatedAt - left.updatedAt)[0]?.threadId ?? fallback
@@ -870,6 +1070,12 @@ function evaluateAnswerTurnExpectations(input: {
       problems.push(`agentJsonUrl missing "${value}"`)
     }
   }
+  if (expected.forbidCatalogProse === true) {
+    const found = CATALOG_PROSE_FRAGMENTS.filter((fragment) => publicText.toLowerCase().includes(fragment))
+    if (found.length > 0) {
+      problems.push(`catalog-discovery prose present: ${found.join(', ')}`)
+    }
+  }
   if (expected.forbidInternalPublicTerms === true) {
     const terms = findInternalPublicTerms(inspectablePublicText)
     if (terms.length > 0) {
@@ -893,7 +1099,9 @@ function evaluateWorkLogExpectations(input: {
   const ids = input.workSteps.map((step) => step.id)
 
   if (input.workSteps.length === 0) {
-    problems.push('missing visible work log')
+    if ((input.expected.toolQueries?.length ?? 0) > 0) {
+      problems.push('missing visible work log')
+    }
     return problems
   }
   if (ids.some((id) => !/^step-\d+$/.test(id))) {
@@ -926,6 +1134,167 @@ function parseEvidence(value: string | undefined): FrozenTurnEvidence | undefine
     return undefined
   }
 }
+function readCapabilityEvalMetrics(
+  evidence: FrozenTurnEvidence | undefined,
+  snapshot: AnswerSnapshot | undefined,
+): AnswerEvalCapabilityMetrics {
+  const capabilityCalls = (evidence?.toolCalls ?? []).filter((call) => call.toolId === 'operation.execute')
+  const capabilityToolCounts = {
+    total: capabilityCalls.length,
+    complete: capabilityCalls.filter((call) => capabilityEvidenceMatchesAnswer(call, snapshot)).length,
+    refused: capabilityCalls.filter((call) => call.status === 'refused').length,
+    error: capabilityCalls.filter((call) => call.status === 'error').length,
+  }
+  const capabilityOperationRefDialects = {
+    canonical: 0,
+    readable: 0,
+    invalid: 0,
+    missing: 0,
+  }
+  for (const call of capabilityCalls) {
+    const dialect = readOperationRefDialect(call.inputJson)
+    capabilityOperationRefDialects[dialect] += 1
+  }
+  return {
+    capabilityToolCounts,
+    capabilityOperationRefDialects,
+    capabilityEvidenceComplete: capabilityCalls.length > 0
+      && capabilityCalls.every((call) => capabilityEvidenceMatchesAnswer(call, snapshot)),
+  }
+}
+
+function capabilityEvidenceMatchesAnswer(
+  call: FrozenTurnEvidence['toolCalls'][number],
+  snapshot: AnswerSnapshot | undefined,
+): boolean {
+  if (
+    call.toolCallId.trim().length === 0
+    || call.inputJson.trim().length === 0
+    || call.resultJson.trim().length === 0
+    || call.resultSummaryJson.trim().length === 0
+    || call.resultHash.trim().length === 0
+  ) {
+    return false
+  }
+  const input = parseRecord(call.inputJson)
+  const result = parseRecord(call.resultJson)
+  const operationRef = input?.operationRef
+  if (
+    !isRecord(input?.input)
+    || typeof operationRef !== 'string'
+    || !/^operation:v1:[0-9a-f]{64}$/.test(operationRef)
+    || result?.kind !== 'ok'
+    || result.operationRef !== operationRef
+    || typeof result.capabilityId !== 'string'
+    || result.capabilityId.length === 0
+    || typeof result.name !== 'string'
+    || result.name.length === 0
+    || typeof result.evidenceHash !== 'string'
+    || result.evidenceHash.length === 0
+    || !Object.prototype.hasOwnProperty.call(result, 'output')
+  ) {
+    return false
+  }
+  return capabilityOutputGroundsAnswer(result.output, snapshot)
+}
+
+function capabilityOutputGroundsAnswer(output: unknown, snapshot: AnswerSnapshot | undefined): boolean {
+  if (snapshot === undefined) return false
+  const leaves: (string | number | boolean)[] = []
+  collectCapabilityLeaves(output, leaves)
+  if (leaves.length === 0) return false
+  const meaningfulLeaves = leaves.some((leaf) => typeof leaf === 'number')
+    ? leaves.filter((leaf): leaf is number => typeof leaf === 'number')
+    : leaves
+  const prose = `${snapshot.oneLine} ${snapshot.summary} ${snapshot.nextStep}`.toLowerCase().replace(/,/g, '')
+  return meaningfulLeaves.some((leaf) => {
+    const value = String(leaf).toLowerCase().trim()
+    if (value.length === 0 || value.length > 80) return false
+    if (typeof leaf === 'number') {
+      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      return new RegExp(String.raw`(?<!\d)${escaped}(?:\.\d+)?(?!\d)`).test(prose)
+    }
+    return prose.includes(value)
+  })
+}
+
+function collectCapabilityLeaves(value: unknown, target: (string | number | boolean)[]): void {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    target.push(value)
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectCapabilityLeaves(item, target)
+    return
+  }
+  if (!isRecord(value)) return
+  for (const item of Object.values(value)) collectCapabilityLeaves(item, target)
+}
+
+function parseRecord(value: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return isRecord(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function evaluateCapabilityEvidenceExpectation(input: {
+  expected: AnswerTurnEvalCase['expected']['capabilityEvidence']
+  evidence: FrozenTurnEvidence | undefined
+  snapshot: AnswerSnapshot | undefined
+}): string[] {
+  const expected = input.expected
+  if (expected === undefined) return []
+  const capabilityCalls = input.evidence?.toolCalls.filter((candidate) => candidate.toolId === 'operation.execute') ?? []
+  const call = capabilityCalls.at(-1)
+  if (call === undefined) return ['capability evidence missing']
+  const namedFailure = [...capabilityCalls].reverse().find((candidate) => candidate.status !== 'complete')
+  if (namedFailure !== undefined) return [`capability evidence status is ${namedFailure.status}`]
+  const callInput = parseRecord(call.inputJson)
+  const result = parseRecord(call.resultJson)
+  if (callInput?.operationRef !== expected.operationRef) {
+    return ['capability operation reference mismatch']
+  }
+  if (
+    result?.kind !== 'ok'
+    || call.resultHash.trim().length === 0
+    || result.operationRef !== expected.operationRef
+    || typeof result.evidenceHash !== 'string'
+    || result.evidenceHash.length === 0
+    || JSON.stringify(result.output) !== JSON.stringify(expected.output)
+  ) {
+    return ['capability result schema/ref mismatch']
+  }
+  if (!capabilityOutputGroundsAnswer(result.output, input.snapshot)) {
+    return ['capability prose is stale for returned value']
+  }
+  return []
+}
+
+type OperationRefDialect = keyof AnswerEvalCapabilityOperationRefDialects
+
+function readOperationRefDialect(inputJson: string): OperationRefDialect {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(inputJson)
+  } catch {
+    return 'missing'
+  }
+  if (!isRecord(parsed) || !Object.prototype.hasOwnProperty.call(parsed, 'operationRef')) {
+    return 'missing'
+  }
+  const operationRef = parsed.operationRef
+  if (typeof operationRef !== 'string') {
+    return 'invalid'
+  }
+  if (/^operation:v1:[0-9a-f]{64}$/.test(operationRef)) {
+    return 'canonical'
+  }
+  return operationRef.startsWith('operation:v1:') ? 'readable' : 'invalid'
+}
+
 
 function readToolQueries(evidence: FrozenTurnEvidence | undefined): string[] {
   return (evidence?.toolCalls ?? []).map((call) => {
@@ -973,7 +1342,7 @@ function readArtifactKinds(
   frames: readonly AnswerTurnFrame[],
   snapshot: AnswerSnapshot | undefined,
 ): string[] {
-  return stableUnique([
+  return uniq([
     ...frames.flatMap((frame) =>
       frame.event.type === 'artifact' ? [frame.event.artifact.kind] : [],
     ),
@@ -1052,7 +1421,10 @@ async function evaluateToolUseCase(
   const restoreOpenRouter = server.installEnv()
 
   try {
-    const agentResult = await runAnswerToolUseAgent({ query: vars.query })
+    const agentResult = await runAnswerToolUseAgent({
+      query: vars.query,
+      keylessExecutableSource: EMPTY_KEYLESS_EXECUTABLE_SOURCE,
+    })
     const firstCall = agentResult.toolCalls[0]
     const toolInput = firstCall?.inputJson ?? ''
     const slugs = [...agentResult.allowedSlugs]

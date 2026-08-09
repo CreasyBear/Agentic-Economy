@@ -7,6 +7,7 @@ import {
 import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,
+  type ProviderConnectionAuthorityLookup,
   type RouteTransportInvocation,
   type RouteTransportRuntime,
   type X402PaymentSignatureRequest,
@@ -16,13 +17,17 @@ import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
+  capabilityOperationId,
+  createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   importX402Capability,
   materializePublishedOperation,
+  type PublishedOperation,
 } from '@/modules/capability-supply/public'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 
 async function invokeRouteTransport(
   routeInvocation: RouteTransportInvocation,
@@ -30,12 +35,62 @@ async function invokeRouteTransport(
 ) {
   const preparation = prepareRegisteredRouteTransportInvocation(
     routeInvocation,
-    runtime.resolveCredential,
     runtime.x402PaymentSigningAvailable,
   )
   return preparation.kind === 'refused'
     ? preparation.observation
     : await invokePreparedRouteTransport(preparation.prepared, runtime)
+}
+type ProviderRouteTransportBinding = Extract<
+  RouteTransportInvocation,
+  { readonly binding: { readonly authority: { readonly kind: 'provider_connection' } } }
+>['binding']
+
+function providerRouteTransportBinding(
+  operation: PublishedOperation,
+): ProviderRouteTransportBinding {
+  const authority = operation.binding.authority
+  if (authority.kind !== 'provider_connection') {
+    throw new Error('provider_connection_required')
+  }
+  return {
+    adapterId: operation.identity.adapterId,
+    endpointUrl: operation.binding.endpointUrl,
+    authority,
+    ...operation.transport,
+  }
+}
+
+function currentProviderAuthority(operation: Readonly<{
+  connectionAuthority?: Readonly<{ authorityGeneration: number; authorityDigest: string }>
+}>): Readonly<{ authorityGeneration: number; authorityDigest: string }> {
+  const snapshot = operation.connectionAuthority
+  if (snapshot === undefined) throw new Error('connection_authority_missing')
+  return {
+    authorityGeneration: snapshot.authorityGeneration,
+    authorityDigest: snapshot.authorityDigest,
+  }
+}
+
+function providerCredentialReader(operation: PublishedOperation) {
+  const snapshot = operation.connectionAuthority
+  if (snapshot === undefined) throw new Error('connection_authority_missing')
+  return (input: ProviderConnectionAuthorityLookup) => {
+    if (
+      input.connectionRef !== snapshot.connectionRef
+      || input.providerRef !== snapshot.providerRef
+      || input.adapterId !== snapshot.adapterId
+    ) {
+      return { kind: 'unavailable' as const, reason: 'not_found' as const }
+    }
+    if (input.authorityGeneration !== snapshot.authorityGeneration) {
+      return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+    }
+    if (input.authorityDigest !== snapshot.authorityDigest) {
+      return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    }
+    return { kind: 'resolved' as const, credentialRef: snapshot.connectionRef }
+  }
 }
 
 describe('published operation materialization', () => {
@@ -53,7 +108,7 @@ describe('published operation materialization', () => {
         method: 'GET',
         path: '/x402/v3/cryptocurrency/quotes/latest',
       },
-      price: { kind: 'fixed', currency: 'USD', amountMinor: 1 },
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
     })
     expect(packet.operation.usageObservation).toMatchObject({
       calls: 8,
@@ -129,25 +184,22 @@ describe('published operation materialization', () => {
       })
     })
     const invocation: RouteTransportInvocation = {
-      binding: {
-        adapterId: packet.operation.identity.adapterId,
-        endpointUrl: packet.operation.binding.endpointUrl,
-        credentialRef: packet.operation.binding.credentialRef,
-        ...packet.operation.transport,
-      },
+      binding: providerRouteTransportBinding(packet.operation),
       authority: {
         attemptRef: 'mock:attempt:get',
         operationKeyDigest: canonicalDigest({ operation: packet.operation.operationId }),
         mandateDigest: canonicalDigest({ mandate: 'mock' }),
         grantDigest: canonicalDigest({ grant: 'mock' }),
         capabilityContractDigest: packet.operation.identity.contractDigest,
-        maximumSpend: { currency: 'USD', amountMinor: 1 },
-        expiresAt: Date.now() + 120_000,
+        maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
+        ...currentProviderAuthority(packet.operation),
+        expiresAt: Date.now() + 60_000,
         callIdentity: { keyId: 'mock:key', signature: 'mock:signature' },
       },
       inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
     }
     await expect(invokeRouteTransport(invocation, {
+      readProviderConnectionCredentialRef: providerCredentialReader(packet.operation),
       send,
       resolveCredential: () => 'mock-credential',
       ...preparedX402Custody(async () => 'mock:payment-signature'),
@@ -180,24 +232,21 @@ describe('published operation materialization', () => {
         })
       })
       await expect(invokeRouteTransport({
-        binding: {
-          adapterId: operation.identity.adapterId,
-          endpointUrl: operation.binding.endpointUrl,
-          credentialRef: operation.binding.credentialRef,
-          ...operation.transport,
-        },
+        binding: providerRouteTransportBinding(operation),
         authority: {
           attemptRef: `mock:attempt:${method}`,
           operationKeyDigest: canonicalDigest({ operation: operation.operationId, method }),
           mandateDigest: canonicalDigest({ mandate: 'mock' }),
           grantDigest: canonicalDigest({ grant: 'mock' }),
           capabilityContractDigest: operation.identity.contractDigest,
-          maximumSpend: { currency: 'USD', amountMinor: 1 },
-          expiresAt: Date.now() + 120_000,
+          maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
+          ...currentProviderAuthority(operation),
+          expiresAt: Date.now() + 60_000,
           callIdentity: { keyId: 'mock:key', signature: 'mock:signature' },
         },
         inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
       }, {
+        readProviderConnectionCredentialRef: providerCredentialReader(operation),
         send,
         resolveCredential: () => 'mock-credential',
         ...preparedX402Custody(async () => 'mock:payment-signature'),
@@ -205,26 +254,58 @@ describe('published operation materialization', () => {
     },
   )
 
-  it.each([
-    ['offering price', (packet: any) => { packet.sourceMaterial.offering.presentation.price.amountMinor = 2 }],
-    ['binding payTo', (packet: any) => { packet.sourceMaterial.binding.adapter.config.payTo = '0xattacker' }],
-    ['binding network', (packet: any) => { packet.sourceMaterial.binding.adapter.config.network = 'eip155:1' }],
-    ['binding asset', (packet: any) => { packet.sourceMaterial.binding.adapter.config.asset = '0xattacker' }],
-    ['offering amount', (packet: any) => { packet.sourceMaterial.offering.presentation.price.amountMinor = 99 }],
-    ['method mismatch', (packet: any) => { packet.sourceMaterial.binding.adapter.config.method = 'POST' }],
-    ['admitted config', (packet: any) => { packet.sourceMaterial.admittedTransport.configJson = '{"method":"POST"}' }],
-    ['binding source digest', (packet: any) => { packet.sourceMaterial.qualification.sources[3].digest = canonicalDigest({ forged: true }) }],
-    ['operation material', (packet: any) => { packet.operation.identity.payTo = '0xattacker' }],
-    ['readiness', (packet: any) => { packet.readinessObservation.validUntil += 1 }],
-    ['usage', (packet: any) => { packet.operation.usageObservation.calls = 9; packet.operation.materialDigest = canonicalDigest(packet.operation.identity) }],
-    ['endpoint', (packet: any) => { packet.operation.identity.endpoint.path = '/attacker'; packet.operation.materialDigest = canonicalDigest(packet.operation.identity) }],
-    ['descriptor', (packet: any) => { packet.descriptor.retryClass = 'replayable' }],
-  ])('rejects independently rebuilt %s tampering', (_label, tamper) => {
-    const packet: any = buildDevelopmentPublishedOperationEvidence()
-    tamper(packet)
-    expect(() => verifyDevelopmentPublishedOperationEvidence(packet)).toThrow(
-      'development_published_operation_evidence_invalid',
-    )
+  it('rejects independently rebuilt material tampering', () => {
+    const baseline = buildDevelopmentPublishedOperationEvidence()
+    type Packet = typeof baseline
+    const config = (packet: Packet): Record<string, unknown> => {
+      const value = packet.sourceMaterial.binding.adapter.config
+      if (!isRecord(value)) throw new Error('binding_config_missing')
+      return value
+    }
+    const tamperers: readonly [string, (packet: Packet) => void][] = [
+      ['offering price', (packet) => {
+        const price = packet.sourceMaterial.offering.presentation.price
+        if (price.kind !== 'fixed') throw new Error('fixed_price_missing')
+        Object.assign(price.amount, { units: '2' })
+      }],
+      ['binding payTo', (packet) => { config(packet).payTo = '0xattacker' }],
+      ['binding network', (packet) => { config(packet).network = 'eip155:1' }],
+      ['binding asset', (packet) => { config(packet).asset = '0xattacker' }],
+      ['offering amount', (packet) => {
+        const price = packet.sourceMaterial.offering.presentation.price
+        if (price.kind !== 'fixed') throw new Error('fixed_price_missing')
+        Object.assign(price.amount, { units: '99' })
+      }],
+      ['method mismatch', (packet) => { config(packet).method = 'POST' }],
+      ['admitted config', (packet) => { Object.assign(packet.sourceMaterial.admittedTransport, { configJson: '{"method":"POST"}' }) }],
+      ['binding source digest', (packet) => {
+        const source = packet.sourceMaterial.qualification.sources[3]
+        if (source === undefined) throw new Error('binding_source_missing')
+        Object.assign(source, { digest: canonicalDigest({ forged: true }) })
+      }],
+      ['operation material', (packet) => {
+        if (packet.operation.identity.payment.kind !== 'x402') throw new Error('x402_payment_missing')
+        Object.assign(packet.operation.identity.payment, { payTo: '0xattacker' })
+      }],
+      ['readiness', (packet) => { Object.assign(packet.readinessObservation, { validUntil: packet.readinessObservation.validUntil + 1 }) }],
+      ['usage', (packet) => {
+        if (packet.operation.usageObservation === undefined) throw new Error('usage_observation_missing')
+        Object.assign(packet.operation.usageObservation, { calls: 9 })
+        Object.assign(packet.operation, { materialDigest: canonicalDigest(packet.operation.identity) })
+      }],
+      ['endpoint', (packet) => {
+        Object.assign(packet.operation.identity.endpoint, { path: '/attacker' })
+        Object.assign(packet.operation, { materialDigest: canonicalDigest(packet.operation.identity) })
+      }],
+      ['descriptor', (packet) => { Object.assign(packet.descriptor, { retryClass: 'replayable' }) }],
+    ]
+    for (const [_label, tamper] of tamperers) {
+      const packet = buildDevelopmentPublishedOperationEvidence()
+      tamper(packet)
+      expect(() => verifyDevelopmentPublishedOperationEvidence(packet)).toThrow(
+        'development_published_operation_evidence_invalid',
+      )
+    }
   })
 })
 
@@ -242,7 +323,7 @@ function buildImportedOperation(method: 'GET' | 'POST') {
         : {}),
       inputSchema,
       outputSchema,
-      price: { currency: 'USD', amountMinor: 1 },
+      price: { currency: 'USD', units: '1', exponent: 2 },
       scheme: 'exact',
       network: 'eip155:8453',
       asset: '0xmock-usdc',
@@ -260,7 +341,7 @@ function buildImportedOperation(method: 'GET' | 'POST') {
         registrationEvidenceRefs: source.offering.registrationEvidenceRefs,
       },
       bindingId: source.binding.bindingId,
-      credentialRef: source.binding.credentialRef,
+      authority: source.binding.authority,
       registrationEvidenceRefs: source.binding.registrationEvidenceRefs,
       requestTimeoutMs: 5_000,
     },
@@ -282,7 +363,7 @@ function buildImportedOperation(method: 'GET' | 'POST') {
   const admission = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
     endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
+    authority: binding.authority,
     continuation: binding.continuation,
     cancellation: binding.cancellation,
     config: binding.adapter.config,
@@ -306,14 +387,32 @@ function buildImportedOperation(method: 'GET' | 'POST') {
       return entry
     }),
   }
+  const publication = {
+    ...source.publication,
+    sourceDigest: imported.draft.source.descriptorDigest,
+  }
+  let connectionAuthority = source.connectionAuthority
+  if (binding.authority.kind === 'provider_connection') {
+    if (connectionAuthority === undefined) throw new Error('connection_authority_missing')
+    connectionAuthority = {
+      ...connectionAuthority,
+      connectionRef: binding.authority.connectionRef,
+      providerRef: binding.authority.providerRef,
+      adapterId: binding.adapter.adapterId,
+      operationRef: createPublicOperationRef({
+        operationId: capabilityOperationId(contract.ref.capabilityId),
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        contractRef: contract.ref,
+      }),
+    }
+  }
   return materializePublishedOperation({
-    publication: {
-      ...source.publication,
-      sourceDigest: imported.draft.source.descriptorDigest,
-    },
+    publication,
     contract,
     offering,
     binding,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     admittedTransport: admission.transport,
     qualification,
     ...(source.usageObservation === undefined ? {} : { usageObservation: source.usageObservation }),

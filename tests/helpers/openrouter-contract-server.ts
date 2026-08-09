@@ -8,7 +8,7 @@ export type OpenRouterContractRequest = {
   tools?: { function: { name: string } }[]
   tool_choice?: unknown
   parallel_tool_calls?: unknown
-  response_format?: { type?: string; json_schema?: { strict?: boolean } }
+  response_format?: { type?: string; json_schema?: { strict?: boolean; name?: string } }
 }
 
 export type OpenRouterToolCallPlan = {
@@ -34,18 +34,34 @@ export type OpenRouterContractResponseSource =
   | readonly unknown[]
   | ((request: OpenRouterContractRequest, index: number) => unknown | Promise<unknown>)
 
+export type OpenRouterContractServerOptions = {
+  safetyDecision?: 'allow' | 'refuse'
+}
+
 export async function startOpenRouterContractServer(
   responses: OpenRouterContractResponseSource,
+  options: OpenRouterContractServerOptions = {},
 ): Promise<OpenRouterContractServer> {
   const responseSource = responses
   const requests: OpenRouterContractRequest[] = []
+  let scenarioRequestCount = 0
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const body = await json(request) as OpenRouterContractRequest
+    const isSafetyRequest =
+      body.response_format?.json_schema?.name === 'answer_query_safety'
+      || body.messages.some((message) =>
+        message.role === 'system' && message.content.includes('Classify the user request'),
+      )
     requests.push(body)
-    const responseIndex = requests.length - 1
-    const payload = typeof responseSource === 'function'
-      ? await responseSource(body, responseIndex)
-      : responseSource[responseIndex]
+    let payload: unknown
+    if (isSafetyRequest) {
+      payload = openRouterSafetyChoiceResponse(options.safetyDecision ?? 'allow')
+    } else {
+      const responseIndex = scenarioRequestCount++
+      payload = typeof responseSource === 'function'
+        ? await responseSource(body, responseIndex)
+        : responseSource[responseIndex]
+    }
     if (payload === undefined) {
       response.writeHead(500, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ error: 'unexpected_openrouter_request' }))
@@ -139,6 +155,27 @@ export function openRouterProseResponse(
   }
 }
 
+function openRouterSafetyChoiceResponse(
+  result: 'allow' | 'refuse',
+): unknown {
+  return {
+    id: `chatcmpl-safety-${result}`,
+    model: 'test-model',
+    choices: [{
+      finish_reason: 'stop',
+      message: {
+        role: 'assistant',
+        content: JSON.stringify({ result }),
+      },
+    }],
+    usage: {
+      prompt_tokens: 40,
+      completion_tokens: 2,
+      total_tokens: 42,
+    },
+  }
+}
+
 /** A schema-valid final response for an AI SDK `Output.object` request. */
 export function openRouterStructuredProseResponse(
   prose: OpenRouterProsePlan,
@@ -153,6 +190,16 @@ export function openRouterToolThenProseResponses(input: {
 }): OpenRouterContractResponseSource {
   const toolCalls = input.toolCalls ?? []
   return (request) => {
+    // The safety preflight uses Output.choice, while answer prose uses Output.object.
+    // Keep the fixture's ordinary response path unchanged after answering the choice.
+    if (
+      request.response_format?.json_schema?.name === 'answer_query_safety'
+      || request.messages.some((message) =>
+        message.role === 'system' && message.content.includes('Classify the user request'),
+      )
+    ) {
+      return openRouterSafetyChoiceResponse('allow')
+    }
     // Route on request SHAPE, never call index: multi-turn tests reuse one
     // server and turns interleave discovery, tool, and structured requests.
     if (request.response_format?.type !== 'json_schema') {
@@ -167,10 +214,15 @@ export function openRouterToolThenProseResponses(input: {
           }],
         }
       }
-      // An agent call carrying tools must also carry Output.object json_schema.
-      throw new Error('expected_structured_output_request')
+      // AI SDK tool rounds are not structured-output rounds. The next request
+      // with tool results must withhold tools and carry the prose JSON schema.
+      const hasToolResults = request.messages.some((message) => message.role === 'tool')
+      if (toolCalls.length > 0 && !hasToolResults) {
+        return openRouterToolResponse(toolCalls)
+      }
+      throw new Error('unexpected_unstructured_tool_request')
     }
-    if (request.tools !== undefined && toolCalls.length > 0) {
+    if ((request.tools?.length ?? 0) > 0 && toolCalls.length > 0) {
       // Tool round: tools exposed, planned calls unserved on this step chain.
       const hasToolResults = request.messages.some((message) => message.role === 'tool')
       if (!hasToolResults) {

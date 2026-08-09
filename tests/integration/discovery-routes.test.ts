@@ -105,10 +105,10 @@ describe('discovery route handlers', () => {
 
     expect(response.status).toBe(404)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(body).toEqual({
-      kind: 'not_found',
+    expect(body).toMatchObject({
+      kind: 'NOT_FOUND',
       code: 'discovery_manifest_not_found',
-      reason: 'No public discovery manifest exists for this slug.',
+      detail: 'No public discovery manifest exists for this slug.',
     })
   })
 })

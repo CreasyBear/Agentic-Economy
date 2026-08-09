@@ -1,12 +1,13 @@
 import { z } from 'zod'
 
 import {
-  OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
 } from '@/modules/catalog/public'
+import { exactAmountSchema } from '@/modules/money/public'
 import { TrustTierValues } from '@/modules/business/public'
 import {
+  type CatalogOfferingOperationMapEntry,
   type InspectPlanInput,
   type InspectPlanResult,
   type OperationCompareInput,
@@ -21,6 +22,7 @@ import {
   readCapabilityOperationDetail,
   readCapabilityOperationInspectPlan,
   readCapabilityOperationSearch,
+  readCatalogOfferingOperationMap,
 } from '@/modules/capability-supply/operation-source'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
@@ -43,6 +45,7 @@ import {
   type PublicBusinessCatalogV2DetailResult,
   type PublicServicesApiPage,
   type PublicServicesSearchPage,
+  type ServiceDto,
   projectPublicServicesPage,
   projectPublicServicesSearchPage,
 } from '@/modules/registry/public'
@@ -65,7 +68,7 @@ import {
  */
 
 const registryListInputSchema = z.strictObject({
-  cursor: z.string().max(512).optional().describe('Pagination cursor from a previous catalog page'),
+  cursor: z.string().min(1).max(512).optional().describe('Pagination cursor from a previous catalog page'),
   limit: z
     .number()
     .int()
@@ -84,7 +87,7 @@ const registrySearchInputSchema = z.strictObject({
     .max(50)
     .optional()
     .describe('Maximum providers to return'),
-  cursor: z.string().max(512).optional().describe('Pagination cursor from a previous search page'),
+  cursor: z.string().min(1).max(512).optional().describe('Pagination cursor from a previous search page'),
   mode: z
     .enum(['near_me', 'whole_catalogue'])
     .optional()
@@ -95,12 +98,9 @@ const registrySearchInputSchema = z.strictObject({
     .max(80)
     .optional()
     .describe('Place to search around when mode is near_me'),
-  maxPriceMinor: z
-    .number()
-    .int()
-    .positive()
+  maxPrice: exactAmountSchema
     .optional()
-    .describe('Budget ceiling in minor currency units, for example 25000 for $250'),
+    .describe('Budget ceiling as an exact amount with currency, integer units, and decimal exponent'),
   hasPrice: z
     .boolean()
     .optional()
@@ -114,6 +114,7 @@ const registryDetailInputSchema = z.strictObject({
 const offeringAccessPathOutputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     accessPathRef: z.string(),
+    offeringRevision: z.number().int().nonnegative(),
     kind: z.literal('human_request'),
     channel: z.enum(['phone', 'website', 'ae_inquiry']),
     disclosure: z.string(),
@@ -121,6 +122,7 @@ const offeringAccessPathOutputSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     accessPathRef: z.string(),
+    offeringRevision: z.number().int().nonnegative(),
     kind: z.literal('external_operation'),
     name: z.string(),
     summary: z.string(),
@@ -134,14 +136,33 @@ const offeringAccessPathOutputSchema = z.discriminatedUnion('kind', [
   }),
 ])
 
-const offeringPriceOutputSchema = z.strictObject({
-  kind: z.enum(OfferingPriceKindValues).describe('Published price shape'),
-  currency: z.string().describe('ISO 4217 currency code'),
-  amountMinor: z.number().optional().describe('Published amount in minor currency units'),
-  maximumAmountMinor: z.number().optional().describe('Published upper amount in minor currency units'),
-  unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
-  taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
-})
+const offeringPriceOutputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('fixed').describe('Fixed published price'),
+    amount: exactAmountSchema.describe('Exact published amount: currency, integer units, and decimal exponent'),
+    unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
+  }),
+  z.strictObject({
+    kind: z.literal('from').describe('Published starting price'),
+    amount: exactAmountSchema.describe('Exact published amount: currency, integer units, and decimal exponent'),
+    unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
+  }),
+  z.strictObject({
+    kind: z.literal('range').describe('Published bounded price range'),
+    minimum: exactAmountSchema.describe('Exact lower amount: currency, integer units, and decimal exponent'),
+    maximum: exactAmountSchema.describe('Exact upper amount: currency, integer units, and decimal exponent'),
+    unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
+  }),
+  z.strictObject({
+    kind: z.literal('quote_only').describe('Price supplied after inquiry'),
+    currency: z.string().describe('Currency code retained for quote-only pricing'),
+    unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
+  }),
+])
 
 const offeringOutputSchema = z.strictObject({
   offeringRef: z.string(),
@@ -206,48 +227,147 @@ const registrySearchPageOutputSchema = z.strictObject({
     hasMore: z.boolean(),
   }),
 }) as z.ZodType<PublicBusinessCatalogApiV2SearchPage>
-const serviceEndpointOutputSchema = z.strictObject({
-  url: z.string().describe('Callable external operation URL'),
-  method: z.string().optional().describe('HTTP method when published'),
-  name: z.string().describe('Published operation name'),
-  summary: z.string().describe('Published operation summary'),
-  pricingSummary: z.string().optional().describe('Published operation pricing note'),
-  authenticationSummary: z.string().optional().describe('Published authentication requirement'),
-  provenance: z.enum(['business_declared', 'publicly_observed']).describe('How the operation was published'),
-  access: z.enum(['open', 'external']).describe('Whether the operation is keyless AE sandbox access'),
-})
-
-const serviceOutputSchema = z.strictObject({
-  id: z.string().describe('Published offering reference'),
+const serviceOfferingOutputSchema = z.strictObject({
+  offeringRef: z.string().describe('Published offering reference'),
   revision: z.number().int().nonnegative().describe('Published offering revision'),
-  business: z
-    .strictObject({
-      slug: z.string().describe('Published business slug'),
-      name: z.string().describe('Published business name'),
-      suburb: z.string().optional().describe('Published business suburb'),
-      stateTerritory: z.string().optional().describe('Published business state or territory'),
-    })
-    .describe('Business that publishes the offering'),
   name: z.string().describe('Published offering name'),
   category: z.string().describe('Published offering category'),
   summary: z.string().describe('Published offering summary'),
-  pricingSummary: z.string().optional().describe('Published offering pricing note'),
+  serviceAreaSummary: z.string().optional().describe('Published service area'),
   availabilitySummary: z.string().optional().describe('Exact published availability or timing note'),
-  observedAt: z.number().optional().describe('Source observation time for freshness context'),
+  pricingSummary: z.string().optional().describe('Published offering pricing note'),
   price: offeringPriceOutputSchema.optional().describe('Comparable published offering price'),
-  endpoints: z.array(serviceEndpointOutputSchema).describe('Published external operation endpoints'),
-  links: z
-    .strictObject({
-      business: z.string().describe('Business detail API link'),
-      manifest: z.string().describe('Business UCP-shaped manifest link'),
-    })
-    .describe('Related public discovery links'),
+  support: z.strictObject({
+    integrated: z.boolean().describe('Whether the offering is capability-integrated'),
+    routeable: z.boolean().describe('Whether the offering is currently routeable'),
+    observedAt: z.number().optional().describe('Source observation time'),
+    validUntil: z.number().optional().describe('Routeability validity window end'),
+  }),
 })
+
+const serviceEndpointAuthenticationOutputSchema = z.union([
+  z.strictObject({ kind: z.literal('keyless') }),
+  z.strictObject({
+    kind: z.literal('platform_credential'),
+    scheme: z.literal('api_key'),
+    in: z.enum(['query', 'header']),
+    name: z.string(),
+  }),
+  z.strictObject({
+    kind: z.literal('platform_credential'),
+    scheme: z.literal('bearer'),
+  }),
+  z.strictObject({ kind: z.literal('x402') }),
+  z.strictObject({ kind: z.literal('unknown') }),
+])
+
+const serviceEndpointOutputSchema = z.strictObject({
+  url: z.string().describe('Callable external endpoint URL'),
+  description: z.string().describe('Published endpoint description'),
+  method: z.string().optional().describe('HTTP method when published'),
+  pricing: z
+    .strictObject({
+      amount: z.string().optional().describe('Exact decimal amount'),
+      currency: z.string().describe('Currency code for the decimal catalog price'),
+      network: z.string().optional().describe('Admitted x402 payment network'),
+      scheme: z.enum(['exact', 'upto']).describe('Decimal price scheme'),
+      minAmount: z.string().optional().describe('Range minimum decimal amount'),
+      maxAmount: z.string().optional().describe('Range maximum decimal amount'),
+    })
+    .optional()
+    .describe('Decimal endpoint price when published'),
+  providerName: z.string().optional().describe('Provider name only when linked supply is provider-owned'),
+  serviceName: z.string().describe('Published service name'),
+  tags: z.array(z.string()).describe('Published endpoint tags'),
+  parameters: z
+    .array(
+      z.strictObject({
+        group: z.enum(['body', 'path', 'query']).describe('Catalog-inferred parameter group'),
+        name: z.string().describe('Parameter name'),
+        type: z.string().describe('JSON-Schema type'),
+        description: z.string().optional().describe('Parameter description'),
+        example: z.unknown().optional().describe('Example value'),
+        enumValues: z.array(z.string()).optional().describe('Allowed enum values'),
+        default: z.unknown().optional().describe('Default value'),
+        required: z.boolean().describe('Whether the parameter is required'),
+      }),
+    )
+    .describe('Flat catalog parameters of the endpoint'),
+  quality: z.null().describe('Traffic quality evidence, absent when not observed'),
+  ae: z
+    .strictObject({
+      operationRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).optional().describe('Canonical execution read link when linked to a capability operation'),
+      offeringRef: z.string().describe('Published offering the endpoint belongs to'),
+      provenance: z.enum(['business_declared', 'publicly_observed']).describe('How the endpoint was published'),
+      access: z.enum(['open', 'external']).describe('Whether the endpoint is keyless AE sandbox access'),
+      authentication: serviceEndpointAuthenticationOutputSchema.describe('Public authentication classification without secret values'),
+      execution: z.enum(['answer_tool', 'request_route', 'catalog_only']).describe('Public execution channel'),
+      authorityMode: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']).optional().describe('Authoritative source classification when linked'),
+      sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']).optional().describe('Transport source classification when linked'),
+      authenticationSummary: z.string().optional().describe('Published authentication requirement'),
+      settlementSupport: z
+        .enum(['executable', 'catalog_only', 'unpriced'])
+        .describe('Whether the published price can be settled by the execution path'),
+    })
+    .describe('AE execution and provenance metadata'),
+})
+
+const servicePriceSummaryOutputSchema = z.strictObject({
+  currency: z.string().describe('Currency shared by the exact source amounts'),
+  minAmount: z.string().describe('Lowest published decimal amount'),
+  maxAmount: z.string().describe('Highest published decimal amount'),
+  avgCostPerTransaction: z.string().optional().describe('Average comparable decimal amount when derivable'),
+  avgCostBasis: z.enum(['exact', 'varies']).describe('Whether the aggregate average is exact or varies'),
+})
+
+const serviceOutputSchema = z.strictObject({
+  id: z.string().describe('Published service identifier'),
+  name: z.string().describe('Published service name'),
+  description: z.string().optional().describe('Published service description'),
+  domain: z.string().optional().describe('Published service domain'),
+  provider: z.string().optional().describe('Published service provider'),
+  providerUrl: z.string().optional().describe('Published service provider URL'),
+  category: z.string().describe('Published service category'),
+  networks: z.array(z.string()).describe('Payment networks supported by the service'),
+  enriched: z.boolean().describe('Whether at least one endpoint is linked to a capability operation'),
+  integrationType: z.enum(['1P', '3P']).describe('First-party or third-party integration grouping'),
+  isNew: z.boolean().optional().describe('Whether the service is newly published'),
+  endpoints: z.array(serviceEndpointOutputSchema).describe('Flat endpoints published by the service'),
+  priceSummary: servicePriceSummaryOutputSchema.optional().describe('Aggregate published decimal price summary'),
+  serviceName: z.string().describe('Published service name'),
+  tags: z.array(z.string()).describe('Published service tags'),
+  iconUrl: z.string().optional().describe('Published service icon URL'),
+  ae: z
+    .strictObject({
+      trustTier: z.enum(TrustTierValues).describe('Published business trust tier'),
+      suburb: z.string().optional().describe('Published business suburb'),
+      stateTerritory: z.string().optional().describe('Published business state or territory'),
+      postcode: z.string().optional().describe('Published business postcode'),
+      publicUrl: z.string().describe('Published business URL'),
+      responseTimeMinutes: z.number().optional().describe('Typical response window'),
+      photos: z
+        .array(z.strictObject({ url: z.string(), alt: z.string() }))
+        .describe('Published business photos'),
+      observedAt: z.number().describe('Source observation time for freshness context'),
+      disposition: z.enum(['current', 'partial', 'stale']).describe('Catalog disposition'),
+      source: z
+        .enum(['business_published', 'ae_sandbox'])
+        .describe('Whether this service is a published business listing or AE sandbox supply'),
+      offerings: z.array(serviceOfferingOutputSchema).describe('Local merchandising and inquiry listing view'),
+      links: z
+        .strictObject({
+          business: z.string().describe('Business detail API link'),
+          manifest: z.string().describe('Business manifest link'),
+        })
+        .describe('Related public discovery links'),
+    })
+    .describe('AE-local merchandising and provenance metadata'),
+}) as z.ZodType<ServiceDto>
 
 const servicesPageOutputSchema = z.strictObject({
   kind: z.literal('ok').describe('Successful services response'),
   schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
-  services: z.array(serviceOutputSchema).describe('Published offerings flattened into services'),
+  services: z.array(serviceOutputSchema).describe('One Service per published business with flat endpoints'),
   isDone: z.boolean(),
   continueCursor: z.string(),
 }) as z.ZodType<PublicServicesApiPage>
@@ -255,7 +375,7 @@ const servicesSearchPageOutputSchema = z.strictObject({
   kind: z.literal('ok').describe('Successful services response'),
   schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
   query: z.string().optional().describe('Echo of the supplied search query'),
-  services: z.array(serviceOutputSchema).describe('Published offerings flattened into services'),
+  services: z.array(serviceOutputSchema).describe('Matching Services grouped one per published business'),
   pagination: z
     .strictObject({
       cursor: z.string().optional().describe('Cursor used for this page'),
@@ -266,6 +386,32 @@ const servicesSearchPageOutputSchema = z.strictObject({
     })
     .describe('Computed search pagination'),
 }) as z.ZodType<PublicServicesSearchPage>
+
+const servicesDetailOutputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('found').describe('Service found'),
+    schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
+    service: serviceOutputSchema.describe('Canonical Service projection'),
+  }),
+  z.strictObject({
+    kind: z.literal('not_found').describe('Service was not found'),
+    code: z.literal('service_not_found'),
+    reason: z.string(),
+  }),
+]) as z.ZodType<RegistryServicesDetailResult>
+
+type RegistryServicesDetailResult = Readonly<
+  | {
+      kind: 'found'
+      schemaVersion: typeof PublicServicesApiSchemaVersion
+      service: ServiceDto
+    }
+  | {
+      kind: 'not_found'
+      code: 'service_not_found'
+      reason: string
+    }
+>
 
 
 const registryDetailOutputSchema = z.discriminatedUnion('kind', [
@@ -329,10 +475,10 @@ const searchParameters: readonly ActionParameter[] = [
     required: false,
   },
   {
-    name: 'maxPriceMinor',
-    type: 'number',
+    name: 'maxPrice',
+    type: 'object',
     description:
-      'Budget ceiling in minor currency units (25000 means $250.00). Keeps a business when at least one of its offerings fits. '
+      'Budget ceiling as an exact amount. Keeps a business when at least one offering fits. '
       + 'An offering quoted on request, or one with no published price, has no comparable ceiling and is never removed by this filter.',
     required: false,
   },
@@ -406,7 +552,7 @@ export const registrySearchAction = defineAction({
     'Returns only public supply facts: slug, name, category, suburb, trust tier, and each offering\'s summary, service area, availability, price, and published access paths.',
     'An access path is how a person can reach the business, not a bookable slot. An AE-supported offering is still not a booking, payment, or dispatch.',
     'The registry is literal. Misspelled suburbs (e.g. "paramata") do not auto-correct; choose better search arguments instead.',
-    'maxPriceMinor filters on the published comparable price, in minor units. A business is kept when any one of its offerings fits the budget. An offering quoted on request has no comparable ceiling, so it is never removed by a budget: absence of a price is not evidence of an expensive one.',
+    'maxPrice filters on the published comparable price using exact currency units and exponent. A business is kept when any one of its offerings fits the budget. An offering quoted on request has no comparable ceiling, so it is never removed by a budget: absence of a price is not evidence of an expensive one.',
     'hasPrice set to true narrows to businesses publishing at least one comparable price. Most local supply quotes on request, so this filter hides real options; use it only when a number is genuinely required.',
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
@@ -426,7 +572,7 @@ export const registrySearchAction = defineAction({
   invocationContract: {
     version: 'registry.search:v2',
     consequenceClass: 'read_only',
-    materialInputPaths: ['query', 'limit', 'cursor', 'mode', 'location', 'maxPriceMinor', 'hasPrice'],
+    materialInputPaths: ['query', 'limit', 'cursor', 'mode', 'location', 'maxPrice', 'hasPrice'],
     authorityRequirement: 'none',
     retryClass: 'replayable',
     expectedEvidence: ['public_registry_search_result'],
@@ -438,7 +584,7 @@ export const registrySearchAction = defineAction({
       'cursor_changed',
       'mode_changed',
       'location_changed',
-      'maxPriceMinor_changed',
+      'maxPrice_changed',
       'hasPrice_changed',
     ],
   },
@@ -452,11 +598,11 @@ export const registryServicesListAction = defineAction({
   id: 'registry.services_list',
   name: 'List published services',
   summary:
-    'List each published offering as a callable-service discovery entry. ' +
+    'List each published business as one agent-native Service with flat endpoints across its offerings. ' +
     'This is a read-only projection of the same public business supply used by /api/businesses.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
-    'Returns only public supply facts for published offerings and their external operation paths.',
+    'Returns one Service per business; AE-local offering facts remain under ae.offerings[].',
     'An open endpoint is an AE sandbox operation, not proof of provider fulfilment or payment.',
   ],
   schema: registryListInputSchema as z.ZodType<RegistryListActionInput>,
@@ -482,22 +628,23 @@ export const registryServicesListAction = defineAction({
     safeContinuations: ['inspect_result'],
     invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
   },
-  run: async ({ data }) => projectPublicServicesPage(
-    await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistryPage(
+  run: async ({ data }) => {
+    const page = await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistryPage(
       normalizeRegistryListInput(data),
-    )),
-  ),
+    ))
+    return projectPublicServicesPage(page, await offeringOperationMapFor(page.page.map((item) => item.businessId)))
+  },
 })
 
 export const registryServicesSearchAction = defineAction({
   id: 'registry.services_search',
   name: 'Search published services',
   summary:
-    'Search published offerings as callable-service discovery entries. ' +
+    'Search published businesses as agent-native Services with flat endpoints across their offerings. ' +
     'This is a read-only projection of the same public business supply used by /api/businesses/search.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
-    'Returns only public supply facts for published offerings and their external operation paths.',
+    'Returns one Service per business; AE-local offering facts remain under ae.offerings[].',
     'An open endpoint is an AE sandbox operation, not proof of provider fulfilment or payment.',
   ],
   schema: registrySearchInputSchema,
@@ -516,7 +663,7 @@ export const registryServicesSearchAction = defineAction({
   invocationContract: {
     version: 'registry.services_search:v1',
     consequenceClass: 'read_only',
-    materialInputPaths: ['query', 'limit', 'cursor', 'mode', 'location', 'maxPriceMinor', 'hasPrice'],
+    materialInputPaths: ['query', 'limit', 'cursor', 'mode', 'location', 'maxPrice', 'hasPrice'],
     authorityRequirement: 'none',
     retryClass: 'replayable',
     expectedEvidence: ['public_services_search_result'],
@@ -528,21 +675,94 @@ export const registryServicesSearchAction = defineAction({
       'cursor_changed',
       'mode_changed',
       'location_changed',
-      'maxPriceMinor_changed',
+      'maxPrice_changed',
       'hasPrice_changed',
     ],
   },
   run: async ({ data, context }) => {
-    const page = projectPublicServicesSearchPage(
-      await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
-        normalizeRegistrySearchInput(data),
-        { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: 'registry_action' },
-      )),
+    const page = await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
+      normalizeRegistrySearchInput(data),
+      { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: 'registry_action' },
+    ))
+    const services = projectPublicServicesSearchPage(
+      page,
+      await offeringOperationMapFor(page.items.map((item) => item.businessId)),
     )
     // Echo the caller's query verbatim; the search pipeline normalizes internally.
-    return { ...page, query: data.query }
+    return { ...services, query: data.query }
   },
 })
+export const registryServicesDetailAction = defineAction({
+  id: 'registry.services_detail',
+  name: 'Read a published service',
+  summary:
+    'Read one canonical agent-native Service by service id. ' +
+    'The detail response is the same Service projection returned by the list and search routes.',
+  boundaries: [
+    'Read-only. Does not book, charge, dispatch, or send inquiries.',
+    'Returns only the public Service projection for the requested business slug.',
+    'A not_found result means no public listing exists for that service id; do not invent provider details.',
+  ],
+  schema: registryDetailInputSchema,
+  outputSchema: servicesDetailOutputSchema,
+  parameters: detailParameters,
+  readOnly: true,
+  effect: {
+    class: 'observation',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'none',
+  },
+  surfaces: ['http', 'agentJson'],
+  invocationContract: {
+    version: 'registry.services_detail:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['slug'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_services_detail_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'slug_changed'],
+  },
+  run: async ({ data }) => {
+    const detail = await projectCurrentOfferingInquiryDetail(
+      await readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() }),
+    )
+    if (detail.kind === 'not_found') {
+      return {
+        kind: 'not_found' as const,
+        code: 'service_not_found' as const,
+        reason: detail.reason,
+      }
+    }
+    const page: PublicBusinessCatalogApiV2Page = {
+      kind: 'ok',
+      schemaVersion: PublicBusinessCatalogApiSchemaVersion,
+      page: [detail.business],
+      isDone: true,
+      continueCursor: '',
+    }
+    const service = projectPublicServicesPage(
+      page,
+      await offeringOperationMapFor([detail.business.businessId]),
+    ).services[0]
+    if (service === undefined) {
+      return {
+        kind: 'not_found' as const,
+        code: 'service_not_found' as const,
+        reason: `Service ${data.slug.trim()} is not publicly available.`,
+      }
+    }
+    return {
+      kind: 'found' as const,
+      schemaVersion: PublicServicesApiSchemaVersion,
+      service,
+    }
+  },
+})
+
 type RegistryListActionInput = {
   cursor?: string | undefined
   limit?: number | undefined
@@ -552,7 +772,7 @@ type RegistryReadInput = RegistryListActionInput & {
   query?: string | undefined
   mode?: PublicBusinessCatalogSearchInput['mode'] | undefined
   location?: string | undefined
-  maxPriceMinor?: number | undefined
+  maxPrice?: PublicBusinessCatalogSearchInput['maxPrice'] | undefined
   hasPrice?: boolean | undefined
 }
 
@@ -576,7 +796,7 @@ function normalizeRegistrySearchInput(
     ...(data.limit === undefined ? {} : { limit: data.limit }),
     ...(data.mode === undefined ? {} : { mode: data.mode }),
     ...(data.location === undefined ? {} : { location: data.location.trim() }),
-    ...(data.maxPriceMinor === undefined ? {} : { maxPriceMinor: data.maxPriceMinor }),
+    ...(data.maxPrice === undefined ? {} : { maxPrice: data.maxPrice }),
     ...(data.hasPrice === undefined ? {} : { hasPrice: data.hasPrice }),
   }
 }
@@ -584,6 +804,31 @@ function normalizeRegistrySearchInput(
 function normalizeActionLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return 20
   return Math.min(Math.max(Math.trunc(limit), 1), 50)
+}
+
+/**
+ * W1 origin seam: fetch the per-offering admitted-operation map for the page's
+ * businesses as plain data from the capability-supply source port. Any read
+ * failure (e.g. capability supply unavailable / local registry fixture path)
+ * degrades to an empty map — the projection simply leaves unlinked endpoints
+ * un-enriched rather than throwing or fabricating.
+ */
+async function offeringOperationMapFor(
+  businessIds: readonly string[],
+): Promise<Readonly<Record<string, readonly CatalogOfferingOperationMapEntry[]>>> {
+  if (businessIds.length === 0) return {}
+  try {
+    const entries = await readCatalogOfferingOperationMap(businessIds)
+    const map: Record<string, CatalogOfferingOperationMapEntry[]> = {}
+    for (const entry of entries) {
+      const current = map[entry.offeringRef]
+      if (current === undefined) map[entry.offeringRef] = [entry]
+      else current.push(entry)
+    }
+    return map
+  } catch {
+    return {}
+  }
 }
 
 export const registryDetailAction = defineAction({

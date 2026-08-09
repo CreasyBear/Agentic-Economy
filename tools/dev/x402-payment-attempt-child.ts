@@ -30,7 +30,7 @@ const attempt: X402PaymentAttempt = {
   network: 'eip155:84532',
   asset: 'USDC',
   payTo: '0x0000000000000000000000000000000000000001',
-  amount: '37',
+  amount: { currency: 'USDC', units: '37', exponent: 2 },
   providerEndpoint: 'https://provider.invalid/paid',
   operationRevision: 'sha256:revision',
   authorizationDigest: event.authorizationDigest!,
@@ -40,7 +40,7 @@ const attempt: X402PaymentAttempt = {
   ...(state === 'settled'
     ? {
         observedAt: 2,
-        settledAmount: { currency: 'USDC', amountMinor: 37 },
+        settledAmount: { currency: 'USDC', units: '37', exponent: 2 },
         evidenceRefs: ['sha256:settlement-evidence'],
       }
     : { evidenceRefs: [] }),

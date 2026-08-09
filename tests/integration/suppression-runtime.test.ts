@@ -93,8 +93,8 @@ describe('suppression and removal Convex runtime controls', () => {
   it('suppresses and unsuppresses a published catalog through source-owned owner_admin authority', async () => {
     const db = seededPublishedDb()
 
-    const before = await detailHandler(queryCtx(db), { slug: 'sam-plumbing' })
-    expect(before).toMatchObject({ kind: 'found', business: { slug: 'sam-plumbing' } })
+    const before = await detailHandler(queryCtx(db), { slug: 'parramatta-emergency-plumbing' })
+    expect(before).toMatchObject({ kind: 'found', business: { slug: 'parramatta-emergency-plumbing' } })
 
     const supportDenied = await suppressHandler(authCtx(db, support()), suppressionArgs('support-denied'))
     expect(supportDenied).toMatchObject({
@@ -116,7 +116,7 @@ describe('suppression and removal Convex runtime controls', () => {
     expect(db.dump('businesses')[0]).toMatchObject({ publicStatus: 'suppressed', claimStatus: 'suppressed' })
     expect(db.dump('suppressionRules')).toHaveLength(1)
 
-    const hidden = await detailHandler(queryCtx(db), { slug: 'sam-plumbing' })
+    const hidden = await detailHandler(queryCtx(db), { slug: 'parramatta-emergency-plumbing' })
     expect(hidden).toMatchObject({ kind: 'not_found' })
 
     const unsuppressed = await unsuppressHandler(authCtx(db, ownerAdmin()), {
@@ -275,9 +275,9 @@ function seededPublishedDb(): FakeDb {
     _id: 'businesses:1',
     _creationTime: 3,
     ownerId: 'owners:1',
-    slug: 'sam-plumbing',
-    name: 'Sam Plumbing',
-    normalizedName: 'sam plumbing',
+    slug: 'parramatta-emergency-plumbing',
+    name: 'Parramatta Emergency Plumbing',
+    normalizedName: 'parramatta emergency plumbing',
     category: 'Emergency plumbing',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
@@ -312,32 +312,25 @@ function seededPublishedDb(): FakeDb {
     projection: {
       business: {
         businessId: 'businesses:1',
-        slug: 'sam-plumbing',
-        name: 'Sam Plumbing',
+        slug: 'parramatta-emergency-plumbing',
+        name: 'Parramatta Emergency Plumbing',
         category: 'Emergency plumbing',
         suburb: 'Parramatta',
         stateTerritory: 'NSW',
-        publicUrl: '/sam-plumbing',
+        publicUrl: '/parramatta-emergency-plumbing',
         trustTier: 'claimed',
       },
       offerings: [{
         offering: {
-          offeringRef: 'offering:emergency-pipe-repair',
+          offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
           revision: 1,
           name: 'Emergency pipe repair',
           category: 'Emergency plumbing',
-          summary: 'Burst pipe triage and repair.',
+          summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
           serviceAreaSummary: 'Parramatta and nearby suburbs',
-          availabilitySummary: 'Owner supplied hours',
+          availabilitySummary: 'Hours supplied by owner',
         },
-        accessPaths: [{
-          accessPathRef: 'access:emergency-pipe-repair:inquiry',
-          descriptor: {
-            kind: 'human_request',
-            channel: 'ae_inquiry',
-            disclosure: 'Use the source-owned inquiry form for a first contact.',
-          },
-        }],
+        accessPaths: [],
         support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
       }],
       sourceRevision: 1,

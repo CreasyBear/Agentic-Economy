@@ -1,4 +1,5 @@
 import type { CustomerRequestActionResult } from '../action-result'
+import type { ExactAmount } from '@/modules/money/public'
 import type {
   CompareResumeMandate,
   CompareResumePorts,
@@ -26,7 +27,7 @@ export type ConfirmServiceAuthorization = Readonly<{
   assertion: ConfirmServiceAssertion
 }>
 
-export type ConfirmMoney = Readonly<{ currency: string; amountMinor: number }>
+export type ConfirmMoney = ExactAmount
 
 export type IssueConfirmMandateResult = Readonly<
   | { kind: 'issued' | 'replayed'; mandate: CompareResumeMandate }

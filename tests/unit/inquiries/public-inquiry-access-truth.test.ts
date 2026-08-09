@@ -3,9 +3,16 @@ import { describe, expect, it } from 'vitest'
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectPublicInquiryAvailability, projectPublicInquiryOfferingSupply } from '@/modules/inquiries/route-readbacks'
 
 const businessId = brandNonEmpty('business:access-truth', 'BusinessId')
+const requiredOfferingRef = brandNonEmpty('offering:demo-plumbing:emergency', 'OfferingRef')
+const requiredOfferingRevision = 1
+const requiredOfferingSourceHash = canonicalDigest({
+  offeringRef: String(requiredOfferingRef),
+  revision: requiredOfferingRevision,
+})
 const observedAt = 1_900_000_000_000
 
 /** The exact copy the dev seed and the v1 catalog stamp onto every human channel. */
@@ -41,16 +48,13 @@ describe('rendered access paths never describe a refused channel', () => {
   it('leaves an external operation path untouched in both states', () => {
     const external = [{
       ...requiredOffering(),
-      accessPaths: [{
-        accessPathRef: brandNonEmpty('access:api', 'AccessPathRef'),
-        descriptor: {
-          kind: 'external_operation' as const,
-          name: 'Booking API',
-          summary: 'Books a visit.',
-          url: 'https://example.test/api',
-          provenance: 'business_declared' as const,
-        },
-      }],
+      accessPaths: [accessPath('access:api', {
+        kind: 'external_operation',
+        name: 'Booking API',
+        summary: 'Books a visit.',
+        url: 'https://example.test/api',
+        provenance: 'business_declared',
+      })],
     }] satisfies readonly PublicOfferingSupplyProjection[]
 
     expect(projectPublicInquiryOfferingSupply(external, undefined)[0]?.accessPaths).toEqual(external[0]?.accessPaths)
@@ -81,8 +85,8 @@ describe('rendered access paths never describe a refused channel', () => {
 function requiredOffering(): PublicOfferingSupplyProjection {
   return {
     offering: {
-      offeringRef: brandNonEmpty('offering:demo-plumbing:emergency', 'OfferingRef'),
-      revision: 1,
+      offeringRef: requiredOfferingRef,
+      revision: requiredOfferingRevision,
       name: 'Emergency plumbing visit',
       category: 'Plumber',
       summary: 'A published offering.',
@@ -96,25 +100,57 @@ function offeringFixture(): readonly PublicOfferingSupplyProjection[] {
   return [{
     ...requiredOffering(),
     accessPaths: [
-      {
-        accessPathRef: brandNonEmpty('access:phone', 'AccessPathRef'),
-        descriptor: { kind: 'human_request', channel: 'phone', disclosure: storedInquiryDisclosure },
-      },
-      {
-        accessPathRef: brandNonEmpty('access:website', 'AccessPathRef'),
-        descriptor: {
-          kind: 'human_request',
-          channel: 'website',
-          disclosure: storedInquiryDisclosure,
-          url: 'https://example.test',
-        },
-      },
-      {
-        accessPathRef: brandNonEmpty('access:ae', 'AccessPathRef'),
-        descriptor: { kind: 'human_request', channel: 'ae_inquiry', disclosure: storedInquiryDisclosure },
-      },
+      accessPath('access:phone', {
+        kind: 'human_request',
+        channel: 'phone',
+        disclosure: storedInquiryDisclosure,
+      }),
+      accessPath('access:website', {
+        kind: 'human_request',
+        channel: 'website',
+        disclosure: storedInquiryDisclosure,
+        url: 'https://example.test',
+      }),
+      accessPath('access:ae', {
+        kind: 'human_request',
+        channel: 'ae_inquiry',
+        disclosure: storedInquiryDisclosure,
+      }),
     ],
   }]
+}
+function accessPath(
+  accessPathRef: string,
+  descriptor: PublicOfferingSupplyProjection['accessPaths'][number]['descriptor'],
+): PublicOfferingSupplyProjection['accessPaths'][number] {
+  const ref = brandNonEmpty(accessPathRef, 'AccessPathRef')
+  return {
+    accessPathRef: ref,
+    offeringRevision: requiredOfferingRevision,
+    offeringSourceHash: requiredOfferingSourceHash,
+    sourceHash: canonicalDigest({
+      accessPathRef: ref,
+      offeringSourceHash: requiredOfferingSourceHash,
+      descriptor,
+    }),
+    descriptor,
+  }
+}
+function catalogHumanPath(
+  offeringRef: string,
+  accessPathRef: string,
+  channel: 'phone' | 'ae_inquiry',
+): PublicBusinessCatalogApiV2Dto['offerings'][number]['accessPaths'][number] {
+  const descriptor = {
+    kind: 'human_request' as const,
+    channel,
+    disclosure: storedInquiryDisclosure,
+  }
+  return {
+    accessPathRef: brandNonEmpty(accessPathRef, 'AccessPathRef'),
+    offeringRevision: 1,
+    ...descriptor,
+  }
 }
 
 function twoOfferingCatalog(): PublicBusinessCatalogApiV2Dto {
@@ -138,18 +174,8 @@ function twoOfferingCatalog(): PublicBusinessCatalogApiV2Dto {
       category: 'Plumber',
       summary: 'Published Offering.',
       accessPaths: [
-        {
-          accessPathRef: brandNonEmpty(`access:phone:${slug}`, 'AccessPathRef'),
-          kind: 'human_request' as const,
-          channel: 'phone' as const,
-          disclosure: storedInquiryDisclosure,
-        },
-        {
-          accessPathRef: brandNonEmpty(`access:ae:${slug}`, 'AccessPathRef'),
-          kind: 'human_request' as const,
-          channel: 'ae_inquiry' as const,
-          disclosure: storedInquiryDisclosure,
-        },
+        catalogHumanPath(`offering:${slug}`, `access:phone:${slug}`, 'phone'),
+        catalogHumanPath(`offering:${slug}`, `access:ae:${slug}`, 'ae_inquiry'),
       ],
       support: { integrated: false, aeSupportedAction: false },
     })),

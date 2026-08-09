@@ -110,7 +110,7 @@ function preparedActionFixture(): PreparedActionV2 {
       output: { ok: true },
       evidence: [],
     },
-    price: { currency: 'AUD', minimumAmountMinor: 2500, maximumAmountMinor: 4000 },
+    price: { kind: 'range', minimum: { currency: 'AUD', units: '25', exponent: 2 }, maximum: { currency: 'AUD', units: '40', exponent: 2 } },
     materialTerms: [{ label: 'Wait time', value: '15 minutes' }],
     commercialRelationship: { kind: 'none' },
     cancellation: { kind: 'unsupported', evidenceRefs: [] },

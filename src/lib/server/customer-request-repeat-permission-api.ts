@@ -20,6 +20,8 @@ import {
   type CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
 import { response } from '@/lib/server/no-store-response'
+import { kindForStatus } from '@/lib/errors'
+import { problem } from '@/lib/server/problem'
 
 type AllowOptions = Readonly<{
   allow?: (args: Record<string, unknown>) => Promise<CustomerRequestRepeatPermissionResult>
@@ -62,7 +64,7 @@ export async function handleCustomerRequestConnectedAssistantsGet(
   requestRef: string,
   options: ListOptions = {},
 ): Promise<Response> {
-  if (!validRef(requestRef, 200)) return response({ error: 'invalid_request_ref' }, 400)
+  if (!validRef(requestRef, 200)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
   try {
     const command = { requestRef }
     const result = customerRequestConnectedAssistantsResultSchema.parse(await (options.list === undefined
@@ -71,6 +73,13 @@ export async function handleCustomerRequestConnectedAssistantsGet(
           context: { request },
         })
       : options.list(command)))
+    if (result.kind === 'refused') {
+      return problem({
+        status: result.reason === 'authentication_required' ? 401 : 404,
+        kind: result.reason === 'authentication_required' ? 'UNAUTHENTICATED' : 'NOT_FOUND',
+        code: result.reason,
+      })
+    }
     return resultResponse(result)
   } catch (error) {
     return unavailable(error, 'connected_assistants_unavailable')
@@ -83,7 +92,7 @@ export async function handleCustomerRequestRepeatPermissionUsePost(
   permissionRef: string,
   options: UseOptions = {},
 ): Promise<Response> {
-  if (!validRef(permissionRef, 300)) return response({ error: 'invalid_permission_ref' }, 400)
+  if (!validRef(permissionRef, 300)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_permission_ref' })
   return handleCustomerRequestPostBoundary({
     request,
     requestRef,
@@ -106,12 +115,12 @@ export async function handleCustomerRequestRepeatPermissionGet(
   permissionRef: string,
   options: InspectOptions = {},
 ): Promise<Response> {
-  if (!validRef(requestRef, 200)) return response({ error: 'invalid_request_ref' }, 400)
-  if (!validRef(permissionRef, 300)) return response({ error: 'invalid_permission_ref' }, 400)
+  if (!validRef(requestRef, 200)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
+  if (!validRef(permissionRef, 300)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_permission_ref' })
   const parsed = customerRequestRepeatPermissionInspectInputSchema.safeParse({
     routeRef: new URL(request.url).searchParams.get('routeRef'),
   })
-  if (!parsed.success) return response({ error: 'invalid_request' }, 400)
+  if (!parsed.success) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request' })
   try {
     const command = { requestRef, permissionRef, ...parsed.data }
     const result = customerRequestRepeatPermissionResultSchema.parse(await (options.inspect === undefined
@@ -120,6 +129,13 @@ export async function handleCustomerRequestRepeatPermissionGet(
           context: { request },
         })
       : options.inspect(command)))
+    if (result.kind === 'refused') {
+      return problem({
+        status: result.reason === 'authentication_required' ? 401 : 404,
+        kind: result.reason === 'authentication_required' ? 'UNAUTHENTICATED' : 'NOT_FOUND',
+        code: result.reason,
+      })
+    }
     return resultResponse(result)
   } catch (error) {
     return unavailable(error, 'repeat_permission_inspection_unavailable')
@@ -132,7 +148,7 @@ export async function handleCustomerRequestRepeatPermissionWithdrawPost(
   permissionRef: string,
   options: WithdrawOptions = {},
 ): Promise<Response> {
-  if (!validRef(permissionRef, 300)) return response({ error: 'invalid_permission_ref' }, 400)
+  if (!validRef(permissionRef, 300)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_permission_ref' })
   return handleCustomerRequestPostBoundary({
     request,
     requestRef,
@@ -162,8 +178,10 @@ function resultResponse(result: { kind: string; reason?: string }): Response {
 }
 
 function unavailable(error: unknown, code: string): Response {
-  if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-  return response({ error: code }, 503)
+  if (error instanceof ConvexSourceError) {
+    return problem({ status: error.status, kind: kindForStatus(error.status), code: error.code })
+  }
+  return problem({ status: 503, kind: 'UNAVAILABLE', code })
 }
 
 function validRef(value: string, maximum: number): boolean {

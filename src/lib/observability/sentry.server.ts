@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node'
 
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { sanitizeTelemetryEvent, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
+import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
 
 let initialized = false
 
@@ -35,21 +36,59 @@ export function initSentryServer(): boolean {
 }
 
 export function captureServerException(error: unknown, context?: Record<string, string>): void {
-  if (!initSentryServer()) {
-    return
+  try {
+    if (!initSentryServer()) return
+    const correlationId = currentRequestCorrelationId()
+    const enrichedContext = correlationId === undefined
+      ? context
+      : { ...(context ?? {}), 'ae.request_id': correlationId }
+    if (enrichedContext !== undefined) {
+      Sentry.withScope((scope) => {
+        for (const [key, value] of Object.entries(enrichedContext)) {
+          scope.setTag(key, String(sanitizeTelemetryValue(value, key)))
+        }
+        Sentry.captureException(error)
+      })
+      return
+    }
+    Sentry.captureException(error)
+  } catch {
+    // Diagnostics are fail-open and cannot alter the domain response.
   }
+}
 
-  if (context !== undefined) {
+export type ClientErrorCapture = Readonly<{
+  message: string
+  name?: string
+  stack?: string
+  url?: string
+  source?: string
+  metadata?: Readonly<Record<string, string | number | boolean | null>>
+}>
+
+export function captureClientError(input: ClientErrorCapture): boolean {
+  try {
+    if (!initSentryServer()) return false
+    const error = new Error(input.message)
+    if (input.name !== undefined) error.name = input.name
+    if (input.stack !== undefined) error.stack = input.stack
+    const correlationId = currentRequestCorrelationId()
+    const context = {
+      ...(input.url === undefined ? {} : { url: sanitizeTelemetryValue(input.url, 'url') }),
+      ...(input.source === undefined ? {} : { source: sanitizeTelemetryValue(input.source, 'source') }),
+      ...(input.metadata === undefined ? {} : { metadata: sanitizeTelemetryValue(input.metadata) }),
+      ...(correlationId === undefined ? {} : { correlationId }),
+    }
     Sentry.withScope((scope) => {
-      for (const [key, value] of Object.entries(context)) {
-        scope.setTag(key, String(sanitizeTelemetryValue(value, key)))
-      }
+      scope.setTag('ae.client_error', 'true')
+      if (correlationId !== undefined) scope.setTag('ae.request_id', correlationId)
+      scope.setContext('ae.client_error', context)
       Sentry.captureException(error)
     })
-    return
+    return true
+  } catch {
+    return false
   }
-
-  Sentry.captureException(error)
 }
 
 export { Sentry }

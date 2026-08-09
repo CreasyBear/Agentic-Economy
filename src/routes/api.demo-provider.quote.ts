@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
-
+import { methodNotAllowed } from '@/lib/server/method-guard'
+import { problem } from '@/lib/server/problem'
+import type { ExactAmount } from '@/modules/money/public'
 import { jsonResponse } from './api.businesses'
 
 const ADELAIDE_TIME_ZONE = 'Australia/Adelaide'
@@ -13,9 +15,9 @@ const adelaideDateTime = new Intl.DateTimeFormat('en-AU', {
   hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
 })
 const servicePrices = {
-  'home-office-video-setup': 18_900,
-  'remote-tech-check': 7_900,
-} as const
+  'home-office-video-setup': { currency: 'AUD', units: '18900', exponent: 2 },
+  'remote-tech-check': { currency: 'AUD', units: '7900', exponent: 2 },
+} satisfies Readonly<Record<'home-office-video-setup' | 'remote-tech-check', ExactAmount>>
 
 const quoteInputSchema = z.object({
   service: z.enum(['home-office-video-setup', 'remote-tech-check']).default('home-office-video-setup'),
@@ -27,6 +29,13 @@ export const Route = createFileRoute('/api/demo-provider/quote')({
     handlers: {
       HEAD: () => new Response(null, { status: 204 }),
       POST: ({ request }) => handleDemoProviderQuoteRequest(request),
+      GET: () => methodNotAllowed(['HEAD', 'POST']),
+      PUT: () => methodNotAllowed(['HEAD', 'POST']),
+      PATCH: () => methodNotAllowed(['HEAD', 'POST']),
+      DELETE: () => methodNotAllowed(['HEAD', 'POST']),
+      OPTIONS: () => methodNotAllowed(['HEAD', 'POST']),
+      TRACE: () => methodNotAllowed(['HEAD', 'POST']),
+      CONNECT: () => methodNotAllowed(['HEAD', 'POST']),
     },
   },
 })
@@ -38,23 +47,23 @@ export async function handleDemoProviderQuoteRequest(
   const body = await readBoundedRequestJson(request, MAX_DEMO_PROVIDER_QUOTE_BODY_BYTES)
   if (!body.ok) {
     return body.code === 'payload_too_large'
-      ? jsonResponse({ kind: 'refused', reason: 'request_too_large' }, { status: 413 })
-      : jsonResponse({ kind: 'refused', reason: 'invalid_request' }, { status: 400 })
+      ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large', detail: 'request_too_large' })
+      : problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request', detail: 'invalid_request' })
   }
   const input = quoteInputSchema.safeParse(body.value)
   if (!input.success) {
-    return jsonResponse({ kind: 'refused', reason: 'invalid_request' }, { status: 400 })
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request', detail: 'invalid_request' })
   }
 
   const nextSlot = nextAdelaideBusinessSlot(now)
-  const amountMinor = servicePrices[input.data.service]
+  const amount = servicePrices[input.data.service]
   const validUntil = new Date(now.getTime() + QUOTE_VALIDITY_MS).toISOString()
   return jsonResponse({
     kind: 'quoted',
     quoteRef: `ae-demo:${input.data.service}:${nextSlot}`,
     service: input.data.service,
-    expectedCost: { currency: 'AUD', amountMinor },
-    maximumCost: { currency: 'AUD', amountMinor },
+    expectedCost: amount,
+    maximumCost: amount,
     expectedLatencyMs: 250,
     dataFields: input.data.postcode === undefined ? ['service'] : ['service', 'postcode'],
     disclosures: input.data.postcode === undefined ? [] : ['postcode'],

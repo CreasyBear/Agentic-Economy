@@ -1,4 +1,5 @@
 import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
+import type { ExactAmount } from '@/modules/money/public'
 
 import type {
   CustomerRequestAgentResult,
@@ -32,7 +33,7 @@ export type AllowCustomerRequestRepeatPermissionInput = Readonly<{
   routeRef: string
   delegatedCredentialId: string
   occurrences: number
-  cumulativeSpend: Readonly<{ currency: string; amountMinor: number }>
+  cumulativeSpend: ExactAmount
   validUntil: number
   idempotencyKey: string
 }>

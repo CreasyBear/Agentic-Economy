@@ -18,19 +18,19 @@ import { composeRequestActions } from '@/modules/customer-request/compiler'
 import { exactContractRefKey } from '@/modules/customer-request/contract-ref-key'
 import type { ProposedRequestAction } from '@/modules/customer-request/evaluation'
 
-function contractFor(publication: CapabilityPublicationImport): CapabilityContract {
-  const normalized = normalizeCapabilityPublication(publication)
+async function contractFor(publication: CapabilityPublicationImport): Promise<CapabilityContract> {
+  const normalized = await normalizeCapabilityPublication(publication)
   if (normalized.kind !== 'normalized') throw new Error(`publication_refused:${normalized.reason}`)
   return defineCapabilityContract(JSON.parse(normalized.draft.documentJson))
 }
 
 describe('curated Exa search to contents mapping', () => {
-  it('composes different registered source and target schemas through array projection', () => {
-    const search = openCapabilityDecisionModel(contractFor(exaSearchPublicationImport))
-    const contents = openCapabilityDecisionModel(contractFor(exaContentsPublicationImport))
+  it('composes different registered source and target schemas through array projection', async () => {
+    const search = openCapabilityDecisionModel(await contractFor(exaSearchPublicationImport))
+    const contents = openCapabilityDecisionModel(await contractFor(exaContentsPublicationImport))
     const mapping = buildExaSearchContentsMapping(
-      contractFor(exaSearchPublicationImport),
-      contractFor(exaContentsPublicationImport),
+      await contractFor(exaSearchPublicationImport),
+      await contractFor(exaContentsPublicationImport),
       createRegisteredOperationMappingRef,
     )
     const query = search.inputs.find(({ inputPointer }) => inputPointer === '/query')

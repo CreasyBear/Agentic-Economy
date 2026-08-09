@@ -1,8 +1,18 @@
 ---
 milestone: protocol-kernel-product-conversion
-status: active
+status: completed-historical-mechanics
 created: 2026-07-20
 ---
+
+> **SUPERSESSION NOTICE — 2026-08-08.** These requirements preserve the completed
+> BTC/USD paid-operation proof and its durable payment/evidence invariants. They
+> are not the current product category, V1 contract family, wedge, or active
+> implementation destination. Current authority is
+> [`ADR-032`](adr/ADR-032-founder-category-and-ownership.md),
+> [`PROJECT.md`](PROJECT.md), [`VISION-conceptual-map.md`](VISION-conceptual-map.md),
+> and [`wayfinder/MAP.md`](wayfinder/MAP.md). The current V1 candidate is
+> public-document structured extraction with field-level provenance; it needs a
+> separate execution plan before implementation.
 
 # Requirements — Phase 3A one reliable paid operation
 

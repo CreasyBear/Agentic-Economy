@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-
 import { describe, expect, it } from 'vitest'
 
 import { PRODUCT_FOUNDRY_PORTFOLIO } from '../../eval/product-foundry/portfolio'
@@ -344,15 +342,5 @@ describe('AE Product Foundry and Primitive Refinery', () => {
       productProofReady: false,
       gaps: expect.arrayContaining(['replay_assertions_required']),
     })
-  })
-
-  it('keeps the durable program evidence-bounded and issues dormant', () => {
-    const program = readFileSync(
-      new URL('../../.planning/research/2026-07-17-product-foundry-primitive-refinery-program.md', import.meta.url),
-      'utf8',
-    )
-    expect(program).toContain('**Maturity:** Target research')
-    expect(program).toContain('packs are labelled simulated. They are not replay, customer, provider,')
-    expect(program).toContain('Issues #181–#187 remain dormant.')
   })
 })

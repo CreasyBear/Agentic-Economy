@@ -2,6 +2,8 @@ import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-d
 import { isRecord } from '@/modules/common/is-record'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import { sameStringList } from '@/modules/common/same-string-list'
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { CustomerRequestRoutePlan } from './compiler'
@@ -87,7 +89,7 @@ export type RouteMandate = Readonly<{
     routeDigest: string
     stepGraphDigest: string
     steps: readonly RouteMandateStep[]
-    maximumTotalSpend: Readonly<{ currency: string; amountMinor: number }>
+    maximumTotalSpend: ExactAmount
     dataScopeDigest: string
     effectScopeDigest: string
     evidenceScopeDigest: string
@@ -144,7 +146,7 @@ export function compileRouteMandate(input: Readonly<{
   selectedRoutePlanId: string
   principal: RouteMandatePrincipal
   authorization: RouteMandateAuthorization
-  maximumTotalSpend: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalSpend: ExactAmount
   expiresAt: number
   now: number
 }>): CompileRouteMandateResult {
@@ -152,7 +154,7 @@ export function compileRouteMandate(input: Readonly<{
     || !validIdentifier(input.selectedRoutePlanId)
     || !validPrincipal(input.principal)
     || !validAuthorization(input.authorization)
-    || !validMoney(input.maximumTotalSpend)) {
+    || !validExactAmount(input.maximumTotalSpend)) {
     return { kind: 'refused', reason: 'mandate_material_invalid' }
   }
   if (!routeGenerationIsMandateEligibleProposal(input.generation)) {
@@ -163,8 +165,7 @@ export function compileRouteMandate(input: Readonly<{
   if (route.maximumTotalCost.kind !== 'known') {
     return { kind: 'refused', reason: 'route_cost_unresolved' }
   }
-  if (route.maximumTotalCost.currency !== input.maximumTotalSpend.currency
-    || route.maximumTotalCost.amountMinor !== input.maximumTotalSpend.amountMinor) {
+  if (compareExactAmounts(route.maximumTotalCost.amount, input.maximumTotalSpend) !== 0) {
     return { kind: 'refused', reason: 'spend_scope_mismatch' }
   }
   if (route.expiresAt <= input.now) return { kind: 'refused', reason: 'route_expired' }
@@ -212,7 +213,7 @@ export function routeMandateAuthorityScopeDigest(input: Readonly<{
   selectedRoutePlanId: string
   principalId: string
   authorizationKind: RouteMandateAuthorization['kind']
-  maximumTotalSpend: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalSpend: ExactAmount
   issuedAt: number
   expiresAt: number
 }>): string {
@@ -222,8 +223,7 @@ export function routeMandateAuthorityScopeDigest(input: Readonly<{
   const route = input.generation.routes.find(({ routePlanId }) => routePlanId === input.selectedRoutePlanId)
   if (route === undefined
     || route.maximumTotalCost.kind !== 'known'
-    || route.maximumTotalCost.currency !== input.maximumTotalSpend.currency
-    || route.maximumTotalCost.amountMinor !== input.maximumTotalSpend.amountMinor
+    || compareExactAmounts(route.maximumTotalCost.amount, input.maximumTotalSpend) !== 0
     || !validIdentifier(input.principalId)
     || (input.authorizationKind !== 'explicit' && input.authorizationKind !== 'standing_low_risk')
     || !validTime(input.issuedAt)
@@ -384,10 +384,7 @@ function routeAuthorityMaterial(
       edges: route.edges,
     } as StableHashValue),
     steps,
-    maximumTotalSpend: {
-      currency: route.maximumTotalCost.currency,
-      amountMinor: route.maximumTotalCost.amountMinor,
-    },
+    maximumTotalSpend: route.maximumTotalCost.amount,
     dataScopeDigest: canonicalDigest(dataScope as StableHashValue),
     effectScopeDigest: canonicalDigest(effectScope as StableHashValue),
     evidenceScopeDigest: canonicalDigest(evidenceScope as StableHashValue),
@@ -428,8 +425,7 @@ function validMandateEnvelope(value: unknown): value is RouteMandate {
     || !Number.isSafeInteger(value.route.generation) || Number(value.route.generation) < 1
     || !isCanonicalDigest(String(value.route.generationDigest ?? ''))
     || !validIdentifier(value.route.routePlanId) || !isCanonicalDigest(String(value.route.routeDigest ?? ''))
-    || !Array.isArray(value.route.steps) || !isRecord(value.route.maximumTotalSpend)
-    || !validMoney(value.route.maximumTotalSpend as { currency: string; amountMinor: number })
+    || !Array.isArray(value.route.steps) || !validExactAmount(value.route.maximumTotalSpend)
     || !validTime(value.issuedAt) || !validTime(value.expiresAt)
     || !validIdentifier(value.mandateRef) || !isCanonicalDigest(String(value.mandateDigest ?? ''))) return false
   return true
@@ -460,10 +456,8 @@ function validAuthorization(authorization: unknown): authorization is RouteManda
     && isDigest(authorization.authorityScopeDigest)
 }
 
-function validMoney(value: Readonly<{ currency: string; amountMinor: number }>): boolean {
-  return typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency)
-    && Number.isSafeInteger(value.amountMinor)
-    && value.amountMinor >= 0
+function validExactAmount(value: unknown): value is ExactAmount {
+  return exactAmountSchema.safeParse(value).success
 }
 
 function validIdentifier(value: unknown): value is string {

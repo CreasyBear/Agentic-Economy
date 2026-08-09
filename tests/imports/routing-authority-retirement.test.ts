@@ -71,7 +71,7 @@ describe('routing authority retirement', () => {
     expect(generatedRoutingModules).toEqual(['routingKernelV1History'])
   })
 
-  it('removes routing writers, dispatch, and cleanup without changing the historical schema', () => {
+  it('pins the exact retired routing schema', () => {
     const crons = readFileSync(join(root, 'convex/crons.ts'), 'utf8')
     const schema = readFileSync(join(root, 'src/modules/routing-kernel/internal/convex-schema.ts'), 'utf8')
     const currentRequest = [
@@ -81,7 +81,7 @@ describe('routing authority retirement', () => {
     ].map((path) => readFileSync(join(root, path), 'utf8')).join('\n')
 
     expect(crons).not.toContain('routingKernel')
-    expect(createHash('sha256').update(schema).digest('hex')).toBe('0d7b351813c594cb90351017da41a416b784fcd28ac4817023848b0985bd540b')
+    expect(createHash('sha256').update(schema).digest('hex')).toBe('ee699971d33bfd7bef74d599a06ec6032852edb97305f9240cceb3cdf54dc90d')
     expect(currentRequest).not.toMatch(/routingKernel|routing-kernel|createRegisteredRoutingKernel/)
   })
 

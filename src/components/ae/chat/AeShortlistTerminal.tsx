@@ -50,8 +50,8 @@ export function AeShortlistTerminal({
   if (closed) {
     return (
       <section className="grid gap-3 rounded-lg border border-border bg-card p-4" aria-labelledby="shortlist-closed-heading">
-        <h2 id="shortlist-closed-heading" className="text-xl font-semibold text-foreground">Shortlist closed</h2>
-        <p className="text-muted-foreground" role="status">Nothing was sent.</p>
+        <h2 id="shortlist-closed-heading" className="text-xl font-semibold text-foreground">Options closed</h2>
+        <p className="text-muted-foreground">Nothing was sent.</p>
         <Button asChild variant="secondary" className="min-h-11 justify-self-start">
           <a href="/">Return home</a>
         </Button>
@@ -78,12 +78,12 @@ export function AeShortlistTerminal({
       {urgentContact}
       <div className="grid gap-1">
         <h2 id="shortlist-terminal-heading" className="text-xl font-semibold text-foreground">
-          Your shortlist is ready
+          Your options are ready
         </h2>
         <p className="text-muted-foreground">
           {timing === 'today'
-            ? 'For today, listings with a published contact path appear first. Phone details are shown only when published.'
-            : 'Compare the listed facts, then open a business page when you are ready.'}
+            ? 'For today, businesses with published contact details appear first. Phone details are shown only when published.'
+            : 'Compare the published details, then open a business page when you are ready.'}
         </p>
       </div>
       <div className="flex flex-col gap-2 min-[376px]:flex-row min-[376px]:flex-wrap" aria-label="Shortlist actions">
@@ -106,7 +106,7 @@ export function AeShortlistTerminal({
         <Button type="button" variant="ghost" className="min-h-11" onClick={() => setClosed(true)}>Close</Button>
       </div>
       {callHref === undefined
-        ? <p className="block text-sm text-muted-foreground">Open the listing for its published contact options.</p>
+        ? <p className="block text-sm text-muted-foreground">Open the business page for its published contact options.</p>
         : <p className="block text-sm text-muted-foreground">Calls go directly to the published business number.</p>}
       <AeExportPreview
         isOpen={exportPreviewOpen}

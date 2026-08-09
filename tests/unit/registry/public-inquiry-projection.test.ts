@@ -70,32 +70,62 @@ function inquiryManifest(): DiscoveryManifestContract {
   return result.manifest
 }
 
+const offeringRef = 'offering:perth-hvac-repair:emergency-hvac-assessment'
+const offeringRevision = 1
+const offeringSourceHash = canonicalDigest({ offeringRef, revision: offeringRevision })
+const aeInquiryDescriptor = {
+  kind: 'human_request' as const,
+  channel: 'ae_inquiry' as const,
+  disclosure: 'Use the inquiry form for a first contact.',
+}
 const aeInquiryPath = {
   accessPathRef: 'access:perth-hvac-repair:emergency-hvac-assessment',
-  kind: 'human_request',
-  channel: 'ae_inquiry',
-  disclosure: 'Use the inquiry form for a first contact.',
+  offeringRevision,
+  offeringSourceHash,
+  sourceHash: canonicalDigest({
+    accessPathRef: 'access:perth-hvac-repair:emergency-hvac-assessment',
+    offeringSourceHash,
+    descriptor: aeInquiryDescriptor,
+  }),
+  ...aeInquiryDescriptor,
 } as const
-
+const phoneDescriptor = {
+  kind: 'human_request' as const,
+  channel: 'phone' as const,
+  disclosure: 'Call the published number.',
+}
 const phonePath = {
   accessPathRef: 'access:perth-hvac-repair:phone',
-  kind: 'human_request',
-  channel: 'phone',
-  disclosure: 'Call the published number.',
+  offeringRevision,
+  offeringSourceHash,
+  sourceHash: canonicalDigest({
+    accessPathRef: 'access:perth-hvac-repair:phone',
+    offeringSourceHash,
+    descriptor: phoneDescriptor,
+  }),
+  ...phoneDescriptor,
 } as const
-
-const externalPath = {
-  accessPathRef: 'access:perth-hvac-repair:quote-api',
-  kind: 'external_operation',
+const externalDescriptor = {
+  kind: 'external_operation' as const,
   name: 'Quote endpoint',
   summary: 'Machine-readable quote request.',
   url: 'https://ae.test/quote',
-  provenance: 'business_declared',
+  provenance: 'business_declared' as const,
+}
+const externalPath = {
+  accessPathRef: 'access:perth-hvac-repair:quote-api',
+  offeringRevision,
+  offeringSourceHash,
+  sourceHash: canonicalDigest({
+    accessPathRef: 'access:perth-hvac-repair:quote-api',
+    offeringSourceHash,
+    descriptor: externalDescriptor,
+  }),
+  ...externalDescriptor,
 } as const
-
 const offering = {
-  offeringRef: 'offering:perth-hvac-repair:emergency-hvac-assessment',
-  revision: 1,
+  offeringRef,
+  revision: offeringRevision,
   name: 'Emergency HVAC assessment',
   category: 'HVAC',
   summary: 'Assessment and written quote.',

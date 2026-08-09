@@ -1,5 +1,6 @@
 import type { Infer } from 'convex/values'
 import { v } from 'convex/values'
+import { connectionAuthoritySnapshotValue } from '@/modules/capability-supply/convex'
 
 import {
   registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
@@ -84,11 +85,17 @@ const commercialRelationshipValue = v.object({
   influencesOrder: v.boolean(),
   evidenceRefs: evidenceRefsValue,
 })
+const exactAmountValue = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
 const priceValue = v.union(
-  v.object({ kind: v.literal('fixed'), currency: v.string(), amountMinor: v.number() }),
+  v.object({ kind: v.literal('fixed'), amount: exactAmountValue }),
   v.object({
-    kind: v.literal('range'), currency: v.string(),
-    minimumAmountMinor: v.number(), maximumAmountMinor: v.number(),
+    kind: v.literal('range'),
+    minimum: exactAmountValue,
+    maximum: exactAmountValue,
   }),
   v.object({ kind: v.literal('on_request') }),
 )
@@ -128,7 +135,47 @@ const cancellationValue = v.object({
   kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
   evidenceRefs: evidenceRefsValue,
 })
-
+const keylessAuthorityValue = v.object({ kind: v.literal('keyless') })
+const providerConnectionAuthorityValue = v.object({
+  kind: v.literal('provider_connection'),
+  connectionRef: v.string(),
+  providerRef: v.string(),
+})
+const authorityValue = v.union(
+  keylessAuthorityValue,
+  providerConnectionAuthorityValue,
+)
+const capabilityProbeTargetFields = {
+  publicationRef: v.string(),
+  revision: v.number(),
+  bindingId: v.string(),
+  capabilityId: v.string(),
+  endpointUrl: v.string(),
+  adapterId: v.string(),
+  probeKind: v.union(
+    v.literal('ae_quote'),
+    v.literal('openapi_http'),
+    v.literal('mcp'),
+    v.literal('x402'),
+  ),
+  probeQuery: v.array(v.object({ parameter: v.string(), value: v.string() })),
+  probeMethod: v.union(v.literal('GET'), v.literal('HEAD')),
+  transportConfigJson: v.string(),
+  probeInputJson: v.optional(v.string()),
+  outputSchemaJson: v.optional(v.string()),
+  targetDigest: v.string(),
+}
+const capabilityProbeTargetValue = v.union(
+  v.object({
+    ...capabilityProbeTargetFields,
+    authority: keylessAuthorityValue,
+  }),
+  v.object({
+    ...capabilityProbeTargetFields,
+    authority: providerConnectionAuthorityValue,
+    connectionAuthority: connectionAuthoritySnapshotValue,
+  }),
+)
 const queryMappingValue = v.array(v.object({
   inputPointer: v.string(),
   parameter: v.string(),
@@ -163,7 +210,7 @@ const bindingRegistrationValue = v.object({
   networkId: v.string(),
   contractRef: contractRefValue,
   endpointUrl: v.string(),
-  credentialRef: v.string(),
+  authority: authorityValue,
   continuation: continuationValue,
   cancellation: cancellationValue,
   adapter: adapterValue,
@@ -180,7 +227,7 @@ const capabilityPublicationOfferingValue = v.object({
 const capabilityPublicationBindingValue = v.object({
   bindingId: v.string(),
   endpointUrl: v.string(),
-  credentialRef: v.string(),
+  authority: authorityValue,
   continuation: continuationValue,
   cancellation: cancellationValue,
   adapter: adapterValue,
@@ -245,7 +292,7 @@ const capabilityContractMetadataValue = v.object({
 const capabilityImporterCommercialValue = v.object({
   offering: capabilityPublicationOfferingValue,
   bindingId: v.string(),
-  credentialRef: v.string(),
+  authority: authorityValue,
   registrationEvidenceRefs: evidenceRefsValue,
   requestTimeoutMs: v.number(),
 })
@@ -273,6 +320,16 @@ const capabilityPublicationSourceValue = v.union(
     evidenceRefs: evidenceRefsValue,
   }),
   v.object({
+    kind: v.literal('agent_plugin_mcp'),
+    manifestJson: v.string(),
+    serverName: v.string(),
+    toolJson: v.string(),
+    protocolVersion: v.string(),
+    contract: capabilityContractMetadataValue,
+    commercial: capabilityImporterCommercialValue,
+    evidenceRefs: evidenceRefsValue,
+  }),
+  v.object({
     kind: v.literal('x402'),
     resourceJson: v.string(),
     contract: capabilityContractMetadataValue,
@@ -283,6 +340,8 @@ const capabilityPublicationSourceValue = v.union(
 const publicationAuthorityModeValue = v.union(
   v.literal('provider_owned'),
   v.literal('ae_curated_external'),
+  v.literal('third_party_gateway'),
+  v.literal('observed_external'),
 )
 const capabilityPublicationAdmissionSourceValue = v.union(
   v.object({
@@ -306,6 +365,16 @@ const capabilityPublicationAdmissionSourceValue = v.union(
   v.object({
     kind: v.literal('mcp'),
     serverUrl: v.string(),
+    toolJson: v.string(),
+    protocolVersion: v.string(),
+    contract: capabilityContractMetadataValue,
+    commercial: capabilityImporterCommercialValue,
+    evidenceRefs: evidenceRefsValue,
+  }),
+  v.object({
+    kind: v.literal('agent_plugin_mcp'),
+    manifestJson: v.string(),
+    serverName: v.string(),
     toolJson: v.string(),
     protocolVersion: v.string(),
     contract: capabilityContractMetadataValue,
@@ -357,6 +426,10 @@ const bindingFailureReason = v.union(
   v.literal('adapter_config_invalid'), v.literal('adapter_config_too_large'),
   v.literal('binding_identity_conflict'), v.literal('offering_integrity_failure'),
   v.literal('binding_integrity_failure'), v.literal('operation_key_conflict'),
+  v.literal('connection_not_found'), v.literal('connection_owner_mismatch'),
+  v.literal('connection_provider_mismatch'), v.literal('connection_adapter_mismatch'),
+  v.literal('connection_inactive'), v.literal('connection_authority_invalid'),
+  v.literal('connection_operation_mismatch'), v.literal('connection_authority_stale'),
 )
 const eligibilityFailureReason = v.union(
   v.literal('authorization_denied'), v.literal('registration_context_invalid'),
@@ -364,7 +437,7 @@ const eligibilityFailureReason = v.union(
   v.literal('offering_binding_mismatch'), v.literal('registration_changed'),
   v.literal('contract_not_found'), v.literal('contract_not_active'), v.literal('contract_integrity_failure'),
   v.literal('offering_integrity_failure'), v.literal('binding_integrity_failure'),
-  v.literal('operation_key_conflict'),
+  v.literal('operation_key_conflict'), v.literal('connection_authority_stale'),
 )
 const registerOfferingResultValue = v.union(
   v.object({
@@ -410,17 +483,21 @@ const eligibleSupplyValue = v.object({
     capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
     origin: v.optional(offeringOriginValue),
     presentation: presentationValue, status: v.literal('active'), registrationHash: v.string(),
+    searchTerms: v.optional(v.array(v.string())),
   }),
   binding: v.object({
     bindingId: v.string(), offeringId: v.string(), networkId: v.string(),
     capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
-    endpointUrl: v.string(), credentialRef: v.string(), continuation: continuationValue,
+    endpointUrl: v.string(), authority: authorityValue,
+    connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
+    continuation: continuationValue,
     cancellation: cancellationValue, adapterId: v.string(), configJson: v.string(), configDigest: v.string(),
     admission: v.literal('admitted'), conformance: v.literal('conformant'), registrationHash: v.string(),
   }),
   publication: v.optional(v.object({
     publicationRef: v.string(), revision: v.number(), readinessValidUntil: v.number(),
     operationRef: v.string(),
+    connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
     admittedOperation: v.object({
       publicationRef: v.string(), publicationRevision: v.number(),
       publisherRef: v.string(), sourceRevision: v.string(), sourceDigest: v.string(),
@@ -533,9 +610,15 @@ const capabilityPublicationAdmissionResultValue = v.union(
       v.literal('operation_not_found'),
       v.literal('schema_missing'),
       v.literal('schema_profile_unsupported'),
+      v.literal('admit_schema_circular_reference'),
+      v.literal('admit_schema_reference_unresolvable'),
+      v.literal('admit_schema_too_deep'),
+      v.literal('admit_schema_deref_unavailable'),
+      v.literal('admit_output_no_guaranteed_field'),
       v.literal('transport_unsupported'),
       v.literal('commercial_metadata_inconsistent'),
       v.literal('payment_execution_unsupported'),
+      v.literal('payment_required_invalid'),
       v.literal('contract_too_large'),
       v.literal('contract_invalid'),
       v.literal('contract_identity_conflict'),
@@ -557,7 +640,13 @@ const capabilityGraphNodeValue = v.object({
   publicationRef: v.string(), revision: v.number(), businessId: v.id('businesses'),
   contractRef: contractRefValue, offeringId: v.string(), bindingId: v.string(),
   source: v.object({
-    kind: v.union(v.literal('ae_envelope'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
+    kind: v.union(
+      v.literal('ae_envelope'),
+      v.literal('openapi_http'),
+      v.literal('mcp'),
+      v.literal('agent_plugin_mcp'),
+      v.literal('x402'),
+    ),
     digest: v.string(),
   }),
   semantic: v.object({
@@ -758,9 +847,16 @@ export const readCapabilityPublication = query({
         .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
     ])
     if (offering === null || binding === null) return null
+    const providerAuthority = binding.authority.kind === 'provider_connection'
+      ? binding.authority
+      : undefined
+    const currentConnection = providerAuthority === undefined
+      ? undefined
+      : await ctx.db.query('capabilityProviderConnections')
+        .withIndex('by_connectionRef', (index) => index.eq('connectionRef', providerAuthority.connectionRef)).unique()
     return publicationProjection(
       contractRefFromRow(publication), publication.offeringId, publication.bindingId,
-      publicationLifecycle(publication, offering, binding, Date.now()),
+      publicationLifecycle(publication, offering, binding, Date.now(), currentConnection),
     )
   },
 })
@@ -843,19 +939,61 @@ export const readCapabilityProbeTarget = internalQuery({
     v.object({ kind: v.literal('unavailable') }),
     v.object({
       kind: v.literal('available'),
-      target: v.object({
-        publicationRef: v.string(), revision: v.number(), bindingId: v.string(), capabilityId: v.string(),
-        endpointUrl: v.string(), credentialRef: v.string(), adapterId: v.string(),
-        probeKind: v.union(v.literal('ae_quote'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
-        probeQuery: v.array(v.object({ parameter: v.string(), value: v.string() })),
-        probeMethod: v.union(v.literal('GET'), v.literal('HEAD')),
-        targetDigest: v.string(),
-      }),
+      target: capabilityProbeTargetValue,
     }),
   ),
-  handler: async (ctx, args) => (
-    await readCapabilityProbeTargetFromModule(capabilitySupplyGraphPorts(ctx.db), args)
-  ),
+  handler: async (ctx, args) => {
+    const result = await readCapabilityProbeTargetFromModule(capabilitySupplyGraphPorts(ctx.db), args)
+    if (result.kind === 'unavailable') return { kind: 'unavailable' as const }
+
+    const { target } = result
+    const targetFields = {
+      publicationRef: target.publicationRef,
+      revision: target.revision,
+      bindingId: target.bindingId,
+      capabilityId: target.capabilityId,
+      endpointUrl: target.endpointUrl,
+      adapterId: target.adapterId,
+      probeKind: target.probeKind,
+      probeQuery: target.probeQuery,
+      probeMethod: target.probeMethod,
+      transportConfigJson: target.transportConfigJson,
+      ...(target.probeInputJson === undefined ? {} : { probeInputJson: target.probeInputJson }),
+      ...(target.outputSchemaJson === undefined ? {} : { outputSchemaJson: target.outputSchemaJson }),
+      targetDigest: target.targetDigest,
+    }
+    if (target.authority.kind === 'provider_connection') {
+      if (!('connectionAuthority' in target)) return { kind: 'unavailable' as const }
+      return {
+        kind: 'available' as const,
+        target: {
+          ...targetFields,
+          authority: {
+            kind: 'provider_connection' as const,
+            connectionRef: target.authority.connectionRef,
+            providerRef: target.authority.providerRef,
+          },
+          connectionAuthority: {
+            connectionRef: target.connectionAuthority.connectionRef,
+            providerRef: target.connectionAuthority.providerRef,
+            adapterId: target.connectionAuthority.adapterId,
+            authorityGeneration: target.connectionAuthority.authorityGeneration,
+            authorityDigest: target.connectionAuthority.authorityDigest,
+            operationRef: target.connectionAuthority.operationRef,
+            grantedScopes: target.connectionAuthority.grantedScopes,
+            grantedResources: target.connectionAuthority.grantedResources,
+          },
+        },
+      }
+    }
+    return {
+      kind: 'available' as const,
+      target: {
+        ...targetFields,
+        authority: { kind: 'keyless' as const },
+      },
+    }
+  },
 })
 
 export const recordCapabilityProbeResult = internalMutation({
@@ -1233,13 +1371,13 @@ export const quarantineBinding = mutation({
 })
 
 export const listIntegrated = internalQuery({
-  args: { networkId: v.string(), limit: v.number() },
+  args: { networkId: v.string(), limit: v.number(), now: v.number() },
   returns: eligibleSupplyResultValue,
   handler: async (ctx, args) => await listIntegratedCapabilitySupply(ctx.db, args) as Infer<typeof eligibleSupplyResultValue>,
 })
 
 export const listRouteable = internalQuery({
-  args: { networkId: v.string(), limit: v.number() },
+  args: { networkId: v.string(), limit: v.number(), now: v.number() },
   returns: eligibleSupplyResultValue,
   handler: async (ctx, args) => await listRouteableCapabilitySupply(ctx.db, args) as Infer<typeof eligibleSupplyResultValue>,
 })
@@ -1301,9 +1439,17 @@ export async function registerCapabilityOffering(
 }
 
 export async function registerCapabilityTransportBinding(
-  db: MutationCtx['db'], input: unknown, registeredAt: number,
+  db: MutationCtx['db'],
+  input: unknown,
+  registeredAt: number,
+  expectedOperationRef?: string,
 ) {
-  return registerCapabilityTransportBindingWrite(capabilitySupplyWriterPorts(db), input, registeredAt)
+  return registerCapabilityTransportBindingWrite(
+    capabilitySupplyWriterPorts(db),
+    input,
+    registeredAt,
+    expectedOperationRef,
+  )
 }
 
 export async function setCapabilitySupplyEligibility(
@@ -1315,13 +1461,13 @@ export async function setCapabilitySupplyEligibility(
 }
 
 export async function listIntegratedCapabilitySupply(
-  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now?: number }>,
+  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now: number }>,
 ) {
   return listIntegratedCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
 }
 
 export async function listRouteableCapabilitySupply(
-  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now?: number }>,
+  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now: number }>,
 ) {
   return listRouteableCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
 }
@@ -1332,12 +1478,13 @@ export async function getEligibleExactCapabilitySupply(
     networkId: string; businessId: string; offeringId: string; bindingId: string
     contractRef: ContractRef
     expectedOfferingRegistrationHash: string; expectedBindingRegistrationHash: string
+    now: number
   }>,
 ) {
   return getEligibleExactCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
 }
 
-async function ownsPublishedBusiness(
+export async function ownsPublishedBusiness(
   ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
   businessId: Id<'businesses'>,
 ): Promise<boolean> {
@@ -1357,7 +1504,7 @@ async function resolveMappingAuthority(
   ctx: MutationCtx,
   networkId: string,
   mapping: RegisteredOperationMappingInput,
-  authorityMode: 'provider_owned' | 'ae_curated_external',
+  authorityMode: 'provider_owned' | 'ae_curated_external' | 'third_party_gateway' | 'observed_external',
   principalId: string,
 ): Promise<MappingAuthorityResult> {
   const current = await ctx.db.query('capabilityPublications')
@@ -1378,7 +1525,13 @@ async function resolveMappingAuthority(
   if (source.length === 0 || target.length === 0) {
     return { kind: 'refused', reason: 'network_not_owned' }
   }
-  if (authorityMode === 'ae_curated_external') {
+  if (authorityMode === 'observed_external') {
+    // Observed entries are not proven; they must clear the observed promotion
+    // lifecycle (verified evidence + readiness gates) before they can register
+    // a real execution mapping. Never grant observed_external mapping authority.
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+  if (authorityMode === 'ae_curated_external' || authorityMode === 'third_party_gateway') {
     const authority = await resolveAdminAuthority(
       { db: ctx.db, auth: ctx.auth }, 'register_capability_supply',
     )
@@ -1435,12 +1588,14 @@ async function publishedBusiness(db: QueryCtx['db'], businessId: string | Id<'bu
 function portsFor(db: MutationCtx['db']): OperationLedgerPorts {
   return capabilitySupplyOperationPorts(db, {
     registerOffering: (registration, now) => registerCapabilityOffering(db, registration, now),
-    registerBinding: (registration, now) => registerCapabilityTransportBinding(db, registration, now),
+    registerBinding: (registration, now, expectedOperationRef) => (
+      registerCapabilityTransportBinding(db, registration, now, expectedOperationRef)
+    ),
     setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(db, eligibility, now),
   })
 }
 
-async function rebuildCapabilityOriginSupplyProjection(
+export async function rebuildCapabilityOriginSupplyProjection(
   ctx: MutationCtx,
   businessId: Id<'businesses'>,
   now: number,
@@ -1466,396 +1621,13 @@ async function rebuildCapabilityOfferingOriginSupplyProjection(
   if (offering?.origin?.kind !== 'catalog_offering') return
   await rebuildCapabilityOriginSupplyProjection(ctx, offering.businessId, now)
 }
-/** Bounded owner readback for the six-step publisher and single-player panel. */
-const ownerSupplyAccessPathDescriptorValue = v.union(
-  v.object({
-    kind: v.literal('human_request'),
-    channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')),
-    disclosure: v.string(),
-    url: v.optional(v.string()),
-  }),
-  v.object({
-    kind: v.literal('external_operation'),
-    name: v.string(),
-    summary: v.string(),
-    url: v.string(),
-    method: v.optional(v.string()),
-    documentationUrl: v.optional(v.string()),
-    interfaceDescription: v.optional(v.object({ format: v.string(), url: v.optional(v.string()) })),
-    authenticationSummary: v.optional(v.string()),
-    pricingSummary: v.optional(v.string()),
-    provenance: v.union(v.literal('business_declared'), v.literal('publicly_observed')),
-  }),
-)
-const ownerSupplyFunnelResultValue = v.union(
-  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
-  v.object({ kind: v.literal('not_found') }),
-  v.object({
-    kind: v.literal('available'),
-    businessId: v.string(),
-    business: v.object({ name: v.string(), slug: v.string() }),
-    offerings: v.array(v.object({
-      offeringRef: v.string(),
-      revision: v.number(),
-      name: v.string(),
-      summary: v.string(),
-      status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
-      sourceHash: v.optional(v.string()),
-      publicationRef: v.optional(v.string()),
-      readiness: v.optional(v.object({
-        outcome: v.union(v.literal('unobserved'), v.literal('healthy'), v.literal('unhealthy')),
-        validUntil: v.optional(v.number()),
-        evidenceRefs: v.array(v.string()),
-      })),
-      accessPaths: v.array(v.object({
-        accessPathRef: v.string(),
-        status: v.union(v.literal('draft'), v.literal('published'), v.literal('withdrawn')),
-        descriptor: ownerSupplyAccessPathDescriptorValue,
-      })),
-    })),
-    callLog: v.array(v.object({
-      eventRef: v.string(),
-      offeringRef: v.string(),
-      publicationRef: v.optional(v.string()),
-      observedAt: v.number(),
-      outcome: v.union(v.literal('filled'), v.literal('zero')),
-      zeroReason: v.optional(v.union(
-        v.literal('no_routeable_supply'), v.literal('readiness_unavailable'),
-        v.literal('provider_refused'), v.literal('credential_unavailable'),
-        v.literal('price_unavailable'), v.literal('insufficient_credit'),
-        v.literal('input_invalid'), v.literal('outcome_unknown'),
-      )),
-      durationMs: v.optional(v.number()),
-      evidenceRefs: v.array(v.string()),
-      environment: v.union(v.literal('local'), v.literal('development'), v.literal('sandbox'), v.literal('production')),
-    })),
-    liquidity: v.object({
-      fillCount: v.number(),
-      zeroCount: v.number(),
-      firstSuccessP50Ms: v.optional(v.number()),
-      firstSuccessP95Ms: v.optional(v.number()),
-      depthSamples: v.number(),
-      environment: v.literal('development'),
-    }),
-  }),
-)
-type OwnerSupplyFunnelResult = Infer<typeof ownerSupplyFunnelResultValue>
-type OwnerSupplyAccessPathDescriptor = Infer<typeof ownerSupplyAccessPathDescriptorValue>
-type OwnerSupplyAdvanceResult = Infer<typeof ownerSupplyAdvanceResultValue>
-type OwnerSupplyPublishResult = Infer<typeof ownerSupplyPublishResultValue>
 
-function ownerSupplyLiteral<const Values extends readonly string[]>(value: unknown, values: Values, label: string): Values[number] {
-  if (typeof value === 'string' && values.some((candidate) => candidate === value)) return value as Values[number]
-  throw new Error(`Invalid owner supply ${label}`)
-}
-
-function ownerSupplyOptionalString(value: unknown, label: string): string | undefined {
-  if (value === undefined) return undefined
-  if (typeof value === 'string') return value
-  throw new Error(`Invalid owner supply ${label}`)
-}
-
-function ownerSupplyOptionalNumber(value: unknown, label: string): number | undefined {
-  if (value === undefined) return undefined
-  if (typeof value === 'number') return value
-  throw new Error(`Invalid owner supply ${label}`)
-}
-
-function ownerSupplyStringArray(value: unknown, label: string): string[] {
-  if (!Array.isArray(value)) throw new Error(`Invalid owner supply ${label}`)
-  const strings: string[] = []
-  for (const item of value) {
-    if (typeof item !== 'string') throw new Error(`Invalid owner supply ${label}`)
-    strings.push(item)
-  }
-  return strings
-}
-
-function ownerSupplyAccessPathDescriptor(value: unknown): OwnerSupplyAccessPathDescriptor {
-  if (!isOwnerSupplyRecord(value)) throw new Error('Invalid owner supply access path descriptor')
-  if (value.kind === 'human_request') {
-    const channel = ownerSupplyLiteral(value.channel, ['phone', 'website', 'ae_inquiry'] as const, 'access channel')
-    const disclosure = typeof value.disclosure === 'string' ? value.disclosure : (() => { throw new Error('Invalid owner supply disclosure') })()
-    const url = ownerSupplyOptionalString(value.url, 'access URL')
-    return { kind: 'human_request', channel, disclosure, ...(url === undefined ? {} : { url }) }
-  }
-  if (value.kind === 'external_operation') {
-    const name = typeof value.name === 'string' ? value.name : (() => { throw new Error('Invalid owner supply operation name') })()
-    const summary = typeof value.summary === 'string' ? value.summary : (() => { throw new Error('Invalid owner supply operation summary') })()
-    const url = typeof value.url === 'string' ? value.url : (() => { throw new Error('Invalid owner supply operation URL') })()
-    const method = ownerSupplyOptionalString(value.method, 'operation method')
-    const documentationUrl = ownerSupplyOptionalString(value.documentationUrl, 'operation documentation URL')
-    const authenticationSummary = ownerSupplyOptionalString(value.authenticationSummary, 'operation authentication summary')
-    const pricingSummary = ownerSupplyOptionalString(value.pricingSummary, 'operation pricing summary')
-    const provenance = ownerSupplyLiteral(value.provenance, ['business_declared', 'publicly_observed'] as const, 'operation provenance')
-    let interfaceDescription: { format: string; url?: string } | undefined
-    if (value.interfaceDescription !== undefined) {
-      if (!isOwnerSupplyRecord(value.interfaceDescription) || typeof value.interfaceDescription.format !== 'string') {
-        throw new Error('Invalid owner supply interface description')
-      }
-      const interfaceUrl = ownerSupplyOptionalString(value.interfaceDescription.url, 'interface description URL')
-      interfaceDescription = { format: value.interfaceDescription.format, ...(interfaceUrl === undefined ? {} : { url: interfaceUrl }) }
-    }
-    return {
-      kind: 'external_operation',
-      name,
-      summary,
-      url,
-      ...(method === undefined ? {} : { method }),
-      ...(documentationUrl === undefined ? {} : { documentationUrl }),
-      ...(interfaceDescription === undefined ? {} : { interfaceDescription }),
-      ...(authenticationSummary === undefined ? {} : { authenticationSummary }),
-      ...(pricingSummary === undefined ? {} : { pricingSummary }),
-      provenance,
-    }
-  }
-  throw new Error('Invalid owner supply access path descriptor kind')
-}
-const ownerSupplyStepValue = v.union(
-  v.literal('describe'),
-  v.literal('endpoint'),
-  v.literal('readiness'),
-  v.literal('pricing'),
-  v.literal('test'),
-  v.literal('publish'),
-)
-const ownerSupplyResultStepValue = v.union(ownerSupplyStepValue, v.literal('unknown'))
-type OwnerSupplyStep = Infer<typeof ownerSupplyStepValue>
-function isOwnerSupplyStep(value: unknown): value is OwnerSupplyStep {
-  return value === 'describe'
-    || value === 'endpoint'
-    || value === 'readiness'
-    || value === 'pricing'
-    || value === 'test'
-    || value === 'publish'
-}
-
-
-const ownerSupplyEndpointValue = v.object({
-  sourceKind: v.union(v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
-  descriptor: v.string(),
-  selector: v.string(),
-  endpointUrl: v.string(),
-  method: v.union(v.literal('GET'), v.literal('POST')),
-  queryMapping: v.string(),
-  protocolVersion: v.string(),
-  toolName: v.string(),
-  requestTimeoutMs: v.number(),
-  credentialRef: v.string(),
-})
-const ownerSupplyPricingValue = v.object({
-  version: v.literal('pricing:v1'),
-  unit: v.literal('call'),
-  currency: v.string(),
-  paidAmountMinor: v.number(),
-  freeTier: v.optional(v.object({ maxCalls: v.number(), window: v.union(v.literal('day'), v.literal('month')) })),
-})
-const ownerSupplyValueValidator = v.object({
-  step: v.optional(ownerSupplyResultStepValue),
-  endpoint: v.optional(ownerSupplyEndpointValue),
-  pricing: v.optional(ownerSupplyPricingValue),
-  sourceKind: v.optional(v.union(v.literal('openapi_http'), v.literal('mcp'), v.literal('x402'))),
-  descriptor: v.optional(v.string()),
-  selector: v.optional(v.string()),
-  endpointUrl: v.optional(v.string()),
-  method: v.optional(v.union(v.literal('GET'), v.literal('POST'))),
-  queryMapping: v.optional(v.string()),
-  protocolVersion: v.optional(v.string()),
-  toolName: v.optional(v.string()),
-  requestTimeoutMs: v.optional(v.number()),
-  credentialRef: v.optional(v.string()),
-  version: v.optional(v.literal('pricing:v1')),
-  unit: v.optional(v.literal('call')),
-  currency: v.optional(v.string()),
-  paidAmountMinor: v.optional(v.number()),
-  freeTier: v.optional(v.object({ maxCalls: v.number(), window: v.union(v.literal('day'), v.literal('month')) })),
-})
-const ownerSupplyCompletedValue = v.object({
-  step: ownerSupplyStepValue,
-  state: v.literal('completed'),
-  offeringRef: v.string(),
-  revision: v.number(),
-  message: v.string(),
-  publicationRef: v.optional(v.string()),
-})
-const ownerSupplyAdvanceResultValue = v.union(
-  ownerSupplyCompletedValue,
-  v.object({ step: ownerSupplyResultStepValue, state: v.literal('refused'), refusal: v.literal('authorization_denied') }),
-)
-const ownerSupplyActionResultValue = v.union(
-  ownerSupplyCompletedValue,
-  v.object({
-    step: v.union(v.literal('readiness'), v.literal('test')),
-    state: v.literal('refused'),
-    refusal: v.union(
-      v.literal('authorization_denied'), v.literal('target_not_public'),
-      v.literal('transport_unreachable'), v.literal('http_redirect'),
-      v.literal('http_4xx'), v.literal('http_5xx'), v.literal('response_invalid'),
-    ),
-  }),
-)
-const ownerSupplyPublishResultValue = v.union(
-  ownerSupplyCompletedValue,
-  v.object({
-    step: v.literal('publish'),
-    state: v.literal('refused'),
-    refusal: v.union(
-      v.literal('authorization_denied'), v.literal('invalid_offering'),
-      v.literal('business_not_registered'), v.literal('contract_invalid'),
-      v.literal('contract_too_large'), v.literal('contract_identity_conflict'),
-      v.literal('contract_integrity_failure'), v.literal('offering_invalid'),
-      v.literal('offering_identity_conflict'), v.literal('offering_integrity_failure'),
-      v.literal('binding_invalid'), v.literal('binding_identity_conflict'),
-      v.literal('binding_integrity_failure'), v.literal('adapter_not_registered'),
-      v.literal('adapter_config_invalid'), v.literal('adapter_config_too_large'),
-      v.literal('registration_context_invalid'), v.literal('operation_key_conflict'),
-      v.literal('source_invalid'),
-    ),
-  }),
-)
-const ownerSupplyInput = {
-  businessId: v.id('businesses'),
-  offeringRef: v.string(),
-  revision: v.number(),
-  operationKey: v.string(),
-  value: ownerSupplyValueValidator,
-}
-
-export const readOwnerSupplyFunnel = query({
-  args: {},
-  returns: ownerSupplyFunnelResultValue,
-  handler: async (ctx): Promise<OwnerSupplyFunnelResult> => {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
-    const db = ctx.db
-    const owner = await db.query('owners').withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', actor.clerkUserId)).unique()
-    if (owner === null) return { kind: 'not_found' as const }
-    const business = await db.query('businesses')
-      .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
-      .order('desc')
-      .first()
-    if (business === null) return { kind: 'not_found' as const }
-    // `businessOfferings.status` is draft|published|paused|retired — there is no
-    // 'active'. Filtering on it returned nothing for every owner, so the funnel
-    // home always read "No services yet" while /owner/offerings listed the same
-    // offerings. Same selection rule as `loadOfferingSourceState` in catalog.ts.
-    const [offeringRows, revisions, accessPaths, publications, capabilityOfferings, events] = await Promise.all([
-      db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(50),
-      db.query('businessOfferingRevisions').withIndex('by_businessId_and_createdAt', (q) => q.eq('businessId', business._id)).take(100),
-      // Access-path status is draft|published|withdrawn; 'active' never matched.
-      db.query('offeringAccessPaths').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(100),
-      db.query('capabilityPublications').withIndex('by_businessId_and_disposition', (q) => q.eq('businessId', business._id).eq('disposition', 'current')).take(50),
-      db.query('capabilityOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id).eq('status', 'active')).take(50),
-      db.query('capabilityCallEvents').withIndex('by_businessId_and_observedAt', (q) => q.eq('businessId', business._id)).order('desc').take(50),
-    ])
-    const offerings = offeringRows.map((offering) => {
-      const revision = revisions.find((candidate) => candidate.offeringRef === offering.offeringRef && candidate.revision === offering.currentRevision)
-      const paths = accessPaths.filter((path) => path.offeringRef === offering.offeringRef && path.offeringRevision === offering.currentRevision)
-      const capabilityOffering = capabilityOfferings.find((candidate) => candidate.origin?.kind === 'catalog_offering' && candidate.origin.offeringRef === offering.offeringRef)
-      const publication = capabilityOffering === undefined ? undefined : publications.find((candidate) => candidate.offeringId === capabilityOffering.offeringId)
-      const readiness = publication === undefined
-        ? undefined
-        : {
-            outcome: ownerSupplyLiteral(publication.healthState, ['unobserved', 'healthy', 'unhealthy'] as const, 'readiness outcome'),
-            ...(publication.readinessValidUntil === undefined ? {} : { validUntil: publication.readinessValidUntil }),
-            evidenceRefs: ownerSupplyStringArray(publication.readinessEvidenceRefs, 'readiness evidence'),
-          }
-      const sourceHash = revision?.sourceHash
-      return {
-        offeringRef: offering.offeringRef,
-        revision: offering.currentRevision,
-        name: revision?.name ?? offering.offeringRef,
-        summary: revision?.summary ?? '',
-        status: ownerSupplyLiteral(offering.status, ['draft', 'published', 'paused', 'retired'] as const, 'offering status'),
-        ...(sourceHash === undefined ? {} : { sourceHash }),
-        ...(publication === undefined ? {} : {
-          publicationRef: publication.publicationRef,
-          ...(readiness === undefined ? {} : { readiness }),
-        }),
-        accessPaths: paths.map((path) => ({
-          accessPathRef: path.accessPathRef,
-          status: ownerSupplyLiteral(path.status, ['draft', 'published', 'withdrawn'] as const, 'access path status'),
-          descriptor: ownerSupplyAccessPathDescriptor(path.descriptor),
-        })),
-      }
-    })
-    const fillEvents = events.filter((event) => event.eventKind === 'supply_liquidity_fill_observed')
-    const durations = events.flatMap((event) => {
-      if (event.eventKind !== 'supply_liquidity_first_success_observed') return []
-      const durationMs = ownerSupplyOptionalNumber(event.durationMs, 'duration')
-      return durationMs === undefined ? [] : [durationMs]
-    }).sort((left, right) => left - right)
-    const callLog = fillEvents.map((event) => {
-      const zeroReason = event.zeroReason === undefined
-        ? undefined
-        : ownerSupplyLiteral(event.zeroReason, [
-            'no_routeable_supply', 'readiness_unavailable', 'provider_refused', 'credential_unavailable',
-            'price_unavailable', 'insufficient_credit', 'input_invalid', 'outcome_unknown',
-          ] as const, 'zero reason')
-      const durationMs = ownerSupplyOptionalNumber(event.durationMs, 'duration')
-      return {
-        eventRef: event.eventRef,
-        offeringRef: event.offeringRef,
-        ...(event.publicationRef === undefined ? {} : { publicationRef: event.publicationRef }),
-        observedAt: event.observedAt,
-        outcome: ownerSupplyLiteral(event.outcome, ['filled', 'zero'] as const, 'event outcome'),
-        ...(zeroReason === undefined ? {} : { zeroReason }),
-        ...(durationMs === undefined ? {} : { durationMs }),
-        evidenceRefs: ownerSupplyStringArray(event.evidenceRefs, 'event evidence'),
-        environment: ownerSupplyLiteral(event.environment, ['local', 'development', 'sandbox', 'production'] as const, 'event environment'),
-      }
-    })
-    const durationsP50 = durations[Math.floor((durations.length - 1) * 0.5)]
-    const durationsP95 = durations[Math.floor((durations.length - 1) * 0.95)]
-    return {
-      kind: 'available',
-      businessId: business._id,
-      business: { name: business.name, slug: business.slug },
-      offerings,
-      callLog,
-      liquidity: {
-        fillCount: callLog.filter((event) => event.outcome === 'filled').length,
-        zeroCount: callLog.filter((event) => event.outcome === 'zero').length,
-        ...(durations.length === 0 ? {} : { firstSuccessP50Ms: durationsP50, firstSuccessP95Ms: durationsP95 }),
-        depthSamples: events.filter((event) => event.eventKind === 'supply_liquidity_depth_observed').length,
-        environment: 'development',
-      },
-    }
-  },
-})
-
-export const recordCapabilityCallEvent = internalMutation({
-  args: {
-    eventRef: v.string(),
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-    publicationRef: v.optional(v.string()),
-    taskDigest: v.string(),
-    eventKind: v.union(v.literal('supply_liquidity_fill_observed'), v.literal('supply_liquidity_first_success_observed'), v.literal('supply_liquidity_depth_observed')),
-    outcome: v.union(v.literal('filled'), v.literal('zero')),
-    zeroReason: v.optional(v.union(v.literal('no_routeable_supply'), v.literal('readiness_unavailable'), v.literal('provider_refused'), v.literal('credential_unavailable'), v.literal('price_unavailable'), v.literal('insufficient_credit'), v.literal('input_invalid'), v.literal('outcome_unknown'))),
-    taskStartedAt: v.optional(v.number()),
-    successfulAt: v.optional(v.number()),
-    durationMs: v.optional(v.number()),
-    eligibleDepth: v.optional(v.number()),
-    observedAt: v.number(),
-    evidenceRefs: v.array(v.string()),
-    environment: v.union(v.literal('local'), v.literal('development'), v.literal('sandbox'), v.literal('production')),
-  },
-  returns: v.union(v.object({ kind: v.literal('recorded') }), v.object({ kind: v.literal('replayed') })),
-  handler: async (ctx, args) => {
-    const existing = await ctx.db.query('capabilityCallEvents').withIndex('by_eventRef', (index) => index.eq('eventRef', args.eventRef)).unique()
-    if (existing !== null) return { kind: 'replayed' as const }
-    await ctx.db.insert('capabilityCallEvents', args)
-    return { kind: 'recorded' as const }
-  },
-})
-
-
-function publicationPorts(ctx: MutationCtx) {
+export function publicationPorts(ctx: MutationCtx) {
   return capabilitySupplyPublicationPorts(ctx, {
     registerOffering: (registration, now) => registerCapabilityOffering(ctx.db, registration, now),
-    registerBinding: (registration, now) => registerCapabilityTransportBinding(ctx.db, registration, now),
+    registerBinding: (registration, now, expectedOperationRef) => (
+      registerCapabilityTransportBinding(ctx.db, registration, now, expectedOperationRef)
+    ),
     setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(ctx.db, eligibility, now),
   })
 }
@@ -1894,9 +1666,13 @@ export async function withdrawCuratedCapability(
   if (publication === null) {
     return { kind: 'refused' as const, reason: 'publication_not_found' as const }
   }
+  // Only curated admin classes are withdrawable via the curated path.
+  // provider_owned is owner-managed and observed_external is never withdrawable
+  // until it is promoted out of the observed (inert) state.
   if (
     publication.publisherRef !== 'system:curated-provider-bootstrap'
-    || publication.authorityMode !== 'ae_curated_external'
+    || (publication.authorityMode !== 'ae_curated_external'
+      && publication.authorityMode !== 'third_party_gateway')
   ) {
     return { kind: 'refused' as const, reason: 'authorization_denied' as const }
   }
@@ -1914,6 +1690,7 @@ export async function withdrawCuratedCapability(
   }
   return result
 }
+
 export const authorizeOwnerSupplyAction = internalQuery({
   args: { businessId: v.id('businesses') },
   returns: v.boolean(),
@@ -1923,91 +1700,30 @@ export const authorizeOwnerSupplyAction = internalQuery({
   },
 })
 
-
-function isOwnerSupplyRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function ownerSupplyValue(value: unknown): Record<string, unknown> {
-  return isOwnerSupplyRecord(value) ? value : {}
-}
-
-function ownerSupplyPricing(value: unknown): { currency: string; amountMinor: number } | undefined {
-  const pricing = ownerSupplyValue(ownerSupplyValue(value).pricing)
-  const currency = typeof pricing.currency === 'string' ? pricing.currency : ''
-  const amountMinor = pricing.paidAmountMinor
-  return currency.length > 0 && typeof amountMinor === 'number' && Number.isSafeInteger(amountMinor) && amountMinor >= 0
-    ? { currency, amountMinor }
-    : undefined
-}
-
-export const advanceOwnerSupplyStep = mutation({
-  args: ownerSupplyInput,
-  returns: ownerSupplyAdvanceResultValue,
-  handler: async (ctx, args): Promise<OwnerSupplyAdvanceResult> => {
-    if (!validRegistrationContext({
-      operationKey: args.operationKey,
-      correlationId: `owner-supply:${args.offeringRef}`,
-      reasonCode: 'owner_supply_funnel',
-      evidenceRefs: ['owner-supply:funnel'],
-    }) || !await ownsPublishedBusiness(ctx, args.businessId)) {
-      return { step: 'unknown', state: 'refused', refusal: 'authorization_denied' }
-    }
-    const value = ownerSupplyValue(args.value)
-    const step = isOwnerSupplyStep(value.step) ? value.step : 'endpoint'
-    return { step, state: 'completed', offeringRef: args.offeringRef, revision: args.revision, message: 'Step completed.' }
+export const recordCapabilityCallEvent = internalMutation({
+  args: {
+    eventRef: v.string(),
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    publicationRef: v.optional(v.string()),
+    taskDigest: v.string(),
+    eventKind: v.union(v.literal('supply_liquidity_fill_observed'), v.literal('supply_liquidity_first_success_observed'), v.literal('supply_liquidity_depth_observed')),
+    outcome: v.union(v.literal('filled'), v.literal('zero')),
+    zeroReason: v.optional(v.union(v.literal('no_routeable_supply'), v.literal('readiness_unavailable'), v.literal('provider_refused'), v.literal('credential_unavailable'), v.literal('price_unavailable'), v.literal('insufficient_credit'), v.literal('input_invalid'), v.literal('outcome_unknown'))),
+    taskStartedAt: v.optional(v.number()),
+    successfulAt: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+    eligibleDepth: v.optional(v.number()),
+    observedAt: v.number(),
+    evidenceRefs: v.array(v.string()),
+    environment: v.union(v.literal('local'), v.literal('development'), v.literal('sandbox'), v.literal('production')),
+  },
+  returns: v.union(v.object({ kind: v.literal('recorded') }), v.object({ kind: v.literal('replayed') })),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query('capabilityCallEvents').withIndex('by_eventRef', (index) => index.eq('eventRef', args.eventRef)).unique()
+    if (existing !== null) return { kind: 'replayed' as const }
+    await ctx.db.insert('capabilityCallEvents', args)
+    return { kind: 'recorded' as const }
   },
 })
 
-
-export const publishOwnerCapability = mutation({
-  args: ownerSupplyInput,
-  returns: ownerSupplyPublishResultValue,
-  handler: async (ctx, args): Promise<OwnerSupplyPublishResult> => {
-    if (!await ownsPublishedBusiness(ctx, args.businessId)) {
-      return { step: 'publish', state: 'refused', refusal: 'authorization_denied' }
-    }
-    const value = ownerSupplyValue(args.value)
-    const endpointConfig = ownerSupplyValue(value.endpoint)
-    const endpointUrl = typeof endpointConfig.endpointUrl === 'string' ? endpointConfig.endpointUrl : ''
-    const pricing = ownerSupplyPricing(value)
-    const [offeringRow, revisionRow] = await Promise.all([
-      ctx.db.query('businessOfferings')
-        .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef)).unique(),
-      ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', args.offeringRef).eq('revision', args.revision)).unique(),
-    ])
-    if (offeringRow === null || offeringRow.businessId !== args.businessId || revisionRow === null || revisionRow.businessId !== args.businessId || endpointUrl.length === 0 || pricing === undefined) {
-      return { step: 'publish', state: 'refused', refusal: 'invalid_offering' }
-    }
-    const offeringId = `capability-offering:${args.businessId}:${args.offeringRef}:${args.revision}`
-    const bindingId = `capability-binding:${args.businessId}:${args.offeringRef}:${args.revision}`
-    const documentJson = JSON.stringify({
-      contractFormat: 'ae.capability-contract:v2', capabilityId: 'ae-demo-services.quote', version: 1,
-      name: 'AE Demo Services quote', description: 'A bounded quote for a home-office video-call setup.',
-      inputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { service: { type: 'string' }, postcode: { type: 'string' }, timeout: { type: 'number' } }, required: ['service', 'postcode'], additionalProperties: false },
-      outputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { kind: { const: 'quoted' }, expectedCost: { type: 'object' }, maximumCost: { type: 'object' }, expectedLatencyMs: { type: 'number' }, dataFields: { type: 'array' }, disclosures: { type: 'array' } }, required: ['kind', 'expectedCost', 'maximumCost', 'expectedLatencyMs', 'dataFields', 'disclosures'], additionalProperties: true },
-      customerAnnotations: [{ annotationId: 'service', document: 'input', pointer: '/service', label: 'Service', role: 'request' }, { annotationId: 'quote', document: 'output', pointer: '/', label: 'Quote', role: 'completion_evidence' }],
-      dataUse: [{ effectId: 'quote_request', inputPointer: '/service', classification: 'public', phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['return_bounded_quote'] }],
-      effects: [{ effectId: 'quote_request', class: 'data_release', authority: 'explicit', reversibility: 'irreversible' }],
-      evidence: [{ evidenceId: 'quote', outputPointer: '/', purpose: 'completion' }],
-      lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
-    })
-    const origin = { kind: 'catalog_offering' as const, offeringRef: args.offeringRef, offeringRevision: args.revision, offeringSourceHash: revisionRow.sourceHash }
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { step: 'publish', state: 'refused', refusal: 'authorization_denied' as const }
-    const result = await publishCapabilityCommand({
-      businessId: args.businessId, source: { kind: 'ae_envelope', documentJson },
-      offering: {
-        offeringId, networkId: 'ae-demo-services', origin,
-        presentation: { label: 'AE Demo Services', summary: revisionRow.summary, price: { kind: 'fixed', currency: pricing.currency, amountMinor: pricing.amountMinor }, materialTerms: [], commercialRelationship: { kind: 'none', summary: 'Direct demo endpoint.', influencesEligibility: false, influencesInclusion: false, influencesOrder: false, evidenceRefs: ['owner-supply:funnel'] } },
-        searchTerms: ['home office', 'video calls', 'quote'], registrationEvidenceRefs: ['owner-supply:funnel'],
-      },
-      binding: { bindingId, endpointUrl, credentialRef: 'none', continuation: { kind: 'single_response', evidenceRefs: ['owner-supply:funnel'] }, cancellation: { kind: 'unsupported', evidenceRefs: ['owner-supply:funnel'] }, adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 10_000 } }, registrationEvidenceRefs: ['owner-supply:funnel'] },
-
-      operationKey: args.operationKey, correlationId: `owner-supply:${args.offeringRef}`, reasonCode: 'owner_supply_funnel', evidenceRefs: ['owner-supply:funnel'], actor: { kind: 'owner', ref: identity.subject }, now: Date.now(),
-    }, publicationPorts(ctx))
-    if (result.kind === 'refused') return { step: 'publish', state: 'refused', refusal: result.reason }
-    await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, Date.now())
-    return { step: 'publish', state: 'completed', offeringRef: args.offeringRef, revision: args.revision, message: 'Your service is live.', publicationRef: result.publicationRef }
-  },
-})

@@ -272,6 +272,7 @@ function nativeOfferingForFixture(
     const offeringRef = `offering:${fixture.requestedSlug}:${offeringSlug}`
     const accessPaths = offering.accessPaths.map((path, index) => ({
       accessPathRef: `${offeringRef}:${path.channel}:${index + 1}`,
+      offeringRevision: 1,
       kind: path.kind,
       channel: path.channel,
       disclosure: path.disclosure,
@@ -336,9 +337,11 @@ function nativeOfferingListPage(
   const requestedStart = input.paginationOpts.cursor === null
     ? 0
     : Number(input.paginationOpts.cursor)
-  const start = Number.isSafeInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0
-  const page = items.slice(start, start + input.paginationOpts.numItems)
-  const next = start + page.length
+  if (!Number.isSafeInteger(requestedStart) || requestedStart < 0) {
+    throw new Error('registry_invalid_cursor')
+  }
+  const page = items.slice(requestedStart, requestedStart + input.paginationOpts.numItems)
+  const next = requestedStart + page.length
   return {
     kind: 'ok',
     schemaVersion: 'public-business-catalog-api:v2',
@@ -366,7 +369,11 @@ function searchNativeOfferings(
   const limit = normalizePublicLimit(input.limit)
   const start = input.cursor === undefined
     ? 0
-    : Math.max(ranked.findIndex((item) => item.slug === input.cursor) + 1, 0)
+    : (() => {
+        const index = ranked.findIndex((item) => item.slug === input.cursor)
+        if (index < 0) throw new Error('registry_invalid_cursor')
+        return index + 1
+      })()
   const page = ranked.slice(start, start + limit)
   const next = ranked[start + page.length]
   return {
@@ -383,6 +390,7 @@ function searchNativeOfferings(
     },
   }
 }
+
 
 function nativeOfferingDetail(
   items: readonly PublicBusinessCatalogApiV2Dto[],

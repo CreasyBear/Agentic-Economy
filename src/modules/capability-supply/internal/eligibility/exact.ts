@@ -3,6 +3,7 @@ import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import { contractRefFromRow, type CapabilityContractRef } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
+import { publicationLifecycle } from '../publication'
 
 import { bindingEligibilityIsValid, offeringEligibilityIsValid } from './integrity'
 import type { EligibleSupplyPorts } from './ports'
@@ -17,6 +18,7 @@ export async function getEligibleExactCapabilitySupply(
     contractRef: CapabilityContractRef
     expectedOfferingRegistrationHash: string
     expectedBindingRegistrationHash: string
+    now: number
   }>,
 ) {
   const [offering, binding] = await Promise.all([
@@ -44,5 +46,17 @@ export async function getEligibleExactCapabilitySupply(
   }
   const contract = await ports.getActiveExactCapabilityContract(input.contractRef)
   if (contract.kind !== 'found') return { kind: 'unavailable' as const }
+  const publication = await ports.loadCurrentPublicationByBindingId(binding.bindingId)
+  const currentConnection = binding.authority.kind === 'provider_connection'
+    ? await ports.loadProviderConnection(binding.authority.connectionRef)
+    : undefined
+  if (
+    publication === null
+    || publication.businessId !== offering.businessId
+    || publication.offeringId !== offering.offeringId
+    || publication.bindingId !== binding.bindingId
+    || publication.networkId !== input.networkId
+    || publicationLifecycle(publication, offering, binding, input.now, currentConnection).state !== 'active'
+  ) return { kind: 'unavailable' as const }
   return { kind: 'available' as const, offering, binding, business, contract }
 }

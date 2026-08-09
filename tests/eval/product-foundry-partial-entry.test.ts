@@ -61,7 +61,7 @@ describe('AE partial workflow entry', () => {
       routeRef: 'external-proposal:one',
       idempotencyKey: 'commit-entry-eval',
       providerIdentity: 'business:one',
-      boundedAuthority: { currency: 'AUD', amountMinor: 10_000 },
+      boundedAuthority: { currency: 'AUD', units: '10000', exponent: 2 },
     }).success).toBe(false)
 
     expect(results.find(({ caseId }) => caseId === 'external-proposal-commitment')).toMatchObject({

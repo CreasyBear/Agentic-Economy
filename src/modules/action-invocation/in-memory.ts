@@ -2,11 +2,12 @@ import {
   resolveActionContract,
   type ActionResult,
 } from '@/modules/common/action'
-import type {
-  ActionInvocationTracer,
-  ActionInvocationView,
-  InvocationDecision,
-  PreparedInvocation,
+import {
+  parseActionInvocationLimits,
+  type ActionInvocationTracer,
+  type ActionInvocationView,
+  type InvocationDecision,
+  type PreparedInvocation,
 } from './contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -93,12 +94,17 @@ export function createInMemoryActionInvocationTracer<
     const freshUntil = new Date(Date.parse(preparedAt) + input.freshnessMs).toISOString()
     const digest = materialDigest(input.input, contract.materialInputPaths)
     const authorityRef = options.nextAuthorityRef?.() ?? `dev:authority:${++authoritySequence}`
+    const projectedPreparation = options.action.projectInvocationPreparation?.(input.input)
+    const projectedDataUse = projectedPreparation?.dataUse
+    const limits = parseActionInvocationLimits(projectedDataUse?.limits ?? {})
+    if (limits === undefined) throw new Error('action_invocation_limits_invalid')
     const prepared: PreparedInvocation = {
       materialInputDigest: digest,
       target: readPath(input.input, 'target') ?? null,
       consequence: contract.consequenceClass,
-      dataUse: options.action.projectInvocationPreparation?.(input.input).dataUse
-        ?? { fields: [], limits: {} },
+      dataUse: projectedDataUse === undefined
+        ? { fields: [], limits }
+        : { fields: projectedDataUse.fields, limits },
       preparedAt,
       freshUntil,
     }
@@ -200,7 +206,7 @@ export function createInMemoryActionInvocationTracer<
             outcome: {
               state: 'failed',
               retry: 'safe_before_release',
-              message: durableReleaseRefusal,
+              errorDigest: canonicalDigest(durableReleaseRefusal),
             },
           }),
           control: { state: 'retryable', reason: 'pre_release_failure' },
@@ -317,16 +323,16 @@ export function createInMemoryActionInvocationTracer<
       records.set(record.view.invocationRef, record)
       return executeRunner(record)
     },
-    prepare({ origin, actor, input, context, freshnessMs }) {
+    async prepare({ origin, actor, input, context, freshnessMs }) {
       return prepareRecord({ origin, actor, input, context, freshnessMs })
     },
-    prepareExisting(input) {
+    async prepareExisting(input) {
       return prepareRecord(input, {
         invocationRef: input.invocationRef,
         expectedInvocationVersion: input.expectedInvocationVersion,
       })
     },
-    revisePrepared(input) {
+    async revisePrepared(input) {
       const existing = records.get(input.invocationRef)
       if (existing === undefined) return { kind: 'refused', code: 'invocation_not_found' }
       if (existing.view.invocationVersion !== input.expectedInvocationVersion) {
@@ -353,7 +359,7 @@ export function createInMemoryActionInvocationTracer<
         }),
       }
     },
-    decide(input) {
+    async decide(input) {
       const checked = checkBinding(records.get(input.invocationRef), input, options.now())
       if (checked.kind === 'refused') return checked
       const record = checked.record
@@ -379,7 +385,7 @@ export function createInMemoryActionInvocationTracer<
       }
       return { kind: 'accepted', view: record.view }
     },
-    authorizeStandingMandateUse(input) {
+    async authorizeStandingMandateUse(input) {
       const checked = checkBinding(records.get(input.invocationRef), input, options.now())
       if (checked.kind === 'refused') return checked
       const record = checked.record
@@ -422,7 +428,7 @@ export function createInMemoryActionInvocationTracer<
       record.input = input.materialInput
       return { kind: 'accepted', view: await executeRunner(record) }
     },
-    acquire(input) {
+    async acquire(input) {
       const checked = checkBinding(records.get(input.invocationRef), input, options.now())
       if (checked.kind === 'refused') return checked
       const record = checked.record
@@ -477,13 +483,13 @@ export function createInMemoryActionInvocationTracer<
       if (record === undefined) return { kind: 'refused', code: 'invocation_not_found' }
       return runAcquired(record, input)
     },
-    publishObservation(input) {
+    async publishObservation(input) {
       return publishObservation(records.get(input.invocationRef), input, options.now())
     },
-    cancel(input) {
+    async cancel(input) {
       return cancelInvocation(records.get(input.invocationRef), input)
     },
-    reconcile(input) {
+    async reconcile(input) {
       return reconcileInvocation(
         records.get(input.invocationRef),
         input,

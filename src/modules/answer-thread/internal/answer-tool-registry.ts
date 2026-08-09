@@ -1,20 +1,28 @@
-import { findAction, type AnyAction } from '@/modules/actions'
+import { registryDetailAction, registrySearchAction } from '@/modules/registry/registry.actions'
+import { registryOperationsSearchAction } from '@/modules/registry/operations.actions'
+import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
+import { webDiscoverAction } from '@/modules/storefront/storefront.actions'
+import type { AnyAction } from '@/modules/common/action'
 
 import {
-  AnswerToolIdValues,
+  ANSWER_READ_TOOL_IDS,
   type AnswerToolId,
 } from '../answer-thread.schema'
 
-export const ANSWER_READ_TOOL_IDS: readonly AnswerToolId[] = AnswerToolIdValues
-
-const ANSWER_READ_TOOL_ID_LOOKUP = new Set(ANSWER_READ_TOOL_IDS)
+const ANSWER_READ_ACTIONS: readonly AnyAction[] = [
+  registrySearchAction,
+  registryDetailAction,
+  sandboxCheckupQuoteAction,
+  webDiscoverAction,
+  registryOperationsSearchAction,
+]
 
 export function isAnswerReadToolId(toolId: string): toolId is AnswerToolId {
-  return ANSWER_READ_TOOL_ID_LOOKUP.has(toolId as AnswerToolId)
+  return ANSWER_READ_TOOL_IDS.some((candidate) => candidate === toolId)
 }
 
-export function findAnswerReadToolAction(toolId: AnswerToolId): AnyAction | undefined {
-  const action = findAction(toolId)
+export function findAnswerReadToolAction(toolId: string): AnyAction | undefined {
+  const action = ANSWER_READ_ACTIONS.find((candidate) => candidate.id === toolId)
   if (action === undefined || !action.readOnly) {
     return undefined
   }

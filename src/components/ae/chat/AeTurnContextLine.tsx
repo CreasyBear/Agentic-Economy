@@ -33,7 +33,7 @@ export function AeTurnContextLine({ intent, seq, artifacts }: AeTurnContextLineP
       aria-label="Turn context"
     >
       <Icon className="mt-px size-3.5 text-muted-foreground" aria-hidden="true" />
-      <span>{line}</span>
+      <span dir="auto" style={{ unicodeBidi: 'isolate' }}>{line}</span>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { connectionAuthoritySnapshotsEqual } from '@/modules/capability-supply/public'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import {
@@ -13,7 +14,6 @@ import type {
   EgressOperationRow,
 } from './types'
 
-const DISPATCH_LEASE_MS = 150_000
 
 export async function beginDispatch(
   args: BeginDispatchArgs,
@@ -42,6 +42,17 @@ export async function beginDispatch(
     return { kind: 'terminal', state: 'uncertain' }
   }
   if (operation.state !== 'allocated') return { kind: 'terminal', state: operation.state }
+  const canonicalClaimMaterial = operation.canonicalClaimMaterial
+  if (canonicalClaimMaterial === undefined) {
+    await markAllocatedNotReleased(ports, operation, args.now, 'canonical_claim_material_missing')
+    return { kind: 'terminal', state: 'not_released' }
+  }
+  const leaseExpiresAt = Date.parse(canonicalClaimMaterial.attempt.leaseExpiresAt)
+  const recordedAt = Date.parse(canonicalClaimMaterial.recordedAt)
+  if (!Number.isFinite(leaseExpiresAt) || !Number.isFinite(recordedAt) || leaseExpiresAt <= args.now) {
+    await markAllocatedNotReleased(ports, operation, args.now, 'canonical_claim_lease_expired')
+    return { kind: 'terminal', state: 'not_released' }
+  }
   const opened = await openReadyPreparation(ports, operation.preparationRef, args.principalId)
   if (opened.kind !== 'ready') {
     await ports.patchOperation({
@@ -58,7 +69,8 @@ export async function beginDispatch(
     })
     return { kind: 'terminal', state: 'not_released' }
   }
-  const supply = opened.supplies.find(({ offering, binding }) => (
+  const { preparation, action, supplies } = opened
+  const supply = supplies.find(({ offering, binding, publication }) => (
     String(offering.businessId) === String(operation.businessId)
     && offering.offeringId === operation.offeringId
     && binding.bindingId === operation.bindingId
@@ -68,24 +80,30 @@ export async function beginDispatch(
     && binding.configDigest === operation.adapterConfigDigest
     && binding.configJson === operation.adapterConfigJson
     && binding.endpointUrl === operation.endpointUrl
-    && binding.credentialRef === operation.credentialRef
+    && (binding.authority.kind === 'keyless' ? 'none' : binding.authority.connectionRef) === operation.credentialRef
+    && (binding.authority.kind === 'keyless'
+      ? binding.connectionAuthority === undefined
+        && publication.connectionAuthority === undefined
+        && operation.connectionAuthority === undefined
+      : connectionAuthoritySnapshotsEqual(binding.connectionAuthority, operation.connectionAuthority)
+        && connectionAuthoritySnapshotsEqual(publication.connectionAuthority, operation.connectionAuthority))
   ))
   if (supply === undefined
-    || opened.preparation.authorityScope.authorityScopeDigest !== operation.authorityScopeDigest) {
+    || preparation.authorityScope.authorityScopeDigest !== operation.authorityScopeDigest) {
     await markAllocatedNotReleased(ports, operation, args.now, 'release_binding_changed')
     return { kind: 'terminal', state: 'not_released' }
   }
-  if (opened.preparation.authorityScope.declarations.some((declaration) => declaration.phase === 'preparation'
+  if (preparation.authorityScope.declarations.some((declaration) => declaration.phase === 'preparation'
     && declaration.recipient.kind === 'candidate_binding'
     && (declaration.classification !== 'public' || declaration.effect.authority !== 'none'))
-    && opened.preparation.authorityReservation?.reservationRef !== operation.authorityReference) {
+    && preparation.authorityReservation?.reservationRef !== operation.authorityReference) {
     await markAllocatedNotReleased(ports, operation, args.now, 'release_authority_changed')
     return { kind: 'terminal', state: 'not_released' }
   }
-  if (opened.preparation.authorityReservation !== undefined) {
+  if (preparation.authorityReservation !== undefined) {
     const reservation = await ports.loadAuthorityReservation(operation.authorityReference)
     if (reservation === null
-      || reservation.reservationDigest !== opened.preparation.authorityReservation.reservationDigest
+      || reservation.reservationDigest !== preparation.authorityReservation.reservationDigest
       || reservation.reservation.authorityScopeDigest !== operation.authorityScopeDigest) {
       await markAllocatedNotReleased(ports, operation, args.now, 'release_authority_changed')
       return { kind: 'terminal', state: 'not_released' }
@@ -108,7 +126,7 @@ export async function beginDispatch(
         !== canonicalDigest(operation.lineage as StableHashValue)) {
       throw new Error('customer_request_v2_egress_allocation_integrity_failure')
     }
-    const declaration = opened.preparation.authorityScope.declarations.find((candidate) => (
+    const declaration = preparation.authorityScope.declarations.find((candidate) => (
       candidate.phase === 'preparation'
       && candidate.recipient.kind === 'candidate_binding'
       && candidate.declarationKey === allocation.declarationKey
@@ -125,7 +143,7 @@ export async function beginDispatch(
     if (declaration === undefined) {
       throw new Error('customer_request_v2_egress_declaration_integrity_failure')
     }
-    const fact = opened.action.inputs.find((candidate) => candidate.inputKey === allocation.inputKey
+    const fact = action.inputs.find((candidate) => candidate.inputKey === allocation.inputKey
       && candidate.inputPointer === allocation.inputPointer
       && candidate.schemaIdentity === allocation.schemaIdentity)
     if (fact === undefined || canonicalDigest(fact.value as StableHashValue) !== allocation.valueDigest) {
@@ -140,27 +158,29 @@ export async function beginDispatch(
       purpose: allocation.purpose,
     }
   })
-  const dispatchAttemptRef = `preparation-dispatch:${canonicalDigest({
-    operationRef: operation.operationRef,
-    operationDigest: operation.operationDigest,
-    startedAt: args.now,
-  })}`
+  const dispatchAttemptRef = canonicalClaimMaterial.attempt.attemptRef
+  const dispatchStartedAt = recordedAt
+  const dispatchLeaseExpiresAt = leaseExpiresAt
   await ports.patchOperation({
     operationId: operation.operationId,
     patch: {
       state: 'dispatching',
-      dispatchStartedAt: args.now,
+      dispatchStartedAt,
       dispatchAttemptRef,
-      dispatchLeaseExpiresAt: args.now + DISPATCH_LEASE_MS,
+      dispatchLeaseExpiresAt,
     },
   })
   return {
     kind: 'dispatch',
     endpointUrl: operation.endpointUrl,
     credentialRef: operation.credentialRef,
+    ...(operation.connectionAuthority === undefined
+      ? {}
+      : { connectionAuthority: operation.connectionAuthority }),
     adapterId: operation.adapterId,
     configJson: operation.adapterConfigJson,
     dispatchAttemptRef,
+    canonicalClaimMaterial,
     bodyText: stableStringify({
       protocol: 'ae.preparation-egress:v1',
       operationRef: operation.operationRef,

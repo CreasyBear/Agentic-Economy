@@ -1,8 +1,10 @@
 import { z } from 'zod'
 
+import { exactAmountSchema } from './exact-amount'
+export { currencySchema, exactAmountSchema } from './exact-amount'
+export type { ExactAmount } from './exact-amount'
+
 export const moneyRefSchema = z.string().trim().min(1).max(500)
-export const currencySchema = z.string().trim().regex(/^[A-Z]{3}$/)
-export const minorAmountSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 
 const freeTierSchema = z.strictObject({
   maxCalls: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -10,10 +12,9 @@ const freeTierSchema = z.strictObject({
 })
 
 export const pricingConfigSchema = z.strictObject({
-  version: z.literal('pricing:v1'),
+  version: z.literal('pricing:v2'),
   unit: z.literal('call'),
-  currency: currencySchema,
-  paidAmountMinor: minorAmountSchema,
+  paidAmount: exactAmountSchema,
   freeTier: freeTierSchema.optional(),
 })
 

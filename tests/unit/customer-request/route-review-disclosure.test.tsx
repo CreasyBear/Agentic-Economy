@@ -30,7 +30,7 @@ describe('route review keeps one decision immediate', () => {
     renderReview()
 
     expect(screen.getByText('Same-day burst pipe repair')).toBeDefined()
-    expect(screen.getByText('Maximum $420.00')).toBeDefined()
+    expect(screen.getByText('Maximum AUD 420.00')).toBeDefined()
     expect(screen.getByText('Cost')).toBeDefined()
     expect(screen.getByText(/Confirm before/)).toBeDefined()
     // The summary counts what leaves, so the customer can judge exposure at a
@@ -145,7 +145,7 @@ const route = {
     deliverables: ['Repair report'],
   },
   businesses: [{ businessRef: 'business:one', name: 'North Star Services' }],
-  maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 42_000 },
+  maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '42000', exponent: 2 } },
   validUntil: 1_800_000_000_000,
   quoteDigest: 'digest:choice',
   dataUse: {

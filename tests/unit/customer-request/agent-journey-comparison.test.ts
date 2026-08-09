@@ -8,7 +8,7 @@ const cohort = freezeAgentJourneyCohort({
   request: 'Find the cheapest labelled sandbox option.',
   customerAnswers: {},
   providerOrigins: ['https://providers.example/resolver', 'https://providers.example/quoter'],
-  maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+  maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
   authorityScope: {
     recipients: ['Sandbox Resolver', 'Sandbox Quoter'],
     purposes: ['prepare_quote', 'resolve_request'],
@@ -47,7 +47,7 @@ const direct = {
   integrationBurden: { originsProvided: 2, discoveryCalls: 2, invocationCalls: 2, schemaMappings: 1 },
   turns: { total: 4 }, elapsedMs: 40,
   hardConstraintAccuracy: { state: 'satisfied' as const },
-  totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', amountMinor: 1_000 } },
+  totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', units: '1000', exponent: 2 } },
   recovery: { state: 'unsupported' as const }, resultUsability: { state: 'usable' as const },
   disclosureLedger: [
     {
@@ -75,7 +75,7 @@ const ae = {
   measurements: {
     integrationBurden: { requestCalls: 8, clarifications: 1 }, turns: { total: 8 }, elapsedMs: 80,
     hardConstraintAccuracy: { state: 'satisfied' as const },
-    totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', amountMinor: 1_000 } },
+    totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', units: '1000', exponent: 2 } },
     recovery: { state: 'durable' as const, resumed: true, postures: ['retry_safe' as const] },
     interruptionRecovery: {
       state: 'verified' as const,

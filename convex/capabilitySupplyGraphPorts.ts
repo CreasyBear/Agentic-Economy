@@ -3,6 +3,7 @@ import type {
   GraphPublicationRow,
   GraphPublishedBusiness,
 } from '@/modules/capability-supply/public'
+import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
@@ -11,7 +12,6 @@ import {
   getExactRegisteredCapabilityContract,
 } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-
 export function capabilitySupplyGraphPorts(
   db: QueryCtx['db'] | MutationCtx['db'],
 ): CapabilityGraphPorts {
@@ -49,22 +49,56 @@ export function capabilitySupplyGraphPorts(
         ? toPublishedBusiness(business)
         : null
     },
+    loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
+      const row = await db.query('capabilityProviderConnections')
+        .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
+      return row === null ? undefined : {
+        connectionRef: row.connectionRef,
+        businessId: String(row.businessId),
+        providerRef: row.providerRef,
+        providerAccountRef: row.providerAccountRef,
+        adapterId: row.adapterId,
+        credentialRef: row.credentialRef,
+        grantedScopes: row.grantedScopes,
+        grantedResources: row.grantedResources,
+        authorityGeneration: row.authorityGeneration,
+        authorityDigest: row.authorityDigest,
+        lifecycle: row.lifecycle,
+        observedAt: row.observedAt,
+        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
+        ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
+        ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
+        evidenceRefs: row.evidenceRefs,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        lastCommandId: row.lastCommandId,
+        lastCommandDigest: row.lastCommandDigest,
+      }
+    },
     getActiveExactCapabilityContract: (ref) => getActiveExactCapabilityContract(db, ref),
     getExactRegisteredCapabilityContract: (ref) => getExactRegisteredCapabilityContract(db, ref),
     patchProbeReadiness: async (publicationId, patch) => {
       if (!('patch' in db)) {
         throw new Error('patchProbeReadiness requires a mutation database writer')
       }
+      const connectionAuthority = patch.connectionAuthority === undefined
+        ? undefined
+        : {
+          ...patch.connectionAuthority,
+          grantedScopes: [...patch.connectionAuthority.grantedScopes],
+          grantedResources: [...patch.connectionAuthority.grantedResources],
+        }
       await db.patch(publicationId as Id<'capabilityPublications'>, {
         credentialState: patch.credentialState,
         healthState: patch.healthState,
+        ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
         readinessObservedAt: patch.readinessObservedAt,
         readinessValidUntil: patch.readinessValidUntil,
         readinessEvidenceRefs: [...patch.readinessEvidenceRefs],
         updatedAt: patch.updatedAt,
       })
     },
-  }
+}
 }
 
 function toPublishedBusiness(doc: Doc<'businesses'>): GraphPublishedBusiness {
@@ -82,6 +116,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
   return {
     id: doc._id,
     publicationRef: doc.publicationRef,
+    operationRef: doc.operationRef,
     revision: doc.revision,
     businessId: doc.businessId,
     offeringId: doc.offeringId,
@@ -94,6 +129,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,
+    ...(doc.connectionAuthority === undefined ? {} : { connectionAuthority: doc.connectionAuthority }),
     registrationEvidenceRefs: doc.registrationEvidenceRefs,
     readinessEvidenceRefs: doc.readinessEvidenceRefs,
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),

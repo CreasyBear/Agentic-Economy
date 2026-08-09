@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import {
   buildRegistrySearchDocumentsForCatalog,
@@ -131,18 +132,31 @@ function catalog(
 function offering(
   overrides: Partial<PublicBusinessCatalogApiV2Dto['offerings'][number]> = {},
 ): PublicBusinessCatalogApiV2Dto['offerings'][number] {
+  const offeringRef = brandNonEmpty(
+    overrides.offeringRef ?? 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
+    'OfferingRef',
+  )
+  const accessPathRef = brandNonEmpty(
+    `access:${offeringRef.slice('offering:'.length)}:inquiry`,
+    'AccessPathRef',
+  )
+  const descriptor = {
+    kind: 'human_request' as const,
+    channel: 'ae_inquiry' as const,
+    disclosure: 'Send a qualified inquiry for owner review.',
+  }
+
   return {
-    offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
+    offeringRef,
     revision: 1,
     name: 'Emergency pipe repair',
     category: 'Emergency plumbing',
     summary: 'Emergency plumbing help for urgent pipe repairs.',
     serviceAreaSummary: 'Parramatta and nearby suburbs',
     accessPaths: [{
-      accessPathRef: 'access:parramatta-emergency-plumbing:emergency-pipe-repair:inquiry',
-      kind: 'human_request',
-      channel: 'ae_inquiry',
-      disclosure: 'Send a qualified inquiry for owner review.',
+      accessPathRef,
+      offeringRevision: 1,
+      ...descriptor,
     }],
     support: { integrated: false, aeSupportedAction: false },
     ...overrides,

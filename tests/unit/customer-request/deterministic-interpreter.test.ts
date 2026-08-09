@@ -20,12 +20,19 @@ import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2
 
 const BURST_PIPE_JOB = 'emergency plumber near me tonight, how much?'
 
+// Registry-taught discovery vocabulary. Exact-token matching (no stemming): the literal words
+// that appear in the request MUST appear verbatim in a descriptor's name, description or
+// searchTerms, or that descriptor can never be a candidate for the request.
+const PLUMBING_SEARCH_TERMS = ['plumber', 'plumbing', 'burst pipe', 'blocked drain', 'emergency callout']
+const ACCOUNTING_SEARCH_TERMS = ['accounting', 'business activity', 'lodge', 'bas']
+const DENTIST_SEARCH_TERMS = ['dentist', 'dental', 'emergency appointment', 'tooth pain']
+
 describe('deterministic customer request interpretation', () => {
   it('matches the plumbing capability and leaves the accountant out', async () => {
     const plumbing = capability('plumbing.callout', 'Emergency plumbing callout',
-      'Burst pipe and blocked drain triage for urgent local plumbing issues.')
+      'Burst pipe and blocked drain triage for urgent local plumbing issues.', PLUMBING_SEARCH_TERMS)
     const accounting = capability('accounting.review', 'Business accounting review',
-      'Prepare and lodge business activity statements for local companies.')
+      'Prepare and lodge business activity statements for local companies.', ACCOUNTING_SEARCH_TERMS)
 
     const proposal = await createDeterministicCustomerRequestInterpreter().propose({
       customerJob: BURST_PIPE_JOB,
@@ -43,10 +50,12 @@ describe('deterministic customer request interpretation', () => {
 
   it('proposes nothing rather than an arbitrary capability when no word matches', async () => {
     const plumbing = capability('plumbing.callout', 'Emergency plumbing callout',
-      'Burst pipe and blocked drain triage for urgent local plumbing issues.')
+      'Burst pipe and blocked drain triage for urgent local plumbing issues.', PLUMBING_SEARCH_TERMS)
     const accounting = capability('accounting.review', 'Business accounting review',
-      'Prepare and lodge business activity statements for local companies.')
+      'Prepare and lodge business activity statements for local companies.', ACCOUNTING_SEARCH_TERMS)
 
+    // "xyzzy-nonsense" shares no token with the top discovery-ranked candidates, so the
+    // eligibility gate calls it greenfield and the interpreter proposes nothing.
     await expect(createDeterministicCustomerRequestInterpreter().propose({
       customerJob: 'xyzzy-nonsense',
       capabilities: [plumbing.descriptor, accounting.descriptor],
@@ -57,9 +66,9 @@ describe('deterministic customer request interpretation', () => {
     // "emergency" and "tonight" say when, not what. A capability whose only overlap with the
     // request is an availability word must not outrank the one that names the actual trade.
     const plumbing = capability('plumbing.callout', 'Local plumbing callout',
-      'Burst pipe and blocked drain triage for a plumber to attend.')
+      'Burst pipe and blocked drain triage for a plumber to attend.', PLUMBING_SEARCH_TERMS)
     const emergencyDentist = capability('dental.emergency', 'Emergency dental appointment',
-      'Emergency tonight appointment for urgent dental pain.')
+      'Emergency tonight appointment for urgent dental pain.', DENTIST_SEARCH_TERMS)
 
     await expect(createDeterministicCustomerRequestInterpreter().propose({
       customerJob: BURST_PIPE_JOB,
@@ -67,12 +76,14 @@ describe('deterministic customer request interpretation', () => {
     })).resolves.toMatchObject({ selections: [{ selectionKey: plumbing.model.selectionKey }] })
   })
 
-  it('ranks identically whichever order the capabilities arrive in', async () => {
+  it('follows the discovery pool order without re-ranking', async () => {
     const description = 'Burst pipe and blocked drain triage for urgent local plumbing issues.'
-    const first = capability('plumbing.first', 'Emergency plumbing callout', description)
-    const second = capability('plumbing.second', 'Emergency plumbing callout', description)
+    const first = capability('plumbing.first', 'Emergency plumbing callout', description,
+      ['plumber', 'plumbing', 'burst pipe'])
+    const second = capability('plumbing.second', 'Emergency plumbing callout', description,
+      ['plumber', 'plumbing', 'burst pipe'])
     const accounting = capability('accounting.review', 'Business accounting review',
-      'Prepare and lodge business activity statements for local companies.')
+      'Prepare and lodge business activity statements for local companies.', ACCOUNTING_SEARCH_TERMS)
     const interpreter = createDeterministicCustomerRequestInterpreter()
 
     const forward = await interpreter.propose({
@@ -84,16 +95,40 @@ describe('deterministic customer request interpretation', () => {
       capabilities: [accounting.descriptor, second.descriptor, first.descriptor],
     })
 
-    // Two capabilities score identically here, so only the stable key can decide which one wins.
-    const tieBreak = [first.model.selectionKey, second.model.selectionKey]
-      .sort((left, right) => left.localeCompare(right))[0]
-    expect(forward).toEqual(reversed)
-    expect(forward).toMatchObject({ selections: [{ selectionKey: tieBreak }] })
+    // The two bespoke plumbing fixtures cover the request identically, so discovery order — not a
+    // re-rank — decides: the first GENUINE candidate in the pool wins. Reversing the pool flips
+    // the winner; the non-genuine accountant is skipped in both orderings.
+    expect(forward).toMatchObject({ selections: [{ selectionKey: first.model.selectionKey }] })
+    expect(reversed).toMatchObject({ selections: [{ selectionKey: second.model.selectionKey }] })
+
+    // Determinism: re-running the same pool yields the identical proposal.
+    const again = await interpreter.propose({
+      customerJob: BURST_PIPE_JOB,
+      capabilities: [first.descriptor, second.descriptor, accounting.descriptor],
+    })
+    expect(again).toEqual(forward)
+  })
+
+  it('co-selects only the discovery-top-ranked alternative when two share the request vocabulary', async () => {
+    const description = 'Burst pipe and blocked drain triage for urgent local plumbing issues.'
+    const first = capability('plumbing.callout', 'Emergency plumbing callout', description,
+      ['plumber', 'plumbing', 'burst pipe'])
+    const second = capability('plumbing.drain', 'Emergency drain clearing', description,
+      ['plumber', 'plumbing', 'blocked drain'])
+
+    // Both bound to "plumber", but they are ALTERNATIVES, not compose steps: the top-ranked one
+    // covers the request token and the second covers zero NEW uncovered tokens, so only [first].
+    await expect(createDeterministicCustomerRequestInterpreter().propose({
+      customerJob: BURST_PIPE_JOB,
+      capabilities: [first.descriptor, second.descriptor],
+    })).resolves.toMatchObject({
+      selections: [{ selectionKey: first.model.selectionKey }],
+    })
   })
 
   it('compiles a keyword-matched proposal through the normal path and marks it as keyword-matched', async () => {
     const plumbing = capability('plumbing.callout', 'Emergency plumbing callout',
-      'Burst pipe and blocked drain triage for urgent local plumbing issues.')
+      'Burst pipe and blocked drain triage for urgent local plumbing issues.', PLUMBING_SEARCH_TERMS)
     const proposal = await createDeterministicCustomerRequestInterpreter().propose({
       customerJob: BURST_PIPE_JOB, capabilities: [plumbing.descriptor],
     })
@@ -120,7 +155,7 @@ describe('deterministic customer request interpretation', () => {
 describe('configured customer request interpretation', () => {
   it('still interprets without a provider key instead of leaving no interpreter at all', async () => {
     const plumbing = capability('plumbing.callout', 'Emergency plumbing callout',
-      'Burst pipe and blocked drain triage for urgent local plumbing issues.')
+      'Burst pipe and blocked drain triage for urgent local plumbing issues.', PLUMBING_SEARCH_TERMS)
     const interpreter = createConfiguredRequestInterpreter({ maximumDescriptorBytes: 64_000 })
 
     expect(interpreter.interpreterId).toBe(DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID)
@@ -131,7 +166,7 @@ describe('configured customer request interpretation', () => {
 
   it('falls back to keyword matching on the last attempt, and reports which leg answered', async () => {
     const plumbing = capability('plumbing.callout', 'Emergency plumbing callout',
-      'Burst pipe and blocked drain triage for urgent local plumbing issues.')
+      'Burst pipe and blocked drain triage for urgent local plumbing issues.', PLUMBING_SEARCH_TERMS)
     const logged: unknown[] = []
     const consoleError = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       logged.push(...args)
@@ -165,7 +200,7 @@ describe('configured customer request interpretation', () => {
   it('lets a retryable attempt fail so a transient provider blip is not answered by keywords', async () => {
     // Absorbing the first failure would turn one 503 into a permanently downgraded answer.
     const plumbing = capability('plumbing.callout', 'Emergency plumbing callout',
-      'Burst pipe and blocked drain triage for urgent local plumbing issues.')
+      'Burst pipe and blocked drain triage for urgent local plumbing issues.', PLUMBING_SEARCH_TERMS)
     vi.stubGlobal('fetch', vi.fn(async () => new Response('unavailable', { status: 503 })))
 
     try {
@@ -201,7 +236,7 @@ describe('configured customer request interpretation', () => {
   })
 })
 
-function capability(capabilityId: string, name: string, description: string) {
+function capability(capabilityId: string, name: string, description: string, searchTerms: string[] = []) {
   const document = capabilityContractV2({ capabilityId, name, description, inputSchema: requestInputSchema() })
   const model = openCapabilityDecisionModel(defineCapabilityContract(document))
   return {
@@ -212,6 +247,7 @@ function capability(capabilityId: string, name: string, description: string) {
       selectionKey: model.selectionKey,
       name,
       description,
+      searchTerms,
       inputs: model.inputs,
       valueSchemas: model.inputs.map((input) => ({
         inputKey: input.key,
@@ -236,7 +272,7 @@ function supply(bindingId: string, model: CapabilityDecisionModel) {
     contractRef: model.contractRef, offeringRegistrationHash: `sha256:offering:${bindingId}`,
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
     publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
-    price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
+    price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '100', exponent: 2 } },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }

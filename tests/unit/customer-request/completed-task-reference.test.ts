@@ -68,7 +68,6 @@ function control(
     control: {
       invocationRef: 'invocation:development:one',
       invocationVersion: 4,
-      environment: 'MOCK/DEVELOPMENT ONLY',
       persistence: 'durable_control',
       origin: {
         kind: 'standalone',
@@ -94,10 +93,10 @@ function ports(
   source = { sourceResultRef, result },
 ): AttachCompletedTaskReferencePorts {
   const durable = {
-    readControl: () => row,
+    readControl: async () => row,
   } as unknown as DurableActionInvocationPort<ActionResult>
   return {
-    readCompletedResultIdentity: ({ invocationRef, actor }) =>
+    readCompletedResultIdentity: async ({ invocationRef, actor }) =>
       readCompletedResultIdentity(durable, invocationRef, actor, () => source),
   }
 }
@@ -111,8 +110,8 @@ const input = (candidateAggregate = aggregate()) => ({
 })
 
 describe('completed standalone result reference in Customer Request V2', () => {
-  it('attaches one source-verified identity, replays idempotently, and never reruns the action', () => {
-    const attached = attachCompletedTaskReference(input(), ports())
+  it('attaches one source-verified identity, replays idempotently, and never reruns the action', async () => {
+    const attached = await attachCompletedTaskReference(input(), ports())
     expect(attached).toMatchObject({
       kind: 'attached',
       noEffect: true,
@@ -128,7 +127,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
       },
     })
     if (attached.kind !== 'attached') throw new Error('reference was not attached')
-    const replay = attachCompletedTaskReference(input(attached.aggregate), ports())
+    const replay = await attachCompletedTaskReference(input(attached.aggregate), ports())
     expect(replay).toMatchObject({
       kind: 'replayed',
       noEffect: true,
@@ -145,8 +144,8 @@ describe('completed standalone result reference in Customer Request V2', () => {
     expect(attached.aggregate.plan.actions).toEqual([])
   })
 
-  it('survives labelled cold reconstruction and remains a valid canonical V2 aggregate', () => {
-    const attached = attachCompletedTaskReference(input(), ports())
+  it('survives labelled cold reconstruction and remains a valid canonical V2 aggregate', async () => {
+    const attached = await attachCompletedTaskReference(input(), ports())
     if (attached.kind !== 'attached') throw new Error('reference was not attached')
     const reconstructed = structuredClone(
       structuredClone(attached.aggregate) as CustomerRequestV2Aggregate,
@@ -176,9 +175,12 @@ describe('completed standalone result reference in Customer Request V2', () => {
       terminalBusinessOutcome: 'refused',
       terminalResultReferenceable: false,
     }), {}, 'outcome_not_referenceable'],
-  ])('refuses %s identity', (_label, row, overrides, reason) => {
+  ])('refuses %s identity', async (_label, row, overrides, reason) => {
     const candidate = input()
-    expect(attachCompletedTaskReference({ ...candidate, ...overrides }, ports(row))).toEqual({
+    await expect(attachCompletedTaskReference(
+      { ...candidate, ...overrides },
+      ports(row),
+    )).resolves.toEqual({
       kind: 'refused',
       reason,
     })
@@ -187,31 +189,29 @@ describe('completed standalone result reference in Customer Request V2', () => {
   it.each([
     ['source reference', { sourceResultRef: 'mock:tampered', result }],
     ['result digest', { sourceResultRef, result: { kind: 'inquiry_queued', tampered: true } }],
-  ])('refuses a tampered %s', (_label, source) => {
-    expect(attachCompletedTaskReference(input(), ports(control(), source))).toEqual({
+  ])('refuses a tampered %s', async (_label, source) => {
+    await expect(attachCompletedTaskReference(input(), ports(control(), source))).resolves.toEqual({
       kind: 'refused',
       reason: 'source_result_mismatch',
     })
   })
 
-  it('refuses a tampered persisted result digest', () => {
-    expect(attachCompletedTaskReference(input(), ports(control({
+  it('refuses a tampered persisted result digest', async () => {
+    await expect(attachCompletedTaskReference(input(), ports(control({
       sourceResultDigest: `sha256:${'0'.repeat(64)}`,
-    })))).toEqual({
+    })))).resolves.toEqual({
       kind: 'refused',
       reason: 'source_result_mismatch',
     })
   })
 
-  it('leaves historical Request aggregates and their replay digest unchanged', () => {
-    const historical = aggregate()
-    const reconstructed = structuredClone(
-      structuredClone(historical) as CustomerRequestV2Aggregate,
-    )
-    expect(reconstructed).toEqual(historical)
-    expect(reconstructed.completedTaskReferences).toBeUndefined()
-    expect(aggregateIsInternallyConsistent(reconstructed, 0)).toBe(true)
-  })
+  it('leaves historical Request aggregates and their replay digest unchanged', async () => { const historical = aggregate()
+  const reconstructed = structuredClone(
+    structuredClone(historical) as CustomerRequestV2Aggregate,
+  )
+  expect(reconstructed).toEqual(historical)
+  expect(reconstructed.completedTaskReferences).toBeUndefined()
+  expect(aggregateIsInternallyConsistent(reconstructed, 0)).toBe(true) })
 
   it('commits one canonical revision, supersedes prior route authority, and cold-replays without another effect', async () => {
     const invocationActor = {
@@ -266,7 +266,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
       nextAttemptRef: () => 'attempt:development:one',
       resolveSourceState: () => invocationSource,
     })
-    const prepared = invocation.prepare({
+    const prepared = await invocation.prepare({
       origin: invocationOrigin,
       actor: invocationActor,
       input: invocationInput,
@@ -274,7 +274,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
       freshnessMs: 60_000,
     })
     invocationSource.prepared = prepared.prepared!
-    const decided = invocation.decide({
+    const decided = await invocation.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -296,8 +296,15 @@ describe('completed standalone result reference in Customer Request V2', () => {
       view: { control: { state: 'terminal' } },
     })
     expect(runner).toHaveBeenCalledTimes(1)
-    const attemptCountAfterEffect = invocationPort.readAttempts(prepared.invocationRef, 10).length
-    const historyCountAfterEffect = invocationPort.readHistory(prepared.invocationRef, 0, 20).length
+    const attemptCountAfterEffect = (await invocationPort.readAttempts(
+      prepared.invocationRef,
+      10,
+    )).length
+    const historyCountAfterEffect = (await invocationPort.readHistory(
+      prepared.invocationRef,
+      0,
+      20,
+    )).length
     expect(attemptCountAfterEffect).toBe(1)
 
     const initial = aggregate()
@@ -368,7 +375,7 @@ describe('completed standalone result reference in Customer Request V2', () => {
       insertGenerationCommand: async () => {},
     } as unknown as CustomerRequestV2WritePorts
     const identityPorts: AttachCompletedTaskReferencePorts = {
-      readCompletedResultIdentity: ({ invocationRef, actor }) =>
+      readCompletedResultIdentity: async ({ invocationRef, actor }) =>
         readCompletedResultIdentity(invocationPort, invocationRef, actor, () => ({
           sourceResultRef: invocationSource.resultIdentity.sourceResultRef,
           result: invocationResult,
@@ -435,10 +442,10 @@ describe('completed standalone result reference in Customer Request V2', () => {
     expect(cold.completedTaskReferences).toHaveLength(1)
     expect(aggregateIsInternallyConsistent(cold, 1)).toBe(true)
     expect(runner).toHaveBeenCalledTimes(1)
-    expect(invocationPort.readAttempts(prepared.invocationRef, 10)).toHaveLength(
+    expect(await invocationPort.readAttempts(prepared.invocationRef, 10)).toHaveLength(
       attemptCountAfterEffect,
     )
-    expect(invocationPort.readHistory(prepared.invocationRef, 0, 20)).toHaveLength(
+    expect(await invocationPort.readHistory(prepared.invocationRef, 0, 20)).toHaveLength(
       historyCountAfterEffect,
     )
     expect(JSON.stringify(cold)).not.toContain(invocationResult.receipt.accessKey)

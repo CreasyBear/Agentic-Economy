@@ -8,7 +8,10 @@ import {
   type EligiblePublicationRow,
   type EligibleSupplyPorts,
 } from '@/modules/capability-supply/internal/eligibility'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/internal/binding'
 import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import {
   capabilityBindingEligibilityHash,
@@ -20,6 +23,12 @@ import {
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import {
+  createProviderConnection,
+  providerConnectionAuthorityDigest,
+  type CreateProviderConnectionCommand,
+  type ProviderConnection,
+} from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const contractRef = {
@@ -57,30 +66,68 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   networkId: 'ae:public',
   contractRef,
   endpointUrl: 'https://example.test/api',
-  credentialRef: 'credential:demo',
+  authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
   continuation: { kind: 'single_response', evidenceRefs: ['evidence:continuation'] },
   cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
   adapter: { adapterId: 'http-json:v1', config: null },
   registrationEvidenceRefs: ['evidence:binding'],
 })
 
+const providerConnectionCommand: CreateProviderConnectionCommand = {
+  commandId: 'command:create:demo',
+  connectionRef: 'connection:demo',
+  businessId: 'business-1',
+  providerRef: 'provider:demo',
+  providerAccountRef: 'account:demo',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:DEMO_PROVIDER_SECRET',
+  requestedScopes: ['demo:read'],
+  grantedScopes: ['demo:read'],
+  requestedResources: ['account:demo'],
+  grantedResources: ['account:demo'],
+  evidenceRefs: ['evidence:connection'],
+}
+
+function demoProviderConnection(
+  overrides: Partial<Omit<ProviderConnection, 'authorityDigest'>> = {},
+): ProviderConnection {
+  const result = createProviderConnection(providerConnectionCommand, 1)
+  if (result.kind !== 'applied') throw new Error(`provider connection fixture failed: ${result.kind}`)
+  const connection = { ...result.connection, ...overrides }
+  return { ...connection, authorityDigest: providerConnectionAuthorityDigest(connection) }
+}
+
+function publicationOperationRef(publicationRef: string, revision: number) {
+  return createPublicOperationRef({
+    operationId: capabilityOperationId(contractRef.capabilityId),
+    publicationRef,
+    publicationRevision: revision,
+    contractRef,
+  })
+}
+
 const admitted = {
   configJson: '{}',
   configDigest: canonicalDigest({}),
 }
 
-function currentPublication(overrides: Partial<Omit<EligiblePublicationRow, 'operationRef'>> = {}): EligiblePublicationRow {
+function currentPublication(
+  overrides: Partial<Omit<EligiblePublicationRow, 'operationRef'>> = {},
+  includeConnectionAuthority = true,
+): EligiblePublicationRow {
   const publicationRef = overrides.publicationRef ?? 'pub-a'
   const revision = overrides.revision ?? 2
+  const connectionAuthority = includeConnectionAuthority
+    ? connectionAuthoritySnapshotFromProviderConnection(
+      demoProviderConnection(),
+      publicationOperationRef(publicationRef, revision),
+    )
+    : undefined
   return {
     publicationRef,
     revision,
-    operationRef: createPublicOperationRef({
-      operationId: capabilityOperationId(contractRef.capabilityId),
-      publicationRef,
-      publicationRevision: revision,
-      contractRef,
-    }),
+    operationRef: publicationOperationRef(publicationRef, revision),
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     businessId: 'business-1',
     networkId: 'ae:public',
     capabilityId: contractRef.capabilityId,
@@ -133,11 +180,18 @@ function activeOffering(overrides: Partial<CapabilityOfferingRow> = {}): Capabil
 }
 
 function admittedBinding(overrides: Partial<CapabilityBindingRow> = {}): CapabilityBindingRow {
-  const registrationHash = capabilityBindingRegistrationHash(bindingRegistration, admitted)
+  const authority = overrides.authority ?? bindingRegistration.authority
+  const registrationHash = capabilityBindingRegistrationHash({ ...bindingRegistration, authority }, admitted)
   const admissionEvidenceRefs = ['evidence:admission']
   const conformanceEvidenceRefs = ['evidence:conformance']
   const admission = overrides.admission ?? 'admitted'
   const conformance = overrides.conformance ?? 'conformant'
+  const connectionAuthority = authority.kind === 'provider_connection'
+    ? connectionAuthoritySnapshotFromProviderConnection(
+      demoProviderConnection(),
+      publicationOperationRef('pub-a', 2),
+    )
+    : undefined
   return {
     _id: 'row-1',
     _creationTime: 1,
@@ -148,7 +202,8 @@ function admittedBinding(overrides: Partial<CapabilityBindingRow> = {}): Capabil
     version: contractRef.version,
     contractDigest: contractRef.contractDigest,
     endpointUrl: bindingRegistration.endpointUrl,
-    credentialRef: bindingRegistration.credentialRef,
+    authority,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     continuation: bindingRegistration.continuation,
     cancellation: bindingRegistration.cancellation,
     adapterId: bindingRegistration.adapter.adapterId,
@@ -180,19 +235,20 @@ function emptyPorts(overrides: Partial<EligibleSupplyPorts> = {}): EligibleSuppl
     loadOfferingByOfferingId: async () => null,
     loadBindingByBindingId: async () => null,
     loadPublishedBusiness: async () => null,
+    loadProviderConnection: async () => demoProviderConnection(),
     catalogOriginIsCurrent: async () => true,
     getActiveExactCapabilityContract: async () => ({ kind: 'unavailable', reason: 'not_found' }),
-    loadCurrentPublicationByBindingId: async () => null,
+    loadCurrentPublicationByBindingId: async () => currentPublication(),
     ...overrides,
   }
 }
 
 describe('capability-supply eligible inventory', () => {
   it('refuses invalid limits', async () => {
-    expect(await listIntegratedCapabilitySupply(emptyPorts(), { networkId: 'ae:public', limit: 0 }))
+    expect(await listIntegratedCapabilitySupply(emptyPorts(), { networkId: 'ae:public', limit: 0, now: 1 }))
       .toEqual({ kind: 'unavailable', reason: 'limit_invalid' })
     expect(await listIntegratedCapabilitySupply(emptyPorts(), {
-      networkId: 'ae:public', limit: MAX_ELIGIBLE_SUPPLY + 1,
+      networkId: 'ae:public', limit: MAX_ELIGIBLE_SUPPLY + 1, now: 1,
     })).toEqual({ kind: 'unavailable', reason: 'limit_invalid' })
   })
 
@@ -202,7 +258,7 @@ describe('capability-supply eligible inventory', () => {
       emptyPorts({
         listAdmittedConformantBindingsByNetwork: async () => [binding, { ...binding, bindingId: 'binding-b' }],
       }),
-      { networkId: 'ae:public', limit: 1 },
+      { networkId: 'ae:public', limit: 1, now: 1 },
     )
     expect(result).toEqual({ kind: 'unavailable', reason: 'eligible_supply_limit_exceeded' })
   })
@@ -214,7 +270,7 @@ describe('capability-supply eligible inventory', () => {
           admittedBinding({ registrationHash: `sha256:${'9'.repeat(64)}` }),
         ],
       }),
-      { networkId: 'ae:public', limit: 8 },
+      { networkId: 'ae:public', limit: 8, now: 1 },
     )
     expect(result).toEqual({ kind: 'unavailable', reason: 'supply_integrity_failure' })
   })
@@ -231,7 +287,7 @@ describe('capability-supply eligible inventory', () => {
           kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
         }),
       }),
-      { networkId: 'ae:public', limit: 8 },
+      { networkId: 'ae:public', limit: 8, now: 1 },
     )
     expect(result).toEqual({ kind: 'available', supplies: [] })
   })
@@ -370,10 +426,150 @@ describe('capability-supply eligible inventory', () => {
     const routeable = await listRouteableCapabilitySupply(
       ports, { networkId: 'ae:public', limit: 8, now: 100 },
     )
+    const exact = await getEligibleExactCapabilitySupply(
+      ports,
+      {
+        networkId: 'ae:public',
+        businessId: 'business-1',
+        offeringId: 'offering-a',
+        bindingId: 'binding-a',
+        contractRef,
+        expectedOfferingRegistrationHash: activeOffering().registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        now: 100,
+      },
+    )
+
+    expect(exact).toEqual({ kind: 'unavailable' })
 
     expect(integrated.kind).toBe('available')
     expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(0)
     expect(routeable).toEqual({ kind: 'available', supplies: [] })
+  })
+  it.each([
+    ['reauthorized connection', demoProviderConnection({ authorityGeneration: 2 })],
+    ['revoked connection', demoProviderConnection({ lifecycle: 'revoked' })],
+    ['expired connection', demoProviderConnection({ expiresAt: 50 })],
+  ] as const)('excludes provider supply after %s', async (_label, currentConnection) => {
+    const persistedConnection = currentConnection.expiresAt === undefined
+      ? demoProviderConnection()
+      : currentConnection
+    const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
+      persistedConnection,
+      publicationOperationRef('pub-a', 2),
+    )
+    const binding = admittedBinding({ connectionAuthority })
+    const offering = activeOffering()
+    const ports = emptyPorts({
+      listAdmittedConformantBindingsByNetwork: async () => [binding],
+      loadOfferingByOfferingId: async () => offering,
+      loadBindingByBindingId: async () => binding,
+      loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+      loadProviderConnection: async () => currentConnection,
+      getActiveExactCapabilityContract: async () => ({
+        kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
+      }),
+      loadCurrentPublicationByBindingId: async () => currentPublication({ connectionAuthority }),
+    })
+
+    const integrated = await listIntegratedCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    const routeable = await listRouteableCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    const exact = await getEligibleExactCapabilitySupply(
+      ports,
+      {
+        networkId: 'ae:public',
+        businessId: 'business-1',
+        offeringId: 'offering-a',
+        bindingId: 'binding-a',
+        contractRef,
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        now: 100,
+      },
+    )
+
+    expect(integrated).toEqual({ kind: 'available', supplies: [] })
+    expect(routeable).toEqual({ kind: 'available', supplies: [] })
+    expect(exact).toEqual({ kind: 'unavailable' })
+  })
+
+  it('keeps keyless supply eligible without a provider connection', async () => {
+    const binding = admittedBinding({ authority: { kind: 'keyless' } })
+    const offering = activeOffering()
+    const publication = currentPublication({}, false)
+    const ports = emptyPorts({
+      listAdmittedConformantBindingsByNetwork: async () => [binding],
+      loadOfferingByOfferingId: async () => offering,
+      loadBindingByBindingId: async () => binding,
+      loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+      loadProviderConnection: async () => undefined,
+      getActiveExactCapabilityContract: async () => ({
+        kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
+      }),
+      loadCurrentPublicationByBindingId: async () => publication,
+    })
+
+    const integrated = await listIntegratedCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    const routeable = await listRouteableCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    const exact = await getEligibleExactCapabilitySupply(
+      ports,
+      {
+        networkId: 'ae:public',
+        businessId: 'business-1',
+        offeringId: 'offering-a',
+        bindingId: 'binding-a',
+        contractRef,
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        now: 100,
+      },
+    )
+
+    expect(binding.connectionAuthority).toBeUndefined()
+    expect(publication.connectionAuthority).toBeUndefined()
+    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(1)
+    expect(routeable.kind === 'available' ? routeable.supplies : []).toHaveLength(1)
+    expect(exact.kind).toBe('available')
+  })
+  it('excludes provider supply when connection reader returns absence', async () => {
+    const binding = admittedBinding()
+    const offering = activeOffering()
+    const ports = emptyPorts({
+      listAdmittedConformantBindingsByNetwork: async () => [binding],
+      loadOfferingByOfferingId: async () => offering,
+      loadBindingByBindingId: async () => binding,
+      loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+      loadProviderConnection: async () => undefined,
+      getActiveExactCapabilityContract: async () => ({
+        kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
+      }),
+      loadCurrentPublicationByBindingId: async () => currentPublication(),
+    })
+
+    const integrated = await listIntegratedCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    const exact = await getEligibleExactCapabilitySupply(ports, {
+      networkId: 'ae:public',
+      businessId: 'business-1',
+      offeringId: 'offering-a',
+      bindingId: 'binding-a',
+      contractRef,
+      expectedOfferingRegistrationHash: offering.registrationHash,
+      expectedBindingRegistrationHash: binding.registrationHash,
+      now: 100,
+    })
+
+    expect(integrated).toEqual({ kind: 'available', supplies: [] })
+    expect(exact).toEqual({ kind: 'unavailable' })
   })
 
   it('exact supply hits when hashes and published business match', async () => {
@@ -387,6 +583,7 @@ describe('capability-supply eligible inventory', () => {
         getActiveExactCapabilityContract: async () => ({
           kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
         }),
+        loadCurrentPublicationByBindingId: async () => currentPublication(),
       }),
       {
         networkId: 'ae:public',
@@ -396,6 +593,7 @@ describe('capability-supply eligible inventory', () => {
         contractRef,
         expectedOfferingRegistrationHash: offering.registrationHash,
         expectedBindingRegistrationHash: binding.registrationHash,
+        now: 100,
       },
     )
     expect(result.kind).toBe('available')
@@ -425,6 +623,7 @@ describe('capability-supply eligible inventory', () => {
         contractRef,
         expectedOfferingRegistrationHash: `sha256:${'9'.repeat(64)}`,
         expectedBindingRegistrationHash: binding.registrationHash,
+        now: 100,
       },
     )
     expect(missHash).toEqual({ kind: 'unavailable' })
@@ -446,6 +645,7 @@ describe('capability-supply eligible inventory', () => {
         contractRef,
         expectedOfferingRegistrationHash: offering.registrationHash,
         expectedBindingRegistrationHash: binding.registrationHash,
+        now: 100,
       },
     )
     expect(missBusiness).toEqual({ kind: 'unavailable' })

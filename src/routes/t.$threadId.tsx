@@ -48,6 +48,10 @@ export const Route = createFileRoute('/t/$threadId')({
       links: [{ rel: 'canonical', href: seo.canonicalUrl }],
     }
   },
+  headers: () => ({
+    'Cache-Control': 'private, no-store',
+    'Referrer-Policy': 'no-referrer',
+  }),
   component: ThreadPage,
 })
 
@@ -65,7 +69,7 @@ function ThreadPage() {
   }, [threadId])
   return accessKey === undefined
     ? <AeChat threadId={threadId} initialProjection={projection} />
-    : <AeCustomerRecord threadId={threadId} accessKey={accessKey} />
+    : <AeCustomerRecord threadId={threadId} recordAccessKey={accessKey} />
 }
 
 

@@ -5,7 +5,7 @@ import type {
   InvocationActor,
 } from './contracts'
 import type { DynamicPublishedInvocationResult } from './dynamic-published-contract'
-import type { DevelopmentInvocationHost } from './application-service'
+import type { InvocationHost } from './application-service'
 import {
   derivePaidOperationSemantics,
   projectRichPaidOperation,
@@ -172,7 +172,7 @@ export function createPaidOperationApplicationService<Result extends ActionResul
 }
 
 export function createDevelopmentPaidOperationApplicationService(input: Readonly<{
-  host: DevelopmentInvocationHost
+  host: InvocationHost
   interpreter: PaidOperationInterpreter<DynamicPublishedInvocationResult>
 }>): PaidOperationApplicationService {
   const paymentAttempts = () => input.host.exportSnapshot().paymentAttempts
@@ -190,11 +190,11 @@ export function createDevelopmentPaidOperationApplicationService(input: Readonly
       },
     },
     commands: {
-      authorize: ({ invocationRef, expectedInvocationVersion, accept }) => {
+      authorize: async ({ invocationRef, expectedInvocationVersion, accept }) => {
         if (input.host.inspect(invocationRef)?.invocationVersion !== expectedInvocationVersion) {
           return undefined
         }
-        const decision = input.host.decide(invocationRef, accept)
+        const decision = await input.host.decide(invocationRef, accept)
         return decision.kind === 'accepted' ? decision.view : undefined
       },
       execute: async ({ invocationRef, expectedInvocationVersion }) => {

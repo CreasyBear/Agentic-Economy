@@ -1,3 +1,9 @@
+import type { Response as UndiciResponse } from 'undici'
+
+export type BoundedRequestBody =
+  | Pick<Request | Response, 'body' | 'headers'>
+  | Pick<UndiciResponse, 'body' | 'headers'>
+
 export type BoundedRequestTextResult =
   | { ok: true; text: string }
   | { ok: false; code: 'payload_too_large' }
@@ -9,7 +15,7 @@ export type BoundedRequestJsonResult =
 const decoder = new TextDecoder()
 
 export async function readBoundedRequestText(
-  request: Pick<Request, 'body' | 'headers'>,
+  request: BoundedRequestBody,
   maxBytes: number,
 ): Promise<BoundedRequestTextResult> {
   const declaredContentLength = Number(request.headers.get('content-length'))
@@ -30,6 +36,9 @@ export async function readBoundedRequestText(
       const { done, value } = await reader.read()
       if (done) {
         break
+      }
+      if (value === undefined) {
+        throw new TypeError('Response body reader returned no value before completion.')
       }
 
       totalBytes += value.byteLength
@@ -62,7 +71,7 @@ export async function readBoundedRequestText(
 }
 
 export async function readBoundedRequestJson(
-  request: Pick<Request, 'body' | 'headers'>,
+  request: BoundedRequestBody,
   maxBytes: number,
 ): Promise<BoundedRequestJsonResult> {
   const bounded = await readBoundedRequestText(request, maxBytes)

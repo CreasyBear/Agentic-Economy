@@ -73,7 +73,7 @@ const generation = {
       bindingRegistrationHash: canonicalDigest('binding'),
       publicationRef: 'pub:1',
       publicationRevision: 1,
-      price: { kind: 'fixed', currency: 'AUD', amountMinor: 2500 },
+      price: { kind: 'fixed', amount: { currency: 'AUD', units: '25', exponent: 2 } },
     }],
   }],
 } satisfies CompareResumeRouteGeneration
@@ -93,7 +93,7 @@ const availableGraph = {
     publicationRef: 'pub:1',
     publicationRevision: 1,
     readinessValidUntil: FUTURE,
-    price: { kind: 'fixed', currency: 'AUD', amountMinor: 2500 },
+    price: { kind: 'fixed', amount: { currency: 'AUD', units: '25', exponent: 2 } },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [] },
   }],
 } as unknown as RequestGraph

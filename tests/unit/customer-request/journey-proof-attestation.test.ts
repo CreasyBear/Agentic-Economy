@@ -41,7 +41,7 @@ const proof = hostedCustomerRequestJourneyProofSchema.parse({
     turns: { total: 8 },
     elapsedMs: 1200,
     hardConstraintAccuracy: { state: 'satisfied' },
-    totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 900 } },
+    totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', units: '900', exponent: 2 } },
     recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
     resultUsability: { state: 'usable' },
     replaySafety: { executionStart: 'same_request_monotonic_progress' },

@@ -58,7 +58,7 @@ const customerAnnotation = z.strictObject({
   annotationId: identifier,
   semanticIdentity: identifier.optional(),
   document: z.enum(['input', 'output']),
-  pointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
+  pointer: z.string().max(500).refine(pointerSyntaxIsCanonical),
   label: z.string().trim().min(1).max(160),
   prompt: z.string().trim().min(1).max(240).optional(),
   role: z.enum(['request', 'constraint', 'comparison', 'commitment', 'result', 'completion_evidence', 'recovery']),
@@ -84,12 +84,24 @@ const effect = z.strictObject({
 })
 const evidence = z.strictObject({
   evidenceId: identifier,
-  outputPointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
+  outputPointer: z.string().max(500).refine(pointerSyntaxIsCanonical),
   purpose: z.enum(['comparison', 'completion', 'recovery']),
 })
 const lifecycle = z.strictObject({
   idempotency: z.enum(['not_applicable', 'required']),
   recovery: z.enum(['retry_safe', 'reconcile_required']),
+})
+/**
+ * Mirrors the Vercel AI SDK `inputExamples` shape ("an array of input examples that
+ * helps guide the model on how input data should be structured when the JSON schema
+ * does not fully specify intended usage"): each example is `{ label?, input }` where
+ * `input` is an object conforming to the capability's input schema.
+ * Advisory teaching data only; full schema conformance is asserted at plan-inspection
+ * time rather than at registration so a partial illustrative example is not rejected.
+ */
+const inputExample = z.strictObject({
+  label: z.string().trim().min(1).max(160).optional(),
+  input: z.record(z.string(), jsonValueSchema),
 })
 const contractDocumentSchema = z.strictObject({
   contractFormat: z.literal(CAPABILITY_CONTRACT_FORMAT),
@@ -104,8 +116,13 @@ const contractDocumentSchema = z.strictObject({
   effects: z.array(effect).max(64),
   evidence: z.array(evidence).min(1).max(64),
   lifecycle,
+  inputExamples: z.array(inputExample).max(32).optional(),
 })
 
+export type CapabilityInputExample = Readonly<{
+  label?: string | undefined
+  input: Readonly<Record<string, JsonValue>>
+}>
 export type CapabilityContractDocument = Readonly<z.infer<typeof contractDocumentSchema>>
 export type CapabilityContractRef = Readonly<{
   capabilityId: string
@@ -113,6 +130,22 @@ export type CapabilityContractRef = Readonly<{
   contractDigest: string
 }>
 export type CapabilityContract = CapabilityContractDocument & Readonly<{ ref: CapabilityContractRef }>
+/**
+ * Validate a JSON value without allowing @cfworker/json-schema to mutate the
+ * caller-owned schema. The validator dereferences and annotates its input, so
+ * every call receives an isolated clone.
+ */
+export function validateJsonSchema(
+  schema: Readonly<Record<string, unknown>>,
+  value: unknown,
+): boolean {
+  try {
+    const validator = new Validator(structuredClone(schema) as Schema, '2020-12', false)
+    return validator.validate(value).valid
+  } catch {
+    return false
+  }
+}
 
 declare const capabilitySelectionKeyBrand: unique symbol
 declare const capabilityInputKeyBrand: unique symbol
@@ -818,6 +851,7 @@ function inputSchemaSupportsStageProjection(
 }
 
 function pointerSyntaxIsCanonical(pointer: string): boolean {
+  if (pointer === '') return true
   if (!pointer.startsWith('/')) return false
   return pointer.slice(1).split('/').every((segment) => (
     segment.length > 0
@@ -1087,7 +1121,7 @@ function jsonDepth(value: JsonValue, depth = 0): number {
   return nested.reduce((maximum, item) => Math.max(maximum, jsonDepth(item, depth + 1)), depth)
 }
 
-function containsRemoteSchemaReference(schema: Readonly<Record<string, JsonValue>>): boolean {
+export function containsRemoteSchemaReference(schema: Readonly<Record<string, JsonValue>>): boolean {
   for (const keyword of ['$ref', '$dynamicRef', '$recursiveRef'] as const) {
     const reference = schema[keyword]
     if (reference !== undefined && (typeof reference !== 'string' || !reference.startsWith('#'))) return true
@@ -1392,7 +1426,7 @@ function pointerCovers(parent: string, child: string): boolean {
   return parent === child || child.startsWith(`${parent}/`)
 }
 function decodeJsonPointerSegments(pointer: string): string[] {
-  return pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
+  return pointer === '' ? [] : pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
 }
 
 

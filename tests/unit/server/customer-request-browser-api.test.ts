@@ -14,6 +14,7 @@ import {
   handleBrowserCustomerRequestRunPost,
 } from '@/lib/server/customer-request-browser-lifecycle-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyBrowserGuestAssertion } from '@/lib/server/browser-guest-assertion'
 
 const serviceKey = 'browser-session-service-key-for-unit-tests'
 
@@ -51,6 +52,18 @@ describe('browser Customer Request API', () => {
     })
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('set-cookie')).toContain('Path=/api/requests')
+    const requestAssertion = response.headers.get('set-cookie')
+      ?.split(';')[0]?.slice('ae_request_session='.length)
+    expect(requestAssertion).toBe(
+      'v1.018f3f24-8f17-7b72-8b5a-a3d6d6bf35d7.10000.gTOSOIzOMUdqFAa2Di80VatUT2X1vQ5SpN0VpbY1lME',
+    )
+    await expect(verifyBrowserGuestAssertion(serviceKey, requestAssertion ?? '', { now: () => 10_000 }))
+      .resolves.toEqual({
+        sessionId: '018f3f24-8f17-7b72-8b5a-a3d6d6bf35d7',
+        issuedAt: 10_000,
+        principalId: 'browser_guest:018f3f24-8f17-7b72-8b5a-a3d6d6bf35d7',
+      })
     expect(response.headers.get('set-cookie')).toContain('ae_request_session=')
     expect(response.headers.get('set-cookie')).toContain('HttpOnly')
     expect(response.headers.get('set-cookie')).toContain('SameSite=Lax')
@@ -278,11 +291,35 @@ describe('browser Customer Request API', () => {
     const response = await handleBrowserCustomerRequestMessagePost(new Request(
       'https://ae.example/api/requests/request%3Aguest/messages',
       {
-        method: 'POST', headers: { Cookie: 'ae_request_session=v1.tampered.10000.invalid' }, body: '{}',
+        method: 'POST', headers: { Cookie: 'ae_request_session=v1.018f3f24-8f17-7b72-8b5a-a3d6d6bf35d7.10000.gTOSOIzOMUdqFAa2Di80VatUT2X1vQ5SpN0VpbY1lMA' }, body: '{}',
       },
     ), 'request:guest', {
       env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey },
       now: () => 10_001,
+      callAction,
+      tryAuthenticatedMessage: authenticatedFallback,
+    })
+
+    expect(response.status).toBe(401)
+    expect(callAction).not.toHaveBeenCalled()
+    expect(authenticatedFallback).toHaveBeenCalledOnce()
+  })
+
+  it('fails an expired browser session closed without reaching the Request action', async () => {
+    const callAction = vi.fn()
+    const authenticatedFallback = vi.fn(async () => Response.json({ error: 'missing_auth' }, { status: 401 }))
+    const response = await handleBrowserCustomerRequestMessagePost(new Request(
+      'https://ae.example/api/requests/request%3Aguest/messages',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: 'ae_request_session=v1.018f3f24-8f17-7b72-8b5a-a3d6d6bf35d7.10000.gTOSOIzOMUdqFAa2Di80VatUT2X1vQ5SpN0VpbY1lME',
+        },
+        body: '{}',
+      },
+    ), 'request:guest', {
+      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey },
+      now: () => 10_000 + 86_400_001,
       callAction,
       tryAuthenticatedMessage: authenticatedFallback,
     })

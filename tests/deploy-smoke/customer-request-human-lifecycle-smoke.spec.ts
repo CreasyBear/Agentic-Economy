@@ -6,6 +6,7 @@ import {
 } from '@/modules/customer-request/agent-contract'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { HOME } from '@/content/brand-copy'
 
 import { applyVercelProtectionBypassToPage } from './vercel-bypass'
 
@@ -36,9 +37,9 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   }
 
   if (existingRequestRef === undefined || existingRequestRef.length === 0) {
-    await expect(page.getByRole('heading', { level: 1, name: '“Where do we even start?”' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: HOME.heroHeading })).toBeVisible()
     await page.getByRole('searchbox', { name: 'What do you need done?' }).fill(requestText)
-    await page.getByRole('button', { name: 'Find my options' }).click({ noWaitAfter: true })
+    await page.getByRole('button', { name: 'Ask' }).click({ noWaitAfter: true })
     await reachComparableChoice(page)
 
     for (const business of expectedBusinesses) {

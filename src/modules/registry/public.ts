@@ -10,7 +10,30 @@ import type {
   PublishedInquiryTargetResolution,
 } from './internal/search'
 import type { PublicBusinessCatalogApiV2Dto } from './internal/offering-api-projection'
-import type { ServiceDto } from './internal/services-api-projection'
+import type {
+  ServiceDto,
+  ServiceEndpointDto,
+  ServiceOfferingDto,
+  ServicePriceSummaryDto,
+} from './internal/service-projection'
+import {
+  IndexStatusValues,
+  IndexTargetTypeValues,
+  RegistryProjectionKindValues,
+  RegistryProjectionSourceVersion as RegistryProjectionSourceVersionValue,
+  RegistryProjectionStatusValues,
+  RegistryRepairActionValues,
+  RegistryRepairResultValues,
+  RegistrySearchDocumentSourceVersion as RegistrySearchDocumentSourceVersionValue,
+  type IndexStatus,
+  type IndexTargetType,
+  type RegistryProjectionKind,
+  type RegistryProjectionSourceVersion as RegistryProjectionSourceVersionType,
+  type RegistryProjectionStatus,
+  type RegistryRepairAction,
+  type RegistryRepairResult,
+  type RegistrySearchDocumentSourceVersion as RegistrySearchDocumentSourceVersionType,
+} from './internal/schema-values'
 export {
   PublicOperationRegistrySchemaVersion,
   searchCapabilityOperations,
@@ -53,8 +76,10 @@ export type {
   PublicCancellationPolicy,
   PublicOperationAvailability,
   PublicOperationBusinessRef,
+  PublicOperationCatalogPrice,
   PublicOperationDescriptor,
   PublicOperationOfferingRef,
+  PublicOperationParameter,
   PublicOperationPrice,
   PublicOperationNavigationRelation,
   PublicRecoveryPolicy,
@@ -76,75 +101,90 @@ export {
   projectPublicServicesPage,
   projectPublicServicesSearchPage,
 } from './internal/services-api-projection'
+export { registrySearchTokens } from './internal/search-documents'
 export type {
-  EndpointDto,
   PublicServicesApiPage,
   PublicServicesSearchPage,
-  ServiceDto,
+  ServiceOperationMap,
 } from './internal/services-api-projection'
+export type {
+  ServiceDto,
+  ServiceEndpointAuthenticationDto,
+  ServiceEndpointAuthorityModeDto,
+  ServiceEndpointDto,
+  ServiceEndpointExecutionDto,
+  ServiceEndpointSourceKindDto,
+  ServiceOfferingDto,
+  ServicePriceSummaryDto,
+} from './internal/service-projection'
 
 export function toConsumerSupplyOption(service: ServiceDto): ConsumerSupplyOption {
-  const location = [service.business.suburb, service.business.stateTerritory]
+  const location = [service.ae.suburb, service.ae.stateTerritory]
     .filter((part): part is string => part !== undefined && part.length > 0)
     .join(', ')
-  const quoteEndpoint = service.endpoints.find((endpoint) => endpoint.access === 'open')
+  const firstOffer = service.ae.offerings[0]
+  const firstPricedOffering = service.ae.offerings.find((offering) => offering.price !== undefined)
+  const quoteEndpoint = service.endpoints.find((endpoint) => endpoint.ae.access === 'open')
   const nextAction = quoteEndpoint === undefined
-    ? { kind: 'inspect' as const, label: 'See business details', href: `/${service.business.slug}` }
+    ? { kind: 'inspect' as const, label: 'See business details', href: `/${service.id}` }
     : { kind: 'quote' as const, label: 'Check an example quote', href: quoteEndpoint.url }
-  const price = service.price === undefined
+  const priceSummary = catalogPriceSummaryText(service.priceSummary)
+  const price = firstPricedOffering?.price === undefined
     ? {
         kind: 'not_published' as const,
-        ...(service.pricingSummary === undefined ? {} : { summary: service.pricingSummary }),
+        ...(priceSummary === undefined ? {} : { summary: priceSummary }),
       }
     : {
         kind: 'published' as const,
-        published: service.price,
-        ...(service.pricingSummary === undefined ? {} : { summary: service.pricingSummary }),
+        published: firstPricedOffering.price,
+        ...(priceSummary === undefined ? {} : { summary: priceSummary }),
       }
-  const availability = service.availabilitySummary === undefined
+  const availability = firstOffer?.availabilitySummary === undefined
     ? { kind: 'needs_confirmation' as const }
-    : { kind: 'published' as const, summary: service.availabilitySummary }
+    : { kind: 'published' as const, summary: firstOffer.availabilitySummary }
   return {
     optionRef: service.id,
     business: {
-      slug: service.business.slug,
-      name: service.business.name,
+      slug: service.id,
+      name: service.name,
       ...(location.length === 0 ? {} : { location }),
     },
-    offering: { name: service.name, summary: service.summary },
+    offering: { name: service.name, summary: firstOffer?.summary ?? service.category },
     price,
     availability,
     nextAction,
     evidence: {
-      ...(service.observedAt === undefined ? {} : { observedAt: service.observedAt }),
-      source: quoteEndpoint === undefined ? 'business_published' : 'ae_sandbox',
+      observedAt: service.ae.observedAt,
+      source: service.ae.source,
     },
   }
 }
 
-export const IndexStatusValues = ['not_queued', 'queued', 'indexed', 'failed', 'stale'] as const
-export type IndexStatus = (typeof IndexStatusValues)[number]
+function catalogPriceSummaryText(summary: ServicePriceSummaryDto | undefined): string | undefined {
+  if (summary === undefined) return undefined
+  return `${summary.minAmount} - ${summary.maxAmount} ${summary.currency}`
+}
 
-export const RegistryProjectionStatusValues = ['queued', 'succeeded', 'failed', 'stale'] as const
-export type RegistryProjectionStatus = (typeof RegistryProjectionStatusValues)[number]
-
-export const RegistryProjectionKindValues = ['business_catalog', 'offering_catalog'] as const
-export type RegistryProjectionKind = (typeof RegistryProjectionKindValues)[number]
-
-export const IndexTargetTypeValues = ['business', 'offering'] as const
-export type IndexTargetType = (typeof IndexTargetTypeValues)[number]
-
-export const RegistryProjectionSourceVersion = 'public-catalog:v1' as const
-export type RegistryProjectionSourceVersion = typeof RegistryProjectionSourceVersion
-
-export const RegistryRepairActionValues = ['retry_projection', 'rebuild_projection', 'no_repair'] as const
-export type RegistryRepairAction = (typeof RegistryRepairActionValues)[number]
-
-export const RegistryRepairResultValues = ['not_run', 'succeeded', 'failed'] as const
-export type RegistryRepairResult = (typeof RegistryRepairResultValues)[number]
-
-export const RegistrySearchDocumentSourceVersion = 'registry-search-document:v1' as const
-export type RegistrySearchDocumentSourceVersion = typeof RegistrySearchDocumentSourceVersion
+export {
+  IndexStatusValues,
+  IndexTargetTypeValues,
+  RegistryProjectionKindValues,
+  RegistryProjectionStatusValues,
+  RegistryRepairActionValues,
+  RegistryRepairResultValues,
+} from './internal/schema-values'
+export type {
+  IndexStatus,
+  IndexTargetType,
+  RegistryProjectionKind,
+  RegistryProjectionStatus,
+  RegistryRepairAction,
+  RegistryRepairResult,
+}
+export const RegistryProjectionSourceVersion = RegistryProjectionSourceVersionValue
+export const RegistrySearchDocumentSourceVersion = RegistrySearchDocumentSourceVersionValue
+export type RegistryProjectionSourceVersion = RegistryProjectionSourceVersionType
+export type RegistrySearchDocumentSourceVersion = RegistrySearchDocumentSourceVersionType
 
 
 export type RegistryProjectionReadback = {

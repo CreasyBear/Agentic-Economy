@@ -60,8 +60,12 @@ export async function openReconciliation(
   return {
     kind: 'available',
     endpointUrl: operation.endpointUrl,
+    ...(operation.connectionAuthority === undefined
+      ? {}
+      : { connectionAuthority: operation.connectionAuthority }),
     credentialRef: operation.credentialRef,
     adapterId: operation.adapterId,
     configJson: operation.adapterConfigJson,
+    canonicalClaimMaterial: operation.canonicalClaimMaterial,
   }
 }

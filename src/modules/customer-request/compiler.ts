@@ -2,6 +2,8 @@ import { DirectedGraph } from 'graphology'
 import { hasCycle, topologicalGenerations } from 'graphology-dag'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { addExactAmounts, compareExactAmounts, rescaleExactAmount } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   sameCapabilityContractRef,
@@ -128,7 +130,7 @@ export type CustomerRequestRoutePlan = Readonly<{
   }>[]
   edges: readonly (RequestActionInputMapping & Readonly<{ fromStep: string; toStep: string }>)[]
   maximumTotalCost:
-    | Readonly<{ kind: 'known'; currency: string; amountMinor: number }>
+    | Readonly<{ kind: 'known'; amount: ExactAmount }>
     | Readonly<{ kind: 'requires_preparation' }>
   expiresAt: number
   uncertainty: readonly ('cost_requires_preparation' | 'customer_fact_requires_evidence')[]
@@ -608,7 +610,7 @@ export function compileRoutePlans(input: Readonly<{
   models: ReadonlyMap<string, CapabilityDecisionModel>
   objective?: 'lowest_maximum_price'
   objectiveEvidenceRef?: string
-  maximumTotalCost?: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalCost?: ExactAmount
   customerFactRequiresEvidence: boolean
   excludedChoiceSignatures?: readonly string[]
 }>): readonly CustomerRequestRoutePlan[] | undefined {
@@ -705,9 +707,13 @@ export function compileRoutePlans(input: Readonly<{
   const eligibleDrafts = drafts.filter((route) => !excludedChoiceSignatures.has(routeChoiceSignature(route)))
   const admittedDrafts = input.maximumTotalCost === undefined
     ? eligibleDrafts
-    : eligibleDrafts.filter((route) => route.maximumTotalCost.kind === 'known'
-      && route.maximumTotalCost.currency === input.maximumTotalCost?.currency
-      && route.maximumTotalCost.amountMinor <= input.maximumTotalCost.amountMinor)
+    : eligibleDrafts.filter((route) => {
+      if (route.maximumTotalCost.kind !== 'known') return false
+      const maximum = rescaleExactAmount(input.maximumTotalCost, route.maximumTotalCost.amount.exponent)
+      if (maximum === undefined) return false
+      const comparison = compareExactAmounts(route.maximumTotalCost.amount, maximum)
+      return comparison !== undefined && comparison <= 0
+    })
   const ranking = canRankByLowestMaximumPrice(admittedDrafts)
     && input.objectiveEvidenceRef !== undefined
     ? Object.freeze({ objective: input.objective, evidenceRef: input.objectiveEvidenceRef })
@@ -782,30 +788,24 @@ function isRouteCandidate(candidate: RequestEvaluation['candidates'][number]): c
 }
 
 function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerRequestRoutePlan['maximumTotalCost'] | undefined {
-  if (prices.some((price) => price.kind === 'on_request')) {
-    return Object.freeze({ kind: 'requires_preparation' as const })
-  }
-  const currencies = new Set(prices.map((price) => price.kind === 'on_request' ? '' : price.currency))
-  if (currencies.size !== 1) return undefined
-  let amountMinor = 0
+  let total: ExactAmount | undefined
   for (const price of prices) {
-    if (price.kind === 'on_request') continue
-    const maximum = price.kind === 'fixed' ? price.amountMinor : price.maximumAmountMinor
-    amountMinor += maximum
-    if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) return undefined
+    if (price.kind === 'on_request') return Object.freeze({ kind: 'requires_preparation' as const })
+    const maximum = price.kind === 'fixed' ? price.amount : price.maximum
+    total = total === undefined ? maximum : addExactAmounts(total, maximum)
+    if (total === undefined) return undefined
   }
-  const [currency] = currencies
-  if (currency === undefined) return undefined
-  return Object.freeze({ kind: 'known' as const, currency, amountMinor })
+  return total === undefined ? undefined : Object.freeze({ kind: 'known' as const, amount: total })
 }
 
 function canRankByLowestMaximumPrice(
   routes: readonly Pick<CustomerRequestRoutePlan, 'maximumTotalCost'>[],
 ): boolean {
-  if (routes.length === 0 || routes.some((route) => route.maximumTotalCost.kind !== 'known')) return false
-  return new Set(routes.map((route) => route.maximumTotalCost.kind === 'known'
-    ? route.maximumTotalCost.currency
-    : '')).size === 1
+  const known = routes
+    .map(({ maximumTotalCost }) => maximumTotalCost.kind === 'known' ? maximumTotalCost.amount : undefined)
+    .filter((amount): amount is ExactAmount => amount !== undefined)
+  if (known.length === 0 || known.length !== routes.length) return false
+  return known.slice(1).every((amount) => compareExactAmounts(known[0], amount) !== undefined)
 }
 
 function routesUseDisjointProviders(
@@ -823,9 +823,11 @@ function compareRoutePlans(
   objective: 'lowest_maximum_price' | undefined,
 ): number {
   if (objective === undefined) return left.routePlanId.localeCompare(right.routePlanId)
-  const leftCost = left.maximumTotalCost.kind === 'known' ? left.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
-  const rightCost = right.maximumTotalCost.kind === 'known' ? right.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
-  return leftCost - rightCost || left.routePlanId.localeCompare(right.routePlanId)
+  if (left.maximumTotalCost.kind !== 'known' || right.maximumTotalCost.kind !== 'known') {
+    return left.routePlanId.localeCompare(right.routePlanId)
+  }
+  const comparison = compareExactAmounts(left.maximumTotalCost.amount, right.maximumTotalCost.amount)
+  return (comparison ?? 0) || left.routePlanId.localeCompare(right.routePlanId)
 }
 
 export function composeRequestActions(

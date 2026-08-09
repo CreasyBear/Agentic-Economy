@@ -133,12 +133,20 @@ const finalizeAnswerTurnHarnessRunResult = v.union(
   v.object({
     status: v.literal('conflict'),
     reason: v.union(
+      v.literal('reservation_not_found'),
+      v.literal('reservation_identity_mismatch'),
+      v.literal('request_digest_mismatch'),
       v.literal('turn_not_found'),
       v.literal('snapshot_mismatch'),
       v.literal('evidence_conflict'),
+      v.literal('entry_identity_mismatch'),
       v.literal('entry_id_conflict'),
       v.literal('idempotency_conflict'),
       v.literal('parent_conflict'),
+      v.literal('stopped'),
+      v.literal('generation_mismatch'),
+      v.literal('lease_owner_mismatch'),
+      v.literal('lease_expired'),
     ),
     message: v.string(),
     activeLeafEntryId: v.optional(v.string()),
@@ -337,7 +345,15 @@ export const appendHarnessSessionEntry = mutation({
 
 export const finalizeAnswerTurnHarnessRun = mutation({
   args: {
+    reservationKey: v.string(),
+    requestDigest: v.string(),
+    sessionId: v.string(),
+    threadId: v.string(),
     turnId: v.string(),
+    turnSeq: v.number(),
+    generation: v.number(),
+    leaseOwner: v.string(),
+    finalStatus: v.union(v.literal('complete'), v.literal('error')),
     snapshotHash: v.string(),
     evidenceJson: v.string(),
     finalizationHash: v.string(),
@@ -378,19 +394,113 @@ export const finalizeAnswerTurnHarnessRun = mutation({
       }
     }
 
+    const reservation = await ctx.db
+      .query('answerTurnReservations')
+      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
+      .unique()
+    if (reservation === null) {
+      return {
+        status: 'conflict' as const,
+        reason: 'reservation_not_found' as const,
+        message: 'Answer turn reservation does not exist.',
+      }
+    }
+    if (
+      reservation.sessionId !== args.sessionId ||
+      reservation.threadId !== args.threadId ||
+      reservation.turnId !== args.turnId ||
+      reservation.seq !== args.turnSeq
+    ) {
+      return {
+        status: 'conflict' as const,
+        reason: 'reservation_identity_mismatch' as const,
+        message: 'Answer turn reservation identity does not match finalization.',
+      }
+    }
+    if (reservation.requestDigest !== args.requestDigest) {
+      return {
+        status: 'conflict' as const,
+        reason: 'request_digest_mismatch' as const,
+        message: 'Answer turn request digest does not match reservation.',
+      }
+    }
+    const thread = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (query) => query.eq('threadId', args.threadId))
+      .unique()
+    if (thread === null || thread.pseudonymousSessionId !== args.sessionId) {
+      return {
+        status: 'conflict' as const,
+        reason: 'parent_conflict' as const,
+        message: 'Answer thread parent is not available for finalization.',
+      }
+    }
+    if (reservation.state === 'stopped') {
+      return {
+        status: 'conflict' as const,
+        reason: 'stopped' as const,
+        message: 'Answer turn was stopped before finalization.',
+      }
+    }
+    if (reservation.state === 'reserved') {
+      return {
+        status: 'conflict' as const,
+        reason: 'turn_not_found' as const,
+        message: 'Answer turn has not been durably persisted.',
+      }
+    }
+    if (reservation.state !== 'finalized') {
+      if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
+        return {
+          status: 'conflict' as const,
+          reason: 'generation_mismatch' as const,
+          message: 'Answer turn generation does not match finalization.',
+        }
+      }
+      if (reservation.leaseOwner !== args.leaseOwner) {
+        return {
+          status: 'conflict' as const,
+          reason: 'lease_owner_mismatch' as const,
+          message: 'Answer turn lease owner does not match finalization.',
+        }
+      }
+      if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
+        return {
+          status: 'conflict' as const,
+          reason: 'lease_expired' as const,
+          message: 'Answer turn lease has expired.',
+        }
+      }
+    }
+    if (
+      reservation.state === 'finalized' &&
+      reservation.harnessFinalizationDigest !== args.finalizationHash
+    ) {
+      return {
+        status: 'conflict' as const,
+        reason: 'evidence_conflict' as const,
+        message: 'Answer turn was already finalized with different harness evidence.',
+      }
+    }
+
     const turn = await ctx.db
       .query('answerTurns')
       .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
       .unique()
-
-    if (turn === null) {
+    if (turn === null || turn.threadId !== args.threadId || turn.seq !== args.turnSeq) {
       return {
         status: 'conflict' as const,
         reason: 'turn_not_found' as const,
-        message: `Answer turn ${args.turnId} does not exist.`,
+        message: `Answer turn ${args.turnId} does not exist for this reservation.`,
       }
     }
-
+    if (turn.status === 'stopped') {
+      return {
+        status: 'conflict' as const,
+        reason: 'stopped' as const,
+        message: 'Answer turn was stopped before finalization.',
+      }
+    }
     if (turn.snapshotHash !== args.snapshotHash) {
       return {
         status: 'conflict' as const,
@@ -409,14 +519,28 @@ export const finalizeAnswerTurnHarnessRun = mutation({
       }
     }
 
-    const validation = await validateHarnessSessionEntryBatch(ctx.db, args.entries.map(coerceFinalizationEntryInput))
+    const validation = await validateHarnessSessionEntryBatch(
+      ctx.db,
+      args.entries.map(coerceFinalizationEntryInput),
+      {
+        sessionId: args.sessionId,
+        runId: args.turnId,
+        turnId: args.turnId,
+      },
+    )
     if (validation.status === 'conflict') {
       return validation
     }
 
-    const evidenceAlreadyFinal = currentFinalizationHash === args.finalizationHash || currentEvidenceJson === args.evidenceJson
+    const evidenceAlreadyFinal =
+      reservation.state === 'finalized' &&
+      reservation.harnessFinalizationDigest === args.finalizationHash &&
+      (currentFinalizationHash === args.finalizationHash || currentEvidenceJson === args.evidenceJson)
     if (!evidenceAlreadyFinal) {
-      await ctx.db.patch(turn._id, { evidenceJson: args.evidenceJson })
+      await ctx.db.patch(turn._id, {
+        evidenceJson: args.evidenceJson,
+        status: args.finalStatus,
+      })
     }
 
     for (const entry of validation.entriesToInsert) {
@@ -428,6 +552,20 @@ export const finalizeAnswerTurnHarnessRun = mutation({
       if (lastEntry !== undefined) {
         await upsertHarnessSessionForFinalization(ctx.db, validation.session, lastEntry)
       }
+    }
+
+    if (reservation.state !== 'finalized') {
+      await ctx.db.patch(reservation._id, {
+        state: 'finalized',
+        finalStatus: args.finalStatus,
+        harnessFinalizationDigest: args.finalizationHash,
+        checkpointJson: undefined,
+        checkpointDigest: undefined,
+        checkpointStep: undefined,
+        leaseOwner: undefined,
+        leaseExpiresAt: undefined,
+        updatedAt: Date.now(),
+      })
     }
 
     const activeLeafEntryId = validation.entriesToInsert.at(-1)?.entryId ?? validation.activeLeafEntryId
@@ -624,6 +762,11 @@ async function validateHarnessSessionEntryBatch(
     toolContractHash?: string
     sourceSnapshotHash?: string
   }>,
+  expectedIdentity: {
+    sessionId: string
+    runId: string
+    turnId: string
+  },
 ): Promise<
   | {
       status: 'ok'
@@ -634,7 +777,7 @@ async function validateHarnessSessionEntryBatch(
     }
   | {
       status: 'conflict'
-      reason: 'entry_id_conflict' | 'idempotency_conflict' | 'parent_conflict'
+      reason: 'entry_identity_mismatch' | 'entry_id_conflict' | 'idempotency_conflict' | 'parent_conflict'
       message: string
       activeLeafEntryId?: string
     }
@@ -657,6 +800,19 @@ async function validateHarnessSessionEntryBatch(
       activeLeafEntryId: undefined,
       entriesToInsert: [],
       entriesReplayed: 0,
+    }
+  }
+  for (const entry of entries) {
+    if (
+      entry.sessionId !== expectedIdentity.sessionId ||
+      entry.runId !== expectedIdentity.runId ||
+      entry.turnId !== expectedIdentity.turnId
+    ) {
+      return {
+        status: 'conflict',
+        reason: 'entry_identity_mismatch',
+        message: 'Finalization journal entries must match the answer turn identity.',
+      }
     }
   }
 

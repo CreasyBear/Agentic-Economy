@@ -9,7 +9,7 @@ import type {
   ActionModelRequestObservation,
   ActionModelUsage,
 } from '@/modules/common/action'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 
 import {
   StorefrontEnrichmentSourceLabel,
@@ -299,7 +299,7 @@ async function requestCompletion<Result extends BusinessEnrichmentResult | WebDi
     }
     // OpenRouter's web plugin returns its citations as URL sources; a claim is
     // only admissible when one of them backs it.
-    const citations = stableUnique(result.sources.flatMap((source) => {
+    const citations = uniq(result.sources.flatMap((source) => {
       if (source.sourceType !== 'url' || source.url.trim().length === 0) return []
       return [source.url]
     }))

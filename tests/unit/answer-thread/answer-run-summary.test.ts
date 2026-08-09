@@ -33,8 +33,8 @@ describe('answer run summary', () => {
       ],
       workLog: [
         { id: 'interpret.request', phase: 'interpret', status: 'complete', title: 'Reading your request' },
-        { id: 'search.registry.initial', phase: 'search', status: 'error', title: 'Searching listed businesses' },
-        { id: 'assemble.answer', phase: 'assemble', status: 'skipped', title: 'Preparing the answer' },
+        { id: 'search.registry.initial', phase: 'search', status: 'error', title: 'Searching for matches' },
+        { id: 'assemble.answer', phase: 'assemble', status: 'skipped', title: 'Putting together the answer' },
       ],
     }
 

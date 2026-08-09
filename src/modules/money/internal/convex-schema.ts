@@ -2,7 +2,8 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 const currency = v.string()
-const amountMinor = v.number()
+const exponent = v.number()
+const units = v.string()
 const identifier = v.string()
 const evidenceRefs = v.array(v.string())
 
@@ -13,7 +14,8 @@ export const moneyTables = {
     principalId: v.optional(identifier),
     businessId: v.optional(identifier),
     currency,
-    balanceMinor: amountMinor,
+    exponent,
+    balanceUnits: units,
     version: v.number(),
     state: v.union(v.literal('active'), v.literal('locked')),
     createdAt: v.number(),
@@ -27,8 +29,9 @@ export const moneyTables = {
     accountRef: identifier,
     entryType: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake')),
     direction: v.union(v.literal('credit'), v.literal('debit')),
-    amountMinor,
+    amountUnits: units,
     currency,
+    exponent,
     transactionRef: identifier,
     idempotencyKey: identifier,
     principalId: v.optional(identifier),
@@ -51,6 +54,7 @@ export const moneyTables = {
     inputDigest: identifier,
     principalId: identifier,
     currency,
+    exponent,
     state: v.union(v.literal('pending'), v.literal('applied'), v.literal('outcome_unknown'), v.literal('reversed')),
     expectedAccountVersion: v.number(),
     externalRef: v.optional(identifier),
@@ -68,6 +72,7 @@ export const moneyTables = {
     principalId: identifier,
     credentialId: identifier,
     currency,
+    exponent,
     serviceRef: identifier,
     offeringRef: identifier,
     businessId: identifier,
@@ -76,7 +81,7 @@ export const moneyTables = {
     operationKey: identifier,
     priceDigest: identifier,
     chargeState: v.union(v.literal('free_tier'), v.literal('paid'), v.literal('insufficient_credit'), v.literal('outcome_unknown'), v.literal('refunded')),
-    amountMinor,
+    amountUnits: units,
     transactionRef: v.optional(identifier),
     observedAt: v.number(),
   })
@@ -88,10 +93,11 @@ export const moneyTables = {
     principalId: identifier,
     credentialId: identifier,
     currency,
+    exponent,
     callCount: v.number(),
     paidCallCount: v.number(),
     freeCallCount: v.number(),
-    grossSpendMinor: amountMinor,
+    grossSpendUnits: units,
     states: v.array(v.union(v.literal('free_tier'), v.literal('paid'), v.literal('insufficient_credit'), v.literal('outcome_unknown'), v.literal('refunded'))),
     updatedAt: v.number(),
   }).index('by_principalId_and_credentialId_and_currency', ['principalId', 'credentialId', 'currency']),
@@ -112,9 +118,10 @@ export const moneyTables = {
     principalId: identifier,
     accountRef: identifier,
     currency,
-    amountMinor,
-    processingFeeMinor: amountMinor,
-    chargeAmountMinor: amountMinor,
+    exponent,
+    amountUnits: units,
+    processingFeeUnits: units,
+    chargeAmountUnits: units,
     idempotencyKey: identifier,
     inputDigest: identifier,
     state: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed'), v.literal('outcome_unknown')),
@@ -137,6 +144,7 @@ export const moneyTables = {
   moneyPayoutAccounts: defineTable({
     businessId: identifier,
     currency,
+    exponent,
     stripeAccountId: identifier,
     state: v.union(v.literal('not_started'), v.literal('onboarding_started'), v.literal('submitted'), v.literal('restricted'), v.literal('ready')),
     detailsSubmitted: v.boolean(),
@@ -150,10 +158,11 @@ export const moneyTables = {
     payoutRef: identifier,
     businessId: identifier,
     currency,
-    grossAccrualMinor: amountMinor,
-    rakeMinor: amountMinor,
-    providerNetMinor: amountMinor,
-    minimumPayoutMinor: amountMinor,
+    exponent,
+    grossAccrualUnits: units,
+    rakeUnits: units,
+    providerNetUnits: units,
+    minimumPayoutUnits: units,
     state: v.union(v.literal('review'), v.literal('held_kyc'), v.literal('held_threshold'), v.literal('transfer_pending'), v.literal('paid'), v.literal('failed'), v.literal('outcome_unknown')),
     periodStart: identifier,
     periodEnd: identifier,
@@ -163,9 +172,9 @@ export const moneyTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
   })
- .index('by_businessId_and_currency_and_state', ['businessId', 'currency', 'state'])
- .index('by_periodStart_and_state', ['periodStart', 'state'])
- .index('by_stripeTransferId', ['stripeTransferId'])
- .index('by_payoutRef', ['payoutRef'])
- .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt']),
+    .index('by_businessId_and_currency_and_state', ['businessId', 'currency', 'state'])
+    .index('by_periodStart_and_state', ['periodStart', 'state'])
+    .index('by_stripeTransferId', ['stripeTransferId'])
+    .index('by_payoutRef', ['payoutRef'])
+    .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt']),
 } as const

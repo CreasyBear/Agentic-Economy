@@ -1,14 +1,16 @@
 import { z } from 'zod'
+import { addExactAmounts, compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import {
   freezeAgentJourneyCohort,
   type AgentJourneyCohortInput,
 } from '@/modules/customer-request/agent-journey-cohort'
 
-const moneySchema = z.strictObject({ currency: z.string().min(1), amountMinor: z.number().int().nonnegative() })
+const moneySchema = exactAmountSchema
 const jsonObjectSchema = z.record(z.string(), z.unknown())
 const providerDiscoverySchema = z.strictObject({
   format: z.literal('ae.sandbox-capability-provider:v1'),
@@ -34,7 +36,11 @@ const FROZEN_POLICY = Object.freeze({
   recovery: 'unsupported',
 })
 
-type Money = Readonly<z.infer<typeof moneySchema>>
+type Money = ExactAmount
+type MaximumCostConstraint =
+  | Readonly<{ state: 'not_declared' }>
+  | Readonly<{ state: 'satisfied' }>
+  | Readonly<{ state: 'violated'; reason: 'currency_mismatch' | 'maximum_total_cost_exceeded' }>
 type Discovery = Readonly<z.infer<typeof providerDiscoverySchema>>
 
 export type FrozenDirectAgentBaselineInput = Readonly<{
@@ -73,6 +79,7 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
   }
 
   const total = totalMaximumCost(discoveries)
+  if (total === undefined) throw new Error('direct_baseline_cost_missing')
   const constraint = evaluateMaximumCostConstraint(input.hardConstraints.maximumTotalCost, total)
   if (constraint.state === 'violated') {
     return blockedProof(input, startedAt, discoveries.length, 'hard_constraint_violated', {
@@ -199,23 +206,25 @@ function safePublicUrl(value: string): URL | undefined {
   }
 }
 
-function totalMaximumCost(discoveries: readonly Discovery[]): Money {
-  const currency = discoveries[0]?.operation.maximumCost.currency ?? 'AUD'
-  if (discoveries.some(({ operation }) => operation.maximumCost.currency !== currency)) {
-    throw new Error('direct_baseline_cost_currency_mismatch')
+function totalMaximumCost(discoveries: readonly Discovery[]): Money | undefined {
+  const first = discoveries[0]?.operation.maximumCost
+  if (first === undefined) return undefined
+  let total = first
+  for (const { operation } of discoveries.slice(1)) {
+    const next = addExactAmounts(total, operation.maximumCost)
+    if (next === undefined) throw new Error('direct_baseline_cost_currency_mismatch')
+    total = next
   }
-  return {
-    currency,
-    amountMinor: discoveries.reduce((sum, { operation }) => sum + operation.maximumCost.amountMinor, 0),
-  }
+  return total
 }
 
-function evaluateMaximumCostConstraint(maximum: Money | undefined, total: Money) {
-  if (maximum === undefined) return { state: 'not_declared' as const }
-  if (maximum.currency !== total.currency) return { state: 'violated' as const, reason: 'currency_mismatch' as const }
-  return total.amountMinor <= maximum.amountMinor
-    ? { state: 'satisfied' as const }
-    : { state: 'violated' as const, reason: 'maximum_total_cost_exceeded' as const }
+function evaluateMaximumCostConstraint(maximum: Money | undefined, total: Money): MaximumCostConstraint {
+  if (maximum === undefined) return { state: 'not_declared' }
+  const comparison = compareExactAmounts(total, maximum)
+  if (comparison === undefined) return { state: 'violated', reason: 'currency_mismatch' }
+  return comparison <= 0
+    ? { state: 'satisfied' }
+    : { state: 'violated', reason: 'maximum_total_cost_exceeded' }
 }
 
 function burden(
@@ -226,7 +235,7 @@ function burden(
 ) {
   return {
     originsProvided, discoveryCalls: originsProvided, invocationCalls, schemaMappings,
-    authenticationSchemes: stableUnique(discoveries.map(({ operation }) => operation.authentication.scheme)),
+    authenticationSchemes: uniq(discoveries.map(({ operation }) => operation.authentication.scheme)),
     boundaryStatements: discoveries.reduce((sum, provider) => sum + provider.boundaries.length, 0),
   }
 }
@@ -256,8 +265,8 @@ function blockedProof(
     reason: 'provider_discovery_missing_cannot_count_as_ae_gain' | 'cohort_conditions_not_equal'
   }>,
   discoveries: readonly Discovery[] = [],
-  total: Money = { currency: 'AUD', amountMinor: 0 },
-  constraint: ReturnType<typeof evaluateMaximumCostConstraint> = { state: 'not_declared' },
+  total?: Money,
+  constraint: MaximumCostConstraint = { state: 'not_declared' },
   invocationCalls = 0,
   schemaMappings = 0,
   invocations: readonly Readonly<{
@@ -283,8 +292,9 @@ function blockedProof(
     },
     elapsedMs: (input.now ?? Date.now)() - startedAt,
     hardConstraintAccuracy: constraint,
-    totalCostAccuracy: { state: discoveries.length === 0 ? 'unavailable' as const : 'exact' as const, total },
-    recovery: { state: 'unsupported' as const, reason: 'direct_calls_have_no_durable_request_to_resume' as const },
+    totalCostAccuracy: total === undefined
+      ? { state: 'unavailable' as const }
+      : { state: 'exact' as const, total },
     resultUsability: partialResult === undefined
       ? { state: 'unusable' as const, reason }
       : { state: 'partial' as const, reason, result: partialResult },

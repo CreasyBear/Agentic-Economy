@@ -43,13 +43,12 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
         principalId: result.principalId,
-        currency: result.currency,
-        balanceMinor: result.balanceMinor,
+        balance: result.balance,
         ...(result.pendingTopup === undefined ? {} : { pendingTopup: result.pendingTopup }),
         autoRecharge: {
           enabled: result.autoRecharge.enabled,
-          thresholdMinor: result.autoRecharge.thresholdMinor,
-          rechargeAmountMinor: result.autoRecharge.rechargeAmountMinor,
+          threshold: result.autoRecharge.threshold,
+          rechargeAmount: result.autoRecharge.rechargeAmount,
         },
         evidence: result.evidence,
       }
@@ -71,8 +70,7 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
         callCount: result.callCount,
         paidCallCount: result.paidCallCount,
         freeCallCount: result.freeCallCount,
-        grossSpendMinor: result.grossSpendMinor,
-        currency: result.currency,
+        grossSpend: result.grossSpend,
         states: result.states,
       }
     },

@@ -1,28 +1,81 @@
+import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
+
+import { Button } from '@/components/ui/button'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { Message, MessageContent } from '@/components/ai-elements/message'
-import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
+import type { StopAnswerTurnResult } from './turn-stop'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
-import { ANSWER_SECTION_CLASS, type ThreadTurnViewModel } from './thread-turn-view'
+import {
+  ANSWER_SECTION_CLASS,
+  presenterPhaseForTurnStatus,
+  turnStatusCopy,
+  type ThreadTurnViewModel,
+} from './thread-turn-view'
 
 export type AeThreadTurnReplaySectionProps = ThreadTurnViewModel & {
   scrollTargetId?: string
   threadId?: string
+  onRetry?: () => void
+  onStopPending?: () => Promise<StopAnswerTurnResult>
 }
 
-export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }: AeThreadTurnReplaySectionProps) {
+export function AeThreadTurnReplaySection({
+  scrollTargetId,
+  threadId,
+  onRetry,
+  onStopPending,
+  ...turn
+}: AeThreadTurnReplaySectionProps) {
+  const [stopState, setStopState] = useState<'idle' | 'requested' | 'failed'>('idle')
+  const canStop = turn.status === 'pending' && onStopPending !== undefined
+  const presenterPhase = presenterPhaseForTurnStatus(turn.status)
+  const statusCopy = turnStatusCopy(turn.status)
+
+  async function requestStop(): Promise<void> {
+    if (onStopPending === undefined || turn.status !== 'pending' || stopState === 'requested') {
+      return
+    }
+    setStopState('requested')
+    const result = await onStopPending()
+    setStopState(result.kind === 'stopped' || result.kind === 'already_settled' ? 'idle' : 'failed')
+  }
+
   const fallback = (
     <AeGenerativeAnswer
       artifacts={turn.artifacts}
       query={turn.query}
       oneLineFallback={turn.oneLine}
-      phase="complete"
+      busy={turn.status === 'pending'}
+      phase={presenterPhase}
+      workSteps={turn.workLog}
+      errorMessage={turn.status === 'error' ? (
+        <>
+          {turn.problem?.detail ?? 'This answer could not be completed.'}{' '}
+          {onRetry === undefined ? null : (
+            <Button
+              type="button"
+              variant="link"
+              className="inline h-auto cursor-pointer p-0 font-semibold text-foreground underline underline-offset-4 hover:text-foreground"
+              onClick={onRetry}
+            >
+              Try again
+            </Button>
+          )}{' '}
+          <Link to="/" className="text-foreground underline underline-offset-4">
+            Start a new ask
+          </Link>
+        </>
+      ) : turn.status === 'stopped' ? statusCopy : null}
+      {...(canStop && stopState !== 'requested' ? { onStop: () => void requestStop() } : {})}
+      {...(turn.answerCheckSummary === undefined ? {} : { checkSummary: turn.answerCheckSummary })}
       {...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile })}
       {...(threadId === undefined ? {} : { threadId })}
     />
   )
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-turn-status={turn.status}>
       <AeThreadTurnQueryHeader query={turn.query} intent={turn.intent} seq={turn.seq} />
       <Message
         from="assistant"
@@ -31,14 +84,11 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
       >
         <MessageContent className="w-full">
           <AeTurnContextLine intent={turn.intent} seq={turn.seq} artifacts={turn.artifacts} />
-          <AeAnswerThinkingTrace
-            isStreaming={false}
-            label="Ready"
-            steps={[]}
-            workLog={turn.workLog}
-            checkSummary={turn.answerCheckSummary}
-            query={turn.query}
-          />
+          {statusCopy === null || turn.status === 'stopped' ? null : (
+            <p className="text-sm text-muted-foreground">{statusCopy}</p>
+          )}
+          {turn.status === 'pending' && stopState === 'requested' ? <p className="text-sm text-muted-foreground">Stopping…</p> : null}
+          {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-red-vivid" role="alert">Stop was not confirmed. The answer is still pending; try Stop again.</p> : null}
           {fallback}
         </MessageContent>
       </Message>

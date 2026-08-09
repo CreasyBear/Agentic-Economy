@@ -9,14 +9,13 @@ import { useCallback } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
-
 export const Conversation = ({ className, ...props }: ConversationProps) => (
   <StickToBottom
     className={cn("relative flex-1 overflow-y-hidden", className)}
     initial="smooth"
     resize="smooth"
-    role="log"
     {...props}
+    role="region"
   />
 );
 

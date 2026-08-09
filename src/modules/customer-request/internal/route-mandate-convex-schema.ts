@@ -31,15 +31,15 @@ const admittedOperation = v.object({
   effectDigest: v.string(),
 })
 
-const money = v.object({ currency: v.string(), amountMinor: v.number() })
+const exactAmountValue = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
+const money = exactAmountValue
 
 const registeredPrice = v.union(
-  v.object({ kind: v.literal('fixed'), currency: v.string(), amountMinor: v.number() }),
+  v.object({ kind: v.literal('fixed'), amount: exactAmountValue }),
   v.object({
     kind: v.literal('range'),
-    currency: v.string(),
-    minimumAmountMinor: v.number(),
-    maximumAmountMinor: v.number(),
+    minimum: exactAmountValue,
+    maximum: exactAmountValue,
   }),
   v.object({ kind: v.literal('on_request') }),
 )
@@ -725,7 +725,6 @@ export const customerRequestRouteMandateTables = {
     operationKeyDigest: v.string(),
     state: v.union(
       v.literal('pending'),
-      // Deprecated persisted-row state; current route dispatch never writes leases.
       v.literal('leased'),
       v.literal('delivered'),
       v.literal('failed'),
@@ -733,9 +732,8 @@ export const customerRequestRouteMandateTables = {
       v.literal('cancelled'),
     ),
     availableAt: v.number(),
-    // Deprecated persisted-row lease metadata; current writers leave these absent.
-    leaseOwner: v.optional(v.string()),
-    leaseExpiresAt: v.optional(v.number()),
+    leaseOwner: v.string(),
+    leaseExpiresAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -757,7 +755,9 @@ export const customerRequestRouteMandateTables = {
     network: v.string(),
     asset: v.string(),
     payTo: v.string(),
-    amount: v.string(),
+    amountUnits: v.string(),
+    currency: v.string(),
+    exponent: v.number(),
     custodyRef: v.string(),
     authorizationDigest: v.string(),
     state: v.union(

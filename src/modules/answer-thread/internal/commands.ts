@@ -1,21 +1,11 @@
-import type { PaginationOptions, PaginationResult } from 'convex/server'
-import {
-  callPublicSourceQuery,
-  sourceQuery,
-} from '@/lib/server/convex-source'
-
-import type {
-  AnswerToolCallRecord,
-  AnswerToolCallStatus,
-  AnswerToolId,
-} from '../answer-thread.schema'
+import type { AnswerToolCallStatus, AnswerToolId } from '../answer-thread.schema'
 
 /**
  * Tool-call persistence for answer turns.
  *
  * `answerToolCalls` rows are persisted alongside the owning `answerTurns` row
  * before the turn orchestrator emits a terminal `complete` event - never
- * mid-stream. The orchestrator buffers `AnswerToolCallRecord[]` in memory
+ * mid-stream. The orchestrator buffers tool-call records in memory
  * during the agent loop and fails closed if complete-turn evidence cannot be
  * persisted.
  */
@@ -31,53 +21,3 @@ export type AnswerToolCallInputRow = {
   status: AnswerToolCallStatus
 }
 
-export type AppendAnswerToolCallsArgs = {
-  turnId: string
-  toolCalls: readonly AnswerToolCallInputRow[]
-  sourceWriteRequest?: Request
-}
-
-export type ReadTurnToolCallsResult = Readonly<
-  Pick<PaginationResult<AnswerToolCallRecord>, 'page' | 'isDone' | 'continueCursor'>
->
-
-const readTurnToolCallsQuery = sourceQuery<
-  {
-    turnId: string
-    pseudonymousSessionId: string
-    paginationOpts: PaginationOptions
-  },
-  ReadTurnToolCallsResult
->(
-  'answerThreads:readTurnToolCalls',
-)
-
-type AnswerToolCallPort = {
-  appendToolCalls(args: AppendAnswerToolCallsArgs): Promise<{ inserted: number }>
-  readTurnToolCalls(
-    turnId: string,
-    pseudonymousSessionId: string,
-    paginationOpts: PaginationOptions,
-  ): Promise<ReadTurnToolCallsResult>
-}
-
-let testPort: AnswerToolCallPort | undefined
-
-export function setAnswerToolCallPortForTests(port: AnswerToolCallPort | undefined): () => void {
-  const previous = testPort
-  testPort = port
-  return () => {
-    testPort = previous
-  }
-}
-
-export async function readTurnToolCalls(
-  turnId: string,
-  pseudonymousSessionId: string,
-  paginationOpts: PaginationOptions,
-): Promise<ReadTurnToolCallsResult> {
-  if (testPort !== undefined) {
-    return testPort.readTurnToolCalls(turnId, pseudonymousSessionId, paginationOpts)
-  }
-  return callPublicSourceQuery(readTurnToolCallsQuery, { turnId, pseudonymousSessionId, paginationOpts })
-}

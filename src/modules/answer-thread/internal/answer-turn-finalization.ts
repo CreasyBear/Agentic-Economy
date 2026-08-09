@@ -10,11 +10,7 @@ import {
 } from '@/modules/answer/search-context'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import {
-  appendHarnessSessionEntryToSourceFromRequest,
-  type AppendHarnessSessionEntryResult,
-  type AppendHarnessSessionEntrySourceInput,
-} from '@/modules/harness/harness.functions'
+import type { AppendHarnessSessionEntrySourceInput } from '@/modules/harness/harness.functions'
 import type {
   HarnessModelRequestRecord,
   HarnessRunReport,
@@ -35,15 +31,17 @@ import type {
   FrozenTurnProse,
 } from '../answer-thread.schema'
 import {
-  appendAnswerTurnWithThreadAndToolCalls,
-  appendAnswerTurnWithToolCalls,
+  failPersistedAnswerTurn as failPersistedAnswerTurnSource,
   finalizeAnswerTurnHarnessRunFromRequest,
   getThreadTurns,
+  persistReservedAnswerTurn,
   type AnswerHarnessFinalizationResult,
+  type FailPersistedAnswerTurnResult,
   type FinalizeAnswerTurnHarnessRunArgs,
 } from '../answer-thread.functions'
 import { buildAnswerHarnessOperationReport } from './answer-harness-operation'
 import { buildAnswerRunReport, buildHarnessRunReportForAnswer } from './answer-run-summary'
+import { answerTurnFinalizationDigest } from './turn-digests'
 import { parseFrozenEvidence } from './public-projection'
 
 export type AnswerTurnRecordLite = Pick<AnswerTurnRecord, 'evidenceJson' | 'query' | 'seq' | 'status'>
@@ -59,7 +57,7 @@ export async function readPriorCompleteTurns(
   try {
     // Answer-thread writes cap a thread at 25 turns, so one bounded native page is complete.
     const page = await getThreadTurns(threadId, pseudonymousSessionId, { cursor: null, numItems: 25 })
-    return page.page.filter((turn) => turn.status === 'complete')
+    return page.page.filter((turn: AnswerTurnRecord) => turn.status === 'complete')
   } catch {
     return []
   }
@@ -70,12 +68,17 @@ export type PersistAnswerTurnInput = {
   threadId: string
   isNewThread: boolean
   title: string
+  reservationKey: string
+  requestDigest: string
+  generation: number
+  leaseOwner: string
   turnId: string
   turnSeq: number
   query: string
   intent: FollowUpIntent
   captured: AnswerSnapshot | undefined
   errorCopyId: string | undefined
+  errorProblemJson?: string
   toolCalls: readonly AnswerToolCallRecord[]
   gate: AnswerRunGateSummary | undefined
   modelRequests?: readonly HarnessModelRequestRecord[]
@@ -86,17 +89,7 @@ export type PersistAnswerTurnInput = {
   sourceWriteRequest?: Request
   harnessRun?: HarnessRunReport
   harnessRuntimeEvents?: readonly HarnessRuntimeEvent[]
-  skipHarnessSessionJournal?: boolean
 }
-
-export type AnswerHarnessSessionJournalWriteInput = {
-  request: Request
-  entry: AppendHarnessSessionEntrySourceInput
-}
-
-export type AnswerHarnessSessionJournalWriter = (
-  input: AnswerHarnessSessionJournalWriteInput
-) => Promise<AppendHarnessSessionEntryResult>
 
 export type AnswerHarnessFinalizerInput = FinalizeAnswerTurnHarnessRunArgs & {
   request: Request
@@ -106,22 +99,9 @@ export type AnswerHarnessFinalizer = (
   input: AnswerHarnessFinalizerInput
 ) => Promise<AnswerHarnessFinalizationResult>
 
-let answerHarnessSessionJournalWriter: AnswerHarnessSessionJournalWriter = async (input) =>
-  appendHarnessSessionEntryToSourceFromRequest(input)
-
 let answerHarnessFinalizer: AnswerHarnessFinalizer = async (input) => {
   const { request, ...args } = input
   return finalizeAnswerTurnHarnessRunFromRequest(request, args)
-}
-
-export function setAnswerHarnessSessionJournalWriterForTests(
-  writer: AnswerHarnessSessionJournalWriter,
-): () => void {
-  const previous = answerHarnessSessionJournalWriter
-  answerHarnessSessionJournalWriter = writer
-  return () => {
-    answerHarnessSessionJournalWriter = previous
-  }
 }
 
 export function setAnswerHarnessFinalizerForTests(
@@ -134,14 +114,13 @@ export function setAnswerHarnessFinalizerForTests(
   }
 }
 
-export async function persistAnswerTurn(input: PersistAnswerTurnInput): Promise<boolean> {
-  return (await persistAnswerTurnWithResult(input)).ok
-}
 
 export type PersistAnswerTurnResult = {
   ok: boolean
-  status: AnswerTurnStatus
+  failure?: 'conflict' | 'unknown'
+  status: Extract<AnswerTurnStatus, 'complete' | 'error'>
   snapshotHash: string
+  finalizationDigest: string
   harnessRun: HarnessRunReport
   evidenceJson: string
 }
@@ -189,13 +168,17 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
   const evidence: FrozenTurnEvidence = {
     ...evidenceForSummary,
     answerRun,
-    harnessRun,
+    harnessRunRef: input.turnId,
   }
   const turnRow = {
-    turnId: input.turnId,
+    reservationKey: input.reservationKey,
+    requestDigest: input.requestDigest,
+    sessionId: input.sessionId,
     threadId: input.threadId,
-    pseudonymousSessionId: input.sessionId,
-    seq: input.turnSeq,
+    turnId: input.turnId,
+    turnSeq: input.turnSeq,
+    generation: input.generation,
+    leaseOwner: input.leaseOwner,
     query: input.query,
     intent: input.intent,
     evidenceJson: JSON.stringify(evidence),
@@ -204,9 +187,9 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
     artifactKindsJson: JSON.stringify(
       input.captured === undefined ? [] : buildArtifactsFromSnapshot(input.captured).map((artifact) => artifact.kind),
     ),
-    status,
+    finalStatus: status,
     ...(input.errorCopyId === undefined ? {} : { errorCopyId: input.errorCopyId }),
-    ...(input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.sourceWriteRequest }),
+    ...(input.errorProblemJson === undefined ? {} : { errorProblemJson: input.errorProblemJson }),
     toolCalls: input.toolCalls.map((call) => ({
       toolCallId: call.toolCallId,
       seq: call.seq,
@@ -218,38 +201,37 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
       status: call.status,
     })),
   }
+  const finalizationDigest = answerTurnFinalizationDigest({
+    turn: {
+      turnId: input.turnId,
+      threadId: input.threadId,
+      seq: input.turnSeq,
+      query: input.query,
+      intent: input.intent,
+      evidenceJson: turnRow.evidenceJson,
+      snapshotHash: turnRow.snapshotHash,
+      proseJson: turnRow.proseJson,
+      artifactKindsJson: turnRow.artifactKindsJson,
+      status,
+      ...(input.errorCopyId === undefined ? {} : { errorCopyId: input.errorCopyId }),
+      ...(input.errorProblemJson === undefined ? {} : { errorProblemJson: input.errorProblemJson }),
+    },
+    toolCalls: input.toolCalls,
+  })
+
 
   try {
-    if (input.isNewThread) {
-      await appendAnswerTurnWithThreadAndToolCalls({
-        ...turnRow,
-        title: input.title,
-      })
-      if (input.skipHarnessSessionJournal !== true) {
-        await appendAnswerHarnessSessionJournal({
-          input,
-          harnessRun,
-          snapshotHash,
-          status,
-          ...(input.harnessRuntimeEvents === undefined ? {} : { runtimeEvents: input.harnessRuntimeEvents }),
-        })
-      }
-      return { ok: true, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
+    const persisted = await persistReservedAnswerTurn({
+      ...turnRow,
+      answerDigest: finalizationDigest,
+      ...(input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.sourceWriteRequest }),
+    })
+    if (persisted.kind === 'conflict') {
+      return { ok: false, failure: 'conflict', status, snapshotHash, finalizationDigest, harnessRun, evidenceJson: turnRow.evidenceJson }
     }
-
-    await appendAnswerTurnWithToolCalls(turnRow)
-    if (input.skipHarnessSessionJournal !== true) {
-      await appendAnswerHarnessSessionJournal({
-        input,
-        harnessRun,
-        snapshotHash,
-        status,
-        ...(input.harnessRuntimeEvents === undefined ? {} : { runtimeEvents: input.harnessRuntimeEvents }),
-      })
-    }
-    return { ok: true, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
+    return { ok: true, status, snapshotHash, finalizationDigest, harnessRun, evidenceJson: turnRow.evidenceJson }
   } catch {
-    return { ok: false, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
+    return { ok: false, failure: 'unknown', status, snapshotHash, finalizationDigest, harnessRun, evidenceJson: turnRow.evidenceJson }
   }
 }
 
@@ -290,12 +272,47 @@ export async function finalizePersistedAnswerTurnHarnessRun(args: {
 
   return answerHarnessFinalizer({
     request,
+    reservationKey: args.input.reservationKey,
+    requestDigest: args.input.requestDigest,
+    sessionId: args.input.sessionId,
+    threadId: args.input.threadId,
     turnId: args.input.turnId,
+    turnSeq: args.input.turnSeq,
+    finalStatus: args.persistResult.status,
     snapshotHash: args.persistResult.snapshotHash,
+    generation: args.input.generation,
+    leaseOwner: args.input.leaseOwner,
     evidenceJson: finalizedEvidence,
     finalizationHash,
     entries,
   })
+}
+
+export async function failPersistedAnswerTurnDurably(args: {
+  input: PersistAnswerTurnInput
+  persistResult: PersistAnswerTurnResult
+  errorProblemJson: string
+}): Promise<FailPersistedAnswerTurnResult | undefined> {
+  const request = args.input.sourceWriteRequest
+  if (request === undefined) return undefined
+  try {
+    return await failPersistedAnswerTurnSource({
+      sourceWriteRequest: request,
+      reservationKey: args.input.reservationKey,
+      requestDigest: args.input.requestDigest,
+      sessionId: args.input.sessionId,
+      threadId: args.input.threadId,
+      turnId: args.input.turnId,
+      turnSeq: args.input.turnSeq,
+      generation: args.input.generation,
+      leaseOwner: args.input.leaseOwner,
+      answerDigest: args.persistResult.finalizationDigest,
+      ...(args.input.errorCopyId === undefined ? {} : { errorCopyId: args.input.errorCopyId }),
+      errorProblemJson: args.errorProblemJson,
+    })
+  } catch {
+    return undefined
+  }
 }
 
 export function answerHarnessFinalizationSucceeded(
@@ -311,9 +328,9 @@ function finalizeEvidenceJson(input: {
   journalEntryCount: number
 }): string {
   const evidence = parseFrozenEvidence(input.evidenceJson)
+  // Spread preserves `harnessRunRef`; the full report stays in `harnessSessionEntries`.
   const finalized: FrozenTurnEvidence = {
     ...evidence,
-    harnessRun: input.harnessRun,
     harnessFinalization: {
       schemaVersion: 1,
       status: 'accepted',
@@ -428,29 +445,6 @@ function emptyProse(): FrozenTurnProse {
   return { oneLine: '', summary: '', nextStep: '' }
 }
 
-async function appendAnswerHarnessSessionJournal(args: {
-  input: PersistAnswerTurnInput
-  harnessRun: HarnessRunReport
-  snapshotHash: string
-  status: AnswerTurnStatus
-  runtimeEvents?: readonly HarnessRuntimeEvent[]
-}): Promise<void> {
-  if (args.input.sourceWriteRequest === undefined) {
-    return
-  }
-
-  const entries = buildAnswerHarnessSessionJournalEntries(args)
-  for (const entry of entries) {
-    try {
-      await answerHarnessSessionJournalWriter({
-        request: args.input.sourceWriteRequest,
-        entry,
-      })
-    } catch {
-      return
-    }
-  }
-}
 
 function buildAnswerHarnessSessionJournalEntries(args: {
   input: PersistAnswerTurnInput

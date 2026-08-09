@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { findFiles } from '@/lib/ui/contract-scans'
+import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/public'
 import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
 
 const productionAuthority = {
@@ -218,20 +219,28 @@ describe('CustomerRequest source completeness', () => {
     const agentHttp = source('agentHttp')
     expect(agentHttp).not.toMatch(/authorizePreparation|approvePreparedAction|admitApprovedAction|operation:\s*['"]approve/)
     const ui = source('humanUi')
-    expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
-    expect(ui).toContain('const replacing = editingRevision !== undefined')
-    expect(ui).toContain('const endpoint = replacing')
-    expect(ui).toContain('fetch(endpoint, requestInit)')
+    const workspaceController = readFileSync(
+      'src/components/ae/customer-request/workspace-controller.ts',
+      'utf8',
+    )
+    const uiSource = `${ui}\n${workspaceController}`
+    expect(uiSource).toContain("from '@/modules/customer-request/customer-projection'")
+    expect(uiSource).toContain('const replacing = editingRevision !== undefined')
+    expect(uiSource).toContain('const endpoint = replacing')
+    expect(uiSource).toContain('fetch(endpoint, requestInit)')
     expect(ui).toContain('projectCustomerRequestDecisionRecords(state.projection)')
-    expect(ui).toContain(": '/api/requests'")
-    expect(ui).toContain('/messages`')
-    expect(ui).toContain("mode: 'replace'")
-    expect(ui).toContain("method: 'GET'")
-    expect(ui).toContain('ACTIVE_REQUEST_STORAGE_KEY')
-    expect(ui).toContain('/options`')
+    expect(uiSource).toContain(": '/api/requests'")
+    expect(uiSource).toContain('/messages`')
+    expect(uiSource).toContain("mode: 'replace'")
+    expect(uiSource).toContain("method: 'GET'")
+    expect(uiSource).toContain('ACTIVE_REQUEST_STORAGE_KEY')
+    expect(uiSource).toContain('/options`')
     const publicHome = readFileSync('src/routes/index.tsx', 'utf8')
-    expect(publicHome).toContain('projectConsumerPlan')
-    expect(publicHome).toContain('customerRequestPlanPreviewAction')
+    expect(publicHome).toContain("throw redirect({ to: '/t/new', search: { q: search.q } })")
+    expect(publicHome).toContain('readRootWorkTreeServer')
+    expect(publicHome).toContain('<RootWorkTreeLoop readback={data.readback} />')
+    expect(publicHome).not.toContain('projectConsumerPlan')
+    expect(publicHome).not.toContain('customerRequestPlanPreviewAction')
     expect(publicHome).not.toContain('AeHomeComposer')
     for (const route of [
       'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.messages.ts', 'src/routes/api.requests.$requestRef.options.ts',
@@ -254,18 +263,17 @@ describe('CustomerRequest source completeness', () => {
     for (const marker of requiredMarkers) {
       expect(discoveryFiles, `shared discovery owner missing ${marker}`).toContain(marker)
     }
-    expect(publicContract).toContain(
-      `export const CUSTOMER_REQUEST_AGENT_SCOPE = '${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}' as const`
-    )
-    expect(discoveryFiles).toContain('CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES')
+    expect(publicContract).toContain('export const CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
     for (const marker of [
+      'ANSWER_THREAD_AGENT_ENTRYPOINT',
       'CUSTOMER_REQUEST_AGENT_ENTRYPOINT',
-      'CUSTOMER_REQUEST_AGENT_SCOPE',
+      'CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES',
       'CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES',
       'CUSTOMER_REQUEST_STATE_VALUES',
     ]) {
       expect(discoveryFiles, `shared discovery owner missing ${marker}`).toContain(marker)
     }
+    expect(discoveryFiles).not.toContain('CUSTOMER_REQUEST_AGENT_SCOPE')
     expect(durableDiscovery).toMatch(
       /buildOfferingLlmsTxt\(await publicOfferingSupplyForDiscovery\(ctx\.db\)/
     )

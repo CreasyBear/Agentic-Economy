@@ -4,7 +4,7 @@ import {
   validateAdmittedOperationRef,
   type AdmittedOperationRef,
   type PublicOperationRef,
-  type RegisteredInputMappingRef,
+  type RegisteredOperationMappingRef,
 } from '@/modules/capability-supply/public'
 import {
   openCapabilityDecisionModel,
@@ -106,8 +106,8 @@ export function customerRequestV2PreparationPorts(
       return { kind: 'current' as const, aggregate: domainAggregate(revision.aggregate) }
     },
 
-    loadActionCapabilityModel: async (aggregate, action) => (
-      await loadCurrentActionModel(db, aggregate, action)
+    loadActionCapabilityModel: async (aggregate, action, now) => (
+      await loadCurrentActionModel(db, aggregate, action, now)
     ),
 
     loadActionPreparation: async (input) => {
@@ -291,10 +291,12 @@ async function loadCurrentActionModel(
   db: QueryCtx['db'],
   aggregate: CustomerRequestV2Aggregate,
   action: CustomerRequestV2Aggregate['plan']['actions'][number],
-): Promise<CapabilityDecisionModel | undefined> {
+  now: number,
+) {
   const supply = await listRouteableCapabilitySupply(db, {
     networkId: aggregate.snapshot.networkId,
     limit: 64,
+    now,
   })
   if (supply.kind !== 'available') return undefined
   const bindings = registeredEvaluationBindingsFromRouteableSupply(supply)
@@ -406,7 +408,7 @@ function asDomainAdmittedOperation(value: unknown): AdmittedOperationRef {
   return value
 }
 
-function asDomainMappingRef(value: string): RegisteredInputMappingRef {
+function asDomainMappingRef(value: string): RegisteredOperationMappingRef {
   if (!isRegisteredOperationMappingRef(value)) {
     throw new Error('customer_request_v2_preparation_mapping_ref_invalid')
   }

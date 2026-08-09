@@ -25,6 +25,7 @@ export type ClaimFormSearch = Readonly<{
   suburb: string
   stateTerritory: string
   requestedSlug: string
+  source?: 'supply'
 }>
 
 /**
@@ -35,9 +36,11 @@ export type ClaimFormSearch = Readonly<{
 export function AeFindMyBusiness({
   search,
   onBuildFromWeb,
+  source,
 }: {
   search: FindMyBusinessSearch
   onBuildFromWeb: (businessName: string) => void
+  source?: 'supply'
 }) {
   const [query, setQuery] = useState('')
   const [pending, setPending] = useState(false)
@@ -105,7 +108,7 @@ export function AeFindMyBusiness({
                   </p>
                   <div>
                     <Button asChild variant="secondary" className="min-h-11">
-                      <Link to="/claim/form" search={claimFormSearchFor(business)}>This is my business</Link>
+                      <Link to="/claim/form" search={claimFormSearchFor(business, source)}>This is my business</Link>
                     </Button>
                   </div>
                 </CardContent>
@@ -125,7 +128,7 @@ export function AeFindMyBusiness({
             Start with my website
           </Button>
           <Button asChild variant="ghost" className="min-h-11">
-            <Link to="/claim/form">My business is not listed. Start fresh.</Link>
+            <Link to="/claim/form" search={source === 'supply' ? { source } : {}}>My business is not listed. Start fresh.</Link>
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">

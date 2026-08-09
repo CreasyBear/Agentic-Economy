@@ -6,6 +6,7 @@ import type {
 } from '@/modules/capability-supply/public'
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
@@ -190,7 +191,7 @@ export function createDynamicPublishedAction(input: Readonly<{
         dataUse: {
           fields: descriptor.dataUse.map(({ inputPointer }) => inputPointer),
           limits: {
-            amountMinor: executableFixedPrice(operation).amountMinor,
+            amount: executableFixedPrice(operation),
             publicationRevision: operation.identity.publicationRevision,
             contractVersion: operation.identity.contractVersion,
           },
@@ -213,15 +214,14 @@ export function createDynamicPublishedAction(input: Readonly<{
 
 export function executableFixedPrice(
   operation: PublishedOperation,
-): Readonly<{ currency: string; amountMinor: number }> {
+): ExactAmount {
   const price = operation.identity.price
-  if (
-    price.kind !== 'fixed'
-    || price.currency.trim().length === 0
-    || !Number.isSafeInteger(price.amountMinor)
-    || price.amountMinor < 0
-  ) {
+  if (price.kind !== 'fixed') {
     throw new Error('published_operation_price_not_fixed')
   }
-  return { currency: price.currency, amountMinor: price.amountMinor }
+  const parsed = exactAmountSchema.safeParse(price.amount)
+  if (!parsed.success) {
+    throw new Error('published_operation_price_not_fixed')
+  }
+  return parsed.data
 }

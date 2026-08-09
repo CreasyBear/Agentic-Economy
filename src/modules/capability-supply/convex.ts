@@ -1,1 +1,4 @@
-export { registeredOperationMappingValue } from './internal/convex-schema'
+export {
+  connectionAuthoritySnapshotValue,
+  registeredOperationMappingValue,
+} from './internal/convex-schema'

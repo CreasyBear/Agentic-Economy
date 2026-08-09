@@ -1,6 +1,6 @@
 # ADR register
 
-This register is reconciled against the files on disk (2026-07-29). ADR
+This register is reconciled against the files on disk (2026-08-08). ADR
 numbers are historical identifiers, not a single-file sequence: ADR-002 and
 ADR-004 each have two durable records, and both records are retained. New ADRs
 must use the next unused number.
@@ -52,6 +52,9 @@ file's status declaration; the filename disambiguates duplicate numbers.
 | ADR-029 | `ADR-029-capability-publication-provenance-readiness.md` | Accepted |
 | ADR-030 | `ADR-030-registry-engine-machine-contract.md` | Accepted |
 | ADR-031 | `ADR-031-frankfurter-second-conformance-provider.md` | Accepted |
+| ADR-032 | `ADR-032-founder-category-and-ownership.md` | Accepted |
+| ADR-033 | `ADR-033-durable-answer-turn-lifecycle.md` | Accepted; implemented at source/local verification boundary |
+| ADR-034 | `ADR-034-supplier-usage-qualified-use-and-payout-spine.md` | Accepted; owner readback implemented at source/local verification boundary, remaining sequence documented |
 
 ## Reconciled gaps and discrepancies
 

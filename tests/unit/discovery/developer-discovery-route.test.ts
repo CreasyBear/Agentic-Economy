@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { emptyDiscoverySourceState } from '../../fixtures/source-state'
 import {
   createDefaultDiscoverySourceState,
@@ -368,6 +369,15 @@ function routeSnapshotWithBusiness(input: {
         accessPaths: [
           {
             accessPathRef: `access:${input.slug}:burst-pipe-repair`,
+            offeringRevision: 1,
+            offeringSourceHash: canonicalDigest({
+              fixture: 'developer-discovery-route',
+              offeringRef: `offering:${input.slug}:burst-pipe-repair`,
+            }),
+            sourceHash: canonicalDigest({
+              fixture: 'developer-discovery-route',
+              accessPathRef: `access:${input.slug}:burst-pipe-repair`,
+            }),
             kind: 'human_request',
             channel: 'phone',
             disclosure: 'This business has not published a request path.',

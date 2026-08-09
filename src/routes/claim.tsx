@@ -277,6 +277,7 @@ function ClaimRoute() {
             writeClaimEnrichIntent({ businessName })
             void navigate({ to: '/claim/form', ...(source === 'supply' ? { search: { source: 'supply' } } : {}) })
           }}
+          {...(source === undefined ? {} : { source })}
         />
       </section>
     </AePublicShell>

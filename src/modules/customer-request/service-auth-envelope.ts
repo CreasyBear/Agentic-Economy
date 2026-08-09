@@ -1,8 +1,14 @@
-import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
+import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 const MAX_ASSERTION_AGE_MS = 30_000
+
+export function toStableHashValue(value: unknown): StableHashValue {
+  if (!isBoundedJsonValue(value)) throw new Error('canonical_digest_value_invalid')
+  return value
+}
 
 export type CustomerRequestServicePrincipal = Readonly<{
   principalId: string

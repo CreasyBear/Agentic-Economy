@@ -30,6 +30,7 @@ export type CustomerRequestV2PreparationPorts = Readonly<{
   loadActionCapabilityModel: (
     aggregate: CustomerRequestV2Aggregate,
     action: PlanAction,
+    now: number,
   ) => Promise<CapabilityDecisionModel | undefined>
 
   loadActionPreparation: (input: Readonly<{

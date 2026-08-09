@@ -1,4 +1,3 @@
-import { convexTest } from 'convex-test'
 import { Response as UndiciResponse } from 'undici'
 import { fetch as UndiciFetch } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,6 +22,7 @@ import {
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import type { ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { ExactAmount } from '@/modules/money/public'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
@@ -86,6 +86,7 @@ async function rememberModelOperationRef(
   const supply = await backend.query(internal.capabilitySupply.listIntegrated, {
     networkId: 'ae:public',
     limit: 64,
+    now: Date.now(),
   })
   if (supply.kind !== 'available') throw new Error(`model fixture supply unavailable: ${supply.reason}`)
   const matching = supply.supplies.find(({ binding }) => (
@@ -111,8 +112,8 @@ describe('current V2 Customer Request application path', () => {
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
       kind: 'quoted',
-      expectedCost: { currency: 'USD', amountMinor: 0 },
-      maximumCost: { currency: 'USD', amountMinor: 0 },
+      expectedCost: { currency: 'USD', units: '0', exponent: 2 },
+      maximumCost: { currency: 'USD', units: '0', exponent: 2 },
       expectedLatencyMs: 1,
       dataFields: [],
       disclosures: ['Readiness probe only.'],
@@ -129,12 +130,9 @@ describe('current V2 Customer Request application path', () => {
 
   it('preserves the unsupported Request data disposition through the durable application projection', async () => {
     const backend = await convexTestWithWorkers()
-    await seedCuratedFrankfurterSupply(backend)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'unsupported_request',
       reason: 'requested_result_not_available',
-      prompt: '',
-      selections: [],
     })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -146,7 +144,6 @@ describe('current V2 Customer Request application path', () => {
       customerJob: 'Book and pay for a guaranteed appointment. Private medical context is included.',
       routing: { networkId: 'ae:public' },
     })
-
     expect(submitted).toMatchObject({
       kind: 'request',
       state: 'unsupported',
@@ -157,13 +154,13 @@ describe('current V2 Customer Request application path', () => {
         explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
       },
       unsupportedRecovery: {
-        reason: 'requested_result_not_available',
+        reason: 'no_current_business',
         preservedRequest: true,
         authorityCreatedForThisRevision: false,
         businessContactedForThisRevision: false,
         nextStep: {
           kind: 'change_request',
-          summary: 'Change the outcome you want while keeping this Request and its history.',
+          summary: 'Change the location, timing, or outcome while keeping this Request and its history.',
         },
       },
     })
@@ -195,7 +192,7 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:legacy-embedded-route',
       requestId: requestRef,
       delegatedAgentId: 'agent:external:v2',
-      customerJob: 'Legacy route recovery',
+      customerJob: 'Find the EUR to USD rate for legacy route recovery',
       routing: { networkId: 'ae:public' },
     }
     const submitted = await customer.action(api.customerRequestApplication.submit, initialSubmitArgs)
@@ -501,9 +498,6 @@ describe('current V2 Customer Request application path', () => {
       operations: await ctx.db.query('customerRequestV2PreparationEgressOperations').collect(),
       allocations: await ctx.db.query('customerRequestV2PreparationDisclosureAllocations').collect(),
       consumption: await ctx.db.query('customerRequestV2PreparationEgressConsumption').collect(),
-      legacyHeads: await ctx.db.query('customerRequestHeads').collect(),
-      legacyRequests: await ctx.db.query('customerRequests').collect(),
-      legacyPreparations: await ctx.db.query('customerRequestPreparationCommands').collect(),
     }))
     const activeRevision = persisted.revisions.find((row) => row.aggregate.snapshot.revision === review.revision)
     if (activeRevision === undefined) throw new Error('active request revision missing')
@@ -562,9 +556,6 @@ describe('current V2 Customer Request application path', () => {
       planDigest: activeRevision.aggregate.plan.planDigest,
       contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest,
     } })
-    expect(persisted.legacyHeads).toEqual([])
-    expect(persisted.legacyRequests).toEqual([])
-    expect(persisted.legacyPreparations).toEqual([])
   })
 
   it('does not return an unchanged option after the customer reports that exact option cannot work', async () => {
@@ -577,7 +568,7 @@ describe('current V2 Customer Request application path', () => {
         facts: frankfurterFacts(model),
       }],
     }
-    const replacementRequest = 'Find an option with a flexible deadline.'
+    const replacementRequest = 'Find an EUR to USD option with a flexible deadline.'
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(modelResponse(selected))
       .mockResolvedValueOnce(modelResponse({
@@ -594,7 +585,7 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:reported-option-failure',
       requestId: 'request:v2:reported-option-failure',
       delegatedAgentId: 'agent:reported-option-failure',
-      customerJob: 'Find an option before the hard deadline.',
+      customerJob: 'Find an EUR to USD option before the hard deadline.',
       routing: { networkId: 'ae:public' },
     })
     if (submitted.kind !== 'request') throw new Error('reported-option Request missing')
@@ -625,7 +616,7 @@ describe('current V2 Customer Request application path', () => {
       revision: 2,
       state: 'ready_to_compare',
       nextAction: 'prepare_options',
-      summary: 'Find an option before the hard deadline.',
+      summary: 'Find an EUR to USD option before the hard deadline.',
     })
     if (refined.kind !== 'request') throw new Error('reported-option refinement missing')
     await expect(customer.action(api.customerRequestApplication.refine, command)).resolves.toEqual(refined)
@@ -743,7 +734,7 @@ describe('current V2 Customer Request application path', () => {
     if (baseInput === undefined || quoteInput === undefined) {
       throw new Error('frankfurter decision inputs missing')
     }
-    const customerJob = 'Convert EUR to one US Dollar rate.'
+    const customerJob = 'Convert EUR to USD rate.'
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
       kind: 'capability_candidates',
       selections: [{
@@ -826,7 +817,7 @@ describe('current V2 Customer Request application path', () => {
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:seeded-run', requestId: 'request:v2:seeded-run',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled EUR to USD sandbox options',
       routing: { networkId: 'ae:public' },
     })
     if (submitted.kind !== 'request') throw new Error('seeded route request missing')
@@ -890,7 +881,7 @@ describe('current V2 Customer Request application path', () => {
     const customer = backend.withIdentity(identity)
     const command = {
       compilationKey: 'submit:v2:disclosure', requestId: 'request:v2:disclosure',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare a private request safely',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare a private EUR to USD request safely',
       routing: { networkId: 'ae:public' },
     }
 
@@ -934,14 +925,14 @@ describe('current V2 Customer Request application path', () => {
 
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:retry', requestId: 'request:v2:retry',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest labelled sandbox option.',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest EUR to USD labelled sandbox option.',
       routing: { networkId: 'ae:public' },
     })
 
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:v2:retry', revision: 1,
       state: 'ready_to_compare', nextAction: 'prepare_options',
-      summary: 'Find the cheapest labelled sandbox option.',
+      summary: 'Find the cheapest EUR to USD labelled sandbox option.',
     })
     expect(generate).toHaveBeenCalledTimes(1)
     const persisted = await backend.run(async (ctx) => (
@@ -970,7 +961,7 @@ describe('current V2 Customer Request application path', () => {
       .mockResolvedValueOnce(modelResponse({
         kind: 'capability_candidates',
         canonicalStatements: [
-          { source: 'prior', quote: 'Find an option' },
+          { source: 'prior', quote: 'Find an EUR to USD option' },
           { source: 'amendment', quote: 'Prefer the cheapest suitable option.' },
         ],
         selections: [{ selectionKey: model.selectionKey, facts: frankfurterFacts(model) }],
@@ -980,7 +971,7 @@ describe('current V2 Customer Request application path', () => {
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', key)
     const command = {
       compilationKey: 'submit:external:1', requestId: 'request:v2:external',
-      delegatedAgentId: 'agent:external', customerJob: 'Find an option', routing: { networkId: 'ae:public' },
+      delegatedAgentId: 'agent:external', customerJob: 'Find an EUR to USD option', routing: { networkId: 'ae:public' },
     }
     const serviceAuth = await createCustomerRequestServiceAssertion({
       key, operation: 'submit', command,
@@ -1114,7 +1105,7 @@ describe('current V2 Customer Request application path', () => {
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:drift', requestId: 'request:v2:drift',
-      delegatedAgentId: 'agent:drift', customerJob: 'Find an option', routing: { networkId: 'ae:public' },
+      delegatedAgentId: 'agent:drift', customerJob: 'Find an EUR to USD option', routing: { networkId: 'ae:public' },
     })
     if (submitted.kind !== 'request') throw new Error('submitted request missing')
     const answered = submitted
@@ -1182,7 +1173,7 @@ describe('current V2 Customer Request application path', () => {
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:egress-state', requestId: 'request:v2:egress-state',
-      delegatedAgentId: 'agent:egress-state', customerJob: 'Protected request', routing: { networkId: 'ae:public' },
+      delegatedAgentId: 'agent:egress-state', customerJob: 'Protected EUR to USD request', routing: { networkId: 'ae:public' },
     })
     if (submitted.kind !== 'request') throw new Error('submitted request missing')
     const answered = submitted
@@ -1393,7 +1384,7 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:transient-recovery',
       requestId: 'request:v2:transient-recovery',
       delegatedAgentId: 'agent:external:v2',
-      customerJob: 'Compare labelled sandbox options',
+      customerJob: 'Compare labelled EUR to USD sandbox options',
       routing: { networkId: 'ae:public' },
     })).resolves.toMatchObject({
       kind: 'request',
@@ -1503,7 +1494,10 @@ describe('current V2 Customer Request application path', () => {
         format: 'ae.prepared-action:v2', business: { name: 'Frankfurter — ECB rates' },
         offering: { offeringId: 'offering:frankfurter-preparation:rate' },
         binding: { bindingId: 'binding:frankfurter-preparation:http-json' },
-        price: { currency: 'USD', maximumAmountMinor: 0 },
+        price: {
+          minimum: { currency: 'USD', units: '0', exponent: 2 },
+          maximum: { currency: 'USD', units: '0', exponent: 2 },
+        },
         // Two heterogeneous candidate bindings (Frankfurter keyless at USD 0,
         // Exa credential at USD 0.01); lowest-maximum-price selects Frankfurter.
         comparison: { kind: 'lowest_maximum_price', candidateCount: 2 },
@@ -1512,10 +1506,8 @@ describe('current V2 Customer Request application path', () => {
     await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, command)).resolves.toEqual(prepared)
     const stored = await backend.run(async (ctx) => ({
       current: await ctx.db.query('customerRequestV2PreparedActions').collect(),
-      legacy: await ctx.db.query('customerRequestPreparedActions').collect(),
     }))
     expect(stored.current).toHaveLength(1)
-    expect(stored.legacy).toEqual([])
     if (prepared.kind !== 'prepared') throw new Error('prepared action missing')
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
@@ -1535,7 +1527,7 @@ describe('current V2 Customer Request application path', () => {
       .mockResolvedValueOnce(modelResponse({
         ...response,
         canonicalStatements: [
-          { source: 'prior', quote: 'Find an option' },
+          { source: 'prior', quote: 'Find an EUR to USD option' },
           { source: 'amendment', quote: 'Prefer the clearest result.' },
         ],
       }))
@@ -1544,7 +1536,7 @@ describe('current V2 Customer Request application path', () => {
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:refine', requestId: 'request:v2:refine', delegatedAgentId: 'agent:refine',
-      customerJob: 'Find an option', routing: { networkId: 'ae:public' },
+      customerJob: 'Find an EUR to USD option', routing: { networkId: 'ae:public' },
     })
     expect(submitted).toMatchObject({ kind: 'request', revision: 1, state: 'ready_to_compare' })
     if (submitted.kind !== 'request') throw new Error('submitted request missing')
@@ -1562,7 +1554,7 @@ describe('current V2 Customer Request application path', () => {
     ]))
     const replaced = await customer.action(api.customerRequestApplication.refine, {
       requestRef: submitted.requestRef, expectedRevision: 2, idempotencyKey: 'replace:v2:2',
-      message: 'Find lunch in Fremantle.', mode: 'replace',
+      message: 'Find an EUR to USD option with a different deadline.', mode: 'replace',
     })
     if (replaced.kind !== 'request' || replaced.state !== 'ready_to_compare') {
       throw new Error(`replaced request missing: ${JSON.stringify(replaced)}`)
@@ -1577,13 +1569,13 @@ describe('current V2 Customer Request application path', () => {
   it('stores one canonical current Request when an amendment supersedes a material assertion', async () => {
     const backend = await convexTestWithWorkers()
     const model = await seedCuratedFrankfurterSupply(backend)
-    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
+    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: frankfurterFacts(model) }] }
     const generate = vi.fn()
       .mockResolvedValueOnce(modelResponse(response))
       .mockResolvedValueOnce(modelResponse({
         ...response,
         canonicalStatements: [
-          { source: 'prior', quote: 'Find an option.' },
+          { source: 'prior', quote: 'Find an EUR to USD option.' },
           { source: 'prior', quote: 'Wheelchair accessibility is mandatory.' },
           { source: 'prior', quote: 'Passport validity is unknown.' },
           { source: 'amendment', quote: 'Arrival before 09:00 is now immovable.' },
@@ -1600,7 +1592,7 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:canonical-amendment',
       requestId: 'request:v2:canonical-amendment',
       delegatedAgentId: 'agent:canonical-amendment',
-      customerJob: 'Find an option. Arrival before 08:00 is immovable. '
+      customerJob: 'Find an EUR to USD option. Arrival before 08:00 is immovable. '
         + 'Wheelchair accessibility is mandatory. Passport validity is unknown.',
       routing: { networkId: 'ae:public' },
     })
@@ -1618,7 +1610,7 @@ describe('current V2 Customer Request application path', () => {
     expect(refined).toMatchObject({
       kind: 'request',
       revision: 2,
-      summary: 'Find an option.\nWheelchair accessibility is mandatory.\n'
+      summary: 'Find an EUR to USD option.\nWheelchair accessibility is mandatory.\n'
         + 'Passport validity is unknown.\nArrival before 09:00 is now immovable.',
       criteria: expect.arrayContaining([
         expect.objectContaining({ label: 'Must preserve', value: 'Wheelchair accessibility is mandatory.' }),
@@ -1657,7 +1649,7 @@ describe('current V2 Customer Request application path', () => {
         kind: 'unsupported_request',
         reason: 'requested_result_not_available',
         canonicalStatements: [
-          { source: 'prior', quote: 'Find an option' },
+          { source: 'prior', quote: 'Find an EUR to USD option' },
           { source: 'amendment', quote: 'Tighten the hard total budget to AUD 1.' },
         ],
       }))
@@ -1668,7 +1660,7 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:refine-retry',
       requestId: 'request:v2:refine-retry',
       delegatedAgentId: 'agent:refine-retry',
-      customerJob: 'Find an option',
+      customerJob: 'Find an EUR to USD option',
       routing: { networkId: 'ae:public' },
     })
     if (submitted.kind !== 'request') throw new Error('submitted request missing')
@@ -1680,7 +1672,6 @@ describe('current V2 Customer Request application path', () => {
     }
 
     const refined = await customer.action(api.customerRequestApplication.refine, command)
-
     expect(refined).toMatchObject({
       kind: 'request',
       requestRef: submitted.requestRef,
@@ -1688,6 +1679,15 @@ describe('current V2 Customer Request application path', () => {
       state: 'unsupported',
     })
     await expect(customer.action(api.customerRequestApplication.refine, command)).resolves.toEqual(refined)
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      ...command,
+      idempotencyKey: 'refine:v2:stale-revision',
+      message: 'Use a fresh key for a different change.',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      requestRef: submitted.requestRef,
+      reason: 'revision_changed',
+    })
     await expect(customer.action(api.customerRequestApplication.refine, {
       ...command,
       message: 'Use the same key for a different change.',
@@ -1707,7 +1707,7 @@ describe('current V2 Customer Request application path', () => {
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
-    const intent = 'Find an accessible transfer and hotel before noon.'
+    const intent = 'Find an accessible EUR to USD transfer and hotel before noon.'
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:exact-replacement',
       requestId: 'request:v2:exact-replacement',
@@ -1769,8 +1769,8 @@ describe('durable Customer Request submission recovery', () => {
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
       kind: 'quoted',
-      expectedCost: { currency: 'USD', amountMinor: 0 },
-      maximumCost: { currency: 'USD', amountMinor: 0 },
+      expectedCost: { currency: 'USD', units: '0', exponent: 2 },
+      maximumCost: { currency: 'USD', units: '0', exponent: 2 },
       expectedLatencyMs: 1,
       dataFields: [],
       disclosures: ['Readiness probe only.'],
@@ -1842,6 +1842,7 @@ describe('durable Customer Request submission recovery', () => {
     // The already-committed command replays; a fresh one takes the model path to comparison.
     await expect(customer.action(api.customerRequestApplication.submit, {
       ...command,
+      customerJob: 'Compare labelled EUR to USD sandbox options for an accessible office relocation.',
       compilationKey: 'submit:v2:interpreter-recovery:model',
       requestId: 'request:v2:interpreter-recovery-model',
     })).resolves.toMatchObject({
@@ -1855,7 +1856,7 @@ describe('durable Customer Request submission recovery', () => {
 })
 
 async function beginHistoricalPreparationProof(
-  backend: ReturnType<typeof convexTest>,
+  backend: ConvexFixtureBackend,
   input: Readonly<{
     requestRef: string; revision: number; principalId: string; suffix: string
   }>,
@@ -1882,16 +1883,16 @@ async function beginHistoricalPreparationProof(
 }
 
 async function registerVariantSupply(
-  backend: ReturnType<typeof convexTest>,
+  backend: ConvexFixtureBackend,
   document: unknown,
   businessId: string,
   offeringId: string,
   bindingId: string,
-  options: Readonly<{ suffix?: string; businessSlug?: string; priceAmountMinor?: number; label?: string }> = {},
+  options: Readonly<{ suffix?: string; businessSlug?: string; priceAmount?: ExactAmount; label?: string }> = {},
 ) {
   const suffix = options.suffix ?? 'disclosure'
   const businessSlug = options.businessSlug ?? 'frankfurter-ecb-rates'
-  const priceAmountMinor = options.priceAmountMinor ?? 0
+  const priceAmount = options.priceAmount ?? { currency: 'USD', units: '0', exponent: 2 }
   const label = options.label ?? 'Frankfurter Preparation Rate'
   await backend.run(async (ctx) => {
     const encoded = encodeCapabilityContractDocument(document)
@@ -1910,7 +1911,7 @@ async function registerVariantSupply(
         presentation: {
           label,
           summary: 'Curated Frankfurter supply for preparation authority verification only.',
-          price: { kind: 'fixed', currency: 'USD', amountMinor: priceAmountMinor },
+          price: { kind: 'fixed', amount: priceAmount },
           materialTerms: [{ termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS.' }],
           commercialRelationship: {
             kind: 'none', summary: 'No commercial relationship.',
@@ -1933,7 +1934,7 @@ async function registerVariantSupply(
         bindingId, offeringId,
         networkId: 'ae:public', contractRef: contract.ref,
         endpointUrl: 'https://api.frankfurter.dev/v2/rates',
-        credentialRef: 'none',
+        authority: { kind: 'keyless' },
         continuation: { kind: 'single_response', evidenceRefs: ['test:single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['test:no-cancellation'] },
         adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
@@ -2038,7 +2039,7 @@ async function registerDualPreparationSupply(
     exaBusiness._id,
     'offering:exa-preparation:rate',
     'binding:exa-preparation:http-json',
-    { suffix: 'exa-preparation', businessSlug: 'agentic-market-exa', priceAmountMinor: 1, label: 'Exa Preparation Rate' },
+    { suffix: 'exa-preparation', businessSlug: 'agentic-market-exa', priceAmount: { currency: 'USD', units: '1', exponent: 2 }, label: 'Exa Preparation Rate' },
   )
   // Publishing/observing schedules readiness probes; drain them now so the
   // routeable supply is settled (and the registry snapshot stable) before the

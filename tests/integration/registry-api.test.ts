@@ -27,9 +27,10 @@ import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slu
 import {
   handleDurableSearchBusinessesRequest,
   optionalHasPrice,
-  optionalMaxPriceMinor,
+  optionalMaxPrice,
 } from '@/routes/api.businesses.search'
-import { loadServicesRouteReadback } from '@/routes/index'
+import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
+import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
 
 const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
   (fixture) => fixture.inquiryAdmission === 'admitted',
@@ -146,7 +147,10 @@ describe('registry public API routes', () => {
 
     try {
       const searchQuery = `${admittedLocalE2eOffering.name} ${admittedLocalE2eBusiness.suburb}`
-      const registry = await loadServicesRouteReadback({ q: searchQuery })
+      const registryResponse = await handleDurableSearchServicesRequest(
+        new Request(`https://ae.example/api/v1/services/search?q=${encodeURIComponent(searchQuery)}`),
+      )
+      const registry = await registryResponse.json()
       const listing = await readPublicOfferingRegistryBusinessDetail({
         slug: admittedLocalE2eBusiness.requestedSlug,
       })
@@ -186,12 +190,9 @@ describe('registry public API routes', () => {
         kind: 'ok',
         services: [
           {
-            business: {
-              slug: admittedLocalE2eBusiness.requestedSlug,
-              name: admittedLocalE2eBusiness.businessName,
-              suburb: admittedLocalE2eBusiness.suburb,
-            },
-            name: admittedLocalE2eOffering.name,
+            id: admittedLocalE2eBusiness.requestedSlug,
+            name: admittedLocalE2eBusiness.businessName,
+            category: admittedLocalE2eBusiness.category,
           },
         ],
       })
@@ -225,9 +226,9 @@ describe('registry public API routes', () => {
       vi.stubEnv('CONVEX_URL', undefined)
       vi.stubEnv('VITE_CONVEX_URL', undefined)
 
-      await expect(loadServicesRouteReadback({ q: searchQuery })).rejects.toThrow(
-        'CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.',
-      )
+      await expect(handleDurableSearchServicesRequest(
+        new Request(`https://ae.example/api/v1/services/search?q=${encodeURIComponent(searchQuery)}`),
+      )).rejects.toThrow('CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.')
       await expect(readPublicOfferingRegistryPage({
         paginationOpts: { cursor: null, numItems: 50 },
       })).rejects.toThrow(
@@ -347,7 +348,95 @@ describe('registry public API routes', () => {
         /ownerId|clerk|sourceHash|rawContact|admin|private:evidence|callable|paymentRequired|MCP|OpenAPI/,
       )
     })
+    it.each([
+      ['businesses list', handleDurableListBusinessesRequest, 'https://ae.example/api/businesses?limit=-5'],
+      ['businesses search', handleDurableSearchBusinessesRequest, 'https://ae.example/api/businesses/search?q=plumber&limit=-5'],
+      ['services list', handleDurableListServicesRequest, 'https://ae.example/api/v1/services?limit=-5'],
+      ['services search', handleDurableSearchServicesRequest, 'https://ae.example/api/v1/services/search?q=plumber&limit=-5'],
+    ] as const)('rejects limit=-5 for %s with an RFC 9457 problem', async (_label, handler, url) => {
+      const response = await handler(new Request(url))
+      const body = await response.json()
 
+      expect(response.status).toBe(400)
+      expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+      expect(body).toMatchObject({
+        type: 'about:blank',
+        title: 'Invalid argument',
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_query_parameter',
+        detail: 'Too small: expected number to be >=1',
+      })
+    })
+    it.each(['NaN', 'Infinity', '-Infinity', '0', '1.5', 'not-a-number'])(
+      'rejects invalid limit %s with an RFC 9457 problem',
+      async (limit) => {
+        const response = await handleDurableListBusinessesRequest(
+          new Request(`https://ae.example/api/businesses?limit=${limit}`),
+        )
+        const body = await response.json()
+
+        expect(response.status).toBe(400)
+        expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+        expect(body).toMatchObject({
+          status: 400,
+          kind: 'INVALID_ARGUMENT',
+          code: 'invalid_query_parameter',
+        })
+      },
+    )
+
+    it.each([
+      ['businesses list', handleDurableListBusinessesRequest, 'https://ae.example/api/businesses?cursor=not-a-valid-cursor'],
+      ['businesses search', handleDurableSearchBusinessesRequest, 'https://ae.example/api/businesses/search?q=plumber&cursor=not-a-result'],
+      ['services list', handleDurableListServicesRequest, 'https://ae.example/api/v1/services?cursor=not-a-valid-cursor'],
+      ['services search', handleDurableSearchServicesRequest, 'https://ae.example/api/v1/services/search?q=plumber&cursor=not-a-result'],
+    ] as const)('rejects an invalid cursor for %s with an RFC 9457 problem', async (_label, handler, url) => {
+      const response = await handler(new Request(url))
+      const body = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+      expect(body).toMatchObject({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_cursor',
+      })
+    })
+
+
+    it('rejects an unknown search mode before running the search action', async () => {
+
+      const response = await handleDurableSearchBusinessesRequest(
+        new Request('https://ae.example/api/businesses/search?q=plumber&mode=bogus'),
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+      expect(body).toMatchObject({
+        type: 'about:blank',
+        title: 'Invalid argument',
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_query_parameter',
+        detail: 'Invalid search mode.',
+      })
+    })
+    it('does not turn stop-word discovery prompts into an all-businesses result', async () => {
+      const response = await handleDurableSearchBusinessesRequest(
+        new Request('https://ae.example/api/businesses/search?q=find+providers'),
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body).toMatchObject({
+        kind: 'ok',
+        query: 'find providers',
+        items: [],
+        pagination: { total: 0, hasMore: false },
+      })
+    })
     it('searches deterministically across name, service, category, suburb, state, and service-area tokens', async () => {
       const response = await handleDurableSearchBusinessesRequest(
         new Request(
@@ -435,9 +524,25 @@ describe('registry public API routes', () => {
       })
       expect(missingDetail.status).toBe(404)
       expect(missingBody).toEqual({
-        kind: 'not_found',
+        type: 'about:blank',
+        title: 'Not found',
+        status: 404,
+        detail: 'No public business catalog exists for this slug.',
+        kind: 'NOT_FOUND',
         code: 'business_not_found',
-        reason: 'No public business catalog exists for this slug.',
+      })
+    })
+
+    it('rejects an overlong business slug with an RFC 9457 problem', async () => {
+      const response = await handleDurableBusinessDetailRequest('x'.repeat(201))
+      const body = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+      expect(body).toMatchObject({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_query_parameter',
       })
     })
 
@@ -468,19 +573,22 @@ describe('registry public API routes', () => {
     })
 
     /**
-     * Both price parameters are optional on a route agents already call. A
-     * value the route cannot read is dropped, never turned into a 400: a
-     * malformed budget must not cost the caller the whole search.
+     * Price filters are optional on a route agents already call. A value the
+     * route cannot read is dropped, never turned into a 400: a malformed
+     * budget must not cost the caller the whole search.
      */
-    it('reads a price ceiling and a price requirement off the query string, ignoring anything unreadable', () => {
-      expect(optionalMaxPriceMinor('25000')).toEqual({ maxPriceMinor: 25_000 })
-      expect(optionalMaxPriceMinor(' 25000 ')).toEqual({ maxPriceMinor: 25_000 })
-      expect(optionalMaxPriceMinor(null)).toEqual({})
-      expect(optionalMaxPriceMinor('')).toEqual({})
-      expect(optionalMaxPriceMinor('$250')).toEqual({})
-      expect(optionalMaxPriceMinor('250.5')).toEqual({})
-      expect(optionalMaxPriceMinor('-1')).toEqual({})
-      expect(optionalMaxPriceMinor('0')).toEqual({})
+    it('reads an exact price ceiling and ignores incomplete or malformed triples', () => {
+      expect(optionalMaxPrice('USDC', '7000', '6')).toEqual({
+        maxPrice: { currency: 'USDC', units: '7000', exponent: 6 },
+      })
+      expect(optionalMaxPrice(null, '7000', '6')).toEqual({})
+      expect(optionalMaxPrice('USDC', null, '6')).toEqual({})
+      expect(optionalMaxPrice('USDC', '7000', null)).toEqual({})
+      expect(optionalMaxPrice('usdc', '7000', '6')).toEqual({})
+      expect(optionalMaxPrice('USDC', '-1', '6')).toEqual({})
+      expect(optionalMaxPrice('USDC', '07000', '6')).toEqual({})
+      expect(optionalMaxPrice('USDC', '7000', '19')).toEqual({})
+      expect(optionalMaxPrice('USDC', '7000', '6.5')).toEqual({})
 
       expect(optionalHasPrice('true')).toEqual({ hasPrice: true })
       expect(optionalHasPrice('1')).toEqual({ hasPrice: true })
@@ -490,15 +598,15 @@ describe('registry public API routes', () => {
       expect(optionalHasPrice('maybe')).toEqual({})
     })
 
-    it('accepts price parameters on the live search route without narrowing supply that published no price', async () => {
+    it('accepts exact price parameters on the live search route without narrowing supply that published no price', async () => {
       const baseline = await (await handleDurableSearchBusinessesRequest(
         new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta'),
       )).json()
       const budgeted = await handleDurableSearchBusinessesRequest(
-        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta&max_price_minor=25000'),
+        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta&max_price_currency=USDC&max_price_units=7000&max_price_exponent=6'),
       )
       const malformed = await handleDurableSearchBusinessesRequest(
-        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta&max_price_minor=%24250&has_price=maybe'),
+        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta&max_price_currency=usdc&max_price_units=07000'),
       )
 
       expect(budgeted.status).toBe(200)

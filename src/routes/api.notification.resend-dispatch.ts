@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { kindForStatus } from '@/lib/errors'
 import {
   callPublicSourceMutation,
   callPublicSourceQuery,
@@ -12,6 +13,7 @@ import {
   statusForNotificationRuntimeError,
 } from '@/lib/server/notification-dispatch'
 import { response as notificationDispatchJsonResponse } from '@/lib/server/no-store-response'
+import { problem } from '@/lib/server/problem'
 import {
   NotificationProviderError,
   readClerkSecretKey,
@@ -29,15 +31,25 @@ import type {
   NotificationDispatchProviderFailure,
   NotificationRecordDispatchArgs,
   NotificationRecordDispatchResult,
+  NotificationRuntimeErrorResult,
   NotificationSystemSendReadArgs,
   NotificationSystemSendReadResult,
 } from '@/lib/server/notification-dispatch'
 import { readDispatchId, requireDispatchAuthorization } from '@/modules/notification-outbox/public'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 
 export const Route = createFileRoute('/api/notification/resend-dispatch')({
   server: {
     handlers: {
       POST: ({ request }) => handleResendDispatchRequest(request),
+      GET: () => methodNotAllowed(['POST']),
+      PUT: () => methodNotAllowed(['POST']),
+      PATCH: () => methodNotAllowed(['POST']),
+      DELETE: () => methodNotAllowed(['POST']),
+      HEAD: () => methodNotAllowed(['POST']),
+      OPTIONS: () => methodNotAllowed(['POST']),
+      TRACE: () => methodNotAllowed(['POST']),
+      CONNECT: () => methodNotAllowed(['POST']),
     },
   },
 })
@@ -76,7 +88,7 @@ export async function handleResendDispatchRequest(
     const dispatchId = await readDispatchId(request)
     const readback = await (options.readDispatchForSend ?? defaultReadDispatchForSend)({ dispatchId, systemKey })
     if (readback.kind === 'error') {
-      return notificationDispatchJsonResponse(readback, statusForNotificationRuntimeError(readback.code))
+      return runtimeErrorResponse(readback)
     }
 
     const send = readback.send
@@ -125,7 +137,7 @@ export async function handleResendDispatchRequest(
       correlationId: `correlation:notification:dispatch:resend:${send.dispatch.dispatchId}`,
     })
     if (record.kind === 'error') {
-      return notificationDispatchJsonResponse(record, statusForNotificationRuntimeError(record.code))
+      return runtimeErrorResponse(record)
     }
 
     return notificationDispatchJsonResponse({
@@ -166,4 +178,15 @@ async function defaultRecordDispatch(
   args: NotificationRecordDispatchArgs<NotificationDispatchProviderResult>
 ): Promise<NotificationRecordDispatchResult> {
   return await callPublicSourceMutation(recordDispatchMutation, args)
+}
+
+function runtimeErrorResponse(error: NotificationRuntimeErrorResult): Response {
+  const status = statusForNotificationRuntimeError(error.code)
+  return problem({
+    status,
+    kind: kindForStatus(status),
+    code: error.code,
+    detail: error.reason,
+    retryable: error.retryable,
+  })
 }

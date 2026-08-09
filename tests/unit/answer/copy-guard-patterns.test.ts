@@ -35,11 +35,11 @@ describe('copy guard patterns', () => {
   it('allows public work-log copy without internal terms or action overclaims', () => {
     const copy = [
       'Reading your request',
-      'Searching listed businesses',
-      'Reading listed businesses',
-      'Checking fit',
-      'Preparing the next step',
-      'Preparing the answer',
+      'Searching for matches',
+      'Reading the details',
+      'Comparing the matches',
+      'Choosing the next step',
+      'Putting together the answer',
     ].join(' ')
 
     expect(hasEpistemicVocabulary(copy)).toBe(false)

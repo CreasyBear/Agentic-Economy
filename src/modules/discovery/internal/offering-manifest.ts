@@ -1,4 +1,5 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
+import type { ExactAmount } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
@@ -159,10 +160,42 @@ function sanitizeAccessPath(path: PublicOfferingAccessPathDto): PublicOfferingAc
 }
 
 /**
- * Every field but `currency` is a bounded enum or an integer, so the only place
- * an unpublished control character could ride into the manifest is the currency
- * code. It gets the same treatment as the neighbouring prose fields.
+ * Sanitize the only free-text money fields while reconstructing each
+ * discriminated price variant. Conditional spreads keep optional `unit`
+ * omitted under `exactOptionalPropertyTypes`.
  */
 function safeManifestPrice(price: OfferingPrice): OfferingPrice {
-  return { ...price, currency: safePublicText(price.currency) }
+  switch (price.kind) {
+    case 'quote_only':
+      return {
+        kind: price.kind,
+        currency: safePublicText(price.currency),
+        taxTreatment: price.taxTreatment,
+        ...(price.unit === undefined ? {} : { unit: price.unit }),
+      }
+    case 'fixed':
+    case 'from':
+      return {
+        kind: price.kind,
+        amount: safeManifestAmount(price.amount),
+        taxTreatment: price.taxTreatment,
+        ...(price.unit === undefined ? {} : { unit: price.unit }),
+      }
+    case 'range':
+      return {
+        kind: price.kind,
+        minimum: safeManifestAmount(price.minimum),
+        maximum: safeManifestAmount(price.maximum),
+        taxTreatment: price.taxTreatment,
+        ...(price.unit === undefined ? {} : { unit: price.unit }),
+      }
+  }
+}
+
+function safeManifestAmount(amount: ExactAmount): ExactAmount {
+  return {
+    currency: safePublicText(amount.currency),
+    units: amount.units,
+    exponent: amount.exponent,
+  }
 }

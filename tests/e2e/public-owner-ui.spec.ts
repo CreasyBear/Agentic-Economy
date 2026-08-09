@@ -5,7 +5,7 @@ import slugify from '@sindresorhus/slugify'
 import { expect, test, type Page } from '@playwright/test'
 import { LOCAL_E2E_BUSINESS_FIXTURES, type LocalE2eBusinessFixture } from '../../src/lib/dev/local-e2e-business-fixtures'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
-import { DIALOG_WELCOME } from '../../src/content/brand-copy'
+import { HOME } from '../../src/content/brand-copy'
 
 const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
 if (demoBusiness === undefined) {
@@ -38,13 +38,12 @@ test.describe('public owner routes', () => {
   test('home exposes the public landing story and claim path', async ({ page }, testInfo) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: DIALOG_WELCOME.heading })).toBeVisible()
+    await expect(page.getByRole('heading', { name: HOME.heroHeading })).toBeVisible()
     await expect(page.getByLabel('What do you need done?')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'See my options' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Ask' })).toBeVisible()
     await page.getByLabel('What do you need done?').fill('Emergency plumbing in Parramatta')
-    await page.getByRole('button', { name: 'See my options' }).click()
-    await expect(page).toHaveURL(/\/\?q=Emergency(?:\+|%20)plumbing(?:\+|%20)in(?:\+|%20)Parramatta/u)
+    await page.getByRole('button', { name: 'Ask' }).click()
+    await expect(page).toHaveURL(/\/t\//u)
     await expect(page.getByRole('heading', { name: /options|plan/i })).toBeVisible()
     await page.goto('/')
 
@@ -92,16 +91,16 @@ test.describe('public owner routes', () => {
     for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
       expect(assistantText).toContain(statement)
     }
-    await expect(page.getByRole('heading', { name: DIALOG_WELCOME.heading })).toBeVisible()
+    await expect(page.getByRole('heading', { name: HOME.heroHeading })).toBeVisible()
     const humanText = await page.locator('body').innerText()
     for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
       expect(humanText).not.toContain(statement)
     }
 
-    await expect(page.getByRole('button', { name: 'See my options' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Ask' })).toBeVisible()
     expect(assistantText).toContain('Human entry=')
     expect(assistantText).toContain('/api/v1/requests')
-    expect(assistantText).toContain('auth=Bearer AE API key with customer_requests:create')
+    expect(assistantText).toContain('auth=Authorization: Bearer <Clerk API key>; scopes=customer_requests:create plus exactly one mode:')
     expect(assistantText).toContain('You decide whether to confirm an option. Starting it is a separate decision.')
   })
 
@@ -215,7 +214,7 @@ test.describe('public owner routes', () => {
     await publishButton.click()
 
     await expect(page).toHaveURL(new RegExp(`/claim/success.*slug=${slug}`))
-    await expect(page.getByRole('heading', { name: /your service page is live/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /service page is ready to preview/i })).toBeVisible()
     await expect(page.getByText(businessName)).toBeVisible()
     await expect(page.getByText('Emergency electrical')).toBeVisible()
     await expect(page.getByText('Fremantle, WA')).toBeVisible()
@@ -236,11 +235,11 @@ test.describe('public owner routes', () => {
     await assertPublicLanguage(page)
   })
 
-  test('claim success and owner readback show public URL, separate states, and unavailable actions', async ({ page }) => {
+  test('claim success and owner readback label fixture data as preview and keep actions unavailable', async ({ page }) => {
     await page.goto('/claim/success')
 
-    await expect(page.getByRole('heading', { name: /your service page is live/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /view public page/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing')
+    await expect(page.getByRole('heading', { name: /service page is ready to preview/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /open preview/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing')
     await expect(page.getByText('Parramatta Emergency Plumbing')).toBeVisible()
     await assertPublicLanguage(page)
 
@@ -251,7 +250,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: /service page status/i })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Request admission' })).toBeVisible()
     await expect(
-      page.getByText('Complete these checks to start receiving requests from this page.', { exact: true }),
+      page.getByText('Preview only. Connect the public source before sharing this page.', { exact: true }),
     ).toBeVisible()
     await expect(page.getByText('Add a usable owner notification email', { exact: true })).toBeVisible()
     await expect(page.getByText('Finish inquiry setup', { exact: true })).toBeVisible()

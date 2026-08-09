@@ -18,7 +18,7 @@ export function AeSessionJourney({ projection, liveTurn = null }: AeSessionJourn
   }
 
   return (
-    <section className="w-full" aria-label="Inquiry path">
+    <section className="w-full" aria-label="Next steps">
       <div className="grid gap-3 rounded-md border border-border bg-card p-3">
         <div className="grid gap-1 sm:grid-cols-[minmax(9rem,0.55fr)_minmax(0,1fr)] sm:items-center sm:gap-4">
           <div className="grid gap-0.5">

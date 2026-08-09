@@ -27,12 +27,12 @@ async function streamInsufficientFrozenContextTurn(
   const snapshot = withFollowUpLayout(
     {
       query: ctx.query,
-      oneLine: isCompare ? 'No two listed businesses to compare yet.' : 'No listed businesses to filter yet.',
+      oneLine: isCompare ? 'Not enough matches to compare yet.' : 'No matches found yet.',
       providers: [],
       summary: isCompare
-        ? 'There are not enough listed businesses in the latest answer to compare.'
-        : 'There are no listed businesses in the latest answer to filter.',
-      nextStep: 'Ask for a need and place, then compare or filter the listed businesses that appear.',
+        ? 'There are not enough matches in the latest answer to compare.'
+        : 'There are no matches in the latest answer to filter.',
+      nextStep: 'Tell me what you need and where, then compare the matches or narrow them down.',
       agentJsonUrl: buildAgentJsonUrl(ctx.query, DEFAULT_TURN_PROVIDER_LIMIT),
     },
     ctx.priorTurnsCount,
@@ -43,9 +43,9 @@ async function streamInsufficientFrozenContextTurn(
     id: 'read.providers',
     phase: 'read',
     status: 'skipped',
-    title: 'Using previous listed businesses',
-    summary: 'There were not enough listed businesses in the latest answer for this follow-up.',
-    detailRows: [{ label: 'Available from latest answer', value: '0' }],
+    title: 'Checking the matches already found',
+    summary: 'There were not enough matches in the latest answer for this follow-up.',
+    detailRows: [{ label: 'Matches from latest answer', value: '0' }],
     completedAtMs: Date.now(),
   })
 
@@ -53,7 +53,7 @@ async function streamInsufficientFrozenContextTurn(
 
   const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
   if (!finalized.ok) {
-    return rejectBlockedSnapshot(ctx, [], allowedSlugs, finalized)
+    return rejectBlockedSnapshot([], allowedSlugs, finalized)
   }
   const assembly = await ctx.emitOrDeferSnapshot(
     finalized.snapshot,

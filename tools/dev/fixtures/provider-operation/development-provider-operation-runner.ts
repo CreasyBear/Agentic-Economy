@@ -25,6 +25,7 @@ import {
   mandateRefusalToInvocationRefusal,
   type DevelopmentProviderOperationMandateService,
 } from './development-provider-operation-mandate'
+import type { ExactAmount } from '../../../../src/modules/money/public'
 
 type Provider = ReturnType<typeof createDevelopmentProviderOperationProvider>
 type ProviderOperationInvocationEvent = TransferBoundaryEvent | Readonly<{
@@ -71,8 +72,8 @@ export async function runProviderOperationInvocation(input: Readonly<{
     throwDuringReconstruction?: boolean
     throwFromReleaseFenceBeforeProvider?: boolean
     fallbackRef?: string | null
-    reservedSpendMinor?: number
-    reservedLossMinor?: number
+    reservedSpend?: ExactAmount
+    reservedLoss?: ExactAmount
     risk?: string
     policyDecisionRef?: string
   }>
@@ -155,12 +156,12 @@ export async function runProviderOperationInvocation(input: Readonly<{
       ...(source.resultIdentity === undefined ? {} : { resultIdentity: source.resultIdentity }),
     }),
   })
-  const prepared = tracer.prepare({
+  const prepared = await tracer.prepare({
     origin: input.origin, actor: owner, input: input.operation, context, freshnessMs: 900_000,
   })
   source.prepared = prepared.prepared
   if (configuredMandate === undefined) {
-    const decision = tracer.decide({
+    const decision = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -187,15 +188,15 @@ export async function runProviderOperationInvocation(input: Readonly<{
     operation: input.operation,
     effectGeneration: prepared.attempts.length + 1,
     ...(bounded.fallbackRef === undefined ? {} : { fallbackRef: bounded.fallbackRef }),
-    ...(bounded.reservedSpendMinor === undefined ? {} : { reservedSpendMinor: bounded.reservedSpendMinor }),
-    ...(bounded.reservedLossMinor === undefined ? {} : { reservedLossMinor: bounded.reservedLossMinor }),
+    ...(bounded.reservedSpend === undefined ? {} : { reservedSpend: bounded.reservedSpend }),
+    ...(bounded.reservedLoss === undefined ? {} : { reservedLoss: bounded.reservedLoss }),
     ...(bounded.risk === undefined ? {} : { risk: bounded.risk }),
     ...(bounded.policyDecisionRef === undefined ? {} : { policyDecisionRef: bounded.policyDecisionRef }),
   })
   if (reserved.kind === 'refused') throw new Error(reserved.code)
   let standingAuthorization
   try {
-    standingAuthorization = tracer.authorizeStandingMandateUse({
+    standingAuthorization = await tracer.authorizeStandingMandateUse({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: bounded.developmentAuthorizationVersionOverride
         ?? prepared.invocationVersion,
@@ -221,7 +222,7 @@ export async function runProviderOperationInvocation(input: Readonly<{
   events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
   let acquired
   try {
-    acquired = tracer.acquire({
+    acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: bounded.developmentAcquisitionVersionOverride
         ?? standingAuthorization.view.invocationVersion,
@@ -250,8 +251,9 @@ export async function runProviderOperationInvocation(input: Readonly<{
       if (bounded.throwDuringReconstruction === true) {
         throw new Error('mock_cold_reconstruction_failed')
       }
+      const resumed = await tracer.coldResume(prepared.invocationRef)
       activeMandateService = bounded.reconstructBeforeRelease(
-        tracer.coldResume(prepared.invocationRef).inspect(prepared.invocationRef) ?? acquired.view,
+        resumed.inspect(prepared.invocationRef) ?? acquired.view,
       )
     } catch (error) {
       throw compensateAndPreserve(
@@ -393,7 +395,7 @@ export async function runCancellationInvocation(input: Readonly<{
       ...(source.resultIdentity === undefined ? {} : { resultIdentity: source.resultIdentity }),
     }),
   })
-  const prepared = tracer.prepare({
+  const prepared = await tracer.prepare({
     origin: input.origin, actor: owner, input: input.cancellation, context, freshnessMs: 900_000,
   })
   source.prepared = prepared.prepared
@@ -417,7 +419,7 @@ export async function runCancellationInvocation(input: Readonly<{
         : { policyDecisionRef: configured.policyDecisionRef }),
     })
     if (reserved.kind === 'refused') throw new Error(reserved.code)
-    const authorized = tracer.authorizeStandingMandateUse({
+    const authorized = await tracer.authorizeStandingMandateUse({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -430,7 +432,7 @@ export async function runCancellationInvocation(input: Readonly<{
       throw new Error(authorized.code)
     }
     events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
-    const acquired = tracer.acquire({
+    const acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: authorized.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -461,7 +463,7 @@ export async function runCancellationInvocation(input: Readonly<{
     if (settled.kind === 'refused') throw new Error(settled.code)
     return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
   }
-  const decision = tracer.decide({
+  const decision = await tracer.decide({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: prepared.invocationVersion,
     authorityRef: prepared.authority!.reference,

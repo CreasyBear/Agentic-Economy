@@ -71,9 +71,11 @@ const permission = {
   validFrom: 0,
   validUntil: 9_999_999_999_999,
   perUseSpendCurrency: 'AUD',
-  perUseSpendMinor: 500,
+  perUseSpendUnits: '500',
+  perUseSpendExponent: 2,
   cumulativeSpendCurrency: 'AUD',
-  cumulativeSpendMinor: 500,
+  cumulativeSpendUnits: '500',
+  cumulativeSpendExponent: 2,
   occurrenceLimit: 1,
   perUseDataAllocations: 2,
   cumulativeDataAllocations: 2,
@@ -81,8 +83,12 @@ const permission = {
   settledDataAllocations: 0,
   reservedOccurrences: 0,
   settledOccurrences: 0,
-  reservedSpendMinor: 0,
-  settledSpendMinor: 0,
+  reservedSpendCurrency: 'AUD',
+  reservedSpendUnits: '0',
+  reservedSpendExponent: 2,
+  settledSpendCurrency: 'AUD',
+  settledSpendUnits: '0',
+  settledSpendExponent: 2,
   status: 'active' as const,
   issuedAt: 1_000,
   sourceReceiptId: 'decision:fixture',
@@ -97,12 +103,12 @@ async function seededBackend(): Promise<TestConvex<typeof schema>> {
   return backend
 }
 
-const reserveArgs = (operationKey: string, amountMinor = 0) => ({
+const reserveArgs = (operationKey: string, units = '0', exponent = 2) => ({
   projectId: baseTree.projectId,
   permissionRef: permission.permissionRef,
   operationKey,
   requestedOccurrences: 1,
-  requestedSpend: { currency: 'AUD', amountMinor },
+  requestedSpend: { currency: 'AUD', units, exponent },
   requestedDataAllocations: 1,
 })
 
@@ -128,7 +134,7 @@ describe('WorkTree repeat-use reservation ledger', () => {
       kind: 'replayed',
       useRef: accepted.useRef,
     })
-    await expect(owner.mutation(reserveRepeatUse, reserveArgs('reserve:race:a', 300))).resolves.toMatchObject({
+    await expect(owner.mutation(reserveRepeatUse, reserveArgs('reserve:race:a', '300'))).resolves.toMatchObject({
       kind: 'conflict',
     })
 
@@ -137,11 +143,11 @@ describe('WorkTree repeat-use reservation ledger', () => {
       kind: 'accepted',
       use: {
         state: 'reserved',
-        reservedSpend: { currency: 'AUD', amountMinor: 0 },
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       },
       permission: {
         reservedOccurrences: 1,
-        reservedSpend: { currency: 'AUD', amountMinor: 0 },
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       },
     })
   })
@@ -202,7 +208,7 @@ describe('WorkTree repeat-use reservation ledger', () => {
       useRef: reserved.useRef,
       operationKey: 'finalize:settle',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })
@@ -210,14 +216,14 @@ describe('WorkTree repeat-use reservation ledger', () => {
       kind: 'accepted',
       state: 'settled',
       operationKey: 'finalize:settle',
-      releasedSpendMinor: 0,
+      releasedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       releasedDataAllocations: 1,
     })
     await expect(owner.mutation(finalizeRepeatUse, {
       useRef: reserved.useRef,
       operationKey: 'finalize:settle',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })).resolves.toEqual({ ...finalized, kind: 'replayed' })
@@ -229,7 +235,7 @@ describe('WorkTree repeat-use reservation ledger', () => {
       useRef: reserved.useRef,
       operationKey: 'finalize:changed',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })).resolves.toMatchObject({ kind: 'conflict', operationKey: 'finalize:changed', useRef: reserved.useRef })
@@ -238,14 +244,14 @@ describe('WorkTree repeat-use reservation ledger', () => {
     expect(settled).toMatchObject({
       use: {
         state: 'settled',
-        actualSpend: { currency: 'AUD', amountMinor: 0 },
+        actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
         actualDataAllocations: 0,
-        reservedSpend: { currency: 'AUD', amountMinor: 0 },
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
         reservedDataAllocations: 0,
       },
       permission: {
-        reservedSpend: { currency: 'AUD', amountMinor: 0 },
-        settledSpend: { currency: 'AUD', amountMinor: 0 },
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
+        settledSpend: { currency: 'AUD', units: '0', exponent: 2 },
         reservedDataAllocations: 0,
         settledDataAllocations: 0,
       },
@@ -265,25 +271,25 @@ describe('WorkTree repeat-use reservation ledger', () => {
       kind: 'unknown',
       operationKey: 'finalize:unknown',
       state: 'unknown',
-      heldSpendMinor: 0,
+      heldSpend: { currency: 'AUD', units: '0', exponent: 2 },
       heldDataAllocations: 1,
     })
     await expect(unknownOwner.mutation(reconcileRepeatUse, {
       useRef: unknown.useRef,
       operationKey: 'reconcile:not-settled-nonzero',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'not_settled',
     })).resolves.toMatchObject({ kind: 'refused', reason: 'invalid_request', useRef: unknown.useRef })
     await expect(unknownOwner.query(inspectRepeatUse, { useRef: unknown.useRef })).resolves.toMatchObject({
       use: {
         state: 'unknown',
-        reservedSpend: { currency: 'AUD', amountMinor: 0 },
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
         reservedDataAllocations: 1,
       },
       permission: {
-        reservedSpend: { currency: 'AUD', amountMinor: 0 },
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
         reservedDataAllocations: 1,
       },
     })
@@ -291,7 +297,7 @@ describe('WorkTree repeat-use reservation ledger', () => {
       useRef: unknown.useRef,
       operationKey: 'reconcile:unknown',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })
@@ -300,14 +306,14 @@ describe('WorkTree repeat-use reservation ledger', () => {
       state: 'settled',
       operationKey: 'reconcile:unknown',
       reconcileOperationKey: 'reconcile:unknown',
-      releasedSpendMinor: 0,
+      releasedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       releasedDataAllocations: 1,
     })
     await expect(unknownOwner.mutation(reconcileRepeatUse, {
       useRef: unknown.useRef,
       operationKey: 'reconcile:unknown',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })).resolves.toEqual({ ...reconciled, kind: 'replayed' })
@@ -325,7 +331,7 @@ describe('WorkTree repeat-use reservation ledger', () => {
       useRef: unknown.useRef,
       operationKey: 'reconcile:changed',
       actualOccurrences: 1,
-      actualSpend: { currency: 'AUD', amountMinor: 0 },
+      actualSpend: { currency: 'AUD', units: '0', exponent: 2 },
       actualDataAllocations: 0,
       outcome: 'settled',
     })).resolves.toMatchObject({ kind: 'conflict', operationKey: 'reconcile:changed', useRef: unknown.useRef })
@@ -335,11 +341,11 @@ describe('WorkTree repeat-use reservation ledger', () => {
     const backend = await seededBackend()
     const owner = backend.withIdentity(ownerIdentity)
 
-    await expect(owner.mutation(reserveRepeatUse, reserveArgs('reserve:too-much', 600))).resolves.toMatchObject({
+    await expect(owner.mutation(reserveRepeatUse, reserveArgs('reserve:too-much', '600'))).resolves.toMatchObject({
       kind: 'refused',
       reason: 'limit_exceeded',
     })
-    await expect(owner.mutation(reserveRepeatUse, reserveArgs('reserve:paid', 400))).resolves.toMatchObject({
+    await expect(owner.mutation(reserveRepeatUse, reserveArgs('reserve:paid', '400'))).resolves.toMatchObject({
       kind: 'refused',
       reason: 'live_money_gate_open',
     })

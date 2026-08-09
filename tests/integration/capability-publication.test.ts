@@ -1,17 +1,28 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from '../../convex/capabilitySupplyProjection'
 
+import { resolveKeylessDataAsk } from '@/modules/answer/internal/keyless-data-ask'
+import type {
+  KeylessExecutableSourcePort,
+  KeylessExecutableToolDescriptor,
+} from '@/modules/capability-execution'
+import { executeKeylessOperation } from '@/modules/capability-execution/operation-execute.server'
+import {
+  isPublicOperationRef,
+  type CapabilityTransportAuthority,
+  type OperationSearchWireResult,
+} from '@/modules/capability-supply/public'
 import { defineCapabilityContract, type CapabilityContract, type CapabilityContractDocument } from '@/modules/capability-contract/public'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
-import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
+import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
 describe('capability publication', () => {
   it('rebuilds legacy projection rows as strict current rows and remains idempotent', async () => {
@@ -66,6 +77,7 @@ describe('capability publication', () => {
     })
 
     const baseInput = capabilityPublicationInput(businessId, 'legacy-rebuild')
+    await registerProviderConnection(backend, businessId, 'legacy-rebuild')
     const published = await owner.mutation(api.capabilitySupply.publishCapability, {
       ...baseInput,
       offering: {
@@ -133,6 +145,7 @@ describe('capability publication', () => {
       })
     })
     const baseInput = capabilityPublicationInput(businessId, 'catalog-origin-one')
+    await registerProviderConnection(backend, businessId, 'catalog-origin-one')
     const input = { ...baseInput, offering: { ...baseInput.offering, origin: {
       kind: 'catalog_offering' as const, offeringRef: 'catalog-offering:catalog-origin-one',
       offeringRevision: 1, offeringSourceHash: 'catalog-source:v1',
@@ -238,6 +251,7 @@ describe('capability publication', () => {
   it('lets the source-bound business owner publish one canonical inactive AE capability', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'independent-one')
+    await registerProviderConnection(backend, businessId, 'independent-one')
 
     const published = await owner.mutation(api.capabilitySupply.publishCapability, {
       businessId,
@@ -254,7 +268,7 @@ describe('capability publication', () => {
         presentation: {
           label: 'Independent reference lookup',
           summary: 'Looks up one public reference and returns structured evidence.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 },
+          price: { kind: 'fixed', amount: { currency: 'AUD', units: '1200', exponent: 2 } },
           materialTerms: [{ termId: 'response', label: 'Response', value: 'One structured response' }],
           commercialRelationship: {
             kind: 'none',
@@ -271,7 +285,7 @@ describe('capability publication', () => {
       binding: {
         bindingId: 'binding:independent-one:http',
         endpointUrl: 'https://independent-one.example.test/capabilities/reference-lookup',
-        credentialRef: 'env:INDEPENDENT_ONE_CAPABILITY_KEY',
+        authority: providerAuthority('independent-one'),
         continuation: { kind: 'single_response', evidenceRefs: ['business:http-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['business:no-cancellation'] },
         adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
@@ -323,6 +337,7 @@ describe('capability publication', () => {
     const { businessId, owner } = await publishedBusinessOwner(backend, 'lifecycle-one')
     const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
     const input = capabilityPublicationInput(businessId, 'lifecycle-one')
+    await registerProviderConnection(backend, businessId, 'lifecycle-one')
     const published = await owner.mutation(api.capabilitySupply.publishCapability, input)
     if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
 
@@ -363,12 +378,203 @@ describe('capability publication', () => {
       publicationRef: published.publicationRef,
     })).resolves.toMatchObject({ lifecycle: { state: 'withdrawn' } })
   })
+  it('publishes a novel keyless GET into the live answer source, executes it, and withdraws it fail closed', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'xyz-current-price')
+    const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
+
+    const source: KeylessExecutableSourcePort = {
+      list: async () => {
+        const rows = await backend.query(api.capabilitySupplyOperations.listKeylessExecutable, {})
+        return rows
+          .filter((row: (typeof rows)[number]) => isPublicOperationRef(row.operationRef))
+          .map(({
+            inputSchemaJson,
+            inputExamplesJson,
+            ...row
+          }: (typeof rows)[number]): KeylessExecutableToolDescriptor => {
+            const descriptor: KeylessExecutableToolDescriptor = {
+              ...row,
+              inputSchema: JSON.parse(inputSchemaJson) as Record<string, unknown>,
+            }
+            if (inputExamplesJson === undefined) return descriptor
+            return {
+              ...descriptor,
+              inputExamples: JSON.parse(inputExamplesJson) as NonNullable<KeylessExecutableToolDescriptor['inputExamples']>,
+            }
+          })
+      },
+      read: async (operationRef) => {
+        if (!isPublicOperationRef(operationRef)) return null
+        const descriptor = await backend.query(api.capabilitySupplyOperations.readKeylessExecutable, { operationRef })
+        if (descriptor === null
+          || !isPublicOperationRef(descriptor.operationRef)
+          || descriptor.operationRef !== operationRef) {
+          return null
+        }
+        const { inputSchemaJson, outputSchemaJson, ...wire } = descriptor
+        return {
+          ...wire,
+          inputSchema: JSON.parse(inputSchemaJson) as Record<string, unknown>,
+          ...(outputSchemaJson === undefined
+            ? {}
+            : { outputSchema: JSON.parse(outputSchemaJson) as Record<string, unknown> }),
+        }
+      },
+      search: async (query, descriptors) => {
+        if (descriptors.length === 0 || query.trim().length === 0) return []
+        const allowed = new Set(descriptors.map(({ operationRef }) => operationRef))
+        const result: OperationSearchWireResult = await backend.query(api.capabilitySupplyOperations.search, { query, limit: 10 })
+        if (result.kind !== 'ok') return []
+        return result.items
+          .map(({ operationRef }) => operationRef)
+          .filter((operationRef) => isPublicOperationRef(operationRef) && allowed.has(operationRef))
+      },
+    }
+
+    const beforePublication = await resolveKeylessDataAsk('XYZ current price', source)
+    expect(beforePublication).toMatchObject({ kind: 'resolved' })
+    if (beforePublication.kind !== 'resolved') throw new Error('unexpected_source_unavailable')
+    expect(beforePublication.candidates).toHaveLength(0)
+
+    const published = await owner.mutation(api.capabilitySupply.publishCapability, {
+      businessId,
+      source: {
+        kind: 'ae_envelope' as const,
+        documentJson: JSON.stringify(capabilityContractV2({
+          capabilityId: 'xyz.current-price',
+          name: 'XYZ current price',
+          description: 'Return the current public price for the XYZ token.',
+          inputExamples: [{ label: 'XYZ current price', input: { request: 'XYZ' } }],
+        })),
+      },
+      offering: {
+        offeringId: 'offering:xyz-current-price',
+        networkId: 'ae:public',
+        presentation: {
+          label: 'XYZ current price',
+          summary: 'Returns the current public price for the XYZ token.',
+          price: { kind: 'on_request' as const },
+          materialTerms: [],
+          commercialRelationship: {
+            kind: 'none' as const,
+            summary: 'No commercial influence.',
+            influencesEligibility: false,
+            influencesInclusion: false,
+            influencesOrder: false,
+            evidenceRefs: ['business:xyz-neutrality'],
+          },
+        },
+        searchTerms: ['xyz', 'current', 'price', 'token'],
+        registrationEvidenceRefs: ['business:xyz-publication'],
+      },
+      binding: {
+        bindingId: 'binding:xyz-current-price:http',
+        endpointUrl: 'https://xyz-current-price.example.test/price',
+        authority: { kind: 'keyless' },
+        continuation: { kind: 'single_response' as const, evidenceRefs: ['business:xyz-response'] },
+        cancellation: { kind: 'unsupported' as const, evidenceRefs: ['business:xyz-no-cancellation'] },
+        adapter: {
+          adapterId: 'http-json:v1',
+          config: {
+            method: 'GET' as const,
+            query: [{ inputPointer: '/request', parameter: 'symbol' }],
+            requestTimeoutMs: 5_000,
+          },
+        },
+        registrationEvidenceRefs: ['business:xyz-http-binding'],
+      },
+      ...operationContext('publish-xyz-current-price'),
+    })
+    if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
+
+    await admitPublication(backend, observer, published, 'xyz-current-price')
+    const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: published.publicationRef,
+      expectedRevision: 1,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: Date.now() + 300_000,
+      ...operationContext('observe-xyz-current-price'),
+    })
+    expect(observed).toMatchObject({ kind: 'observed' })
+
+    const resolved = await resolveKeylessDataAsk('XYZ current price', source)
+    expect(resolved).toMatchObject({ kind: 'resolved' })
+    if (resolved.kind !== 'resolved' || resolved.selected === undefined) {
+      throw new Error('xyz_current_price_not_selected')
+    }
+    expect(resolved.candidates).toHaveLength(1)
+    const selected = resolved.selected
+    expect(selected.capabilityId).toBe('xyz.current-price')
+    expect(isPublicOperationRef(selected.operationRef)).toBe(true)
+    const operationRef = selected.operationRef
+    expect(await source.read(operationRef)).toMatchObject({
+      operationRef,
+      capabilityId: 'xyz.current-price',
+      endpointUrl: 'https://xyz-current-price.example.test/price',
+      authority: { kind: 'keyless' },
+      adapterId: 'http-json:v1',
+      method: 'GET',
+    })
+
+    const providerFetch = vi.fn(async (_input: URL | RequestInfo, _init?: RequestInit) => (
+      new Response(JSON.stringify({ result: '123.45' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    ))
+    const isPublicTarget = vi.fn(async (_url: URL) => true)
+    const executed = await executeKeylessOperation(
+      { operationRef, input: { request: 'XYZ' } },
+      source,
+      { fetchImpl: providerFetch, isPublicTarget },
+    )
+    expect(executed).toMatchObject({
+      kind: 'ok',
+      operationRef,
+      capabilityId: 'xyz.current-price',
+      output: { result: '123.45' },
+    })
+    expect(providerFetch).toHaveBeenCalledTimes(1)
+    expect(isPublicTarget).toHaveBeenCalledTimes(1)
+
+    const withdrawn = await owner.mutation(api.capabilitySupply.withdrawCapability, {
+      publicationRef: published.publicationRef,
+      expectedRevision: 1,
+      ...operationContext('withdraw-xyz-current-price'),
+    })
+    expect(withdrawn).toMatchObject({
+      kind: 'withdrawn',
+      lifecycle: { state: 'withdrawn', reasons: ['withdrawn'] },
+    })
+
+    providerFetch.mockClear()
+    isPublicTarget.mockClear()
+    await expect(source.read(operationRef)).resolves.toBeNull()
+    const afterWithdrawal = await resolveKeylessDataAsk('XYZ current price', source)
+    expect(afterWithdrawal).toMatchObject({ kind: 'resolved' })
+    if (afterWithdrawal.kind !== 'resolved') throw new Error('unexpected_withdrawal_source_unavailable')
+    expect(afterWithdrawal.candidates).toHaveLength(0)
+
+    const refused = await executeKeylessOperation(
+      { operationRef, input: { request: 'XYZ' } },
+      source,
+      { fetchImpl: providerFetch, isPublicTarget },
+    )
+    expect(refused).toEqual({ kind: 'refused', operationRef, reason: 'operation_not_found' })
+    expect(providerFetch).not.toHaveBeenCalled()
+    expect(isPublicTarget).not.toHaveBeenCalled()
+  })
+
 
   it('projects two independent publications through one generic graph path', async () => {
     const backend = convexTest(schema, modules)
     const first = await publishedBusinessOwner(backend, 'graph-one')
     const second = await publishedBusinessOwner(backend, 'graph-two')
     const observer = await ownerAdmin(backend, 'user_capability_publication_observer')
+    await registerProviderConnection(backend, first.businessId, 'graph-one')
+    await registerProviderConnection(backend, second.businessId, 'graph-two')
     const firstPublished = await first.owner.mutation(
       api.capabilitySupply.publishCapability, capabilityPublicationInput(first.businessId, 'graph-one'),
     )
@@ -426,6 +632,7 @@ describe('capability publication', () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'openapi-one')
     const direct = capabilityPublicationInput(businessId, 'openapi-one')
+    await registerProviderConnection(backend, businessId, 'openapi-one')
     const contractDocument = defineCapabilityContract(capabilityContractV2({
       capabilityId: 'independent.openapi.lookup', name: 'OpenAPI lookup',
     }))
@@ -447,7 +654,7 @@ describe('capability publication', () => {
         commercial: {
           offering: direct.offering,
           bindingId: direct.binding.bindingId,
-          credentialRef: direct.binding.credentialRef,
+          authority: direct.binding.authority,
           registrationEvidenceRefs: direct.binding.registrationEvidenceRefs,
           requestTimeoutMs: 5_000,
         },
@@ -465,12 +672,18 @@ describe('capability publication', () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, `${kind}-one`)
     const direct = capabilityPublicationInput(businessId, `${kind}-one`)
+    await registerProviderConnection(
+      backend,
+      businessId,
+      `${kind}-one`,
+      kind === 'mcp' ? 'mcp-jsonrpc:v1' : 'x402-fetch:v2',
+    )
     const document = defineCapabilityContract(capabilityContractV2({ capabilityId: `independent.${kind}.lookup`, name: `${kind} lookup` }))
     const { inputSchema, outputSchema } = document
     const contract = contractMetadata(document)
     const commercial = {
       offering: direct.offering, bindingId: direct.binding.bindingId,
-      credentialRef: direct.binding.credentialRef,
+      authority: direct.binding.authority,
       registrationEvidenceRefs: direct.binding.registrationEvidenceRefs,
       requestTimeoutMs: 5_000,
     }
@@ -486,7 +699,7 @@ describe('capability publication', () => {
           kind,
           resourceJson: JSON.stringify({
             resourceUrl: 'https://x402-one.example.test/lookup', inputSchema, outputSchema,
-            price: { currency: 'AUD', amountMinor: 1_200 },
+            price: { currency: 'AUD', units: '1200', exponent: 2 },
             scheme: 'exact', network: 'eip155:84532',
             asset: '0x0000000000000000000000000000000000000001',
             payTo: '0x0000000000000000000000000000000000000002',
@@ -499,7 +712,7 @@ describe('capability publication', () => {
               ...commercial.offering,
               presentation: {
                 ...commercial.offering.presentation,
-                price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1_200 },
+                price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
               },
             },
           },
@@ -514,6 +727,7 @@ describe('capability publication', () => {
   it('keeps an incompatible refresh observable and fail closed', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'refresh-one')
+    await registerProviderConnection(backend, businessId, 'refresh-one')
     const published = await owner.mutation(
       api.capabilitySupply.publishCapability, capabilityPublicationInput(businessId, 'refresh-one'),
     )
@@ -526,6 +740,7 @@ describe('capability publication', () => {
       ...operationContext('observe-refresh-one'),
     })
     const next = capabilityPublicationInput(businessId, 'refresh-two')
+    await registerProviderConnection(backend, businessId, 'refresh-two')
     const incompatibleDocument = capabilityContractV2({
       capabilityId: published.contractRef.capabilityId,
       version: 2,
@@ -569,7 +784,7 @@ describe('capability publication', () => {
     })
     expect(graph).toMatchObject({ kind: 'available', nodes: [] })
     await expect(backend.query(internal.capabilitySupply.listIntegrated, {
-      networkId: 'ae:public', limit: 10,
+      networkId: 'ae:public', limit: 10, now: Date.now(),
     })).resolves.toMatchObject({ kind: 'available', supplies: [] })
   })
 
@@ -577,9 +792,11 @@ describe('capability publication', () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'compatible-one')
     const firstInput = capabilityPublicationInput(businessId, 'compatible-one')
+    await registerProviderConnection(backend, businessId, 'compatible-one')
     const published = await owner.mutation(api.capabilitySupply.publishCapability, firstInput)
     if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
     const next = capabilityPublicationInput(businessId, 'compatible-two')
+    await registerProviderConnection(backend, businessId, 'compatible-two')
     const compatibleDocument = capabilityContractV2({
       capabilityId: published.contractRef.capabilityId, version: 2, name: 'Compatible lookup revision',
     })
@@ -686,6 +903,43 @@ async function readProjectedSupport(backend: ReturnType<typeof convexTest>, busi
   })
 }
 
+function providerAuthority(
+  name: string,
+): Extract<CapabilityTransportAuthority, { kind: 'provider_connection' }> {
+  return {
+    kind: 'provider_connection',
+    connectionRef: `connection:capability-publication:${name}`,
+    providerRef: `provider:capability-publication:${name}`,
+  }
+}
+async function registerProviderConnection(
+  backend: ConvexFixtureBackend,
+  businessId: Id<'businesses'>,
+  suffix: string,
+  adapterId = 'http-json:v1',
+) {
+  const { connectionRef, providerRef } = providerAuthority(suffix)
+  const result = await backend.mutation(internal.capabilityProviderConnections.create, {
+    commandId: `command:create:capability-publication:${suffix}`,
+    connectionRef,
+    businessId,
+    providerRef,
+    providerAccountRef: `account:capability-publication:${suffix}`,
+    adapterId,
+    credentialRef: null,
+    requestedScopes: [`capability:capability-publication:${suffix}`],
+    grantedScopes: [`capability:capability-publication:${suffix}`],
+    requestedResources: [`resource:capability-publication:${suffix}`],
+    grantedResources: [`resource:capability-publication:${suffix}`],
+    evidenceRefs: [`test:provider-connection:${suffix}`],
+    now: 1,
+  })
+  if (result.kind !== 'applied') {
+    throw new Error(`provider_connection_fixture_${result.kind}`)
+  }
+  return result.connection
+}
+
 function capabilityPublicationInput(businessId: Id<'businesses'>, suffix: string) {
   return {
     businessId,
@@ -713,7 +967,7 @@ function capabilityPublicationInput(businessId: Id<'businesses'>, suffix: string
     binding: {
       bindingId: `binding:${suffix}:http`,
       endpointUrl: `https://${suffix}.example.test/lookup`,
-      credentialRef: `env:${suffix.toUpperCase().replaceAll('-', '_')}_KEY`,
+      authority: providerAuthority(suffix),
       continuation: { kind: 'single_response' as const, evidenceRefs: ['business:response'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['business:no-cancellation'] },
       adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },

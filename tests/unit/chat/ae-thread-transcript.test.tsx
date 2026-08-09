@@ -9,11 +9,13 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-dialog'
 
 import { AeThreadTranscript } from '@/components/ae/chat/AeThreadTranscript'
+import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
+import { AeThreadScroller } from '@/components/ae/chat/AeThreadScroller'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
 
@@ -30,7 +32,11 @@ function render(ui: ReactElement) {
     createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
-  return rtlRender(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+  return rtlRender(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <RouterContextProvider router={router}>{children}</RouterContextProvider>
+    ),
+  })
 }
 
 describe('AeThreadTranscript', () => {
@@ -57,8 +63,8 @@ describe('AeThreadTranscript', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Your shortlist is ready' })).toBeTruthy()
-    expect(screen.getByText('Compare the listed facts, then open a business page when you are ready.')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Your options are ready' })).toBeTruthy()
+    expect(screen.getByText('Compare the published details, then open a business page when you are ready.')).toBeTruthy()
     expect(screen.queryByText('No reply history yet')).toBeNull()
 
     const actions = screen.getByLabelText('Shortlist actions')
@@ -66,7 +72,7 @@ describe('AeThreadTranscript', () => {
     expect(within(actions).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(first.detailUrl)
     expect(within(actions).getByRole('button', { name: 'Copy' }).hasAttribute('disabled')).toBe(false)
     expect(within(actions).getByRole('button', { name: 'Call' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByText('Open the listing for its published contact options.')).toBeTruthy()
+    expect(screen.getByText('Open the business page for its published contact options.')).toBeTruthy()
 
     fireEvent.click(changeCriteria)
     expect(onChangeCriteria).toHaveBeenCalledOnce()
@@ -152,7 +158,7 @@ describe('AeThreadTranscript', () => {
 
     expect(
       screen.getByText(
-        'For today, listings with a published contact path appear first. Phone details are shown only when published.',
+        'For today, businesses with published contact details appear first. Phone details are shown only when published.',
       ),
     ).toBeTruthy()
     const urgentContact = screen.getByLabelText('Call first option')
@@ -163,14 +169,17 @@ describe('AeThreadTranscript', () => {
     ).toBe('tel:0412345678')
 
     const replayQuery = screen.getByText('Find plumbers near Parramatta')
-    const processCopy = screen.getByText('How AE checked this', { selector: 'summary' })
+    const processCopy = screen.getByText('How this was checked', { selector: 'summary' })
     expect(urgentContact.compareDocumentPosition(replayQuery) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(urgentContact.compareDocumentPosition(processCopy) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
 
     const orderedProviderLinks = screen
       .getAllByRole('link')
-      .filter((link) => link.textContent === phoneCapable.name || link.textContent === inquiryOnly.name)
-    expect(orderedProviderLinks.map((link) => link.textContent)).toEqual([phoneCapable.name, inquiryOnly.name])
+      .filter((link) => link.textContent?.includes(phoneCapable.name) || link.textContent?.includes(inquiryOnly.name))
+    expect(orderedProviderLinks.map((link) => link.textContent)).toEqual([
+      expect.stringContaining(phoneCapable.name),
+      expect.stringContaining(inquiryOnly.name),
+    ])
     expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(phoneCapable.detailUrl)
   })
 
@@ -184,8 +193,8 @@ describe('AeThreadTranscript', () => {
 
     render(<AeThreadTranscript projection={projection} />)
 
-    expect(screen.getByText('Prepare a qualified inquiry for the first listed business')).toBeTruthy()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Your shortlist is ready' })).toBeNull()
+    expect(screen.getByText('Message the first listed business')).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
   })
 
   it('does not terminalize an earlier shortlist when a newer turn has errored', () => {
@@ -210,12 +219,13 @@ describe('AeThreadTranscript', () => {
 
     render(<AeThreadTranscript projection={projection} />)
 
-    expect(screen.getByText('Parramatta Emergency Plumbing')).toBeTruthy()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Your shortlist is ready' })).toBeNull()
+    expect(screen.getByText('1 listed businesses match.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
+    expect(screen.getByRole('alert').textContent).toContain('This answer could not be completed.')
+    expect(screen.getByRole('link', { name: 'Start a new ask' }).getAttribute('href')).toBe('/')
   })
 
   it('renders the exact no-send disclosure after a no-match recovery turn', () => {
-    stubDeterministicChips()
     const projection: PublicThreadProjection = {
       threadId: 'thread-no-match',
       title: 'Emergency roofer in Parramatta',
@@ -237,9 +247,47 @@ describe('AeThreadTranscript', () => {
 
     render(<AeThreadTranscript projection={projection} />)
 
-    expect(screen.getByText('Nothing was sent.', { exact: true, selector: '[role="status"]' }).textContent)
+    expect(screen.getByText('Nothing was sent.', { exact: true }).textContent)
       .toBe('Nothing was sent.')
   })
+  it('shows owner Stop for pending replay rows but keeps shared transcripts read-only', async () => {
+    const pendingProjection: PublicThreadProjection = {
+      threadId: 'thread-pending',
+      title: 'Pending answer',
+      turns: [{
+        turnId: 'turn-pending',
+        seq: 1,
+        query: 'Find a pending answer',
+        intent: 'refine_search',
+        status: 'pending',
+        oneLine: '',
+        workLog: [],
+        artifacts: [],
+      }],
+    }
+    const onStopPendingTurn = vi.fn().mockResolvedValue({
+      kind: 'stopped',
+      threadId: 'thread-pending',
+      turnId: 'turn-pending',
+    })
+
+    render(
+      <AeThreadTranscript
+        threadId={pendingProjection.threadId}
+        projection={pendingProjection}
+        onStopPendingTurn={onStopPendingTurn}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    await waitFor(() => expect(onStopPendingTurn).toHaveBeenCalledWith('thread-pending', 'turn-pending'))
+
+    cleanup()
+    render(<AeThreadTranscript threadId={pendingProjection.threadId} projection={pendingProjection} />)
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+    expect(screen.getByText('This answer is still pending. Reload to check its durable status.')).toBeTruthy()
+  })
+
+
 
   it('keeps follow-up chips connected after a providerless boundary turn', () => {
     stubDeterministicChips()
@@ -255,18 +303,18 @@ describe('AeThreadTranscript', () => {
     )
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
+    expect(panel.contains(screen.getByText('Continue with these options'))).toBe(true)
     expect(
       panel.contains(
         screen.getByText(
-          'Narrow, compare, or prepare a qualified inquiry from the businesses already found in this thread.',
+          'Narrow or compare the options already found here, or ask the business about them.',
         ),
       ),
     ).toBe(true)
 
-    fireEvent.click(screen.getByText('Prepare qualified inquiry with Parramatta Emergency Plumbing'))
+    fireEvent.click(screen.getByText('Ask Parramatta Emergency Plumbing about this'))
 
-    expect(selectedQuery).toBe('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
+    expect(selectedQuery).toBe('Message Parramatta Emergency Plumbing')
   })
 
   it('labels selected-provider follow-ups as carried from the thread after a boundary turn', () => {
@@ -285,14 +333,90 @@ describe('AeThreadTranscript', () => {
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(
       panel.contains(
-        screen.getByText('Use the selected inquiry path from this thread, or keep narrowing this thread.'),
+        screen.getByText('Use the selected business\'s request form from this thread, or keep narrowing the options.'),
       ),
     ).toBe(true)
-    expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
+    expect(screen.queryByText(/Ask .* about this/)).toBeNull()
 
-    fireEvent.click(screen.getByText('Only inquiry-ready listings'))
+    fireEvent.click(screen.getByText('Businesses accepting requests'))
 
-    expect(selectedQuery).toBe('Show only businesses that accept inquiries')
+    expect(selectedQuery).toBe('Show only businesses accepting requests')
+  })
+
+  it('keeps one polite status for the current pending-to-terminal transition', () => {
+    const historyTurn = {
+      turnId: 'turn-history',
+      seq: 1,
+      query: 'Find an earlier answer',
+      intent: 'refine_search' as const,
+      status: 'complete' as const,
+      oneLine: 'Earlier answer remains available.',
+      workLog: [],
+      artifacts: [{ kind: 'one-line' as const, text: 'Earlier answer remains available.' }],
+    }
+    const pendingTurn = {
+      turnId: 'turn-current',
+      seq: 2,
+      query: 'Find the current answer',
+      intent: 'refine_search' as const,
+      status: 'pending' as const,
+      oneLine: '',
+      workLog: [],
+      artifacts: [],
+    }
+    const pendingProjection: PublicThreadProjection = {
+      threadId: 'thread-status',
+      title: 'Answer status',
+      turns: [historyTurn, pendingTurn],
+    }
+    const { rerender } = render(<AeThreadTranscript projection={pendingProjection} />)
+
+    expect(screen.queryByRole('log')).toBeNull()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    const status = screen.getByRole('status')
+    expect(status.getAttribute('aria-live')).toBe('polite')
+    expect(status.getAttribute('aria-atomic')).toBe('true')
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1)
+    expect(status.textContent).toBe('Answer is still pending.')
+    expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
+
+    const completeProjection: PublicThreadProjection = {
+      ...pendingProjection,
+      turns: [
+        historyTurn,
+        {
+          ...pendingTurn,
+          status: 'complete',
+          oneLine: 'Current answer is ready.',
+        },
+      ],
+    }
+    rerender(<AeThreadTranscript projection={completeProjection} />)
+
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status')).toBe(status)
+    expect(status.textContent).toBe('Answer ready.')
+    expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
+
+    rerender(<AeThreadTranscript projection={completeProjection} />)
+
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
+    expect(screen.getByText('Current answer is ready.')).toBeTruthy()
+    expect(document.querySelectorAll('[aria-live]')).toHaveLength(0)
+  })
+
+  it('keeps the static transcript outside live-region ownership', () => {
+    render(
+      <AeThreadScroller showJumpButton={false}>
+        <AeGenerativeAnswer artifacts={[]} busy phase="streaming" query="Find a plumber near Parramatta" />
+      </AeThreadScroller>,
+    )
+
+    expect(screen.getByRole('region', { name: 'Chat' })).toBeTruthy()
+    expect(screen.queryByRole('log')).toBeNull()
+    expect(screen.queryAllByRole('status')).toHaveLength(0)
+    expect(screen.queryByText("Checking what's available")).toBeTruthy()
   })
 })
 
@@ -352,10 +476,10 @@ function projectionWithSelectedProviderBoundaryTurn(): PublicThreadProjection {
       {
         turnId: 'turn-1',
         seq: 1,
-        query: 'Prepare a qualified inquiry for the first listed business',
+        query: 'Message the first listed business',
         intent: 'inquiry_handoff',
         status: 'complete',
-        oneLine: 'Parramatta Emergency Plumbing is ready for inquiry review.',
+        oneLine: 'Parramatta Emergency Plumbing is ready for contact.',
         workLog: [],
         artifacts: [{ kind: 'selected-provider', provider: source }],
       },

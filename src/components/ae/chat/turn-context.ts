@@ -1,7 +1,10 @@
-import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
+import { neutralizeBidiFormattingControls, type AnswerArtifact, type AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
-import { listedProvidersFromArtifacts } from './session-provider-context'
-
+import {
+  listedProvidersFromArtifacts,
+  providerHasInquiryPath,
+  selectedProviderFromArtifacts,
+} from './session-provider-context'
 export type TurnContextLineInput = {
   intent: FollowUpIntent
   seq: number
@@ -18,20 +21,20 @@ export function buildTurnContextLine(input: TurnContextLineInput): string | unde
   switch (input.intent) {
     case 'filter_known':
       return providerLabel === undefined
-        ? 'Filtering listed businesses from this thread.'
-        : `Filtering ${providerLabel} from this thread.`
+        ? 'Narrowing matches from this thread.'
+        : `Narrowing ${providerLabel} from this thread.`
     case 'compare_known':
       return providerLabel === undefined
-        ? 'Comparing listed businesses from this thread.'
+        ? 'Explaining the earlier search result.'
         : `Comparing ${providerLabel} from this thread.`
     case 'inquiry_handoff':
-      return buildInquiryHandoffContextLine([...providersBySlug.values()])
+      return buildInquiryHandoffContextLine(input.artifacts)
     case 'explain_boundary':
       return 'Checking the supported next step.'
     case 'unsupported':
-      return "This request is outside AE's current inquiry path; the answer will route back to published listings."
+      return 'This request is outside the current path; the answer will return to other options.'
     case 'refine_search':
-      return input.seq <= 1 ? undefined : 'Searching again for this follow-up.'
+      return input.seq <= 1 ? undefined : 'Checking again with this follow-up.'
   }
 }
 
@@ -45,17 +48,18 @@ function formatProviderCount(count: number): string | undefined {
   if (count <= 0) {
     return undefined
   }
-  return `${count} listed ${count === 1 ? 'business' : 'businesses'}`
+  return `${count} ${count === 1 ? 'match' : 'matches'}`
 }
 
-function buildInquiryHandoffContextLine(providers: readonly AnswerSource[]): string {
-  const firstProvider = providers[0]
-  if (providers.length === 1 && firstProvider !== undefined) {
-    return `Preparing the qualified inquiry next step for ${firstProvider.name}.`
+function buildInquiryHandoffContextLine(artifacts: readonly AnswerArtifact[]): string {
+  const selectedProvider = selectedProviderFromArtifacts(artifacts)
+  if (selectedProvider === undefined) {
+    return 'No business is selected yet. Find a match before sending a request.'
   }
-  if (providers.length > 1) {
-    return `Preparing the qualified inquiry next step from ${providers.length} listed businesses.`
+  const providerName = neutralizeBidiFormattingControls(selectedProvider.name)
+  if (!providerHasInquiryPath(selectedProvider)) {
+    return `${providerName} does not have a request form here yet.`
   }
-  return 'Preparing the qualified inquiry next step from this thread.'
+  return `Preparing a request to ${providerName}.`
 }
 

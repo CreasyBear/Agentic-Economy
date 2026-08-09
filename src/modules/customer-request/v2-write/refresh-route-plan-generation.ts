@@ -14,6 +14,7 @@ import type {
   RefreshRoutePlanGenerationArgs,
 } from './types'
 
+
 export async function refreshRoutePlanGeneration(
   args: RefreshRoutePlanGenerationArgs,
   ports: CustomerRequestV2WritePorts,
@@ -78,7 +79,6 @@ export async function refreshRoutePlanGeneration(
   )
   if (context === 'stale') return { kind: 'context_stale' }
   if (context === 'invalid') return { kind: 'candidate_invalid' }
-
   const current = await ports.loadExactRoutePlanGeneration(args.requestId, args.expectedGenerationRef)
   if (current.kind !== 'found'
     || current.routeGeneration.generation !== args.expectedGeneration

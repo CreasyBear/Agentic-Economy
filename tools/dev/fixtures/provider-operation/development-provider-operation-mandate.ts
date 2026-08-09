@@ -7,6 +7,7 @@ import {
   type MandateRefusalCode,
   type StandingMandateAuthorityBasis,
 } from '../../../../src/modules/action-invocation'
+import type { ExactAmount } from '../../../../src/modules/money/public'
 import type {
   DevelopmentProviderOperationCancellationResult,
   DevelopmentProviderOperationInput,
@@ -73,8 +74,8 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
       operation: DevelopmentProviderOperationInput
       effectGeneration: number
       fallbackRef?: string | null
-      reservedSpendMinor?: number
-      reservedLossMinor?: number
+      reservedSpend?: ExactAmount
+      reservedLoss?: ExactAmount
       risk?: string
       policyDecisionRef?: string
     }>): MandateDecision<Readonly<{ use: AuthorityUse; basis: StandingMandateAuthorityBasis }>> {
@@ -105,15 +106,13 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
         recipientRef: args.operation.disclosure.recipient,
         purpose: args.operation.disclosure.purpose,
         dataFields: args.operation.disclosure.fields,
-        reservedSpend: {
-          amountMinor: args.reservedSpendMinor ?? 0,
+        reservedSpend: args.reservedSpend ?? {
           currency: mandate.scope.maximumSpend.currency,
+          units: '0',
+          exponent: mandate.scope.maximumSpend.exponent,
         },
-        ...(args.reservedLossMinor === undefined ? {} : {
-          reservedLoss: {
-            amountMinor: args.reservedLossMinor,
-            currency: mandate.scope.maximumLoss?.currency ?? mandate.scope.maximumSpend.currency,
-          },
+        ...(args.reservedLoss === undefined ? {} : {
+          reservedLoss: args.reservedLoss,
         }),
         fallbackRef: args.fallbackRef ?? null,
         risk: args.risk ?? 'development_provider_operation_zero_charge',
@@ -165,10 +164,15 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
         recipientRef: args.recipientRef,
         purpose: args.purpose,
         dataFields: args.dataFields,
-        reservedSpend: { amountMinor: 0, currency: mandate.scope.maximumSpend.currency },
+        reservedSpend: {
+          currency: mandate.scope.maximumSpend.currency,
+          units: '0',
+          exponent: mandate.scope.maximumSpend.exponent,
+        },
         reservedLoss: {
-          amountMinor: 0,
           currency: mandate.scope.maximumLoss?.currency ?? mandate.scope.maximumSpend.currency,
+          units: '0',
+          exponent: mandate.scope.maximumLoss?.exponent ?? mandate.scope.maximumSpend.exponent,
         },
         fallbackRef: null,
         risk: args.risk,

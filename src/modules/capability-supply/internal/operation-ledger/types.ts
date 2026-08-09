@@ -103,7 +103,11 @@ export type OperationLedgerPorts = Readonly<{
   insertAudit: (row: AuditInsertRow) => Promise<void>
 
   registerOffering: (registration: unknown, now: number) => Promise<RegisterOfferingWriterResult>
-  registerBinding: (registration: unknown, now: number) => Promise<RegisterBindingWriterResult>
+  registerBinding: (
+    registration: unknown,
+    now: number,
+    expectedOperationRef?: string,
+  ) => Promise<RegisterBindingWriterResult>
   setEligibility: (eligibility: EligibilityInput, now: number) => Promise<SetEligibilityWriterResult>
 
   loadOfferingByOfferingId: (offeringId: string) => Promise<CapabilityOfferingRow | null>

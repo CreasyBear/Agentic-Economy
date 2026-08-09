@@ -43,8 +43,11 @@
           ],
           "maximumTotalCost": {
             "kind": "known",
-            "currency": "AUD",
-            "amountMinor": 1400
+            "amount": {
+              "currency": "AUD",
+              "units": "1400",
+              "exponent": 2
+            }
           },
           "dataUse": {
             "recipientCount": 2,
@@ -126,8 +129,11 @@
             "hardConstraints": "not_evaluated",
             "maximumCost": {
               "kind": "known",
-              "currency": "AUD",
-              "amountMinor": 1400
+              "amount": {
+                "currency": "AUD",
+                "units": "1400",
+                "exponent": 2
+              }
             },
             "dataExposureCount": 2,
             "irreversibleEffectCount": 1,

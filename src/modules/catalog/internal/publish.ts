@@ -1,19 +1,10 @@
 import { brandNonEmpty } from '@/modules/common/ids'
-import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { buildOfferingSupplyProjection, validateServiceCatalogInput } from './catalog-model'
 import {
-  changeOfferingStatusInState,
-  createOfferingInState,
-  reviseOfferingInState,
-  upsertAccessPathInState,
-  withdrawAccessPathInState,
-  type OfferingFactsInput,
   type OfferingSourceState,
 } from './offering-source'
-import type {
-  BusinessOfferingRecord,
-} from './offering-supply'
+import { reconcilePublishedOfferings } from './publish-reconcile'
 import type {
   PublishBusinessCatalogCommand,
   PublishBusinessCatalogResult,
@@ -226,110 +217,19 @@ function applyPublishState(
     accessPaths: state.accessPaths,
     operations: [],
   }
-  const activeRefs = new Set<string>()
-  const authority = { actorRef: business.ownerId, ownerRef: business.ownerId, businessOwnerRef: business.ownerId }
-  for (const service of services) {
-    const slug = normalizeSlug(service.name) || 'offering'
-    const offeringRef = brandNonEmpty(`offering:${business.businessId}:${slug}`, 'OfferingRef')
-    activeRefs.add(offeringRef)
-    const facts: OfferingFactsInput = {
-      name: service.name,
-      category: service.category,
-      summary: service.summary,
-      serviceAreaSummary: service.serviceArea,
-      availabilitySummary: service.hoursOrUnknown,
-    }
-    const existing = source.offerings.find((offering) => offering.offeringRef === offeringRef)
-    let offering: BusinessOfferingRecord
-    if (existing === undefined) {
-      const created = createOfferingInState(source, {
-        authority,
-        operationKey: `${operationKey}:offering:${slug}:create`,
-        businessId: business.businessId,
-        offeringRef,
-        facts,
-        now,
-      })
-      if (created.kind === 'error') throw new Error(created.reason)
-      source = created.state
-      offering = created.value
-    } else {
-      const revised = reviseOfferingInState(source, {
-        authority,
-        operationKey: `${operationKey}:offering:${slug}:revise:${existing.currentRevision}`,
-        offeringRef,
-        expectedRevision: existing.currentRevision,
-        facts,
-        now,
-      })
-      if (revised.kind === 'error') throw new Error(revised.reason)
-      source = revised.state
-      offering = revised.value
-    }
-    if (offering.status !== 'published') {
-      const published = changeOfferingStatusInState(source, {
-        authority,
-        operationKey: `${operationKey}:offering:${slug}:publish`,
-        offeringRef,
-        expectedRevision: offering.currentRevision,
-        status: 'published',
-        now,
-      })
-      if (published.kind === 'error') throw new Error(published.reason)
-      source = published.state
-      offering = published.value
-    }
-
-    const channel = service.firstRequest.publicChannel === 'public_business_contact'
-      ? 'phone'
-      : service.firstRequest.publicChannel === 'ae_status_only'
-        ? 'ae_inquiry'
-        : undefined
-    const existingPaths = source.accessPaths.filter((path) => path.offeringRef === offeringRef && path.status !== 'withdrawn')
-    if (channel !== undefined && service.firstRequest.mode !== 'not_available_yet') {
-      const upserted = upsertAccessPathInState(source, {
-        authority,
-        operationKey: `${operationKey}:offering:${slug}:access-path`,
-        offeringRef,
-        accessPathRef: brandNonEmpty(`access:${business.businessId}:${slug}:human`, 'AccessPathRef'),
-        expectedRevision: offering.currentRevision,
-        status: 'published',
-        descriptor: {
-          kind: 'human_request',
-          channel,
-          disclosure: service.firstRequest.publicDisclosure ?? 'Contact the business to begin.',
-        },
-        now,
-      })
-      if (upserted.kind === 'error') throw new Error(upserted.reason)
-      source = upserted.state
-    } else {
-      for (const path of existingPaths) {
-        const withdrawn = withdrawAccessPathInState(source, {
-          authority,
-          operationKey: `${operationKey}:offering:${slug}:withdraw:${path.accessPathRef}`,
-          accessPathRef: path.accessPathRef,
-          expectedRevision: offering.currentRevision,
-          now,
-        })
-        if (withdrawn.kind === 'error') throw new Error(withdrawn.reason)
-        source = withdrawn.state
-      }
-    }
-  }
-  for (const offering of source.offerings) {
-    if (offering.businessId !== business.businessId || activeRefs.has(offering.offeringRef) || offering.status === 'retired') continue
-    const drafted = changeOfferingStatusInState(source, {
-      authority,
-      operationKey: `${operationKey}:offering:${offering.offeringRef}:draft`,
-      offeringRef: offering.offeringRef,
-      expectedRevision: offering.currentRevision,
-      status: 'draft',
-      now,
-    })
-    if (drafted.kind === 'error') throw new Error(drafted.reason)
-    source = drafted.state
-  }
+  const reconcile = reconcilePublishedOfferings(source, {
+    businessId: business.businessId,
+    authority: {
+      actorRef: business.ownerId,
+      ownerRef: business.ownerId,
+      businessOwnerRef: business.ownerId,
+    },
+    services,
+    operationKey,
+    now,
+  })
+  if (reconcile.kind === 'error') throw new Error(reconcile.reason)
+  source = reconcile.state
   state.offerings.splice(0, state.offerings.length, ...source.offerings)
   state.revisions.splice(0, state.revisions.length, ...source.revisions)
   state.accessPaths.splice(0, state.accessPaths.length, ...source.accessPaths)

@@ -1,14 +1,16 @@
 import {
+  buildAgentJsonUrl,
+  extractRequestedLocation,
+  isConfirmedSearchContext,
   type AnswerSnapshot,
   type AnswerSource,
   type AnswerWorkStep,
-  buildAgentJsonUrl,
-  extractRequestedLocation,
 } from '@/modules/answer/public'
 import {
   aeSearchContextLocationQuery,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
+
 
 import {
   hasAnswerServiceSignal,
@@ -54,14 +56,15 @@ async function streamRetrievalFirstTurn(
     return undefined
   }
 
-  const searchInput = buildInitialRegistrySearchInput(ctx.query, ctx.searchContext, plan.providerBudget.searchLimit)
+  const registryQuery = ctx.registryQuery ?? ctx.query
+  const searchInput = buildInitialRegistrySearchInput(registryQuery, ctx.searchContext, plan.providerBudget.searchLimit)
   const searchStartedAt = Date.now()
   ctx.workLog.emit({
     id: 'search.registry.initial',
     phase: 'search',
     status: 'running',
-    title: 'Searching listed businesses',
-    summary: 'Looking for listed businesses that match the request.',
+    title: 'Searching for matches',
+    summary: 'Looking for businesses that can help.',
     detailRows: buildSearchWorkStepDetailRows(searchInput),
     startedAtMs: searchStartedAt,
   })
@@ -84,10 +87,10 @@ async function streamRetrievalFirstTurn(
     id: 'search.registry.initial',
     phase: 'search',
     status: result.record.status === 'complete' ? 'complete' : 'error',
-    title: 'Searching listed businesses',
+    title: 'Searching for matches',
     summary: result.record.status === 'complete'
-      ? describeProviderCount(result.providers.length, 'listed business')
-      : 'The listed-business search did not complete.',
+      ? describeProviderCount(result.providers.length, 'match')
+      : 'The search did not complete.',
     detailRows: [
       ...buildSearchWorkStepDetailRows(searchInput),
       { label: 'Results', value: String(result.providers.length) },
@@ -112,38 +115,10 @@ async function streamRetrievalFirstTurn(
 
   emitReadAndCompareSteps(ctx.workLog, result.providers)
   if (result.providers.length === 0) {
-    const operation = await discoverCapabilityOperations(ctx, searchInput)
-    const toolCalls = [result.record, operation.record]
-    const allowedSlugs = new Set([...result.allowedSlugs, ...operation.allowedSlugs])
+    const toolCalls = [result.record]
+    const allowedSlugs = result.allowedSlugs
 
-    if (operation.providers.length > 0) {
-      const operationSnapshot = withFollowUpLayout(
-        buildRetrievalFirstSnapshot({
-          query: ctx.query,
-          providers: operation.providers,
-          visibleLimit: plan.providerBudget.visibleLimit,
-          searchInput,
-          searchContext: ctx.searchContext,
-        }),
-        ctx.priorTurnsCount,
-        ctx.intent,
-      )
-      const finalized = finalizeAnswerTurnSnapshot({ snapshot: operationSnapshot, allowedSlugs })
-      if (!finalized.ok) {
-        return rejectBlockedSnapshot(ctx, toolCalls, allowedSlugs, finalized)
-      }
-      const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_first', { plan })
-      return {
-        snapshot: finalized.snapshot,
-        toolCalls,
-        allowedSlugs,
-        errorCopyId: undefined,
-        gate: finalized.gate,
-        ...(assembly === undefined ? {} : { assembly }),
-      }
-    }
-
-    if (!shouldReturnDeterministicEmptyState(ctx.query, searchInput)) {
+    if (!shouldReturnDeterministicEmptyState(searchInput.query, searchInput)) {
       return { snapshot: undefined, toolCalls, allowedSlugs, errorCopyId: undefined, gate: undefined }
     }
 
@@ -171,7 +146,7 @@ async function streamRetrievalFirstTurn(
 
     const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
     if (!finalized.ok) {
-      return rejectBlockedSnapshot(ctx, emptyToolCalls, allowedSlugs, finalized)
+      return rejectBlockedSnapshot(emptyToolCalls, allowedSlugs, finalized)
     }
     const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_empty', { planMode: 'empty' })
     return {
@@ -198,7 +173,7 @@ async function streamRetrievalFirstTurn(
 
   const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
   if (!finalized.ok) {
-    return rejectBlockedSnapshot(ctx, [result.record], result.allowedSlugs, finalized)
+    return rejectBlockedSnapshot([result.record], result.allowedSlugs, finalized)
   }
   const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_first', { plan })
 
@@ -226,7 +201,10 @@ function buildInitialRegistrySearchInput(
     return { ...input, mode: 'whole_catalogue' }
   }
 
-  const contextLocation = aeSearchContextLocationQuery(searchContext)
+  const contextLocation = isConfirmedSearchContext(searchContext)
+    ? aeSearchContextLocationQuery(searchContext)
+    : undefined
+
   const userNamedLocation = extractRequestedLocation(query)
   if (userNamedLocation !== undefined) {
     return { ...input, mode: 'near_me', location: userNamedLocation }
@@ -250,16 +228,17 @@ function buildRetrievalFirstSnapshot(input: {
   const count = providers.length
   const place = input.searchInput.location ?? extractRequestedLocation(input.query)
   const placeSuffix = place === undefined ? '' : ` in ${place}`
-  const subject = count === 1 ? 'This listing' : `These ${count} listings`
+  const subject = count === 1 ? 'This business' : `These ${count} businesses`
+  const offer = count === 1 ? 'offers' : 'offer'
 
   return {
     query: input.query,
-    oneLine: `${subject} may fit your request${placeSuffix}.`,
+    oneLine: `${subject} may fit what you need${placeSuffix}.`,
     providers,
-    summary: `${subject} publish services that matched your request. Scope, price, and current availability still need confirmation.`,
-    nextStep: `Choose one listing and ask whether it handles "${input.query}", what it costs, and when it is available.`,
+    summary: `${subject} ${offer} something that matches what you need. What they offer, price, and current availability still need confirmation.`,
+    nextStep: `Open a business, then ask whether it handles "${input.query}", what it costs, and when it is available.`,
     agentJsonUrl: buildAgentJsonUrl(
-      buildAgentJsonQuery(input.query, input.searchInput),
+      buildAgentJsonQuery(input.searchInput.query, input.searchInput),
       input.searchInput.limit,
       buildAgentJsonScope(input.searchInput, input.searchContext),
     ),
@@ -277,15 +256,15 @@ function buildDeterministicEmptySnapshot(input: {
 
   return {
     query: input.query,
-    oneLine: `No listed businesses match "${input.query}" yet.`,
+    oneLine: `No businesses match "${input.query}" yet.`,
     providers: [],
     ...(input.importedClaims === undefined ? {} : { importedClaims: input.importedClaims }),
     summary: place === undefined
-      ? 'No listed businesses publish matching coverage yet.'
-      : `No listed businesses publish coverage${placeSuffix} yet.`,
-    nextStep: 'Try a nearby suburb, browse the registry, or list a business that should appear here.',
+      ? 'No matches found yet.'
+      : `No matches found in ${place} yet.`,
+    nextStep: 'Try a nearby suburb, see other options, or add a business that should appear here.',
     agentJsonUrl: buildAgentJsonUrl(
-      buildAgentJsonQuery(input.query, input.searchInput),
+      buildAgentJsonQuery(input.searchInput.query, input.searchInput),
       input.searchInput.limit,
       buildAgentJsonScope(input.searchInput, input.searchContext),
     ),
@@ -304,15 +283,15 @@ async function discoverImportedClaims(
     id: 'search.web.discovery',
     phase: 'search',
     status: 'running',
-    title: 'Checking the web for unlisted businesses',
-    summary: 'AE has no listed match, so it is checking one web source for real local providers.',
-    detailRows: [{ label: 'Search words', value: safeWorkLogUserText(ctx.query) }],
+    title: 'Checking the web for more businesses',
+    summary: 'No match was found in the businesses here, so one web source is being checked for more businesses.',
+    detailRows: [{ label: 'Search words', value: safeWorkLogUserText(searchInput.query) }],
     startedAtMs: startedAt,
   })
   const result = await runAnswerToolCall({
     toolId: 'web.discover',
     input: {
-      query: ctx.query,
+      query: searchInput.query,
       ...(searchInput.location === undefined ? {} : { location: searchInput.location }),
     },
     turnId: ctx.turnId,
@@ -337,79 +316,21 @@ async function discoverImportedClaims(
     id: 'search.web.discovery',
     phase: 'search',
     status: discoveryStatus,
-    title: 'Checking the web for unlisted businesses',
+    title: 'Checking the web for more businesses',
     summary: discoveryStatus === 'error'
-      ? 'The web discovery check did not complete.'
+      ? 'The web check did not complete.'
       : discoveryStatus === 'skipped'
-        ? 'Web discovery is not configured for this request.'
+        ? 'Web search is not set up for this request.'
         : claims.length === 0
-          ? 'No additional web businesses were found for this request.'
-          : `${claims.length} real business${claims.length === 1 ? '' : 'es'} found on the web, separate from AE listings.`,
-    detailRows: [{ label: 'Imported claims', value: String(claims.length) }],
+          ? 'No other businesses were found on the web for this request.'
+          : `${claims.length} ${claims.length === 1 ? 'business' : 'businesses'} appeared in a web search. These details come from the web and have not been verified.`,
+    detailRows: [{ label: 'Web results', value: String(claims.length) }],
     startedAtMs: startedAt,
     completedAtMs: Date.now(),
   })
   return { claims, record: result.record, status: discoveryStatus }
 }
 
-/**
- * Falls back to the typed executable-operation search when the listed-business
- * catalog returns no provider, so natural-language questions surface real
- * onboarded capabilities (e.g. Frankfurter / Exa) instead of stopping at an
- * empty catalog state. Returns zero providers when the search errors or finds
- * nothing, preserving the deterministic empty-state / web-discover path.
- */
-async function discoverCapabilityOperations(
-  ctx: TurnPathContext,
-  searchInput: AnswerRegistrySearchInput,
-): Promise<{
-  providers: readonly AnswerSource[]
-  record: Awaited<ReturnType<typeof runAnswerToolCall>>['record']
-  allowedSlugs: ReadonlySet<string>
-}> {
-  const startedAt = Date.now()
-  ctx.workLog.emit({
-    id: 'search.operations.initial',
-    phase: 'search',
-    status: 'running',
-    title: 'Searching executable operations',
-    summary: 'No listed businesses matched, so AE is checking its executable operations.',
-    detailRows: [{ label: 'Search words', value: safeWorkLogUserText(ctx.query) }],
-    startedAtMs: startedAt,
-  })
-  const result = await runAnswerToolCall({
-    toolId: 'registry.operations.search',
-    input: { query: ctx.query, limit: searchInput.limit },
-    turnId: ctx.turnId,
-    seq: 1,
-    harnessLoop: ctx.harness.loop,
-  })
-  ctx.timings.add(result.timings, {
-    phase: 'operation_discovery',
-    toolId: result.record.toolId,
-    toolSeq: result.record.seq,
-  })
-  ctx.workLog.emit({
-    id: 'search.operations.initial',
-    phase: 'search',
-    status: result.record.status === 'complete' ? 'complete' : 'error',
-    title: 'Searching executable operations',
-    summary: result.record.status === 'complete'
-      ? result.providers.length === 0
-        ? 'No executable operations matched this request.'
-        : `${result.providers.length} executable operation${result.providers.length === 1 ? '' : 's'} matched this request.`
-      : 'The executable-operation search did not complete.',
-    detailRows: [{ label: 'Results', value: String(result.providers.length) }],
-    relatedProviderSlugs: result.providers.map((provider) => provider.slug),
-    startedAtMs: startedAt,
-    completedAtMs: Date.now(),
-  })
-  return {
-    providers: result.providers,
-    record: result.record,
-    allowedSlugs: result.allowedSlugs,
-  }
-}
 
 
 function shouldReturnDeterministicEmptyState(
@@ -438,7 +359,11 @@ function buildAgentJsonScope(
     return { mode: 'whole_catalogue' }
   }
 
-  const location = searchInput.location ?? aeSearchContextLocationQuery(searchContext)
+  const location = searchInput.location ?? (
+    isConfirmedSearchContext(searchContext)
+      ? aeSearchContextLocationQuery(searchContext)
+      : undefined
+  )
   return location === undefined ? undefined : { mode: 'near_me', location }
 }
 
@@ -450,15 +375,15 @@ function buildSearchWorkStepDetailRows(
   searchInput: AnswerRegistrySearchInput,
 ): NonNullable<AnswerWorkStep['detailRows']> {
   return [
-    { label: 'Search words', value: safeWorkLogUserText(searchInput.query) },
+    { label: 'What you need', value: safeWorkLogUserText(searchInput.query) },
     { label: 'Area', value: describeSearchInputArea(searchInput) },
-    { label: 'Limit', value: String(searchInput.limit) },
+    { label: 'Search limit', value: String(searchInput.limit) },
   ]
 }
 
 function describeSearchInputArea(searchInput: AnswerRegistrySearchInput): string {
   if (searchInput.mode === 'whole_catalogue') {
-    return 'Whole catalogue'
+    return 'All businesses'
   }
-  return searchInput.location ?? 'Request only'
+  return searchInput.location ?? 'As written'
 }

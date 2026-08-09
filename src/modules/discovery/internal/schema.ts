@@ -6,11 +6,10 @@ import {
   ExternalOperationProvenanceValues,
   FirstRequestModeValues,
   HumanRequestChannelValues,
-  OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
   PublicFirstRequestChannelValues,
-} from '@/modules/catalog/public'
+} from '@/modules/catalog/schema-values'
 import {
   DiscoveryAttemptStatusValues,
   DiscoveryManifestRouteKindValues,
@@ -18,7 +17,7 @@ import {
   DiscoveryRepairActionValues,
   DiscoveryRepairResultValues,
   DiscoveryStatusValues,
-} from '@/modules/discovery/public'
+} from './schema-values'
 
 const discoveryManifestRoute = v.object({
   kind: literalUnion(DiscoveryManifestRouteKindValues),
@@ -26,17 +25,37 @@ const discoveryManifestRoute = v.object({
   routeTested: v.literal(true),
 })
 
-const discoveryManifestPrice = v.object({
-  kind: literalUnion(OfferingPriceKindValues),
+const exactAmountValue = v.object({
   currency: v.string(),
-  amountMinor: v.optional(v.number()),
-  maximumAmountMinor: v.optional(v.number()),
-  unit: v.optional(literalUnion(OfferingPriceUnitValues)),
-  taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  units: v.string(),
+  exponent: v.number(),
 })
+
+const discoveryManifestPrice = v.union(
+  v.object({
+    kind: v.literal('quote_only'),
+    currency: v.string(),
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+  v.object({
+    kind: v.union(v.literal('fixed'), v.literal('from')),
+    amount: exactAmountValue,
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+  v.object({
+    kind: v.literal('range'),
+    minimum: exactAmountValue,
+    maximum: exactAmountValue,
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+)
 
 const discoveryManifestHumanRequestAccessPath = v.object({
   accessPathRef: v.string(),
+  offeringRevision: v.number(),
   kind: v.literal('human_request'),
   channel: literalUnion(HumanRequestChannelValues),
   disclosure: v.string(),
@@ -45,6 +64,7 @@ const discoveryManifestHumanRequestAccessPath = v.object({
 
 const discoveryManifestExternalOperationAccessPath = v.object({
   accessPathRef: v.string(),
+  offeringRevision: v.number(),
   kind: v.literal('external_operation'),
   name: v.string(),
   summary: v.string(),

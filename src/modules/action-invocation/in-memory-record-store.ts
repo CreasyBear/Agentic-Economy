@@ -41,6 +41,16 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   }>
 }>
 
+type InMemoryView<Result extends ActionResult> = ActionInvocationView<Result> & Readonly<{
+  persistence: 'in_memory_only'
+}>
+
+function inMemoryView<Result extends ActionResult>(
+  view: ActionInvocationView<Result>,
+): InMemoryView<Result> {
+  return { ...view, persistence: 'in_memory_only' }
+}
+
 export type StoredInvocation<Input, Result extends ActionResult> = {
   sourceRef: string
   view: ActionInvocationView<Result>
@@ -58,11 +68,11 @@ export function createRecordStore<Input, Result extends ActionResult>(
     if (source === undefined) throw new Error(`Missing source state for ${record.sourceRef}.`)
     return [record.control.invocationRef, {
       sourceRef: record.sourceRef,
-      view: {
+      view: inMemoryView({
         ...record.control,
         prepared: source.prepared,
         observedResolution: source.observedResolution,
-      },
+      }),
       input: source.input,
       context: source.context,
       ...(record.authorityBinding === undefined ? {} : { authorityBinding: record.authorityBinding }),
@@ -97,11 +107,9 @@ export function createRecord<Input, Result extends ActionResult>(
   continuation?: Readonly<{ invocationRef: string; expectedInvocationVersion: number }>,
 ): StoredInvocation<Input, Result> {
   const invocationRef = continuation?.invocationRef ?? options.nextInvocationRef()
-  const provisionalView: ActionInvocationView<Result> = {
+  const provisionalView = inMemoryView<Result>({
     invocationRef,
     invocationVersion: (continuation?.expectedInvocationVersion ?? 0) + 1,
-    environment: 'MOCK/DEVELOPMENT ONLY',
-    persistence: 'in_memory_only',
     origin,
     owner: actor,
     action: { id: options.action.id, contractVersion },
@@ -110,7 +118,7 @@ export function createRecord<Input, Result extends ActionResult>(
     observedResolution: { state: 'pending' },
     freshness: { state: 'not_observed' },
     control: { state: 'in_progress' },
-  }
+  })
   const sourceRef = options.sourceRefForInvocation?.(provisionalView, input)
     ?? readPath(input, 'operationKey')
   return {

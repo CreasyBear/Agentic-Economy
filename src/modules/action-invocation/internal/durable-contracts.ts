@@ -1,8 +1,10 @@
 import type { ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ActionAttemptView,
+  ActionInvocationLimits,
   ActionInvocationView,
   AuthorityBindingSnapshot,
 } from '../contracts'
@@ -17,12 +19,10 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
   terminalResultReferenceable?: boolean
   control: Omit<ActionInvocationView<Result>, 'prepared' | 'observedResolution' | 'attempts'>
   authorityBinding?: AuthorityBindingSnapshot
-  /** @deprecated Legacy rows only; current writes keep acceptedAuthority inside control. */
-  acceptedAuthority?: ActionInvocationView<Result>['acceptedAuthority']
   preparedMaterialDigest?: string
   preparedTargetDigest?: string
   consequence?: string
-  dataLimitSummary?: Readonly<Record<string, number>>
+  dataLimitSummary?: ActionInvocationLimits
   authorityDecisionAt?: string
   currentAttemptRef?: string
   currentEffectGeneration?: number
@@ -31,26 +31,83 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
   updatedAt: string
 }>
 
+/**
+ * Rebuild a durable control projection only from its canonical nested control
+ * state. The durable row is already validated by its port/snapshot boundary;
+ * this helper rejects malformed authority values instead of inventing them.
+ */
 export function reconstructDurableControlRow<Result extends ActionResult>(
   row: DurableControlRow<Result>,
 ): DurableControlRow<Result> {
-  const legacyAcceptedAuthority = row.acceptedAuthority
-  const nestedAcceptedAuthority = row.control.acceptedAuthority
+  if (!isRecord(row.control)) throw new Error('durable_control_row_invalid')
+  const acceptedAuthority = row.control.acceptedAuthority
+  if (acceptedAuthority !== undefined) {
+    if (!isAcceptedAuthority(acceptedAuthority)) {
+      throw new Error('durable_control_authority_invalid')
+    }
+    canonicalDigest(acceptedAuthority)
+  }
+  return row
+}
+
+function isAcceptedAuthority(
+  value: unknown,
+): value is NonNullable<ActionInvocationView['acceptedAuthority']> {
+  if (!isRecord(value) || typeof value.kind !== 'string') return false
+  if (value.kind === 'approve_each') {
+    return typeof value.authorityRef === 'string' && value.authorityRef.length > 0
+  }
+  if (value.kind === 'standing_mandate_use') {
+    const mandateVersion = value.mandateVersion
+    const mandateGeneration = value.mandateGeneration
+    return typeof value.mandateRef === 'string'
+      && value.mandateRef.length > 0
+      && typeof mandateVersion === 'number'
+      && Number.isSafeInteger(mandateVersion)
+      && mandateVersion >= 1
+      && typeof mandateGeneration === 'number'
+      && Number.isSafeInteger(mandateGeneration)
+      && mandateGeneration >= 1
+      && typeof value.authorityUseRef === 'string'
+      && value.authorityUseRef.length > 0
+      && typeof value.grantEvidenceRef === 'string'
+      && value.grantEvidenceRef.length > 0
+  }
+  if (value.kind !== 'customer_request_mandate_use') return false
+  const requestRevision = value.requestRevision
+  const routeGeneration = value.routeGeneration
+  const authorization = value.authorization
   if (
-    legacyAcceptedAuthority !== undefined
-    && nestedAcceptedAuthority !== undefined
-    && canonicalDigest(legacyAcceptedAuthority) !== canonicalDigest(nestedAcceptedAuthority)
-  ) {
-    throw new Error('durable_control_authority_mismatch')
+    typeof value.mandateRef !== 'string'
+    || value.mandateRef.length === 0
+    || typeof value.mandateDigest !== 'string'
+    || value.mandateDigest.length === 0
+    || typeof requestRevision !== 'number'
+    || !Number.isSafeInteger(requestRevision)
+    || requestRevision < 1
+    || typeof routeGeneration !== 'number'
+    || !Number.isSafeInteger(routeGeneration)
+    || routeGeneration < 1
+    || typeof value.grantRef !== 'string'
+    || value.grantRef.length === 0
+    || typeof value.grantDigest !== 'string'
+    || value.grantDigest.length === 0
+    || !isRecord(authorization)
+    || typeof authorization.kind !== 'string'
+  ) return false
+  if (authorization.kind === 'explicit') {
+    return typeof authorization.authorizationEvidenceRef === 'string'
+      && authorization.authorizationEvidenceRef.length > 0
+      && typeof authorization.authorizationEvidenceDigest === 'string'
+      && authorization.authorizationEvidenceDigest.length > 0
   }
-  if (legacyAcceptedAuthority === undefined) return row
-  const { acceptedAuthority: _legacyAcceptedAuthority, ...currentRow } = row
-  return {
-    ...currentRow,
-    control: nestedAcceptedAuthority === undefined
-      ? { ...row.control, acceptedAuthority: legacyAcceptedAuthority }
-      : row.control,
-  }
+  return authorization.kind === 'standing_low_risk'
+    && typeof authorization.standingPolicyRef === 'string'
+    && authorization.standingPolicyRef.length > 0
+    && typeof authorization.standingPolicyDigest === 'string'
+    && authorization.standingPolicyDigest.length > 0
+    && typeof authorization.authorityUseRef === 'string'
+    && authorization.authorityUseRef.length > 0
 }
 
 export type DurableAttemptOutcome =
@@ -90,38 +147,17 @@ export function projectDurableAttempt(
   attempt: ActionAttemptView,
   recordedAt: string,
 ): DurableAttemptRow {
-  const outcome: DurableAttemptOutcome =
-    attempt.outcome.state === 'failed'
-      ? { state: 'failed', retry: attempt.outcome.retry, errorDigest: canonicalDigest(attempt.outcome.message) }
-      : attempt.outcome.state === 'uncertain'
-        ? {
-            state: 'uncertain',
-            retry: attempt.outcome.retry,
-            errorDigest: canonicalDigest(attempt.outcome.message),
-            reconciliationRequiredAt: attempt.outcome.reconciliationRequiredAt,
-          }
-        : attempt.outcome
-  return { invocationRef, ...attempt, outcome, recordedAt }
+  return { invocationRef, ...attempt, recordedAt }
 }
 
 export function restoreDurableAttempt(row: DurableAttemptRow): ActionAttemptView {
-  const outcome: ActionAttemptView['outcome'] =
-    row.outcome.state === 'failed'
-      ? { state: 'failed', retry: row.outcome.retry, message: 'Persisted failure evidence is available by digest.' }
-      : row.outcome.state === 'uncertain'
-        ? {
-            state: 'uncertain',
-            retry: row.outcome.retry,
-            message: 'Persisted uncertainty evidence is available by digest.',
-            reconciliationRequiredAt: row.outcome.reconciliationRequiredAt,
-          }
-        : row.outcome
   return {
     attemptRef: row.attemptRef, attemptNumber: row.attemptNumber, actor: row.actor,
     effectGeneration: row.effectGeneration, lease: row.lease, idempotency: row.idempotency,
-    release: row.release, outcome,
+    release: row.release, outcome: row.outcome,
   }
 }
+
 
 export type DurableHistoryRow = Readonly<{
   invocationRef: string
@@ -169,12 +205,12 @@ export type PersistControlResult =
     'lease_not_current' | 'command_identity_conflict' | 'reconciliation_required' }>
 
 export interface DurableActionInvocationPort<Result extends ActionResult = ActionResult> {
-  transact(command: PersistControlCommand<Result>): PersistControlResult
-  readControl(invocationRef: string): DurableControlRow<Result> | undefined
-  readAttempts(invocationRef: string, limit: number): readonly DurableAttemptRow[]
-  readAttempt(invocationRef: string, attemptRef: string): DurableAttemptRow | undefined
-  readHistory(invocationRef: string, afterVersion: number, limit: number): readonly DurableHistoryRow[]
-  readHistoryCommand(invocationRef: string, commandId: string): DurableHistoryRow | undefined
+  transact(command: PersistControlCommand<Result>): Promise<PersistControlResult>
+  readControl(invocationRef: string): Promise<DurableControlRow<Result> | undefined>
+  readAttempts(invocationRef: string, limit: number): Promise<readonly DurableAttemptRow[]>
+  readAttempt(invocationRef: string, attemptRef: string): Promise<DurableAttemptRow | undefined>
+  readHistory(invocationRef: string, afterVersion: number, limit: number): Promise<readonly DurableHistoryRow[]>
+  readHistoryCommand(invocationRef: string, commandId: string): Promise<DurableHistoryRow | undefined>
   recordLateObservation(input: Readonly<{
     invocationRef: string
     commandId: string
@@ -184,5 +220,5 @@ export interface DurableActionInvocationPort<Result extends ActionResult = Actio
     release: 'not_released' | 'released' | 'possibly_released'
     evidenceDigest: string
     recordedAt: string
-  }>): PersistControlResult
+  }>): Promise<PersistControlResult>
 }

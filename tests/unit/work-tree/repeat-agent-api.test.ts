@@ -45,7 +45,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
           state: 'reserved',
           reservedOccurrences: 1,
           reservedDataAllocations: 1,
-          reservedSpend: { currency: 'AUD', amountMinor: 0 },
+          reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
         }
       }
       return {
@@ -62,15 +62,14 @@ describe('WorkTree repeat agent HTTP seam', () => {
           delegatedCredentialId: 'credential:repeat',
           operationKey: 'reserve:http',
           requestedOccurrences: 1,
-          requestedSpend: { currency: 'AUD', amountMinor: 0 },
+          requestedSpend: { currency: 'AUD', units: '0', exponent: 2 },
           requestedDataAllocations: 1,
           reservedOccurrences: 1,
-          reservedSpend: { currency: 'AUD', amountMinor: 0 },
+          reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
           reservedDataAllocations: 1,
           state: 'reserved',
           releasedOccurrences: 0,
-          releasedSpendMinor: 0,
-          releasedDataAllocations: 0,
+          releasedSpend: { currency: 'AUD', units: '0', exponent: 2 },
         },
         permission: {
           permissionRef: 'repeat-permission:http',
@@ -82,8 +81,8 @@ describe('WorkTree repeat agent HTTP seam', () => {
           delegatedCredentialId: 'credential:repeat',
           validFrom: 0,
           validUntil: 9_999_999_999_999,
-          perUseSpend: { currency: 'AUD', amountMinor: 0 },
-          cumulativeSpend: { currency: 'AUD', amountMinor: 0 },
+          perUseSpend: { currency: 'AUD', units: '0', exponent: 2 },
+          cumulativeSpend: { currency: 'AUD', units: '0', exponent: 2 },
           occurrenceLimit: 1,
           perUseDataAllocations: 1,
           cumulativeDataAllocations: 1,
@@ -91,8 +90,8 @@ describe('WorkTree repeat agent HTTP seam', () => {
           settledDataAllocations: 0,
           reservedOccurrences: 1,
           settledOccurrences: 0,
-          reservedSpend: { currency: 'AUD', amountMinor: 0 },
-          settledSpend: { currency: 'AUD', amountMinor: 0 },
+          reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
+          settledSpend: { currency: 'AUD', units: '0', exponent: 2 },
           status: 'active',
           issuedAt: 0,
           sourceReceiptId: 'receipt:http',
@@ -108,7 +107,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
           permissionRef: 'repeat-permission:http',
           operationKey: 'reserve:http',
           requestedOccurrences: 1,
-          requestedSpend: { currency: 'AUD', amountMinor: 0 },
+          requestedSpend: { currency: 'AUD', units: '0', exponent: 2 },
           requestedDataAllocations: 1,
         }),
       }),
@@ -151,7 +150,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
           permissionRef: 'repeat-permission:http',
           operationKey: 'reserve:unpaid-claim',
           requestedOccurrences: 1,
-          requestedSpend: { currency: 'AUD', amountMinor: 400 },
+          requestedSpend: { currency: 'AUD', units: '400', exponent: 2 },
           requestedDataAllocations: 1,
           paid: false,
         }),
@@ -160,6 +159,13 @@ describe('WorkTree repeat agent HTTP seam', () => {
       { callOperation },
     )
     expect(malformed.status).toBe(400)
+    await expect(malformed.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Invalid argument',
+      status: 400,
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_input',
+    })
     expect(callOperation).not.toHaveBeenCalled()
 
     mocks.authenticate.mockResolvedValue({ kind: 'refused', status: 403, reason: 'scope_required' })
@@ -172,7 +178,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
           permissionRef: 'repeat-permission:http',
           operationKey: 'reserve:http',
           requestedOccurrences: 1,
-          requestedSpend: { currency: 'AUD', amountMinor: 0 },
+          requestedSpend: { currency: 'AUD', units: '0', exponent: 2 },
           requestedDataAllocations: 1,
         }),
       }),
@@ -180,6 +186,15 @@ describe('WorkTree repeat agent HTTP seam', () => {
       { callOperation },
     )
     expect(unauthorized.status).toBe(403)
+    expect(unauthorized.headers.get('content-type')).toBe('application/problem+json')
+    await expect(unauthorized.json()).resolves.toMatchObject({
+      type: 'about:blank',
+      title: 'Permission denied',
+      status: 403,
+      kind: 'PERMISSION_DENIED',
+      code: 'scope_required',
+      detail: 'scope_required',
+    })
     expect(callOperation).not.toHaveBeenCalled()
   })
 })

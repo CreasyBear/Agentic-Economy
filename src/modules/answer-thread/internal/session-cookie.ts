@@ -3,8 +3,12 @@ import { isSecureRequest, readCookie, serializeCookie } from '@/lib/http/cookies
 const AE_SESSION_COOKIE = 'ae_session'
 const AE_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
 
+export function readAnswerSessionId(request: Request): string | undefined {
+  return readCookie(request.headers.get('cookie'), AE_SESSION_COOKIE)
+}
+
 export function resolveOrCreateSessionId(request: Request): { sessionId: string; setCookie: boolean } {
-  const existing = readCookie(request.headers.get('cookie'), AE_SESSION_COOKIE)
+  const existing = readAnswerSessionId(request)
   if (existing !== undefined) {
     return { sessionId: existing, setCookie: false }
   }

@@ -126,7 +126,7 @@ async function seedRepresentativeHistory(backend: ReturnType<typeof convexTest>)
     })
     await ctx.db.insert('routingKernelAgentGrants', {
       grantId: 'grant:history', agentId: 'agent:history', principalId: 'principal:history', networkIds: ['network:history'],
-      maximumSpendMinor: 9_999, currency: 'AUD', allowedDataFields: ['private-field'], expiresAt: 30,
+      maximumSpend: { currency: 'AUD', units: '9999', exponent: 2 }, allowedDataFields: ['private-field'], expiresAt: 30,
       status: 'revoked', evidenceRefs: ['evidence:grant'], grantHash: 'sha256:grant', issuedAt: 20, updatedAt: 22, revokedAt: 22,
     })
     await ctx.db.insert('routingKernelPreparationCandidateSets', {
@@ -209,8 +209,9 @@ async function insertRun(ctx: Parameters<Parameters<ReturnType<typeof convexTest
     incidentContract: 'legacy_quarantined', costContract: 'attributed_v2', rootRunId,
     quoteId: `quote:${rootRunId}`, quoteDigest: `sha256:${rootRunId}`, networkId: 'network:history', executionMode: 'live',
     agentId: 'agent:history', principalId: 'principal:history', state, enforcement: 'enforced',
-    effectState: state === 'completed' ? 'committed' : 'not_started', authorizedCurrency: 'AUD', authorizedAmountMinor: 1_000,
-    quotedMaximumCurrency: 'AUD', quotedMaximumAmountMinor: 1_000, updatedAt,
+    effectState: state === 'completed' ? 'committed' : 'not_started',
+    authorizedAmount: { currency: 'AUD', units: '1000', exponent: 2 },
+    quotedMaximumAmount: { currency: 'AUD', units: '1000', exponent: 2 }, updatedAt,
     ...(state === 'completed' ? { completedAt: updatedAt } : {}),
   })
 }

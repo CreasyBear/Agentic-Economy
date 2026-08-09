@@ -110,7 +110,7 @@ describe('in-memory Action Invocation tracer', () => {
       nextAuthorityRef: () => `opaque:authority:${origin.kind}:0001`,
     })
 
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin,
       actor,
       input: inquiryInput,
@@ -120,8 +120,6 @@ describe('in-memory Action Invocation tracer', () => {
 
     expect(developmentAdapter).not.toHaveBeenCalled()
     expect(prepared).toMatchObject({
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      persistence: 'in_memory_only',
       action: { id: 'inquiry.submit', contractVersion: 'inquiry.submit:v1' },
       prepared: {
         target: inquiryInput.target,
@@ -138,7 +136,7 @@ describe('in-memory Action Invocation tracer', () => {
       control: { state: 'awaiting_authority' },
     })
 
-    const decision = tracer.decide({
+    const decision = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -195,7 +193,7 @@ describe('in-memory Action Invocation tracer', () => {
       nextInvocationRef: () => 'dev:action-invocation:guard',
       nextAuthorityRef: () => 'opaque:authority:guard:0001',
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin: standaloneOrigin,
       actor,
       input: inquiryInput,
@@ -203,7 +201,7 @@ describe('in-memory Action Invocation tracer', () => {
       freshnessMs: 60_000,
     })
 
-    expect(tracer.decide({
+    expect(await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -212,7 +210,7 @@ describe('in-memory Action Invocation tracer', () => {
       accept: true,
     })).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
 
-    expect(tracer.decide({
+    expect(await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -221,7 +219,7 @@ describe('in-memory Action Invocation tracer', () => {
       accept: true,
     })).toMatchObject({ kind: 'refused', code: 'cross_origin_refused' })
 
-    const accepted = tracer.decide({
+    const accepted = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -273,14 +271,14 @@ describe('in-memory Action Invocation tracer', () => {
       developmentReleaseSignal: release,
       verifyReconciliationEvidence: evidenceSource.verify,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin,
       actor,
       input: inquiryInput,
       context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
-    const decision = tracer.decide({
+    const decision = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -364,7 +362,7 @@ describe('in-memory Action Invocation tracer', () => {
       resolution: 'not_released',
       observedAt: '2026-07-19T07:00:00.000Z',
     }
-    expect(tracer.reconcile({
+    expect(await tracer.reconcile({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: `dev:attempt:${origin.kind}:2`,
@@ -379,7 +377,7 @@ describe('in-memory Action Invocation tracer', () => {
       code: 'evidence_source_unverified',
       view: { control: { state: 'reconciliation_required' } },
     })
-    const reconciled = tracer.reconcile({
+    const reconciled = await tracer.reconcile({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: `dev:attempt:${origin.kind}:2`,
@@ -437,14 +435,14 @@ describe('in-memory Action Invocation tracer', () => {
       nextAttemptRef: () => 'dev:attempt:missing-observer:1',
       verifyReconciliationEvidence: evidenceSource.verify,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin: standaloneOrigin,
       actor,
       input: inquiryInput,
       context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
-    const decision = tracer.decide({
+    const decision = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -472,7 +470,7 @@ describe('in-memory Action Invocation tracer', () => {
       },
     })
     if (uncertain.kind !== 'accepted') throw new Error('Expected uncertain attempt')
-    expect(tracer.reconcile({
+    expect(await tracer.reconcile({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: 'dev:attempt:missing-observer:1',
@@ -531,14 +529,14 @@ describe('in-memory Action Invocation tracer', () => {
         developmentReleaseSignal: release,
         developmentTimeoutSignal: timeout.signal,
       })
-      const prepared = tracer.prepare({
+      const prepared = await tracer.prepare({
         origin,
         actor,
         input: inquiryInput,
         context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
         freshnessMs: 60_000,
       })
-      const authority = tracer.decide({
+      const authority = await tracer.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
@@ -620,14 +618,14 @@ describe('in-memory Action Invocation tracer', () => {
       nextAttemptRef: () => `dev:attempt:fence:${origin.kind}:${++attempt}`,
     }
     const tracer = createInMemoryActionInvocationTracer(options)
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin,
       actor,
       input: inquiryInput,
       context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
       freshnessMs: 300_000,
     })
-    const authority = tracer.decide({
+    const authority = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -637,7 +635,7 @@ describe('in-memory Action Invocation tracer', () => {
     })
     if (authority.kind !== 'accepted') throw new Error('Expected accepted authority')
 
-    const first = tracer.acquire({
+    const first = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: authority.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -655,7 +653,7 @@ describe('in-memory Action Invocation tracer', () => {
       leaseOwner: first.view.control.leaseOwner,
       effectGeneration: first.view.control.effectGeneration,
     }
-    expect(tracer.publishObservation({
+    expect(await tracer.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: first.view.invocationVersion - 1,
       ...firstToken,
@@ -669,7 +667,7 @@ describe('in-memory Action Invocation tracer', () => {
     })).resolves.toMatchObject({ kind: 'refused', code: 'stale_invocation_version' })
     expect(developmentAdapter).not.toHaveBeenCalled()
 
-    const provenNotReleased = tracer.publishObservation({
+    const provenNotReleased = await tracer.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: first.view.invocationVersion,
       ...firstToken,
@@ -677,7 +675,7 @@ describe('in-memory Action Invocation tracer', () => {
     })
     if (provenNotReleased.kind !== 'accepted') throw new Error('Expected proven non-release')
     now = '2026-07-19T09:00:02.000Z'
-    const takeover = tracer.acquire({
+    const takeover = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: provenNotReleased.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -691,7 +689,7 @@ describe('in-memory Action Invocation tracer', () => {
       throw new Error('Expected takeover lease')
     }
     expect(takeover.view.control.effectGeneration).toBe(2)
-    expect(tracer.publishObservation({
+    expect(await tracer.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: takeover.view.invocationVersion,
       ...firstToken,
@@ -714,7 +712,7 @@ describe('in-memory Action Invocation tracer', () => {
     })
     expect(restored.inspect(prepared.invocationRef)).toEqual(takeover.view)
 
-    const possibleRelease = restored.publishObservation({
+    const possibleRelease = await restored.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: takeover.view.invocationVersion,
       attemptRef: takeover.view.control.attemptRef,
@@ -723,7 +721,7 @@ describe('in-memory Action Invocation tracer', () => {
       release: 'possibly_released',
     })
     if (possibleRelease.kind !== 'accepted') throw new Error('Expected uncertain observation')
-    const cancelAfterRelease = restored.cancel({
+    const cancelAfterRelease = await restored.cancel({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: possibleRelease.view.invocationVersion,
       actor,
@@ -738,14 +736,14 @@ describe('in-memory Action Invocation tracer', () => {
       ...options,
       nextInvocationRef: () => `dev:action-invocation:unknown:${origin.kind}`,
     })
-    const unknownPrepared = unknownTracer.prepare({
+    const unknownPrepared = await unknownTracer.prepare({
       origin,
       actor,
       input: inquiryInput,
       context: {},
       freshnessMs: 300_000,
     })
-    const unknownAuthority = unknownTracer.decide({
+    const unknownAuthority = await unknownTracer.decide({
       invocationRef: unknownPrepared.invocationRef,
       expectedInvocationVersion: unknownPrepared.invocationVersion,
       authorityRef: unknownPrepared.authority!.reference,
@@ -754,7 +752,7 @@ describe('in-memory Action Invocation tracer', () => {
       accept: true,
     })
     if (unknownAuthority.kind !== 'accepted') throw new Error('Expected accepted authority')
-    const unknownLease = unknownTracer.acquire({
+    const unknownLease = await unknownTracer.acquire({
       invocationRef: unknownPrepared.invocationRef,
       expectedInvocationVersion: unknownAuthority.view.invocationVersion,
       authorityRef: unknownPrepared.authority!.reference,
@@ -766,7 +764,7 @@ describe('in-memory Action Invocation tracer', () => {
     })
     if (unknownLease.kind !== 'accepted') throw new Error('Expected unknown lease')
     now = '2026-07-19T09:00:03.000Z'
-    expect(unknownTracer.acquire({
+    expect(await unknownTracer.acquire({
       invocationRef: unknownPrepared.invocationRef,
       expectedInvocationVersion: unknownLease.view.invocationVersion,
       authorityRef: unknownPrepared.authority!.reference,
@@ -785,14 +783,14 @@ describe('in-memory Action Invocation tracer', () => {
       ...options,
       nextInvocationRef: () => `dev:action-invocation:cancel:${origin.kind}`,
     })
-    const cancelPrepared = cancellationTracer.prepare({
+    const cancelPrepared = await cancellationTracer.prepare({
       origin,
       actor,
       input: inquiryInput,
       context: {},
       freshnessMs: 300_000,
     })
-    const cancelAuthority = cancellationTracer.decide({
+    const cancelAuthority = await cancellationTracer.decide({
       invocationRef: cancelPrepared.invocationRef,
       expectedInvocationVersion: cancelPrepared.invocationVersion,
       authorityRef: cancelPrepared.authority!.reference,
@@ -801,7 +799,7 @@ describe('in-memory Action Invocation tracer', () => {
       accept: true,
     })
     if (cancelAuthority.kind !== 'accepted') throw new Error('Expected accepted authority')
-    expect(cancellationTracer.cancel({
+    expect(await cancellationTracer.cancel({
       invocationRef: cancelPrepared.invocationRef,
       expectedInvocationVersion: cancelAuthority.view.invocationVersion,
       actor,
@@ -843,14 +841,14 @@ describe('in-memory Action Invocation tracer', () => {
       nextAuthorityRef: () => 'opaque:authority:late-completion',
       nextAttemptRef: () => 'dev:attempt:late-completion:1',
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin: standaloneOrigin,
       actor,
       input: inquiryInput,
       context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
-    const authority = tracer.decide({
+    const authority = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -859,7 +857,7 @@ describe('in-memory Action Invocation tracer', () => {
       accept: true,
     })
     if (authority.kind !== 'accepted') throw new Error('Expected accepted authority')
-    const acquired = tracer.acquire({
+    const acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: authority.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -885,7 +883,7 @@ describe('in-memory Action Invocation tracer', () => {
       state: 'leased',
       release: 'possibly_released',
     })
-    const cancelled = tracer.cancel({
+    const cancelled = await tracer.cancel({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: releaseStarted.invocationVersion,
       actor,

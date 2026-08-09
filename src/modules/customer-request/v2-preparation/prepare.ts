@@ -41,7 +41,7 @@ export async function prepareActionPreparation(
   if (current.aggregate.outcome !== 'plan_ready') {
     return { kind: 'refused', reason: 'request_not_ready' }
   }
-  const model = await ports.loadActionCapabilityModel(current.aggregate, action)
+  const model = await ports.loadActionCapabilityModel(current.aggregate, action, args.now)
   if (model === undefined) {
     return { kind: 'needs_attention', reason: 'capability_graph_changed' }
   }

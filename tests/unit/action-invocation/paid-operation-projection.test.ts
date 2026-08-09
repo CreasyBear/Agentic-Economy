@@ -37,7 +37,7 @@ function baseSemantics(): Omit<PaidOperationSemantics, 'schema'> {
         },
       ],
     },
-    maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+    maximumAuthorizedCharge: { currency: 'USD', units: '1', exponent: 2 },
     queryRelease: {
       state: 'released',
       recipient: 'provider:development-quote',
@@ -207,7 +207,7 @@ describe('agentic-paid-operation:v1 projections', () => {
       ...baseSemantics(),
       settlement: {
         state: 'settled',
-        amount: { currency: 'USD', amountMinor: 1 },
+        amount: { currency: 'USD', units: '1', exponent: 2 },
         evidenceRefs: [],
       },
     })).toThrow('paid_operation_settlement_invalid')
@@ -231,13 +231,13 @@ describe('agentic-paid-operation:v1 projections', () => {
       paymentAttempt: {
         paymentIdentifier: 'payment:settled-amount',
         custodyRef: `sha256:${'a'.repeat(64)}`,
-        settledAmount: { currency: 'USD', amountMinor: 37 },
+        settledAmount: { currency: 'USD', units: '37', exponent: 2 },
         state: 'settled',
         evidenceRefs: ['evidence:provider-settlement'],
       },
       operation: baseSemantics().operation,
       presentation: baseSemantics().presentation,
-      maximumAuthorizedCharge: { currency: 'USD', amountMinor: 100 },
+      maximumAuthorizedCharge: { currency: 'USD', units: '100', exponent: 2 },
       queryRecipient: 'provider:development-quote',
       resultDelivery: { state: 'not_delivered' },
       environment: baseSemantics().environment,
@@ -245,7 +245,7 @@ describe('agentic-paid-operation:v1 projections', () => {
 
     expect(semantics.settlement).toEqual({
       state: 'settled',
-      amount: { currency: 'USD', amountMinor: 37 },
+      amount: { currency: 'USD', units: '37', exponent: 2 },
       evidenceRefs: ['evidence:provider-settlement'],
     })
     expect(semantics.paymentAuthorization).toEqual(expect.objectContaining({
@@ -321,7 +321,7 @@ describe('agentic-paid-operation:v1 projections', () => {
         paymentSubmission: { state: 'observed', evidenceRefs: ['evidence:dispatch'] },
         settlement: {
           state: 'settled',
-          amount: { currency: 'USD', amountMinor: 1 },
+          amount: { currency: 'USD', units: '1', exponent: 2 },
           evidenceRefs: ['evidence:settlement'],
         },
         resultDelivery: {
@@ -337,7 +337,7 @@ describe('agentic-paid-operation:v1 projections', () => {
         paymentSubmission: { state: 'observed', evidenceRefs: ['evidence:dispatch'] },
         settlement: {
           state: 'settled',
-          amount: { currency: 'USD', amountMinor: 1 },
+          amount: { currency: 'USD', units: '1', exponent: 2 },
           evidenceRefs: ['evidence:settlement'],
         },
         resultDelivery: {

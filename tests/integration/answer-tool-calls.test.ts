@@ -6,11 +6,10 @@ import {
   type AnswerTurnRecord,
 } from '@/modules/answer-thread/public'
 import {
-  appendAnswerTurnWithToolCalls,
-  readTurnToolCalls,
-  setAnswerThreadPortForTests,
-  setAnswerToolCallPortForTests,
-} from '@/modules/answer-thread/testing'
+  persistReservedAnswerTurn,
+  reserveAnswerTurn,
+} from '@/modules/answer-thread/answer-thread.functions'
+import { createAnswerThreadTestStore, installAnswerThreadTestPort } from '../helpers/answer-thread-test-port'
 import {
   buildAnswerRunReport,
   type AnswerToolCallRecord,
@@ -18,135 +17,104 @@ import {
 } from '@/modules/answer-thread/harness'
 import { buildHarnessRunReport } from '@/modules/harness/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { answerTurnFinalizationDigest } from '@/modules/answer-thread/internal/turn-digests'
 
 describe('answerToolCalls persistence', () => {
   let resetThreadPort: () => void
-  let resetToolCallPort: () => void
 
   afterEach(() => {
-    resetToolCallPort()
     resetThreadPort()
   })
 
   it('buffers tool-call records in memory and persists them with the turn', async () => {
-    const threads = new Map<string, AnswerThreadRecord>()
-    const turns = new Map<string, AnswerTurnRecord>()
-    const toolCalls = new Map<string, AnswerToolCallRecord>()
-
-    resetThreadPort = setAnswerThreadPortForTests({
-      createThread: async (args) => {
-        const now = Date.now()
-        threads.set(args.threadId, {
-          threadId: args.threadId,
-          pseudonymousSessionId: args.pseudonymousSessionId,
-          title: args.title,
-          sharePolicy: 'public',
-          createdAt: now,
-          updatedAt: now,
-        })
-        return { threadId: args.threadId }
-      },
-      appendTurn: async (args) => {
-        turns.set(args.turnId, { ...args, createdAt: Date.now() })
-        return { turnId: args.turnId }
-      },
-      appendTurnWithToolCalls: async (args) => {
-        const { toolCalls: inputToolCalls, ...turnArgs } = args
-        turns.set(args.turnId, { ...turnArgs, createdAt: Date.now() })
-        for (const call of inputToolCalls) {
-          toolCalls.set(call.toolCallId, {
-            ...call,
-            turnId: args.turnId,
-            createdAt: Date.now(),
-          })
-        }
-        return { turnId: args.turnId, insertedToolCalls: inputToolCalls.length }
-      },
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async (threadId) => {
-        const thread = threads.get(threadId)
-        if (thread === undefined) {
-          return null
-        }
-        return buildPublicThreadProjection(
-          thread,
-          [...turns.values()].filter((turn) => turn.threadId === threadId),
-        )
-      },
-      getThreadTurns: async (threadId, _sessionId, paginationOpts) => {
-        const rows = [...turns.values()].filter((turn) => turn.threadId === threadId)
-        const start = paginationOpts.cursor === null ? 0 : Number(paginationOpts.cursor)
-        const page = rows.slice(start, start + paginationOpts.numItems)
-        return {
-          page,
-          isDone: start + page.length >= rows.length,
-          continueCursor: String(start + page.length),
-        }
-      },
-    })
-
-    resetToolCallPort = setAnswerToolCallPortForTests({
-      appendToolCalls: async (args) => {
-        for (const call of args.toolCalls) {
-          toolCalls.set(call.toolCallId, {
-            ...call,
-            turnId: args.turnId,
-            createdAt: Date.now(),
-          })
-        }
-        return { inserted: args.toolCalls.length }
-      },
-      readTurnToolCalls: async (turnId, _sessionId, paginationOpts) => {
-        const rows = [...toolCalls.values()]
-          .filter((call) => call.turnId === turnId)
-          .sort((a, b) => a.seq - b.seq)
-        const start = paginationOpts.cursor === null ? 0 : Number(paginationOpts.cursor)
-        const page = rows.slice(start, start + paginationOpts.numItems)
-        return {
-          page,
-          isDone: start + page.length >= rows.length,
-          continueCursor: String(start + page.length),
-        }
-      },
-    })
-
+    const store = createAnswerThreadTestStore()
     const threadId = 'thread-tool-1'
     const turnId = 'turn-tool-1'
-
-    // Orchestrator pattern: create thread, then atomically append the turn and
-    // its buffered tool calls before emitting a terminal complete event.
-    await createThread(threadId, 'session-1', 'after hours plumber Preston')
+    store.threads.set(threadId, {
+      threadId,
+      pseudonymousSessionId: 'session-1',
+      title: 'after hours plumber Preston',
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    })
+    resetThreadPort = installAnswerThreadTestPort(store)
     const buffered: AnswerToolCallRecord[] = [
       buildToolCall('tc-1', turnId, 1, 'registry.search', ['parramatta-emergency-plumbing'], 1),
       buildToolCall('tc-2', turnId, 2, 'registry.detail', ['parramatta-emergency-plumbing'], 1),
     ]
-    await appendAnswerTurnWithToolCalls({
-      turnId,
+    const reservation = await reserveAnswerTurn({
       threadId,
-      pseudonymousSessionId: 'session-1',
-      seq: 1,
+      sessionId: 'session-1',
       query: 'after hours plumber Preston',
-      intent: 'refine_search',
-      evidenceJson: JSON.stringify(currentEvidence({ toolCalls: buffered })),
-      snapshotHash: 'hash-1',
-      proseJson: JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' }),
-      artifactKindsJson: '[]',
-      status: 'complete',
-      toolCalls: buffered.map((record) => ({
-        toolCallId: record.toolCallId,
-        seq: record.seq,
-        toolId: record.toolId,
-        inputJson: record.inputJson,
-        resultSummaryJson: record.resultSummaryJson,
-        resultJson: record.resultJson,
-        resultHash: record.resultHash,
-        status: record.status,
-      })),
+      requestDigest: 'digest-tool-1',
+      reservationKey: 'reservation-tool-1',
+      title: 'after hours plumber Preston',
+    })
+    if (reservation.kind !== 'reserved') {
+      throw new Error(`expected reserved turn, got ${reservation.kind}`)
+    }
+    const generation = 0
+    const leaseOwner = 'worker:tool-calls'
+    const reserved = store.reservations.get(reservation.reservationKey)
+    if (reserved === undefined) throw new Error('expected stored reservation')
+    store.reservations.set(reservation.reservationKey, {
+      ...reserved,
+      runGeneration: generation,
+      leaseOwner,
+      leaseExpiresAt: Date.now() + 60_000,
+    })
+    const toolCallInputs = buffered.map((record) => ({
+      toolCallId: record.toolCallId,
+      seq: record.seq,
+      toolId: record.toolId,
+      inputJson: record.inputJson,
+      resultSummaryJson: record.resultSummaryJson,
+      resultJson: record.resultJson,
+      resultHash: record.resultHash,
+      status: record.status,
+    }))
+    const evidenceJson = JSON.stringify(currentEvidence({ toolCalls: buffered }))
+    const proseJson = JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' })
+    const answerDigest = answerTurnFinalizationDigest({
+      turn: {
+        turnId: reservation.turnId,
+        threadId: reservation.threadId,
+        seq: reservation.turnSeq,
+        query: 'after hours plumber Preston',
+        intent: 'refine_search',
+        evidenceJson,
+        snapshotHash: 'hash-1',
+        proseJson,
+        artifactKindsJson: '[]',
+        status: 'complete',
+      },
+      toolCalls: toolCallInputs,
     })
 
-    const stored = await readTurnToolCalls(turnId, 'session-1', { cursor: null, numItems: 25 })
-    expect(stored.page.map((call) => call.toolCallId)).toEqual(['tc-1', 'tc-2'])
-    expect(stored.page[0]?.toolId).toBe('registry.search')
+    const persisted = await persistReservedAnswerTurn({
+      reservationKey: reservation.reservationKey,
+      requestDigest: 'digest-tool-1',
+      sessionId: 'session-1',
+      threadId: reservation.threadId,
+      turnId: reservation.turnId,
+      turnSeq: reservation.turnSeq,
+      generation,
+      leaseOwner,
+      answerDigest,
+      query: 'after hours plumber Preston',
+      intent: 'refine_search',
+      evidenceJson,
+      snapshotHash: 'hash-1',
+      proseJson,
+      artifactKindsJson: '[]',
+      toolCalls: toolCallInputs,
+    })
+    expect(persisted.kind).toBe('persisted')
+    expect(store.persisted).toHaveLength(1)
+    expect(store.persisted[0]).toMatchObject({
+      turnId: reservation.turnId,
+      toolCalls: toolCallInputs,
+    })
   })
 
   it('keeps tool-call evidence out of the public thread projection', async () => {
@@ -154,8 +122,7 @@ describe('answerToolCalls persistence', () => {
       threadId: 'thread-share-1',
       pseudonymousSessionId: 'session-1',
       title: 'after hours plumber Preston',
-      sharePolicy: 'public',
-      createdAt: 1_000,
+            createdAt: 1_000,
       updatedAt: 2_000,
     }
     const turn: AnswerTurnRecord = {
@@ -217,12 +184,6 @@ function currentEvidence(input: {
       evidence: draft,
     }),
   }
-}
-
-
-async function createThread(threadId: string, sessionId: string, title: string): Promise<void> {
-  const { createAnswerThread } = await import('@/modules/answer-thread/answer-thread.functions')
-  await createAnswerThread({ threadId, pseudonymousSessionId: sessionId, title })
 }
 
 function buildToolCall(

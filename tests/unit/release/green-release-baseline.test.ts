@@ -16,6 +16,9 @@ type WorkflowStep = {
 }
 
 type WorkflowJob = {
+  if?: string
+  needs?: string
+  environment?: string
   steps?: WorkflowStep[]
   env?: Record<string, string>
 }
@@ -68,7 +71,7 @@ describe('green release baseline', () => {
     }
   })
 
-  it('runs one source gate for every required CI event and publishes sanitized evidence', () => {
+  it('keeps pull requests credential-free and protected releases generated-source proof', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
     const events = workflow.on ?? {}
     expect(events).toHaveProperty('pull_request')
@@ -77,15 +80,28 @@ describe('green release baseline', () => {
     const steps = workflowSteps(workflow)
 
     const source = workflow.jobs?.['source-proof']
-    const codegen = source?.steps?.find((step) => step.name === 'Verify committed Convex generated source')
-    expect(codegen?.run).toBe('npm run check:convex-codegen')
-    expect(codegen?.env?.CONVEX_DEPLOY_KEY).toBe('${{ secrets.CONVEX_DEPLOY_KEY }}')
+    expect(source).toBeDefined()
+    const sourceConfig = JSON.stringify(source ?? {})
+    expect(sourceConfig).not.toContain('CONVEX_DEPLOY_KEY')
+    expect(sourceConfig).not.toContain('secrets.')
+    const sourceCodegen = source?.steps?.find((step) => step.name === 'Verify committed Convex generated source')
+    expect(sourceCodegen).toBeUndefined()
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
     expect(sourceGate?.env).toBeUndefined()
 
     const hosted = workflow.jobs?.['hosted-proof']
     expect(hosted).toBeDefined()
+    expect(hosted?.if).toBe('github.event_name != \'pull_request\' && github.ref == \'refs/heads/main\'')
+    expect(hosted?.environment).toBe('production')
+    expect(hosted?.needs).toBe('source-proof')
+    const hostedCodegenIndex = hosted?.steps?.findIndex((step) => step.name === 'Verify committed Convex generated source') ?? -1
+    const hostedCodegen = hosted?.steps?.[hostedCodegenIndex]
+    expect(hostedCodegenIndex).toBeGreaterThanOrEqual(0)
+    expect(hosted?.steps?.findIndex((step) => step.name === 'Refuse a checkout other than the triggering revision')).toBeLessThan(hostedCodegenIndex)
+    expect(hosted?.steps?.findIndex((step) => step.name === 'Deploy the dual-compatible exact clean source revision')).toBeGreaterThan(hostedCodegenIndex)
+    expect(hostedCodegen?.run).toBe('npm run check:convex-codegen')
+    expect(hostedCodegen?.env?.CONVEX_DEPLOY_KEY).toBe('${{ secrets.CONVEX_DEPLOY_KEY }}')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     expect(uploads.length).toBeGreaterThan(0)

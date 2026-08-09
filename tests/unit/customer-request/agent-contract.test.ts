@@ -230,7 +230,10 @@ describe('Customer Request agent contract', () => {
       preparedAction: {
         actionRef: 'prepared-action:v2:opaque', businessName: 'Sandbox Option Two',
         offeringLabel: 'Sandbox Option Two', summary: 'Labelled sandbox supply.',
-        price: { currency: 'AUD', minimumAmountMinor: 900, maximumAmountMinor: 900 },
+        price: {
+          minimum: { currency: 'AUD', units: '900', exponent: 2 },
+          maximum: { currency: 'AUD', units: '900', exponent: 2 },
+        },
         materialTerms: [{ label: 'Environment', value: 'Sandbox only; not real supply.' }],
         cancellation: { kind: 'unsupported' }, validUntil: 10_000,
         selection: {
@@ -244,7 +247,10 @@ describe('Customer Request agent contract', () => {
         effects: [{ class: 'data_release', reversibility: 'irreversible' }],
         alternatives: [{
           businessName: 'Sandbox Option One',
-          price: { currency: 'AUD', minimumAmountMinor: 1_200, maximumAmountMinor: 1_200 },
+          price: {
+            minimum: { currency: 'AUD', units: '1200', exponent: 2 },
+            maximum: { currency: 'AUD', units: '1200', exponent: 2 },
+          },
           validUntil: 10_000,
         }],
       },

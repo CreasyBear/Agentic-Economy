@@ -56,10 +56,6 @@ img {
   outline-offset: -1px;
 }
 
-body[data-ae-surface='register'] img {
-  outline-color: var(--ae-image-outline);
-}
-
 [data-numeric] {
   font-variant-numeric: tabular-nums;
 }

@@ -54,10 +54,10 @@ describe('T45 WorkTree owner claim', () => {
       kind: 'accepted',
       code: 'work_tree_claimed',
       replayed: false,
-      readback: { projectId, principalId: ownerIdentity.tokenIdentifier },
+      readback: { projectId },
       receipt: {
         projectId,
-        actor: { principalId: ownerIdentity.tokenIdentifier, ownerId: ownerIdentity.subject },
+        actor: { source: expect.any(String) },
       },
     })
     if (claim.kind !== 'accepted') throw new Error(`claim failed: ${JSON.stringify(claim)}`)

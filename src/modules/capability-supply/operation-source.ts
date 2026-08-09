@@ -10,6 +10,7 @@ import {
   deserializeOperationSearchResult,
   deserializeInspectPlanResult,
   type CapabilityOperationSourcePort,
+  type CatalogOfferingOperationMapEntry,
   type InspectPlanInput,
   type InspectPlanResult,
   type InspectPlanWireResult,
@@ -28,29 +29,33 @@ const searchQuery = sourceQuery<OperationSearchInput, OperationSearchWireResult>
 const detailQuery = sourceQuery<OperationDetailInput, OperationDetailWireResult>('capabilitySupplyOperations:detail')
 const compareQuery = sourceQuery<OperationCompareInput, OperationCompareWireResult>('capabilitySupplyOperations:compare')
 const inspectPlanQuery = sourceQuery<InspectPlanInput, InspectPlanWireResult>('capabilitySupplyOperations:inspectPlan')
-
-let sourcePortForTests: CapabilityOperationSourcePort | undefined
+const offeringOperationMapQuery = sourceQuery<{ businessIds: string[] }, CatalogOfferingOperationMapEntry[]>('capabilitySupplyOperations:offeringOperationMap')
 
 export function readCapabilityOperationSearch(input: OperationSearchInput): Promise<OperationSearchResult> {
-  return sourcePortForTests === undefined
-    ? callPublicSourceQuery(searchQuery, input).then(deserializeOperationSearchResult)
-    : searchCapabilityOperations(sourcePortForTests, input)
+  return callPublicSourceQuery(searchQuery, input).then(deserializeOperationSearchResult)
 }
 
 export function readCapabilityOperationDetail(input: OperationDetailInput): Promise<OperationDetailResult> {
-  return sourcePortForTests === undefined
-    ? callPublicSourceQuery(detailQuery, input).then(deserializeOperationDetailResult)
-    : detailCapabilityOperation(sourcePortForTests, input)
+  return callPublicSourceQuery(detailQuery, input).then(deserializeOperationDetailResult)
 }
 
 export function readCapabilityOperationCompare(input: OperationCompareInput): Promise<OperationCompareResult> {
-  return sourcePortForTests === undefined
-    ? callPublicSourceQuery(compareQuery, input).then(deserializeOperationCompareResult)
-    : compareCapabilityOperations(sourcePortForTests, input)
+  return callPublicSourceQuery(compareQuery, input).then(deserializeOperationCompareResult)
 }
 
 export function readCapabilityOperationInspectPlan(input: InspectPlanInput): Promise<InspectPlanResult> {
-  return sourcePortForTests === undefined
-    ? callPublicSourceQuery(inspectPlanQuery, input).then(deserializeInspectPlanResult)
-    : inspectCapabilityOperationPlan(sourcePortForTests, input)
+  return callPublicSourceQuery(inspectPlanQuery, input).then(deserializeInspectPlanResult)
+}
+
+/**
+ * W1 origin seam: returns, per catalog offering, the single admitted capability
+ * operation surface linked via the capability offering's `catalog_offering`
+ * origin for the given businesses. Only uniquely-resolved offeringRefs are
+ * returned; an offering that maps to zero or multiple operations is omitted so
+ * the services surface never fabricates a link.
+ */
+export function readCatalogOfferingOperationMap(
+  businessIds: readonly string[],
+): Promise<CatalogOfferingOperationMapEntry[]> {
+  return callPublicSourceQuery(offeringOperationMapQuery, { businessIds: [...businessIds] })
 }

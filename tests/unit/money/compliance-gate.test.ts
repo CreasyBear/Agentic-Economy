@@ -10,33 +10,34 @@ import {
   evaluateLiveMoneyGate,
   LIVE_MONEY_GATE_POLICY,
   validatePaymentBinding,
+  type ExactAmount,
+  type LedgerState,
   type MoneyAccount,
   type PaymentBinding,
 } from '../../../src/modules/money/public'
 
 const accounts: readonly MoneyAccount[] = [
-  { accountRef: accountRefForOperator('key-1', 'USD'), accountKind: 'operator_credit', principalId: 'clerk_api_key:key-1', currency: 'USD', balanceMinor: 1_000, version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
-  { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', currency: 'USD', balanceMinor: 0, version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
-  { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', currency: 'USD', balanceMinor: 0, version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForOperator('key-1', 'USD'), accountKind: 'operator_credit', principalId: 'clerk_api_key:key-1', balance: amount('USD', '1000', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
 ]
 
 const approved: PaymentBinding = {
-  amountMinor: 500,
-  currency: 'USD',
+  amount: amount('USD', '500', 2),
   providerRef: accountRefForProvider('business-1', 'USD'),
   actionVersion: 'published-operation:v1',
   expiresAt: 100,
   idempotencyKey: 'charge-key-1',
 }
 
-function chargeInput(state: ReturnType<typeof createLedgerState>, binding: PaymentBinding = approved) {
+function chargeInput(state: LedgerState, binding: PaymentBinding = approved) {
   return {
     state,
     transaction: { transactionRef: 'charge-1', kind: 'charge' as const, idempotencyKey: binding.idempotencyKey, inputDigest: 'input-1', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 1, now: 10 },
     operatorAccountRef: accountRefForOperator('key-1', 'USD'),
     providerAccountRef: accountRefForProvider('business-1', 'USD'),
     rakeAccountRef: accountRefForRake('USD'),
-    grossAmountMinor: binding.amountMinor,
+    grossAmount: binding.amount,
     rakeConfig: { rakeBps: 1_000 },
     priceDigest: 'price-1',
     principalId: 'clerk_api_key:key-1',
@@ -77,21 +78,21 @@ describe('T52 first-dollar money gate', () => {
 
     const topup = applyTopup({
       state: createLedgerState(accounts),
-      transaction: { transactionRef: 'topup-1', kind: 'topup', idempotencyKey: 'topup-key', inputDigest: 'topup-input', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 0, now: 1 },
+      transaction: { transactionRef: 'topup-1', kind: 'topup' as const, idempotencyKey: 'topup-key', inputDigest: 'topup-input', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 0, now: 1 },
       accountRef: accountRefForOperator('key-1', 'USD'),
-      amountMinor: 1_000,
+      amount: amount('USD', '1000', 2),
       sourceDigest: 'source-topup',
       evidenceRefs: ['labelled_local_dev:topup'],
     })
     const charged = authorizePaidCharge(chargeInput(topup.state))
-    expect(charged.result).toMatchObject({ kind: 'accepted', chargeState: 'paid', amountMinor: 500 })
+    expect(charged.result).toMatchObject({ kind: 'accepted', chargeState: 'paid', amount: amount('USD', '500', 2) })
     const retried = authorizePaidCharge(chargeInput(charged.state))
     expect(retried.result).toMatchObject({ kind: 'accepted', transactionRef: 'charge-1' })
     expect(retried.state.entries).toHaveLength(charged.state.entries.length)
   })
 
   it.each([
-    ['amount', { amountMinor: 600 }],
+    ['amount', { amount: amount('USD', '600', 2) }],
     ['provider', { providerRef: 'business:other:USD' }],
     ['action version', { actionVersion: 'published-operation:v2' }],
   ])('requires fresh approval when the %s widens', (_label, changes) => {
@@ -102,9 +103,9 @@ describe('T52 first-dollar money gate', () => {
   it('refuses an expired exact approval without touching the ledger', () => {
     const topup = applyTopup({
       state: createLedgerState(accounts),
-      transaction: { transactionRef: 'topup-1', kind: 'topup', idempotencyKey: 'topup-key', inputDigest: 'topup-input', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 0, now: 1 },
+      transaction: { transactionRef: 'topup-1', kind: 'topup' as const, idempotencyKey: 'topup-key', inputDigest: 'topup-input', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 0, now: 1 },
       accountRef: accountRefForOperator('key-1', 'USD'),
-      amountMinor: 1_000,
+      amount: amount('USD', '1000', 2),
       sourceDigest: 'source-topup',
       evidenceRefs: ['labelled_local_dev:topup'],
     })
@@ -116,3 +117,8 @@ describe('T52 first-dollar money gate', () => {
     expect(result.state.transactions).toHaveLength(topup.state.transactions.length)
   })
 })
+
+function amount(currency: string, units: string, exponent: number): ExactAmount {
+  return { currency, units, exponent }
+}
+

@@ -6,7 +6,13 @@ import { handleCustomerRequestMessagePost, type MessageResult } from '@/lib/serv
 import type { ConfirmationResult } from '@/lib/server/customer-request-confirmation-api'
 import { handleCustomerRequestPost, type SubmitResult } from '@/lib/server/customer-request-api'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
-import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
+import {
+  BROWSER_GUEST_LIFETIME_SECONDS,
+  browserGuestPrincipalId,
+  mintBrowserGuestAssertion,
+  readBrowserGuestSigningKey,
+  verifyBrowserGuestAssertion,
+} from '@/lib/server/browser-guest-assertion'
 import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
 import type {
   CustomerRequestAgentResult,
@@ -14,12 +20,9 @@ import type {
   CustomerRequestProblemResult,
   CustomerRequestProblemStatusChange,
 } from '@/modules/customer-request/agent-contract'
-import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
 
 const COOKIE_NAME = 'ae_request_session'
-const SESSION_VERSION = 'v1'
-const SESSION_LIFETIME_SECONDS = 24 * 60 * 60
-const SESSION_LIFETIME_MS = SESSION_LIFETIME_SECONDS * 1_000
 const SESSION_SCOPE = 'customer_requests:create'
 
 type BrowserActionResult = SubmitResult | FactsResult | MessageResult | CustomerRequestProjection | InspectResult
@@ -137,7 +140,7 @@ async function handleGuestSubmit(request: Request, session: GuestSession, option
   return handleCustomerRequestPost(request, {
     submit: async (args) => await callAsGuest<SubmitResult>('customerRequestApplication:submit', 'submit', {
       ...args,
-      delegatedAgentId: guestPrincipalId(session.sessionId),
+      delegatedAgentId: browserGuestPrincipalId(session.sessionId),
     }, session, options),
   })
 }
@@ -149,13 +152,13 @@ async function callAsGuest<Result extends BrowserActionResult>(
   session: GuestSession,
   options: BrowserApiOptions,
 ): Promise<Result> {
-  const key = readServiceKey(options)
+  const key = readBrowserGuestSigningKey(browserGuestAssertionOptions(options))
   if (key === undefined) throw new Error('customer_request_browser_session_unavailable')
-  const principalId = guestPrincipalId(session.sessionId)
+  const principalId = browserGuestPrincipalId(session.sessionId)
   const serviceAuth = await createCustomerRequestServiceAssertion({
     key,
     operation,
-    command: command as never,
+    command: toStableHashValue(command),
     principal: {
       principalId,
       ownerId: principalId,
@@ -170,28 +173,30 @@ async function callAsGuest<Result extends BrowserActionResult>(
 }
 
 async function createGuestSession(options: BrowserApiOptions): Promise<GuestSession | undefined> {
-  const key = readServiceKey(options)
+  const key = readBrowserGuestSigningKey(browserGuestAssertionOptions(options))
   if (key === undefined) return undefined
   const sessionId = options.randomUUID?.() ?? crypto.randomUUID()
   const issuedAt = (options.now ?? Date.now)()
-  const material = `${SESSION_VERSION}.${sessionId}.${issuedAt}`
-  const signature = await sign(key, material)
-  return { sessionId, issuedAt, token: `${material}.${signature}` }
+  const token = await mintBrowserGuestAssertion(key, { sessionId, issuedAt })
+  return { sessionId, issuedAt, token }
 }
 
 async function readGuestSession(request: Request, options: BrowserApiOptions): Promise<GuestSession | undefined> {
-  const key = readServiceKey(options)
+  const assertionOptions = browserGuestAssertionOptions(options)
+  const key = readBrowserGuestSigningKey(assertionOptions)
   if (key === undefined) return undefined
   const token = readCookie(request.headers.get('cookie'), COOKIE_NAME)
   if (token === undefined) return undefined
-  const [version, sessionId, rawIssuedAt, signature, ...rest] = token.split('.')
-  if (rest.length > 0 || version !== SESSION_VERSION || !validSessionId(sessionId) || signature === undefined) return undefined
-  const issuedAt = Number(rawIssuedAt)
-  const now = (options.now ?? Date.now)()
-  if (!Number.isSafeInteger(issuedAt) || issuedAt > now + 5_000 || now - issuedAt > SESSION_LIFETIME_MS) return undefined
-  const material = `${version}.${sessionId}.${issuedAt}`
-  if (!await verify(key, material, signature)) return undefined
-  return { sessionId, issuedAt, token }
+  const verified = await verifyBrowserGuestAssertion(key, token, assertionOptions)
+  if (verified === undefined) return undefined
+  return { sessionId: verified.sessionId, issuedAt: verified.issuedAt, token }
+}
+
+function browserGuestAssertionOptions(options: BrowserApiOptions) {
+  return {
+    ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  }
 }
 
 function withGuestCookie(response: Response, session: GuestSession, request: Request, options: BrowserApiOptions): Response {
@@ -203,37 +208,11 @@ function withGuestCookie(response: Response, session: GuestSession, request: Req
       path: '/api/requests',
       httpOnly: true,
       sameSite: 'Lax',
-      maxAge: SESSION_LIFETIME_SECONDS,
+      maxAge: BROWSER_GUEST_LIFETIME_SECONDS,
       secure: isSecureRequest(request, nodeEnv === undefined ? {} : { NODE_ENV: nodeEnv }),
     }),
   )
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-function readServiceKey(options: BrowserApiOptions): string | undefined {
-  const key = (options.env ?? process.env).AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
-  return key !== undefined && key.length >= 32 ? key : undefined
-}
-
-function guestPrincipalId(sessionId: string): string { return `browser_guest:${sessionId}` }
-function validSessionId(value: string | undefined): value is string {
-  return value !== undefined && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
-}
-
-async function sign(key: string, material: string): Promise<string> {
-  const signature = await crypto.subtle.sign('HMAC', await importKey(key, ['sign']), new TextEncoder().encode(material))
-  return base64Codec.toBase64Url(new Uint8Array(signature))
-}
-
-async function verify(key: string, material: string, signature: string): Promise<boolean> {
-  const bytes = tryDecodeBase64Url(signature)
-  if (bytes === undefined) return false
-  return crypto.subtle.verify(
-    'HMAC', await importKey(key, ['verify']), new Uint8Array(bytes).buffer, new TextEncoder().encode(material),
-  )
-}
-
-async function importKey(key: string, usages: Array<'sign' | 'verify'>): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, usages)
-}
 

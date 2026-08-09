@@ -505,7 +505,7 @@ function isActionableNextStep(input: TurnScoreInput): boolean {
     return /\b(open|details|provider page|business page|inquiry|contact)\b/i.test(nextStep)
   }
 
-  return /\b(try|search|browse|another|different|nearby|details|listed)\b/i.test(nextStep)
+  return /\b(try|search|browse|another|different|nearby|details|listed|use)\b/i.test(nextStep)
 }
 
 function answerShapeMatchesResult(input: TurnScoreInput): boolean {
@@ -547,7 +547,10 @@ function artifactStreamMatchesResult(input: TurnScoreInput): boolean {
 
 function workLogMatchesResult(input: TurnScoreInput): boolean {
   const ids = input.result.workStepIds
-  if (ids.length === 0 || ids.some((id) => !/^step-\d+$/.test(id))) {
+  if (ids.length === 0) {
+    return (input.testCase.expected.toolQueries?.length ?? 0) === 0
+  }
+  if (ids.some((id) => !/^step-\d+$/.test(id))) {
     return false
   }
   if (input.result.workSteps.some((step) => step.status === 'running')) {

@@ -4,6 +4,7 @@ import type {
   PayoutAccountState,
   PayoutState,
 } from '../public'
+import { compareExactAmounts } from './exact-amount'
 
 export type PayoutPolicyResult<T> = Readonly<{
   kind: 'accepted'
@@ -18,6 +19,7 @@ export type PayoutAccountTransitionInput = Readonly<{
   current?: MoneyPayoutAccount
   businessId: string
   currency: string
+  exponent: number
   stripeAccountId: string
   event:
     | Readonly<{ kind: 'onboarding_started'; observedAt: number }>
@@ -50,6 +52,7 @@ export function transitionPayoutAccount(input: PayoutAccountTransitionInput): Pa
   const base = current ?? {
     businessId: input.businessId,
     currency: input.currency,
+    exponent: input.exponent,
     stripeAccountId: input.stripeAccountId,
     state: 'not_started' as const,
     detailsSubmitted: false,
@@ -58,7 +61,12 @@ export function transitionPayoutAccount(input: PayoutAccountTransitionInput): Pa
     createdAt: input.event.observedAt,
     updatedAt: input.event.observedAt,
   }
-  if (base.businessId !== input.businessId || base.currency !== input.currency || base.stripeAccountId !== input.stripeAccountId) {
+  if (
+    base.businessId !== input.businessId
+    || base.currency !== input.currency
+    || base.exponent !== input.exponent
+    || base.stripeAccountId !== input.stripeAccountId
+  ) {
     return { kind: 'refused', code: 'stripe_setup_required', retryable: false }
   }
   if (input.event.kind === 'onboarding_started') {
@@ -111,12 +119,17 @@ export function payoutReviewWindow(input: Readonly<{ now: number }>): PayoutRevi
 
 export function transitionPayout(input: PayoutTransitionInput): PayoutPolicyResult<MoneyPayout> {
   const current = input.current
+  if (
+    compareExactAmounts(current.grossAccrual, current.rake) === undefined
+    || compareExactAmounts(current.grossAccrual, current.providerNet) === undefined
+    || compareExactAmounts(current.providerNet, current.minimumPayout) === undefined
+  ) return { kind: 'refused', code: 'payout_not_ready', retryable: false }
   if (input.action.kind === 'review') {
     if (!input.action.autoApprove || current.state !== 'review') return { kind: 'accepted', value: current }
     if (input.account.state !== 'ready' || !input.account.detailsSubmitted || !input.account.recipientCapabilityActive) {
       return { kind: 'accepted', value: { ...current, state: 'held_kyc', updatedAt: input.now } }
     }
-    if (current.providerNetMinor < current.minimumPayoutMinor) {
+    if (compareExactAmounts(current.providerNet, current.minimumPayout) === -1) {
       return { kind: 'accepted', value: { ...current, state: 'held_threshold', updatedAt: input.now } }
     }
     return { kind: 'accepted', value: { ...current, state: 'held_threshold', updatedAt: input.now } }
@@ -125,7 +138,7 @@ export function transitionPayout(input: PayoutTransitionInput): PayoutPolicyResu
     if (current.state === 'outcome_unknown') return { kind: 'refused', code: 'payout_reconciliation_required', retryable: false }
     if (current.state !== 'held_threshold' && current.state !== 'held_kyc') return { kind: 'refused', code: 'payout_not_ready', retryable: false }
     if (input.account.state !== 'ready' || !input.account.detailsSubmitted || !input.account.recipientCapabilityActive) return { kind: 'refused', code: 'payout_not_ready', retryable: false }
-    if (current.providerNetMinor < current.minimumPayoutMinor) return { kind: 'refused', code: 'payout_below_threshold', retryable: false }
+    if (compareExactAmounts(current.providerNet, current.minimumPayout) === -1) return { kind: 'refused', code: 'payout_below_threshold', retryable: false }
     return { kind: 'accepted', value: { ...current, state: 'transfer_pending', ...(input.action.stripeTransferId === undefined ? {} : { stripeTransferId: input.action.stripeTransferId }), updatedAt: input.now } }
   }
   if (input.action.kind === 'transfer_failed') {

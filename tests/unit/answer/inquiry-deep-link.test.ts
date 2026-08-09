@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { runAnswerToolUseAgent } from '@/modules/answer/public'
+import { runAnswerToolUseAgent } from '@/modules/answer/server'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,

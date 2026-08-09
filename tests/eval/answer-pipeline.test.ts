@@ -9,14 +9,15 @@ import {
   type AnswerThreadEvalCase,
   type AnswerTurnEvalCase,
 } from '../../eval/answer/lib/cases'
+import { seedKeylessExecutableSource } from '@/modules/capability-execution'
 import {
   ANSWER_TURN_DATA_PART,
   assembleAnswerEvidence,
-  runAnswerToolUseAgent,
   runAnswerGate,
   type AnswerTurnFrame,
   type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
+import { runAnswerToolUseAgent } from '@/modules/answer/server'
 import {
   runAnswerThreadEvalCase,
   runAnswerTurnEvalCase,
@@ -90,7 +91,7 @@ describe('answer pipeline eval', () => {
   it('invokes onFrame for each parsed answer frame', async () => {
     const sent: AnswerTurnFrame[] = [
       { seq: 0, event: { type: 'thread', threadId: 'thread:eval', turnId: 'turn:eval', turnSeq: 1 } },
-      { seq: 1, event: { type: 'one-line', oneLine: 'A listed business matches.' } },
+      { seq: 1, event: { type: 'one-line', oneLine: 'A business matches.' } },
     ]
     const stream = createUIMessageStream<AnswerTurnUIMessage>({
       execute: ({ writer }) => {
@@ -124,7 +125,7 @@ describe('answer pipeline eval', () => {
     expect(report.seed.broadBusinessCount).toBeGreaterThanOrEqual(100)
     expect(report.cases.every((testCase) => testCase.ok)).toBe(true)
     expect(report.cases.every((testCase) => testCase.score >= testCase.scoreThreshold)).toBe(true)
-    expect(report.cases.every((testCase) => testCase.userOutcome.satisfied)).toBe(true)
+    expect(report.cases.every((testCase) => testCase.userOutcome.satisfied), JSON.stringify(report.cases.filter((testCase) => !testCase.userOutcome.satisfied), null, 2)).toBe(true)
     expect(report.cases.every((testCase) => testCase.userOutcome.gotRightAnswer)).toBe(true)
     expect(report.cases.every((testCase) => testCase.userOutcome.canProceed)).toBe(true)
     expect(report.cases.every((testCase) => testCase.userOutcome.abandonmentRisk === 'low')).toBe(true)
@@ -184,6 +185,24 @@ describe('answer pipeline eval', () => {
       [...report.summary.costUnavailableReasons].sort((left, right) => left.localeCompare(right)),
     )
 
+    expect(report.summary.capabilityToolCounts).toEqual({
+      total: 1,
+      complete: 1,
+      refused: 0,
+      error: 0,
+    })
+    expect(report.summary.capabilityOperationRefDialects).toEqual({
+      canonical: 1,
+      readable: 0,
+      invalid: 0,
+      missing: 0,
+    })
+    expect(report.summary.capabilityEvidenceCompleteTurnCount).toBe(1)
+
+    const capabilityReport = report.cases.find((testCase) => testCase.id === 'turn-capability-tool-executes')
+    expect(capabilityReport?.kind).toBe('turn')
+    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelRequestCount : undefined).toBe(2)
+    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelToolRunCount : undefined).toBe(1)
     const directReport = report.cases.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
     expect(directReport?.kind).toBe('turn')
     expect(directReport?.kind === 'turn' ? directReport.modelRequestCount : undefined).toBe(0)
@@ -236,19 +255,19 @@ describe('answer pipeline eval', () => {
     expect(forbiddenPrivateContent.test('recovery-prompts')).toBe(false)
     expect(forbiddenPrivateContent.test('raw prompt content')).toBe(true)
     expect(strings.filter((value) => forbiddenPrivateContent.test(value))).toEqual([])
-    expect(strings).not.toContain('Two listed businesses match this need.')
-    expect(strings).not.toContain('The listings publish emergency pipe repair in Parramatta.')
+    expect(strings).not.toContain('Two businesses may fit what you need.')
+    expect(strings).not.toContain('The businesses offer emergency pipe repair in Parramatta.')
   })
 
   it('rejects impossible model and tool count expectations', async () => {
-    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
     if (sourceCase === undefined) {
-      throw new Error('missing turn-paramata-visible-recovery eval case')
+      throw new Error('missing turn-capability-tool-executes eval case')
     }
 
     const impossibleCase: AnswerTurnEvalCase = {
       ...sourceCase,
-      id: 'turn-paramata-visible-recovery-impossible-counts',
+      id: 'turn-capability-tool-executes-impossible-counts',
       expected: {
         ...sourceCase.expected,
         expectedModelRequests: 0,
@@ -261,8 +280,88 @@ describe('answer pipeline eval', () => {
     expect(result.ok).toBe(false)
     expect(result.problems).toContain('expected 0 model requests, got 2')
     expect(result.problems).toContain('expected 0 model tool runs, got 1')
-    expect(result.problems).toContain('model tool run count 1 exceeds 0')
-    expect(result.problems).toContain('tool run count 2 exceeds 0')
+    expect(result.problems).toContain('tool run count 1 exceeds 0')
+  })
+  it('rejects a seed-only capability response that violates its output schema', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-capability-tool-executes eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-capability-tool-executes-schema-mismatch',
+      capabilityOutput: { bitcoin: { usd: '94,213' } },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('capability evidence status is error')
+  })
+
+  it('rejects a seed-only capability query mismatch instead of treating kind as success', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
+    if (sourceCase === undefined || sourceCase.openRouterAgent === undefined) {
+      throw new Error('missing turn-capability-tool-executes eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-capability-tool-executes-query-mismatch',
+      openRouterAgent: {
+        ...sourceCase.openRouterAgent,
+        toolCalls: [{
+          ...sourceCase.openRouterAgent.toolCalls[0]!,
+          input: { ids: 'ethereum', vs_currencies: 'usd' },
+        }],
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems, JSON.stringify(result)).toContain('capability evidence status is refused')
+  })
+
+  it('rejects stale seed-only prose when the completed operation returns a changed value', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-capability-tool-executes eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-capability-tool-executes-stale-prose',
+      capabilityOutput: { bitcoin: { usd: 95_123 } },
+      expected: {
+        ...sourceCase.expected,
+        capabilityEvidence: {
+          ...sourceCase.expected.capabilityEvidence!,
+          output: { bitcoin: { usd: 95_123 } },
+        },
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('capability prose is stale for returned value')
+  })
+  it('rejects a seed-only capability result bound to the wrong operation reference', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-capability-tool-executes eval case')
+    }
+
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-capability-tool-executes-ref-mismatch',
+      expected: {
+        ...sourceCase.expected,
+        capabilityEvidence: {
+          ...sourceCase.expected.capabilityEvidence!,
+          operationRef: `operation:v1:${'b'.repeat(64)}`,
+        },
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('capability operation reference mismatch')
   })
 
   it('enforces persisted tool statuses without leaking tool identities', async () => {
@@ -307,14 +406,14 @@ describe('answer pipeline eval', () => {
   })
 
   it('rejects wrong model request and model-tool counts', async () => {
-    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
     if (sourceCase === undefined) {
-      throw new Error('missing turn-paramata-visible-recovery eval case')
+      throw new Error('missing turn-capability-tool-executes eval case')
     }
 
     const result = await runAnswerTurnEvalCase({
       ...sourceCase,
-      id: 'turn-paramata-wrong-model-counts',
+      id: 'turn-capability-tool-executes-wrong-model-counts',
       expected: {
         ...sourceCase.expected,
         expectedModelRequests: 1,
@@ -374,7 +473,7 @@ describe('answer pipeline eval', () => {
 
   it.each(ANSWER_TURN_EVAL_CASES)('$id', async (testCase: AnswerTurnEvalCase) => {
     const result = await runAnswerTurnEvalCase(testCase)
-    expect(result.ok, result.problems.join('; ')).toBe(true)
+    expect(result.ok, `${result.problems.join('; ')}; diagnostics=${JSON.stringify(result.diagnostics)}`).toBe(true)
   })
 
   it.each(ANSWER_THREAD_EVAL_CASES)('$id', async (testCase: AnswerThreadEvalCase) => {
@@ -428,11 +527,11 @@ describe('answer pipeline eval', () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [],
       prose: {
-        oneLine: 'Two listed businesses match this need.',
+        oneLine: 'Two businesses may fit what you need.',
         summary:
-          'The listings publish emergency pipe repair in Parramatta. The businesses handle timing, price, and availability.',
+          'The businesses offer emergency pipe repair in Parramatta. The businesses handle timing, price, and availability.',
         whatToDoNow:
-          'Open a provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'Open a business page and send a request when published. Agentic Economy does not book or take payment on this page.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -487,30 +586,38 @@ describe('answer pipeline eval', () => {
     }
   })
 
-  it('passes runAnswerGate for tool-use agent output grounded on tool-result slugs', async () => {
+  it('replaces provider fulfillment claims despite grounded tool-result slugs', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      toolCalls: [{ toolId: 'registry.search', input: { query: QUERY } }],
       prose: {
-        oneLine: 'One listed business matches this need.',
+        oneLine: 'One business may fit what you need.',
         summary:
-          'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+          'The business offers emergency pipe repair. The business confirms timing, price, availability, and the work.',
         whatToDoNow:
-          'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
+          'Open the business page and send a request when published. The business confirms timing, price, availability, and the work.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
     process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
-      const result = await runAnswerToolUseAgent({ query: QUERY })
-      const gate = runAnswerGate({
+      const result = await runAnswerToolUseAgent({
+        query: QUERY,
+        keylessExecutableSource: seedKeylessExecutableSource,
+      })
+      expect(runAnswerGate({
         snapshot: result.snapshot,
         allowedSlugs: result.allowedSlugs,
-      })
-      expect(gate.ok).toBe(true)
+      })).toEqual({ ok: true })
+      expect(result.snapshot.summary).toContain('Possible matches:')
+      expect(result.snapshot.summary).not.toContain('confirms timing')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -523,6 +630,16 @@ describe('answer pipeline eval', () => {
         delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
       } else {
         process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousViteConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousViteConvexUrl
       }
     }
   })

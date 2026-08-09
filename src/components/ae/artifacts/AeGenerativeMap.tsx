@@ -1,9 +1,12 @@
+import { neutralizeBidiFormattingControls } from '@/modules/answer/public'
+
 export type AeGenerativeMapProps = {
   label: string
   placeQuery: string
 }
 
 export function AeGenerativeMap({ label, placeQuery }: AeGenerativeMapProps) {
+  const displayLabel = neutralizeBidiFormattingControls(label)
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   if (typeof apiKey !== 'string' || apiKey.length === 0) {
     return null
@@ -13,11 +16,11 @@ export function AeGenerativeMap({ label, placeQuery }: AeGenerativeMapProps) {
 
   return (
     <figure className="overflow-hidden rounded-lg border border-border bg-card">
-      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
-        Area for this query: {label}
+      <figcaption dir="auto" style={{ unicodeBidi: 'isolate' }} className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
+        Area for this query: {displayLabel}
       </figcaption>
       <iframe
-        title={`Map for ${label}`}
+        title={`Map for ${displayLabel}`}
         className="block h-64 w-full border-0"
         src={src}
         loading="lazy"
@@ -35,6 +38,7 @@ export type AeOfficeMapProps = {
 }
 
 export function AeOfficeMap({ address, businessName }: AeOfficeMapProps) {
+  const displayBusinessName = neutralizeBidiFormattingControls(businessName)
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   if (typeof apiKey !== 'string' || apiKey.length === 0) {
     return null
@@ -44,11 +48,11 @@ export function AeOfficeMap({ address, businessName }: AeOfficeMapProps) {
 
   return (
     <figure className="overflow-hidden rounded-lg border border-border bg-card">
-      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
-        Office — {businessName}
+      <figcaption dir="auto" style={{ unicodeBidi: 'isolate' }} className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
+        Office — {displayBusinessName}
       </figcaption>
       <iframe
-        title={`Office map for ${businessName}`}
+        title={`Office map for ${displayBusinessName}`}
         className="block h-64 w-full border-0"
         src={src}
         loading="lazy"

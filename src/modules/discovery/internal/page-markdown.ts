@@ -1,6 +1,10 @@
 import { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from '@/modules/answer-thread/agent-entry'
 import { formatOfferingPrice } from '@/modules/catalog/public'
-import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
+import {
+  CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY,
+  CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
+  CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES,
+} from '@/modules/customer-request/agent-contract'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
@@ -27,13 +31,16 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     '',
     '## Start here (no key needed)',
     '',
-    `\`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\``,
+    '```http',
+    `${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path} HTTP/1.1`,
+    'Content-Type: application/json',
+    'X-AE-Turn-Key: <fresh opaque value>',
     '',
-    '```json',
     '{ "query": "emergency plumber in Adelaide" }',
     '```',
     '',
     `No credential. The response is a \`${ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType}\` stream.`,
+    'Use a fresh opaque `X-AE-Turn-Key` for every turn; it is an idempotency and correlation value, not a credential.',
     ANSWER_THREAD_AGENT_ENTRYPOINT.boundary,
     '',
     '## Read the catalog',
@@ -47,8 +54,9 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     '',
     `\`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method} ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}\` carries a Customer Request from comparison`,
     'through confirmation, start, progress, evidence, problem reporting, and cancellation.',
-    `It needs a Bearer key with \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\`, issued to a signed-in account at`,
-    `${base}${AGENT_KEY_ISSUANCE_PATH}. Read \`GET ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}\` first.`,
+    `It needs ${CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY} with \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\`, issued after signed-in owner approval at`,
+    `Use \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\` plus exactly one mode scope: \`${CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES.slice(1).join('`, `')}\`.`,
+    `${base}${AGENT_KEY_ISSUANCE_PATH}. Read \`GET ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}\` first.`,
     '',
     '## Boundary',
     '',
@@ -90,7 +98,7 @@ export function buildCatalogMarkdown(
     '',
     DiscoveryListingBoundaryLine,
     '',
-    `Start a request with \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed.`,
+    `Start a request with \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn.`,
     '',
   ].join('\n')
 }
@@ -127,7 +135,7 @@ export function buildBusinessMarkdown(
         ])),
     DiscoveryListingBoundaryLine,
     '',
-    `To act on this, start at \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed.`,
+    `To act on this, start at \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn.`,
     '',
   ].join('\n')
 }
@@ -146,7 +154,7 @@ export function buildUnknownPageMarkdown(
     `- \`GET ${base}/llms.txt\` — the public surface index`,
     `- \`GET ${base}/SKILL.md\` — the full assistant procedure`,
     `- \`GET ${base}/api/businesses\` — every published business`,
-    `- \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — ask for an outcome, no key needed`,
+    `- \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — ask for an outcome, no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn`,
     '',
   ].join('\n')
 }

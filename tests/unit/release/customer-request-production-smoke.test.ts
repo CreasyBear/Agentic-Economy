@@ -104,14 +104,14 @@ describe('customer Request production smoke entrypoint', () => {
       AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api","https://quoter.example/api"]',
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
       AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
-      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","units":"1000","exponent":2}',
       AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(comparisonCohort()),
     })).toMatchObject({
       finish: 'complete',
       directBaseline: {
         providerOrigins: ['https://resolver.example/api', 'https://quoter.example/api'],
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
-        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
         cohort: comparisonCohort(),
       },
     })
@@ -126,7 +126,7 @@ describe('customer Request production smoke entrypoint', () => {
       AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api"]',
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
       AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
-      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","units":"1000","exponent":2}',
       AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(comparisonCohort()),
     })).toThrow('Direct comparison requires AE_CUSTOMER_REQUEST_FINISH=complete')
     expect(() => customerRequestProductionSmokeConfigFromEnvironment({
@@ -134,7 +134,7 @@ describe('customer Request production smoke entrypoint', () => {
       AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api"]',
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
       AE_DIRECT_PREDECLARED_GAIN: 'faster',
-      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","units":"1000","exponent":2}',
       AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(comparisonCohort()),
     })).toThrow('AE_DIRECT_PREDECLARED_GAIN must be recoverable_progress')
   })
@@ -148,7 +148,7 @@ describe('customer Request production smoke entrypoint', () => {
       directBaseline: {
         providerOrigins: ['https://resolver.example/api', 'https://quoter.example/api'],
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
-        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
         cohort: comparisonCohort(),
       },
     })).rejects.toThrow('Direct comparison requires a completed hosted journey')
@@ -161,7 +161,7 @@ describe('customer Request production smoke entrypoint', () => {
       directBaseline: {
         providerOrigins: ['http://resolver.example/api', 'https://quoter.example/api'],
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
-        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
         cohort: comparisonCohort(['http://resolver.example/api', 'https://quoter.example/api']),
       },
     })).rejects.toThrow('must contain at least two safe provider origins')
@@ -176,7 +176,7 @@ function comparisonCohort(
     request: 'Find a sandbox option.',
     customerAnswers: {},
     providerOrigins,
-    maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+    maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
     authorityScope: {
       recipients: ['Resolver', 'Quoter'],
       purposes: ['resolve', 'quote'],

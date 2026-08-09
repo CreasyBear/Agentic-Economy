@@ -58,7 +58,7 @@ describe('selectOwnerAdmissionTarget', () => {
       ownerAdmissionOffering(selectedOfferingRef, []),
       ownerAdmissionOffering(
         brandNonEmpty('offering:inquiry-ready', 'OfferingRef'),
-        [inquiryAccessPath('access:inquiry-ready')],
+        [inquiryAccessPath('access:inquiry-ready', brandNonEmpty('offering:inquiry-ready', 'OfferingRef'))],
       ),
     ])
 
@@ -72,8 +72,8 @@ describe('selectOwnerAdmissionTarget', () => {
     const firstOfferingRef = brandNonEmpty('offering:z-catalog-first', 'OfferingRef')
     const secondOfferingRef = brandNonEmpty('offering:a-catalog-second', 'OfferingRef')
     const catalog = ownerAdmissionCatalog([
-      ownerAdmissionOffering(firstOfferingRef, [inquiryAccessPath('access:z-catalog-first')]),
-      ownerAdmissionOffering(secondOfferingRef, [inquiryAccessPath('access:a-catalog-second')]),
+      ownerAdmissionOffering(firstOfferingRef, [inquiryAccessPath('access:z-catalog-first', firstOfferingRef)]),
+      ownerAdmissionOffering(secondOfferingRef, [inquiryAccessPath('access:a-catalog-second', secondOfferingRef)]),
     ])
 
     expect(selectOwnerAdmissionTarget(catalog)).toEqual({
@@ -132,12 +132,19 @@ function ownerAdmissionOffering(
   }
 }
 
-function inquiryAccessPath(accessPathRef: string): PublicOfferingAccessPathDto {
+function inquiryAccessPath(
+  accessPathRef: string,
+  offeringRef: PublicBusinessCatalogApiV2Dto['offerings'][number]['offeringRef'],
+): PublicOfferingAccessPathDto {
+  const descriptor = {
+    kind: 'human_request' as const,
+    channel: 'ae_inquiry' as const,
+    disclosure: 'Use the inquiry form for a first contact.',
+  }
   return {
     accessPathRef,
-    kind: 'human_request',
-    channel: 'ae_inquiry',
-    disclosure: 'Use the inquiry form for a first contact.',
+    offeringRevision: 1,
+    ...descriptor,
   }
 }
 describe('human inquiry owner inbox slice', () => {
@@ -283,6 +290,7 @@ describe('human inquiry owner inbox slice', () => {
         availabilitySummary: 'Hours supplied by owner',
         accessPaths: [{
           accessPathRef: 'access:emergency-plumbing:inquiry',
+          offeringRevision: 1,
           kind: 'human_request',
           channel: 'ae_inquiry',
           disclosure: 'Use the source-owned inquiry form for a first contact.',
@@ -356,6 +364,23 @@ describe('human inquiry owner inbox slice', () => {
       blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
       businessName: 'Demo Plumbing',
       offeringName: 'Emergency plumbing',
+    })
+
+    expect(readPublicInquiryRouteReadback({
+      slug: 'plumbing-demo',
+      page: { kind: 'unavailable', reason: 'source_unavailable', retryable: true },
+    })).toEqual({
+      kind: 'unavailable',
+      slug: 'plumbing-demo',
+      reason: 'The public business source is unavailable right now. Try again in a moment.',
+    })
+    expect(readPublicInquiryRouteReadback({
+      slug: 'missing-business',
+      page: { kind: 'not_found', reason: 'no_such_business' },
+    })).toMatchObject({
+      kind: 'not_found',
+      slug: 'missing-business',
+      reason: 'no_such_business',
     })
     const routeBody = 'Please ask a human owner to contact me about this leak.'
     const routeContact = { name: 'Route Customer', email: 'route.customer@example.test' }

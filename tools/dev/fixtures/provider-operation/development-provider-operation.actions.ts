@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { exactAmountSchema } from '../../../../src/modules/money/public'
 
 import { defineAction } from '../../../../src/modules/common/action'
 import { developmentProviderOperationDependencies } from './development-provider-operation-context'
@@ -215,10 +216,7 @@ export const developmentProviderOperationCancellationOutputSchema = z.discrimina
           evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
         }),
         outcome: z.literal('provider_confirmed_reversal'),
-        reversedAmount: z.object({
-          amountMinor: z.number().int().nonnegative(),
-          currency: z.string().min(1),
-        }),
+        reversedAmount: exactAmountSchema,
         observedAt: z.string().datetime(),
       }),
       digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),

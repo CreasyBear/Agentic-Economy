@@ -2,9 +2,10 @@ import { getTime, min, parseISO } from 'date-fns'
 /** date-fns v4 parseISO/getTime/min declarations: parseISO.d.ts:11-30, getTime.d.ts:7-19, min.d.ts:8-38. */
 
 import { type PublicServicesApiPage } from '@/modules/registry/public'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import { compareExactAmounts, formatExactAmount } from '@/modules/money/public'
 import {
   resolveCategoryQuote,
   type CategoryQuote,
@@ -50,7 +51,7 @@ export function scanStudySupply(input: Readonly<{
   return {
     providers,
     webClaims,
-    webEvidenceRefs: stableUnique(webClaims.map((claim) => claim.sourceUrl)),
+    webEvidenceRefs: uniq(webClaims.map((claim) => claim.sourceUrl)),
   }
 }
 
@@ -72,7 +73,7 @@ export function qualifyStudyProviders(
   for (const provider of scan.providers) {
     const reasons = charter.hardNeeds.flatMap((need) => hardNeedFailure(provider, need))
     if (reasons.length > 0) {
-      excluded.push({ providerRef: provider.id, reasons: stableUnique(reasons) })
+      excluded.push({ providerRef: provider.id, reasons: uniq(reasons) })
       continue
     }
     eligibleProviders.push(provider)
@@ -118,7 +119,7 @@ export function quoteQualifiedProviders(input: Readonly<{
         rejectedProviderRefs.push(provider.id)
         refusals.push({ providerRef: provider.id, reason: supplied.reason })
       } else {
-        quotes.push(studyQuoteSchema.parse(supplied))
+        quotes.push(withSelectedOperationRef(studyQuoteSchema.parse(supplied), provider))
       }
       continue
     }
@@ -128,7 +129,8 @@ export function quoteQualifiedProviders(input: Readonly<{
       refusals.push({ providerRef: provider.id, reason: 'unknown_category' })
       continue
     }
-    if (provider.price?.kind !== 'fixed' || provider.price.amountMinor === undefined) {
+    const price = provider.price
+    if (price?.kind !== 'fixed') {
       rejectedProviderRefs.push(provider.id)
       refusals.push({ providerRef: provider.id, reason: 'unpriced_provider' })
       continue
@@ -139,13 +141,7 @@ export function quoteQualifiedProviders(input: Readonly<{
       requestedAt: input.requestedAt,
       offerings: [{
         name: provider.name,
-        price: {
-          kind: 'fixed',
-          currency: provider.price.currency,
-          amountMinor: provider.price.amountMinor,
-          ...(provider.price.unit === undefined ? {} : { unit: provider.price.unit }),
-          taxTreatment: provider.price.taxTreatment ?? 'unstated',
-        },
+        price,
         accessPaths: provider.endpoints.map((endpoint) => ({
           kind: 'external_operation',
           url: endpoint.url,
@@ -567,13 +563,15 @@ function hardNeedFailure(
       return location.includes(target) ? [] : ['location']
     }
     case 'fixed_price':
-      return provider.price?.kind === 'fixed' && provider.price.amountMinor !== undefined ? [] : ['fixed_price']
+      return provider.price?.kind === 'fixed' ? [] : ['fixed_price']
     case 'open_quote':
       return provider.endpoints.some((endpoint) => endpoint.access === 'open') ? [] : ['open_quote']
-    case 'price_ceiling':
-      return provider.price?.kind === 'fixed' && provider.price.amountMinor !== undefined && provider.price.amountMinor <= need.maxMinor
-        ? []
-        : ['price_ceiling']
+    case 'price_ceiling': {
+      const comparison = provider.price?.kind === 'fixed'
+        ? compareExactAmounts(provider.price.amount, need.max)
+        : undefined
+      return comparison !== undefined && comparison <= 0 ? [] : ['price_ceiling']
+    }
   }
 }
 
@@ -583,8 +581,12 @@ function valueForCriterion(
   valueKey: StudyCharter['wants'][number]['valueKey'],
 ): number {
   switch (valueKey) {
-    case 'priceMinor':
-      return quote.price.amountMinor
+    case 'price': {
+      const decimal = formatExactAmount(quote.price.amount)
+      const value = decimal === undefined ? Number.NaN : Number(decimal)
+      if (!Number.isFinite(value)) throw new Error(`study_price_invalid:${criterionId}`)
+      return value
+    }
     case 'qualityScore':
       return quote.qualityScore
     case 'availabilityEpochMs': {
@@ -606,16 +608,15 @@ function categoryForProvider(category: string): CategoryQuoteCategory | undefine
 }
 
 function toStudyQuote(quote: CategoryQuote, provider: StudyRegistryService): StudyQuote {
+  const operationRef = provider.endpoints.find((endpoint) => endpoint.operationRef !== undefined)?.operationRef
   return {
     quoteRef: `${quote.category}:${quote.slug}:${quote.quotedAt}`,
+    ...(operationRef === undefined ? {} : { operationRef }),
     providerSlug: provider.business.slug,
     providerName: provider.business.name,
     category: quote.category,
     service: quote.service,
-    price: {
-      currency: quote.price.currency,
-      amountMinor: quote.price.amountMinor,
-    },
+    price: quote.price,
     nextAvailable: quote.nextAvailable,
     quotedAt: quote.quotedAt,
     validUntil: quote.validUntil,
@@ -629,24 +630,54 @@ function toStudyQuote(quote: CategoryQuote, provider: StudyRegistryService): Stu
   }
 }
 
+function withSelectedOperationRef(
+  quote: StudyQuote,
+  provider: StudyRegistryService,
+): StudyQuote {
+  const operationRef = provider.endpoints.find((endpoint) => endpoint.operationRef !== undefined)?.operationRef
+  return operationRef === undefined || quote.operationRef === operationRef
+    ? quote
+    : { ...quote, operationRef }
+}
+
 function toStudyRegistryService(service: PublicServicesApiPage['services'][number]): StudyRegistryService {
+  const firstOffering = service.ae.offerings[0]
+  const selectedOffering = service.ae.offerings.find((offering) => offering.price?.kind === 'fixed')
+    ?? service.ae.offerings.find((offering) => offering.price !== undefined)
+    ?? firstOffering
+  const selectedOfferingRef = selectedOffering?.offeringRef
+  const selectedEndpoints = selectedOfferingRef === undefined
+    ? []
+    : service.endpoints.filter((endpoint) => endpoint.ae.offeringRef === selectedOfferingRef)
+  const suburb = optionalStudyText(service.ae.suburb)
+  const stateTerritory = optionalStudyText(service.ae.stateTerritory)
   return {
     id: service.id,
-    revision: service.revision,
-    business: service.business,
-    name: service.name,
-    category: service.category,
-    summary: service.summary,
-    ...(service.price === undefined ? {} : { price: service.price }),
-    endpoints: service.endpoints.map((endpoint) => ({
+    revision: selectedOffering?.revision ?? 1,
+    business: {
+      slug: service.id,
+      name: service.name,
+      ...(suburb === undefined ? {} : { suburb }),
+      ...(stateTerritory === undefined ? {} : { stateTerritory }),
+    },
+    name: selectedOffering?.name ?? service.name,
+    category: selectedOffering?.category ?? service.category,
+    summary: selectedOffering?.summary ?? service.category,
+    ...(selectedOffering?.price === undefined ? {} : { price: selectedOffering.price }),
+    endpoints: selectedEndpoints.map((endpoint) => ({
       url: endpoint.url,
-
-      access: endpoint.access,
-      provenance: endpoint.provenance,
-      name: endpoint.name,
-      summary: endpoint.summary,
+      access: endpoint.ae.access,
+      provenance: endpoint.ae.provenance,
+      offeringRef: endpoint.ae.offeringRef,
+      ...(endpoint.ae.operationRef === undefined ? {} : { operationRef: endpoint.ae.operationRef }),
+      ...(endpoint.serviceName === undefined ? {} : { name: endpoint.serviceName }),
+      ...(endpoint.description.trim().length === 0 ? {} : { summary: endpoint.description }),
     })),
-    ...(service.observedAt === undefined ? {} : { observedAt: service.observedAt }),
-    links: service.links,
+    observedAt: service.ae.observedAt,
+    links: service.ae.links,
   }
+}
+
+function optionalStudyText(value: string | undefined): string | undefined {
+  return value === undefined || value.trim().length === 0 ? undefined : value
 }

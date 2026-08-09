@@ -28,7 +28,8 @@ describe('production shipping quote adapters', () => {
     await expect(adapter.quote({ quoteInput })).resolves.toMatchObject({
       kind: 'quoted', inputDigest: quoteInput.inputDigest,
       provider: 'shippo', downstreamCarrier: 'Australia Post', serviceCode: 'au-express',
-      expectedCost: { currency: 'AUD', amountMinor: 1_234 },
+      expectedCost: { currency: 'AUD', units: '1234', exponent: 2 },
+      maximumCost: { currency: 'AUD', units: '1234', exponent: 2 },
       observedAt: Date.parse('2025-06-15T15:06:40.000Z'),
     })
     expect(requestBody(fetchImpl)).toEqual({
@@ -60,7 +61,8 @@ describe('production shipping quote adapters', () => {
     await expect(adapter.quote({ quoteInput })).resolves.toMatchObject({
       kind: 'quoted', inputDigest: quoteInput.inputDigest,
       provider: 'easypost', downstreamCarrier: 'AustraliaPost', serviceCode: 'ExpressPost',
-      expectedCost: { currency: 'AUD', amountMinor: 1_025 }, environment: 'production',
+      expectedCost: { currency: 'AUD', units: '1025', exponent: 2 }, environment: 'production',
+      maximumCost: { currency: 'AUD', units: '1025', exponent: 2 },
     })
     expect(requestBody(fetchImpl)).toEqual({
       shipment: {
@@ -75,6 +77,52 @@ describe('production shipping quote adapters', () => {
       },
     })
     expect(JSON.stringify(requestBody(fetchImpl))).not.toMatch(/distance_unit|mass_unit/)
+  })
+
+  it('preserves provider fractional precision instead of assuming cents', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(Response.json({
+      object_id: 'shippo-shipment-precise',
+      rates: [{
+        object_id: 'shippo-rate-precise', carrier_account: 'shippo-carrier-1',
+        provider: 'Australia Post', servicelevel: { token: 'au-express', name: 'Express Post' },
+        amount: '0.007', currency: 'AUD', object_created: '2025-06-15T15:06:40.000Z',
+        estimated_days: 2, duration_terms: 'Delivery in two business days', test: false,
+      }],
+    }))
+    const adapter = createShippoQuoteAdapter({
+      fetchImpl, token: 'shippo-token', signingKey,
+      carrierAccountId: 'shippo-carrier-1', serviceLevelToken: 'au-express', now,
+    })
+
+    await expect(adapter.quote({ quoteInput })).resolves.toMatchObject({
+      kind: 'quoted',
+      expectedCost: { currency: 'AUD', units: '7', exponent: 3 },
+      maximumCost: { currency: 'AUD', units: '7', exponent: 3 },
+    })
+  })
+
+  it.each([
+    ['scientific notation', '7e-3'],
+    ['negative amount', '-0.007'],
+    ['malformed decimal', '0.'],
+    ['precision beyond ExactAmount scale', '0.1234567890123456789'],
+  ])('refuses %s provider rate', async (_label, amount) => {
+    const fetchImpl = vi.fn().mockResolvedValue(Response.json({
+      object_id: 'shippo-shipment-invalid',
+      rates: [{
+        object_id: 'shippo-rate-invalid', carrier_account: 'shippo-carrier-1',
+        provider: 'Australia Post', servicelevel: { token: 'au-express', name: 'Express Post' },
+        amount, currency: 'AUD', object_created: '2025-06-15T15:06:40.000Z',
+      }],
+    }))
+    const adapter = createShippoQuoteAdapter({
+      fetchImpl, token: 'shippo-token', signingKey,
+      carrierAccountId: 'shippo-carrier-1', serviceLevelToken: 'au-express', now,
+    })
+
+    await expect(adapter.quote({ quoteInput })).resolves.toEqual({
+      kind: 'refused', reason: 'shippo_quote_invalid',
+    })
   })
 })
 

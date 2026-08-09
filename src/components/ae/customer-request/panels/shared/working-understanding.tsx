@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card'
-import { formatMoney } from '@/lib/ui/format-money'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
 export function WorkingUnderstanding({ projection, correct }: { projection: CustomerRequestView; correct: () => void }) { const criteria = projection.criteria ?? []; const keywordMatched = projection.interpretationBasis === 'keyword_match'; if (criteria.length === 0 && !keywordMatched) return null; return <Card className="p-4"><div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-brand">AE’s working understanding</p>{keywordMatched ? <p className="text-sm text-muted-foreground">AE matched keywords in your words, not the whole meaning.</p> : null}</div><button type="button" onClick={correct} className="min-h-11 text-sm font-semibold underline underline-offset-4">Correct</button></div><div className="grid gap-2">{criteria.map((criterion) => <div key={`${criterion.label}:${workingCriterionValue(criterion.value)}`} className="rounded-md border border-border bg-card px-3 py-2 text-sm"><div><strong>{workingCriterionLabel(criterion.label, criterion.value, projection.summary)}:</strong> {workingCriterionValue(criterion.value)}</div><p className="text-sm text-muted-foreground">{criterion.basis === 'customer_provided' ? 'You said this.' : 'Understood from your request.'} {workingCriterionImpact(criterion.impact)}</p></div>)}</div></div></Card> }
@@ -14,8 +14,12 @@ function workingCriterionValue(value: unknown): string {
   if (Array.isArray(value)) return value.map(workingCriterionValue).join(', ')
   const entries = Object.entries(value)
   const currency = entries.find(([key]) => key === 'currency')?.[1]
-  const amountMinor = entries.find(([key]) => key === 'amountMinor')?.[1]
-  if (typeof currency === 'string' && typeof amountMinor === 'number') return formatMoney(currency, amountMinor)
+  const units = entries.find(([key]) => key === 'units')?.[1]
+  const exponent = entries.find(([key]) => key === 'exponent')?.[1]
+  if (typeof currency === 'string' && typeof units === 'string' && typeof exponent === 'number') {
+    const formatted = formatCurrencyAmount({ currency, units, exponent })
+    if (formatted !== undefined) return formatted
+  }
   return entries.map(([key, entry]) => `${key.replaceAll('_', ' ')}: ${workingCriterionValue(entry)}`).join(', ')
 }
 function workingCriterionLabel(label: string, value: unknown, requestSummary: string): string {

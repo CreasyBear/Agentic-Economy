@@ -47,7 +47,7 @@ const pricedOffering: PublicBusinessCatalogApiV2Dto['offerings'][number] = {
   category: 'Emergency plumbing',
   summary: 'Jetting and camera inspection.',
   pricingSummary: 'From $180 — quoted before work starts',
-  price: { kind: 'from', currency: 'AUD', amountMinor: 18000, unit: 'visit', taxTreatment: 'inclusive' },
+  price: { kind: 'from', amount: { currency: 'AUD', units: '18000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
   accessPaths: [],
   support: { integrated: false, aeSupportedAction: false },
 }
@@ -59,6 +59,9 @@ describe('site brief markdown', () => {
     expect(body.indexOf('/api/answer/turn')).toBeGreaterThan(-1)
     expect(body.indexOf('/api/answer/turn')).toBeLessThan(body.indexOf('customer_requests:create'))
     expect(body).toContain('No credential.')
+    expect(body).toContain('fresh opaque `X-AE-Turn-Key` for every turn')
+    expect(body).toContain('X-AE-Turn-Key: <fresh opaque value>')
+    expect(body).toContain('not a credential')
   })
 
   it('names where a key comes from instead of assuming the caller has one', () => {
@@ -99,7 +102,7 @@ describe('catalog markdown', () => {
     const lines = body.split('\n')
 
     expect(lines.find((line) => line.startsWith('| Business |'))).toContain('| Price |')
-    expect(lines.find((line) => line.includes('Meridian Drains'))).toContain('| From AUD 180 per visit incl. tax |')
+    expect(lines.find((line) => line.includes('Meridian Drains'))).toContain('| From AUD 180.00 per visit incl. tax |')
     // An offering without a published price stays without one; the row says so.
     expect(lines.find((line) => line.includes('Silent Pipeworks'))).toContain('| — |')
   })
@@ -118,7 +121,7 @@ describe('business markdown', () => {
   it('publishes the comparable price above the note the business wrote', () => {
     const body = buildBusinessMarkdown(business({ offerings: [pricedOffering] }), options)
 
-    expect(body).toContain('- Price: From AUD 180 per visit incl. tax')
+    expect(body).toContain('- Price: From AUD 180.00 per visit incl. tax')
     expect(body).toContain('- Published price note: From $180 — quoted before work starts')
     expect(body.indexOf('- Price:')).toBeLessThan(body.indexOf('- Published price note:'))
   })

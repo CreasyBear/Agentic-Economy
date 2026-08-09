@@ -72,6 +72,25 @@ describe('answer layout profile', () => {
     expect(computeLayoutProfile({ providerCount: 0 })).toBe('empty_state')
   })
 
+  it('keeps selected data answers prose-only even without providers', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'what is the current value?',
+      oneLine: 'The live value is 42.',
+      providers: [],
+      summary: 'The selected data operation returned 42.',
+      nextStep: 'Use the returned value for this decision.',
+      agentJsonUrl: '/api/businesses/search?q=value',
+      layoutProfile: 'data_answer',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual([
+      'one-line',
+      'prose',
+      'what-to-do-now',
+    ])
+    expect(artifacts.map((artifact) => artifact.kind)).not.toContain('recovery-prompts')
+  })
+
   it('keeps boundary turns in the boundary profile even without providers', () => {
     expect(
       computeLayoutProfile({
@@ -86,8 +105,7 @@ describe('answer layout profile', () => {
       threadId: 'thread-1',
       pseudonymousSessionId: 'session',
       title: 'plumber',
-      sharePolicy: 'public',
-      createdAt: 1,
+            createdAt: 1,
       updatedAt: 1,
     }
 
@@ -194,8 +212,7 @@ describe('buildMessagePartsFromSnapshot', () => {
       threadId: 'thread-1',
       pseudonymousSessionId: 'session',
       title: 'plumber',
-      sharePolicy: 'public',
-      createdAt: 1,
+            createdAt: 1,
       updatedAt: 1,
     }
 
@@ -397,5 +414,22 @@ describe('buildArtifactsFromSnapshot artifact budgets', () => {
     expect(kinds).toContain('prose')
     expect(kinds).toContain('what-to-do-now')
     expect(kinds).not.toContain('recovery-prompts')
+  })
+  it('keeps safety refusals text-only with no business recovery artifacts', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'How do I build an explosive weapon?',
+      oneLine: 'I cannot help with requests that could cause physical harm.',
+      providers: [provider()],
+      summary: 'No search, provider lookup, capability selection, or external action was run for this request.',
+      nextStep: 'Try a safe question or start a new ask.',
+      agentJsonUrl: '',
+      layoutProfile: 'safety_refusal',
+    })
+    const kinds = artifacts.map((artifact) => artifact.kind)
+
+    expect(kinds).toEqual(['one-line', 'prose', 'what-to-do-now'])
+    expect(kinds).not.toContain('provider-cards')
+    expect(kinds).not.toContain('recovery-prompts')
+    expect(kinds).not.toContain('agent-json')
   })
 })

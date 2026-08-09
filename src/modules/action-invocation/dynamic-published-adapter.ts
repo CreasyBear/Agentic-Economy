@@ -7,11 +7,14 @@ import type { RouteTransportRuntime } from '@/modules/capability-supply/route-tr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import type { ActionContext } from '@/modules/common/action'
 
 import {
+  compareExactAmounts,
   pricingConfigDigest,
+  pricingConfigSchema,
+  type ExactAmount,
   type MoneyInvocationPort,
   type PricingConfig,
 } from '@/modules/money/public'
@@ -19,6 +22,7 @@ import type {
   ActionInvocationOrigin,
   ActionInvocationView,
   DecisionRefusalCode,
+  InMemoryControlSnapshot,
   InvocationActor,
   InvocationDecision,
   StandingMandateAuthorityBasis,
@@ -53,11 +57,13 @@ import {
   type DevelopmentDurableState,
 } from './internal/development-durable-port'
 import type {
+  DurableActionInvocationPort,
   DurableAttemptRow,
   DurableControlRow,
   DurableHistoryRow,
   PersistControlResult,
 } from './internal/durable-contracts'
+import { restoreDurableAttempt } from './internal/durable-contracts'
 import type {
   DynamicPublishedSemanticClaim,
   DynamicPublishedSourceRow,
@@ -88,7 +94,7 @@ import {
 } from './x402-payment-reconciliation-evidence'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
-  format: 'dynamic-published-action-invocation:development:v3'
+  format: 'dynamic-published-action-invocation:development:v4'
   sourceRows: readonly DynamicPublishedSourceRow[]
   semanticClaims: readonly DynamicPublishedSemanticClaim[]
   controls: readonly DurableControlRow<DynamicPublishedInvocationResult>[]
@@ -115,26 +121,26 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     origin: ActionInvocationOrigin
     actor: InvocationActor
     partial: Readonly<Record<string, StableHashValue>>
-  }>): InvocationInputWork
+  }>): Promise<InvocationInputWork>
   answer(input: Readonly<{
     invocationRef: string
     actor: InvocationActor
     answers: Readonly<Record<string, StableHashValue>>
     freshnessMs: number
-  }>): InvocationInputWork | ActionInvocationView<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationInputWork | ActionInvocationView<DynamicPublishedInvocationResult>>
   correct(input: Readonly<{
     invocationRef: string
     actor: InvocationActor
     corrections: Readonly<Record<string, StableHashValue>>
     freshnessMs: number
-  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   readInputWork(invocationRef: string): InvocationInputWork | undefined
   prepare(input: Readonly<{
     origin: ActionInvocationOrigin
     actor: InvocationActor
     value: StableHashValue
     freshnessMs: number
-  }>): ActionInvocationView<DynamicPublishedInvocationResult>
+  }>): Promise<ActionInvocationView<DynamicPublishedInvocationResult>>
   decide(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -142,7 +148,7 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     actor: InvocationActor
     origin: ActionInvocationOrigin
     accept: boolean
-  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   authorizeStandingMandateUse(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -150,7 +156,7 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     actor: InvocationActor
     origin: ActionInvocationOrigin
     basis: StandingMandateAuthorityBasis
-  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   acquire(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -160,7 +166,7 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     leaseOwner: string
     leaseMs: number
     acceptedAuthorityBasis?: StandingMandateAuthorityBasis
-  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   executeAcquired(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -174,13 +180,13 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     attemptRef: string
     leaseOwner: string
     effectGeneration: number
-  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   cancel(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
     actor: InvocationActor
     origin: ActionInvocationOrigin
-  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   reconcile: ReturnType<typeof createDurableActionInvocationTracer<
     DynamicPublishedInvocationInput,
     DynamicPublishedInvocationResult
@@ -204,8 +210,8 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
   readCompletedResult(
     invocationRef: string,
     actor: InvocationActor,
-  ): CompletedResultIdentity
-  exportSnapshot(): DynamicPublishedAdapterSnapshot
+  ): Promise<CompletedResultIdentity>
+  exportDevelopmentSnapshot(): DynamicPublishedAdapterSnapshot
 }>
 
 export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
@@ -216,7 +222,12 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   nextInvocationRef: () => string
   nextAuthorityRef: () => string
   nextAttemptRef: () => string
-  durableState?: DevelopmentDurableState<DynamicPublishedInvocationResult>
+  durablePort: DurableActionInvocationPort<DynamicPublishedInvocationResult>
+  initialSnapshot?: InMemoryControlSnapshot<
+    DynamicPublishedInvocationInput,
+    DynamicPublishedInvocationResult
+  >
+  developmentSnapshot?: DevelopmentDurableState<DynamicPublishedInvocationResult>
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   inputWork?: readonly InvocationInputWork[]
   inputHistory?: readonly InvocationInputHistory[]
@@ -228,8 +239,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   pricingConfig?: PricingConfig
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
-  const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
-  const durablePort = createDevelopmentDurablePort(durableState)
+  const durablePort = input.durablePort
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
   const preparedTransports = new Map<string, DynamicPublishedPreparedTransport>()
   const paymentAttempts = new Map(
@@ -238,7 +248,13 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       attempt,
     ]),
   )
-  const moneyCharges = new Map<string, Readonly<{ transactionRef: string; principalId: string; chargeState: 'free_tier' | 'paid'; amountMinor: number; currency: string; priceDigest: string }>>()
+  const moneyCharges = new Map<string, Readonly<{
+    transactionRef: string
+    principalId: string
+    chargeState: 'free_tier' | 'paid'
+    amount: ExactAmount
+    priceDigest: string
+  }>>()
   const paymentAttemptPort = input.paymentAttemptPort
     ?? createInMemoryX402PaymentAttemptPort(
       input.paymentAttempts,
@@ -307,7 +323,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         requestDigest: value.operationKey,
         failureCode: 'published_operation_attempt_not_leased',
       }
-      const preparation = prepareDynamicPublishedTransport({
+      const preparation = await prepareDynamicPublishedTransport({
         operation: input.operation,
         descriptor,
         invocation: value,
@@ -324,10 +340,11 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         requestDigest: value.operationKey,
         failureCode: 'published_operation_source_missing',
       }
+      const persisted = await durablePort.readControl(execution.invocationRef)
       const claim = input.source.claimSemanticEffect({
         semanticBaseKey: row.semanticBaseKey,
         semanticIdentityDigest: row.semanticIdentityDigest,
-        principalRef: durableState.controls.get(execution.invocationRef)?.control.owner.principalRef ?? '',
+        principalRef: persisted?.control.owner.principalRef ?? '',
         invocationRef: execution.invocationRef,
       })
       if (claim.kind === 'conflict') return {
@@ -358,8 +375,12 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         semanticBaseKey: row.semanticBaseKey,
         semanticIdentityDigest: row.semanticIdentityDigest,
       })
+      // moneyLedger (authorizeInvocationCharge) is the single durable charging
+      // authority for AE-internal per-call billing. Route-transport x402 payment is
+      // the external provider-credential path and must never also charge this
+      // invocation; the two seams operate on disjoint invocation types by design.
       if (input.moneyPort !== undefined) {
-        const principalRef = durableState.controls.get(execution.invocationRef)?.control.owner.principalRef
+        const principalRef = persisted?.control.owner.principalRef
         if (principalRef === undefined || principalRef.length === 0) {
           return {
             kind: 'published_operation_refused',
@@ -371,13 +392,27 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           }
         }
         const fixedPrice = executableFixedPrice(input.operation)
-        const pricingConfig = input.pricingConfig ?? {
-          version: 'pricing:v1' as const,
+        const pricingConfigInput = input.pricingConfig ?? {
+          version: 'pricing:v2' as const,
           unit: 'call' as const,
-          currency: fixedPrice.currency,
-          paidAmountMinor: fixedPrice.amountMinor,
+          paidAmount: fixedPrice,
         }
-        if (pricingConfig.currency !== fixedPrice.currency) {
+        const parsedPricingConfig = pricingConfigSchema.safeParse(pricingConfigInput)
+        if (!parsedPricingConfig.success) {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: 'pricing_config_invalid',
+          }
+        }
+        const pricingConfig = parsedPricingConfig.data
+        if (
+          pricingConfig.paidAmount.currency !== fixedPrice.currency
+          || pricingConfig.paidAmount.exponent !== fixedPrice.exponent
+        ) {
           return {
             kind: 'published_operation_refused',
             sourceDisposition: 'refused',
@@ -385,6 +420,27 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
             operationVersion: descriptor.version,
             requestDigest: value.operationKey,
             failureCode: 'currency_mismatch',
+          }
+        }
+        const priceComparison = compareExactAmounts(pricingConfig.paidAmount, fixedPrice)
+        if (priceComparison === undefined) {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: 'currency_mismatch',
+          }
+        }
+        if (priceComparison !== 0) {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: 'price_changed',
           }
         }
         const priceDigest = pricingConfigDigest(pricingConfig)
@@ -402,9 +458,15 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
               pricingConfig,
               priceDigest,
               priceSourceDigest: priceDigest,
-              authorityMaximumSpendMinor: fixedPrice.amountMinor,
+              authorityMaximumSpend: fixedPrice,
             })
-          : { kind: 'accepted' as const, chargeState: existingCharge.chargeState, currency: existingCharge.currency, amountMinor: existingCharge.amountMinor, priceDigest: existingCharge.priceDigest, transactionRef: existingCharge.transactionRef }
+          : {
+              kind: 'accepted' as const,
+              chargeState: existingCharge.chargeState,
+              amount: existingCharge.amount,
+              priceDigest: existingCharge.priceDigest,
+              transactionRef: existingCharge.transactionRef,
+            }
         if (charge.kind === 'refused') {
           return {
             kind: 'published_operation_refused',
@@ -419,8 +481,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           transactionRef: charge.transactionRef ?? `free:${execution.invocationRef}:${execution.effectGeneration}`,
           principalId: principalRef,
           chargeState: charge.chargeState,
-          amountMinor: charge.amountMinor,
-          currency: charge.currency,
+          amount: charge.amount,
           priceDigest: charge.priceDigest,
         }
         moneyCharges.set(key, moneyCharge)
@@ -494,9 +555,6 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       }
     },
   })
-  const resumeInvocationRef = input.durableState === undefined
-    ? undefined
-    : durableState.controls.keys().next().value as string | undefined
   const tracer = createDurableActionInvocationTracer({
     action,
     port: durablePort,
@@ -511,9 +569,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     nextAuthorityRef: input.nextAuthorityRef,
     nextAttemptRef: input.nextAttemptRef,
     onExecutionResolved: (view) => {
-      const operationKey = durableState.controls.get(view.invocationRef)?.sourceRef
-      if (operationKey === undefined) return
-      const row = input.source.read(operationKey)
+      const row = input.source.read(view.invocationRef)
       if (row === undefined) return
       const claim = semanticClaims.get(view.invocationRef)
       if (view.observedResolution.state !== 'returned') {
@@ -571,20 +627,23 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         ...(row.resultIdentity === undefined ? {} : { resultIdentity: row.resultIdentity }),
       }
     },
-  }, resumeInvocationRef)
+  }, input.initialSnapshot)
 
-  const materialFor = (invocationRef: string): DynamicPublishedInvocationInput | undefined => {
-    const control = durableState.controls.get(invocationRef)
-      return control === undefined ? undefined : input.source.read(invocationRef)?.input
+  const materialFor = async (
+    invocationRef: string,
+  ): Promise<DynamicPublishedInvocationInput | undefined> => {
+    const control = await durablePort.readControl(invocationRef)
+    if (control === undefined) return undefined
+    return input.source.read(control.sourceRef)?.input
   }
 
-  const prepareValue = (request: Readonly<{
+  const prepareValue = async (request: Readonly<{
     origin: ActionInvocationOrigin
     actor: InvocationActor
     value: StableHashValue
     freshnessMs: number
     continuation?: Readonly<{ invocationRef: string; expectedInvocationVersion: number; revise: boolean }>
-  }>): ActionInvocationView<DynamicPublishedInvocationResult> => {
+  }>): Promise<ActionInvocationView<DynamicPublishedInvocationResult>> => {
     const material = buildDynamicPublishedInput({
       operation: input.operation,
       descriptor,
@@ -650,12 +709,12 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     let decision: InvocationDecision<DynamicPublishedInvocationResult>
     try {
       decision = request.continuation === undefined
-        ? { kind: 'accepted' as const, view: tracer.prepare(preparation) }
+        ? { kind: 'accepted' as const, view: await tracer.prepare(preparation) }
         : request.continuation.revise
-          ? tracer.revisePrepared({ ...preparation, ...request.continuation })
+          ? await tracer.revisePrepared({ ...preparation, ...request.continuation })
           : {
               kind: 'accepted' as const,
-              view: tracer.prepareExisting({ ...preparation, ...request.continuation }),
+              view: await tracer.prepareExisting({ ...preparation, ...request.continuation }),
             }
       if (decision.kind === 'refused') {
         throw new Error(`published_operation_prepare_refused:${decision.code}`)
@@ -711,7 +770,6 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     descriptor,
     source: input.source,
     durablePort,
-    durableState,
     work: inputWork,
     history: inputHistory,
     now: input.now,
@@ -726,27 +784,37 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     prepare: prepareValue,
     decide: tracer.decide,
     authorizeStandingMandateUse: tracer.authorizeStandingMandateUse,
-    acquire(request) {
-      const materialInput = materialFor(request.invocationRef)
+    async acquire(request) {
+      const materialInput = await materialFor(request.invocationRef)
       if (materialInput === undefined) return { kind: 'refused', code: 'invocation_not_found' }
       return tracer.acquire({ ...request, materialInput })
     },
     async executeAcquired(request) {
-      const material = materialFor(request.invocationRef)
+      const material = await materialFor(request.invocationRef)
+      const persisted = await durablePort.readControl(request.invocationRef)
       const view = tracer.inspect(request.invocationRef)
-      if (material === undefined || view?.authority === undefined) {
+      const authority = persisted?.control.authority
+      if (
+        material === undefined
+        || persisted === undefined
+        || view === undefined
+        || authority === undefined
+      ) {
         return { kind: 'refused', code: 'invocation_not_found' }
       }
-      if (view.invocationVersion !== request.expectedInvocationVersion) {
+      if (persisted.invocationVersion !== request.expectedInvocationVersion) {
         return { kind: 'refused', code: 'stale_invocation_version', view }
       }
-      if (view.control.state !== 'leased'
-        || view.control.attemptRef !== request.attemptRef
-        || view.control.effectGeneration !== request.effectGeneration
-        || view.control.leaseOwner !== request.leaseOwner) {
+      const persistedControl = persisted.control.control
+      if (
+        persistedControl.state !== 'leased'
+        || persistedControl.attemptRef !== request.attemptRef
+        || persistedControl.effectGeneration !== request.effectGeneration
+        || persistedControl.leaseOwner !== request.leaseOwner
+      ) {
         return { kind: 'refused', code: 'lease_not_current', view }
       }
-      const sourceRow = input.source.read(request.invocationRef)
+      const sourceRow = input.source.read(persisted.sourceRef)
       const context = sourceRow?.context
       if (context === undefined) return { kind: 'refused', code: 'invocation_not_found' }
       context.actionInvocationExecution = {
@@ -759,14 +827,14 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         invocationRef: request.invocationRef,
         attemptRef: request.attemptRef,
         effectGeneration: request.effectGeneration,
-        authorityRef: view.authority.reference,
-        mandateDigest: canonicalDigest(view.acceptedAuthority),
+        authorityRef: authority.reference,
+        mandateDigest: canonicalDigest(persisted.control.acceptedAuthority),
         grantDigest: canonicalDigest({
-          acceptedAuthority: view.acceptedAuthority,
-          owner: view.owner,
-          origin: view.origin,
+          acceptedAuthority: persisted.control.acceptedAuthority,
+          owner: persisted.control.owner,
+          origin: persisted.control.origin,
         }),
-        expiresAt: Date.parse(view.authority.expiresAt),
+        expiresAt: Date.parse(authority.expiresAt),
       })
       try {
         return await tracer.executeAcquired(request)
@@ -777,10 +845,10 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         delete context.actionInvocationExecution
       }
     },
-    abandonAcquired(request) {
+    async abandonAcquired(request) {
       return tracer.publishObservation({ ...request, release: 'not_released' })
     },
-    cancel(request) {
+    async cancel(request) {
       const operation = input.source.current(dynamicPublishedOperationSlot(input.operation))
       if (operation?.binding.cancellation.kind === 'unsupported') {
         const view = tracer.inspect(request.invocationRef)
@@ -858,7 +926,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         ...current,
         state: evidence.resolution,
         observedAt: Date.parse(evidence.observedAt),
-        evidenceRefs: stableUnique([evidence.evidenceRef, ...evidence.evidenceRefs]),
+        evidenceRefs: uniq([evidence.evidenceRef, ...evidence.evidenceRefs]),
         reconciliationEvidenceRef: evidence.evidenceRef,
         reconciliationEvidenceDigest: evidence.digest,
         ...(evidence.settledAmount === undefined ? {} : { settledAmount: evidence.settledAmount }),
@@ -868,7 +936,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       return { kind: 'accepted', attempt }
     },
     inspect: tracer.inspect,
-    readCompletedResult(invocationRef, actor) {
+    async readCompletedResult(invocationRef, actor) {
       return readCompletedResultIdentity(
         durablePort,
         invocationRef,
@@ -887,22 +955,26 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         },
       )
     },
-    exportSnapshot() {
+    exportDevelopmentSnapshot() {
+      const developmentSnapshot = input.developmentSnapshot
+      if (developmentSnapshot === undefined) {
+        throw new Error('development_snapshot_export_unavailable')
+      }
       const snapshot: DynamicPublishedAdapterSnapshot = {
-        format: 'dynamic-published-action-invocation:development:v3',
+        format: 'dynamic-published-action-invocation:development:v4',
         sourceRows: input.source.list(),
         semanticClaims: input.source.listSemanticClaims(),
-        controls: [...durableState.controls.values()],
-        attempts: [...durableState.attempts].map(([invocationRef, rows]) => ({
+        controls: [...developmentSnapshot.controls.values()],
+        attempts: [...developmentSnapshot.attempts].map(([invocationRef, rows]) => ({
           invocationRef,
           rows: [...rows.values()],
         })),
-        history: [...durableState.history].map(([invocationRef, rows]) => ({ invocationRef, rows })),
-        commands: [...durableState.commands].map(([commandId, value]) => ({
+        history: [...developmentSnapshot.history].map(([invocationRef, rows]) => ({ invocationRef, rows })),
+        commands: [...developmentSnapshot.commands].map(([commandId, value]) => ({
           commandId,
           value: {
             ...value,
-            material: durableState.commandMaterials.get(commandId) ?? null,
+            material: developmentSnapshot.commandMaterials.get(commandId) ?? null,
           },
         })),
         inputWork: [...inputWork.values()],
@@ -920,7 +992,12 @@ export function loadDynamicPublishedAdapterSnapshot(
   snapshot: unknown,
   anchors: DynamicPublishedSnapshotAnchors,
 ): Readonly<{
-  durableState: DevelopmentDurableState<DynamicPublishedInvocationResult>
+  durablePort: DurableActionInvocationPort<DynamicPublishedInvocationResult>
+  developmentSnapshot: DevelopmentDurableState<DynamicPublishedInvocationResult>
+  initialSnapshot: InMemoryControlSnapshot<
+    DynamicPublishedInvocationInput,
+    DynamicPublishedInvocationResult
+  >
   sourceRows: Map<string, DynamicPublishedSourceRow>
   semanticClaims: readonly DynamicPublishedSemanticClaim[]
   inputWork: readonly InvocationInputWork[]
@@ -942,8 +1019,26 @@ export function loadDynamicPublishedAdapterSnapshot(
     })
     durableState.commandMaterials.set(command.commandId, command.value.material)
   }
+  const initialSnapshot: InMemoryControlSnapshot<
+    DynamicPublishedInvocationInput,
+    DynamicPublishedInvocationResult
+  > = {
+    format: 'action-invocation-control:development:v1',
+    records: verified.controls.map((row) => ({
+      sourceRef: row.sourceRef,
+      control: {
+        ...row.control,
+        attempts: [...(durableState.attempts.get(row.invocationRef)?.values() ?? [])]
+          .sort((left, right) => left.attemptNumber - right.attemptNumber)
+          .map(restoreDurableAttempt),
+      },
+      ...(row.authorityBinding === undefined ? {} : { authorityBinding: row.authorityBinding }),
+    })),
+  }
   return {
-    durableState,
+    durablePort: createDevelopmentDurablePort(durableState),
+    developmentSnapshot: durableState,
+    initialSnapshot,
     sourceRows: new Map(verified.sourceRows.map((row) => [row.invocationRef, row])),
     semanticClaims: verified.semanticClaims,
     inputWork: verified.inputWork ?? [],

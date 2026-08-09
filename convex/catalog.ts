@@ -25,16 +25,17 @@ export {
 import {
   BusinessOfferingStatusValues,
   OfferingAccessPathStatusValues,
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
   changeOfferingStatusInState,
   createOfferingInState,
   MAX_ACCESS_PATHS_PER_OFFERING,
   MAX_OFFERINGS_PER_BUSINESS,
-  OfferingPriceKindValues,
-  OfferingPriceTaxTreatmentValues,
-  OfferingPriceUnitValues,
   reviseOfferingInState,
   upsertAccessPathInState,
   withdrawAccessPathInState,
+  reconcilePublishedOfferings,
   type OfferingAccessPathDescriptor,
   type OfferingAccessPathStatus,
   type OfferingPrice,
@@ -50,6 +51,7 @@ import type {
   ServiceCatalogInput,
   ValidatedServiceCatalogInput,
 } from '../src/modules/catalog/public'
+import { compareExactAmounts, exactAmountSchema, rescaleExactAmount } from '../src/modules/money/public'
 import { projectBusinessSupplyToPublicApi } from '../src/modules/registry/public'
 
 const firstRequestArg = v.object({
@@ -68,16 +70,34 @@ const serviceArg = v.object({
   hoursOrUnknown: v.string(),
   firstRequest: firstRequestArg,
 })
+const exactAmountArg = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
 
 /** Mirrors `businessOfferingRevisions.price` exactly; optional and additive. */
-const offeringPriceArg = v.object({
-  kind: literalUnion(OfferingPriceKindValues),
-  currency: v.string(),
-  amountMinor: v.optional(v.number()),
-  maximumAmountMinor: v.optional(v.number()),
-  unit: v.optional(literalUnion(OfferingPriceUnitValues)),
-  taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
-})
+const offeringPriceArg = v.union(
+  v.object({
+    kind: v.literal('quote_only'),
+    currency: v.string(),
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+  v.object({
+    kind: v.union(v.literal('fixed'), v.literal('from')),
+    amount: exactAmountArg,
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+  v.object({
+    kind: v.literal('range'),
+    minimum: exactAmountArg,
+    maximum: exactAmountArg,
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+)
 const offeringFactsArg = v.object({
   name: v.string(), category: v.string(), summary: v.string(),
   serviceAreaSummary: v.optional(v.string()), availabilitySummary: v.optional(v.string()), pricingSummary: v.optional(v.string()),
@@ -266,17 +286,7 @@ const discoveryAttemptResult = v.object({
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
 })
 
-const catalogOfferingPriceValue = v.object({
-  kind: v.union(v.literal('fixed'), v.literal('from'), v.literal('range'), v.literal('quote_only')),
-  currency: v.string(),
-  amountMinor: v.optional(v.number()),
-  maximumAmountMinor: v.optional(v.number()),
-  unit: v.optional(v.union(
-    v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'),
-    v.literal('day'), v.literal('week'), v.literal('month'),
-  )),
-  taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
-})
+const catalogOfferingPriceValue = offeringPriceArg
 const catalogAccessPathDescriptorValue = v.union(
   humanAccessPathArg,
   externalAccessPathArg,
@@ -674,47 +684,6 @@ export async function ensureCatalogProjectionControlsCommand(
     }
   }
 }
-export async function createBusinessOfferingCommand(
-  db: GenericDatabaseWriter<DataModel>,
-  command: Readonly<{
-    actorRef: string
-    businessId: Id<'businesses'>
-    offeringRef: string
-    operationKey: string
-    facts: OfferingFactsInput
-  }>,
-  now: number,
-) {
-  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'createOffering' }, (state, authority) => createOfferingInState(state, {
-    authority,
-    operationKey: command.operationKey,
-    businessId: brandNonEmpty(command.businessId, 'BusinessId'),
-    offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
-    facts: command.facts,
-    now,
-  }), now)
-}
-export async function changeBusinessOfferingStatusCommand(
-  db: GenericDatabaseWriter<DataModel>,
-  command: Readonly<{
-    actorRef: string
-    businessId: Id<'businesses'>
-    offeringRef: string
-    expectedRevision: number
-    operationKey: string
-    status: 'draft' | 'published' | 'paused' | 'retired'
-  }>,
-  now: number,
-) {
-  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'changeOfferingStatus' }, (state, authority) => changeOfferingStatusInState(state, {
-    authority,
-    operationKey: command.operationKey,
-    offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
-    expectedRevision: command.expectedRevision,
-    status: command.status,
-    now,
-  }), now)
-}
 export async function reviseBusinessOfferingCommand(
   db: GenericDatabaseWriter<DataModel>,
   command: Readonly<{
@@ -760,24 +729,40 @@ export async function upsertOfferingAccessPathCommand(
     now,
   }), now)
 }
-export async function withdrawOfferingAccessPathCommand(
+
+async function runOfferingSourceCore(
   db: GenericDatabaseWriter<DataModel>,
-  command: Readonly<{
-    actorRef: string
-    businessId: Id<'businesses'>
-    accessPathRef: string
-    expectedRevision: number
-    operationKey: string
-  }>,
+  businessId: Id<'businesses'>,
+  ownerRef: string,
+  actorRef: string,
+  operationName: string,
+  operationKey: string,
+  mutate: (
+    state: OfferingSourceState,
+    authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string },
+    now: number,
+  ) => OfferingSourceResult<unknown>,
   now: number,
-) {
-  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'withdrawAccessPath' }, (state, authority) => withdrawAccessPathInState(state, {
-    authority,
-    operationKey: command.operationKey,
-    accessPathRef: brandNonEmpty(command.accessPathRef, 'AccessPathRef'),
-    expectedRevision: command.expectedRevision,
-    now,
-  }), now)
+): Promise<{ kind: 'ok'; code: string; resultRef?: string; currentRevision?: number } | { kind: 'error'; code: string; reason: string }> {
+  const state = await loadOfferingSourceState(db, businessId, {
+    actorRef: ownerRef,
+    operationName,
+    operationKey,
+  })
+  const result = mutate(state, { actorRef, ownerRef, businessOwnerRef: ownerRef }, now)
+  if (result.kind === 'error') return { kind: 'error', code: result.code, reason: result.reason }
+  const persisted = await persistOfferingSourceState(db, businessId, state, result.state)
+  if (persisted.kind === 'error') return persisted
+  const value = result.value
+  const resultRef = typeof value === 'object' && value !== null
+    ? ('offeringRef' in value && typeof value.offeringRef === 'string'
+      ? value.offeringRef
+      : 'accessPathRef' in value && typeof value.accessPathRef === 'string' ? value.accessPathRef : undefined)
+    : undefined
+  const currentRevision = typeof value === 'object' && value !== null && 'currentRevision' in value && typeof value.currentRevision === 'number'
+    ? value.currentRevision
+    : undefined
+  return { kind: 'ok', code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(currentRevision === undefined ? {} : { currentRevision }) }
 }
 
 type SystemOfferingCommand = Readonly<{
@@ -802,25 +787,7 @@ async function runSystemOfferingSourceCommand(
   if (ownerRef.length === 0 || command.actorRef !== ownerRef) {
     return { kind: 'error', code: 'wrong_owner', reason: 'Only the source-bound owner may change this business.' }
   }
-  const state = await loadOfferingSourceState(db, command.businessId, {
-    actorRef: ownerRef,
-    operationName: command.operationName,
-    operationKey: command.operationKey,
-  })
-  const result = mutate(state, { actorRef: command.actorRef, ownerRef, businessOwnerRef: ownerRef })
-  if (result.kind === 'error') return { kind: 'error', code: result.code, reason: result.reason }
-  const persisted = await persistOfferingSourceState(db, command.businessId, state, result.state)
-  if (persisted.kind === 'error') return persisted
-  const value = result.value
-  const resultRef = typeof value === 'object' && value !== null
-    ? ('offeringRef' in value && typeof value.offeringRef === 'string'
-      ? value.offeringRef
-      : 'accessPathRef' in value && typeof value.accessPathRef === 'string' ? value.accessPathRef : undefined)
-    : undefined
-  const currentRevision = typeof value === 'object' && value !== null && 'currentRevision' in value && typeof value.currentRevision === 'number'
-    ? value.currentRevision
-    : undefined
-  return { kind: 'ok', code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(currentRevision === undefined ? {} : { currentRevision }) }
+  return runOfferingSourceCore(db, command.businessId, ownerRef, command.actorRef, command.operationName, command.operationKey, mutate, now)
 }
 
 export const createBusinessOffering = mutationGeneric({
@@ -914,27 +881,11 @@ async function runOfferingSourceMutation(
   if (business === null) return { kind: 'error', code: 'wrong_owner', reason: 'Business was not found.' }
   const owner = await ctx.db.get(business.ownerId)
   const businessOwnerRef = owner?.clerkUserId ?? ''
-  const state = await loadOfferingSourceState(ctx.db, args.businessId, {
-    actorRef: businessOwnerRef,
-    operationName,
-    operationKey: args.operationKey,
-  })
-  const result = mutate(state, { actorRef: actor.clerkUserId, ownerRef: businessOwnerRef, businessOwnerRef }, now)
-  if (result.kind === 'error') return { kind: 'error', code: result.code, reason: result.reason }
-  const persisted = await persistOfferingSourceState(ctx.db, args.businessId, state, result.state)
-  if (persisted.kind === 'error') return persisted
+  const core = await runOfferingSourceCore(ctx.db, args.businessId, businessOwnerRef, actor.clerkUserId, operationName, args.operationKey, mutate, now)
+  if (core.kind === 'error') return core
   const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, args.businessId, now)
   await rebuildBusinessSupplyProjectionSnapshotCommand({ db: ctx.db, sourceDb: ctx.db, businessId: args.businessId, support, now })
-  const value = result.value
-  const resultRef = typeof value === 'object' && value !== null
-    ? ('offeringRef' in value && typeof value.offeringRef === 'string'
-      ? value.offeringRef
-      : 'accessPathRef' in value && typeof value.accessPathRef === 'string' ? value.accessPathRef : undefined)
-    : undefined
-  const currentRevision = typeof value === 'object' && value !== null && 'currentRevision' in value && typeof value.currentRevision === 'number'
-    ? value.currentRevision
-    : undefined
-  return { kind: 'ok', code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(currentRevision === undefined ? {} : { currentRevision }) }
+  return core
 }
 
 export const retryBusinessSupplyProjection = mutationGeneric({
@@ -988,11 +939,10 @@ function optionalCatalogString<Row extends object>(row: Row, field: CatalogStrin
   return value
 }
 
-function optionalCatalogNumber<Row extends object>(row: Row, field: CatalogStringKey<Row>): number | undefined {
-  const value = row[field]
-  if (value === undefined) return undefined
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`catalog_invalid_${field}`)
-  return value
+function requiredCatalogExactAmount<Row extends object>(row: Row, field: CatalogStringKey<Row>) {
+  const parsed = exactAmountSchema.safeParse(row[field])
+  if (!parsed.success) throw new Error(`catalog_invalid_${field}`)
+  return parsed.data
 }
 
 function requiredCatalogLiteral<T extends string>(
@@ -1008,18 +958,44 @@ function requiredCatalogLiteral<T extends string>(
 function readCatalogPrice(value: unknown): OfferingPrice | undefined {
   if (value === undefined) return undefined
   if (!isCatalogRecord(value)) throw new Error('catalog_invalid_price')
-  const amountMinor = optionalCatalogNumber(value, 'amountMinor')
-  const maximumAmountMinor = optionalCatalogNumber(value, 'maximumAmountMinor')
+  const kind = requiredCatalogLiteral(OfferingPriceKindValues, value.kind, 'price_kind')
   const unit = value.unit === undefined
     ? undefined
     : requiredCatalogLiteral(OfferingPriceUnitValues, value.unit, 'price_unit')
+  const taxTreatment = requiredCatalogLiteral(OfferingPriceTaxTreatmentValues, value.taxTreatment, 'price_taxTreatment')
+
+  if (kind === 'quote_only') {
+    return {
+      kind,
+      currency: requiredCatalogString(value, 'currency'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
+  if (kind === 'fixed' || kind === 'from') {
+    return {
+      kind,
+      amount: requiredCatalogExactAmount(value, 'amount'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
+
+  const minimum = requiredCatalogExactAmount(value, 'minimum')
+  const maximum = requiredCatalogExactAmount(value, 'maximum')
+  const exponent = Math.max(minimum.exponent, maximum.exponent)
+  const comparableMinimum = rescaleExactAmount(minimum, exponent)
+  const comparableMaximum = rescaleExactAmount(maximum, exponent)
+  const comparison = comparableMinimum === undefined || comparableMaximum === undefined
+    ? undefined
+    : compareExactAmounts(comparableMinimum, comparableMaximum)
+  if (comparison === undefined || comparison > 0) throw new Error('catalog_invalid_price_range')
   return {
-    kind: requiredCatalogLiteral(OfferingPriceKindValues, value.kind, 'price_kind'),
-    currency: requiredCatalogString(value, 'currency'),
-    ...(amountMinor === undefined ? {} : { amountMinor }),
-    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
+    kind,
+    minimum,
+    maximum,
     ...(unit === undefined ? {} : { unit }),
-    taxTreatment: requiredCatalogLiteral(OfferingPriceTaxTreatmentValues, value.taxTreatment, 'price_taxTreatment'),
+    taxTreatment,
   }
 }
 
@@ -1728,111 +1704,15 @@ async function persistPublishedOfferings(
   now: number,
 ): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
   const before = await loadOfferingSourceState(db, businessId)
-  let after = before
-  const authority = { actorRef: ownerRef, ownerRef, businessOwnerRef: ownerRef }
-  const offeringRefs = new Set<string>()
-  for (const service of services) {
-    const slug = normalizeSlug(service.name) || 'offering'
-    const offeringRef = `offering:${businessId}:${slug}`
-    offeringRefs.add(offeringRef)
-    const facts: OfferingFactsInput = {
-      name: service.name,
-      category: service.category,
-      summary: service.summary,
-      serviceAreaSummary: service.serviceArea,
-      availabilitySummary: service.hoursOrUnknown,
-    }
-    let offering = after.offerings.find((candidate) => candidate.offeringRef === offeringRef)
-    if (offering === undefined) {
-      const created = createOfferingInState(after, {
-        authority,
-        operationKey: `${publishOperationKey}:offering:${slug}:create`,
-        businessId: brandNonEmpty(businessId, 'BusinessId'),
-        offeringRef: brandNonEmpty(offeringRef, 'OfferingRef'),
-        facts,
-        now,
-      })
-      if (created.kind === 'error') return { kind: 'error', code: created.code }
-      after = created.state
-      offering = created.value
-    } else {
-      const revised = reviseOfferingInState(after, {
-        authority,
-        operationKey: `${publishOperationKey}:offering:${slug}:revise:${offering.currentRevision}`,
-        offeringRef: offering.offeringRef,
-        expectedRevision: offering.currentRevision,
-        facts,
-        now,
-      })
-      if (revised.kind === 'error') return { kind: 'error', code: revised.code }
-      after = revised.state
-      offering = revised.value
-    }
-    if (offering.status !== 'published') {
-      const published = changeOfferingStatusInState(after, {
-        authority,
-        operationKey: `${publishOperationKey}:offering:${slug}:publish`,
-        offeringRef: offering.offeringRef,
-        expectedRevision: offering.currentRevision,
-        status: 'published',
-        now,
-      })
-      if (published.kind === 'error') return { kind: 'error', code: published.code }
-      after = published.state
-      offering = published.value
-    }
-
-    const humanChannel = service.firstRequest.publicChannel === 'public_business_contact'
-      ? 'phone'
-      : service.firstRequest.publicChannel === 'ae_status_only'
-        ? 'ae_inquiry'
-        : undefined
-    const existingPaths = after.accessPaths.filter((path) => path.offeringRef === offering.offeringRef && path.status !== 'withdrawn')
-    if (humanChannel !== undefined && service.firstRequest.mode !== 'not_available_yet') {
-      const upserted = upsertAccessPathInState(after, {
-        authority,
-        operationKey: `${publishOperationKey}:offering:${slug}:access-path`,
-        offeringRef: offering.offeringRef,
-        accessPathRef: brandNonEmpty(`access:${businessId}:${slug}:human`, 'AccessPathRef'),
-        expectedRevision: offering.currentRevision,
-        status: 'published',
-        descriptor: {
-          kind: 'human_request',
-          channel: humanChannel,
-          disclosure: service.firstRequest.publicDisclosure ?? 'Contact the business to begin.',
-        },
-        now,
-      })
-      if (upserted.kind === 'error') return { kind: 'error', code: upserted.code }
-      after = upserted.state
-    } else {
-      for (const path of existingPaths) {
-        const withdrawn = withdrawAccessPathInState(after, {
-          authority,
-          operationKey: `${publishOperationKey}:offering:${slug}:withdraw:${path.accessPathRef}`,
-          accessPathRef: path.accessPathRef,
-          expectedRevision: offering.currentRevision,
-          now,
-        })
-        if (withdrawn.kind === 'error') return { kind: 'error', code: withdrawn.code }
-        after = withdrawn.state
-      }
-    }
-  }
-
-  for (const offering of after.offerings) {
-    if (offeringRefs.has(offering.offeringRef) || offering.status === 'retired') continue
-    const drafted = changeOfferingStatusInState(after, {
-      authority,
-      operationKey: `${publishOperationKey}:offering:${offering.offeringRef}:draft`,
-      offeringRef: offering.offeringRef,
-      expectedRevision: offering.currentRevision,
-      status: 'draft',
-      now,
-    })
-    if (drafted.kind === 'error') return { kind: 'error', code: drafted.code }
-    after = drafted.state
-  }
+  const reconcile = reconcilePublishedOfferings(before, {
+    businessId,
+    authority: { actorRef: ownerRef, ownerRef, businessOwnerRef: ownerRef },
+    services,
+    operationKey: publishOperationKey,
+    now,
+  })
+  if (reconcile.kind === 'error') return { kind: 'error', code: reconcile.code }
+  const after = reconcile.state
   const persisted = await persistOfferingSourceState(db, businessId, before, after)
   return persisted.kind === 'error' ? persisted : { kind: 'ok' }
 }

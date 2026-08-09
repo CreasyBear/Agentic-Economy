@@ -13,6 +13,11 @@ import {
   sandboxCategoryQuotePathForSlug,
   type CheckupQuoteOffering,
 } from '@/modules/sandbox-supply/public'
+import type { ExactAmount } from '@/modules/money/public'
+
+function audAmount(units: string, exponent: number): ExactAmount {
+  return { currency: 'AUD', units, exponent }
+}
 import type {
   StudyCharter,
   StudyRegistryService,
@@ -20,7 +25,7 @@ import type {
 
 const charter: StudyCharter = {
   wants: [
-    { id: 'price', label: 'Price', weight: 0.6, sense: 'cost', valueKey: 'priceMinor' },
+    { id: 'price', label: 'Price', weight: 0.6, sense: 'cost', valueKey: 'price' },
     { id: 'quality', label: 'Quality', weight: 0.4, sense: 'benefit', valueKey: 'qualityScore' },
   ],
   hardNeeds: [
@@ -30,15 +35,15 @@ const charter: StudyCharter = {
   ],
 }
 
-function offering(category: 'photographer' | 'funeral' | 'dentist', slug: string, amountMinor: number): CheckupQuoteOffering {
+function offering(category: 'photographer' | 'funeral' | 'dentist', slug: string, amount: ExactAmount): CheckupQuoteOffering {
   return {
     name: `${category} package`,
-    price: { kind: 'fixed', currency: 'AUD', amountMinor, taxTreatment: 'inclusive' },
+    price: { kind: 'fixed', amount, taxTreatment: 'inclusive' },
     accessPaths: [{ kind: 'external_operation', url: sandboxCategoryQuotePathForSlug(category, slug), method: 'POST' }],
   }
 }
 
-function provider(category: string, slug: string, amountMinor: number, open = true): StudyRegistryService {
+function provider(category: string, slug: string, amount: ExactAmount, open = true): StudyRegistryService {
   return {
     id: `service:${slug}`,
     revision: 1,
@@ -46,7 +51,7 @@ function provider(category: string, slug: string, amountMinor: number, open = tr
     name: `${category} package`,
     category,
     summary: `${category} service`,
-    price: { kind: 'fixed', currency: 'AUD', amountMinor },
+    price: { kind: 'fixed', amount, taxTreatment: 'inclusive' },
     endpoints: open
       ? [{ url: sandboxCategoryQuotePathForSlug(category as 'photographer' | 'funeral' | 'dentist', slug), method: 'POST', access: 'open' }]
       : [],
@@ -92,8 +97,8 @@ describe('study engine', () => {
   it('keeps web discovery quarantined and applies hard-needs qualification', () => {
     const scan = scanStudySupply({
       registryServices: [
-        provider('dentist', 'listed-dentist', 9500),
-        provider('dentist', 'closed-dentist', 7500, false),
+        provider('dentist', 'listed-dentist', audAmount('9500', 2)),
+        provider('dentist', 'closed-dentist', audAmount('7500', 2), false),
       ],
       webClaims: [{ businessName: 'web dentist', suburb: 'Melbourne', sourceUrl: 'https://example.com/web-dentist' }],
     })
@@ -109,12 +114,12 @@ describe('study engine', () => {
         category,
         slug: `${category}-one`,
         requestedAt: Date.parse('2026-08-01T10:00:00.000Z'),
-        offerings: [offering(category, `${category}-one`, 12_500)],
+        offerings: [offering(category, `${category}-one`, audAmount('7', 3))],
       })
       expect(result.kind).toBe('ok')
       if (result.kind === 'ok') {
         expect(result.quote).toMatchObject({ category, evidenceClass: 'ae_sandbox_provider', provenance: 'ae_sandbox_provider' })
-        expect(result.quote.price.amountMinor).toBe(12_500)
+        expect(result.quote.price.amount).toEqual(audAmount('7', 3))
       }
     }
   })
@@ -125,7 +130,7 @@ describe('study engine', () => {
       requestedAt: Date.parse('2026-08-01T10:00:00.000Z'),
       offerings: [{
         name: 'checkup',
-        price: { kind: 'fixed', currency: 'AUD', amountMinor: 100, taxTreatment: 'inclusive' },
+        price: { kind: 'fixed', amount: audAmount('100', 2), taxTreatment: 'inclusive' },
         accessPaths: [{ kind: 'external_operation', url: '/api/sandbox/photographer-one/checkup-quote', method: 'POST' }],
       }],
     })
@@ -135,12 +140,13 @@ describe('study engine', () => {
   it('excludes expired quotes with a typed reason before scoring', () => {
     const quotes = quoteQualifiedProviders({
       qualification: {
-        eligibleProviders: [provider('dentist', 'expired-dentist', 9500)],
+        eligibleProviders: [provider('dentist', 'expired-dentist', audAmount('7', 3))],
         excluded: [],
         allowedSlugs: ['expired-dentist'],
       },
       requestedAt: Date.parse('2026-08-01T10:00:00.000Z'),
     }).quotes
+    expect(quotes[0]?.price.amount).toEqual(audAmount('7', 3))
     const result = scoreFreshStudyQuotes({
       quotes,
       charter,

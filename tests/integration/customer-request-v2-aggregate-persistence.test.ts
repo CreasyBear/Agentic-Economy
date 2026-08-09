@@ -1,5 +1,5 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -21,8 +21,11 @@ import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-suppl
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
 import { listRouteableCapabilitySupply, setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import { registeredEvaluationBindingsFromRouteableSupply } from '../../convex/customerRequestEvaluationBindings'
+import { convexModules as modules, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { factsForModel, markCuratedSupplyReady, readCuratedContract, readCuratedModel } from '../helpers/curated-supply'
+
+afterEach(() => vi.useRealTimers())
 
 describe('atomic V2 Customer Request aggregate persistence', () => {
 
@@ -313,12 +316,14 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
   })
 
   it('atomically supersedes changed liveness material and rejects a concurrent stale head', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
     const backend = convexTest(schema, modules)
     const { aggregate, routeGeneration } = await compiledAggregate(backend)
-    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:liveness-base', commandDigest: canonicalDigest({ command: 'liveness-base' }),
       expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
-    })
+    })).resolves.toEqual({ kind: 'stored', requestId: aggregate.snapshot.requestId, revision: 1 })
     const currentRoute = routeGeneration.routes[0]
     const currentStep = currentRoute?.steps[0]
     const publication = await backend.run(async (ctx) => (
@@ -330,20 +335,20 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
               .eq('revision', currentStep.publicationRevision)
           )).unique()
     ))
-    const now = publication?.readinessValidUntil
-    if (publication === null || now === undefined) {
+    const priorReadinessValidUntil = publication?.readinessValidUntil
+    if (publication === null || priorReadinessValidUntil === undefined) {
       throw new Error('liveness refresh publication missing')
     }
     const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
       publicationRef: publication.publicationRef, expectedRevision: publication.revision,
-      credentialState: 'ready', healthState: 'healthy', validUntil: now + 900_000,
+      credentialState: 'ready', healthState: 'healthy', validUntil: priorReadinessValidUntil + 900_000,
       operationKey: 'test:refresh-liveness', correlationId: 'test:refresh-liveness',
       reasonCode: 'test_refresh_liveness', evidenceRefs: ['test:refresh-liveness'],
     })
     if (observed.kind !== 'observed') throw new Error(`liveness observation failed: ${observed.reason}`)
     const candidate = await compileRefreshCandidate(backend, aggregate, 1, {
       kind: 'capability_candidates', selections: [sandboxSelection(aggregate)],
-    }, now)
+    }, Date.now())
     if (candidate.routeGeneration === undefined) throw new Error('liveness candidate generation missing')
     expect(candidate.routeGeneration.routes[0]?.expiresAt).not.toBe(routeGeneration.routes[0]?.expiresAt)
     const refresh = {
@@ -795,11 +800,12 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
 })
 
-async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
+async function compiledAggregate(backend: ConvexFixtureBackend) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await markCuratedSupplyReady(backend)
+  const now = Date.now()
   const supply = await backend.run(async (ctx) => (
-    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64, now })
   ))
   if (supply.kind !== 'available') throw new Error(`routeable supply unavailable: ${supply.reason}`)
   const frankfurter = supply.supplies.find(({ binding, publication }) => (
@@ -820,24 +826,8 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       }],
     },
     interpreterId: 'interpreter:test',
-    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
-      operationRef: publication.operationRef,
-      admittedOperation: publication.admittedOperation,
-      businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
-      contractRef: {
-        capabilityId: binding.capabilityId,
-        version: binding.version,
-        contractDigest: binding.contractDigest,
-      },
-      offeringRegistrationHash: offering.registrationHash,
-      bindingRegistrationHash: binding.registrationHash,
-      price: offering.presentation.price,
-      commercialRelationship: offering.presentation.commercialRelationship,
-      cancellation: binding.cancellation,
-      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-      readinessValidUntil: publication.readinessValidUntil,
-    }]),
-    mappings: [], models: [model], now: 1_000,
+    bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
+    mappings: [], models: [model], now,
   })
   if (result.kind !== 'compiled') throw new Error(`compile failed: ${result.reason}`)
   if (result.routeGeneration === undefined) throw new Error('route generation missing')
@@ -861,14 +851,14 @@ function sandboxSelection(
 }
 
 async function compileRefreshCandidate(
-  backend: ReturnType<typeof convexTest>,
+  backend: ConvexFixtureBackend,
   aggregate: Awaited<ReturnType<typeof compiledAggregate>>['aggregate'],
   expectedGeneration: number,
   proposal: CustomerRequestSemanticProposal,
   now: number,
 ) {
   const supply = await backend.run(async (ctx) => (
-    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64, now })
   ))
   if (supply.kind !== 'available') throw new Error(`refresh routeable supply unavailable: ${supply.reason}`)
   const model = await readCuratedModel(backend, 'frankfurter.single-rate')
@@ -883,18 +873,7 @@ async function compileRefreshCandidate(
     priorFacts: aggregate.snapshot.facts,
     proposal,
     interpreterId: 'interpreter:refresh-test',
-    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
-      operationRef: publication.operationRef,
-      admittedOperation: publication.admittedOperation,
-      businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
-      contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
-      offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
-      price: offering.presentation.price,
-      commercialRelationship: offering.presentation.commercialRelationship,
-      cancellation: binding.cancellation,
-      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-      readinessValidUntil: publication.readinessValidUntil,
-    }]),
+    bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
     mappings: [], models: [model], now,
   })
   if (result.kind !== 'compiled') throw new Error(`refresh compile failed: ${result.reason}`)
@@ -952,7 +931,7 @@ function preCancellationRouteGeneration(
   })
 }
 
-async function revokeFirstSupply(backend: ReturnType<typeof convexTest>) {
+async function revokeFirstSupply(backend: ConvexFixtureBackend) {
   await backend.run(async (ctx) => {
     const binding = await ctx.db.query('capabilityTransportBindings').first()
     if (binding === null) throw new Error('sandbox binding missing')
@@ -970,7 +949,7 @@ async function revokeFirstSupply(backend: ReturnType<typeof convexTest>) {
   })
 }
 
-async function v2Rows(backend: ReturnType<typeof convexTest>) {
+async function v2Rows(backend: ConvexFixtureBackend) {
   return await backend.run(async (ctx) => ({
     heads: await ctx.db.query('customerRequestV2Heads').collect(),
     revisions: await ctx.db.query('customerRequestV2Revisions').collect(),

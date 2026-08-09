@@ -2,24 +2,27 @@
 
 **Status:** active implementation authority
 **Decision owner:** Founder
-**Rebaselined:** 2026-07-25
+**Rebaselined:** 2026-08-08
 
 ## Product
 
-Agentic Economy is an execution product for agentic commerce. It helps a
-person's agent discover viable businesses, decide within granted authority and
-carry registered work through external effects, evidence and recovery.
+Agentic Economy lets developers turn agent capabilities into discoverable, metered services that agents can buy.
 
-**Promise:** your agent knows who to call — and can get the work done.
+**Canonical category sentence:** “Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.”
 
-AE is not an inquiry product, directory, lead marketplace, generic tool
-registry or chat wrapper. Discovery and qualified inquiry are entry points,
-not the category or the ceiling.
+**Principal and delegated agent:** A human or organization is the **Principal**: it owns authority and budget. The agent is the Principal’s delegated shopper and distribution interface: it discovers, compares, buys and invokes within that authority. A **Supplier** hosts the implementation and offers a callable `Operation`; AE admits it, projects it as a `Market Operation`, and owns the invocation identity, policy boundary, evidence, Qualified Use, metering and reconciliation. AE does not host supplier runtimes.
 
-The recurring movements are ask, understand, choose, authorize, act and follow.
-They are not a mandatory funnel: a provider-supported task can start and finish
-as one standalone action, and a larger outcome can compile into a Customer
-Request that coordinates several actions.
+**Platform meaning:** Developers build and host agent capabilities wherever they choose. AE admits each callable `Operation`, projects it as a `Market Operation`, distributes it to agents, and meters verified usage and payment through AE’s invocation/evidence boundary. `Supplier` is the portfolio rollup; `Provider` remains the registered Business that can fulfil an `Operation`.
+
+**Category shorthand:** OpenRouter for agent services: one agent-facing market and invocation interface over many supplier-hosted Operations. AE provides a Vercel-style self-serve publishing and operating experience without owning the runtime. The consuming agent is the app store: discovery, comparison, purchase and invocation happen at runtime rather than through a human installation flow.
+
+**Category guardrail:** Trades, Australian small businesses, BAS and human-service coordination may be future suppliers/use cases; they are not the category, ICP, wedge or default product frame.
+
+This sentence names the destination; the current evidence section does not claim that production settlement, independent supply or customer value is already proven.
+
+AE hosts the market and transaction boundary, not supplier runtimes. Skills, SDKs and repositories remain acquisition, lineage and distribution inputs; they become market supply only through an admitted callable `Operation` with an evidence path.
+
+**First-party demand application:** AE retains the person-facing execution loop as a subordinate demand-side application and proving ground for the platform. A Principal’s agent can discover admitted Market Operations, decide within granted authority and carry registered invocations through external effects, evidence and recovery. This application is not the platform category.
 
 `UBIQUITOUS_LANGUAGE.md` owns domain vocabulary. Live source and executable
 behavior decide what exists now. This charter owns the destination; the former

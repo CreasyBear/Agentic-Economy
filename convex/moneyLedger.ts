@@ -2,41 +2,148 @@ import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { internalMutation, internalQuery, query, type MutationCtx } from './_generated/server'
+import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { resolveBusinessActor } from './authz'
 import type { Doc } from './_generated/dataModel'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
+  addExactAmounts,
   accountRefForOperator,
   accountRefForProvider,
   accountRefForRake,
+  compareExactAmounts,
   evaluateLiveMoneyGate,
+  exactAmountSchema,
+  multiplyExactAmountByBps,
+  rescaleExactAmount,
+  subtractExactAmounts,
   transitionPayout,
   validateChargeAccounts,
+  type ExactAmount,
+  type MoneyAccount,
   type MoneyPayout,
 } from '../src/modules/money/public'
+
 type MoneyUsageEventInput = Omit<Doc<'moneyUsageEvents'>, '_id' | '_creationTime'>
+type MoneyLedgerEntryRow = Doc<'moneyLedgerEntries'>
+
+const identifier = v.string()
+const exactAmount = v.object({
+  currency: identifier,
+  units: identifier,
+  exponent: v.number(),
+})
+const moneyArgs = {
+  principalId: identifier,
+  currency: identifier,
+}
+
+function readAmount(value: unknown): ExactAmount | undefined {
+  const parsed = exactAmountSchema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
+function amountFromParts(currency: string, units: string, exponent: number): ExactAmount | undefined {
+  return readAmount({ currency, units, exponent })
+}
+function amountAtScale(amount: ExactAmount, currency: string, exponent: number): ExactAmount | undefined {
+  if (amount.currency !== currency) return undefined
+  return rescaleExactAmount(amount, exponent)
+}
+
+function zeroAmount(currency: string, exponent: number): ExactAmount | undefined {
+  return amountFromParts(currency, '0', exponent)
+}
+
+function accountFromRow(row: Doc<'moneyAccounts'>): MoneyAccount | undefined {
+  const balance = amountFromParts(row.currency, row.balanceUnits, row.exponent)
+  if (balance === undefined) return undefined
+  return {
+    accountRef: row.accountRef,
+    accountKind: row.accountKind,
+    ...(row.principalId === undefined ? {} : { principalId: row.principalId }),
+    ...(row.businessId === undefined ? {} : { businessId: row.businessId }),
+    balance,
+    version: row.version,
+    state: row.state,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function payoutFromRow(row: Doc<'moneyPayouts'>): MoneyPayout | undefined {
+  const grossAccrual = amountFromParts(row.currency, row.grossAccrualUnits, row.exponent)
+  const rake = amountFromParts(row.currency, row.rakeUnits, row.exponent)
+  const providerNet = amountFromParts(row.currency, row.providerNetUnits, row.exponent)
+  const minimumPayout = amountFromParts(row.currency, row.minimumPayoutUnits, row.exponent)
+  if (grossAccrual === undefined || rake === undefined || providerNet === undefined || minimumPayout === undefined) return undefined
+  return {
+    payoutRef: row.payoutRef,
+    businessId: row.businessId,
+    grossAccrual,
+    rake,
+    providerNet,
+    minimumPayout,
+    state: row.state,
+    periodStart: row.periodStart,
+    periodEnd: row.periodEnd,
+    ...(row.stripeTransferId === undefined ? {} : { stripeTransferId: row.stripeTransferId }),
+    idempotencyKey: row.idempotencyKey,
+    ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+
+function entryAmount(row: MoneyLedgerEntryRow): ExactAmount | undefined {
+  return amountFromParts(row.currency, row.amountUnits, row.exponent)
+}
 
 async function insertMoneyUsageEvent(ctx: MutationCtx, event: MoneyUsageEventInput): Promise<boolean> {
   const existing = await ctx.db.query('moneyUsageEvents').withIndex('by_usageRef', (q) => q.eq('usageRef', event.usageRef)).unique()
   if (existing !== null) return false
-  await ctx.db.insert('moneyUsageEvents', event)
+  const eventAmount = amountFromParts(event.currency, event.amountUnits, event.exponent)
+  if (eventAmount === undefined) return false
   const summary = await ctx.db.query('moneyCredentialUsageSummaries').withIndex('by_principalId_and_credentialId_and_currency', (q) => q.eq('principalId', event.principalId).eq('credentialId', event.credentialId).eq('currency', event.currency)).unique()
   const states = summary === null || summary.states.includes(event.chargeState) ? summary?.states ?? [event.chargeState] : [...summary.states, event.chargeState]
   const paidCall = event.chargeState === 'paid' ? 1 : 0
   const freeCall = event.chargeState === 'free_tier' ? 1 : 0
-  const spend = event.chargeState === 'paid' ? event.amountMinor : 0
+  const spend = event.chargeState === 'paid' ? eventAmount : zeroAmount(event.currency, event.exponent)
+  if (spend === undefined) return false
+  const nextGrossSpend = summary === null
+    ? spend
+    : (() => {
+        const current = amountFromParts(summary.currency, summary.grossSpendUnits, summary.exponent)
+        return current === undefined ? undefined : addExactAmounts(current, spend)
+      })()
+  if (nextGrossSpend === undefined) return false
+  await ctx.db.insert('moneyUsageEvents', event)
   if (summary === null) {
-    await ctx.db.insert('moneyCredentialUsageSummaries', { principalId: event.principalId, credentialId: event.credentialId, currency: event.currency, callCount: 1, paidCallCount: paidCall, freeCallCount: freeCall, grossSpendMinor: spend, states, updatedAt: event.observedAt })
+    await ctx.db.insert('moneyCredentialUsageSummaries', {
+      principalId: event.principalId,
+      credentialId: event.credentialId,
+      currency: nextGrossSpend.currency,
+      exponent: nextGrossSpend.exponent,
+      callCount: 1,
+      paidCallCount: paidCall,
+      freeCallCount: freeCall,
+      grossSpendUnits: nextGrossSpend.units,
+      states,
+      updatedAt: event.observedAt,
+    })
   } else {
-    await ctx.db.patch(summary._id, { callCount: summary.callCount + 1, paidCallCount: summary.paidCallCount + paidCall, freeCallCount: summary.freeCallCount + freeCall, grossSpendMinor: summary.grossSpendMinor + spend, states, updatedAt: event.observedAt })
+    await ctx.db.patch(summary._id, {
+      callCount: summary.callCount + 1,
+      paidCallCount: summary.paidCallCount + paidCall,
+      freeCallCount: summary.freeCallCount + freeCall,
+      exponent: nextGrossSpend.exponent,
+      grossSpendUnits: nextGrossSpend.units,
+      states,
+      updatedAt: event.observedAt,
+    })
   }
   return true
-}
-
-const identifier = v.string()
-const moneyArgs = {
-  principalId: identifier,
-  currency: identifier,
 }
 
 function principalAllowed(identity: { tokenIdentifier?: string } | null, principalId: string): boolean {
@@ -61,19 +168,15 @@ async function ownerPrincipalAllowed(
   return identityRefs.includes(principal.ownerTokenIdentifier)
 }
 
-function safeBalance(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0
-}
-
 type ReconcileChargeResult =
   | Readonly<{ kind: 'accepted'; transactionRef: string; outcome: 'released' }>
   | Readonly<{ kind: 'accepted'; transactionRef: string; currency: string }>
-  | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>;
+  | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
 
 export const authorizeInvocationCharge = internalMutation({
   args: {
     principalId: identifier,
-    currency: identifier,
+    amount: exactAmount,
     operatorAccountRef: identifier,
     providerAccountRef: identifier,
     rakeAccountRef: identifier,
@@ -81,11 +184,10 @@ export const authorizeInvocationCharge = internalMutation({
     idempotencyKey: identifier,
     inputDigest: identifier,
     expectedAccountVersion: v.number(),
-    amountMinor: v.number(),
     rakeBps: v.number(),
     priceDigest: identifier,
     priceSourceDigest: identifier,
-    authorityMaximumSpendMinor: v.number(),
+    authorityMaximumSpend: exactAmount,
     credentialId: identifier,
     serviceRef: identifier,
     offeringRef: identifier,
@@ -101,33 +203,57 @@ export const authorizeInvocationCharge = internalMutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!principalAllowed(identity, args.principalId)) return { kind: 'refused' as const, code: 'billing_identity_missing' as const, retryable: false }
-    if (args.amountMinor > 0 && !args.freeTier) {
-      const gate = evaluateLiveMoneyGate()
-      if (gate.kind === 'refused') return gate
-    }
-    if (!Number.isSafeInteger(args.amountMinor) || args.amountMinor < 0 || !Number.isSafeInteger(args.authorityMaximumSpendMinor) || args.authorityMaximumSpendMinor < 0) return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
+    const requestedAmount = readAmount(args.amount)
+    const requestedMaximumSpend = readAmount(args.authorityMaximumSpend)
+    if (requestedAmount === undefined || requestedMaximumSpend === undefined) return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
     const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', args.offeringRef)).unique()
     if (offering === null || offering.businessId.toString() !== args.businessId || offering.status !== 'active') return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
     const publishedPrice = offering.presentation.price
     if (publishedPrice.kind !== 'fixed') return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
-    if (publishedPrice.currency !== args.currency) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
-    const expectedPriceDigest = canonicalDigest({ version: 'pricing:v1', unit: 'call', currency: publishedPrice.currency, paidAmountMinor: publishedPrice.amountMinor })
-    if (args.amountMinor !== publishedPrice.amountMinor || args.priceDigest !== expectedPriceDigest || args.priceSourceDigest !== expectedPriceDigest || args.freeTier || args.rakeBps !== 1_000) return { kind: 'refused' as const, code: 'price_changed' as const, retryable: false }
-    if (args.amountMinor > args.authorityMaximumSpendMinor) return { kind: 'refused' as const, code: 'price_changed' as const, retryable: false }
-    const expectedOperatorRef = accountRefForOperator(args.principalId, args.currency)
-    const expectedProviderRef = accountRefForProvider(args.businessId, args.currency)
-    const expectedRakeRef = accountRefForRake(args.currency)
+    const publishedAmount = readAmount(publishedPrice.amount)
+    if (publishedAmount === undefined) return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
+    if (requestedAmount.currency !== publishedAmount.currency || requestedMaximumSpend.currency !== publishedAmount.currency) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
+    const amount = requestedAmount
+    const authorityMaximumSpend = requestedMaximumSpend
+    const authorityComparison = compareExactAmounts(amount, authorityMaximumSpend)
+    if (authorityComparison === undefined) return { kind: 'refused' as const, code: 'price_changed' as const, retryable: false }
+    if (amount.units !== '0' && !args.freeTier) {
+      const gate = evaluateLiveMoneyGate()
+      if (gate.kind === 'refused') return gate
+    }
+    const expectedPriceDigest = canonicalDigest({ version: 'pricing:v2', unit: 'call', paidAmount: publishedAmount })
+    if (compareExactAmounts(amount, publishedAmount) !== 0 || args.priceDigest !== expectedPriceDigest || args.priceSourceDigest !== expectedPriceDigest || args.freeTier || args.rakeBps !== 1_000) return { kind: 'refused' as const, code: 'price_changed' as const, retryable: false }
+    if (authorityComparison === 1) return { kind: 'refused' as const, code: 'price_changed' as const, retryable: false }
+    const currency = amount.currency
+    const expectedOperatorRef = accountRefForOperator(args.principalId, currency)
+    const expectedProviderRef = accountRefForProvider(args.businessId, currency)
+    const expectedRakeRef = accountRefForRake(currency)
     if (args.operatorAccountRef !== expectedOperatorRef || args.providerAccountRef !== expectedProviderRef || args.rakeAccountRef !== expectedRakeRef) return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false }
-    const [operator, provider, rake] = await Promise.all([
-      ctx.db.query('moneyAccounts').withIndex('by_principalId_and_currency', (q) => q.eq('principalId', args.principalId).eq('currency', args.currency)).unique(),
-      ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique(),
+    const [operator, provider, rakeAccount] = await Promise.all([
+      ctx.db.query('moneyAccounts').withIndex('by_principalId_and_currency', (q) => q.eq('principalId', args.principalId).eq('currency', currency)).unique(),
+      ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', currency)).unique(),
       ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', expectedRakeRef)).unique(),
     ])
-    const accountRefusal = validateChargeAccounts({ operator: operator ?? undefined, provider: provider ?? undefined, rake: rake ?? undefined, operatorAccountRef: expectedOperatorRef, providerAccountRef: expectedProviderRef, rakeAccountRef: expectedRakeRef, principalId: args.principalId, businessId: args.businessId, currency: args.currency })
+    const operatorDomain = operator === null ? undefined : accountFromRow(operator)
+    const providerDomain = provider === null ? undefined : accountFromRow(provider)
+    const rakeDomain = rakeAccount === null ? undefined : accountFromRow(rakeAccount)
+    const accountRefusal = validateChargeAccounts({ operator: operatorDomain, provider: providerDomain, rake: rakeDomain, operatorAccountRef: expectedOperatorRef, providerAccountRef: expectedProviderRef, rakeAccountRef: expectedRakeRef, principalId: args.principalId, businessId: args.businessId, currency })
     if (accountRefusal !== undefined) return accountRefusal
-    if (operator === null || provider === null || rake === null) {
+    if (operator === null || provider === null || rakeAccount === null || operatorDomain === undefined || providerDomain === undefined || rakeDomain === undefined) {
       return { kind: 'refused' as const, code: 'billing_identity_missing' as const, retryable: false }
     }
+    if (provider.exponent !== operator.exponent || rakeAccount.exponent !== operator.exponent) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
+    const grossAmount = amountAtScale(amount, currency, operator.exponent)
+    if (grossAmount === undefined) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
+    const operatorAmount = grossAmount
+    const rake = multiplyExactAmountByBps(grossAmount, args.rakeBps, 'floor')
+    const providerNet = rake === undefined ? undefined : subtractExactAmounts(grossAmount, rake)
+    const providerAmount = providerNet === undefined ? undefined : amountAtScale(providerNet, currency, provider.exponent)
+    const rakeAmount = rake === undefined ? undefined : amountAtScale(rake, currency, rakeAccount.exponent)
+    if (providerAmount === undefined || rakeAmount === undefined || providerNet === undefined) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
+    const providerBalance = addExactAmounts(providerDomain.balance, providerAmount)
+    const rakeBalance = addExactAmounts(rakeDomain.balance, rakeAmount)
+    if (providerBalance === undefined || rakeBalance === undefined) return { kind: 'refused' as const, code: 'rake_not_configured' as const, retryable: false }
     const prior = await ctx.db.query('moneyTransactions').withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', args.idempotencyKey)).unique()
     if (prior !== null) {
       if (prior.inputDigest !== args.inputDigest || prior.principalId !== args.principalId || prior.kind !== 'charge') return { kind: 'refused' as const, code: 'ledger_idempotency_conflict' as const, retryable: false }
@@ -135,59 +261,64 @@ export const authorizeInvocationCharge = internalMutation({
       const charge = entries.find((entry) => entry.entryType === 'charge' && entry.direction === 'debit')
       const providerEntry = entries.find((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'credit')
       const rakeEntry = entries.find((entry) => entry.entryType === 'rake' && entry.direction === 'credit')
-      if (charge === undefined || providerEntry === undefined || rakeEntry === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
-      return { kind: 'accepted' as const, chargeState: 'paid' as const, currency: prior.currency, amountMinor: charge.amountMinor, priceDigest: expectedPriceDigest, transactionRef: prior.transactionRef, providerNetMinor: providerEntry.amountMinor, rakeMinor: rakeEntry.amountMinor }
+      const chargeAmount = charge === undefined ? undefined : entryAmount(charge)
+      const providerEntryAmount = providerEntry === undefined ? undefined : entryAmount(providerEntry)
+      const rakeEntryAmount = rakeEntry === undefined ? undefined : entryAmount(rakeEntry)
+      if (charge === undefined || providerEntry === undefined || rakeEntry === undefined || chargeAmount === undefined || providerEntryAmount === undefined || rakeEntryAmount === undefined || charge.accountRef !== operator.accountRef || providerEntry.accountRef !== provider.accountRef || rakeEntry.accountRef !== rakeAccount.accountRef) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+      const storedCharge = amountAtScale(chargeAmount, currency, operator.exponent)
+      const storedProvider = amountAtScale(providerEntryAmount, currency, provider.exponent)
+      const storedRake = amountAtScale(rakeEntryAmount, currency, rakeAccount.exponent)
+      if (storedCharge === undefined || storedProvider === undefined || storedRake === undefined || compareExactAmounts(storedCharge, operatorAmount) !== 0 || compareExactAmounts(storedProvider, providerAmount) !== 0 || compareExactAmounts(storedRake, rakeAmount) !== 0) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+      return { kind: 'accepted' as const, chargeState: 'paid' as const, amount: grossAmount, priceDigest: expectedPriceDigest, transactionRef: prior.transactionRef, providerNet, rake }
     }
-    const rakeProduct = args.amountMinor * args.rakeBps
-    if (!Number.isSafeInteger(rakeProduct)) return { kind: 'refused' as const, code: 'rake_not_configured' as const, retryable: false }
-    const rakeMinor = Math.floor(rakeProduct / 10_000)
-    const providerNetMinor = args.amountMinor - rakeMinor
-    if (!Number.isSafeInteger(providerNetMinor) || providerNetMinor < 0) return { kind: 'refused' as const, code: 'rake_not_configured' as const, retryable: false }
     const usageRef = `${args.invocationRef}:${args.attemptRef}:${args.operationKey}`
-    if (args.amountMinor === 0) {
+    if (grossAmount.units === '0') {
       const existingUsage = await ctx.db.query('moneyUsageEvents').withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef)).unique()
-      if (existingUsage !== null) return { kind: 'accepted' as const, chargeState: 'free_tier' as const, currency: existingUsage.currency, amountMinor: existingUsage.amountMinor, priceDigest: existingUsage.priceDigest }
+      if (existingUsage !== null) {
+        const existingAmount = amountFromParts(existingUsage.currency, existingUsage.amountUnits, existingUsage.exponent)
+        if (existingAmount === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+        return { kind: 'accepted' as const, chargeState: 'free_tier' as const, amount: existingAmount, priceDigest: existingUsage.priceDigest }
+      }
       const windowStart = new Date(args.observedAt).toISOString().slice(0, 10)
       const counter = await ctx.db.query('moneyFreeTierCounters').withIndex('by_principalId_and_offeringRef_and_windowStart', (q) => q.eq('principalId', args.principalId).eq('offeringRef', args.offeringRef).eq('windowStart', windowStart)).unique()
       if (counter !== null && counter.callsUsed >= 1) return { kind: 'refused' as const, code: 'credit_topup_required' as const, retryable: false, nextAction: 'credit_topup_required' as const }
       if (counter === null) await ctx.db.insert('moneyFreeTierCounters', { counterRef: `${args.principalId}:${args.offeringRef}:day:${windowStart}`, principalId: args.principalId, offeringRef: args.offeringRef, window: 'day', windowStart, callsUsed: 1, version: 1, updatedAt: args.observedAt })
       else await ctx.db.patch('moneyFreeTierCounters', counter._id, { callsUsed: counter.callsUsed + 1, version: counter.version + 1, updatedAt: args.observedAt })
-      await insertMoneyUsageEvent(ctx, { usageRef, principalId: args.principalId, credentialId: args.credentialId, currency: args.currency, serviceRef: args.serviceRef, offeringRef: args.offeringRef, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef, operationKey: args.operationKey, priceDigest: expectedPriceDigest, chargeState: 'free_tier', amountMinor: 0, observedAt: args.observedAt })
-      return { kind: 'accepted' as const, chargeState: 'free_tier' as const, currency: args.currency, amountMinor: 0, priceDigest: expectedPriceDigest }
+      await insertMoneyUsageEvent(ctx, { usageRef, principalId: args.principalId, credentialId: args.credentialId, currency, exponent: grossAmount.exponent, serviceRef: args.serviceRef, offeringRef: args.offeringRef, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef, operationKey: args.operationKey, priceDigest: expectedPriceDigest, chargeState: 'free_tier', amountUnits: '0', observedAt: args.observedAt })
+      return { kind: 'accepted' as const, chargeState: 'free_tier' as const, amount: grossAmount, priceDigest: expectedPriceDigest }
     }
-    const operatorBalance = operator.balanceMinor - args.amountMinor
-    const providerBalance = provider.balanceMinor + providerNetMinor
-    const rakeBalance = rake.balanceMinor + rakeMinor
-    if (!safeBalance(operatorBalance) || !safeBalance(providerBalance) || !safeBalance(rakeBalance)) return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
-    if (operator.state !== 'active' || operator.balanceMinor < args.amountMinor) {
+    const balanceComparison = compareExactAmounts(operatorDomain.balance, operatorAmount)
+    if (operatorDomain.state !== 'active' || balanceComparison === undefined || balanceComparison === -1) {
       const existingUsage = await ctx.db.query('moneyUsageEvents').withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef)).unique()
-      if (existingUsage === null) await insertMoneyUsageEvent(ctx, { usageRef, principalId: args.principalId, credentialId: args.credentialId, currency: args.currency, serviceRef: args.serviceRef, offeringRef: args.offeringRef, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef, operationKey: args.operationKey, priceDigest: expectedPriceDigest, chargeState: 'insufficient_credit', amountMinor: args.amountMinor, observedAt: args.observedAt })
-      return { kind: 'refused' as const, code: 'insufficient_credit' as const, retryable: false, nextAction: 'credit_topup_required' as const, currency: args.currency, requiredAmountMinor: args.amountMinor, availableAmountMinor: operator.balanceMinor }
+      if (existingUsage === null) await insertMoneyUsageEvent(ctx, { usageRef, principalId: args.principalId, credentialId: args.credentialId, currency, exponent: grossAmount.exponent, serviceRef: args.serviceRef, offeringRef: args.offeringRef, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef, operationKey: args.operationKey, priceDigest: expectedPriceDigest, chargeState: 'insufficient_credit', amountUnits: grossAmount.units, observedAt: args.observedAt })
+      return { kind: 'refused' as const, code: 'insufficient_credit' as const, retryable: false, nextAction: 'credit_topup_required' as const, requiredAmount: grossAmount, availableAmount: operatorDomain.balance }
     }
+    const operatorBalance = subtractExactAmounts(operatorDomain.balance, operatorAmount)
+    if (operatorBalance === undefined) return { kind: 'refused' as const, code: 'rake_not_configured' as const, retryable: false }
     if (operator.version !== args.expectedAccountVersion) return { kind: 'refused' as const, code: 'ledger_cas_conflict' as const, retryable: true }
-    const transaction = { transactionRef: args.transactionRef, kind: 'charge' as const, idempotencyKey: args.idempotencyKey, inputDigest: args.inputDigest, principalId: args.principalId, currency: args.currency, state: 'applied' as const, expectedAccountVersion: args.expectedAccountVersion, createdAt: args.observedAt, updatedAt: args.observedAt }
+    const transaction = { transactionRef: args.transactionRef, kind: 'charge' as const, idempotencyKey: args.idempotencyKey, inputDigest: args.inputDigest, principalId: args.principalId, currency, exponent: grossAmount.exponent, state: 'applied' as const, expectedAccountVersion: args.expectedAccountVersion, createdAt: args.observedAt, updatedAt: args.observedAt }
     const common = { transactionRef: args.transactionRef, idempotencyKey: args.idempotencyKey, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt }
-    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:charge`, accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amountMinor: args.amountMinor, currency: args.currency, principalId: args.principalId, invocationRef: args.invocationRef, attemptRef: args.attemptRef })
-    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:provider`, accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amountMinor: providerNetMinor, currency: args.currency, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef })
-    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:rake`, accountRef: rake.accountRef, entryType: 'rake', direction: 'credit', amountMinor: rakeMinor, currency: args.currency, businessId: args.businessId })
-    await ctx.db.patch('moneyAccounts', operator._id, { balanceMinor: operatorBalance, version: operator.version + 1, updatedAt: args.observedAt })
-    await ctx.db.patch('moneyAccounts', provider._id, { balanceMinor: providerBalance, version: provider.version + 1, updatedAt: args.observedAt })
-    await ctx.db.patch('moneyAccounts', rake._id, { balanceMinor: rakeBalance, version: rake.version + 1, updatedAt: args.observedAt })
+    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:charge`, accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amountUnits: operatorAmount.units, currency: operatorAmount.currency, exponent: operatorAmount.exponent, principalId: args.principalId, invocationRef: args.invocationRef, attemptRef: args.attemptRef })
+    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:provider`, accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amountUnits: providerAmount.units, currency: providerAmount.currency, exponent: providerAmount.exponent, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef })
+    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:rake`, accountRef: rakeAccount.accountRef, entryType: 'rake', direction: 'credit', amountUnits: rakeAmount.units, currency: rakeAmount.currency, exponent: rakeAmount.exponent, businessId: args.businessId })
+    await ctx.db.patch('moneyAccounts', operator._id, { balanceUnits: operatorBalance.units, version: operator.version + 1, updatedAt: args.observedAt })
+    await ctx.db.patch('moneyAccounts', provider._id, { balanceUnits: providerBalance.units, version: provider.version + 1, updatedAt: args.observedAt })
+    await ctx.db.patch('moneyAccounts', rakeAccount._id, { balanceUnits: rakeBalance.units, version: rakeAccount.version + 1, updatedAt: args.observedAt })
     await ctx.db.insert('moneyTransactions', transaction)
-    await insertMoneyUsageEvent(ctx, { usageRef, principalId: args.principalId, credentialId: args.credentialId, currency: args.currency, serviceRef: args.serviceRef, offeringRef: args.offeringRef, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef, operationKey: args.operationKey, priceDigest: expectedPriceDigest, chargeState: 'paid', amountMinor: args.amountMinor, transactionRef: args.transactionRef, observedAt: args.observedAt })
-    return { kind: 'accepted' as const, chargeState: 'paid' as const, currency: args.currency, amountMinor: args.amountMinor, priceDigest: expectedPriceDigest, transactionRef: args.transactionRef, providerNetMinor, rakeMinor }
+    await insertMoneyUsageEvent(ctx, { usageRef, principalId: args.principalId, credentialId: args.credentialId, currency, exponent: grossAmount.exponent, serviceRef: args.serviceRef, offeringRef: args.offeringRef, businessId: args.businessId, invocationRef: args.invocationRef, attemptRef: args.attemptRef, operationKey: args.operationKey, priceDigest: expectedPriceDigest, chargeState: 'paid', amountUnits: grossAmount.units, transactionRef: args.transactionRef, observedAt: args.observedAt })
+    return { kind: 'accepted' as const, chargeState: 'paid' as const, amount: grossAmount, priceDigest: expectedPriceDigest, transactionRef: args.transactionRef, providerNet, rake }
   },
 })
+
 export const applyCreditTopup = internalMutation({
   args: {
     commandRef: identifier,
     principalId: identifier,
     accountRef: identifier,
-    currency: identifier,
+    amount: exactAmount,
     transactionRef: identifier,
     idempotencyKey: identifier,
     inputDigest: identifier,
-    amountMinor: v.number(),
     stripeEventId: identifier,
     eventType: v.literal('payment_intent.succeeded'),
     externalRef: identifier,
@@ -201,102 +332,102 @@ export const applyCreditTopup = internalMutation({
     if (identity !== null && !principalAllowed(identity, args.principalId)) return { kind: 'refused' as const, code: 'billing_identity_missing' as const, retryable: false }
     const gate = evaluateLiveMoneyGate()
     if (gate.kind === 'refused') return gate
-    if (!Number.isSafeInteger(args.amountMinor) || args.amountMinor < 0 || args.evidenceRefs.length === 0) return { kind: 'refused' as const, code: 'credit_topup_amount_invalid' as const, retryable: false }
+    const webhookAmount = readAmount(args.amount)
+    if (webhookAmount === undefined || args.evidenceRefs.length === 0) return { kind: 'refused' as const, code: 'credit_topup_amount_invalid' as const, retryable: false }
+    const command = await ctx.db.query('moneyTopupCommands').withIndex('by_commandRef', (q) => q.eq('commandRef', args.commandRef)).unique()
+    if (command === null || command.principalId !== args.principalId || command.accountRef !== args.accountRef || command.externalRef !== args.externalRef || command.idempotencyKey !== args.idempotencyKey || command.inputDigest !== args.inputDigest) return { kind: 'refused' as const, code: 'credit_topup_pending' as const, retryable: true }
+    const commandAmount = amountFromParts(command.currency, command.amountUnits, command.exponent)
+    const processingFee = amountFromParts(command.currency, command.processingFeeUnits, command.exponent)
+    const chargeAmount = amountFromParts(command.currency, command.chargeAmountUnits, command.exponent)
+    const normalizedWebhookAmount = amountAtScale(webhookAmount, command.currency, command.exponent)
+    if (commandAmount === undefined || processingFee === undefined || chargeAmount === undefined || normalizedWebhookAmount === undefined || compareExactAmounts(commandAmount, processingFee) === undefined || compareExactAmounts(commandAmount, chargeAmount) === undefined || compareExactAmounts(chargeAmount, normalizedWebhookAmount) !== 0) return { kind: 'refused' as const, code: 'credit_topup_pending' as const, retryable: true }
     const priorEvent = await ctx.db.query('moneyStripeEvents').withIndex('by_stripeEventId', (q) => q.eq('stripeEventId', args.stripeEventId)).unique()
     if (priorEvent !== null && (priorEvent.eventType !== args.eventType || priorEvent.payloadDigest !== args.sourceDigest)) return { kind: 'refused' as const, code: 'ledger_idempotency_conflict' as const, retryable: false }
     if (priorEvent?.status === 'applied') {
       const appliedRef = priorEvent.appliedRef
       const priorTransaction = appliedRef === undefined ? null : await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', appliedRef)).unique()
       const priorEntry = appliedRef === undefined ? null : await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', appliedRef)).unique()
-      if (priorTransaction === null || priorEntry === null || priorTransaction.kind !== 'topup' || priorTransaction.externalRef !== args.externalRef || priorEntry.amountMinor !== args.amountMinor || priorEntry.currency !== args.currency) return { kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: false }
-      return { kind: 'accepted' as const, transactionRef: priorTransaction.transactionRef, amountMinor: priorEntry.amountMinor, currency: priorEntry.currency }
+      const priorAmount = priorEntry === null ? undefined : entryAmount(priorEntry)
+      if (priorTransaction === null || priorEntry === null || priorAmount === undefined || priorEntry.accountRef !== command.accountRef || priorTransaction.kind !== 'topup' || priorTransaction.externalRef !== args.externalRef || compareExactAmounts(priorAmount, commandAmount) !== 0) return { kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: false }
+      return { kind: 'accepted' as const, chargeState: 'paid' as const, transactionRef: priorTransaction.transactionRef, amount: commandAmount, priceDigest: priorTransaction.inputDigest }
     }
-    const command = await ctx.db.query('moneyTopupCommands').withIndex('by_commandRef', (q) => q.eq('commandRef', args.commandRef)).unique()
-    if (command === null || command.principalId !== args.principalId || command.accountRef !== args.accountRef || command.currency !== args.currency || command.externalRef !== args.externalRef || command.chargeAmountMinor !== args.amountMinor || command.idempotencyKey !== args.idempotencyKey || command.inputDigest !== args.inputDigest) return { kind: 'refused' as const, code: 'credit_topup_pending' as const, retryable: true }
     if (command.state === 'succeeded') {
       const priorTransaction = await ctx.db.query('moneyTransactions').withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', command.idempotencyKey)).unique()
       const priorEntry = priorTransaction === null ? null : await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', priorTransaction.transactionRef)).unique()
-      if (priorTransaction === null || priorEntry === null) return { kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: false }
-      return { kind: 'accepted' as const, transactionRef: priorTransaction.transactionRef, amountMinor: priorEntry.amountMinor, currency: priorEntry.currency }
+      const priorAmount = priorEntry === null ? undefined : entryAmount(priorEntry)
+      if (priorTransaction === null || priorEntry === null || priorAmount === undefined || priorTransaction.inputDigest !== command.inputDigest || priorTransaction.principalId !== command.principalId || priorTransaction.kind !== 'topup' || priorEntry.accountRef !== command.accountRef || compareExactAmounts(priorAmount, commandAmount) !== 0) return { kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: false }
+      return { kind: 'accepted' as const, chargeState: 'paid' as const, transactionRef: priorTransaction.transactionRef, amount: commandAmount, priceDigest: priorTransaction.inputDigest }
     }
     const account = await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', command.accountRef)).unique()
-    if (account === null || account.accountKind !== 'operator_credit' || account.principalId !== command.principalId || account.currency !== command.currency) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
+    const accountDomain = account === null ? undefined : accountFromRow(account)
+    const accountAmount = account === null || accountDomain === undefined ? undefined : amountAtScale(commandAmount, account.currency, account.exponent)
+    if (account === null || accountDomain === undefined || accountAmount === undefined || account.accountKind !== 'operator_credit' || account.principalId !== command.principalId || account.currency !== command.currency) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
     const priorTransaction = await ctx.db.query('moneyTransactions').withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', command.idempotencyKey)).unique()
     if (priorTransaction !== null) {
       if (priorTransaction.inputDigest !== command.inputDigest || priorTransaction.principalId !== command.principalId || priorTransaction.kind !== 'topup') return { kind: 'refused' as const, code: 'ledger_idempotency_conflict' as const, retryable: false }
       const priorEntry = await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', priorTransaction.transactionRef)).unique()
-      if (priorEntry === null || priorEntry.amountMinor !== command.amountMinor || priorEntry.currency !== command.currency) return { kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: false }
-      return { kind: 'accepted' as const, transactionRef: priorTransaction.transactionRef, amountMinor: priorEntry.amountMinor, currency: priorEntry.currency }
+      const priorAmount = priorEntry === null ? undefined : entryAmount(priorEntry)
+      if (priorEntry === null || priorAmount === undefined || priorEntry.accountRef !== account.accountRef || compareExactAmounts(priorAmount, accountAmount) !== 0) return { kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: false }
+      return { kind: 'accepted' as const, chargeState: 'paid' as const, transactionRef: priorTransaction.transactionRef, amount: commandAmount, priceDigest: priorTransaction.inputDigest }
     }
-    const nextBalance = account.balanceMinor + command.amountMinor
-    if (!safeBalance(nextBalance)) return { kind: 'refused' as const, code: 'credit_topup_amount_invalid' as const, retryable: false }
-    const transaction = { transactionRef: args.transactionRef, kind: 'topup' as const, idempotencyKey: command.idempotencyKey, inputDigest: command.inputDigest, principalId: command.principalId, currency: command.currency, state: 'applied' as const, expectedAccountVersion: account.version, externalRef: command.externalRef, createdAt: args.observedAt, updatedAt: args.observedAt }
-    await ctx.db.insert('moneyLedgerEntries', { entryRef: `${args.transactionRef}:topup`, accountRef: account.accountRef, entryType: 'topup', direction: 'credit', amountMinor: command.amountMinor, currency: command.currency, transactionRef: args.transactionRef, idempotencyKey: command.idempotencyKey, principalId: command.principalId, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt })
-    await ctx.db.patch('moneyAccounts', account._id, { balanceMinor: nextBalance, version: account.version + 1, updatedAt: args.observedAt })
+    const nextBalance = addExactAmounts(accountDomain.balance, accountAmount)
+    if (nextBalance === undefined) return { kind: 'refused' as const, code: 'credit_topup_amount_invalid' as const, retryable: false }
+    const transaction = { transactionRef: args.transactionRef, kind: 'topup' as const, idempotencyKey: command.idempotencyKey, inputDigest: command.inputDigest, principalId: command.principalId, currency: command.currency, exponent: command.exponent, state: 'applied' as const, expectedAccountVersion: account.version, externalRef: command.externalRef, createdAt: args.observedAt, updatedAt: args.observedAt }
+    await ctx.db.insert('moneyLedgerEntries', { entryRef: `${args.transactionRef}:topup`, accountRef: account.accountRef, entryType: 'topup', direction: 'credit', amountUnits: accountAmount.units, currency: accountAmount.currency, exponent: accountAmount.exponent, transactionRef: args.transactionRef, idempotencyKey: command.idempotencyKey, principalId: command.principalId, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt })
+    await ctx.db.patch('moneyAccounts', account._id, { balanceUnits: nextBalance.units, version: account.version + 1, updatedAt: args.observedAt })
     await ctx.db.insert('moneyTransactions', transaction)
     await ctx.db.patch('moneyTopupCommands', command._id, { state: 'succeeded', updatedAt: args.observedAt })
     if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', { stripeEventId: args.stripeEventId, eventType: args.eventType, payloadDigest: args.sourceDigest, status: 'applied', appliedRef: args.transactionRef, receivedAt: args.observedAt, appliedAt: args.observedAt })
     else await ctx.db.patch('moneyStripeEvents', priorEvent._id, { status: 'applied', appliedRef: args.transactionRef, appliedAt: args.observedAt })
-    return { kind: 'accepted' as const, transactionRef: args.transactionRef, amountMinor: command.amountMinor, currency: command.currency }
+    return { kind: 'accepted' as const, chargeState: 'paid' as const, transactionRef: args.transactionRef, amount: commandAmount, priceDigest: command.inputDigest }
   },
 })
-
 
 export const releasePayoutAccrual = internalMutation({
   args: {
     authority: v.object({ principalId: identifier }),
     businessId: identifier,
-    currency: identifier,
+    amount: exactAmount,
     providerAccountRef: identifier,
     payoutRef: identifier,
     transactionRef: identifier,
     idempotencyKey: identifier,
     inputDigest: identifier,
-    amountMinor: v.number(),
     sourceDigest: identifier,
     evidenceRefs: v.array(v.string()),
     observedAt: v.number(),
   },
   handler: async (ctx, args) => {
+    const requestedAmount = readAmount(args.amount)
+    if (requestedAmount === undefined || requestedAmount.units === '0' || args.evidenceRefs.length === 0) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
+    const currency = requestedAmount.currency
     const payoutTransactions = await ctx.db.query('moneyTransactions').withIndex('by_externalRef', (q) => q.eq('externalRef', args.payoutRef)).take(2)
     const prior = payoutTransactions.find((transaction) => transaction.kind === 'payout_accrual')
     if (prior !== undefined) {
       if (prior.inputDigest !== args.inputDigest) return { kind: 'refused' as const, code: 'ledger_idempotency_conflict' as const, retryable: false }
       const priorEntry = await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', prior.transactionRef)).unique()
-      if (priorEntry === null) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const, retryable: false }
-      return { kind: 'accepted' as const, transactionRef: prior.transactionRef, amountMinor: priorEntry.amountMinor, currency: priorEntry.currency }
+      const priorAmount = priorEntry === null ? undefined : entryAmount(priorEntry)
+      const expectedAmount = amountAtScale(requestedAmount, prior.currency, prior.exponent)
+      if (priorEntry === null || priorAmount === undefined || expectedAmount === undefined || priorEntry.accountRef !== args.providerAccountRef || compareExactAmounts(priorAmount, expectedAmount) !== 0) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const, retryable: false }
+      return { kind: 'accepted' as const, transactionRef: prior.transactionRef, amount: expectedAmount }
     }
     const identity = await ctx.auth.getUserIdentity()
     if (!principalAllowed(identity, args.authority.principalId)) return { kind: 'refused' as const, code: 'billing_identity_missing' as const, retryable: false }
     const gate = evaluateLiveMoneyGate()
     if (gate.kind === 'refused') return gate
-    if (!Number.isSafeInteger(args.amountMinor) || args.amountMinor <= 0 || args.evidenceRefs.length === 0) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
-    const expectedProviderRef = accountRefForProvider(args.businessId, args.currency)
-    if (args.providerAccountRef !== expectedProviderRef) return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false }
-    const account = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique()
-    if (account === null || account.accountKind !== 'provider_earnings' || account.accountRef !== expectedProviderRef) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
+    const expectedProviderRef = accountRefForProvider(args.businessId, currency)
+    const account = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', currency)).unique()
+    const accountDomain = account === null ? undefined : accountFromRow(account)
+    const amount = account === null || accountDomain === undefined ? undefined : amountAtScale(requestedAmount, currency, account.exponent)
+    if (account === null || accountDomain === undefined || amount === undefined || account.accountKind !== 'provider_earnings' || account.accountRef !== expectedProviderRef) return { kind: 'refused' as const, code: 'currency_mismatch' as const, retryable: false }
     const [payoutAccount, payout] = await Promise.all([
-      ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique(),
+      ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', currency)).unique(),
       ctx.db.query('moneyPayouts').withIndex('by_payoutRef', (q) => q.eq('payoutRef', args.payoutRef)).unique(),
     ])
-    if (payoutAccount === null || payout === null || payout.businessId !== args.businessId || payout.currency !== args.currency) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
-    const current: MoneyPayout = {
-      payoutRef: payout.payoutRef,
-      businessId: payout.businessId,
-      currency: payout.currency,
-      grossAccrualMinor: payout.grossAccrualMinor,
-      rakeMinor: payout.rakeMinor,
-      providerNetMinor: payout.providerNetMinor,
-      minimumPayoutMinor: payout.minimumPayoutMinor,
-      state: payout.state,
-      periodStart: payout.periodStart,
-      periodEnd: payout.periodEnd,
-      ...(payout.stripeTransferId === undefined ? {} : { stripeTransferId: payout.stripeTransferId }),
-      idempotencyKey: payout.idempotencyKey,
-      ...(payout.failureCode === undefined ? {} : { failureCode: payout.failureCode }),
-      createdAt: payout.createdAt,
-      updatedAt: payout.updatedAt,
-    }
+    const current = payout === null ? undefined : payoutFromRow(payout)
+    if (payoutAccount === null || payout === null || current === undefined || payout.businessId !== args.businessId || payout.currency !== currency) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
+    const currentProviderNet = amountAtScale(current.providerNet, currency, amount.exponent)
+    if (currentProviderNet === undefined) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const, retryable: false }
     const policy = transitionPayout({
       current,
       now: args.observedAt,
@@ -304,24 +435,28 @@ export const releasePayoutAccrual = internalMutation({
       account: { state: payoutAccount.state, detailsSubmitted: payoutAccount.detailsSubmitted, recipientCapabilityActive: payoutAccount.recipientCapabilityActive },
     })
     if (policy.kind === 'refused') return policy
-    if (payout.providerNetMinor !== args.amountMinor || account.balanceMinor < args.amountMinor) return { kind: 'refused' as const, code: payout.providerNetMinor !== args.amountMinor ? 'payout_not_ready' as const : 'payout_below_threshold' as const, retryable: false }
+    const providerComparison = compareExactAmounts(currentProviderNet, amount)
+    const balanceComparison = compareExactAmounts(accountDomain.balance, amount)
+    if (providerComparison !== 0 || balanceComparison === -1 || balanceComparison === undefined) return { kind: 'refused' as const, code: providerComparison !== 0 ? 'payout_not_ready' as const : 'payout_below_threshold' as const, retryable: false }
     const priorIdempotency = await ctx.db.query('moneyTransactions').withIndex('by_idempotencyKey', (q) => q.eq('idempotencyKey', args.idempotencyKey)).unique()
     if (priorIdempotency !== null) {
       if (priorIdempotency.inputDigest !== args.inputDigest || priorIdempotency.externalRef !== args.payoutRef || priorIdempotency.kind !== 'payout_accrual') return { kind: 'refused' as const, code: 'ledger_idempotency_conflict' as const, retryable: false }
       const priorEntry = await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', priorIdempotency.transactionRef)).unique()
-      if (priorEntry === null) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const, retryable: false }
-      return { kind: 'accepted' as const, transactionRef: priorIdempotency.transactionRef, amountMinor: priorEntry.amountMinor, currency: priorEntry.currency }
+      const priorAmount = priorEntry === null ? undefined : entryAmount(priorEntry)
+      if (priorEntry === null || priorAmount === undefined || priorEntry.accountRef !== account.accountRef || compareExactAmounts(priorAmount, amount) !== 0) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const, retryable: false }
+      return { kind: 'accepted' as const, transactionRef: priorIdempotency.transactionRef, amount }
     }
-    const nextBalance = account.balanceMinor - args.amountMinor
-    if (!safeBalance(nextBalance)) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
-    const transaction = { transactionRef: args.transactionRef, kind: 'payout_accrual' as const, idempotencyKey: args.idempotencyKey, inputDigest: args.inputDigest, principalId: `business:${args.businessId}`, currency: args.currency, state: 'applied' as const, expectedAccountVersion: account.version, externalRef: args.payoutRef, createdAt: args.observedAt, updatedAt: args.observedAt }
-    await ctx.db.insert('moneyLedgerEntries', { entryRef: `${args.transactionRef}:payout`, accountRef: account.accountRef, entryType: 'payout_accrual', direction: 'debit', amountMinor: args.amountMinor, currency: args.currency, transactionRef: args.transactionRef, idempotencyKey: args.idempotencyKey, businessId: args.businessId, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt })
-    await ctx.db.patch('moneyAccounts', account._id, { balanceMinor: nextBalance, version: account.version + 1, updatedAt: args.observedAt })
+    const nextBalance = subtractExactAmounts(accountDomain.balance, amount)
+    if (nextBalance === undefined) return { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
+    const transaction = { transactionRef: args.transactionRef, kind: 'payout_accrual' as const, idempotencyKey: args.idempotencyKey, inputDigest: args.inputDigest, principalId: `business:${args.businessId}`, currency, exponent: amount.exponent, state: 'applied' as const, expectedAccountVersion: account.version, externalRef: args.payoutRef, createdAt: args.observedAt, updatedAt: args.observedAt }
+    await ctx.db.insert('moneyLedgerEntries', { entryRef: `${args.transactionRef}:payout`, accountRef: account.accountRef, entryType: 'payout_accrual', direction: 'debit', amountUnits: amount.units, currency, exponent: amount.exponent, transactionRef: args.transactionRef, idempotencyKey: args.idempotencyKey, businessId: args.businessId, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt })
+    await ctx.db.patch('moneyAccounts', account._id, { balanceUnits: nextBalance.units, version: account.version + 1, updatedAt: args.observedAt })
     await ctx.db.patch('moneyPayouts', payout._id, { state: policy.value.state, updatedAt: args.observedAt })
     await ctx.db.insert('moneyTransactions', transaction)
-    return { kind: 'accepted' as const, transactionRef: args.transactionRef, amountMinor: args.amountMinor, currency: args.currency }
+    return { kind: 'accepted' as const, transactionRef: args.transactionRef, amount }
   },
 })
+
 export const appendRefund = internalMutation({
   args: {
     principalId: identifier,
@@ -350,21 +485,35 @@ export const appendRefund = internalMutation({
     const charge = entries.find((entry) => entry.entryType === 'charge' && entry.direction === 'debit')
     const provider = entries.find((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'credit')
     const rake = entries.find((entry) => entry.entryType === 'rake' && entry.direction === 'credit')
-    if (charge === undefined || provider === undefined || rake === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+    const chargeAmount = charge === undefined ? undefined : entryAmount(charge)
+    const providerAmount = provider === undefined ? undefined : entryAmount(provider)
+    const rakeAmount = rake === undefined ? undefined : entryAmount(rake)
+    if (charge === undefined || provider === undefined || rake === undefined || chargeAmount === undefined || providerAmount === undefined || rakeAmount === undefined || chargeAmount.currency !== original.currency || providerAmount.currency !== original.currency || rakeAmount.currency !== original.currency || chargeAmount.exponent !== original.exponent || providerAmount.exponent !== original.exponent || rakeAmount.exponent !== original.exponent) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
     const [operatorAccount, providerAccount, rakeAccount] = await Promise.all([
       ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', charge.accountRef)).unique(),
       ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', provider.accountRef)).unique(),
       ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', rake.accountRef)).unique(),
     ])
-    if (operatorAccount === null || providerAccount === null || rakeAccount === null || providerAccount.balanceMinor < provider.amountMinor || rakeAccount.balanceMinor < rake.amountMinor) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+    const operatorDomain = operatorAccount === null ? undefined : accountFromRow(operatorAccount)
+    const providerDomain = providerAccount === null ? undefined : accountFromRow(providerAccount)
+    const rakeDomain = rakeAccount === null ? undefined : accountFromRow(rakeAccount)
+    if (operatorAccount === null || providerAccount === null || rakeAccount === null || operatorDomain === undefined || providerDomain === undefined || rakeDomain === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+    const operatorRefund = amountAtScale(chargeAmount, operatorAccount.currency, operatorAccount.exponent)
+    const providerRefund = amountAtScale(providerAmount, providerAccount.currency, providerAccount.exponent)
+    const rakeRefund = amountAtScale(rakeAmount, rakeAccount.currency, rakeAccount.exponent)
+    if (operatorRefund === undefined || providerRefund === undefined || rakeRefund === undefined || compareExactAmounts(providerDomain.balance, providerRefund) === -1 || compareExactAmounts(rakeDomain.balance, rakeRefund) === -1) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
+    const nextOperatorBalance = addExactAmounts(operatorDomain.balance, operatorRefund)
+    const nextProviderBalance = subtractExactAmounts(providerDomain.balance, providerRefund)
+    const nextRakeBalance = subtractExactAmounts(rakeDomain.balance, rakeRefund)
+    if (nextOperatorBalance === undefined || nextProviderBalance === undefined || nextRakeBalance === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
     const common = { transactionRef: args.transactionRef, idempotencyKey: args.idempotencyKey, sourceDigest: args.sourceDigest, evidenceRefs: args.evidenceRefs, createdAt: args.observedAt }
-    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:operator`, accountRef: operatorAccount.accountRef, entryType: 'refund', direction: 'credit', amountMinor: charge.amountMinor, currency: original.currency, principalId: args.principalId, reversalOf: args.originalTransactionRef })
-    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:provider`, accountRef: providerAccount.accountRef, entryType: 'refund', direction: 'debit', amountMinor: provider.amountMinor, currency: original.currency, ...(provider.businessId === undefined ? {} : { businessId: provider.businessId }), reversalOf: args.originalTransactionRef })
-    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:rake`, accountRef: rakeAccount.accountRef, entryType: 'refund', direction: 'debit', amountMinor: rake.amountMinor, currency: original.currency, ...(rake.businessId === undefined ? {} : { businessId: rake.businessId }), reversalOf: args.originalTransactionRef })
-    await ctx.db.patch('moneyAccounts', operatorAccount._id, { balanceMinor: operatorAccount.balanceMinor + charge.amountMinor, version: operatorAccount.version + 1, updatedAt: args.observedAt })
-    await ctx.db.patch('moneyAccounts', providerAccount._id, { balanceMinor: providerAccount.balanceMinor - provider.amountMinor, version: providerAccount.version + 1, updatedAt: args.observedAt })
-    await ctx.db.patch('moneyAccounts', rakeAccount._id, { balanceMinor: rakeAccount.balanceMinor - rake.amountMinor, version: rakeAccount.version + 1, updatedAt: args.observedAt })
-    await ctx.db.insert('moneyTransactions', { transactionRef: args.transactionRef, kind: 'refund', idempotencyKey: args.idempotencyKey, inputDigest: args.inputDigest, principalId: args.principalId, currency: original.currency, state: 'reversed', expectedAccountVersion: operatorAccount.version, reversalOf: args.originalTransactionRef, createdAt: args.observedAt, updatedAt: args.observedAt })
+    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:operator`, accountRef: operatorAccount.accountRef, entryType: 'refund', direction: 'credit', amountUnits: operatorRefund.units, currency: operatorRefund.currency, exponent: operatorRefund.exponent, principalId: args.principalId, reversalOf: args.originalTransactionRef })
+    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:provider`, accountRef: providerAccount.accountRef, entryType: 'refund', direction: 'debit', amountUnits: providerRefund.units, currency: providerRefund.currency, exponent: providerRefund.exponent, ...(provider.businessId === undefined ? {} : { businessId: provider.businessId }), reversalOf: args.originalTransactionRef })
+    await ctx.db.insert('moneyLedgerEntries', { ...common, entryRef: `${args.transactionRef}:rake`, accountRef: rakeAccount.accountRef, entryType: 'refund', direction: 'debit', amountUnits: rakeRefund.units, currency: rakeRefund.currency, exponent: rakeRefund.exponent, ...(rake.businessId === undefined ? {} : { businessId: rake.businessId }), reversalOf: args.originalTransactionRef })
+    await ctx.db.patch('moneyAccounts', operatorAccount._id, { balanceUnits: nextOperatorBalance.units, version: operatorAccount.version + 1, updatedAt: args.observedAt })
+    await ctx.db.patch('moneyAccounts', providerAccount._id, { balanceUnits: nextProviderBalance.units, version: providerAccount.version + 1, updatedAt: args.observedAt })
+    await ctx.db.patch('moneyAccounts', rakeAccount._id, { balanceUnits: nextRakeBalance.units, version: rakeAccount.version + 1, updatedAt: args.observedAt })
+    await ctx.db.insert('moneyTransactions', { transactionRef: args.transactionRef, kind: 'refund', idempotencyKey: args.idempotencyKey, inputDigest: args.inputDigest, principalId: args.principalId, currency: original.currency, exponent: original.exponent, state: 'reversed' as const, expectedAccountVersion: operatorAccount.version, reversalOf: args.originalTransactionRef, createdAt: args.observedAt, updatedAt: args.observedAt })
     await ctx.db.patch('moneyTransactions', original._id, { state: 'reversed', updatedAt: args.observedAt })
     return { kind: 'accepted' as const, transactionRef: args.transactionRef, currency: original.currency }
   },
@@ -396,7 +545,6 @@ export const reconcileCharge = internalMutation({
   },
 })
 
-
 export const markChargeOutcomeUnknown = internalMutation({
   args: { transactionRef: identifier, principalId: identifier, now: v.number() },
   handler: async (ctx, args) => {
@@ -416,8 +564,17 @@ export const readCreditAccount = query({
     const identity = await ctx.auth.getUserIdentity()
     if (!await ownerPrincipalAllowed(identity, args.principalId, async () => await ctx.db.query('customerRequestAgentPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', args.principalId)).unique())) return { kind: 'refused' as const, code: 'billing_identity_missing' as const }
     const account = await ctx.db.query('moneyAccounts').withIndex('by_principalId_and_currency', (q) => q.eq('principalId', args.principalId).eq('currency', args.currency)).unique()
-    if (account === null) return { kind: 'refused' as const, code: 'billing_identity_missing' as const }
-    return { kind: 'ok' as const, principalId: args.principalId, currency: args.currency, balanceMinor: account.balanceMinor, autoRecharge: { enabled: false, thresholdMinor: 0, rechargeAmountMinor: 0 }, evidence: 'source' as const }
+    const accountDomain = account === null ? undefined : accountFromRow(account)
+    if (account === null || accountDomain === undefined) return { kind: 'refused' as const, code: 'billing_identity_missing' as const }
+    const threshold = zeroAmount(account.currency, account.exponent)
+    if (threshold === undefined) return { kind: 'refused' as const, code: 'billing_identity_missing' as const }
+    return {
+      kind: 'ok' as const,
+      principalId: args.principalId,
+      balance: accountDomain.balance,
+      autoRecharge: { enabled: false, threshold, rechargeAmount: threshold },
+      evidence: 'source' as const,
+    }
   },
 })
 
@@ -431,16 +588,17 @@ export const listCreditActivity = query({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!await ownerPrincipalAllowed(identity, args.principalId, async () => await ctx.db.query('customerRequestAgentPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', args.principalId)).unique())) return { kind: 'refused' as const, code: 'billing_identity_missing' as const, items: [] as const }
-
     const page = await ctx.db.query('moneyUsageEvents').withIndex('by_principalId_and_credentialId_and_currency_and_observedAt', (q) => q.eq('principalId', args.principalId).eq('credentialId', args.credentialId).eq('currency', args.currency)).order('desc').paginate(args.paginationOpts)
-    return {
-      kind: 'ok' as const,
-      page: page.page.map((row) => ({ activityRef: row.usageRef, credentialId: row.credentialId, serviceRef: row.serviceRef, offeringRef: row.offeringRef, businessId: row.businessId, operationKey: row.operationKey, grossAmountMinor: row.amountMinor, currency: row.currency, chargeState: row.chargeState, observedAt: row.observedAt, ...(row.transactionRef === undefined ? {} : { transactionRef: row.transactionRef }) })),
-      isDone: page.isDone,
-      continueCursor: page.continueCursor,
+    const items = []
+    for (const row of page.page) {
+      const grossAmount = amountFromParts(row.currency, row.amountUnits, row.exponent)
+      if (grossAmount === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, items: [] as const }
+      items.push({ activityRef: row.usageRef, credentialId: row.credentialId, serviceRef: row.serviceRef, offeringRef: row.offeringRef, businessId: row.businessId, operationKey: row.operationKey, grossAmount, chargeState: row.chargeState, observedAt: row.observedAt, ...(row.transactionRef === undefined ? {} : { transactionRef: row.transactionRef }) })
     }
+    return { kind: 'ok' as const, page: items, isDone: page.isDone, continueCursor: page.continueCursor }
   },
 })
+
 export const readKeyUsage = query({
   args: {
     principalId: identifier,
@@ -449,36 +607,236 @@ export const readKeyUsage = query({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (!await ownerPrincipalAllowed(identity, args.principalId, async () => await ctx.db.query('customerRequestAgentPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', args.principalId)).unique())) return { kind: 'refused' as const, code: 'billing_identity_missing' as const, items: [] as const }
-
+    if (!await ownerPrincipalAllowed(identity, args.principalId, async () => await ctx.db.query('customerRequestAgentPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', args.principalId)).unique())) return { kind: 'refused' as const, code: 'billing_identity_missing', items: [] as const }
     const summary = await ctx.db.query('moneyCredentialUsageSummaries').withIndex('by_principalId_and_credentialId_and_currency', (q) => q.eq('principalId', args.principalId).eq('credentialId', args.credentialId).eq('currency', args.currency)).unique()
-    if (summary === null) return { kind: 'ok' as const, credentialId: args.credentialId, callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpendMinor: 0, currency: args.currency, states: [] as const }
-    return { kind: 'ok' as const, credentialId: summary.credentialId, callCount: summary.callCount, paidCallCount: summary.paidCallCount, freeCallCount: summary.freeCallCount, grossSpendMinor: summary.grossSpendMinor, currency: summary.currency, states: summary.states }
+    const account = await ctx.db.query('moneyAccounts').withIndex('by_principalId_and_currency', (q) => q.eq('principalId', args.principalId).eq('currency', args.currency)).unique()
+    const exponent = summary?.exponent ?? account?.exponent
+    if (exponent === undefined) return { kind: 'refused' as const, code: 'billing_identity_missing', items: [] as const }
+    const grossSpend = summary === null ? zeroAmount(args.currency, exponent) : amountFromParts(summary.currency, summary.grossSpendUnits, summary.exponent)
+    if (grossSpend === undefined) return { kind: 'refused' as const, code: 'charge_reconciliation_required', items: [] as const }
+    return {
+      kind: 'ok' as const,
+      credentialId: args.credentialId,
+      callCount: summary?.callCount ?? 0,
+      paidCallCount: summary?.paidCallCount ?? 0,
+      freeCallCount: summary?.freeCallCount ?? 0,
+      grossSpend,
+      states: summary?.states ?? [],
+    }
   },
 })
 
+function sumEntries(
+  rows: readonly MoneyLedgerEntryRow[],
+  zero: ExactAmount,
+  predicate: (entry: MoneyLedgerEntryRow) => boolean,
+): ExactAmount | undefined {
+  let total = zero
+  for (const row of rows) {
+    if (!predicate(row)) continue
+    const amount = entryAmount(row)
+    if (amount === undefined) return undefined
+    const next = addExactAmounts(total, amount)
+    if (next === undefined) return undefined
+    total = next
+  }
+  return total
+}
 
+type MoneyQueryCtx = Pick<QueryCtx, 'db'>
+type ProviderEarningsReadResult =
+  | Readonly<{
+      kind: 'ok'
+      businessId: string
+      grossAccrual: ExactAmount
+      rake: ExactAmount
+      providerNet: ExactAmount
+      paidOut: ExactAmount
+      held: ExactAmount
+      truncated: boolean
+      evidence: 'source'
+    }>
+  | Readonly<{ kind: 'refused'; code: 'payout_not_ready' | 'payout_reconciliation_required' }>
+type PayoutStatusReadResult =
+  | Readonly<{
+      kind: 'ok'
+      businessId: string
+      accountState: 'missing' | 'not_started' | 'onboarding_started' | 'submitted' | 'restricted' | 'ready'
+      payoutState?: 'review' | 'held_kyc' | 'held_threshold' | 'transfer_pending' | 'paid' | 'failed' | 'outcome_unknown'
+      providerNet: ExactAmount
+      minimumPayout: ExactAmount
+      evidence: 'source'
+    }>
+  | Readonly<{ kind: 'refused'; code: 'payout_not_ready' | 'payout_reconciliation_required' }>
+
+async function readProviderEarningsForAccount(
+  ctx: MoneyQueryCtx,
+  businessId: string,
+  currency: string,
+  account: Doc<'moneyAccounts'> | null,
+): Promise<ProviderEarningsReadResult> {
+  const accountDomain = account === null ? undefined : accountFromRow(account)
+  if (account === null || accountDomain === undefined || account.accountKind !== 'provider_earnings') return { kind: 'refused' as const, code: 'payout_not_ready' as const }
+  const rows = await ctx.db.query('moneyLedgerEntries').withIndex('by_businessId_and_createdAt', (q) => q.eq('businessId', businessId)).order('desc').take(100)
+  const zero = zeroAmount(account.currency, account.exponent)
+  if (zero === undefined) return { kind: 'refused' as const, code: 'payout_not_ready' as const }
+  const providerCredits = sumEntries(rows, zero, (entry) => entry.currency === currency && entry.accountRef === account.accountRef && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.invocationRef !== undefined)
+  const rakeCredits = sumEntries(rows, zero, (entry) => entry.currency === currency && entry.accountRef === accountRefForRake(currency) && entry.entryType === 'rake' && entry.direction === 'credit')
+  const paidOut = sumEntries(rows, zero, (entry) => entry.currency === currency && entry.accountRef === account.accountRef && entry.entryType === 'payout_accrual' && entry.direction === 'debit')
+  const providerRefunds = sumEntries(rows, zero, (entry) => entry.currency === currency && entry.accountRef === account.accountRef && entry.entryType === 'refund' && entry.direction === 'debit')
+  const rakeRefunds = sumEntries(rows, zero, (entry) => entry.currency === currency && entry.accountRef === accountRefForRake(currency) && entry.entryType === 'refund' && entry.direction === 'debit')
+  const providerNet = providerCredits === undefined || providerRefunds === undefined ? undefined : subtractExactAmounts(providerCredits, providerRefunds)
+  const rake = rakeCredits === undefined || rakeRefunds === undefined ? undefined : subtractExactAmounts(rakeCredits, rakeRefunds)
+  const grossAccrual = providerNet === undefined || rake === undefined ? undefined : addExactAmounts(providerNet, rake)
+  if (grossAccrual === undefined || rake === undefined || providerNet === undefined || paidOut === undefined) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const }
+  return { kind: 'ok' as const, businessId, grossAccrual, rake, providerNet, paidOut, held: accountDomain.balance, truncated: rows.length === 100, evidence: 'source' as const }
+}
+
+async function readProviderEarningsForBusiness(ctx: MoneyQueryCtx, businessId: string, currency: string): Promise<ProviderEarningsReadResult> {
+  const account = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', businessId).eq('currency', currency)).unique()
+  return await readProviderEarningsForAccount(ctx, businessId, currency, account)
+}
+
+async function readPayoutStatusForRows(
+  ctx: MoneyQueryCtx,
+  businessId: string,
+  currency: string,
+  account: Doc<'moneyPayoutAccounts'> | null,
+  providerAccount: Doc<'moneyAccounts'> | null,
+): Promise<PayoutStatusReadResult> {
+  if (account === null) {
+    const provider = providerAccount === null ? undefined : accountFromRow(providerAccount)
+    if (provider === undefined || provider.accountKind !== 'provider_earnings') {
+      return { kind: 'refused' as const, code: 'payout_not_ready' as const }
+    }
+    const zero = zeroAmount(provider.balance.currency, provider.balance.exponent)
+    return zero === undefined
+      ? { kind: 'refused' as const, code: 'payout_not_ready' as const }
+      : {
+          kind: 'ok' as const,
+          businessId,
+          accountState: 'missing' as const,
+          providerNet: zero,
+          minimumPayout: zero,
+          evidence: 'source' as const,
+        }
+  }
+  const current = (await ctx.db.query('moneyPayouts').withIndex('by_businessId_and_currency_and_updatedAt', (q) => q.eq('businessId', businessId).eq('currency', currency)).order('desc').take(1))[0]
+  const zero = zeroAmount(account.currency, account.exponent)
+  if (zero === undefined) return { kind: 'refused' as const, code: 'payout_not_ready' as const }
+  if (current === undefined) return { kind: 'ok' as const, businessId, accountState: account.state, providerNet: zero, minimumPayout: zero, evidence: 'source' as const }
+  const payout = payoutFromRow(current)
+  if (payout === undefined || current.exponent !== account.exponent) return { kind: 'refused' as const, code: 'payout_reconciliation_required' as const }
+  return { kind: 'ok' as const, businessId, accountState: account.state, payoutState: current.state, providerNet: payout.providerNet, minimumPayout: payout.minimumPayout, evidence: 'source' as const }
+}
+
+async function readPayoutStatusForProviderAccount(
+  ctx: MoneyQueryCtx,
+  businessId: string,
+  currency: string,
+  providerAccount: Doc<'moneyAccounts'>,
+): Promise<PayoutStatusReadResult> {
+  const account = await ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', businessId).eq('currency', currency)).unique()
+  return await readPayoutStatusForRows(ctx, businessId, currency, account, providerAccount)
+}
+
+async function readPayoutStatusForBusiness(ctx: MoneyQueryCtx, businessId: string, currency: string): Promise<PayoutStatusReadResult> {
+  const [account, providerAccount] = await Promise.all([
+    ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', businessId).eq('currency', currency)).unique(),
+    ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', businessId).eq('currency', currency)).unique(),
+  ])
+  return await readPayoutStatusForRows(ctx, businessId, currency, account, providerAccount)
+}
+
+const payoutAccountStateValue = v.union(
+  v.literal('missing'),
+  v.literal('not_started'),
+  v.literal('onboarding_started'),
+  v.literal('submitted'),
+  v.literal('restricted'),
+  v.literal('ready'),
+)
+const payoutStateValue = v.union(
+  v.literal('review'),
+  v.literal('held_kyc'),
+  v.literal('held_threshold'),
+  v.literal('transfer_pending'),
+  v.literal('paid'),
+  v.literal('failed'),
+  v.literal('outcome_unknown'),
+)
+const providerEarningsViewValue = v.object({
+  kind: v.literal('ok'),
+  businessId: identifier,
+  grossAccrual: exactAmount,
+  rake: exactAmount,
+  providerNet: exactAmount,
+  paidOut: exactAmount,
+  held: exactAmount,
+  truncated: v.boolean(),
+  evidence: v.literal('source'),
+})
+const payoutStatusViewValue = v.object({
+  kind: v.literal('ok'),
+  businessId: identifier,
+  accountState: payoutAccountStateValue,
+  payoutState: v.optional(payoutStateValue),
+  providerNet: exactAmount,
+  minimumPayout: exactAmount,
+  evidence: v.literal('source'),
+})
+const ownerProviderEarningsResultValue = v.union(
+  v.object({ kind: v.literal('error'), code: v.union(v.literal('unauthenticated'), v.literal('source_unavailable')) }),
+  v.object({ kind: v.literal('not_found') }),
+  v.object({
+    kind: v.literal('available'),
+    businessId: identifier,
+    accounts: v.array(v.object({ currency: identifier, earnings: providerEarningsViewValue, payout: payoutStatusViewValue })),
+    accountsTruncated: v.boolean(),
+  }),
+)
+
+export const readOwnerProviderEarnings = query({
+  args: {},
+  returns: ownerProviderEarningsResultValue,
+  handler: async (ctx) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
+    const owner = await ctx.db.query('owners').withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', actor.clerkUserId)).unique()
+    if (owner === null) return { kind: 'not_found' as const }
+    const business = await ctx.db.query('businesses').withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id)).order('desc').first()
+    if (business === null) return { kind: 'not_found' as const }
+    const businessId = String(business._id)
+    const accountRows = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', businessId)).take(11)
+    const providerAccountRows = accountRows.filter((account) => account.accountKind === 'provider_earnings')
+    const providerAccounts = providerAccountRows.slice(0, 10)
+    const accountResults = await Promise.all(providerAccounts.map(async (providerAccount) => {
+      const [earnings, payout] = await Promise.all([
+        readProviderEarningsForAccount(ctx, businessId, providerAccount.currency, providerAccount),
+        readPayoutStatusForProviderAccount(ctx, businessId, providerAccount.currency, providerAccount),
+      ])
+      return earnings.kind === 'ok' && payout.kind === 'ok'
+        ? { currency: providerAccount.currency, earnings, payout }
+        : undefined
+    }))
+    if (accountResults.some((account) => account === undefined)) {
+      return { kind: 'error' as const, code: 'source_unavailable' as const }
+    }
+    return {
+      kind: 'available' as const,
+      businessId,
+      accounts: accountResults.filter((account) => account !== undefined),
+      accountsTruncated: providerAccountRows.length > 10,
+    }
+  },
+})
 
 export const readProviderEarnings = internalQuery({
   args: { businessId: identifier, currency: identifier },
-  handler: async (ctx, args) => {
-    const account = await ctx.db.query('moneyAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique()
-    if (account === null || account.accountKind !== 'provider_earnings') return { kind: 'refused' as const, code: 'payout_not_ready' as const }
-    const rows = await ctx.db.query('moneyLedgerEntries').withIndex('by_businessId_and_createdAt', (q) => q.eq('businessId', args.businessId)).order('desc').take(100)
-    const providerChargeCredits = rows.filter((entry) => entry.currency === args.currency && entry.accountRef === account.accountRef && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.invocationRef !== undefined).reduce((sum, entry) => sum + entry.amountMinor, 0)
-    const rakeMinor = rows.filter((entry) => entry.currency === args.currency && entry.entryType === 'rake' && entry.direction === 'credit').reduce((sum, entry) => sum + entry.amountMinor, 0)
-    const paidOutMinor = rows.filter((entry) => entry.currency === args.currency && entry.accountRef === account.accountRef && entry.entryType === 'payout_accrual' && entry.direction === 'debit').reduce((sum, entry) => sum + entry.amountMinor, 0)
-    const refundReversals = rows.filter((entry) => entry.currency === args.currency && entry.accountRef === account.accountRef && entry.entryType === 'refund' && entry.direction === 'debit').reduce((sum, entry) => sum + entry.amountMinor, 0)
-    return { kind: 'ok' as const, businessId: args.businessId, currency: args.currency, grossAccrualMinor: providerChargeCredits, rakeMinor, providerNetMinor: providerChargeCredits - refundReversals, paidOutMinor, heldMinor: account.balanceMinor, evidence: 'source' as const }
-  },
+  handler: async (ctx, args) => await readProviderEarningsForBusiness(ctx, args.businessId, args.currency),
 })
 
 export const readPayoutStatus = internalQuery({
   args: { businessId: identifier, currency: identifier },
-  handler: async (ctx, args) => {
-    const account = await ctx.db.query('moneyPayoutAccounts').withIndex('by_businessId_and_currency', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).unique()
-    const current = account === null ? undefined : (await ctx.db.query('moneyPayouts').withIndex('by_businessId_and_currency_and_updatedAt', (q) => q.eq('businessId', args.businessId).eq('currency', args.currency)).order('desc').take(1))[0]
-    return { kind: 'ok' as const, businessId: args.businessId, currency: args.currency, accountState: account?.state ?? 'missing', ...(current === undefined ? {} : { payoutState: current.state }), providerNetMinor: current?.providerNetMinor ?? 0, minimumPayoutMinor: current?.minimumPayoutMinor ?? 0, evidence: 'source' as const }
-  },
+  handler: async (ctx, args) => await readPayoutStatusForBusiness(ctx, args.businessId, args.currency),
 })
-

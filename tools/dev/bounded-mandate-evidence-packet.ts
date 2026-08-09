@@ -24,7 +24,11 @@ import { projectDurableRun } from './fixtures/provider-operation/development-pro
 import { createDevelopmentProviderOperationProvider } from './fixtures/provider-operation/development-provider-operation-provider'
 import { runProviderOperationReconciliation } from './fixtures/provider-operation/development-provider-operation-recovery'
 import { runProviderOperationInvocation } from './fixtures/provider-operation/development-provider-operation-runner'
-import { canonicalDigest } from '../../src/modules/common/canonical-digest'
+import {
+  addExactAmounts,
+  compareExactAmounts,
+  type ExactAmount,
+} from '../../src/modules/money/public'
 import {
   captureOfficialEvidenceProvenance,
   verifyOfficialEvidenceProvenance,
@@ -117,7 +121,7 @@ function createIssuedStore(maximumConcurrentReservations = 2) {
       recipientRefs: ['mock:provider:calendar'],
       purposes: ['create_development_effect'],
       allowedDataFields: ['customer.name', 'customer.email'],
-      maximumSpend: { amountMinor: 0, currency: 'AUD' },
+      maximumSpend: { currency: 'AUD', units: '0', exponent: 2 },
       maximumActionCount: 8,
       maximumConcurrentReservations,
       startsAt: now,
@@ -238,7 +242,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
     action: concurrency.mandate.scope.action, preparedMaterialDigest: 'sha256:prepared:1',
     providerRef: slot.providerRef, recipientRef: slot.providerRef,
     purpose: 'create_development_effect', dataFields: ['customer.name', 'customer.email'],
-    reservedSpend: { amountMinor: 0, currency: 'AUD' }, fallbackRef: null,
+    reservedSpend: { currency: 'AUD', units: '0', exponent: 2 }, fallbackRef: null,
     risk: 'development_provider_operation_zero_charge', effectGeneration: 1,
   } as const
   if (concurrency.store.reserve(firstUse, now).kind === 'refused') throw new Error('packet_concurrency_setup_refused')
@@ -547,11 +551,14 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
   const releasedUses = evidence.mandateSnapshot.uses.filter(({ state }) => state === 'released')
   const heldUses = evidence.mandateSnapshot.uses.filter(({ state }) =>
     state === 'reserved' || state === 'uncertain')
+  const expectedConsumedSpend = releasedUses.reduce<ExactAmount | undefined>(
+    (sum, use) => sum === undefined ? undefined : addExactAmounts(sum, use.reservedSpend),
+    { currency: 'AUD', units: '0', exponent: 2 },
+  )
   if (
     capacity.consumedCount !== releasedUses.length
     || capacity.reservedCount !== heldUses.length
-    || capacity.consumedSpendMinor
-      !== releasedUses.reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
+    || compareExactAmounts(capacity.consumedSpend, expectedConsumedSpend) !== 0
   ) throw new Error('bounded_mandate_capacity_verification_refused')
   return {
     verdict: 'PASS_FOR_DECLARED_CLASS' as const,

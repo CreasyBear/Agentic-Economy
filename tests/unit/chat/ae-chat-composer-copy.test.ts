@@ -7,34 +7,48 @@ import type { PublicThreadTurn } from '@/modules/answer-thread/public'
 describe('chat composer loop copy', () => {
   it('labels first live searches as a checked discovery loop', () => {
     expect(buildFollowUpComposerCopy([], 'refine_search')).toEqual({
-      placeholder: 'Checking published business details',
-      loopHint: 'AE is checking published business details before any contact step.',
+      placeholder: 'Checking what\'s available',
+      loopHint: 'Checking what\'s available before any contact step.',
     })
   })
 
   it('labels live refinement after saved turns as a thread-aware search', () => {
     expect(buildFollowUpComposerCopy([turn()], 'refine_search')).toEqual({
-      placeholder: 'Searching again with this thread in mind',
-      loopHint: 'AE is checking published business details before any contact step.',
+      placeholder: 'Checking what is available again with this thread in mind',
+      loopHint: 'Checking what\'s available before any contact step.',
     })
   })
 
   it('makes live compare and inquiry handoff state explicit', () => {
     expect(buildFollowUpComposerCopy([turn()], 'compare_known')).toEqual({
-      placeholder: 'Comparing the listed businesses from this thread',
-      loopHint: 'AE is comparing published details from the businesses already found.',
+      placeholder: 'Comparing options from this thread',
+      loopHint: 'Comparing details from the businesses already found.',
     })
 
     expect(buildFollowUpComposerCopy([turn()], 'inquiry_handoff')).toEqual({
-      placeholder: 'Preparing the qualified inquiry next step',
-      loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
+      placeholder: 'Preparing a request to the business',
+      loopHint: 'Carrying the selected business into a request. It still confirms timing, quote, and availability.',
     })
   })
 
   it('keeps saved thread guidance when no turn is streaming', () => {
     expect(buildFollowUpComposerCopy([turn()], null)).toEqual({
-      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
+      placeholder: 'Narrow, compare, or ask the business',
+      loopHint: 'Narrow or compare the matches, then ask the business when one fits.',
+    })
+  })
+
+  it('uses neutral follow-up copy after a data answer', () => {
+    expect(buildFollowUpComposerCopy([
+      turn({
+        query: 'What is the current bitcoin price?',
+        artifacts: [{ kind: 'one-line', text: 'Bitcoin is trading at $65,041 USD.' }],
+        oneLine: 'Bitcoin is trading at $65,041 USD.',
+        layoutProfile: 'data_answer',
+      }),
+    ], null)).toEqual({
+      placeholder: 'Ask a follow-up or try another live data lookup',
+      loopHint: '',
     })
   })
 
@@ -54,7 +68,7 @@ describe('chat composer loop copy', () => {
       }),
     ], null)).toEqual({
       placeholder: 'Ask limits, refine, or continue with the selected business',
-      loopHint: 'AE keeps that business in context. The business confirms timing, quote, availability, and the work.',
+      loopHint: 'That business stays in context. It confirms timing, quote, and availability.',
     })
   })
 
@@ -78,8 +92,8 @@ describe('chat composer loop copy', () => {
         oneLine: 'One listed business matches.',
       }),
     ], null)).toEqual({
-      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
+      placeholder: 'Narrow, compare, or ask the business',
+      loopHint: 'Narrow or compare the matches, then ask the business when one fits.',
     })
   })
 
@@ -91,8 +105,8 @@ describe('chat composer loop copy', () => {
         oneLine: 'This business needs listing review first.',
       }),
     ], null)).toEqual({
-      placeholder: 'Ask limits, refine, or review the selected listing',
-      loopHint: 'This business needs a published inquiry path before AE can route contact.',
+      placeholder: 'Ask limits, refine, or review the selected business',
+      loopHint: 'This business does not have a request form yet. Review its page before contacting it.',
     })
   })
 })

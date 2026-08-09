@@ -17,7 +17,7 @@ vi.mock('@/modules/catalog/public-route.functions', () => ({
   readPublicBusinessRouteServer: readPublicBusinessRouteMock,
 }))
 
-import { PublicBusinessNotFound, Route } from '@/routes/$slug'
+import { PublicBusinessNotFound, PublicBusinessUnavailable, Route } from '@/routes/$slug'
 
 
 afterEach(() => {
@@ -74,6 +74,26 @@ describe('/$slug not-found reason', () => {
     expect(isNotFound(thrown)).toBe(true)
     expect(thrown).toMatchObject({ data: { reason: 'not_public' } })
   })
+
+  it('keeps source outages out of the not-found boundary and exposes unavailable metadata', async () => {
+    readPublicBusinessRouteMock.mockResolvedValue({
+      kind: 'unavailable',
+      reason: 'source_unavailable',
+      retryable: true,
+    })
+
+    await expect(loadSlug('business-source-down')).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'source_unavailable',
+      retryable: true,
+    })
+
+    const head = await Route.options.head?.({
+      loaderData: { kind: 'unavailable', reason: 'source_unavailable', retryable: true },
+    } as never)
+    expect(head?.meta).toContainEqual({ title: 'Business page unavailable | Agentic Economy' })
+    expect(head?.meta).not.toContainEqual({ title: 'Page not found | Agentic Economy' })
+  })
   it('marks the not-found response noindex because there is no page to index', async () => {
     const head = await Route.options.head?.({ loaderData: undefined } as never)
 
@@ -88,7 +108,8 @@ describe('PublicBusinessNotFound copy', () => {
 
     expect(screen.getByText('No business page at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
-    expect(screen.getByRole('link', { name: 'Browse businesses' }).getAttribute('href')).toBe('/')
+
+    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
   })
 
   it('keeps the claim framing only when a real business page is withheld from the public', () => {
@@ -98,7 +119,7 @@ describe('PublicBusinessNotFound copy', () => {
     expect(
       screen.getByText('This page is not visible right now. The business may need to claim or review it.'),
     ).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse businesses' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
   })
 
   it('falls back to the no-such-business copy when the boundary carries no reason', () => {
@@ -108,16 +129,26 @@ describe('PublicBusinessNotFound copy', () => {
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
   })
 })
+describe('PublicBusinessUnavailable copy', () => {
+  it('does not render not-found or browse-businesses language', () => {
+    renderWithRouter(<PublicBusinessUnavailable />)
+
+    expect(screen.getByText('Business page temporarily unavailable')).toBeTruthy()
+    expect(screen.getByText(/public business source is unavailable/i)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
+    expect(screen.queryByText(/Page not found/i)).toBeNull()
+  })
+})
 
 describe('ProviderListingError copy', () => {
-  it('returns to services without internal terminology and keeps recovery links at 44px', () => {
+  it('returns to Ask without internal terminology and keeps recovery links at 44px', () => {
     const ErrorComponent = Route.options.errorComponent as ComponentType
     renderWithRouter(<ErrorComponent />)
 
     expect(screen.getByText("This listing didn't load")).toBeTruthy()
     expect(screen.queryByText(/registry/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-11')).toBe(true)
-    expect(screen.getByRole('link', { name: 'Back to services' }).getAttribute('href')).toBe('/')
-    expect(screen.getByRole('link', { name: 'Back to services' }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('link', { name: 'Back to Ask' }).classList.contains('min-h-11')).toBe(true)
   })
 })

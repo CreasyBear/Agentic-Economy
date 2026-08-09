@@ -12,22 +12,52 @@ export type ThreadTurnViewModel = {
   query: string
   intent: FollowUpIntent
   seq: number
+  status: PublicThreadTurn['status']
+  problem?: PublicThreadTurn['problem']
   oneLine: string
   artifacts: readonly AnswerArtifact[]
   workLog: readonly AnswerWorkStep[]
   layoutProfile?: AnswerLayoutProfile
   answerCheckSummary?: PublicAnswerCheckSummary
 }
-
 export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
   return {
     query: turn.query,
     intent: turn.intent,
     seq: turn.seq,
+    status: turn.status,
+    ...(turn.problem === undefined ? {} : { problem: turn.problem }),
     oneLine: turn.oneLine,
     artifacts: orderShortlistArtifacts(turn.artifacts, turn.timing),
     workLog: turn.workLog,
     ...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile }),
     ...(turn.answerCheckSummary === undefined ? {} : { answerCheckSummary: turn.answerCheckSummary }),
+  }
+}
+export type ThreadTurnPresenterPhase = 'streaming' | 'stopped' | 'error' | 'complete'
+
+export function presenterPhaseForTurnStatus(status: PublicThreadTurn['status']): ThreadTurnPresenterPhase {
+  switch (status) {
+    case 'pending':
+      return 'streaming'
+    case 'stopped':
+      return 'stopped'
+    case 'error':
+      return 'error'
+    case 'complete':
+      return 'complete'
+  }
+}
+
+export function turnStatusCopy(status: PublicThreadTurn['status']): string | null {
+  switch (status) {
+    case 'pending':
+      return 'This answer is still pending. Reload to check its durable status.'
+    case 'stopped':
+      return 'Answer stopped.'
+    case 'error':
+      return null
+    case 'complete':
+      return null
   }
 }

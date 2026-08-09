@@ -84,10 +84,10 @@ describe('follow-up chips', () => {
   it('builds deterministic chips with inquiry, suburb, and compare', () => {
     const chips = buildDeterministicFollowUpChips(turn())
     expect(chips[0]).toEqual({
-      label: 'Prepare qualified inquiry with Parramatta Emergency Plumbing',
-      submitQuery: 'Prepare a qualified inquiry for Parramatta Emergency Plumbing',
+      label: 'Ask Parramatta Emergency Plumbing about this',
+      submitQuery: 'Message Parramatta Emergency Plumbing',
     })
-    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses accepting requests')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Compare the top two')
     expect(chips.some((chip) => chip.submitQuery.startsWith('Narrow to '))).toBe(true)
     expect(chips.map((chip) => chip.submitQuery)).not.toContain('What can Agentic Economy do here?')
@@ -122,8 +122,8 @@ describe('follow-up chips', () => {
       llmChips: ['Compare the top two', 'Which take inquiries?'],
     })
     expect(chips[0]).toEqual({
-      label: 'Prepare qualified inquiry with Parramatta Emergency Plumbing',
-      submitQuery: 'Prepare a qualified inquiry for Parramatta Emergency Plumbing',
+      label: 'Ask Parramatta Emergency Plumbing about this',
+      submitQuery: 'Message Parramatta Emergency Plumbing',
     })
     expect(chips.map((chip) => chip.submitQuery)).toContain('Which take inquiries?')
   })
@@ -143,16 +143,16 @@ describe('follow-up chips', () => {
     }))
 
     expect(chips[0]).toEqual({
-      label: 'Prepare qualified inquiry with Top Inquiry Ready',
-      submitQuery: 'Prepare a qualified inquiry for Top Inquiry Ready',
+      label: 'Ask Top Inquiry Ready about this',
+      submitQuery: 'Message Top Inquiry Ready',
     })
-    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses accepting requests')
   })
 
   it('keeps listed context after a selected-provider handoff turn', () => {
     const chips = buildDeterministicFollowUpChips(turn({
       intent: 'inquiry_handoff',
-      query: 'Prepare a qualified inquiry for the first listed business',
+      query: 'Message the first one',
       artifacts: [
         {
           kind: 'selected-provider',
@@ -161,8 +161,8 @@ describe('follow-up chips', () => {
       ],
     }))
 
-    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Prepare a qualified inquiry for the first listed business')
-    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
+    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Message the first one')
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses accepting requests')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Narrow to Parramatta')
   })
 
@@ -170,7 +170,7 @@ describe('follow-up chips', () => {
     const chips = buildFollowUpChips({
       turn: turn({
         intent: 'inquiry_handoff',
-        query: 'Prepare a qualified inquiry for the first listed business',
+        query: 'Message the first one',
         artifacts: [
           {
             kind: 'selected-provider',
@@ -178,10 +178,10 @@ describe('follow-up chips', () => {
           },
         ],
       }),
-      llmChips: ['Prepare a qualified inquiry for the first listed business', 'Narrow to Parramatta'],
+      llmChips: ['Message the first one', 'Narrow to Parramatta'],
     })
 
-    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Prepare a qualified inquiry for the first listed business')
+    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Message the first one')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Narrow to Parramatta')
   })
 
@@ -194,10 +194,9 @@ describe('follow-up chips', () => {
   })
 
   it('maps deterministic chip strings to known intents', () => {
-    expect(classifyFollowUpIntent('Show only businesses that accept inquiries', 1)).toBe('filter_known')
-    expect(classifyFollowUpIntent('Prepare a qualified inquiry for the first listed business', 1)).toBe('inquiry_handoff')
-    expect(classifyFollowUpIntent('Compare the top two', 1)).toBe('compare_known')
+    expect(classifyFollowUpIntent('Show only businesses accepting requests', 1)).toBe('filter_known')
     expect(classifyFollowUpIntent('Message the first one', 1)).toBe('inquiry_handoff')
+    expect(classifyFollowUpIntent('Compare the top two', 1)).toBe('compare_known')
     expect(classifyFollowUpIntent('What can Agentic Economy do here?', 1)).toBe('explain_boundary')
     expect(classifyFollowUpIntent('Narrow to Parramatta', 1)).toBe('refine_search')
   })
@@ -286,8 +285,8 @@ describe('follow-up chips', () => {
     }))
 
     expect(chips[0]).toEqual({
-      label: 'Prepare qualified inquiry with Inquiry Ready Plumbing',
-      submitQuery: 'Prepare a qualified inquiry for Inquiry Ready Plumbing',
+      label: 'Ask Inquiry Ready Plumbing about this',
+      submitQuery: 'Message Inquiry Ready Plumbing',
     })
   })
 
@@ -305,8 +304,8 @@ describe('follow-up chips', () => {
       ],
     }))
 
-    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Prepare a qualified inquiry for the first listed business')
-    expect(chips[0]?.submitQuery).toBe('Show only businesses that accept inquiries')
+    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Message the first one')
+    expect(chips[0]?.submitQuery).toBe('Show only businesses accepting requests')
   })
 })
 

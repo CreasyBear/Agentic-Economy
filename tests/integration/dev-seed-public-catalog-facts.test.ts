@@ -6,6 +6,7 @@ import schema from '../../convex/schema'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 import type { BusinessSupplyProjection } from '../../src/modules/catalog/public'
 import { readBusinessSupplyProjectionSnapshot } from '../../convex/businessSupplyProjectionSnapshot'
+import { DEV_SEED_BUSINESS_COUNT, DEV_SEED_BUSINESS_FIXTURES } from '../../src/modules/dev/public'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -49,17 +50,51 @@ describe('dev-seeded public catalog decision facts', () => {
 
     const rows = await readEveryCatalogRow(backend)
 
-    // The curated-only seed is exactly the three AE-observed provider listings.
-    expect(rows.map((row) => row.slug).sort()).toEqual([
-      'agentic-market-exa', 'agentic-market-tavily', 'frankfurter-ecb-rates',
-    ])
+    // The public catalog contains the complete canonical dev-seed inventory,
+    // including curated provider records and observed x402 listings.
+    const canonicalSlugs = DEV_SEED_BUSINESS_FIXTURES
+      .map(({ requestedSlug }) => requestedSlug)
+      .sort()
+    expect(canonicalSlugs).toHaveLength(DEV_SEED_BUSINESS_COUNT)
+    expect(rows.map((row) => row.slug).sort()).toEqual(canonicalSlugs)
 
-    // Every curated listing publishes a real availability (hours) fact through
-    // the public read, and none is the "unknown" placeholder sentinel.
-    expect(rows.length).toBeGreaterThan(0)
-    expect(rows.every((row) => row.availabilitySummary !== null)).toBe(true)
-    expect(rows.map((row) => row.availabilitySummary).filter((value) => value !== null).length).toBeGreaterThan(0)
-    expect(rows.map((row) => row.availabilitySummary)).not.toContain('Hours supplied by owner')
+    // Observed x402 listings remain discoverable provenance, not curated keyed
+    // providers. Keep that subset explicit so the base Exa listing cannot be
+    // confused with its separately observed x402 listing.
+    const observedX402Slugs = DEV_SEED_BUSINESS_FIXTURES
+      .filter(({ offerings }) => offerings.some(({ publicDisclosure }) => publicDisclosure.startsWith('External x402 listing')))
+      .map(({ requestedSlug }) => requestedSlug)
+      .sort()
+    expect(observedX402Slugs).toEqual([
+      'agentic-market-bizintel-x402',
+      'agentic-market-coinmarketcap-x402',
+      'agentic-market-exa-x402',
+      'agentic-market-flightaware-x402',
+      'agentic-market-tavily',
+      'agentic-market-tavily-x402',
+      'agentic-market-timezone-x402',
+      'agentic-market-wolframalpha-x402',
+    ])
+    const observedX402Rows = rows
+      .filter(({ slug }) => observedX402Slugs.includes(slug))
+      .sort((left, right) => left.slug.localeCompare(right.slug))
+    expect(observedX402Rows.map(({ slug }) => slug)).toEqual(observedX402Slugs)
+    expect(observedX402Rows.every(({ availabilitySummary }) => availabilitySummary === 'Not verified by AE')).toBe(true)
+
+    const exaFixture = DEV_SEED_BUSINESS_FIXTURES.find(({ requestedSlug }) => requestedSlug === 'agentic-market-exa')
+    expect(exaFixture?.ownerMessage).toContain('provider connection')
+    expect(exaFixture?.ownerMessage).not.toContain('x402')
+    expect(observedX402Slugs).not.toContain('agentic-market-exa')
+    expect(rows.find(({ slug }) => slug === 'agentic-market-exa')?.availabilitySummary).not.toBe('Not verified by AE')
+    const curatedRows = rows.filter(({ slug }) => !observedX402Slugs.includes(slug))
+
+    // Curated provider entries publish a real availability (hours) fact
+    // through the public read, and none is the "unknown" placeholder sentinel.
+    expect(curatedRows.length).toBeGreaterThan(0)
+    expect(curatedRows.every((row) => row.availabilitySummary !== null)).toBe(true)
+    expect(curatedRows.map((row) => row.availabilitySummary).filter((value) => value !== null).length).toBe(curatedRows.length)
+    expect(curatedRows.map((row) => row.availabilitySummary)).not.toContain('Hours supplied by owner')
+
     for (const row of rows) {
       expect(row.availabilitySummary?.trim()).toBe(row.availabilitySummary)
       expect(row.availabilitySummary).not.toBe('')

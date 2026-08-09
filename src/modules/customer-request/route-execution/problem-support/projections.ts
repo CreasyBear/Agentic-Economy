@@ -4,7 +4,7 @@ import {
   type RouteAttemptState,
   type RouteDispatchState,
 } from '@/modules/customer-request/route-execution/journal/export-state'
-import { formatCurrencyAmount } from '@/modules/customer-request/format-currency-amount'
+import { addExactAmounts, compareExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 
 import type {
   BusinessCausalityPosition,
@@ -199,7 +199,7 @@ function supportProblemReconstruction(input: Readonly<{
     issuedAt: number
     expiresAt: number
     route: {
-      maximumTotalSpend: { currency: string; amountMinor: number }
+      maximumTotalSpend: ExactAmount
       steps: readonly Readonly<{
         position: number
         businessId: string
@@ -228,7 +228,7 @@ function supportProblemReconstruction(input: Readonly<{
     businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   }
   revocation: null | { recordedAt: number }
-  reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
+  reservations: readonly Readonly<{ reservedSpend: ExactAmount }>[]
   attempts: readonly (SupportAttemptProjection & Readonly<{
     position: number
     attemptRef: string
@@ -246,12 +246,17 @@ function supportProblemReconstruction(input: Readonly<{
     business.name,
   ]))
   for (const [businessId, name] of input.businessNames) businesses.set(businessId, name)
-  const admitted = input.reservations.reduce((total, reservation) => {
-    if (reservation.reservedSpend.currency !== input.mandate.route.maximumTotalSpend.currency) {
+  let admitted: ExactAmount = { ...input.mandate.route.maximumTotalSpend, units: '0' }
+  for (const reservation of input.reservations) {
+    if (compareExactAmounts(reservation.reservedSpend, input.mandate.route.maximumTotalSpend) === undefined) {
       throw new Error('customer_request_route_problem_spend_currency_integrity_failure')
     }
-    return total + reservation.reservedSpend.amountMinor
-  }, 0)
+    const nextAdmitted = addExactAmounts(admitted, reservation.reservedSpend)
+    if (nextAdmitted === undefined) {
+      throw new Error('customer_request_route_problem_spend_currency_integrity_failure')
+    }
+    admitted = nextAdmitted
+  }
   const attempts = new Map(input.attempts.map((attempt) => [attempt.position, attempt]))
   const allIdempotent = input.mandate.route.steps.every((step) => step.recovery.idempotency === 'required')
   const allRetrySafe = input.mandate.route.steps.every((step) => step.recovery.recovery === 'retry_safe')
@@ -269,7 +274,7 @@ function supportProblemReconstruction(input: Readonly<{
         input.mandate.route.steps.length === 1
           ? 'The registered business can provide the requested result.'
           : `All ${input.mandate.route.steps.length} registered steps can provide the requested result.`,
-        `The confirmed option stays within ${formatCurrencyAmount(maximum.currency, maximum.amountMinor)}.`,
+        `The confirmed option stays within ${formatCurrencyAmount(maximum)}.`,
       ],
       confirmedAt: input.mandate.issuedAt,
       validUntil: input.mandate.expiresAt,
@@ -280,8 +285,8 @@ function supportProblemReconstruction(input: Readonly<{
         : input.observedAt >= input.mandate.expiresAt ? 'expired' as const : 'current' as const,
       source: 'customer_confirmation' as const,
       spend: {
-        limit: { ...maximum },
-        admitted: { currency: maximum.currency, amountMinor: admitted },
+        limit: maximum,
+        admitted,
       },
       dataSharing: input.mandate.route.steps.flatMap((step) => {
         const released = supportAttemptWasReleased(attempts.get(step.position))
@@ -395,7 +400,7 @@ export type SupportProblemExportMaterial = Readonly<{
   }>
   revocation: null | { recordedAt: number }
   reservations: readonly Readonly<{
-    reservedSpend: { currency: string; amountMinor: number }
+    reservedSpend: ExactAmount
   }>[]
   attempts: readonly (SupportAttemptProjection & Readonly<{
     position: number

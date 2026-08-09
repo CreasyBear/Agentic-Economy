@@ -94,7 +94,7 @@ export async function admitCapabilityPublicationCommand(
   const importSource = decodeConvexPublicationSource(serializedSource)
   let normalized
   try {
-    normalized = normalizeCapabilityPublication(importSource as CapabilityPublicationImport)
+    normalized = await normalizeCapabilityPublication(importSource as CapabilityPublicationImport)
   } catch {
     return { kind: 'refused', reason: 'source_invalid' }
   }

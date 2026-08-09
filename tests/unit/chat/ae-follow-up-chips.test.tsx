@@ -22,16 +22,16 @@ describe('AeFollowUpChips', () => {
     }} />)
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
+    expect(panel.contains(screen.getByText('Continue with these options'))).toBe(true)
     expect(
       panel.contains(
-        screen.getByText('Narrow, compare, or prepare a qualified inquiry from the listed businesses above.'),
+        screen.getByText('Narrow or compare the options above, or ask the business about them.'),
       ),
     ).toBe(true)
 
-    fireEvent.click(screen.getByText('Prepare qualified inquiry with Parramatta Emergency Plumbing'))
+    fireEvent.click(screen.getByText('Ask Parramatta Emergency Plumbing about this'))
 
-    expect(selectedQuery).toBe('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
+    expect(selectedQuery).toBe('Message Parramatta Emergency Plumbing')
   })
 
   it('submits compare chips as carried thread follow-ups', () => {
@@ -42,7 +42,7 @@ describe('AeFollowUpChips', () => {
       selectedQuery = query
     }} />)
 
-    fireEvent.click(screen.getByText('Compare the top two listings'))
+    fireEvent.click(screen.getByText('Compare the top two matches'))
 
     expect(selectedQuery).toBe('Compare the top two')
   })
@@ -72,9 +72,9 @@ describe('AeFollowUpChips', () => {
     )
 
     expect(screen.getByRole('region', { name: 'Continue this thread' })).toBeTruthy()
-    fireEvent.click(screen.getByText('Prepare qualified inquiry with Top Inquiry Ready'))
+    fireEvent.click(screen.getByText('Ask Top Inquiry Ready about this'))
 
-    expect(selectedQuery).toBe('Prepare a qualified inquiry for Top Inquiry Ready')
+    expect(selectedQuery).toBe('Message Top Inquiry Ready')
   })
 
   it('states the contact boundary when listed businesses lack an inquiry path', () => {
@@ -98,11 +98,11 @@ describe('AeFollowUpChips', () => {
     expect(
       panel.contains(
         screen.getByText(
-          'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.',
+          'These options do not have a request form yet. Narrow, compare, or review a business.',
         ),
       ),
     ).toBe(true)
-    expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
+    expect(screen.queryByText(/Ask .* about this/)).toBeNull()
   })
 
   it('keeps the follow-up panel available after a selected-provider handoff', () => {
@@ -113,7 +113,7 @@ describe('AeFollowUpChips', () => {
       <AeFollowUpChips
         turn={turn({
           intent: 'inquiry_handoff',
-          query: 'Prepare a qualified inquiry for the first listed business',
+          query: 'Message the first listed business',
           artifacts: [
             {
               kind: 'selected-provider',
@@ -128,12 +128,12 @@ describe('AeFollowUpChips', () => {
     )
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
-    expect(panel.contains(screen.getByText('Use the selected inquiry path above, or keep narrowing this thread.'))).toBe(true)
-    expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
-    fireEvent.click(screen.getByText('Only inquiry-ready listings'))
+    expect(panel.contains(screen.getByText('Continue with these options'))).toBe(true)
+    expect(panel.contains(screen.getByText('Use the selected business\'s request form above, or keep narrowing the options.'))).toBe(true)
+    expect(screen.queryByText(/Ask .* about this/)).toBeNull()
+    fireEvent.click(screen.getByText('Businesses accepting requests'))
 
-    expect(selectedQuery).toBe('Show only businesses that accept inquiries')
+    expect(selectedQuery).toBe('Show only businesses accepting requests')
   })
 })
 

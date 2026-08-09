@@ -5,7 +5,7 @@ import { bytesToHex } from '@noble/hashes/utils'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 
 type Awaitable<Value> = Value | Promise<Value>
 
@@ -267,7 +267,7 @@ export function createInMemoryPreparationDisclosureStore(
         return { kind: 'refused' as const, reason: 'authority_state_conflict' as const }
       }
       const isNewRecipient = !state.recipients.has(input.command.recipient.bindingId)
-      const exposureKeys = stableUnique(input.command.fields).map((field) => [
+      const exposureKeys = uniq(input.command.fields).map((field) => [
         input.command.recipient.bindingId, input.command.purpose, field,
       ].join('\u001f'))
       const newExposureCount = exposureKeys.filter((key) => !state.exposures.has(key)).length
@@ -501,7 +501,7 @@ function validateAuthorityScope(
   if (authority.status !== 'active') return 'authority_revoked'
   if (authority.grantedAt > now) return 'authority_not_yet_valid'
   if (authority.expiresAt <= now) return 'authority_expired'
-  const fields = stableUnique(command.fields)
+  const fields = uniq(command.fields)
   const permittedFields = new Set(authority.permittedFields)
   if (fields.length === 0 || fields.some((field) => !permittedFields.has(field))) return 'authority_field_denied'
   const protectedValueFields = Object.keys(command.protectedValues).sort()

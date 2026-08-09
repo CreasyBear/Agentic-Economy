@@ -1,7 +1,12 @@
 export {
   bindingRegistrationFromRow,
+  connectionAuthoritySnapshotFromProviderConnection,
+  connectionAuthoritySnapshotIsValid,
+  connectionAuthoritySnapshotMatches,
+  connectionAuthoritySnapshotsEqual,
   transportAdmissionInput,
   type CapabilityBindingRow,
+  type CapabilityConnectionAuthoritySnapshot,
 } from './registration'
 
 export { bindingIntegrityIsValid } from './integrity'

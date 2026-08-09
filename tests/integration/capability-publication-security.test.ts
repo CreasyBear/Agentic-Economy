@@ -1,11 +1,18 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
-import { convexModules as modules, publishedBusinessOwner } from '../helpers/convex-fixtures'
+import { convexModules as modules, publishedBusinessOwner, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
+import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
+
+const SECURITY_AUTHORITY: CapabilityTransportAuthority = {
+  kind: 'provider_connection',
+  connectionRef: 'connection:capability-publication-security',
+  providerRef: 'provider:capability-publication-security',
+}
 
 describe('capability publication security', () => {
   it('refuses anonymous publication without persisting any publication state', async () => {
@@ -36,6 +43,7 @@ describe('capability publication security', () => {
   it('leaves no partial contract when a later offering identity check refuses publication', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'security-atomic')
+    await registerProviderConnection(backend, businessId)
     const first = publicationArgs(businessId, 'first')
     const published = await owner.mutation(api.capabilitySupply.publishCapability, first)
     expect(published.kind).toBe('published')
@@ -53,6 +61,28 @@ describe('capability publication security', () => {
     await expect(publicationRows(backend)).resolves.toEqual(before)
   })
 })
+async function registerProviderConnection(backend: ConvexFixtureBackend, businessId: Id<'businesses'>) {
+  if (SECURITY_AUTHORITY.kind !== 'provider_connection') {
+    throw new Error('provider connection fixture authority kind changed')
+  }
+  const result = await backend.mutation(internal.capabilityProviderConnections.create, {
+    commandId: 'command:create:capability-publication-security',
+    connectionRef: SECURITY_AUTHORITY.connectionRef,
+    businessId,
+    providerRef: SECURITY_AUTHORITY.providerRef,
+    providerAccountRef: 'account:capability-publication-security',
+    adapterId: 'http-json:v1',
+    credentialRef: 'env:SECURITY_CAPABILITY_KEY',
+    requestedScopes: ['capability:security.atomic.lookup'],
+    grantedScopes: ['capability:security.atomic.lookup'],
+    requestedResources: ['endpoint:https://security.example.test/capability'],
+    grantedResources: ['endpoint:https://security.example.test/capability'],
+    evidenceRefs: ['test:provider-connection:capability-publication-security'],
+    now: 1,
+  })
+  if (result.kind !== 'applied') throw new Error(`provider_connection_fixture_${result.kind}`)
+}
+
 
 function publicationArgs(businessId: Id<'businesses'>, suffix: string) {
   return {
@@ -70,7 +100,7 @@ function publicationArgs(businessId: Id<'businesses'>, suffix: string) {
       presentation: {
         label: 'Security atomic lookup',
         summary: 'Returns one bounded structured response.',
-        price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1_200 },
+        price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
         materialTerms: [{ termId: 'response', label: 'Response', value: 'One structured response' }],
         commercialRelationship: {
           kind: 'none' as const,
@@ -87,7 +117,7 @@ function publicationArgs(businessId: Id<'businesses'>, suffix: string) {
     binding: {
       bindingId: 'binding:security:atomic:http',
       endpointUrl: 'https://security.example.test/capability',
-      credentialRef: 'env:SECURITY_CAPABILITY_KEY',
+      authority: SECURITY_AUTHORITY,
       continuation: { kind: 'single_response' as const, evidenceRefs: ['business:http-response'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['business:no-cancellation'] },
       adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },

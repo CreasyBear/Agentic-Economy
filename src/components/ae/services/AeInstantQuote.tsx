@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
-import type { EndpointDto } from '@/modules/registry/public'
+import type { ServiceEndpointDto } from '@/modules/registry/public'
+import { ProvenanceBadge } from '@/components/ae/status/ProvenanceBadge'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type { JsonValue } from '@/modules/capability-contract/public'
+import { exactAmountSchema, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
-import { formatMoney } from './money'
 
 type AeInstantQuoteProps = Readonly<{
-  endpoint: EndpointDto
+  endpoint: ServiceEndpointDto
   businessName: string
   businessSlug: string
   emphasized?: boolean
@@ -20,8 +20,7 @@ type SandboxQuote = Readonly<{
   provenance: 'ae_sandbox_provider'
   service: string
   price: Readonly<{
-    currency: string
-    amountMinor: number
+    amount: ExactAmount
     unit?: string
     taxTreatment?: 'inclusive' | 'exclusive' | 'unstated'
   }>
@@ -58,19 +57,19 @@ export function AeInstantQuote({ endpoint, businessName, businessSlug, emphasize
       if (!response.ok) {
         setState({
           kind: 'error',
-          message: 'This example did not return a quote. Try again or see the business details.',
+          message: "We couldn't get a quote. Try again or see the business details.",
         })
         return
       }
 
       if (!isSandboxQuote(payload)) {
-        setState({ kind: 'error', message: 'This example returned an unreadable quote. Try again or see the business details.' })
+        setState({ kind: 'error', message: "The quote came back unreadable. Try again or see the business details." })
         return
       }
 
       setState({ kind: 'quoted', quote: payload })
     } catch {
-      setState({ kind: 'error', message: 'This example could not be reached. Try again or see the business details.' })
+      setState({ kind: 'error', message: "The quote service couldn't be reached. Try again or see the business details." })
     }
   }
 
@@ -85,9 +84,9 @@ export function AeInstantQuote({ endpoint, businessName, businessSlug, emphasize
             size="sm"
             className="min-h-11 justify-self-start"
             onClick={() => void requestQuote()}
-            aria-label="Refresh example quote"
+            aria-label="Refresh quote"
           >
-            Refresh example quote
+            Refresh quote
           </Button>
         </>
       ) : state.kind === 'error' ? (
@@ -100,7 +99,7 @@ export function AeInstantQuote({ endpoint, businessName, businessSlug, emphasize
             className="min-h-11 justify-self-start"
             onClick={() => void requestQuote()}
           >
-            Try example quote again
+            Try again
           </Button>
         </>
       ) : (
@@ -112,9 +111,9 @@ export function AeInstantQuote({ endpoint, businessName, businessSlug, emphasize
           className="min-h-11 w-full justify-self-start sm:w-auto"
           disabled={state.kind === 'loading'}
           onClick={() => void requestQuote()}
-          aria-label={state.kind === 'loading' ? 'Getting your quote…' : 'Get example quote'}
+          aria-label={state.kind === 'loading' ? 'Getting your quote…' : 'Get a quote'}
         >
-          {state.kind === 'loading' ? 'Getting your quote…' : 'Get example quote'}
+          {state.kind === 'loading' ? 'Getting your quote…' : 'Get a quote'}
         </Button>
       )}
     </div>
@@ -137,12 +136,12 @@ function QuoteCard({
   return (
     <Card ref={feedbackRef} tabIndex={-1} role="status" aria-live="polite" className="grid gap-3 bg-muted p-4 focus-visible:outline-2 focus-visible:outline-offset-2 sm:min-w-72">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-base font-semibold text-foreground">Example quote</h4>
-        <Badge variant="outline">AE example</Badge>
+        <h4 className="text-base font-semibold text-foreground">Quote</h4>
+        <ProvenanceBadge source="ae_sandbox" />
       </div>
       <p className="block text-sm text-muted-foreground">{quote.service}</p>
       <dl className="grid gap-2 text-sm sm:grid-cols-3">
-        <QuoteFact label="Example price" value={formatQuotePrice(quote.price)} />
+        <QuoteFact label="Price" value={formatQuotePrice(quote.price)} />
         <QuoteFact label="Next available" value={formatQuoteTimestamp(quote.nextAvailable)} />
         <QuoteFact label="Valid until" value={formatQuoteTimestamp(quote.validUntil)} />
       </dl>
@@ -198,20 +197,21 @@ async function readJson(response: Response): Promise<JsonValue | undefined> {
 function isSandboxQuote(value: unknown): value is SandboxQuote {
   if (!isRecord(value) || value.provenance !== 'ae_sandbox_provider') return false
   if (typeof value.service !== 'string' || typeof value.nextAvailable !== 'string' || typeof value.validUntil !== 'string') return false
-  if (!isRecord(value.price) || typeof value.price.currency !== 'string' || typeof value.price.amountMinor !== 'number') return false
+  if (!isRecord(value.price)) return false
+  if (!exactAmountSchema.safeParse(value.price.amount).success) return false
   if (value.price.unit !== undefined && typeof value.price.unit !== 'string') return false
   if (value.price.taxTreatment !== undefined
     && value.price.taxTreatment !== 'inclusive'
     && value.price.taxTreatment !== 'exclusive'
     && value.price.taxTreatment !== 'unstated') return false
-  return Number.isFinite(value.price.amountMinor)
+  return true
 }
 
 
 function formatQuotePrice(price: SandboxQuote['price']): string {
   const unit = price.unit === undefined ? '' : ` / ${price.unit}`
   const tax = price.taxTreatment === 'inclusive' ? ' incl. tax' : price.taxTreatment === 'exclusive' ? ' + tax' : ''
-  return `${formatMoney(price.currency, price.amountMinor)}${unit}${tax}`
+  return `${formatCurrencyAmount(price.amount)}${unit}${tax}`
 }
 
 function formatQuoteTimestamp(value: string): string {

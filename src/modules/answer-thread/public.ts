@@ -2,7 +2,6 @@ export { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from './agent
 
 export type {
   AnswerThreadRecord,
-  AnswerThreadSharePolicy,
   AnswerTurnRecord,
   AnswerTurnRequest,
   AnswerTurnStatus,
@@ -13,14 +12,21 @@ export type {
   ThinkingStep,
 } from './answer-thread.schema'
 export { answerTurnRequestSchema } from './answer-thread.schema'
-
-
+export {
+  parsePublicThreadProjection,
+  PublicAnswerCheckSummarySchema,
+  PublicThreadProjectionSchema,
+  PublicThreadTurnSchema,
+} from './answer-thread.schema'
 
 export {
   deleteAnswerThread,
   getAnswerThread,
-  getPublicThreadProjection,
+  getOwnedThreadProjection,
+  getSharedThreadProjection,
+  issueAnswerThreadShare,
   listSessionThreads,
+  revokeAnswerThreadShare,
 } from './answer-thread.functions'
 export { buildPublicThreadProjection } from './internal/public-projection'
 
@@ -39,12 +45,14 @@ export { resolveThreadAgentJson } from './internal/resolve-thread-agent-json'
 export { generateLlmFollowUpChips } from './internal/llm-follow-up-chips'
 export {
   appendSessionCookie,
+  readAnswerSessionId,
   resolveOrCreateSessionId,
 } from './internal/session-cookie'
-export { streamAnswerTurn } from './internal/turn-orchestrator'
 export {
-  assertAnswerTurnAccess,
-  claimAnswerTurnIdempotency,
-  readAnswerTurnAccessContext,
-  type AnswerTurnAccessDecision,
-} from './internal/turn-guard'
+  answerThreadShareAccessId,
+  mintAnswerThreadShareToken,
+  resolveAnswerThreadShareKeyring,
+  verifyAnswerThreadShare,
+  type AnswerThreadShareGrant,
+  type AnswerThreadShareKeyring,
+} from './internal/share-token'

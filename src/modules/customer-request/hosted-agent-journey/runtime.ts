@@ -3,8 +3,10 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import { isRecord } from '@/modules/common/is-record'
+import { exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 import {
   customerRequestAgentResultSchema,
@@ -114,15 +116,15 @@ export async function confirmThroughRepeatPermission(
   if (!Number.isSafeInteger(repeatPermission.occurrences) || repeatPermission.occurrences <= 0) {
     throw new Error('hosted_journey_repeat_permission_occurrences_invalid')
   }
+  const cumulativeSpend = multiplyExactAmountByCount(
+    route.maximumTotalCost.amount, repeatPermission.occurrences,
+  )
   const allowCommand = {
     revision: view.revision,
     routeRef: route.routeRef,
     delegatedCredentialId: repeatPermission.delegatedCredentialId,
     occurrences: repeatPermission.occurrences,
-    cumulativeSpend: {
-      currency: route.maximumTotalCost.currency,
-      amountMinor: route.maximumTotalCost.amountMinor * repeatPermission.occurrences,
-    },
+    cumulativeSpend,
     validUntil: route.validUntil,
     idempotencyKey: `acceptance:allow-repeat:${nonce}:${view.revision}`,
   }
@@ -521,10 +523,7 @@ export function journeyMeasurements(
   }>,
 ) {
   const totalCostAccuracy = route.maximumTotalCost.kind === 'known'
-    ? {
-        state: 'exact' as const,
-        total: { currency: route.maximumTotalCost.currency, amountMinor: route.maximumTotalCost.amountMinor },
-      }
+    ? { state: 'exact' as const, total: route.maximumTotalCost.amount }
     : { state: 'unavailable' as const }
   return {
     integrationBurden: {
@@ -537,7 +536,7 @@ export function journeyMeasurements(
     totalCostAccuracy,
     recovery: {
       state: 'durable' as const, resumed,
-      postures: stableUnique(route.recovery.map(({ posture }) => posture)),
+      postures: uniq(route.recovery.map(({ posture }) => posture)),
     },
     ...(input.metrics.interruptionRecovery === undefined
       ? {}
@@ -678,6 +677,12 @@ export function digestInput(value: unknown): string {
   return canonicalDigest(customerRequestJsonValueSchema.parse(value) as StableHashValue)
 }
 
+function multiplyExactAmountByCount(amount: ExactAmount, count: number): ExactAmount {
+  if (!exactAmountSchema.safeParse(amount).success || !Number.isSafeInteger(count) || count < 0) {
+    throw new Error('exact_amount_multiplication_invalid')
+  }
+  return Object.freeze({ ...amount, units: (BigInt(amount.units) * BigInt(count)).toString() })
+}
 function sameStableValue(left: unknown, right: unknown): boolean {
   if (left === undefined || right === undefined) return left === right
   return stableStringify(left as StableHashValue) === stableStringify(right as StableHashValue)

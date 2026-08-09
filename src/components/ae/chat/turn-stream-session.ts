@@ -1,20 +1,21 @@
 import {
   streamAnswerTurnRequest,
   type StreamAnswerResult,
-  type TurnStreamFrame,
+  type AnswerStreamFrame,
   type TurnThreadMeta,
 } from './answer-stream'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 
 type Subscriber = {
-  onFrame: (frame: TurnStreamFrame) => void
+  onFrame: (frame: AnswerStreamFrame) => void
   onThread?: (meta: TurnThreadMeta) => void
   onResult: (result: StreamAnswerResult) => void
 }
 
 type Session = {
   key: string
-  frames: TurnStreamFrame[]
+  frames: AnswerStreamFrame[]
+  lastAcceptedSeq: number
   threadMeta: TurnThreadMeta | null
   result: StreamAnswerResult | null
   subscribers: Set<Subscriber>
@@ -34,15 +35,18 @@ export function attachAnswerTurnStream(input: {
 
   if (session === undefined) {
     const abortController = new AbortController()
-    session = {
+    const createdSession: Session = {
       key: input.key,
       frames: [],
+      lastAcceptedSeq: -1,
       threadMeta: null,
       result: null,
       subscribers: new Set(),
       abortController,
     }
-    sessions.set(input.key, session)
+    session = createdSession
+    sessions.set(input.key, createdSession)
+    const isCurrentSession = (): boolean => sessions.get(input.key) === createdSession
 
     void streamAnswerTurnRequest({
       query: input.query,
@@ -51,48 +55,72 @@ export function attachAnswerTurnStream(input: {
       clientTurnKey: input.key,
       signal: abortController.signal,
       onThread: (meta) => {
-        session!.threadMeta = meta
-        for (const sub of session!.subscribers) {
+        if (!isCurrentSession()) {
+          return
+        }
+        createdSession.threadMeta = meta
+        for (const sub of createdSession.subscribers) {
           sub.onThread?.(meta)
         }
       },
       onFrame: (frame) => {
-        session!.frames.push(frame)
-        for (const sub of session!.subscribers) {
+        if (!isCurrentSession() || frame.seq <= createdSession.lastAcceptedSeq) {
+          return
+        }
+        createdSession.lastAcceptedSeq = frame.seq
+        createdSession.frames.push(frame)
+        for (const sub of createdSession.subscribers) {
           sub.onFrame(frame)
         }
       },
     }).then((result) => {
-      session!.result = result
-      for (const sub of session!.subscribers) {
+      if (!isCurrentSession()) {
+        return
+      }
+      createdSession.result = result
+      for (const sub of createdSession.subscribers) {
         sub.onResult(result)
       }
-      sessions.delete(input.key)
+      if (createdSession.subscribers.size === 0) {
+        sessions.delete(input.key)
+      }
     })
   }
 
-  if (session.threadMeta !== null) {
-    input.subscriber.onThread?.(session.threadMeta)
+  const attachedSession = session
+  attachedSession.subscribers.add(input.subscriber)
+  if (attachedSession.threadMeta !== null) {
+    input.subscriber.onThread?.(attachedSession.threadMeta)
   }
-  for (const frame of session.frames) {
-    input.subscriber.onFrame(frame)
+  for (const frame of attachedSession.frames) {
+    if (frame.event.type !== 'thinking') {
+      input.subscriber.onFrame(frame)
+    }
   }
-  if (session.result !== null) {
-    input.subscriber.onResult(session.result)
+  if (attachedSession.result !== null) {
+    input.subscriber.onResult(attachedSession.result)
   }
-
-  session.subscribers.add(input.subscriber)
 
   return () => {
-    session!.subscribers.delete(input.subscriber)
+    attachedSession.subscribers.delete(input.subscriber)
+    if (
+      attachedSession.result !== null
+      && sessions.get(input.key) === attachedSession
+      && attachedSession.subscribers.size === 0
+    ) {
+      sessions.delete(input.key)
+    }
   }
 }
 
+/** Local transport cancellation is only called after the durable Stop ack. */
 export function abortAnswerTurnStream(key: string): void {
   const session = sessions.get(key)
   if (session === undefined) {
     return
   }
   session.abortController.abort()
+  session.subscribers.clear()
   sessions.delete(key)
 }
+

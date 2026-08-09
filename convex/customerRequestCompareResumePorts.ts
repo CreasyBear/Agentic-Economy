@@ -39,6 +39,7 @@ export function preparationEgressPorts(ctx: ActionCtx): PreparationEgressPorts {
 }
 
 export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
+  const now = Date.now()
   return {
     ...preparationEgressPorts(ctx),
     loadCurrent: (requestId) => ctx.runQuery(
@@ -92,9 +93,8 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
     ),
     prepareAction: (input) => ctx.runMutation(internal.customerRequestV2Preparation.prepare, input),
     loadRequestGraph: (networkId) => loadRequestGraphApplication(networkId, {
-      // Must match commitAggregate's validation set (listRouteable) or every refresh dies stale.
       listRouteable: async (id) => await ctx.runQuery(
-        internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
+        internal.capabilitySupply.listRouteable, { networkId: id, limit: 64, now },
       ) as EligibleSupplyResult,
       listMappings: async (id) => await ctx.runQuery(
         internal.capabilitySupply.listMappings, { networkId: id, limit: 128 },

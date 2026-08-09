@@ -13,14 +13,15 @@ import {
 } from '../../convex/capabilitySupply'
 import { publishBusinessCatalogCommand } from '../../convex/catalog'
 import { api, internal } from '../../convex/_generated/api'
+import type { Id } from '../../convex/_generated/dataModel'
 import { openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { convexTestWithWorkers } from '../helpers/convex-fixtures'
+import { convexTestWithWorkers, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
 
 const FRANKFURTER_CAPABILITY = 'frankfurter.single-rate'
-type Backend = ReturnType<typeof convexTestWithWorkers>
+type Backend = ConvexFixtureBackend
 
 type SubstitutionBusinessSpec = Readonly<{
   name: string
@@ -29,6 +30,7 @@ type SubstitutionBusinessSpec = Readonly<{
   offeringId: string
   bindingId: string
   endpointUrl: string
+  authority: CapabilityTransportAuthority
   credentialRef: string
   credential: string
 }>
@@ -40,6 +42,11 @@ const SUBSTITUTION_ONE: SubstitutionBusinessSpec = {
   offeringId: 'offering:frankfurter-substitution:one:http-json:v1',
   bindingId: 'binding:frankfurter-substitution:one:http-json:v1',
   endpointUrl: 'https://substitution-one.example.test/capability?profile=one',
+  authority: {
+    kind: 'provider_connection',
+    connectionRef: 'connection:ae-substitution-one',
+    providerRef: 'provider:ae-substitution-one',
+  },
   credentialRef: 'env:AE_SUBSTITUTION_ONE_KEY',
   credential: 'ae-substitution-one-test-key',
 }
@@ -51,6 +58,11 @@ const SUBSTITUTION_TWO: SubstitutionBusinessSpec = {
   offeringId: 'offering:frankfurter-substitution:two:http-json:v1',
   bindingId: 'binding:frankfurter-substitution:two:http-json:v1',
   endpointUrl: 'https://substitution-two.example.test/capability?profile=two',
+  authority: {
+    kind: 'provider_connection',
+    connectionRef: 'connection:ae-substitution-two',
+    providerRef: 'provider:ae-substitution-two',
+  },
   credentialRef: 'env:AE_SUBSTITUTION_TWO_KEY',
   credential: 'ae-substitution-two-test-key',
 }
@@ -62,12 +74,17 @@ const SUBSTITUTION_THREE: SubstitutionBusinessSpec = {
   offeringId: 'offering:frankfurter-substitution:three:http-json:v1',
   bindingId: 'binding:frankfurter-substitution:three:http-json:v1',
   endpointUrl: 'https://substitution-three.example.test/capability?profile=three',
+  authority: {
+    kind: 'provider_connection',
+    connectionRef: 'connection:ae-substitution-three',
+    providerRef: 'provider:ae-substitution-three',
+  },
   credentialRef: 'env:AE_SUBSTITUTION_THREE_KEY',
   credential: 'ae-substitution-three-test-key',
 }
 
 type SubstitutionRegistration = Readonly<{
-  businessId: string
+  businessId: Id<'businesses'>
   contractRef: Readonly<{ capabilityId: string; version: number; contractDigest: string }>
   offeringId: string
   bindingId: string
@@ -92,38 +109,65 @@ describe('V2 Request registration-only business substitution', () => {
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
       kind: 'quoted',
-      expectedCost: { currency: 'AUD', amountMinor: 0 },
-      maximumCost: { currency: 'AUD', amountMinor: 0 },
+      expectedCost: { currency: 'AUD', units: '0', exponent: 2 },
+      maximumCost: { currency: 'AUD', units: '0', exponent: 2 },
       expectedLatencyMs: 1,
       dataFields: [],
       disclosures: ['Readiness probe only.'],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    const backend = await convexTestWithWorkers()
+  const backend = await convexTestWithWorkers()
     await seedFrankfurterContract(backend)
     const one = await registerSubstitutionBusiness(backend, SUBSTITUTION_ONE)
     const two = await registerSubstitutionBusiness(backend, SUBSTITUTION_TWO)
 
-    const before = await prepareCustomerChoice(backend, 'request:substitution:registered', 'customer-substitution')
+    const before = await compareCustomerChoice(backend, 'request:substitution:registered', 'customer-substitution')
     expect(before).toMatchObject({
-      state: 'options_ready',
-      preparedAction: {
-        businessName: 'Frankfurter Substitution Two',
-        alternatives: [{ businessName: 'Frankfurter Substitution One' }],
+      requestRef: 'request:substitution:registered',
+      state: 'routes_ready',
+      criteria: [
+        { label: 'Base currency', value: 'EUR' },
+        { label: 'Quote currency', value: 'USD' },
+      ],
+      decision: {
+        outcome: { kind: 'routes_available', routeCount: 2 },
+        routes: [
+          {
+            businesses: [{ name: 'Frankfurter Substitution Two' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '900', exponent: 2 } },
+          },
+          {
+            businesses: [{ name: 'Frankfurter Substitution One' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '1200', exponent: 2 } },
+          },
+        ],
       },
+    })
+    expect(before.decision?.comparison).toMatchObject({
+      kind: 'recommended',
+      objective: 'lowest_maximum_price',
+      routeRef: before.decision?.routes[0]?.routeRef,
     })
 
     const revoked = await revokeRegistration(backend, two)
     expect(revoked).toBe('ineligible')
 
-    const after = await prepareCustomerChoice(backend, 'request:substitution:registered-after', 'customer-substitution-after')
+    const after = await compareCustomerChoice(
+      backend,
+      'request:substitution:registered-after',
+      'customer-substitution-after',
+    )
     expect(after).toMatchObject({
-      state: 'options_ready',
-      preparedAction: {
-        businessName: 'Frankfurter Substitution One',
-        selection: { alternativeCount: 0 },
-        alternatives: [],
+      requestRef: 'request:substitution:registered-after',
+      state: 'routes_ready',
+      decision: {
+        outcome: { kind: 'routes_available', routeCount: 1 },
+        routes: [{
+          businesses: [{ name: 'Frankfurter Substitution One' }],
+          maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '1200', exponent: 2 } },
+        }],
       },
     })
+    expect(after.decision?.routes).toHaveLength(1)
   })
 
   it('adds and removes a conformant business without changing the Request or caller contract', async () => {
@@ -134,8 +178,8 @@ describe('V2 Request registration-only business substitution', () => {
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
       kind: 'quoted',
-      expectedCost: { currency: 'AUD', amountMinor: 0 },
-      maximumCost: { currency: 'AUD', amountMinor: 0 },
+      expectedCost: { currency: 'AUD', units: '0', exponent: 2 },
+      maximumCost: { currency: 'AUD', units: '0', exponent: 2 },
       expectedLatencyMs: 1,
       dataFields: [],
       disclosures: ['Readiness probe only.'],
@@ -146,38 +190,68 @@ describe('V2 Request registration-only business substitution', () => {
     const two = await registerSubstitutionBusiness(backend, SUBSTITUTION_TWO)
     const three = await registerSubstitutionBusiness(backend, SUBSTITUTION_THREE)
 
-    const withThird = await prepareCustomerChoice(backend, 'request:substitution:three', 'customer-substitution')
+    const withThird = await compareCustomerChoice(backend, 'request:substitution:three', 'customer-substitution')
     expect(withThird).toMatchObject({
-      state: 'options_ready',
-      preparedAction: {
-        businessName: 'Frankfurter Substitution Three',
-        price: { currency: 'USD', maximumAmountMinor: 500 },
-        selection: { alternativeCount: 2 },
-        alternatives: [
-          { businessName: 'Frankfurter Substitution Two', price: { maximumAmountMinor: 900 } },
-          { businessName: 'Frankfurter Substitution One', price: { maximumAmountMinor: 1_200 } },
+      requestRef: 'request:substitution:three',
+      state: 'routes_ready',
+      decision: {
+        outcome: { kind: 'routes_available', routeCount: 3 },
+        routes: [
+          {
+            businesses: [{ name: 'Frankfurter Substitution Three' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '500', exponent: 2 } },
+          },
+          {
+            businesses: [{ name: 'Frankfurter Substitution Two' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '900', exponent: 2 } },
+          },
+          {
+            businesses: [{ name: 'Frankfurter Substitution One' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '1200', exponent: 2 } },
+          },
         ],
       },
+    })
+    expect(withThird.decision?.comparison).toMatchObject({
+      kind: 'recommended',
+      objective: 'lowest_maximum_price',
+      routeRef: withThird.decision?.routes[0]?.routeRef,
     })
 
     const revoked = await revokeRegistration(backend, three)
     expect(revoked).toBe('ineligible')
 
-    const withoutThird = await prepareCustomerChoice(backend, 'request:substitution:two', 'customer-substitution-two')
+    const withoutThird = await compareCustomerChoice(backend, 'request:substitution:two', 'customer-substitution-two')
     expect(withoutThird).toMatchObject({
-      state: 'options_ready',
-      preparedAction: {
-        businessName: 'Frankfurter Substitution Two',
-        price: { currency: 'USD', maximumAmountMinor: 900 },
-        selection: { alternativeCount: 1 },
-        alternatives: [{ businessName: 'Frankfurter Substitution One', price: { maximumAmountMinor: 1_200 } }],
+      requestRef: 'request:substitution:two',
+      state: 'routes_ready',
+      decision: {
+        outcome: { kind: 'routes_available', routeCount: 2 },
+        routes: [
+          {
+            businesses: [{ name: 'Frankfurter Substitution Two' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '900', exponent: 2 } },
+          },
+          {
+            businesses: [{ name: 'Frankfurter Substitution One' }],
+            maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '1200', exponent: 2 } },
+          },
+        ],
       },
+    })
+    expect(withoutThird.decision?.routes).toHaveLength(2)
+    expect(withoutThird.decision?.comparison).toMatchObject({
+      kind: 'recommended',
+      objective: 'lowest_maximum_price',
+      routeRef: withoutThird.decision?.routes[0]?.routeRef,
     })
   })
 })
 
+
 async function seedFrankfurterContract(backend: Backend) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
+  await backend.finishInProgressScheduledFunctions()
   await readCuratedContract(backend, FRANKFURTER_CAPABILITY)
   // The curated seed admits the real Exa/Frankfurter bindings, but those carry
   // no egress credential (frankfurter uses `none`, exa uses an unstubbed key),
@@ -185,6 +259,7 @@ async function seedFrankfurterContract(backend: Backend) {
   // registered substitution businesses below are routeable and egressed; they
   // all offer frankfurter.single-rate.
   await revokeCuratedSupply(backend)
+  await backend.finishInProgressScheduledFunctions()
 }
 
 async function revokeCuratedSupply(backend: Backend) {
@@ -258,6 +333,32 @@ async function readCuratedContract(backend: Backend, capabilityId: string) {
     documentJson: contractRow.documentJson,
   }
 }
+async function createSubstitutionProviderConnection(
+  backend: Backend,
+  businessId: Id<'businesses'>,
+  spec: SubstitutionBusinessSpec,
+) {
+  if (spec.authority.kind !== 'provider_connection') {
+    throw new Error(`substitution provider connection authority missing: ${spec.slug}`)
+  }
+  const result = await backend.mutation(internal.capabilityProviderConnections.create, {
+    commandId: `test:substitution:connection:${spec.slug}`,
+    connectionRef: spec.authority.connectionRef,
+    businessId,
+    providerRef: spec.authority.providerRef,
+    providerAccountRef: `account:${spec.slug}`,
+    adapterId: 'http-json:v1',
+    credentialRef: spec.credentialRef,
+    requestedScopes: [`capability:${FRANKFURTER_CAPABILITY}`],
+    grantedScopes: [`capability:${FRANKFURTER_CAPABILITY}`],
+    requestedResources: [`endpoint:${spec.endpointUrl}`],
+    grantedResources: [`endpoint:${spec.endpointUrl}`],
+    evidenceRefs: [`test:provider-connection:${spec.slug}`],
+    now: Date.now(),
+  })
+  if (result.kind !== 'applied') throw new Error(`provider_connection_fixture_${result.kind}`)
+}
+
 
 async function registerSubstitutionBusiness(
   backend: Backend,
@@ -314,6 +415,7 @@ async function registerSubstitutionBusiness(
     if (business === null) throw new Error(`${spec.slug} business missing`)
     return { businessId: business._id }
   })
+  await createSubstitutionProviderConnection(backend, registration.businessId, spec)
 
   const owner = backend.withIdentity({
     subject: 'test-registration-owner', issuer: 'https://identity.test', tokenIdentifier: 'test-registration-owner',
@@ -325,7 +427,7 @@ async function registerSubstitutionBusiness(
       offeringId: spec.offeringId, networkId: 'ae:public',
       presentation: {
         label: spec.name, summary: `A deterministic ${FRANKFURTER_CAPABILITY} option for registration-only substitution proof.`,
-        price: { kind: 'fixed', currency: 'USD', amountMinor: spec.price },
+        price: { kind: 'fixed', amount: { currency: 'USD', units: String(spec.price), exponent: 2 } },
         materialTerms: [{ termId: 'verification_only', label: 'Environment', value: 'Verification only; not a real trading quote.' }],
         commercialRelationship: {
           kind: 'none', summary: 'AE verification has no commercial relationship.',
@@ -338,7 +440,7 @@ async function registerSubstitutionBusiness(
     },
     binding: {
       bindingId: spec.bindingId, endpointUrl: spec.endpointUrl,
-      credentialRef: spec.credentialRef,
+      authority: spec.authority,
       continuation: { kind: 'single_response', evidenceRefs: ['test:substitution-single-response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['test:substitution-no-cancellation'] },
       adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
@@ -379,6 +481,9 @@ async function registerSubstitutionBusiness(
     if (eligibility.kind !== 'eligible') throw new Error(`substitution eligibility failed: ${eligibility.kind}`)
     return { offering: offering.registrationHash, binding: binding.registrationHash }
   })
+  // convex-test registers scheduled actions on the next event-loop turn; fake timers cannot drive its internal scheduler.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await backend.finishInProgressScheduledFunctions()
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: published.publicationRef, expectedRevision: 1,
     credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,
@@ -425,14 +530,15 @@ async function revokeRegistration(backend: Backend, registration: SubstitutionRe
   return result
 }
 
-async function prepareCustomerChoice(backend: Backend, requestId: string, subject = 'customer-substitution') {
+async function compareCustomerChoice(backend: Backend, requestId: string, subject = 'customer-substitution') {
   const callerIdentity = { subject, issuer: 'https://identity.test' }
-  const callerPrincipalId = `${callerIdentity.issuer}|${callerIdentity.subject}`
-  const { contract, contractRef: curatedContractRef } = await readCuratedContract(backend, FRANKFURTER_CAPABILITY)
+  const { contract } = await readCuratedContract(backend, FRANKFURTER_CAPABILITY)
   const model = openCapabilityDecisionModel(contract)
+  await backend.finishInProgressScheduledFunctions()
   const supply = await backend.query(internal.capabilitySupply.listIntegrated, {
     networkId: 'ae:public',
     limit: 16,
+    now: Date.now(),
   })
   if (supply.kind !== 'available') throw new Error(`substitution supply unavailable: ${supply.reason}`)
   const frankfurter = supply.supplies.find(({ binding, publication }) => (
@@ -440,10 +546,15 @@ async function prepareCustomerChoice(backend: Backend, requestId: string, subjec
   ))
   const publication = frankfurter?.publication
   if (publication === undefined) throw new Error('frankfurter publication operationRef missing')
-  const facts = model.inputs.map((input) => ({
-    inputKey: input.key,
-    value: input.label === 'Quote currency' ? 'USD' : 'EUR',
-  }))
+  const baseInput = model.inputs.find(({ label }) => label === 'Base currency')
+  const quoteInput = model.inputs.find(({ label }) => label === 'Quote currency')
+  if (baseInput === undefined || quoteInput === undefined) {
+    throw new Error('frankfurter decision inputs missing')
+  }
+  const facts = [
+    { inputKey: baseInput.key, value: 'EUR' },
+    { inputKey: quoteInput.key, value: 'USD' },
+  ]
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
     choices: [{ message: { role: 'assistant', content: JSON.stringify({
       kind: 'capability_candidates',
@@ -462,131 +573,17 @@ async function prepareCustomerChoice(backend: Backend, requestId: string, subjec
     compilationKey: `submit:${requestId}`,
     requestId,
     delegatedAgentId: 'agent:substitution-proof',
-    customerJob: 'Find the cheapest labelled substitution option',
+    customerJob: 'Find the cheapest labelled EUR to USD substitution option',
     routing: { networkId: 'ae:public' },
   })
-  if (submitted.kind !== 'request') throw new Error(`request submission failed: ${JSON.stringify(submitted)}`)
-  const answered = submitted
+  if (submitted.kind !== 'request') throw new Error(`request submission failed: ${submitted.kind}`)
+  if (submitted.state !== 'ready_to_compare') throw new Error(`request submission state failed: ${submitted.state}`)
   const decision = await customer.action(api.customerRequestApplication.compare, {
-    requestRef: answered.requestRef,
-    revision: answered.revision,
+    requestRef: submitted.requestRef,
+    revision: submitted.revision,
     idempotencyKey: `compare:${requestId}`,
   })
-  if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error(`route decision missing: submitted=${JSON.stringify(submitted)} decision=${JSON.stringify(decision)}`)
-  const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, { requestId })
-  if (aggregate.kind !== 'current' || aggregate.aggregate.plan.actions[0] === undefined) throw new Error('request aggregate missing')
-  const historical = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
-    commandKey: `historical-preparation:${requestId}`,
-    commandDigest: canonicalDigest({ requestId, mode: 'historical_preparation_proof' }),
-    principalId: callerPrincipalId,
-    requestId,
-    expectedRevision: decision.revision,
-    actionId: aggregate.aggregate.plan.actions[0].actionId,
-    now: Date.now(),
-  })
-  if (historical.kind !== 'stored' && historical.kind !== 'replayed') {
-    throw new Error(`historical preparation proof missing: ${historical.kind}`)
-  }
-  let preparationRef = historical.preparation.preparationRef
-  if (historical.preparation.kind === 'needs_authority') {
-    // Zero-cost, disclosure-free supply (e.g. the curated Frankfurter capability)
-    // routes without a separate owner-approval step; only step when the graph
-    // actually demands authority.
-    const review = { ...decision, preparationRef }
-    const authorized = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
-      commandKey: `authorize:${requestId}`,
-      commandDigest: canonicalDigest({ requestId, preparationRef: review.preparationRef }),
-      principalId: callerPrincipalId,
-      requestId,
-      expectedRevision: review.revision,
-      actionId: aggregate.aggregate.plan.actions[0].actionId,
-      preparationRef: review.preparationRef,
-      approvalActor: {
-        kind: 'clerk_owner',
-        requestPrincipalId: callerPrincipalId,
-        ownerId: callerIdentity.subject,
-        credentialId: callerPrincipalId,
-        authenticationEvidenceRef: `clerk:test:${requestId}`,
-        approvedAt: Date.now(),
-      },
-      now: Date.now(),
-    })
-    if (authorized.kind !== 'stored' && authorized.kind !== 'replayed') {
-      throw new Error(`preparation authorization missing: ${authorized.kind}`)
-    }
-    preparationRef = authorized.preparation.preparationRef
-  } else if (historical.preparation.kind !== 'ready_for_routing') {
-    throw new Error(`historical preparation proof missing: kind=${historical.preparation.kind}`)
-  }
-  const fetchCountBefore = providerFetch.mock.calls.length
-  providerFetch.mockImplementation(async (input, init) => {
-    const endpoint = new URL(String(input))
-    const body = JSON.parse(String(init?.body)) as {
-      protocol: string
-      operationRef: string
-      contractRef: typeof curatedContractRef
-      facts: unknown[]
-    }
-    const registered = registeredProviderFor(endpoint)
-    expect(endpoint.protocol).toBe('https:')
-    expect(body).toMatchObject({
-      protocol: 'ae.preparation-egress:v1',
-      contractRef: curatedContractRef,
-    })
-    expect(init?.method).toBe('POST')
-    expect(init?.headers).toMatchObject({
-      Authorization: `Bearer ${registered.credential}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'Idempotency-Key': body.operationRef,
-    })
-    return new UndiciResponse(JSON.stringify({
-      format: 'ae.provider-option:v1',
-      operationRef: body.operationRef,
-      contractRef: body.contractRef,
-      offeringId: registered.offeringId,
-      bindingId: registered.bindingId,
-      assertionRef: `provider-assertion:${registered.bindingId}:${requestId}`,
-      assertedAt: Date.now(),
-      validUntil: Date.now() + 60_000,
-      output: [{ date: '2026-08-04', base: 'EUR', quote: 'USD', rate: 1.0837 }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-  })
-  const egress = await backend.action(internal.customerRequestV2PreparationEgress.run, {
-    commandKey: `egress:${requestId}`,
-    commandDigest: canonicalDigest({ requestId, preparationRef }),
-    principalId: callerPrincipalId,
-    preparationRef,
-    now: Date.now(),
-  })
-  if (egress.kind !== 'completed' || egress.states.some(({ state }) => state !== 'released')) {
-    throw new Error(`preparation egress failed: ${JSON.stringify(egress)}`)
-  }
-  expect(providerFetch.mock.calls.length - fetchCountBefore).toBe(egress.states.length)
-  const resumed = await customer.action(api.customerRequestApplication.resume, { requestRef: requestId })
-  if (resumed.kind !== 'request') throw new Error(`request resume failed: ${resumed.kind}`)
-  if (resumed.state !== 'options_ready') {
-    throw new Error(`request options not ready: ${JSON.stringify(resumed)}`)
-  }
-  return resumed
-}
-
-function registeredProviderFor(endpoint: URL) {
-  const profile = endpoint.searchParams.get('profile')
-  if (profile === 'one') return {
-    offeringId: SUBSTITUTION_ONE.offeringId,
-    bindingId: SUBSTITUTION_ONE.bindingId,
-    credential: SUBSTITUTION_ONE.credential,
-  }
-  if (profile === 'two') return {
-    offeringId: SUBSTITUTION_TWO.offeringId,
-    bindingId: SUBSTITUTION_TWO.bindingId,
-    credential: SUBSTITUTION_TWO.credential,
-  }
-  if (profile === 'three') return {
-    offeringId: SUBSTITUTION_THREE.offeringId,
-    bindingId: SUBSTITUTION_THREE.bindingId,
-    credential: SUBSTITUTION_THREE.credential,
-  }
-  throw new Error(`unregistered provider endpoint: ${endpoint.href}`)
+  if (decision.kind !== 'request') throw new Error(`route decision missing: ${decision.kind}`)
+  if (decision.state !== 'routes_ready') throw new Error(`route decision state missing: ${decision.state}`)
+  return decision
 }

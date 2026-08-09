@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Agentic-Economy — Code Map</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --panel2:#1c2129; --border:#2d333b;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --dim-opacity:0.12;
+    --ui:#7ee787; --service:#79c0ff; --infra:#d2a8ff; --domain:#ffa657;
+    --cross:#ff7b72; --backend:#f0883e; --external:#a5b1c2;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden}
+  header{height:54px;display:flex;align-items:center;gap:18px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--border);position:relative;z-index:5}
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.2px}
+  header .meta{color:var(--muted);font-size:12px;display:flex;gap:14px;align-items:center}
+  header .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--panel2);border:1px solid var(--border)}
+  #wrap{display:flex;height:calc(100% - 54px)}
+  #sidebar{width:318px;min-width:318px;background:var(--panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;overflow:hidden}
+  .sb-scroll{flex:1;overflow:auto;padding:12px}
+  .sb-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:6px 0 8px}
+  #legend{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+  .leg{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;padding:3px 6px;border-radius:6px}
+  .leg:hover{background:var(--panel2)}
+  .sw{width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.15);flex:none}
+  .leg.on .sw{outline:2px solid var(--accent);outline-offset:1px}
+  input[type=search]{width:100%;padding:7px 9px;border-radius:6px;border:1px solid var(--border);
+    background:var(--panel2);color:var(--text);font-size:13px;margin-bottom:8px}
+  #flows .flow{display:block;width:100%;text-align:left;padding:8px 9px;margin-bottom:6px;
+    background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);
+    font-size:12px;cursor:pointer;line-height:1.35}
+  #flows .flow:hover{border-color:var(--accent)}
+  #flows .flow.active{background:rgba(88,166,255,.12);border-color:var(--accent)}
+  #flows .flow .fnum{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+  #detail{font-size:12px;margin-top:10px}
+  #detail h3{margin:2px 0 6px;font-size:14px}
+  #detail .k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 3px}
+  #detail ul{margin:0;padding-left:16px}
+  #detail li{margin-bottom:3px;line-height:1.4;word-break:break-word}
+  #detail code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;
+    background:var(--panel2);padding:1px 4px;border-radius:4px}
+  .chip{display:inline-block;font-size:10px;padding:1px 7px;border-radius:10px;margin:0 3px 3px 0;
+     background:var(--panel2);border:1px solid var(--border)}
+  #hint{color:var(--muted);font-size:11px;padding:8px 12px;border-top:1px solid var(--border);line-height:1.5}
+  #canvaswrap{flex:1;position:relative;background:
+     radial-gradient(1200px 800px at 50% 35%, #151a22 0%, var(--bg) 70%)}
+  svg{width:100%;height:100%;display:block;cursor:grab}
+  svg.dragging{cursor:grabbing}
+  .node{cursor:pointer}
+  .node .ring{fill:none;stroke-width:2}
+  .node .body{stroke:rgba(255,255,255,.18);stroke-width:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))}
+  .node text{fill:var(--text);font-size:12px;font-weight:600;pointer-events:none;
+     paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+  .node .sub{fill:var(--muted);font-size:9px;font-weight:400}
+  .edge{stroke:var(--border);stroke-width:1.4;fill:none;opacity:.8}
+  .edge.flowc{stroke:var(--accent);stroke-width:2.6;opacity:1}
+  .edge.hot{stroke:var(--accent);stroke-width:2.4;opacity:1}
+  .edge .lbl{font-size:9px;fill:var(--muted)}
+  .faded{opacity:var(--dim-opacity) !important}
+  .mutedn{opacity:.35}
+  #toolbar{position:absolute;top:12px;right:14px;z-index:8;display:flex;gap:6px}
+  #toolbar button{background:var(--panel2);border:1px solid var(--border);color:var(--text);
+    padding:5px 9px;border-radius:6px;cursor:pointer;font-size:12px}
+  #toolbar button:hover{border-color:var(--accent)}
+  #nodestats{position:absolute;bottom:12px;left:14px;color:var(--muted);font-size:11px;z-index:8}
+</style>
+</head>
+<body>
+<header>
+  <h1>agentic-economy — Code Map</h1>
+  <div class="meta">
+    <span class="badge">generated <span id="genat"></span></span>
+    <span class="badge">commit <span id="commit"></span></span>
+    <span class="badge" id="cnt"></span>
+  </div>
+</header>
+<div id="wrap">
+  <div id="sidebar">
+    <div class="sb-scroll">
+      <div class="sb-title">Legend</div>
+      <div id="legend"></div>
+      <div class="sb-title">Search</div>
+      <input type="search" id="search" placeholder="Filter modules…"/>
+      <div class="sb-title">Flows (select to trace)</div>
+      <div id="flows"></div>
+      <div id="detail"></div>
+    </div>
+    <div id="hint">Click a module to see its callers / dependants / tests / flows. Drag nodes to arrange. Scroll to zoom.</div>
+  </div>
+  <div id="canvaswrap">
+    <div id="toolbar">
+      <button id="resetView">Reset view</button>
+      <button id="reflow">Re-layout</button>
+    </div>
+    <svg id="svg"></svg>
+    <div id="nodestats"></div>
+  </div>
+</div>
+
+<script id="codemap-data" type="application/json">{"generated_at": "2026-08-05T22:33:05+08:00", "generated_from_commit": "4a17c63e0d201d29c5c18a3a6cb7e776609f7258", "scope": ["convex/ (durable Convex functions, schema, seed, workers, cron, http)", "src/modules/ (bounded contexts + internal)", "src/lib/server/ (source adapters, MCP, agent/browser APIs)", "src/routes/ + src/components/ (TanStack UI, HTTP & protocol routes)", "src/start.ts, src/router.tsx (app/request entry)", "tests/ (unit, integration, e2e, deploy-smoke, imports, seo, ui-contract)", "eval/, tools/, scripts/ (evals and operational tooling, lightly mapped)", "excluded: vendor/, node_modules, dist/build/cache, .git, package-lock.json generated dirs"], "nodes": [{"id": "frontend", "type": "ui", "path": "src/routes|src/components", "role": "TanStack Start presentation: public/owner pages, HTTP & protocol API routes, React UI shells, request middleware. Consumes redacted projections and invokes registered actions; never owns domain transitions.", "entrypoints": ["src/start.ts", "src/router.tsx", "src/routes/index.tsx", "src/routes/api.requests.ts", "src/routes/api.v1.requests.ts", "src/routes/api.answer.turn.ts::handleAnswerTurnRequest", "src/routes/mcp.ts", "src/routes/[.]well-known/ucp.ts"], "tests": ["tests/e2e/thread-first.spec.ts", "tests/unit/routes/home-work-tree-loop.test.ts", "tests/seo/discovery-files.test.ts", "tests/imports/route-boundary.test.ts"], "constraints": ["Route files are thin adapters and must not own domain transitions (tests/imports/route-boundary.test.ts)", "src/routeTree.gen.ts is generated; routes are added under src/routes, never by hand-editing the tree"], "evidence": ["src/routes/api.answer.turn.ts::handleAnswerTurnRequest", "src/routes/index.tsx"]}, {"id": "server-adapters", "type": "service", "path": "src/lib/server", "role": "Server-side transport/adapter seams: Convex HTTP client (sourceQuery/sourceMutation/sourceAction), browser/agent Customer Request APIs, MCP server builder, WorkTree agent API, bounded request-body and source-write admission.", "entrypoints": ["src/lib/server/convex-source.ts::sourceQuery", "src/lib/server/convex-source.ts::sourceMutation", "src/lib/server/customer-request-browser-api.ts", "src/lib/server/customer-request-agent-api.ts", "src/lib/server/mcp-api.ts", "src/lib/server/work-tree-agent-api.ts", "src/lib/server/bounded-request-body.ts"], "tests": ["tests/unit/actions/registry.test.ts", "tests/integration/customer-request-v2-application-path.test.ts"], "constraints": ["Auth/guest/API-key principal is derived at this boundary before any Convex write (ARCHITECTURE.md)", "All calls to durable state go through the Convex source transport; no raw HTTP to Convex elsewhere"], "evidence": ["src/lib/server/convex-source.ts::sourceQuery", "src/lib/server/mcp-api.ts", "src/lib/server/bounded-request-body.ts::readBoundedRequestText"]}, {"id": "action-registry", "type": "infra", "path": "src/modules/actions", "role": "Single explicit cross-surface action registry plus the shared action contract. Registers ~41 actions from owning contexts, derives list/lookup/MCP names, and defines effect/authority metadata.", "entrypoints": ["src/modules/actions/index.ts::listActions", "src/modules/actions/index.ts::findAction", "src/modules/actions/index.ts::listMcpActions", "src/modules/common/action.ts::defineAction", "src/modules/common/action.ts::ActionEffectMetadata"], "tests": ["tests/unit/actions/registry.test.ts", "tests/unit/actions/action-contract-compatibility.test.ts"], "constraints": ["A *.actions.ts declaration is inert until imported into src/modules/actions/index.ts", "Action metadata does not grant authority; routes/effects re-validate at the source boundary"], "evidence": ["src/modules/actions/index.ts::listActions", "src/modules/common/action.ts::defineAction"]}, {"id": "customer-request", "type": "domain", "path": "src/modules/customer-request", "role": "Customer Request engine: natural-language interpretation, deterministic capability-graph compilation, route planning, confirmation, mandate, execution, recovery and customer projections. Hosts interpret-compile (discover->interpreter->compile) and semantic/OpenRouter transports.", "entrypoints": ["src/modules/customer-request/public.ts", "src/modules/customer-request/application/interpret-compile/preview.ts::previewCustomerRequest", "src/modules/customer-request/application/interpret-compile/interpreter.ts::createConfiguredRequestInterpreter", "src/modules/customer-request/application/interpret-compile/discover.ts::discoverAndFilterDescriptors", "src/modules/customer-request/compiler.ts::compileCustomerRequest", "src/modules/customer-request/semantic-interpreter.ts::publicDescriptor", "src/modules/customer-request/openrouter-transport.ts", "src/modules/customer-request/standing-route-authority.ts"], "tests": ["tests/unit/customer-request/deterministic-interpreter.test.ts", "tests/unit/customer-request/application/preview-retry-needs-info.test.ts", "tests/unit/customer-request/application/discover.test.ts", "tests/unit/customer-request/route-mandate.test.ts", "tests/integration/customer-request-v2-application-path.test.ts"], "constraints": ["Model output is a bounded proposal only; it cannot create authority or release a provider call (ARCHITECTURE.md)", "Discovery narrows a bounded pool; model zero-selection recovers onto the deterministic searchTerms matcher (interpreter.ts)", "Cross-capability domain guard: a crypto query is never handed ECB-fiat-only ops (capability-domain.ts)"], "evidence": ["src/modules/customer-request/application/interpret-compile/preview.ts::previewCustomerRequest", "src/modules/customer-request/application/interpret-compile/interpreter.ts::createConfiguredRequestInterpreter", "src/modules/customer-request/compiler.ts::compileCustomerRequest"]}, {"id": "capability-supply", "type": "domain", "path": "src/modules/capability-supply", "role": "Capability supply admission and publication: deterministic OpenAPI/MCP schema admission, publication lifecycle with provenance, eligibility, bindings, operation-ledger, readiness, curated ~20-op catalog payloads, and prepared route transports.", "entrypoints": ["src/modules/capability-supply/public.ts", "src/modules/capability-supply/operation-projection.ts", "src/modules/capability-supply/internal/admit-provider-schema.ts::admitProviderSchema", "src/modules/capability-supply/internal/publication/provenance.ts::validCapabilityPublicationAuthority", "src/modules/capability-supply/internal/publication-importers.ts", "src/modules/capability-supply/route-transport-runtime.ts", "src/modules/capability-supply/curated-cluster-a-publications.ts", "src/modules/capability-supply/curated-provider-publications.ts"], "tests": ["tests/unit/capability-supply/admit-provider-schema.test.ts", "tests/unit/capability-supply/provenance-tristate.test.ts", "tests/unit/capability-supply/curated-seed-drift-idempotency.test.ts", "tests/unit/capability-supply/route-transport-runtime.test.ts", "tests/integration/curated-provider-registry.test.ts"], "constraints": ["Admission refuses with a named reason instead of looping on circular/unresolvable/too-deep schemas (admit-provider-schema.ts)", "Every publication carries provenance: authority mode + source revision + digest (provenance.ts)", "Seed is idempotent across source drift: retires stale curated content by capabilityId+version before re-admitting"], "evidence": ["src/modules/capability-supply/internal/admit-provider-schema.ts::admitProviderSchema", "src/modules/capability-supply/internal/publication/provenance.ts::validCapabilityPublicationAuthority"]}, {"id": "capability-contract", "type": "domain", "path": "src/modules/capability-contract|src/modules/capability-contract-registry", "role": "Capability contract definition, validation and durable encoding. Defines the contract shape (including the inputExamples teaching surface), validates documents, and encodes/decodes the active contract registry.", "entrypoints": ["src/modules/capability-contract/public.ts::defineCapabilityContract", "src/modules/capability-contract/public.ts::resolvePointedSchema", "src/modules/capability-contract-registry/public.ts"], "tests": ["tests/unit/capability-supply/capability-supply-contract.test.ts", "tests/imports/capability-contract-boundaries.test.ts"], "constraints": ["Contracts are exact active documents; validation is deterministic and shared (capability-contract-* boundary tests)", "inputExamples are the AI-SDK teaching surface shown to the model for input construction"], "evidence": ["src/modules/capability-contract/public.ts::defineCapabilityContract", "src/modules/capability-contract/public.ts::resolvePointedSchema"]}, {"id": "catalog-registry", "type": "domain", "path": "src/modules/catalog|src/modules/registry", "role": "Public business/offering publication and service/operation discovery: catalog owner claim/publish, registry list/search/detail, operations search/detail/compare/inspect-plan, and inquiry-target resolution.", "entrypoints": ["src/modules/registry/registry.actions.ts", "src/modules/registry/operations.actions.ts", "src/modules/registry/registry.functions.ts", "src/modules/registry/public.ts", "src/modules/catalog/owner-claim.functions.ts", "src/modules/catalog/public.ts"], "tests": ["tests/integration/registry-api.test.ts", "tests/unit/convex/registry-runtime.test.ts", "tests/unit/convex/registry-pagination.test.ts", "tests/integration/curated-provider-registry.test.ts"], "constraints": ["Public readbacks are redacted projections, not reconstructed authority from raw documents", "Operations search/detail serve executable operation descriptors projected from capability supply"], "evidence": ["src/modules/registry/operations.actions.ts", "src/modules/registry/registry.functions.ts"]}, {"id": "discovery", "type": "domain", "path": "src/modules/discovery|src/modules/storefront", "role": "Developer-facing discovery: UCP manifests, llms.txt, SKILL.md, sitemap, agent page projections, and labelled draft web-discovery observations (storefront).", "entrypoints": ["src/modules/discovery/developer-discovery.ts", "src/modules/discovery/internal/agent-skill.ts", "src/modules/discovery/internal/ucp-manifest.ts", "src/modules/discovery/internal/site-manifest.ts", "src/modules/discovery/internal/offering-manifest.ts", "src/modules/storefront/storefront.actions.ts"], "tests": ["tests/integration/discovery-routes.test.ts", "tests/integration/discovery-llms-offering-parity.test.ts", "tests/seo/discovery-files.test.ts", "tests/integration/discovery-prompt-injection.test.ts"], "constraints": ["Web discovery returns explicitly labelled draft observations (claims), never provider admission", "Discovery documents are derived from current public contracts"], "evidence": ["src/modules/discovery/internal/ucp-manifest.ts", "src/modules/discovery/internal/agent-skill.ts"]}, {"id": "answer", "type": "domain", "path": "src/modules/answer", "role": "Answer semantics: retrieval-first paths, a single LLM tool-use producer, grounding/gates, typed UI stream events, and answer schemas/artifacts.", "entrypoints": ["src/modules/answer/internal/answer-tool-use-agent.ts::runAnswerToolUseAgent", "src/modules/answer/answer-synthesizer.ts", "src/modules/answer/answer-schema.ts", "src/modules/answer/answer-ui-stream.ts", "src/modules/answer/public.ts"], "tests": ["tests/unit/answer/answer-tool-use-agent.test.ts", "tests/unit/answer/answer-gate.test.ts", "tests/unit/answer/answer-ui-stream.test.ts"], "constraints": ["Structured answers are sanitized and grounded to allowed public slugs before emission", "Qualifying deterministic/empty-state paths may avoid a model call entirely"], "evidence": ["src/modules/answer/internal/answer-tool-use-agent.ts::runAnswerToolUseAgent"]}, {"id": "answer-thread", "type": "domain", "path": "src/modules/answer-thread", "role": "Per-turn answer orchestration and thread persistence: the turn orchestrator runs a HarnessRunLoop across intent/plan/retrieval/gate/persist phases and serves redacted thread projections.", "entrypoints": ["src/modules/answer-thread/internal/turn-orchestrator.ts::streamAnswerTurn", "src/modules/answer-thread/thread-route.ts", "src/modules/answer-thread/answer-thread.functions.ts", "src/modules/answer-thread/public.ts", "src/modules/answer-thread/internal/public-projection.ts"], "tests": ["tests/unit/answer-thread/tool-runner.test.ts", "tests/unit/answer-thread/answer-turn-grounding.test.ts", "tests/unit/answer-thread/public-projection.test.ts"], "constraints": ["Turn finalization and source-write success are checked before a turn is declared complete", "Durable thread state wins over transient streamed frames after reload"], "evidence": ["src/modules/answer-thread/internal/turn-orchestrator.ts::streamAnswerTurn", "src/modules/answer-thread/internal/public-projection.ts"]}, {"id": "harness", "type": "domain", "path": "src/modules/harness", "role": "Agent harness: ordered run-loop lifecycle, run collector, tool contract, emission guard, session journal, and run viewer projections; bridges registered actions into harness tools.", "entrypoints": ["src/modules/harness/run-loop.ts::HarnessRunLoop", "src/modules/harness/run-collector.ts", "src/modules/harness/action-tool.ts::actionToHarnessTool", "src/modules/harness/harness.functions.ts", "src/modules/harness/run-viewer.functions.ts", "src/modules/harness/harness.schema.ts"], "tests": ["tests/unit/harness/run-loop.test.ts", "tests/unit/harness/run-collector.test.ts", "tests/unit/harness/action-tool.test.ts"], "constraints": ["Harness records ordered phases, model usage/cost observations, tool evidence and approvals", "Only AE-owned state machines decide authority/effect release; harness is a mechanical seam"], "evidence": ["src/modules/harness/run-loop.ts::HarnessRunLoop", "src/modules/harness/action-tool.ts::actionToHarnessTool"]}, {"id": "action-invocation", "type": "domain", "path": "src/modules/action-invocation", "role": "Durable action invocation: authoritative tracer with cold resume, standing mandate/policy, dynamic contract verification, host projection, and durable attempts/reconciliation.", "entrypoints": ["src/modules/action-invocation/durable.ts::createDurableActionInvocationTracer", "src/modules/action-invocation/application-service.ts", "src/modules/action-invocation/standing-mandate.ts", "src/modules/action-invocation/host-projection.ts", "src/modules/action-invocation/dynamic-published-snapshot-verifier.ts"], "tests": ["tests/unit/action-invocation/durable-action-invocation.test.ts", "tests/unit/action-invocation/standing-mandate.test.ts", "tests/unit/harness/run-loop.test.ts"], "constraints": ["Invocation is durable/authoritative: replay and late observations are reconciled from source readback", "Charges flow through MoneyInvocationPort (money seam) with bounded spend authority"], "evidence": ["src/modules/action-invocation/durable.ts::createDurableActionInvocationTracer"]}, {"id": "model-gateway", "type": "domain", "path": "src/modules/model-gateway", "role": "Single OpenRouter model seam: env configuration, model construction, and cost parsing for AI SDK/LangChain-backed calls.", "entrypoints": ["src/modules/model-gateway/public.ts"], "tests": [], "constraints": ["Single seam for OpenRouter model construction; provider cache is module-level state", "Model output is an observation until deterministic validation accepts it"], "evidence": ["src/modules/model-gateway/public.ts"]}, {"id": "work-tree", "type": "domain", "path": "src/modules/work-tree", "role": "Durable project WorkTree (the person's execution loop): host orchestration, bounded gardener verbs, human decisions, repeat-use bounds and approvals, all rendered from append-only source readbacks.", "entrypoints": ["src/modules/work-tree/work-tree.actions.ts::workTreeCreateAction", "src/modules/work-tree/work-tree-agent.actions.ts::workTreeApplyAction", "src/modules/work-tree/work-tree.functions.ts::createWorkTreeThroughSource", "src/modules/work-tree/human-root.functions.ts::startRootWorkTreeServer", "src/modules/work-tree/internal/root-loop.ts::startRootWorkTree", "src/modules/work-tree/internal/verbs.ts"], "tests": ["tests/unit/work-tree/root-loop.test.ts", "tests/unit/work-tree/human-root.functions.test.ts", "tests/unit/work-tree/agent-work-tree-parity.test.ts", "tests/unit/routes/home-work-tree-loop.test.ts", "convex/workTrees.test.ts"], "constraints": ["create does not elaborate, decide, contact a business, charge, or claim fulfilment (work-tree.actions.ts)", "Repeat grants are accepted only from an authenticated human for an eligible low-risk Lock (work-tree-agent.actions.ts)", "WorkTree refusal surface includes live money gate / stripe setup (internal/root-loop.ts)"], "evidence": ["src/modules/work-tree/work-tree.actions.ts::workTreeCreateAction", "src/modules/work-tree/work-tree-agent.actions.ts::workTreeApplyAction"]}, {"id": "study", "type": "domain", "path": "src/modules/study", "role": "Fenced RFx Study over registered public services (with sibling external-run protocol): journal/replay lifecycle, qualification, quotes, deterministic TOPSIS scoring; proposes a recommendation into the WorkTree inbox rather than locking a decision.", "entrypoints": ["src/modules/study/study.actions.ts::studyStartAction", "src/modules/study/study.functions.ts::startStudyThroughSource", "src/modules/study/internal/pipeline.ts::runStudy", "src/modules/study/internal/rfx-machine.ts::replayStudyJournal"], "tests": ["tests/unit/study-actions.test.ts", "tests/unit/study-rfx-journal.test.ts", "convex/studies.test.ts", "convex/study-worktree-binding.test.ts"], "constraints": ["Only registered services can become providers or receive quotes; web discovery is learning evidence only (internal/pipeline.ts)", "Study.complete proposes only; it never auto-locks or creates decision authority (study.actions.ts)"], "evidence": ["src/modules/study/internal/pipeline.ts::runStudy", "src/modules/study/internal/rfx-machine.ts::replayStudyJournal"]}, {"id": "inquiries", "type": "domain", "path": "src/modules/inquiries", "role": "Qualified human->business inquiry flow: governed-send integrity, R1 target admission, customer access keys, notification binding, privacy erasure, owner-inbox readbacks, and the public inquiry.submit conversion action.", "entrypoints": ["src/modules/inquiries/inquiry.actions.ts::submitInquiryAction", "src/modules/inquiries/inquiry.functions.ts::submitPublicInquiryThroughSource", "src/modules/inquiries/public.ts::submitInquiry", "src/modules/inquiries/internal/governed-send.ts::buildGovernedSendIntent", "src/modules/inquiries/internal/admission.ts::evaluateR1TargetAdmission", "src/modules/inquiries/route-readbacks.ts::validatePublicInquiryFormInput"], "tests": ["tests/unit/inquiries/inquiry-flow.test.ts", "tests/unit/inquiries/governed-send-evidence-integrity.test.ts", "tests/unit/inquiries/admission.test.ts", "tests/unit/inquiries/privacy-erasure.test.ts", "tests/unit/convex/inquiries-runtime.test.ts"], "constraints": ["inquiry.submit is the only owned conversion action AE exposes today (inquiry.actions.ts)", "Submit does not book, charge, dispatch, or auto-fulfil (inquiry.actions.ts)", "Admission requires current published revision and a published human-request access path on channel ae_inquiry"], "evidence": ["src/modules/inquiries/inquiry.actions.ts::submitInquiryAction", "src/modules/inquiries/internal/governed-send.ts::buildGovernedSendIntent"]}, {"id": "notification-outbox", "type": "domain", "path": "src/modules/notification-outbox", "role": "Durable notification dispatch outbox: enqueue inquiry notifications, dispatch through a provider-adapter seam, ingest provider webhooks, retry/mark-no-repair, and redacted readbacks + operator serialization.", "entrypoints": ["src/modules/notification-outbox/public.ts::enqueueInquiryNotification", "src/modules/notification-outbox/internal/commands.ts::dispatchNotificationOutbox", "src/modules/notification-outbox/operator/index.ts"], "tests": ["tests/unit/notification-outbox/operator-thinness.test.ts", "tests/unit/convex/notification-outbox-runtime.test.ts"], "constraints": ["Dispatch is disabled unless controls allow: notification_dispatch_disabled when !controls.notificationDispatchEnabled (internal/commands.ts)", "Provider seam is an adapter port NotificationProviderAdapter={family,trigger} (internal/commands.ts)"], "evidence": ["src/modules/notification-outbox/internal/commands.ts::dispatchNotificationOutbox"]}, {"id": "money", "type": "domain", "path": "src/modules/money", "role": "Deterministic money kernel: pricing resolution, double-sided ledger (operator_credit/provider_earnings/ae_rake), charge/refund/reconcile, topup/auto-recharge, payout accrual, live-money compliance gate, and Stripe webhook intake.", "entrypoints": ["src/modules/money/public.ts::readCreditAccount", "src/modules/money/internal/ledger.ts::createLedgerState", "src/modules/money/internal/pricing-config.ts::resolveInvocationPrice", "src/modules/money/internal/live-money-gate.ts::evaluateLiveMoneyGate", "src/modules/money/internal/stripe-webhook.ts::handleStripeWebhookRequest", "src/modules/money/internal/topup.ts::applyCreditTopup"], "tests": ["tests/unit/money/compliance-gate.test.ts", "tests/unit/action-invocation/paid-operation-application-service.test.ts"], "constraints": ["LIVE_MONEY_GATE_POLICY is source-owned first-dollar policy; do not replace with an environment flag (internal/live-money-gate.ts)", "Accounts are strictly typed to the operator/provider/rake triple; mismatches reject as billing_identity/currency_mismatch (internal/ledger.ts)", "beginIdempotentTransaction replays same-key same-digest or refuses ledger_idempotency_conflict"], "evidence": ["src/modules/money/internal/ledger.ts::authorizePaidCharge", "src/modules/money/internal/live-money-gate.ts::evaluateLiveMoneyGate"]}, {"id": "security", "type": "crosscutting", "path": "src/modules/security|src/modules/network-guard|src/modules/observability", "role": "Cross-cutting policy seams: identity/admin/source-write authority (HMAC-SHA256 signing), SSRF network guard, and observability/audit/funnel controls.", "entrypoints": ["src/modules/security/public.ts", "src/modules/security/source-write-admission.ts", "src/modules/security/removal-dispute.functions.ts::openRemovalDisputeThroughSource", "src/modules/security/admin-readback.functions.ts", "src/modules/network-guard/public.ts", "src/modules/observability/public.ts"], "tests": ["tests/unit/http/security-headers.test.ts", "tests/imports/route-boundary.test.ts"], "constraints": ["Source-write admission signs/verifies requests before Convex writes (HMAC-SHA256)", "network-guard blocks DNS resolution against private/link-local ranges (SSRF)", "No route duplicates these cross-cutting policies (ARCHITECTURE.md)"], "evidence": ["src/modules/security/source-write-admission.ts", "src/modules/network-guard/public.ts"]}, {"id": "convex-backend", "type": "backend", "path": "convex", "role": "Durable source of truth and transaction/effect boundary: Convex queries/mutations/actions, composed schema, seed, workers (Workpool/Workflow queues), cron and HTTP routers. Owns identity, revisions, digests, idempotency and effect release.", "entrypoints": ["convex/customerRequestApplication.ts::submit", "convex/customerRequestV2.ts::commitAggregate", "convex/customerRequestRouteExecution.ts::startOrResume", "convex/customerRequestRouteTransportWorker.ts::run", "convex/customerRequestRouteMandate.ts::issue", "convex/curatedProviders.ts::seed", "convex/capabilitySupply.ts::publishCapability", "convex/capabilitySupplyOperations.ts", "convex/registry.ts::searchPublicBusinessOfferingSupply", "convex/catalog.ts::publishBusinessCatalog", "convex/discovery.ts::regenerateDiscoveryManifest", "convex/workTrees.ts::apply", "convex/studies.ts::create", "convex/moneyLedger.ts::authorizeInvocationCharge", "convex/notificationOutbox.ts::dispatchNotificationOutbox", "convex/answerThreads.ts::appendAnswerTurn", "convex/harnessSessions.ts::appendHarnessSessionEntry", "convex/inquiries.ts::submitPublicInquiry", "convex/devSeed.ts::seedDevCatalog", "convex/schema.ts", "convex/http.ts", "convex/crons.ts"], "tests": ["convex/customerRequestRouteMandate.test.ts", "convex/workTrees.test.ts", "convex/workTreeRepeatLedger.test.ts", "convex/studies.test.ts", "convex/externalRuns.test.ts"], "constraints": ["Convex is the single source of truth; module authority logic is reached via named ports", "Application functions recheck identity, revisions, digests and idempotency before source writes or external effects", "publish guard: one capabilityId+version -> one content (contract_identity_conflict is a correct invariant)", "The engine reads the DEPLOYED registry, so seeding is required to make ported ops live"], "evidence": ["convex/customerRequestApplication.ts::submit", "convex/capabilitySupply.ts::publishCapability", "convex/schema.ts", "convex/curatedProviders.ts::seed", "convex/customerRequestRouteTransportWorker.ts::run"]}, {"id": "openrouter", "type": "external", "path": "external:openrouter", "role": "OpenRouter AI model provider accessed through the model-gateway seam (AI SDK / @openrouter/ai-sdk-provider).", "entrypoints": [], "tests": [], "constraints": ["Model calls happen only after durable authority fences", "No raw OpenRouter call outside model-gateway / openrouter-transport"], "evidence": []}, {"id": "clerk", "type": "external", "path": "external:clerk", "role": "Clerk authentication (TanStack Start + Convex auth.config.ts JWT trust).", "entrypoints": [], "tests": [], "constraints": ["convex/auth.config.ts wires Clerk JWT issuer/audience to Convex"], "evidence": ["convex/auth.config.ts"]}, {"id": "convex-cloud", "type": "external", "path": "external:convex", "role": "Convex cloud hosting & database backend where convex/* functions and tables run.", "entrypoints": [], "tests": [], "constraints": ["Convex is the durable DB; Workpool/Workflow/rate-limiter mounted as components"], "evidence": ["convex/convex.config.ts"]}, {"id": "notification-providers", "type": "external", "path": "external:resend-novu", "role": "Notification providers (Resend/Novu) reached via bounded server fetch adapters.", "entrypoints": [], "tests": [], "constraints": ["ProviderFamily 'resend'|'novu' dispatch records; signed webhook intake"], "evidence": ["src/lib/server/notification-provider.ts", "src/lib/server/notification-dispatch.ts"]}, {"id": "stripe", "type": "external", "path": "external:stripe", "role": "Stripe for credit topup / Connect payouts via CreditPaymentPort/ConnectAccountPort.", "entrypoints": [], "tests": [], "constraints": ["Money gate requires Stripe setup before live effects"], "evidence": ["src/modules/money/internal/ports.ts"]}, {"id": "provider-systems", "type": "external", "path": "external:provider-systems", "role": "External provider systems (Exa, Frankfurter, observed x402 listings, etc.) invoked through prepared route transport (HTTP/MCP/x402).", "entrypoints": [], "tests": [], "constraints": ["Effects release only after durable authority and network-guard endpoint validation"], "evidence": ["src/modules/capability-supply/route-transport-runtime.ts"]}], "edges": [{"from": "frontend", "to": "server-adapters", "type": "calls", "evidence": "src/routes/index.tsx"}, {"from": "server-adapters", "to": "convex-backend", "type": "calls", "evidence": "src/lib/server/convex-source.ts::sourceMutation"}, {"from": "server-adapters", "to": "action-registry", "type": "reads", "evidence": "src/lib/server/mcp-api.ts"}, {"from": "server-adapters", "to": "security", "type": "calls", "evidence": "src/modules/security/source-write-admission.ts"}, {"from": "server-adapters", "to": "clerk", "type": "calls", "evidence": "convex/auth.config.ts"}, {"from": "customer-request", "to": "action-registry", "type": "imports", "evidence": "src/modules/customer-request/customer-request.actions.ts"}, {"from": "catalog-registry", "to": "action-registry", "type": "imports", "evidence": "src/modules/registry/operations.actions.ts"}, {"from": "work-tree", "to": "action-registry", "type": "imports", "evidence": "src/modules/work-tree/work-tree.actions.ts::workTreeCreateAction"}, {"from": "study", "to": "action-registry", "type": "imports", "evidence": "src/modules/study/study.actions.ts::studyStartAction"}, {"from": "inquiries", "to": "action-registry", "type": "imports", "evidence": "src/modules/inquiries/inquiry.actions.ts::submitInquiryAction"}, {"from": "discovery", "to": "action-registry", "type": "imports", "evidence": "src/modules/storefront/storefront.actions.ts"}, {"from": "customer-request", "to": "catalog-registry", "type": "reads", "evidence": "src/modules/customer-request/application/interpret-compile/discover.ts::discoverAndFilterDescriptors"}, {"from": "customer-request", "to": "capability-supply", "type": "reads", "evidence": "src/modules/customer-request/application/interpret-compile/graph.ts"}, {"from": "customer-request", "to": "model-gateway", "type": "calls", "evidence": "src/modules/customer-request/openrouter-transport.ts"}, {"from": "model-gateway", "to": "openrouter", "type": "calls", "evidence": "src/modules/model-gateway/public.ts"}, {"from": "answer", "to": "model-gateway", "type": "calls", "evidence": "src/modules/answer/internal/answer-tool-use-agent.ts::runAnswerToolUseAgent"}, {"from": "answer-thread", "to": "harness", "type": "calls", "evidence": "src/modules/answer-thread/internal/turn-orchestrator.ts::streamAnswerTurn"}, {"from": "answer-thread", "to": "answer", "type": "calls", "evidence": "src/modules/answer-thread/internal/tool-runner.ts"}, {"from": "answer-thread", "to": "convex-backend", "type": "writes", "evidence": "src/modules/answer-thread/answer-thread.functions.ts"}, {"from": "harness", "to": "action-registry", "type": "imports", "evidence": "src/modules/harness/action-tool.ts::actionToHarnessTool"}, {"from": "harness", "to": "convex-backend", "type": "writes", "evidence": "src/modules/harness/harness.functions.ts"}, {"from": "action-invocation", "to": "money", "type": "calls", "evidence": "src/modules/money/public.ts::MoneyInvocationPort"}, {"from": "capability-supply", "to": "capability-contract", "type": "imports", "evidence": "src/modules/capability-supply/internal/admit-provider-schema.ts::admitProviderSchema"}, {"from": "catalog-registry", "to": "capability-supply", "type": "reads", "evidence": "src/modules/registry/operations.actions.ts"}, {"from": "discovery", "to": "catalog-registry", "type": "reads", "evidence": "src/modules/discovery/internal/ucp-manifest.ts"}, {"from": "discovery", "to": "convex-backend", "type": "writes", "evidence": "src/modules/discovery/discovery.functions.ts"}, {"from": "study", "to": "catalog-registry", "type": "calls", "evidence": "src/modules/study/study.actions.ts::studyStartAction"}, {"from": "study", "to": "work-tree", "type": "calls", "evidence": "src/modules/study/study.functions.ts::completeStudyThroughSource"}, {"from": "inquiries", "to": "catalog-registry", "type": "calls", "evidence": "src/modules/inquiries/inquiry.functions.ts::resolvePublicRegistryInquiryTarget"}, {"from": "inquiries", "to": "notification-outbox", "type": "publishes", "evidence": "src/modules/inquiries/internal/schema.ts"}, {"from": "inquiries", "to": "security", "type": "imports", "evidence": "src/modules/inquiries/internal/schema.ts::AbuseRateLimitBucketRecord"}, {"from": "notification-outbox", "to": "notification-providers", "type": "calls", "evidence": "src/lib/server/notification-provider.ts"}, {"from": "money", "to": "stripe", "type": "calls", "evidence": "src/modules/money/internal/stripe-webhook.ts::handleStripeWebhookRequest"}, {"from": "money", "to": "capability-supply", "type": "imports", "evidence": "src/modules/money/internal/ledger.ts::authorizePaidCharge"}, {"from": "convex-backend", "to": "customer-request", "type": "calls", "evidence": "convex/customerRequestApplication.ts::submit"}, {"from": "convex-backend", "to": "capability-supply", "type": "calls", "evidence": "convex/capabilitySupply.ts::publishCapability"}, {"from": "convex-backend", "to": "capability-contract", "type": "calls", "evidence": "convex/capabilityContractDocuments.ts"}, {"from": "convex-backend", "to": "catalog-registry", "type": "writes", "evidence": "convex/catalog.ts::publishBusinessCatalog"}, {"from": "convex-backend", "to": "discovery", "type": "writes", "evidence": "convex/discovery.ts::regenerateDiscoveryManifest"}, {"from": "convex-backend", "to": "work-tree", "type": "writes", "evidence": "convex/workTrees.ts::apply"}, {"from": "convex-backend", "to": "study", "type": "writes", "evidence": "convex/studies.ts::create"}, {"from": "convex-backend", "to": "inquiries", "type": "writes", "evidence": "convex/inquiries.ts::submitPublicInquiry"}, {"from": "convex-backend", "to": "notification-outbox", "type": "publishes", "evidence": "convex/notificationOutbox.ts::dispatchNotificationOutbox"}, {"from": "convex-backend", "to": "money", "type": "writes", "evidence": "convex/moneyLedger.ts::authorizeInvocationCharge"}, {"from": "convex-backend", "to": "answer-thread", "type": "writes", "evidence": "convex/answerThreads.ts::appendAnswerTurn"}, {"from": "convex-backend", "to": "harness", "type": "writes", "evidence": "convex/harnessSessions.ts::appendHarnessSessionEntry"}, {"from": "convex-backend", "to": "action-invocation", "type": "writes", "evidence": "convex/actionInvocationControl.ts"}, {"from": "convex-backend", "to": "capability-supply", "type": "calls", "evidence": "convex/capabilitySupplyOperations.ts"}, {"from": "convex-backend", "to": "provider-systems", "type": "calls", "evidence": "convex/customerRequestRouteTransportWorker.ts::run"}, {"from": "convex-backend", "to": "convex-cloud", "type": "writes", "evidence": "convex/schema.ts"}], "flows": [{"trigger": "POST /api/requests (or /api/v1/requests) from browser/agent", "steps": ["frontend", "server-adapters", "convex-backend", "customer-request", "capability-supply", "convex-backend", "provider-systems", "convex-backend"], "outcome": "A bounded proposal is compiled to a proposal_only route generation; on exact-revision confirmation a bounded mandate is created and a durable run executes the registered transport (HTTP/MCP/x402) under network-guard, records the outcome, reconciles any payment, and projects the customer-safe next action."}, {"trigger": "Customer query to planPreview (NL -> discover -> interpret -> compile)", "steps": ["convex-backend", "customer-request", "catalog-registry", "customer-request", "model-gateway", "openrouter", "customer-request", "convex-backend"], "outcome": "Discovery narrows the routeable pool from the deployed registry; the composite interpreter (model-led with deterministic recovery) proposes; compile returns a typed preview (inspect_only), a typed needs_information ask, or an unavailable reason."}, {"trigger": "POST /api/answer/turn", "steps": ["frontend", "server-adapters", "answer-thread", "harness", "answer", "model-gateway", "openrouter", "convex-backend", "answer-thread"], "outcome": "The turn orchestrator runs a HarnessRunLoop; retrieval-first paths use registered read actions, model paths use the answer tool-use agent; typed stream events are emitted and the durable thread/harness journal is finalized, then served as a redacted projection."}, {"trigger": "/ root journey (?q= or ?project=)", "steps": ["frontend", "server-adapters", "catalog-registry", "customer-request", "work-tree", "convex-backend", "frontend"], "outcome": "A BAS ask starts a durable WorkTree and redirects; a normal ask runs public-services search + plan preview, web-discover claims are labelled, and the UI renders the WorkTree panel or service list from redacted projections."}, {"trigger": "Curated supply admission + publication readback", "steps": ["convex-backend", "capability-supply", "capability-contract", "convex-backend", "catalog-registry", "discovery"], "outcome": "Admission normalizes the provider OpenAPI/MCP schema (or refuses by name), publication carries provenance, contracts are validated/registered, the ~20-op curated catalog is seeded idempotently, and registry/operations + discovery manifests are projected."}]}</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("codemap-data").textContent);
+const NODES = DATA.nodes, EDGES = DATA.edges, FLOWS = DATA.flows;
+const byId = Object.fromEntries(NODES.map(n=>[n.id,n]));
+const TYPES = ["ui","service","infra","domain","crosscutting","backend","external"];
+const COLOR = {ui:"var(--ui)",service:"var(--service)",infra:"var(--infra)",domain:"var(--domain)",
+  crosscutting:"var(--cross)",backend:"var(--backend)",external:"var(--external)"};
+const TYPE_NAME = {ui:"UI / routes",service:"Service / adapters",infra:"Infrastructure",domain:"Domain",
+  crosscutting:"Cross-cutting",backend:"Durable backend (Convex)",external:"External"};
+document.getElementById("genat").textContent = DATA.generated_at;
+document.getElementById("commit").textContent = DATA.generated_from_commit.slice(0,8);
+document.getElementById("cnt").textContent = NODES.length + " nodes · " + EDGES.length + " edges · " + FLOWS.length + " flows";
+
+// --- legend ---
+const legendEl = document.getElementById("legend");
+const visible = {}; TYPES.forEach(t=>visible[t]=true);
+TYPES.forEach(t=>{
+  const d=document.createElement("div"); d.className="leg on"; d.dataset.t=t;
+  d.innerHTML = `<span class="sw" style="background:${COLOR[t]}"></span><span>${TYPE_NAME[t]}</span>`;
+  d.onclick=()=>{ visible[t]=!visible[t]; d.classList.toggle("on",visible[t]); applyFilters(); };
+  legendEl.appendChild(d);
+});
+
+// --- SVG setup ---
+const svg=document.getElementById("svg"), NS="http://www.w3.org/2000/svg";
+const W=1400, H=900;
+function el(name,attrs){const e=document.createElementNS(NS,name);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+
+// --- layout: layered backbones + force relaxation to minimize crossings ---
+const P = {}; // id -> {x,y}
+const ACCESS = {}; // flow membership per node
+FLOWS.forEach((f,fi)=>f.steps.forEach(s=>{(ACCESS[s]=ACCESS[s]||[]).push(fi);}));
+const PRIMARY = NODES.filter(n=>n.type!=="external").map(n=>n.id);
+const EXTERNAL = NODES.filter(n=>n.type==="external").map(n=>n.id);
+// initial layered placement (approximate reading order)
+const ORDER = ["frontend","server-adapters","action-registry","customer-request","capability-supply",
+  "capability-contract","catalog-registry","discovery","answer","answer-thread","harness",
+  "action-invocation","model-gateway","work-tree","study","inquiries","notification-outbox","money",
+  "security","convex-backend"];
+ORDER.forEach((id,i)=>{ const col=i%6, row=Math.floor(i/6); P[id]={x:180+col*200, y:130+row*170}; });
+// radial ring for externals
+EXTERNAL.forEach((id,i)=>{ const a=(i/EXTERNAL.length)*Math.PI*2; P[id]={x:W/2+Math.cos(a)*(W/2-110), y:H/2+Math.sin(a)*(H/2-110)}; });
+// force relaxation on primary nodes to minimize edge crossings
+(function(){
+  const adj={}; EDGES.forEach(e=>{ (adj[e.from]=adj[e.from]||[]).push(e.to); (adj[e.to]=adj[e.to]||[]).push(e.from); });
+  const ids=PRIMARY, n=ids.length;
+  for(let iter=0;iter<260;iter++){
+    const K=260;
+    // repulsion
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const a=P[ids[i]], b=P[ids[j]];
+      let dx=a.x-b.x, dy=a.y-b.y; let d2=dx*dx+dy*dy||1; let d=Math.sqrt(d2);
+      let f=K*K/(d2+1); let fx=(dx/d)*f*0.5, fy=(dy/d)*f*0.5;
+      a.x+=fx; a.y+=fy; b.x-=fx; b.y-=fy;
+    }
+    // springs along edges
+    EDGES.forEach(e=>{const a=P[e.from], b=P[e.to]; if(!a||!b)return;
+      let dx=b.x-a.x, dy=b.y-a.y; let d=Math.sqrt(dx*dx+dy*dy)||1; let want=170;
+      let f=(d-want)*0.06; let fx=(dx/d)*f, fy=(dy/d)*f;
+      a.x+=fx; a.y+=fy; b.x-=fx; b.y-=fy;});
+    // keep externals pinned near their ring
+    EXTERNAL.forEach(id=>{const p=P[id]; const c={x:W/2,y:H/2}; let a=Math.atan2(p.y-c.y,p.x-c.x);
+      const R=Math.min(W,H)/2-80; p.x=c.x+Math.cos(a)*R; p.y=c.y+Math.sin(a)*R;});
+    // clamp
+    PRIMARY.forEach(id=>{const p=P[id]; p.x=Math.max(70,Math.min(W-70,p.x)); p.y=Math.max(70,Math.min(H-70,p.y));});
+  }
+  // push externals to boundary
+})();
+
+// --- draw edges ---
+function drawEdges(){
+  svg.querySelectorAll("g.edgeg").forEach(e=>e.remove());
+  EDGES.forEach(e=>{
+    const a=P[e.from], b=P[e.to]; if(!a||!b)return;
+    const g=el("g",{class:"edgeg"}); const line=el("path",{class:"edge"+(e.type) ,d:curve(a,b)});
+    g.appendChild(line); svg.appendChild(g);
+  });
+}
+function curve(a,b){const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+  return `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`;}
+
+// --- draw nodes ---
+function drawNodes(){
+  NODES.forEach(n=>{
+    const p=P[n.id]; if(!p)return;
+    const g=el("g",{class:"node",id:"n_"+n.id}); g.dataset.id=n.id; g.dataset.type=n.type;
+    g.style.cursor="pointer";
+    const body=el("rect",{class:"body",x:-64,y:-26,width:128,height:52,rx:10,ry:10,fill:COLOR[n.type]});
+    const ring=el("rect",{class:"ring",x:-67,y:-29,width:134,height:58,rx:12,ry:12,stroke:COLOR[n.type]});
+    const t1=el("text",{x:0,y:-2,"text-anchor":"middle"}); t1.textContent=n.id;
+    const t2=el("text",{class:"sub",x:0,y:14,"text-anchor":"middle"}); t2.textContent=short(n.type);
+    g.appendChild(ring); g.appendChild(body); g.appendChild(t1); g.appendChild(t2);
+    g.setAttribute("transform",`translate(${p.x},${p.y})`);
+    g.onclick=()=>selectNode(n.id);
+    svg.appendChild(g);
+  });
+}
+function short(t){return {ui:"UI",service:"adapter",infra:"infra",domain:"domain",crosscutting:"policy",
+  backend:"convex",external:"external"}[t]||t;}
+
+// --- rendering state / highlight ---
+let current=null; // {kind:'node'|'flow', id}
+function applyOpacity(){
+  const sel = current;
+  const activeSet = new Set();
+  if(sel){
+    if(sel.kind==="node"){
+      const h = neighbors(sel.id,2);
+      h.forEach(x=>activeSet.add(x));
+      activeSet.add(sel.id);
+    } else {
+      FLOWS[sel.id].steps.forEach(s=>activeSet.add(s));
+    }
+  }
+  svg.querySelectorAll(".node").forEach(g=>{
+    const id=g.dataset.id; const inSet=activeSet.size?activeSet.has(id):true;
+    const vis = visible[g.dataset.type]!==false;
+    g.style.display = vis? "":"none";
+    g.classList.toggle("faded", activeSet.size? !inSet : false);
+    if(vis && (!activeSet.size||inSet)) g.setAttribute("opacity", "1"); else g.setAttribute("opacity","");
+  });
+  // edges
+  svg.querySelectorAll(".edgeg").forEach(g=>{
+    g.style.display = "none";
+  });
+  EDGES.forEach(e=>{
+    const a=byId[e.from], b=byId[e.to];
+    const group = svg.querySelector('#n_'+e.from)&&svg.querySelector('#n_'+e.to)? (()=>{const ea=svg.querySelector('.edgeg:nth-of-type('+(EDGES.indexOf(e)+1)+')');return null;})():null;
+  });
+  /*
+  // simpler: edges have no stable handle mapping to EDGES here; recompute below
+  */
+  paintEdges(activeSet, sel && sel.kind==="flow" ? new Set(FLOWS[sel.id].steps) : null);
+}
+function neighbors(start,depth){
+  const adjFrom={},adjTo={}; EDGES.forEach(e=>{(adjFrom[e.from]=adjFrom[e.from]||[]).push(e.to);
+    (adjTo[e.to]=adjTo[e.to]||[]).push(e.from);});
+  const seen=new Set([start]); let frontier=[start];
+  for(let d=0;d<depth;d++){const nf=[];
+    frontier.forEach(id=>{((adjFrom[id]||[]).concat(adjTo[id]||[])).forEach(x=>{if(!seen.has(x)){seen.add(x);nf.push(x);}})});
+    frontier=nf;}
+  return seen;
+}
+function paintEdges(activeSet, flowSet){
+  svg.querySelectorAll(".edgeg").forEach(g=>g.remove());
+  EDGES.forEach((e,i)=>{
+    const a=P[e.from], b=P[e.to]; if(!a||!b)return;
+    const g=el("g",{class:"edgeg"});
+    let cls="edge";
+    if(flowSet&&flowSet.has(e.from)&&flowSet.has(e.to)) cls="edge flowc";
+    else if(activeSet.size&&activeSet.has(e.from)&&activeSet.has(e.to)) cls="edge hot";
+    const line=el("path",{class:cls,d:curve(a,b)});
+    g.appendChild(line); svg.appendChild(g);
+  });
+}
+
+// --- selection handlers ---
+function selectNode(id){
+  current={kind:"node",id:id}; applyOpacity(); renderDetail(id);
+}
+function selectFlow(fi){
+  current={kind:"flow",id:fi}; applyOpacity(); renderFlowDetail(fi);
+}
+function clearSel(){ current=null; applyOpacity(); renderDetail(null); }
+function renderDetail(id){
+  const el=document.getElementById("detail");
+  if(!id){ el.innerHTML="<div class='sb-title'>Node detail</div><div style='color:var(--muted)'>Click a module to inspect it.</div>"; return; }
+  const n=byId[id];
+  const up=[],down=[];
+  EDGES.forEach(e=>{ if(e.to===id) up.push({id:e.from,type:e.type}); if(e.from===id) down.push({id:e.to,type:e.type}); });
+  const flowsNode = (ACCESS[id]||[]).map(fi=>{const f=FLOWS[fi];return f.trigger.slice(0,48)+(f.trigger.length>48?"…":"");});
+  let h=`<div class='sb-title'>Module · ${id}</div>`;
+  h+=`<h3>${TYPE_NAME[n.type]}</h3>`;
+  h+=`<div class="k">Path</div><code>${esc(n.path)}</code>`;
+  h+=`<div class="k">Role</div><div>${esc(n.role)}</div>`;
+  h+=`<div class="k">Entrypoints</div><ul>`+n.entrypoints.map(e=>`<li><code>${esc(e)}</code></li>`).join("")+`</ul>`;
+  h+=`<div class="k">Tests (${n.tests.length})</div><div>`+(n.tests.map(t=>`<span class="chip">${esc(shortName(t))}</span>`)).join("")+`</div>`;
+  h+=`<div class="k">Constraints</div><ul>`+n.constraints.map(c=>`<li>${esc(c)}</li>`).join("")+`</ul>`;
+  h+=`<div class="k">Evidence</div><ul>`+n.evidence.map(e=>`<li><code>${esc(e)}</code></li>`).join("")+`</ul>`;
+  if(up.length){h+=`<div class="k">Upstream callers / dependants</div><div>`+up.map(x=>`<span class="chip" data-jump="${x.id}">${esc(x.id)} ✓${esc(x.type)}</span>`).join("")+`</div>`;}
+  if(down.length){h+=`<div class="k">Downstream dependencies</div><div>`+down.map(x=>`<span class="chip" data-jump="${x.id}">${esc(x.id)} ⇒${esc(x.type)}</span>`).join("")+`</div>`;}
+  if(flowsNode.length){h+=`<div class="k">Belongs to flows</div><ul>`+flowsNode.map(f=>`<li>${esc(f)}</li>`).join("")+`</ul>`;}
+  el.innerHTML=h;
+  el.querySelectorAll("[data-jump]").forEach(ch=>ch.onclick=()=>selectNode(ch.dataset.jump));
+}
+function renderFlowDetail(fi){
+  const f=FLOWS[fi];
+  const el=document.getElementById("detail");
+  let h=`<div class='sb-title'>Flow ${fi+1} of ${FLOWS.length}</div>`;
+  h+=`<h3>${esc(f.trigger)}</h3>`;
+  h+=`<div class="k">Path</div><div>`+f.steps.map((s,i)=>`<span class="chip">${i+1}. ${esc(s)}</span>`).join(" → ")+`</div>`;
+  h+=`<div class="k">Outcome</div><div>${esc(f.outcome)}</div>`;
+  el.innerHTML=h;
+}
+function buildFlows(){
+  const el=document.getElementById("flows");
+  FLOWS.forEach((f,fi)=>{const b=document.createElement("button");b.className="flow";b.dataset.i=fi;
+    b.innerHTML=`<span class="fnum">Flow ${fi+1}</span><br>${esc(f.trigger)}`;
+    b.onclick=()=>{el.querySelectorAll(".flow").forEach(x=>x.classList.remove("active"));b.classList.add("active");selectFlow(fi);};
+    el.appendChild(b);});
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function shortName(p){const parts=p.split("/");return parts[parts.length-1];}
+function applyFilters(){
+  const q=document.getElementById("search").value.trim().toLowerCase();
+  svg.querySelectorAll(".node").forEach(g=>{
+    const vis=visible[g.dataset.type]!==false;
+    const ok = __omp_shell("q||g.dataset.id.toLowerCase().includes(q);")
+    g.style.display=(vis&&ok)?"":"none";
+  });
+  // re-apply current highlight
+  applyOpacity();
+}
+
+// --- drag / zoom / pan ---
+(function(){
+  let dragging=null, ox=0, oy=0;
+  svg.addEventListener("mousedown",e=>{
+    const t=e.target; const gn=t.closest?.(".node");
+    if(gn){ dragging=gn; ox=e.clientX; oy=e.clientY; e.preventDefault(); return; }
+    svg.classList.add("dragging"); const m0=svg.getAttribute("viewBox").split(" ").map(Number); panStart={x:e.clientX,y:e.clientY,bx0:m0[0],by0:m0[1],bw:m0[2],bh:m0[3]};
+  });
+  let panStart=null;
+  window.addEventListener("mousemove",e=>{
+    if(dragging){ const id=dragging.dataset.id; const dx=(e.clientX-ox),dy=(e.clientY-oy);
+      const m=svg.getAttribute("viewBox").split(" ").map(Number); const sc=W/m[2];
+      P[id].x+=dx/sc; P[id].y+=dy/sc;
+      dragging.setAttribute("transform",`translate(${P[id].x},${P[id].y})`);
+      ox=e.clientX; oy=e.clientY; repaintLinesFor(id);
+      return; }
+    if(panStart){ const m=svg.getAttribute("viewBox").split(" ").map(Number);
+      const sc=m[2]/svg.clientWidth; const nx=panStart.bx0-(e.clientX-panStart.x)*sc; const ny=panStart.by0-(e.clientY-panStart.y)*sc;
+      svg.setAttribute("viewBox",`${nx} ${ny} ${m[2]} ${m[3]}`); }
+  });
+  window.addEventListener("mouseup",()=>{dragging=null;panStart=null;svg.classList.remove("dragging");});
+  svg.addEventListener("wheel",e=>{e.preventDefault();const m=svg.getAttribute("viewBox").split(" ").map(Number);
+    const factor=e.deltaY<0?0.9:1.1; const nw=Math.max(300,Math.min(4000,m[2]*factor));
+    const cx=m[0]+m[2]/2, cy=m[1]+m[3]/2; const nh=m[3]*(nw/m[2]);
+    svg.setAttribute("viewBox",`${cx-nw/2} ${cy-nh/2} ${nw} ${nh}`);},{passive:false});
+  function repaintLinesFor(){ applyOpacity(); }
+  document.getElementById("resetView").onclick=()=>svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  document.getElementById("reflow").onclick=()=>{ applyOpacity(); };
+})();
+
+// --- search input ---
+document.getElementById("search").addEventListener("input",applyFilters);
+// click background clears
+svg.addEventListener("click",e=>{ if(e.target===svg||e.target.tagName==="rect") {} });
+svg.addEventListener("dblclick",()=>{clearSel(); document.getElementById("flows").querySelectorAll(".flow").forEach(x=>x.classList.remove("active"));});
+
+// hide node labels off-type filter initial
+buildFlows();
+drawNodes();
+applyOpacity();
+document.getElementById("resetView").click();
+</script>
+</body>
+</html>

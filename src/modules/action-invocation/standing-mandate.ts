@@ -1,4 +1,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  addExactAmounts,
+  compareExactAmounts,
+  subtractExactAmounts,
+  type ExactAmount,
+} from '@/modules/money/public'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import {
   verifiedGrantMatchesMandate,
@@ -33,7 +39,7 @@ export type StandingMandateScope = Readonly<{
   recipientRefs: readonly string[]
   purposes: readonly string[]
   allowedDataFields: readonly string[]
-  maximumSpend: Readonly<{ amountMinor: number; currency: string }>
+  maximumSpend: ExactAmount
   maximumActionCount: number
   /** Historical v1 wire key: limits concurrently held effect-capacity reservations. */
   maximumConcurrentReservations: number
@@ -41,7 +47,7 @@ export type StandingMandateScope = Readonly<{
   expiresAt: string
   permittedFallbacks: readonly string[]
   riskCeiling: string
-  maximumLoss?: Readonly<{ amountMinor: number; currency: string }>
+  maximumLoss?: ExactAmount
   exposureOffsetRules?: readonly ExposureOffsetRuleIdentity[]
   exposureOffsetVerificationKeys?: readonly Ed25519VerificationKey[]
 }>
@@ -77,8 +83,8 @@ export type AuthorityUseMaterial = Readonly<{
   recipientRef: string
   purpose: string
   dataFields: readonly string[]
-  reservedSpend: Readonly<{ amountMinor: number; currency: string }>
-  reservedLoss?: Readonly<{ amountMinor: number; currency: string }>
+  reservedSpend: ExactAmount
+  reservedLoss?: ExactAmount
   fallbackRef: string | null
   risk: string
   effectGeneration: number
@@ -117,8 +123,7 @@ export type AuthorityExposureOffset = Readonly<{
   offsetSubjectRef: string
   offsetResultRef: string
   offsetEvidenceRef: string
-  amountMinor: number
-  currency: string
+  amount: ExactAmount
   evidenceRuleRef: string
   evidenceRuleSource: string
   evidenceRuleVersion: string
@@ -243,6 +248,10 @@ export class StandingMandateStore {
       const { digest, ...material } = offset
       const use = this.#uses.get(offset.authorityUseRef)
       const offsetUse = this.#uses.get(offset.offsetAuthorityUseRef)
+      const offsetLimit = use === undefined ? undefined : use.reservedLoss ?? use.reservedSpend
+      const offsetComparison = offsetLimit === undefined || !sameExactScale(offset.amount, offsetLimit)
+        ? undefined
+        : compareExactAmounts(offset.amount, offsetLimit)
       if (
         digest !== canonicalDigest(material as never)
         || use === undefined
@@ -267,8 +276,8 @@ export class StandingMandateStore {
         || offset.offsetGeneration !== 1
         || this.#usedOffsetUses.has(offset.offsetAuthorityUseRef)
         || this.#usedOffsetEvidence.has(offset.offsetEvidenceRef)
-        || offset.amountMinor < 0
-        || offset.amountMinor > (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor)
+        || offsetComparison === undefined
+        || offsetComparison > 0
       ) throw new Error('standing_mandate_snapshot_exposure_offset_refused')
       this.#exposureOffsets.set(offset.authorityUseRef, deepFreeze(structuredClone(offset)))
       this.#usedOffsetUses.add(offset.offsetAuthorityUseRef)
@@ -361,23 +370,59 @@ export class StandingMandateStore {
     }
     const mandate = this.#mandates.get(decision.mandateRef)
     const currentCapacity = this.capacity(decision.mandateRef)
+    const { consumedSpend, reservedSpend, worstCaseLoss } = currentCapacity
     const mandateUses = [...this.#uses.values()].filter((use) => use.mandateRef === decision.mandateRef)
+    const currentCommittedSpend = consumedSpend === undefined
+      || reservedSpend === undefined
+      || !sameExactScale(consumedSpend, reservedSpend)
+      ? undefined
+      : addExactAmounts(consumedSpend, reservedSpend)
+    const committedSpendWithUses = mandate === undefined
+      ? undefined
+      : sumExactAmounts(
+        mandateUses
+          .filter((use) => use.state !== 'not_released')
+          .map((use) => use.reservedSpend),
+        mandate.scope.maximumSpend,
+      )
+    const committedSpendWithProposal = committedSpendWithUses === undefined
+      || !sameExactScale(committedSpendWithUses, decision.proposal.spend)
+      ? undefined
+      : addExactAmounts(committedSpendWithUses, decision.proposal.spend)
+    const committedSpendComparison = committedSpendWithProposal === undefined || mandate === undefined
+      ? undefined
+      : compareExactAmounts(committedSpendWithProposal, mandate.scope.maximumSpend)
     if (
-      mandate?.mode !== 'full_yolo'
+      mandate === undefined
+      || mandate.mode !== 'full_yolo'
+      || !sameExactScale(decision.proposal.spend, mandate.scope.maximumSpend)
+      || !sameExactScale(
+        decision.proposal.worstCaseLoss,
+        mandate.scope.maximumLoss ?? mandate.scope.maximumSpend,
+      )
+      || !sameExactScale(decision.proposedWorstCaseLoss, decision.proposal.worstCaseLoss)
+      || compareExactAmounts(decision.proposedWorstCaseLoss, decision.proposal.worstCaseLoss) !== 0
+      || !sameExactScale(decision.maximumLoss, mandate.scope.maximumLoss ?? mandate.scope.maximumSpend)
+      || compareExactAmounts(
+        decision.maximumLoss,
+        mandate.scope.maximumLoss ?? mandate.scope.maximumSpend,
+      ) !== 0
       || decision.mandateVersion !== mandate.version
       || decision.mandateGeneration !== mandate.generation
       || decision.proposal.objective !== mandate.scope.objective
       || decision.capacity.consumedCount !== currentCapacity.consumedCount
       || decision.capacity.reservedCount !== currentCapacity.reservedCount
-      || decision.capacity.committedSpendMinor !== (
-        currentCapacity.consumedSpendMinor + currentCapacity.reservedSpendMinor
-      )
-      || decision.capacity.heldWorstCaseLossMinor !== currentCapacity.worstCaseLossMinor
-      || decision.heldWorstCaseLossMinor !== currentCapacity.worstCaseLossMinor
-      || decision.proposal.spend.amountMinor + mandateUses
-        .filter((use) => use.state !== 'not_released')
-        .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
-        > mandate.scope.maximumSpend.amountMinor
+      || currentCommittedSpend === undefined
+      || !sameExactScale(decision.capacity.committedSpend, currentCommittedSpend)
+      || compareExactAmounts(decision.capacity.committedSpend, currentCommittedSpend) !== 0
+      || worstCaseLoss === undefined
+      || !sameExactScale(decision.capacity.heldWorstCaseLoss, worstCaseLoss)
+      || !sameExactScale(decision.heldWorstCaseLoss, worstCaseLoss)
+      || compareExactAmounts(decision.capacity.heldWorstCaseLoss, worstCaseLoss) !== 0
+      || compareExactAmounts(decision.heldWorstCaseLoss, worstCaseLoss) !== 0
+      || committedSpendWithProposal === undefined
+      || committedSpendComparison === undefined
+      || committedSpendComparison > 0
     ) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
     const prior = this.#policyDecisions.get(decision.policyDecisionRef)
     if (prior !== undefined) {
@@ -457,11 +502,12 @@ export class StandingMandateStore {
   recordExposureOffset(
     input: Omit<AuthorityExposureOffset, 'digest'>,
   ): MandateDecision<AuthorityExposureOffset> {
-    if (!exposureOffsetMaterialValid({ ...input, digest: 'pending' })) {
-      return { kind: 'refused', code: 'mandate_material_invalid' }
-    }
     const use = this.#uses.get(input.authorityUseRef)
     const offsetUse = this.#uses.get(input.offsetAuthorityUseRef)
+    const offsetLimit = use === undefined ? undefined : use.reservedLoss ?? use.reservedSpend
+    const offsetComparison = offsetLimit === undefined || !sameExactScale(input.amount, offsetLimit)
+      ? undefined
+      : compareExactAmounts(input.amount, offsetLimit)
     if (
       use === undefined
       || offsetUse === undefined
@@ -489,9 +535,8 @@ export class StandingMandateStore {
       || input.offsetGeneration !== 1
       || this.#usedOffsetUses.has(input.offsetAuthorityUseRef)
       || this.#usedOffsetEvidence.has(input.offsetEvidenceRef)
-      || input.currency !== (use.reservedLoss?.currency ?? use.reservedSpend.currency)
-      || input.amountMinor < 0
-      || input.amountMinor > (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor)
+      || offsetComparison === undefined
+      || offsetComparison > 0
     ) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
     const material = { ...input }
     const offset = deepFreeze({ ...material, digest: canonicalDigest(material as never) })
@@ -512,17 +557,28 @@ export class StandingMandateStore {
     const uses = [...this.#uses.values()].filter((use) => use.mandateRef === mandateRef)
     const consumed = uses.filter((use) => use.state === 'released')
     const active = uses.filter((use) => use.state === 'reserved' || use.state === 'uncertain')
+    const amountReference = mandate?.scope.maximumSpend ?? uses[0]?.reservedSpend
+    const lossReference = mandate?.scope.maximumLoss ?? amountReference
+    const consumedSpend = amountReference === undefined
+      ? undefined
+      : sumExactAmounts(consumed.map((use) => use.reservedSpend), amountReference)
+    const reservedSpend = amountReference === undefined
+      ? undefined
+      : sumExactAmounts(active.map((use) => use.reservedSpend), amountReference)
+    const lossAmounts = uses
+      .filter((use) => use.state !== 'not_released')
+      .map((use) => effectiveLossAmount(use, this.#exposureOffsets.get(use.authorityUseRef)?.amount))
+    const validLossAmounts = lossAmounts.filter((amount): amount is ExactAmount => amount !== undefined)
+    const worstCaseLoss = lossReference === undefined || validLossAmounts.length !== lossAmounts.length
+      ? undefined
+      : sumExactAmounts(validLossAmounts, lossReference)
     return {
       maximumActionCount: mandate?.scope.maximumActionCount ?? 0,
       consumedCount: consumed.length,
       reservedCount: active.length,
-      consumedSpendMinor: consumed.reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0),
-      reservedSpendMinor: active.reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0),
-      worstCaseLossMinor: uses
-        .filter((use) => use.state !== 'not_released')
-        .reduce((sum, use) =>
-          sum + (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor)
-          - (this.#exposureOffsets.get(use.authorityUseRef)?.amountMinor ?? 0), 0),
+      consumedSpend,
+      reservedSpend,
+      worstCaseLoss,
     }
   }
 
@@ -577,11 +633,16 @@ export class StandingMandateStore {
     if (input.dataFields.some((field) => !allowedDataFields.has(field))) {
       return 'mandate_data_widening'
     }
-    if (input.reservedSpend.currency !== mandate.scope.maximumSpend.currency) return 'mandate_currency_mismatch'
-    if (
-      input.reservedLoss !== undefined
-      && input.reservedLoss.currency !== (mandate.scope.maximumLoss?.currency ?? mandate.scope.maximumSpend.currency)
-    ) return 'mandate_currency_mismatch'
+    if (!sameExactScale(input.reservedSpend, mandate.scope.maximumSpend)
+      || compareExactAmounts(input.reservedSpend, mandate.scope.maximumSpend) === undefined) {
+      return 'mandate_currency_mismatch'
+    }
+    const lossCeiling = mandate.scope.maximumLoss ?? mandate.scope.maximumSpend
+    if (input.reservedLoss !== undefined
+      && (!sameExactScale(input.reservedLoss, lossCeiling)
+        || compareExactAmounts(input.reservedLoss, lossCeiling) === undefined)) {
+      return 'mandate_currency_mismatch'
+    }
     if (!mandate.scope.permittedFallbacks.includes(input.fallbackRef ?? 'none')) return 'mandate_fallback_mismatch'
     if (input.risk !== mandate.scope.riskCeiling) return 'mandate_risk_exceeded'
     const uses = [...this.#uses.values()].filter((use) =>
@@ -593,31 +654,36 @@ export class StandingMandateStore {
     }
     const concurrentEffectCapacity = mandate.scope.maximumConcurrentReservations
     if (held.length >= concurrentEffectCapacity) return 'mandate_concurrency_exhausted'
-    const committedSpend = uses
-      .filter((use) => use.state !== 'not_released')
-      .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
-    if (
-      !Number.isSafeInteger(committedSpend)
-      || !Number.isSafeInteger(committedSpend + input.reservedSpend.amountMinor)
-    ) return 'mandate_material_invalid'
-    if (committedSpend + input.reservedSpend.amountMinor > mandate.scope.maximumSpend.amountMinor) {
-      return 'mandate_spend_exceeded'
-    }
+    const committedSpend = sumExactAmounts(
+      uses
+        .filter((use) => use.state !== 'not_released')
+        .map((use) => use.reservedSpend),
+      mandate.scope.maximumSpend,
+    )
+    const committedSpendWithInput = committedSpend === undefined
+      ? undefined
+      : addExactAmounts(committedSpend, input.reservedSpend)
+    if (committedSpendWithInput === undefined) return 'mandate_material_invalid'
+    const spendComparison = compareExactAmounts(committedSpendWithInput, mandate.scope.maximumSpend)
+    if (spendComparison === undefined) return 'mandate_material_invalid'
+    if (spendComparison > 0) return 'mandate_spend_exceeded'
     const maximumLoss = mandate.scope.maximumLoss
     if (maximumLoss !== undefined) {
-      const heldLoss = uses
+      const heldLossAmounts = uses
         .filter((use) => use.state !== 'not_released')
-        .reduce((sum, use) =>
-          sum + (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor)
-          - (this.#exposureOffsets.get(use.authorityUseRef)?.amountMinor ?? 0), 0)
-      if (
-        !Number.isSafeInteger(heldLoss)
-        || input.reservedLoss === undefined
-        || !Number.isSafeInteger(heldLoss + input.reservedLoss.amountMinor)
-      ) return 'mandate_material_invalid'
-      if (heldLoss + input.reservedLoss.amountMinor > maximumLoss.amountMinor) {
-        return 'mandate_risk_exceeded'
+        .map((use) => effectiveLossAmount(use, this.#exposureOffsets.get(use.authorityUseRef)?.amount))
+      const validHeldLossAmounts = heldLossAmounts.filter((amount): amount is ExactAmount => amount !== undefined)
+      const heldLoss = validHeldLossAmounts.length !== heldLossAmounts.length
+        ? undefined
+        : sumExactAmounts(validHeldLossAmounts, maximumLoss)
+      if (heldLoss === undefined || input.reservedLoss === undefined) {
+        return 'mandate_material_invalid'
       }
+      const heldLossWithInput = addExactAmounts(heldLoss, input.reservedLoss)
+      if (heldLossWithInput === undefined) return 'mandate_material_invalid'
+      const lossComparison = compareExactAmounts(heldLossWithInput, maximumLoss)
+      if (lossComparison === undefined) return 'mandate_material_invalid'
+      if (lossComparison > 0) return 'mandate_risk_exceeded'
     }
     return undefined
   }
@@ -636,10 +702,11 @@ export class StandingMandateStore {
       && decision.proposal.recipientRef === input.recipientRef
       && decision.proposal.purpose === input.purpose
       && canonicalDigest(decision.proposal.dataFields as never) === canonicalDigest(input.dataFields as never)
-      && decision.proposal.spend.amountMinor === input.reservedSpend.amountMinor
-      && decision.proposal.spend.currency === input.reservedSpend.currency
-      && decision.proposal.worstCaseLoss.amountMinor === input.reservedLoss?.amountMinor
-      && decision.proposal.worstCaseLoss.currency === input.reservedLoss?.currency
+      && sameExactScale(decision.proposal.spend, input.reservedSpend)
+      && compareExactAmounts(decision.proposal.spend, input.reservedSpend) === 0
+      && input.reservedLoss !== undefined
+      && sameExactScale(decision.proposal.worstCaseLoss, input.reservedLoss)
+      && compareExactAmounts(decision.proposal.worstCaseLoss, input.reservedLoss) === 0
       && decision.proposal.fallbackRef === (input.fallbackRef ?? 'none')
       && decision.proposal.risk === input.risk
   }
@@ -680,8 +747,8 @@ export class StandingMandateStore {
       && attested.cancellationEffect.resultRef === offset.offsetResultRef
       && attested.cancellationEffect.evidenceDigest === canonicalDigest(offset.offsetEvidenceRef as never)
       && attested.outcome === 'provider_confirmed_reversal'
-      && attested.reversedAmount.amountMinor === offset.amountMinor
-      && attested.reversedAmount.currency === offset.currency
+      && sameExactScale(attested.reversedAmount, offset.amount)
+      && compareExactAmounts(attested.reversedAmount, offset.amount) === 0
   }
 }
 
@@ -703,6 +770,30 @@ export function policyDecisionIntegrityValid(decision: StandingMandatePolicyDeci
   return digest === canonicalDigest(material as never)
 }
 
+function sameExactScale(left: ExactAmount, right: ExactAmount): boolean {
+  return left.currency === right.currency && left.exponent === right.exponent
+}
+
+function sumExactAmounts(amounts: readonly ExactAmount[], zeroReference: ExactAmount): ExactAmount | undefined {
+  let total: ExactAmount = { ...zeroReference, units: '0' }
+  for (const amount of amounts) {
+    if (!sameExactScale(total, amount)) return undefined
+    const next = addExactAmounts(total, amount)
+    if (next === undefined) return undefined
+    total = next
+  }
+  return total
+}
+
+function effectiveLossAmount(
+  use: Pick<AuthorityUse, 'reservedLoss' | 'reservedSpend'>,
+  offset: ExactAmount | undefined,
+): ExactAmount | undefined {
+  const gross = use.reservedLoss ?? use.reservedSpend
+  if (offset === undefined) return gross
+  if (!sameExactScale(gross, offset)) return undefined
+  return subtractExactAmounts(gross, offset)
+}
 function allowedActions(mandate: StandingMandate) {
   return mandate.scope.actions ?? [mandate.scope.action]
 }

@@ -147,7 +147,7 @@ function stateSemantics(
         paymentSubmission: { state: 'observed', evidenceRefs: ['evidence:local-dispatch'] },
         settlement: {
           state: 'settled',
-          amount: { currency: 'AUD', amountMinor: 250 },
+          amount: { currency: 'AUD', units: '250', exponent: 2 },
           evidenceRefs: ['evidence:local-settlement'],
         },
         resultDelivery: {
@@ -164,7 +164,7 @@ function stateSemantics(
         paymentSubmission: { state: 'observed', evidenceRefs: ['evidence:local-dispatch'] },
         settlement: {
           state: 'settled',
-          amount: { currency: 'AUD', amountMinor: 250 },
+          amount: { currency: 'AUD', units: '250', exponent: 2 },
           evidenceRefs: ['evidence:local-settlement'],
         },
         resultDelivery: {
@@ -201,7 +201,7 @@ function baseSemantics(): Omit<PaidOperationSemantics, 'schema'> {
       summary: 'A labelled local mock operation for browser evaluation only.',
       blocks: [{ kind: 'text', label: 'Target language', value: 'French' }],
     },
-    maximumAuthorizedCharge: { currency: 'AUD', amountMinor: 250 },
+    maximumAuthorizedCharge: { currency: 'AUD', units: '250', exponent: 2 },
     queryRelease: {
       state: 'unknown',
       evidenceRefs: ['evidence:local-release-unknown'],

@@ -115,7 +115,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
   const providerB = createDevelopmentProviderOperationProvider({
     providerRef: 'mock:provider:calendar:b',
     slotRef: 'mock:slot:b',
-    exposureAmount: { amountMinor: 5_000, currency: 'AUD' },
+    exposureAmount: { currency: 'AUD', units: '5000', exponent: 2 },
     signingCustody,
   })
   const slotA = await providerA.availability()
@@ -141,8 +141,8 @@ async function runFullYoloDevelopmentObjectiveInternal(
       recipientRefs: [slotA.providerRef, slotB.providerRef],
       purposes: ['create_development_effect', 'cancel_development_effect'],
       allowedDataFields: ['customer.name', 'customer.email', 'reason'],
-      maximumSpend: { amountMinor: 10_000, currency: 'AUD' },
-      maximumLoss: { amountMinor: 5_000, currency: 'AUD' },
+      maximumSpend: { currency: 'AUD', units: '10000', exponent: 2 },
+      maximumLoss: { currency: 'AUD', units: '5000', exponent: 2 },
       maximumActionCount: 4,
       maximumConcurrentReservations: 2,
       startsAt: developmentProviderOperationNow(),
@@ -214,8 +214,8 @@ async function runFullYoloDevelopmentObjectiveInternal(
     recipientRef: slotA.providerRef,
     purpose: 'create_development_effect',
     dataFields: ['customer.name', 'customer.email'],
-    spend: { amountMinor: 0, currency: 'AUD' },
-    worstCaseLoss: { amountMinor: 0, currency: 'AUD' },
+    spend: { currency: 'AUD', units: '0', exponent: 2 },
+    worstCaseLoss: { currency: 'AUD', units: '0', exponent: 2 },
     fallbackRef: 'provider_a_primary',
     risk: 'development_provider_operation_bounded_loss',
   })
@@ -229,7 +229,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
       mandateRef: mandate.mandateRef,
       authorityUseRef: 'mock:authority-use:full-yolo:a',
       fallbackRef: 'provider_a_primary',
-      reservedLossMinor: 0,
+      reservedLoss: { currency: 'AUD', units: '0', exponent: 2 },
       risk: 'development_provider_operation_bounded_loss',
       policyDecisionRef: decisionA.policyDecisionRef,
     },
@@ -256,8 +256,8 @@ async function runFullYoloDevelopmentObjectiveInternal(
     recipientRef: slotB.providerRef,
     purpose: 'create_development_effect',
     dataFields: ['customer.name', 'customer.email'],
-    spend: { amountMinor: 5_000, currency: 'AUD' },
-    worstCaseLoss: { amountMinor: 5_000, currency: 'AUD' },
+    spend: { currency: 'AUD', units: '5000', exponent: 2 },
+    worstCaseLoss: { currency: 'AUD', units: '5000', exponent: 2 },
     fallbackRef: 'provider_b_after_terms_refusal',
     risk: 'development_provider_operation_bounded_loss',
   })
@@ -271,8 +271,8 @@ async function runFullYoloDevelopmentObjectiveInternal(
       mandateRef: mandate.mandateRef,
       authorityUseRef: 'mock:authority-use:full-yolo:b',
       fallbackRef: 'provider_b_after_terms_refusal',
-      reservedSpendMinor: 5_000,
-      reservedLossMinor: 5_000,
+      reservedSpend: { currency: 'AUD', units: '5000', exponent: 2 },
+      reservedLoss: { currency: 'AUD', units: '5000', exponent: 2 },
       risk: 'development_provider_operation_bounded_loss',
       policyDecisionRef: decisionB.policyDecisionRef,
       reconstructBeforeRelease: () => {
@@ -342,15 +342,15 @@ async function runFullYoloDevelopmentObjectiveInternal(
     [executeDevelopmentProviderOperationAction.id, executeDevelopmentProviderOperationAction],
     [cancelDevelopmentProviderOperationAction.id, cancelDevelopmentProviderOperationAction],
   ])
-  const reconstructed = invocationRecords.map((record) => {
+  const reconstructed = await Promise.all(invocationRecords.map(async (record) => {
     const action = actionById.get(record.action.id)
     if (action === undefined) throw new Error('cold_action_missing')
-    return reconstructDevelopmentProviderOperationInvocation({
+    return (await reconstructDevelopmentProviderOperationInvocation({
       invocationRef: record.invocationRef,
       action,
       durable: record.durable,
-    }).view
-  })
+    })).view
+  }))
   const providerSnapshot = resumed.providerSnapshot
   const effectsBeforeReplay = resumed.effectCounts
   const replayed = await resumeDevelopmentProviderOperationObjective({
@@ -460,14 +460,14 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
     || input.objectiveState.completedInvocationRefs.length !== input.durableInvocations.length
   ) throw new Error('development_provider_operation_objective_linkage_refused')
 
-  const reconstructed = input.durableInvocations.map((durable, index) => {
+  const reconstructed = await Promise.all(input.durableInvocations.map(async (durable, index) => {
     const invocationRef = input.objectiveState.completedInvocationRefs[index]
     const action = index < 2
       ? executeDevelopmentProviderOperationAction
       : cancelDevelopmentProviderOperationAction
     if (invocationRef === undefined) throw new Error('development_provider_operation_objective_invocation_missing')
-    return reconstructDevelopmentProviderOperationInvocation({ invocationRef, action, durable }).view
-  })
+    return (await reconstructDevelopmentProviderOperationInvocation({ invocationRef, action, durable })).view
+  }))
   const provider = createDevelopmentProviderOperationProvider({
     ...input.providerSnapshot.options,
     signingCustody: input.signingCustody,
@@ -533,8 +533,8 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
       recipientRef: confirmed.providerRef,
       purpose: 'cancel_development_effect',
       dataFields: ['reason'],
-      spend: { amountMinor: 0, currency: 'AUD' },
-      worstCaseLoss: { amountMinor: 0, currency: 'AUD' },
+      spend: { currency: 'AUD', units: '0', exponent: 2 },
+      worstCaseLoss: { currency: 'AUD', units: '0', exponent: 2 },
       fallbackRef: 'none',
       risk: 'development_provider_operation_bounded_loss',
     },
@@ -580,8 +580,7 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
     offsetSubjectRef: cancellationResult.effectRef,
     offsetResultRef: cancellationResult.cancellationRef,
     offsetEvidenceRef: cancellationResult.evidenceRef,
-    amountMinor: 5_000,
-    currency: 'AUD',
+    amount: { currency: 'AUD', units: '5000', exponent: 2 },
     evidenceRuleRef: developmentCancellationConfirmationRule.evidenceRuleRef,
     evidenceRuleSource: developmentCancellationConfirmationRule.source,
     evidenceRuleVersion: developmentCancellationConfirmationRule.version,

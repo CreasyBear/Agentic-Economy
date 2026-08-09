@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
 
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { createElement, type ReactElement } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
+
+import { AeFindMyBusiness } from '@/components/ae/claim/AeFindMyBusiness'
+import type { FoundBusiness } from '@/components/ae/claim/AeFindMyBusiness'
 import { emptyOwnerOfferingEditorValue, publishGateRefusal } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 import { claimFormSearchFor } from '@/components/ae/claim/AeFindMyBusiness.exports'
 
@@ -65,5 +73,57 @@ describe('find-my-business hands facts to the claim form', () => {
       stateTerritory: 'WA',
       requestedSlug: 'joondalup-emergency-plumbing',
     })
+  })
+})
+
+afterEach(() => {
+  cleanup()
+})
+
+const foundBusiness: FoundBusiness = {
+  slug: 'joondalup-emergency-plumbing',
+  name: 'Joondalup Emergency Plumbing',
+  category: 'Emergency plumbing',
+  suburb: 'Joondalup',
+  stateTerritory: 'WA',
+}
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const claimRoute = createRoute({ getParentRoute: () => rootRoute, path: '/claim' })
+  const claimFormRoute = createRoute({ getParentRoute: () => rootRoute, path: '/claim/form' })
+  const routeTree = rootRoute.addChildren([claimRoute, claimFormRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/claim'] }) })
+  return render(createElement(RouterContextProvider, { router, children: ui }))
+}
+
+function claimFormUrl(link: HTMLElement): URL {
+  const href = link.getAttribute('href')
+  if (href === null) throw new Error('Expected claim form link to have an href.')
+  return new URL(href, 'https://ae.example')
+}
+
+describe('find-my-business claim doors', () => {
+  it.each([
+    { label: 'without a source', source: undefined, expectedSource: null },
+    { label: 'with the supply source', source: 'supply', expectedSource: 'supply' },
+  ] as const)('keeps both claim doors $label', async ({ source, expectedSource }) => {
+    renderWithRouter(createElement(AeFindMyBusiness, {
+      search: vi.fn(async () => [foundBusiness]),
+      onBuildFromWeb: vi.fn(),
+      ...(source === undefined ? {} : { source }),
+    }))
+
+    expect(claimFormUrl(screen.getByRole('link', { name: 'My business is not listed. Start fresh.' })).searchParams.get('source'))
+      .toBe(expectedSource)
+
+    fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: foundBusiness.name } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my business' }))
+    const foundLink = await waitFor(() => screen.getByRole('link', { name: 'This is my business' }))
+    const foundUrl = claimFormUrl(foundLink)
+
+    expect(foundUrl.pathname).toBe('/claim/form')
+    expect(foundUrl.searchParams.get('businessName')).toBe(foundBusiness.name)
+    expect(foundUrl.searchParams.get('source')).toBe(expectedSource)
   })
 })

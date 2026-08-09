@@ -5,8 +5,8 @@ import {
   assertDynamicPublishedSnapshotShape,
 } from './dynamic-published-snapshot-verifier'
 import type { ActionInvocationOrigin } from './contracts'
-import { reconstructDurableControlRow } from './internal/durable-contracts'
 
+import { reconstructDurableControlRow } from './internal/durable-contracts'
 export type DevelopmentHostKind = 'request_owned_human' | 'standalone_external_agent'
 
 export type DevelopmentHostSemanticRead = Readonly<{

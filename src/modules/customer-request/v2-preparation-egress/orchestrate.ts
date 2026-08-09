@@ -101,16 +101,25 @@ async function processOperations(
     if (begun.kind === 'dispatch') {
       if (begun.endpointUrl === undefined || begun.credentialRef === undefined
         || begun.adapterId === undefined || begun.configJson === undefined
-        || begun.bodyText === undefined || begun.dispatchAttemptRef === undefined) {
+        || begun.bodyText === undefined || begun.dispatchAttemptRef === undefined
+        || begun.canonicalClaimMaterial === undefined) {
         return { kind: 'needs_attention' }
       }
       const result = await ports.dispatchRegisteredAdapter({
         endpointUrl: begun.endpointUrl,
         credentialRef: begun.credentialRef,
+        ...(begun.connectionAuthority === undefined
+          ? {}
+          : { connectionAuthority: begun.connectionAuthority }),
         adapterId: begun.adapterId,
         configJson: begun.configJson,
         bodyText: begun.bodyText,
+        canonicalClaimMaterial: begun.canonicalClaimMaterial,
       }, operationRef)
+      if (result.canonicalDisposition === 'active') {
+        states.push({ operationRef, state: 'in_flight' })
+        continue
+      }
       state = await ports.resolveDispatch({
         operationRef,
         dispatchAttemptRef: begun.dispatchAttemptRef,
@@ -119,9 +128,7 @@ async function processOperations(
       })
     }
     if (state === undefined) return { kind: 'needs_attention' }
-    if (state === 'uncertain') {
-      state = await reconcileOperation(ports, operationRef, principalId) ?? 'uncertain'
-    }
+    // Uncertain outcomes require an explicit reconciliation call; never replay automatically.
     states.push({ operationRef, state })
   }
   return { kind: 'completed', states }
@@ -135,15 +142,35 @@ async function reconcileOperation(
   const opened = await ports.openReconciliation({ operationRef, principalId })
   if (opened.kind !== 'available' || opened.endpointUrl === undefined
     || opened.credentialRef === undefined || opened.adapterId === undefined
-    || opened.configJson === undefined) {
+    || opened.configJson === undefined || opened.canonicalClaimMaterial === undefined) {
     return undefined
+  }
+  const base = opened.canonicalClaimMaterial
+  const canonicalClaimMaterial = {
+    ...base,
+    invocationRef: `${base.invocationRef}:reconciliation`,
+    action: {
+      ...base.action,
+      id: `${base.action.id}:reconciliation`,
+    },
+    attempt: {
+      ...base.attempt,
+      attemptRef: `${base.attempt.attemptRef}:reconciliation`,
+      operationKey: `${base.attempt.operationKey}:reconciliation`,
+      leaseOwner: `${base.attempt.leaseOwner}:reconciliation`,
+      leaseExpiresAt: base.authority.expiresAt,
+    },
   }
   const evidence = await ports.reconcileRegisteredAdapter({
     endpointUrl: opened.endpointUrl,
     credentialRef: opened.credentialRef,
+    ...(opened.connectionAuthority === undefined
+      ? {}
+      : { connectionAuthority: opened.connectionAuthority }),
     adapterId: opened.adapterId,
     configJson: opened.configJson,
     bodyText: '',
+    canonicalClaimMaterial,
   }, operationRef)
   if (evidence === undefined) return undefined
   const evidenceMaterial = {

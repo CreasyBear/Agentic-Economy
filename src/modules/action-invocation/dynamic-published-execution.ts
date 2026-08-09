@@ -1,11 +1,15 @@
 import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,
+  preflightRouteTransportCredential,
   type PreparedRouteTransportInvocation,
+  type RouteTransportInvocation,
+  type RouteTransportObservation,
   type RouteTransportRuntime,
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { exactAmountSchema } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
@@ -40,26 +44,42 @@ export type DynamicPublishedPreparedTransport = Readonly<{
   effectGeneration: number
   plan: PreparedRouteTransportInvocation
 }>
-
-export function prepareDynamicPublishedTransport(input: Readonly<{
+export async function prepareDynamicPublishedTransport(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
   invocation: DynamicPublishedInvocationInput
   token: DynamicPublishedExecutionToken
   runtime: RouteTransportRuntime
 }>):
-  | Readonly<{ kind: 'prepared'; prepared: DynamicPublishedPreparedTransport }>
-  | Readonly<{ kind: 'refused'; result: DynamicPublishedInvocationResult }> {
+  Promise<
+    | Readonly<{ kind: 'prepared'; prepared: DynamicPublishedPreparedTransport }>
+    | Readonly<{ kind: 'refused'; result: DynamicPublishedInvocationResult }>
+  > {
   const transportInvocation = dynamicTransportInvocation(input)
   const preparation = prepareRegisteredRouteTransportInvocation(
     transportInvocation,
-    input.runtime.resolveCredential,
     input.runtime.x402PaymentSigningAvailable ?? (() => false),
   )
   if (preparation.kind === 'refused') {
     return {
       kind: 'refused',
       result: observationResult(input.operation, input.descriptor, preparation.observation),
+    }
+  }
+  if (transportInvocation.binding.authority.kind === 'provider_connection') {
+    const preflight = await preflightRouteTransportCredential(transportInvocation, input.runtime)
+    if (preflight.kind === 'unavailable') {
+      return {
+        kind: 'refused',
+        result: {
+          kind: 'published_operation_refused',
+          sourceDisposition: 'refused',
+          operationId: input.operation.operationId,
+          operationVersion: input.descriptor.version,
+          requestDigest: preparation.prepared.requestDigest,
+          failureCode: preflight.failureCode,
+        },
+      }
     }
   }
   return {
@@ -158,7 +178,13 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
       environment: input.environment ?? 'development',
     }, input.liquidityPort)
   }
-  if (observation.disposition === 'unknown' && observation.releaseStarted) {
+  if (
+    observation.releaseStarted
+    && (
+      observation.disposition === 'unknown'
+      || observation.failureCode === 'payment_requirement_outside_authority'
+    )
+  ) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
   }
   if (observation.paymentAuthorizationStatus === 'created'
@@ -241,6 +267,10 @@ export function createPaymentAttemptRuntime(
         || typeof custodyRuntime.readX402PaymentAuthorizationByDigest !== 'function') {
         throw new Error('x402_payment_custody_prepare_unavailable')
       }
+      const amount = request.paymentAmount
+      if (!exactAmountSchema.safeParse(amount).success) {
+        throw new Error('x402_payment_amount_invalid')
+      }
       const authorization = await custodyRuntime.prepareX402PaymentAuthorization(request)
       if (authorization === undefined) return undefined
       volatileCustodyRef = authorization.custodyRef
@@ -258,7 +288,7 @@ export function createPaymentAttemptRuntime(
         network: request.selectedRequirement.network,
         asset: request.selectedRequirement.asset,
         payTo: request.selectedRequirement.payTo,
-        amount: request.selectedRequirement.amount,
+        amount,
         providerEndpoint: request.challenge.resource.url,
         operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
         authorizationDigest: authorization.authorizationDigest,
@@ -363,42 +393,65 @@ function dynamicTransportInvocation(input: Readonly<{
   operation: PublishedOperation
   invocation: DynamicPublishedInvocationInput
   token: DynamicPublishedExecutionToken
-}>): import('@/modules/capability-supply/route-transport-runtime').RouteTransportInvocation {
+}>): RouteTransportInvocation {
   const price = executableFixedPrice(input.operation)
+  const bindingBase = {
+    adapterId: input.operation.binding.adapter.adapterId,
+    endpointUrl: input.operation.binding.endpointUrl,
+    configJson: input.operation.transport.configJson,
+    configDigest: input.operation.transport.configDigest,
+  }
+  const authorityBase = {
+    attemptRef: input.token.attemptRef,
+    effectGeneration: input.token.effectGeneration,
+    operationKeyDigest: input.invocation.operationKey,
+    mandateDigest: input.token.mandateDigest,
+    grantDigest: input.token.grantDigest,
+    capabilityContractDigest: input.operation.identity.contractDigest,
+    maximumSpend: price,
+    expiresAt: input.token.expiresAt,
+    callIdentity: {
+      keyId: `invocation:${input.token.authorityRef}`,
+      signature: canonicalDigest({
+        operationKey: input.invocation.operationKey,
+        attemptRef: input.token.attemptRef,
+        effectGeneration: input.token.effectGeneration,
+      }),
+    },
+  }
+  const inputJson = JSON.stringify(input.invocation.input)
+  if (input.operation.binding.authority.kind === 'keyless') {
+    return {
+      binding: {
+        ...bindingBase,
+        authority: input.operation.binding.authority,
+      },
+      authority: authorityBase,
+      inputJson,
+    }
+  }
+  const connectionAuthority = input.operation.connectionAuthority
+  if (connectionAuthority === undefined) {
+    throw new Error('published_operation_connection_authority_missing')
+  }
   return {
     binding: {
-      adapterId: input.operation.binding.adapter.adapterId,
-      endpointUrl: input.operation.binding.endpointUrl,
-      credentialRef: input.operation.binding.credentialRef,
-      configJson: input.operation.transport.configJson,
-      configDigest: input.operation.transport.configDigest,
+      ...bindingBase,
+      authority: input.operation.binding.authority,
     },
     authority: {
-      attemptRef: input.token.attemptRef,
-      effectGeneration: input.token.effectGeneration,
-      operationKeyDigest: input.invocation.operationKey,
-      mandateDigest: input.token.mandateDigest,
-      grantDigest: input.token.grantDigest,
-      capabilityContractDigest: input.operation.identity.contractDigest,
-      maximumSpend: price,
-      expiresAt: input.token.expiresAt,
-      callIdentity: {
-        keyId: `invocation:${input.token.authorityRef}`,
-        signature: canonicalDigest({
-          operationKey: input.invocation.operationKey,
-          attemptRef: input.token.attemptRef,
-          effectGeneration: input.token.effectGeneration,
-        }),
-      },
+      ...authorityBase,
+      authorityGeneration: connectionAuthority.authorityGeneration,
+      authorityDigest: connectionAuthority.authorityDigest,
     },
-    inputJson: JSON.stringify(input.invocation.input),
+    inputJson,
   }
 }
 
 function observationResult(
   operation: PublishedOperation,
   descriptor: RuntimePublishedOperationDescriptor,
-  observation: import('@/modules/capability-supply/route-transport-runtime').RouteTransportObservation,
+  observation: RouteTransportObservation,
 ): DynamicPublishedInvocationResult {
   const common = {
     operationId: operation.operationId,

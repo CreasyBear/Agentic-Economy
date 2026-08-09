@@ -48,7 +48,7 @@ export async function* emitSnapshotEvents(
   })
 
   if (emitThinking) {
-    yield { type: 'thinking', step: 'write', label: 'Assembling the answer…' }
+    yield { type: 'thinking', step: 'write', label: 'Putting together the answer…' }
   }
 
   yield { type: 'one-line', oneLine: snapshot.oneLine }
@@ -58,7 +58,7 @@ export async function* emitSnapshotEvents(
     yield {
       type: 'thinking',
       step: 'read',
-      label: providerCount > 0 ? 'Reading published details…' : 'Checking whether more detail is needed…',
+      label: providerCount > 0 ? 'Reading the details…' : 'Checking whether we need more detail…',
     }
   }
   yield { type: 'sources', providers: snapshot.providers }
@@ -76,7 +76,7 @@ export async function* emitSnapshotEvents(
     yield {
       type: 'thinking',
       step: 'write',
-      label: needsClarification ? 'Preparing a follow-up question…' : 'Choosing the next step…',
+      label: needsClarification ? 'Choosing what to ask next…' : 'Choosing the next step…',
     }
   }
   yield { type: 'next-step', nextStep: snapshot.nextStep }
@@ -120,7 +120,9 @@ function buildPlanEventFromSnapshot(
     responseMode?: AnswerResponseMode
   },
 ): AnswerPlanEvent {
-  const mode = input.plan?.mode ?? input.responseMode ?? deriveResponseMode(input.layoutProfile, snapshot.providers.length)
+  const mode = input.layoutProfile === 'data_answer'
+    ? 'answer'
+    : input.plan?.mode ?? input.responseMode ?? deriveResponseMode(input.layoutProfile, snapshot.providers.length)
   const artifactBudget = input.plan?.artifactBudget === undefined
     ? getArtifactBudgetForSnapshot({ ...snapshot, layoutProfile: input.layoutProfile })
     : getArtifactBudgetForSnapshot(
@@ -140,11 +142,14 @@ function deriveResponseMode(layoutProfile: AnswerLayoutProfile, providerCount: n
   if (layoutProfile === 'clarification') {
     return 'clarify'
   }
-  if (layoutProfile === 'boundary_explain') {
+  if (layoutProfile === 'boundary_explain' || layoutProfile === 'safety_refusal') {
     return 'boundary'
   }
   if (layoutProfile === 'compare_pair') {
     return 'compare'
+  }
+  if (layoutProfile === 'data_answer') {
+    return 'answer'
   }
   if (layoutProfile === 'empty_state' || providerCount === 0) {
     return 'empty'

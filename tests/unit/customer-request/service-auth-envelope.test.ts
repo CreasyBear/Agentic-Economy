@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { createCustomerRequestServiceAssertion, verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import {
+  createCustomerRequestServiceAssertion,
+  toStableHashValue,
+  verifyCustomerRequestServiceAssertion,
+} from '@/modules/customer-request/service-auth-envelope'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 describe('CustomerRequest service assertion', () => {
   const key = 'service-key-with-at-least-thirty-two-bytes'
@@ -21,5 +26,13 @@ describe('CustomerRequest service assertion', () => {
     await expect(verifyCustomerRequestServiceAssertion({
       key, operation: 'submit', command, assertion: { ...assertion, credentialId: 'ak_other' }, now: 2_000,
     })).resolves.toBe(false)
+  })
+
+  it('admits bounded JSON commands and fails closed for non-JSON values', () => {
+    const command = { requestId: 'request:1', options: ['fast', null] }
+    const stableCommand: StableHashValue = toStableHashValue(command)
+    expect(stableCommand).toEqual(command)
+    expect(() => toStableHashValue({ requestId: undefined })).toThrow('canonical_digest_value_invalid')
+    expect(() => toStableHashValue(new Date())).toThrow('canonical_digest_value_invalid')
   })
 })

@@ -1,4 +1,5 @@
 import { assessWorkTreeDecisionPolicy, type WorkTreeDecisionPolicy } from './decision-policy'
+import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
 import type { WorkNode } from './contract'
 import {
   allowStandingRoute,
@@ -46,7 +47,7 @@ export type WorkTreeRepeatUseInput = Readonly<{
   proposalDigest: string
   delegatedCredentialId: string
   now: number
-  requestedSpend?: Readonly<{ currency: string; amountMinor: number }>
+  requestedSpend?: ExactAmount
   requestedDataAllocations?: number
   requestedOccurrences?: number
 }>
@@ -155,11 +156,10 @@ export function validateWorkTreeRepeatUse(input: WorkTreeRepeatUseInput): WorkTr
   if (binding.permission.status === 'withdrawn' || binding.permission.withdrawnAt !== undefined) return { kind: 'refused', reason: 'permission_revoked' }
   if (input.now < binding.permission.validFrom || input.now >= binding.permission.validUntil) return { kind: 'refused', reason: 'permission_expired' }
   if (binding.permission.delegatedCredentialId !== input.delegatedCredentialId) return { kind: 'refused', reason: 'identity_mismatch' }
-  const spend = input.requestedSpend
-  if (spend !== undefined && (
-    spend.currency !== binding.permission.limits.perUseSpend.currency
-    || spend.amountMinor > binding.permission.limits.perUseSpend.amountMinor
-  )) return { kind: 'refused', reason: 'scope_widened' }
+  if (input.requestedSpend !== undefined) {
+    const spendComparison = compareExactAmounts(input.requestedSpend, binding.permission.limits.perUseSpend)
+    if (spendComparison === undefined || spendComparison === 1) return { kind: 'refused', reason: 'scope_widened' }
+  }
   if ((input.requestedDataAllocations ?? 0) > binding.permission.limits.perUseDataAllocations) return { kind: 'refused', reason: 'scope_widened' }
   if ((input.requestedOccurrences ?? 1) > 1 || (input.requestedOccurrences ?? 1) > binding.permission.limits.occurrences) return { kind: 'refused', reason: 'limit_exceeded' }
   return {

@@ -90,6 +90,17 @@ export type ProviderLocationFilterResult = {
   filtered: boolean
 }
 
+/**
+ * A context location is authority only after the user selected, permitted, or
+ * saved it. The initial product default is a proposal for clarification, not
+ * a buyer constraint.
+ */
+export function isConfirmedSearchContext(context: AeSearchContext | undefined): boolean {
+  return context?.mode === 'near_me'
+    && context.location?.source !== undefined
+    && context.location.source !== 'default'
+}
+
 export function filterProvidersForRequestedLocation(input: {
   providers: readonly AnswerSource[]
   userQuery: string
@@ -100,7 +111,9 @@ export function filterProvidersForRequestedLocation(input: {
     ? undefined
     : extractRequestedLocation(input.toolQuery, { allowLowercaseFallback: true })
   const userLocation = extractRequestedLocation(input.userQuery)
-  const contextLocation = aeSearchContextLocationQuery(input.searchContext)
+  const contextLocation = isConfirmedSearchContext(input.searchContext)
+    ? aeSearchContextLocationQuery(input.searchContext)
+    : undefined
   const resolved = resolveRequestedLocation({ userLocation, contextLocation, toolLocation })
   const { location, locationSource } = resolved
 
@@ -126,6 +139,13 @@ export function filterProvidersForRequestedLocation(input: {
   }
 }
 
+
+const CURRENCY_CODES = new Set([
+  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'CAD', 'AUD', 'CHF', 'NZD', 'INR', 'BRL',
+  'KRW', 'SGD', 'HKD', 'MXN', 'SEK', 'NOK', 'DKK', 'PLN', 'TRY', 'ZAR', 'RUB',
+  'THB', 'IDR', 'MYR', 'AED', 'SAR', 'ILS', 'BTC', 'ETH',
+])
+
 export function extractRequestedLocation(
   query: string,
   options: { allowLowercaseFallback?: boolean } = {},
@@ -150,7 +170,9 @@ export function extractRequestedLocation(
     return undefined
   }
 
-  const candidateTokens = trimServiceWords(dropTrailingState(tokens))
+  const candidateTokens = trimServiceWords(dropTrailingState(tokens)).filter(
+    (token) => !CURRENCY_CODES.has(token.toUpperCase()),
+  )
   const hasLowercaseLocationShape =
     (candidateTokens.length === 1 && tokens.length === 1) ||
     (candidateTokens.length < tokens.length && tokens.length <= 5)

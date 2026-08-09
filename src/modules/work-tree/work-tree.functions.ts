@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+
 import {
   callPublicSourceMutation,
   callPublicSourceQuery,
@@ -52,10 +54,7 @@ const workTreeDecisionReadbackSchema = z.strictObject({
   revision: z.number().int().min(0),
 })
 
-const repeatGrantMoneySchema = z.strictObject({
-  currency: z.string().regex(/^[A-Z]{3}$/u),
-  amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-})
+const repeatGrantMoneySchema = exactAmountSchema
 
 export const workTreeRepeatGrantSchema = z.strictObject({
   delegatedCredentialId: z.string().trim().min(1).max(300),
@@ -66,11 +65,11 @@ export const workTreeRepeatGrantSchema = z.strictObject({
   cumulativeDataAllocations: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   validUntil: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
 }).superRefine((grant, context) => {
-  if (grant.perUseSpend.currency !== grant.cumulativeSpend.currency) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['cumulativeSpend', 'currency'], message: 'currency_mismatch' })
-  }
-  if (grant.perUseSpend.amountMinor > grant.cumulativeSpend.amountMinor) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['cumulativeSpend', 'amountMinor'], message: 'per_use_exceeds_cumulative' })
+  const spendComparison = compareExactAmounts(grant.perUseSpend, grant.cumulativeSpend)
+  if (spendComparison === undefined) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['cumulativeSpend'], message: 'currency_mismatch' })
+  } else if (spendComparison === 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['cumulativeSpend'], message: 'per_use_exceeds_cumulative' })
   }
   if (grant.perUseDataAllocations > grant.cumulativeDataAllocations) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['cumulativeDataAllocations'], message: 'per_use_exceeds_cumulative' })

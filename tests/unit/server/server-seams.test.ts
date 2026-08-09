@@ -490,17 +490,17 @@ describe('server notification provider seam', () => {
       new ConvexSourceError('missing_auth', 'Authentication required.', 401)
     )
 
-    await expect(providerResponse?.json()).resolves.toEqual({
-      kind: 'error',
+    await expect(providerResponse?.json()).resolves.toMatchObject({
+      kind: 'INTERNAL',
       code: 'invalid_resend_signature',
       retryable: false,
-      reason: 'Signature rejected.',
+      detail: 'Signature rejected.',
     })
-    await expect(sourceResponse?.json()).resolves.toEqual({
-      kind: 'error',
+    await expect(sourceResponse?.json()).resolves.toMatchObject({
+      kind: 'INTERNAL',
       code: 'missing_auth',
       retryable: false,
-      reason: 'Authentication required.',
+      detail: 'Authentication required.',
     })
     expect(providerResponse?.status).toBe(401)
     expect(sourceResponse?.status).toBe(401)
@@ -785,7 +785,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'notification_dispatch_unauthorized',
     })
     expect(response.status).toBe(401)
@@ -845,7 +845,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'invalid_notification_dispatch_payload',
     })
     expect(response.status).toBe(413)
@@ -1204,7 +1204,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'unsupported_notification_dispatch',
     })
     expect(response.status).toBe(422)
@@ -1291,7 +1291,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'notification_dispatch_unauthorized',
     })
     expect(response.status).toBe(401)
@@ -1346,7 +1346,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'invalid_notification_dispatch_payload',
     })
     expect(response.status).toBe(413)
@@ -1500,7 +1500,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'unsupported_notification_dispatch',
     })
     expect(response.status).toBe(422)
@@ -1622,7 +1622,7 @@ describe('server notification provider seam', () => {
     )
 
     await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
+      kind: 'INTERNAL',
       code: 'invalid_resend_webhook_payload',
     })
     expect(response.status).toBe(413)
@@ -1687,7 +1687,7 @@ describe('server notification provider seam', () => {
       }
     )
 
-    await expect(response.json()).resolves.toMatchObject({ kind: 'error', code: 'invalid_resend_signature' })
+    await expect(response.json()).resolves.toMatchObject({ kind: 'INTERNAL', code: 'invalid_resend_signature' })
     expect(response.status).toBe(401)
     expect(calls).toHaveLength(0)
   })

@@ -1,6 +1,7 @@
 import {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
+  neutralizeBidiFormattingControls,
   type AnswerWorkStep,
 } from '@/modules/answer/projection'
 
@@ -31,7 +32,7 @@ const INTERNAL_PUBLIC_TERMS = [
  * architecture terms; returns a safe placeholder instead of leaking them.
  */
 export function safeWorkLogUserText(value: string): string {
-  const trimmed = value.trim()
+  const trimmed = neutralizeBidiFormattingControls(value.trim())
   if (trimmed.length === 0) {
     return 'Request shown above'
   }
@@ -46,27 +47,19 @@ export function safeWorkLogUserText(value: string): string {
 }
 
 /**
- * Collapse internal reasoning phases (interpret/route/assemble) to the public
- * 'read' phase; search/read/compare stay as-is.
+ * Internal architecture phases never reach a public human surface. Search,
+ * read, and compare are the observable work a person can verify.
  */
-function publicWorkStepPhase(phase: AnswerWorkStep['phase']): AnswerWorkStep['phase'] {
-  switch (phase) {
-    case 'search':
-    case 'read':
-    case 'compare':
-      return phase
-    case 'interpret':
-    case 'route':
-    case 'assemble':
-      return 'read'
-  }
+export function isPublicWorkStep(step: AnswerWorkStep): boolean {
+  return step.phase === 'search' || step.phase === 'read' || step.phase === 'compare'
 }
 
-/** Re-number and phase-collapse a work-log for public exposure. */
+/** Re-number and project only observable work-log steps for public exposure. */
 export function publicWorkLog(steps: readonly AnswerWorkStep[]): AnswerWorkStep[] {
-  return steps.map((step, index) => ({
-    ...step,
-    id: `step-${index + 1}`,
-    phase: publicWorkStepPhase(step.phase),
-  }))
+  return steps
+    .filter(isPublicWorkStep)
+    .map((step, index) => ({
+      ...step,
+      id: `step-${index + 1}`,
+    }))
 }

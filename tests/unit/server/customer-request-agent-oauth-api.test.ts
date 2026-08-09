@@ -61,11 +61,28 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const pending = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
-    expect(await pending.json()).toEqual({ error: 'authorization_pending' })
+    expect(pending.headers.get('content-type')).toBe('application/json')
+    expect(pending.headers.get('cache-control')).toBe('no-store')
+    const pendingBody = await pending.json() as Record<string, unknown>
+    expect(pendingBody).toEqual({
+      error: 'authorization_pending',
+      error_description: 'Authorization is still pending.',
+    })
+    expect(pendingBody).not.toHaveProperty('type')
+    expect(pendingBody).not.toHaveProperty('title')
+    expect(pendingBody).not.toHaveProperty('status')
+    expect(pendingBody).not.toHaveProperty('kind')
+    expect(pendingBody).not.toHaveProperty('code')
+    expect(pending.headers.get('retry-after')).toBe('5')
     const slow = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
-    expect(await slow.json()).toEqual({ error: 'slow_down' })
+    expect(slow.headers.get('content-type')).toBe('application/json')
+    expect(slow.headers.get('retry-after')).toBe('10')
+    expect(await slow.json()).toEqual({
+      error: 'slow_down',
+      error_description: 'Authorization is still pending; wait longer before polling again.',
+    })
     const grant = await store.getGrantByHash('device', await hashOAuthValue(body.device_code))
     if (grant === null) throw new Error('grant missing')
     await store.updateGrant(grant.grantRef, 'pending', { status: 'approved', keyId: 'ak_local', ownerId: 'user_local' })
@@ -76,7 +93,28 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const replay = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
-    expect(await replay.json()).toEqual({ error: 'invalid_grant' })
+    expect(await replay.json()).toEqual({
+      error: 'invalid_grant',
+      error_description: 'The authorization grant is invalid or expired.',
+    })
+  })
+
+  it('keeps rate-limit failures in the OAuth error envelope', async () => {
+    const response = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: 'client-limited',
+      scope: 'customer_requests:create customer_requests:inspect_only',
+    }), {
+      rateLimit: async () => ({ ok: false, retryAfter: 12_345 }),
+    })
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get('content-type')).toBe('application/json')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('retry-after')).toBe('13')
+    expect(await response.json()).toEqual({
+      error: 'rate_limited',
+      error_description: 'Too many OAuth requests; retry later.',
+    })
   })
 
   it('uses the configured canonical base URL for OAuth verification redirects instead of the request host', async () => {
@@ -126,6 +164,65 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(consentHtml).not.toContain('Customer Request scope:')
     expect(consentHtml).not.toContain('secret')
   })
+  it('requires JSON media type before dynamic registration parsing', async () => {
+    const store = storeFixture()
+    const registration = {
+      client_name: 'JSON assistant',
+      redirect_uris: ['http://localhost/callback'],
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    }
+    for (const contentType of [undefined, 'text/plain']) {
+      const headers = contentType === undefined ? {} : { 'content-type': contentType }
+      const rejected = await handleOAuthRegisterPost(new Request('http://localhost/oauth/register', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(registration),
+      }), { store })
+      expect(rejected.status).toBe(400)
+      expect(rejected.headers.get('content-type')).toBe('application/json')
+      expect(await rejected.json()).toEqual({
+        error: 'invalid_request',
+        error_description: 'The OAuth request is invalid.',
+      })
+      expect(store.clients.size).toBe(0)
+    }
+
+    const accepted = await handleOAuthRegisterPost(new Request('http://localhost/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(registration),
+    }), { store })
+    expect(accepted.status).toBe(201)
+    expect(store.clients.size).toBe(1)
+  })
+  it('projects consent source failures as a safe unavailable problem', async () => {
+    const baseStore = storeFixture()
+    const store: CustomerRequestAgentOAuthStore = {
+      ...baseStore,
+      async getGrantByHash() {
+        throw new Error('HTTPError')
+      },
+    }
+    const response = await handleOAuthAuthorizeGet(new Request('http://localhost/oauth/authorize?user_code=G12-FAKE-CODE'), {
+      store,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+    })
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).toBe('application/problem+json')
+    const body = await response.json()
+    expect(body).toMatchObject({
+      type: 'about:blank',
+      status: 503,
+      kind: 'UNAVAILABLE',
+      code: 'oauth_authorization_unavailable',
+      detail: 'The authorization request is temporarily unavailable.',
+      retryable: true,
+    })
+    expect(JSON.stringify(body)).not.toContain('HTTPError')
+  })
 
   it('binds device consent to the signed-in owner and returns no key secret', async () => {
     const store = storeFixture()
@@ -144,6 +241,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
       store, now: () => 1_000, canonicalBaseUrl: 'http://localhost', authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }), issueKey: async () => ({ keyId: 'ak_local' }),
     })
     expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({
+      error: 'access_denied',
+      error_description: 'The resource owner denied the request.',
+    })
     expect(store.grants.get('device:foreign-origin')?.status).toBe('pending')
   })
 

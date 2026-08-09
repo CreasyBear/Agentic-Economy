@@ -34,6 +34,43 @@ describe('sandbox route provider host', () => {
       operation: { endpoint: `${origin}${path}` },
     })
 
+    const unauthenticated = await fetch(`${origin}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request: 'Resolve a labelled test service' }),
+    })
+    expect(unauthenticated.status).toBe(401)
+    expect(unauthenticated.headers.get('content-type')).toBe('application/problem+json')
+    expect(unauthenticated.headers.get('www-authenticate')).toBe('Bearer')
+    expect(unauthenticated.headers.get('vary')).toBe('Authorization')
+    const unauthenticatedBody = await unauthenticated.json() as Record<string, unknown>
+    expect(unauthenticatedBody).toMatchObject({
+      status: 401,
+      kind: 'UNAUTHENTICATED',
+      code: 'authentication_required',
+      detail: 'authentication_required',
+    })
+    expect(JSON.stringify(unauthenticatedBody)).not.toContain('test-provider-key')
+
+    const unseenOperationKeyDigest = `sha256:${'a'.repeat(64)}`
+    const cancellation = await fetch(`${origin}${path}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-provider-key', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cancellationRequestRef: 'cancel:audit',
+        attemptRef: 'attempt:audit',
+        operationKeyDigest: unseenOperationKeyDigest,
+      }),
+    })
+    expect(cancellation.status).toBe(409)
+    expect(cancellation.headers.get('content-type')).toBe('application/problem+json')
+    await expect(cancellation.json()).resolves.toMatchObject({
+      status: 409,
+      kind: 'ALREADY_EXISTS',
+      code: 'sandbox_operation_not_observed',
+      detail: 'sandbox_operation_not_observed',
+    })
+
     const invoked = await fetch(`${origin}${path}`, {
       method: 'POST',
       headers: { Authorization: 'Bearer test-provider-key', 'Content-Type': 'application/json' },

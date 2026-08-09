@@ -18,6 +18,8 @@ import type {
   CustomerRequestProblemStatusChange,
 } from '@/modules/customer-request/agent-contract'
 import { response } from '@/lib/server/no-store-response'
+import { kindForStatus } from '@/lib/errors'
+import { problem } from '@/lib/server/problem'
 
 export async function handleCustomerRequestProblemPost(
   request: Request,
@@ -47,7 +49,7 @@ export async function handleCustomerRequestProblemReplyPost(
   }> = {},
 ): Promise<Response> {
   if (reportRef.trim().length === 0 || reportRef.length > 300) {
-    return response({ error: 'invalid_request_ref' }, 400)
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
   }
   return handleCustomerRequestPostBoundary({
     request,
@@ -70,17 +72,27 @@ export async function handleCustomerRequestEvidenceGet(
   requestRef: string,
   options: Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<CustomerRequestEvidenceResult> }> = {},
 ): Promise<Response> {
-  if (!validRequestRef(requestRef)) return response({ error: 'invalid_request_ref' }, 400)
+  if (!validRequestRef(requestRef)) {
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
+  }
   try {
     const command = { requestRef }
     const result = customerRequestEvidenceResultSchema.parse(options.inspect === undefined
       ? await customerRequestInspectEvidenceAction.run({ data: command, context: { request } })
       : await options.inspect(command))
-    if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 404)
+    if (result.kind === 'refused') {
+      return problem({
+        status: result.reason === 'authentication_required' ? 401 : 404,
+        kind: result.reason === 'authentication_required' ? 'UNAUTHENTICATED' : 'NOT_FOUND',
+        code: result.reason,
+      })
+    }
     return response(result, 200)
   } catch (error) {
-    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-    return response({ error: 'evidence_unavailable' }, 503)
+    if (error instanceof ConvexSourceError) {
+      return problem({ status: error.status, kind: kindForStatus(error.status), code: error.code })
+    }
+    return problem({ status: 503, kind: 'UNAVAILABLE', code: 'evidence_unavailable' })
   }
 }
 

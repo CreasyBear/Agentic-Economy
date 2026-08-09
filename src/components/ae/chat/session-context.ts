@@ -1,4 +1,4 @@
-import type { AnswerSource } from '@/modules/answer/public'
+import { neutralizeBidiFormattingControls, type AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import {
   activeSelectedProviderForTurns,
@@ -41,13 +41,13 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
   const inquiryReadyCount = providers.filter(providerHasInquiryPath).length
   const liveTurn = input.liveTurn ?? null
 
-  // No listings and nothing selected: the context card would just repeat "no
-  // listed business" in six rows, so suppress it and keep the empty turn lean.
+  // No matches and nothing selected: the context card would just repeat "no
+  // clear match" in six rows, so suppress it and keep the empty turn lean.
   if (providers.length === 0 && selectedProvider === undefined && currentSelectedProvider === undefined) {
     return null
   }
 
-  return {
+  const context: SessionContext = {
     badgeLabel: liveTurn === null ? 'Saved context' : intentLabel(liveTurn.intent),
     summary: contextSummary({
       providerCount: providers.length,
@@ -69,7 +69,7 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
       },
       {
         id: 'businesses',
-        label: 'Listed businesses',
+        label: 'Matches',
         value: providerListLabel(providers),
       },
       ...(selectedProvider === undefined
@@ -81,7 +81,7 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
           }]),
       {
         id: 'inquiry',
-        label: 'Inquiry readiness',
+        label: 'Request status',
         value: inquiryReadinessLabel(inquiryReadyCount),
       },
       {
@@ -90,6 +90,15 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
         value: 'Business confirms timing, quote, and availability.',
       },
     ],
+  }
+  return {
+    ...context,
+    summary: neutralizeBidiFormattingControls(context.summary),
+    facts: context.facts.map((fact) => ({
+      ...fact,
+      label: neutralizeBidiFormattingControls(fact.label),
+      value: neutralizeBidiFormattingControls(fact.value),
+    })),
   }
 }
 
@@ -106,23 +115,23 @@ function contextSummary(input: {
 
   if (input.selectedProvider !== undefined) {
     return providerHasInquiryPath(input.selectedProvider)
-      ? `${input.selectedProvider.name} is the current business selected for inquiry review.`
-      : `${input.selectedProvider.name} is the current business selected for listing review.`
+      ? `${input.selectedProvider.name} is selected for your request.`
+      : `${input.selectedProvider.name} is selected for review.`
   }
 
   if (input.currentProviders.length > 0 && input.providerCount > input.currentProviders.length) {
-    return `This answer is narrowed to ${providerListLabel(input.currentProviders)} while AE keeps earlier listed businesses in the thread.`
+    return `This answer is narrowed to ${providerListLabel(input.currentProviders)} while earlier matches stay in the thread.`
   }
 
   if (input.currentProviders.length === 0 && input.providerCount > 0 && input.latestIntent !== 'refine_search') {
-    return `${completedIntentSummary(input.latestIntent)} while AE keeps earlier listed businesses in the thread.`
+    return `${completedIntentSummary(input.latestIntent)} while earlier matches stay in the thread.`
   }
 
   if (input.providerCount > 0) {
-    return 'AE is holding the listed businesses from this thread for comparison and follow-up.'
+    return 'Keeping the matches from this thread ready for comparison and follow-up.'
   }
 
-  return 'AE has not found a listed business to carry forward yet.'
+  return 'No clear match has been found to carry forward yet.'
 }
 
 function liveIntentSummary(intent: FollowUpIntent): string {
@@ -131,62 +140,62 @@ function liveIntentSummary(intent: FollowUpIntent): string {
     case 'compare_known':
     case 'inquiry_handoff':
     case 'explain_boundary':
-      return `${intentSummary(intent)} using the businesses already found in this thread.`
+      return `${intentSummary(intent)} using the matches already found in this thread.`
     case 'unsupported':
-      return 'This follow-up is being routed back to published listings while AE keeps this thread visible.'
+      return 'This follow-up needs another approach, so the options stay visible here.'
     case 'refine_search':
-      return 'This follow-up is searching published listings again while AE keeps this thread visible.'
+      return "Checking what's available again while keeping this thread visible."
   }
 }
 
 function intentLabel(intent: FollowUpIntent): string {
   switch (intent) {
     case 'filter_known':
-      return 'Filtering'
+      return 'Narrowing'
     case 'compare_known':
       return 'Comparing'
     case 'inquiry_handoff':
-      return 'Inquiry path'
+      return 'Contact'
     case 'explain_boundary':
       return 'Checking limits'
     case 'unsupported':
-      return 'Needs redirect'
+      return 'Needs another approach'
     case 'refine_search':
-      return 'Refining'
+      return 'Finding more'
   }
 }
 
 function intentSummary(intent: FollowUpIntent): string {
   switch (intent) {
     case 'filter_known':
-      return 'This follow-up is narrowing the known results'
+      return 'This follow-up is narrowing the matches'
     case 'compare_known':
-      return 'This follow-up is comparing known options'
+      return 'This follow-up is comparing the options'
     case 'inquiry_handoff':
-      return 'This follow-up is preparing a qualified inquiry next step'
+      return 'This follow-up is preparing a request to the business'
     case 'explain_boundary':
-      return 'This follow-up is checking the supported next step'
+      return 'This follow-up is checking what can happen next'
     case 'unsupported':
-      return 'This follow-up is being routed back to published listings'
+      return 'This follow-up is looking for another way forward'
     case 'refine_search':
-      return 'This follow-up is searching again'
+      return "This follow-up is checking what's available again"
   }
 }
 
 function completedIntentSummary(intent: FollowUpIntent): string {
   switch (intent) {
     case 'filter_known':
-      return 'This answer narrowed the known results'
+      return 'This answer narrowed the matches'
     case 'compare_known':
-      return 'This answer compared known options'
+      return 'This answer compared the options'
     case 'inquiry_handoff':
-      return 'This answer prepared a qualified inquiry next step'
+      return 'This answer prepared a request to the business'
     case 'explain_boundary':
-      return 'This answer checked the supported next step'
+      return 'This answer checked what can happen next'
     case 'unsupported':
-      return 'This answer routed the request back to published listings'
+      return 'This answer looked for another way forward'
     case 'refine_search':
-      return 'This answer searched again'
+      return 'This answer checked what is available'
   }
 }
 
@@ -206,25 +215,25 @@ function currentAnswerLabel(turn: PublicThreadTurn): string {
   const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
   if (selectedProvider !== undefined) {
     return providerHasInquiryPath(selectedProvider)
-      ? `${selectedProvider.name} selected for inquiry review`
-      : `${selectedProvider.name} selected for listing review`
+      ? `${selectedProvider.name} selected for contact`
+      : `${selectedProvider.name} selected for review`
   }
 
   const providers = listedProvidersFromArtifacts(turn.artifacts)
   if (providers.length === 0) {
-    return 'No listed business in this answer'
+    return 'No clear match in this answer'
   }
 
   if (providers.length === 1 && providers[0] !== undefined) {
     return `${providers[0].name} in this answer`
   }
 
-  return `${providers.length} listed businesses in this answer: ${providerListLabel(providers)}`
+  return `${providers.length} matches in this answer: ${providerListLabel(providers)}`
 }
 
 function providerListLabel(providers: readonly AnswerSource[]): string {
   if (providers.length === 0) {
-    return 'No listed business yet'
+    return 'No matches yet'
   }
 
   const names = providers.slice(0, 3).map((provider) => provider.name)
@@ -234,8 +243,8 @@ function providerListLabel(providers: readonly AnswerSource[]): string {
 
 function inquiryReadinessLabel(count: number): string {
   if (count <= 0) {
-    return 'No listed inquiry path yet'
+    return 'No request form available yet'
   }
-  return `${count} listed ${count === 1 ? 'business publishes' : 'businesses publish'} an inquiry path`
+  return `${count} ${count === 1 ? 'business has' : 'businesses have'} a request form`
 }
 

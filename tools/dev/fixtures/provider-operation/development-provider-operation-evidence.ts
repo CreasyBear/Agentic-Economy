@@ -101,7 +101,7 @@ export async function runDevelopmentProviderOperationEvidence() {
     operation: providerOperationInput(availability, unknownOrigin.principalRef, 'mock:operation:unknown'),
     origin: unknownOrigin,
   })
-  const cancelBefore = runCancelBeforeRelease({
+  const cancelBefore = await runCancelBeforeRelease({
     operation: providerOperationInput(availability, 'mock:principal:cancel-before', 'mock:operation:cancel-before'),
     origin: {
       kind: 'standalone', callerRef: 'mock:caller:cancel-before', principalRef: 'mock:principal:cancel-before',
@@ -139,6 +139,7 @@ export async function runDevelopmentProviderOperationEvidence() {
   const authorityIndex = order.indexOf('authority_decision')
   const releaseIndex = order.indexOf('provider_release')
   const authorityBeforeRelease = authorityIndex >= 0 && releaseIndex > authorityIndex
+  const standaloneCold = await standalone.tracer.coldResume(standalone.view.invocationRef)
   const transfer = evaluateAdr009Transfer({
     events: {
       direct_read: [],
@@ -161,8 +162,8 @@ export async function runDevelopmentProviderOperationEvidence() {
       controlRecords: standalone.state.controls.size,
       attributableAttempts: standalone.view.attempts.length,
       durableHistoryRecords: standalone.state.history.get(standalone.view.invocationRef)?.length ?? 0,
-      terminalResultReconstructed: standalone.tracer.coldResume(standalone.view.invocationRef)
-        .inspect(standalone.view.invocationRef)?.control.state === 'terminal',
+      terminalResultReconstructed: standaloneCold.inspect(standalone.view.invocationRef)
+        ?.control.state === 'terminal',
       exactAuthorityBeforeRelease: authorityBeforeRelease,
       retryClass: executeDevelopmentProviderOperationAction.invocationContract!.retryClass,
     },

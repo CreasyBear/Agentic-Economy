@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createRegisteredOperationMappingRef } from '@/modules/capability-supply/public'
+import { addExactAmounts } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
+
 import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { CustomerRequestRoutePlan } from '@/modules/customer-request/compiler'
@@ -39,8 +42,8 @@ describe('RouteMandate', () => {
       capabilityContracts: selected.steps.map(({ contractRef }) => ({ ...contractRef })),
       allowedEffectClasses: ['data_release'] as const,
       limits: {
-        perUseSpend: { currency: 'AUD', amountMinor: 1_000 },
-        cumulativeSpend: { currency: 'AUD', amountMinor: 2_000 },
+        perUseSpend: amount('1000'),
+        cumulativeSpend: amount('2000'),
         perUseDataAllocations: 2,
         cumulativeDataAllocations: 4,
         occurrences: 2,
@@ -76,7 +79,7 @@ describe('RouteMandate', () => {
       },
       use: {
         occurrence: 1,
-        maximumSpend: { currency: 'AUD', amountMinor: 1_000 },
+        maximumSpend: amount('1000'),
         dataAllocations: 2,
       },
     })
@@ -155,6 +158,9 @@ describe('RouteMandate', () => {
   it('binds explicit customer authority to one exact multi-step RoutePlan', () => {
     const generation = routeGeneration()
     const selected = generation.routes[0]!
+    if (selected.maximumTotalCost.kind !== 'known') throw new Error('route mandate fixture cost unresolved')
+    const selectedMaximumTotalSpend = selected.maximumTotalCost.amount
+
     const created = compileRouteMandate({
       generation,
       selectedRoutePlanId: selected.routePlanId,
@@ -171,12 +177,12 @@ describe('RouteMandate', () => {
           selectedRoutePlanId: selected.routePlanId,
           principalId: 'principal:customer',
           authorizationKind: 'explicit',
-          maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+          maximumTotalSpend: selectedMaximumTotalSpend,
           issuedAt: 2_000,
           expiresAt: 9_000,
         }),
       },
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: selectedMaximumTotalSpend,
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -198,13 +204,19 @@ describe('RouteMandate', () => {
           generationRef: generation.generationRef,
           generation: 1,
           generationDigest: generation.generationDigest,
+          registrySnapshotDigest: selected.registrySnapshotDigest,
           routePlanId: selected.routePlanId,
           routeDigest: selected.routeDigest,
-          maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+          stepGraphDigest: canonicalDigest({
+            orderedActionIds: selected.steps.map(({ actionId }) => actionId),
+            edges: selected.edges,
+          } as StableHashValue),
+          maximumTotalSpend: selectedMaximumTotalSpend,
+          routeExpiresAt: selected.expiresAt,
           steps: [
             expect.objectContaining({
-              position: 1,
-              actionId: 'action:lookup',
+              operationRef: selected.steps[0]!.operationRef,
+              admittedOperation: selected.steps[0]!.admittedOperation,
               businessId: 'business:lookup',
               bindingId: 'binding:lookup',
               contractRef: expect.objectContaining({ capabilityId: 'catalog.lookup', version: 1 }),
@@ -212,8 +224,8 @@ describe('RouteMandate', () => {
               recovery: { idempotency: 'required', recovery: 'retry_safe' },
             }),
             expect.objectContaining({
-              position: 2,
-              actionId: 'action:complete',
+              operationRef: selected.steps[1]!.operationRef,
+              admittedOperation: selected.steps[1]!.admittedOperation,
               businessId: 'business:complete',
               bindingId: 'binding:complete',
               contractRef: expect.objectContaining({ capabilityId: 'result.complete', version: 2 }),
@@ -247,7 +259,7 @@ describe('RouteMandate', () => {
           selectedRoutePlanId: selected.routePlanId,
           principalId: 'principal:customer',
           authorizationKind: 'explicit',
-          maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+          maximumTotalSpend: selectedMaximumTotalSpend,
           issuedAt: 2_000,
           expiresAt: 9_000,
         }),
@@ -267,7 +279,7 @@ describe('RouteMandate', () => {
         selectedRoutePlanId: generation.routes[0]!.routePlanId,
         principalId: 'principal:customer',
         authorizationKind: 'explicit',
-        maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalSpend: amount('1000'),
         issuedAt: 2_000,
         expiresAt: 9_000,
       }),
@@ -280,7 +292,7 @@ describe('RouteMandate', () => {
         authenticationEvidenceRef: 'authentication:clerk-session:one',
       },
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -320,7 +332,7 @@ describe('RouteMandate', () => {
         selectedRoutePlanId: generation.routes[0]!.routePlanId,
         principalId: 'principal:customer',
         authorizationKind: 'explicit',
-        maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalSpend: amount('1000'),
         issuedAt: 2_000,
         expiresAt: 9_000,
       }),
@@ -330,7 +342,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId: generation.routes[0]!.routePlanId,
       principal,
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -364,7 +376,7 @@ describe('RouteMandate', () => {
         selectedRoutePlanId: generation.routes[0]!.routePlanId,
         principalId: principal.principalId,
         authorizationKind: 'explicit',
-        maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalSpend: amount('1000'),
         issuedAt: 2_000,
         expiresAt: 9_000,
       }),
@@ -374,7 +386,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId: generation.routes[0]!.routePlanId,
       principal,
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -412,7 +424,7 @@ describe('RouteMandate', () => {
         selectedRoutePlanId,
         principalId: 'principal:customer',
         authorizationKind: 'standing_low_risk',
-        maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+        maximumTotalSpend: amount('1000'),
         issuedAt: 2_000,
         expiresAt: 9_000,
       }),
@@ -422,7 +434,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId,
       principal,
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -453,7 +465,7 @@ describe('RouteMandate', () => {
         ...authorization,
         kind: 'unknown_authority',
       } as never,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })).toEqual({ kind: 'refused', reason: 'mandate_material_invalid' })
@@ -463,7 +475,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId: generation.routes[0]!.routePlanId,
       principal,
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -505,7 +517,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId: generation.routes[0]!.routePlanId,
       principal,
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -520,7 +532,7 @@ describe('RouteMandate', () => {
       (mandate) => { mandate.route.steps[0]!.cancellation.kind = 'adapter_managed' },
       (mandate) => { mandate.route.steps[0]!.recovery.recovery = 'reconcile_required' },
       (mandate) => { mandate.route.fallback.alternatives[0]!.routeDigest = digest('fallback:substituted') },
-      (mandate) => { mandate.route.maximumTotalSpend.amountMinor += 1 },
+      (mandate) => { mandate.route.maximumTotalSpend.units = '1001' },
     ]
     for (const mutate of variants) {
       const substituted = structuredClone(created.mandate) as DeepWritable<RouteMandate>
@@ -549,7 +561,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId: generation.routes[0]!.routePlanId,
       principal,
       authorization,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })
@@ -593,7 +605,7 @@ describe('RouteMandate', () => {
         authorizationEvidenceDigest: digest('customer-decision-one'),
         authorityScopeDigest: digest('scope'),
       },
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       expiresAt: 9_000,
       now: 2_000,
     })).toEqual({ kind: 'refused', reason: 'route_generation_invalid' })
@@ -602,7 +614,7 @@ describe('RouteMandate', () => {
       selectedRoutePlanId: 'route:missing',
       principalId: 'principal:customer',
       authorizationKind: 'explicit',
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       issuedAt: 2_000,
       expiresAt: 9_000,
     })).toThrow('route_mandate_authority_scope_invalid')
@@ -613,13 +625,13 @@ function routeGeneration(generation = 1): CustomerRequestRoutePlanGeneration {
   const firstDraft = routeDraft('one', [
     step({
       actionId: 'action:lookup', capabilityId: 'catalog.lookup', version: 1,
-      businessId: 'business:lookup', amountMinor: 400,
+      businessId: 'business:lookup', amount: amount('400'),
       cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:lookup'] },
       recovery: 'retry_safe',
     }),
     step({
       actionId: 'action:complete', capabilityId: 'result.complete', version: 2,
-      businessId: 'business:complete', amountMinor: 600,
+      businessId: 'business:complete', amount: amount('600'),
       cancellation: { kind: 'adapter_managed', evidenceRefs: ['cancellation:complete'] },
       recovery: 'reconcile_required',
     }),
@@ -627,13 +639,13 @@ function routeGeneration(generation = 1): CustomerRequestRoutePlanGeneration {
   const secondDraft = routeDraft('two', [
     step({
       actionId: 'action:lookup:alternative', capabilityId: 'catalog.lookup', version: 1,
-      businessId: 'business:lookup:alternative', amountMinor: 450,
+      businessId: 'business:lookup:alternative', amount: amount('450'),
       cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:lookup:alternative'] },
       recovery: 'retry_safe',
     }),
     step({
       actionId: 'action:complete:alternative', capabilityId: 'result.complete', version: 2,
-      businessId: 'business:complete:alternative', amountMinor: 650,
+      businessId: 'business:complete:alternative', amount: amount('650'),
       cancellation: { kind: 'adapter_managed', evidenceRefs: ['cancellation:complete:alternative'] },
       recovery: 'reconcile_required',
     }),
@@ -682,7 +694,7 @@ function step(input: Readonly<{
   capabilityId: string
   version: number
   businessId: string
-  amountMinor: number
+  amount: ExactAmount
   cancellation: RouteStep['cancellation']
   recovery: RouteStep['recovery']['recovery']
 }>): RouteStep {
@@ -715,7 +727,7 @@ function step(input: Readonly<{
     publicationRevision: lineage.admittedOperation.publicationRevision,
     resolvedInputs: [],
     deferredInputs: [],
-    price: { kind: 'fixed', currency: 'AUD', amountMinor: input.amountMinor },
+    price: { kind: 'fixed', amount: input.amount },
     dataUse: [{
       effectId: `share:${suffix}`,
       inputPointer: '/request',
@@ -782,19 +794,20 @@ function routeDraft(suffix: string, steps: readonly RouteStep[]): RouteDraft {
     trust: 'registered_current_option' as const,
     ordering: { kind: 'unranked' as const },
   }
+  const maximumTotalCost = steps.reduce<ExactAmount>((total, candidate) => {
+    if (candidate.price.kind !== 'fixed') throw new Error('route fixture price must be fixed')
+    const next = addExactAmounts(total, candidate.price.amount)
+    if (next === undefined) throw new Error('route fixture exact cost invalid')
+    return next
+  }, amount('0'))
+
   const core = {
     requestId: 'request:one',
     requestRevision: 3,
     registrySnapshotDigest: digest('registry'),
     steps,
     edges,
-    maximumTotalCost: {
-      kind: 'known' as const,
-      currency: 'AUD',
-      amountMinor: steps.reduce((total, candidate) => (
-        total + (candidate.price.kind === 'fixed' ? candidate.price.amountMinor : 0)
-      ), 0),
-    },
+    maximumTotalCost: { kind: 'known' as const, amount: maximumTotalCost },
     expiresAt: 10_000,
     uncertainty: [] as const,
     comparison,
@@ -827,6 +840,10 @@ function digest(value: string): string {
   return canonicalDigest(value)
 }
 
+function amount(units: string, currency = 'AUD'): ExactAmount {
+  return { currency, units, exponent: 2 }
+}
+
 function explicitAuthorization(
   generation: CustomerRequestRoutePlanGeneration,
   selectedRoutePlanId: string,
@@ -840,7 +857,7 @@ function explicitAuthorization(
       selectedRoutePlanId,
       principalId: 'principal:customer',
       authorizationKind: 'explicit',
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalSpend: amount('1000'),
       issuedAt: 2_000,
       expiresAt: 9_000,
     }),

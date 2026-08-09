@@ -3,6 +3,7 @@ import {
   capabilityOperationId,
   capabilityOfferingRegistrationHash,
   createPublicOperationRef,
+  type CapabilityOfferingOrigin,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
@@ -35,6 +36,8 @@ export type PublishCapabilityCommandInput = RegistrationContext & Readonly<{
   binding?: CapabilityPublicationBindingDraft | undefined
   actor: SupplyCommandActor
   now: number
+  /** Optional `catalog_offering` origin stamped onto the admitted offering (W1 seed seam). */
+  origin?: CapabilityOfferingOrigin | undefined
   publicationMetadata?: Readonly<{
     sourceRevision: string
     authorityMode: CapabilityPublicationAuthorityMode
@@ -47,12 +50,13 @@ export async function publishCapabilityCommand(
   input: PublishCapabilityCommandInput,
   ports: PublicationCommandPorts,
 ) {
-  const admitted = admitPublicationDraft({
+  const admitted = await admitPublicationDraft({
     source: input.source,
     offering: input.offering,
     binding: input.binding,
     evidenceRefs: input.evidenceRefs,
     businessId: input.businessId,
+    origin: input.origin,
   })
   if (admitted.kind === 'refused') {
     return { kind: 'refused' as const, reason: admitted.reason }
@@ -193,7 +197,7 @@ export async function publishCapabilityCommand(
   if (offeringResult.kind === 'refused') {
     throw new Error(`capability_publication_offering_${offeringResult.reason}`)
   }
-  const bindingResult = await ports.registerBinding(binding, input.now)
+  const bindingResult = await ports.registerBinding(binding, input.now, operationRef)
   if (bindingResult.kind === 'refused') {
     throw new Error(`capability_publication_binding_${bindingResult.reason}`)
   }

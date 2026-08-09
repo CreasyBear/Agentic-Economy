@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { exactAmountSchema } from '@/modules/money/public'
 import {
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
@@ -21,8 +22,7 @@ const checkupQuoteOutputSchema = z.discriminatedUnion('kind', [
       slug: z.string().describe('Published business slug the quote is for'),
       service: z.string().describe('Published offering name the quote prices'),
       price: z.strictObject({
-        currency: z.string().describe('ISO 4217 currency code'),
-        amountMinor: z.number().describe('Published amount in minor currency units'),
+        amount: exactAmountSchema.describe('Published exact amount'),
         unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
         taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).optional().describe('Published tax treatment'),
       }),

@@ -1,5 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ActionResult } from '@/modules/common/action'
+import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ActionInvocationView } from './contracts'
 
@@ -37,7 +38,7 @@ export type PaidOperationSettlement =
   | Readonly<{ state: 'not_settled'; evidenceRefs: readonly string[] }>
   | Readonly<{
       state: 'settled'
-      amount: Readonly<{ currency: string; amountMinor: number }>
+      amount: ExactAmount
       evidenceRefs: readonly string[]
     }>
   | Readonly<{ state: 'unknown'; evidenceRefs: readonly string[] }>
@@ -45,7 +46,7 @@ export type PaidOperationSettlement =
 export type PaidOperationPaymentAttemptSnapshot = Readonly<{
   paymentIdentifier: string
   custodyRef: string
-  settledAmount?: Readonly<{ currency: string; amountMinor: number }>
+  settledAmount?: ExactAmount
   state:
     | 'prepared'
     | 'possibly_submitted'
@@ -59,7 +60,7 @@ export type PaidOperationPaymentAttemptSnapshot = Readonly<{
 export type PaidOperationPresentationBlock =
   | Readonly<{ kind: 'text'; label: string; value: string }>
   | Readonly<{ kind: 'measurement'; label: string; value: number; unit: string }>
-  | Readonly<{ kind: 'money'; label: string; amountMinor: number; currency: string }>
+  | Readonly<{ kind: 'money'; label: string; amount: ExactAmount }>
   | Readonly<{ kind: 'timestamp'; label: string; value: string }>
   | Readonly<{
       kind: 'source'
@@ -135,7 +136,7 @@ export type PaidOperationSemantics = Readonly<{
     summary: string
     blocks: readonly PaidOperationPresentationBlock[]
   }>
-  maximumAuthorizedCharge: Readonly<{ currency: string; amountMinor: number }>
+  maximumAuthorizedCharge: ExactAmount
   queryRelease: PaidOperationQueryRelease
   paymentAuthorization: PaidOperationPaymentAuthorization
   paymentSubmission: PaidOperationPaymentSubmission
@@ -371,9 +372,7 @@ function assertPaidOperationSemantics(value: PaidOperationSemantics): void {
     || value.operation.operationKey.trim().length === 0
     || value.operation.providerId.trim().length === 0
     || value.operation.operationRevision.trim().length === 0
-    || value.maximumAuthorizedCharge.currency.trim().length === 0
-    || !Number.isSafeInteger(value.maximumAuthorizedCharge.amountMinor)
-    || value.maximumAuthorizedCharge.amountMinor < 0
+    || !exactAmountSchema.safeParse(value.maximumAuthorizedCharge).success
     || value.environment.name.trim().length === 0
     || value.environment.evidenceClass.trim().length === 0
     || value.environment.claimCeiling.trim().length === 0
@@ -399,9 +398,7 @@ function assertPaidOperationSemantics(value: PaidOperationSemantics): void {
   ) throw new Error('paid_operation_authorization_state_mismatch')
   if (
     value.settlement.state === 'settled'
-    && (!Number.isSafeInteger(value.settlement.amount.amountMinor)
-      || value.settlement.amount.amountMinor < 0
-      || value.settlement.amount.currency.trim().length === 0
+    && (!exactAmountSchema.safeParse(value.settlement.amount).success
       || value.settlement.evidenceRefs.length === 0
       || value.settlement.evidenceRefs.some((reference) => reference.trim().length === 0))
   ) throw new Error('paid_operation_settlement_invalid')
@@ -478,9 +475,7 @@ function presentationBlockValid(block: PaidOperationPresentationBlock): boolean 
     case 'measurement':
       return Number.isFinite(block.value) && block.unit.trim().length > 0
     case 'money':
-      return Number.isSafeInteger(block.amountMinor)
-        && block.amountMinor >= 0
-        && block.currency.trim().length > 0
+      return exactAmountSchema.safeParse(block.amount).success
     case 'timestamp':
       return !Number.isNaN(Date.parse(block.value))
     case 'source':

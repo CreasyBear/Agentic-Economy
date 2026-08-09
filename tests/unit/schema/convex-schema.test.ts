@@ -4,8 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
+  type DynamicPublishedInvocationResult,
 } from '@/modules/action-invocation'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
@@ -59,25 +62,17 @@ const durableTables = [
   'capabilityOfferings',
   'capabilityPublications',
   'capabilityTransportBindings',
+  'capabilityProviderConnections',
+  'capabilityProviderApprovals',
   'capabilityCallEvents',
+
   'registeredOperationMappings',
   'customerRequestAgentPrincipals',
   'customerRequestAgentOAuthClients',
   'customerRequestAgentOAuthGrants',
-  'customerRequestCapabilityContracts',
-  'customerRequestHeads',
-  'customerRequestSnapshots',
-  'customerRequestCommands',
-  'customerRequestEvaluations',
-  'customerRequestEvaluationCandidates',
-  'customerRequestEvaluationPreparations',
-  'customerRequests',
-  'customerRequestRevisions',
   'projectSpine',
   'projectSpineEvents',
   'projectSpineQuotes',
-  'customerRequestCompilationCommands',
-  'customerRequestPlanRevisions',
   'customerRequestRouteMandateIssues',
   'customerRequestRouteMandateHeads',
   'customerRequestRouteMandateCommands',
@@ -133,13 +128,6 @@ const durableTables = [
   'customerRequestV2ActionAttemptResolutions',
   'customerRequestV2ProviderReconciliationCommands',
   'customerRequestV2ActionAttemptAdmissionCommands',
-  'customerRequestPreparationCommands',
-  'customerRequestPreparedActions',
-  'customerRequestPreparationAuthorities',
-  'customerRequestPreparationDisclosureAllocations',
-  'customerRequestPreparationDisclosureRecipients',
-  'customerRequestPreparationAuthorityUses',
-  'customerRequestPreparationDisclosureExposures',
   'claims',
   'operationKeys',
   'sourceWriteNonces',
@@ -180,7 +168,9 @@ const durableTables = [
   'notificationWebhookEvents',
   'answerThreads',
   'answerTurns',
+  'answerTurnReservations',
   'answerToolCalls',
+  'answerThreadShares',
   'harnessSessions',
   'harnessSessionEntries',
   'routingKernelAdmissionMeters',
@@ -273,7 +263,6 @@ const requiredIndexes = {
     'by_businessId_and_status',
   ],
   businessSupplyProjectionSnapshots: ['by_businessId'],
-  customerRequestHeads: ['by_requestId'],
   customerRequestRouteMandateIssues: ['by_mandateRef', 'by_requestId_and_recordedAt'],
   customerRequestRouteMandateHeads: ['by_requestId'],
   customerRequestRouteMandateCommands: ['by_commandKey'],
@@ -362,26 +351,6 @@ const requiredIndexes = {
   ],
   customerRequestV2ProviderReconciliationCommands: ['by_commandKey'],
   customerRequestV2ActionAttemptAdmissionCommands: ['by_commandKey', 'by_resultRef'],
-  customerRequestSnapshots: ['by_requestId_and_revision'],
-  customerRequestCommands: ['by_commandKey', 'by_requestId_and_resultingRevision'],
-  customerRequestEvaluations: ['by_evaluationId', 'by_requestId_and_requestRevision'],
-  customerRequestEvaluationCandidates: ['by_evaluationId', 'by_candidateRef'],
-  customerRequestEvaluationPreparations: ['by_preparationKey', 'by_requestId_and_requestRevision'],
-  customerRequests: ['by_requestId'],
-  customerRequestRevisions: ['by_requestId_and_revision'],
-  customerRequestCompilationCommands: ['by_compilationKey', 'by_requestId_and_requestRevision'],
-  customerRequestPlanRevisions: ['by_planRevisionId', 'by_requestId_and_requestRevision'],
-  customerRequestPreparationCommands: ['by_preparationScope', 'by_preparationKey', 'by_requestId_and_status', 'by_status_and_leaseExpiresAt'],
-  customerRequestPreparedActions: ['by_preparedActionId', 'by_preparationScope', 'by_requestId_and_requestRevision', 'by_quoteId'],
-  customerRequestPreparationAuthorities: ['by_authorityId', 'by_requestId_and_status', 'by_status_and_expiresAt'],
-  customerRequestPreparationDisclosureAllocations: [
-    'by_allocationId', 'by_operationKey', 'by_authorityId_and_allocatedAt', 'by_requestId_and_requestRevision',
-  ],
-  customerRequestPreparationDisclosureRecipients: ['by_authorityId_and_recipientBindingId'],
-  customerRequestPreparationAuthorityUses: ['by_authorityId_and_authorityUseKey'],
-  customerRequestPreparationDisclosureExposures: [
-    'by_authorityId_and_recipientBindingId_and_purpose_and_field', 'by_authorityId_and_firstAllocatedAt',
-  ],
   claims: ['by_owner_status', 'by_business_status'],
   operationKeys: ['by_actor_operation_key', 'by_scope_key'],
   registryProjectionItems: ['by_business', 'by_offering'],
@@ -419,6 +388,8 @@ const requiredIndexes = {
   notificationWebhookEvents: ['by_webhookEventId', 'by_provider_event', 'by_dispatch', 'by_status_receivedAt'],
   answerThreads: ['by_threadId', 'by_session_updatedAt'],
   answerTurns: ['by_turnId', 'by_thread_createdAt'],
+  answerTurnReservations: ['by_reservationKey', 'by_turnId', 'by_thread_seq'],
+  answerThreadShares: ['by_threadId', 'by_accessId', 'by_thread_status'],
   answerToolCalls: ['by_toolCallId', 'by_turn_seq'],
   harnessSessions: ['by_sessionId', 'by_ownerKey_updatedAt', 'by_lastRunId'],
   harnessSessionEntries: [
@@ -453,7 +424,6 @@ const requiredIndexes = {
   routingKernelIncidentDrainSweeps: ['by_freezeOrderId'],
   routingKernelIncidentDrainFacts: ['by_drainFactId', 'by_freezeOrderId', 'by_rootRunId'],
   customerRequestAgentPrincipals: ['by_principalId', 'by_credentialId'],
-  customerRequestCapabilityContracts: ['by_capabilityContractId', 'by_status_and_capabilityContractId'],
   capabilityLaunchSupportRecords: ['by_supportRecordId'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
   capabilityPublications: [
@@ -471,6 +441,17 @@ const requiredIndexes = {
     'by_bindingId',
     'by_offeringId_and_admission_and_conformance',
     'by_networkId_admission_conformance',
+  ],
+  capabilityProviderConnections: [
+    'by_connectionRef',
+    'by_businessId_and_lifecycle',
+    'by_providerRef_and_lifecycle',
+    'by_connectionRef_and_authorityGeneration',
+  ],
+  capabilityProviderApprovals: [
+    'by_decisionRef',
+    'by_commandId',
+    'by_connectionRef_and_authorityGeneration',
   ],
   capabilityCallEvents: ['by_businessId_and_observedAt', 'by_taskDigest_and_observedAt', 'by_eventRef'],
   registeredOperationMappings: ['by_networkId_and_mappingRef'],
@@ -542,7 +523,7 @@ describe('Convex schema', () => {
   })
 
 
-  it('accepts the aggregate registry search document stored before the per-Offering cutover', async () => {
+  it('refuses the obsolete aggregate registry search document envelope after the per-Offering cutover', async () => {
     const backend = convexTest(schema, convexModules)
     const businessId = await backend.run(async (ctx) => {
       const ownerId = await ctx.db.insert('owners', {
@@ -584,8 +565,11 @@ describe('Convex schema', () => {
               observedAt,
               source: { kind: 'business_supplied' },
               value: {
-                amountMinor: 85_000,
-                currency: 'AUD',
+                amount: {
+                  currency: 'AUD',
+                  units: '85000',
+                  exponent: 2,
+                },
                 description: 'Labelled demo fixed scope',
                 unit: 'total',
               },
@@ -628,20 +612,12 @@ describe('Convex schema', () => {
       updatedAt: observedAt,
     } as const
 
-    await backend.run(async (ctx) => {
+    await expect(backend.run(async (ctx) => {
       await ctx.db.insert('registrySearchDocuments', document as never)
-    })
-    const [stored] = await backend.run(async (ctx) => (
-      ctx.db.query('registrySearchDocuments').take(1)
-    ))
-
-    expect(stored).toEqual(expect.objectContaining({
-      documentId: document.documentId,
-      schemaVersion: 'registry-search-document:v2',
-    }))
+    })).rejects.toThrow()
   })
 
-  it('validates current and legacy action invocation attempts', async () => {
+  it('validates current action invocation attempts and rejects removed legacy messages', async () => {
     const backend = convexTest(schema, convexModules)
     const currentAttempt = {
       invocationRef: 'invocation:schema-regression',
@@ -664,96 +640,38 @@ describe('Convex schema', () => {
       },
       recordedAt: '2026-08-02T00:00:00.000Z',
     } as const
-    const legacyUncertainAttempt = {
+    const legacyAttempt = {
       ...currentAttempt,
-      attemptNumber: 2,
-      attemptRef: 'attempt:legacy-uncertain',
+      attemptRef: 'attempt:legacy-message',
       outcome: {
-        state: 'uncertain',
-        retry: 'reconcile_before_retry',
-        message: 'legacy uncertain attempt message',
-        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
-      },
-    } as const
-    const legacyFailedAttempt = {
-      ...currentAttempt,
-      attemptNumber: 3,
-      attemptRef: 'attempt:legacy-failed',
-      outcome: {
-        state: 'failed',
-        retry: 'safe_before_release',
-        message: 'legacy failed attempt message',
-      },
-    } as const
-    const malformedLegacyAttempt = {
-      ...legacyUncertainAttempt,
-      attemptNumber: 4,
-      attemptRef: 'attempt:legacy-malformed',
-      outcome: {
-        ...legacyUncertainAttempt.outcome,
-        message: 42,
+        ...currentAttempt.outcome,
+        message: 'removed raw error message',
       },
     } as const
 
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('actionInvocationAttempts', legacyAttempt as never)
+    ))).rejects.toThrow()
     await backend.run(async (ctx) => {
       await ctx.db.insert('actionInvocationAttempts', currentAttempt)
-      await ctx.db.insert('actionInvocationAttempts', legacyUncertainAttempt)
-      await ctx.db.insert('actionInvocationAttempts', legacyFailedAttempt)
     })
-    await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationAttempts', malformedLegacyAttempt as never)
-    ))).rejects.toThrow(/"message":42/u)
-
-    const rows = await backend.run(async (ctx) => (
-      ctx.db.query('actionInvocationAttempts').take(10)
+    const row = await backend.run(async (ctx) => (
+      ctx.db.query('actionInvocationAttempts').unique()
     ))
-    const currentRow = rows.find(({ attemptRef }) => attemptRef === 'attempt:current')
-    const legacyUncertainRow = rows.find(({ attemptRef }) => attemptRef === 'attempt:legacy-uncertain')
-    const legacyFailedRow = rows.find(({ attemptRef }) => attemptRef === 'attempt:legacy-failed')
-
-    expect(currentRow).toEqual(expect.objectContaining({
-      outcome: {
-        state: 'uncertain',
-        retry: 'reconcile_before_retry',
-        errorDigest: 'digest:schema-regression',
-        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
-      },
+    expect(row).toEqual(expect.objectContaining({
+      outcome: currentAttempt.outcome,
     }))
-    expect(currentRow?.outcome).not.toHaveProperty('message')
-    expect(legacyUncertainRow).toEqual(expect.objectContaining({
-      outcome: expect.objectContaining({
-        message: 'legacy uncertain attempt message',
-        state: 'uncertain',
-        retry: 'reconcile_before_retry',
-        reconciliationRequiredAt: '2026-08-02T00:00:00.000Z',
-      }),
-    }))
-    expect(legacyFailedRow).toEqual(expect.objectContaining({
-      outcome: expect.objectContaining({
-        message: 'legacy failed attempt message',
-        state: 'failed',
-        retry: 'safe_before_release',
-      }),
-    }))
+    expect(row?.outcome).not.toHaveProperty('message')
   })
-  it('validates current and legacy action invocation controls', async () => {
+  it('validates current action invocation controls and rejects removed legacy shapes', async () => {
     const backend = convexTest(schema, convexModules)
-    const legacyAcceptedAuthority = {
-      kind: 'standing_mandate_use',
-      mandateRef: 'mandate:schema-regression',
-      mandateVersion: 1,
-      mandateGeneration: 2,
-      authorityUseRef: 'authority-use:schema-regression',
-      grantEvidenceRef: 'grant-evidence:schema-regression',
-    } as const
-    const currentAcceptedAuthority = {
+    const acceptedAuthority = {
       kind: 'approve_each',
       authorityRef: 'authority:schema-regression',
     } as const
-    const controlBase = {
+    const control = {
+      invocationRef: 'invocation:schema-regression:current',
       invocationVersion: 1,
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      persistence: 'durable_control',
       origin: {
         kind: 'standalone',
         callerRef: 'caller:schema-regression',
@@ -768,81 +686,61 @@ describe('Convex schema', () => {
       },
       freshness: { state: 'current', observedAt: '2026-08-02T00:00:00.000Z' },
       control: { state: 'authorized', decidedAt: '2026-08-02T00:00:00.000Z' },
-    } as const
-    const legacyControl = {
-      invocationRef: 'invocation:schema-regression:legacy',
-      invocationVersion: 1,
-      control: {
-        ...controlBase,
-        invocationRef: 'invocation:schema-regression:legacy',
-      },
-      sourceRef: 'source:schema-regression:legacy',
-      authorityReference: 'authority:schema-regression',
-      authorityDecisionAt: '2026-08-02T00:00:00.000Z',
-      acceptedAuthority: legacyAcceptedAuthority,
-      updatedAt: '2026-08-02T00:00:00.000Z',
+      acceptedAuthority,
     } as const
     const currentControl = {
-      invocationRef: 'invocation:schema-regression:current',
+      invocationRef: control.invocationRef,
       invocationVersion: 1,
-      control: {
-        ...controlBase,
-        invocationRef: 'invocation:schema-regression:current',
-        acceptedAuthority: currentAcceptedAuthority,
-      },
+      control,
       sourceRef: 'source:schema-regression:current',
       authorityReference: 'authority:schema-regression',
       authorityDecisionAt: '2026-08-02T00:00:00.000Z',
       updatedAt: '2026-08-02T00:00:00.000Z',
     } as const
-    const { mandateGeneration: _mandateGeneration, ...legacyAcceptedAuthorityWithoutGeneration } =
-      legacyAcceptedAuthority
-    const malformedLegacyControl = {
-      ...legacyControl,
-      invocationRef: 'invocation:schema-regression:malformed-authority',
-      acceptedAuthority: legacyAcceptedAuthorityWithoutGeneration,
+    const { acceptedAuthority: removedAuthority, ...legacyInnerControl } = control
+    const legacyControl = {
+      ...currentControl,
+      invocationRef: 'invocation:schema-regression:legacy',
+      control: {
+        ...legacyInnerControl,
+        invocationRef: 'invocation:schema-regression:legacy',
+      },
+      acceptedAuthority: removedAuthority,
     } as const
     const malformedGatheringControl = {
       ...currentControl,
       invocationRef: 'invocation:schema-regression:malformed-gathering',
       control: {
         ...currentControl.control,
+        invocationRef: 'invocation:schema-regression:malformed-gathering',
         control: { state: 'gathering_information', missingFields: 'convert' },
       },
     } as const
 
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', malformedLegacyControl as never)
+      ctx.db.insert('actionInvocationControls', legacyControl as never)
     ))).rejects.toThrow()
     await expect(backend.run(async (ctx) => (
       ctx.db.insert('actionInvocationControls', malformedGatheringControl as never)
     ))).rejects.toThrow()
 
     await backend.run(async (ctx) => {
-      await ctx.db.insert('actionInvocationControls', legacyControl)
       await ctx.db.insert('actionInvocationControls', currentControl)
     })
-
-    const rows = await backend.run(async (ctx) => (
-      ctx.db.query('actionInvocationControls').take(10)
+    const row = await backend.run(async (ctx) => (
+      ctx.db.query('actionInvocationControls').unique()
     ))
-    const legacyRow = rows.find(({ invocationRef }) => invocationRef === legacyControl.invocationRef)
-    const currentRow = rows.find(({ invocationRef }) => invocationRef === currentControl.invocationRef)
-
-    expect(legacyRow).toEqual(expect.objectContaining({
-      acceptedAuthority: legacyAcceptedAuthority,
-      control: expect.not.objectContaining({ acceptedAuthority: expect.anything() }),
+    expect(row).toEqual(expect.objectContaining({
+      control: expect.objectContaining({ acceptedAuthority }),
     }))
-    expect(currentRow).toEqual(expect.objectContaining({
-      control: expect.objectContaining({ acceptedAuthority: currentAcceptedAuthority }),
-    }))
-    expect(currentRow).not.toHaveProperty('acceptedAuthority')
+    expect(row).not.toHaveProperty('acceptedAuthority')
   })
   it('validates current begin and answer gathering-information writes', async () => {
     const backend = convexTest(schema, convexModules)
     const fixture = buildDevelopmentPublishedOperationEvidence()
     const now = fixture.operation.readiness.observedAt + 1_000
     const actor = { callerRef: 'caller:schema-input', principalRef: 'principal:schema-input' }
+    const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
     const adapter = createDynamicPublishedActionInvocationAdapter({
       operation: fixture.operation,
       source: createDevelopmentDynamicPublishedSource([fixture.operation]),
@@ -854,25 +752,23 @@ describe('Convex schema', () => {
       nextInvocationRef: () => 'invocation:schema-input',
       nextAuthorityRef: () => 'authority:schema-input',
       nextAttemptRef: () => 'attempt:schema-input',
+      durablePort: createDevelopmentDurablePort(durableState),
+      developmentSnapshot: durableState,
     })
     const origin = { kind: 'standalone' as const, ...actor }
 
-    const began = adapter.begin({ origin, actor, partial: {} })
+    const began = await adapter.begin({ origin, actor, partial: {} })
     expect(began.state).toBe('gathering_information')
-    const beginControl = adapter.exportSnapshot().controls.find(
+    const beginControl = adapter.exportDevelopmentSnapshot().controls.find(
       ({ invocationRef }) => invocationRef === began.invocationRef,
     )
     if (beginControl === undefined) throw new Error('begin control was not persisted')
     const toConvexControlRow = (row: Exclude<typeof beginControl, undefined>) => {
       const { control } = row
-      if (control.persistence !== 'durable_control') {
-        throw new Error('expected durable control')
-      }
       const state = control.control
       if (state.state !== 'gathering_information') {
         throw new Error('expected gathering-information control')
       }
-      const durablePersistence = 'durable_control' as const
       return {
         invocationRef: row.invocationRef,
         invocationVersion: row.invocationVersion,
@@ -880,8 +776,6 @@ describe('Convex schema', () => {
         control: {
           invocationRef: control.invocationRef,
           invocationVersion: control.invocationVersion,
-          environment: control.environment,
-          persistence: durablePersistence,
           origin: control.origin,
           owner: control.owner,
           action: control.action,
@@ -915,7 +809,7 @@ describe('Convex schema', () => {
       ctx.db.insert('actionInvocationControls', toConvexControlRow(beginControl))
     ))
 
-    const answered = adapter.answer({
+    const answered = await adapter.answer({
       invocationRef: began.invocationRef,
       actor,
       answers: { symbol: 'BTC' },
@@ -924,7 +818,7 @@ describe('Convex schema', () => {
     if (!('state' in answered) || answered.state !== 'gathering_information') {
       throw new Error('answer should remain in gathering state')
     }
-    const answerControl = adapter.exportSnapshot().controls.find(
+    const answerControl = adapter.exportDevelopmentSnapshot().controls.find(
       ({ invocationRef }) => invocationRef === began.invocationRef,
     )
     if (answerControl === undefined) throw new Error('answer control was not persisted')

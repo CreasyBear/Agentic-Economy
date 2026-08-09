@@ -112,6 +112,12 @@ const NOW = 1_900_000_000_000
 
 function inquiryOffering(slug: string, name: string): PublicBusinessCatalogApiV2Dto['offerings'][number] {
   const offeringRef = brandNonEmpty(`offering:${slug}`, 'OfferingRef')
+  const accessPathRef = brandNonEmpty(`access:ae:${slug}`, 'AccessPathRef')
+  const descriptor = {
+    kind: 'human_request' as const,
+    channel: 'ae_inquiry' as const,
+    disclosure: 'Use the source-owned inquiry form for a first contact.',
+  }
   return {
     offeringRef,
     revision: 1,
@@ -121,10 +127,9 @@ function inquiryOffering(slug: string, name: string): PublicBusinessCatalogApiV2
     serviceAreaSummary: 'Parramatta',
     availabilitySummary: 'Hours supplied by owner',
     accessPaths: [{
-      accessPathRef: brandNonEmpty(`access:ae:${slug}`, 'AccessPathRef'),
-      kind: 'human_request',
-      channel: 'ae_inquiry',
-      disclosure: 'Use the source-owned inquiry form for a first contact.',
+      accessPathRef,
+      offeringRevision: 1,
+      ...descriptor,
     }],
     support: { integrated: false, aeSupportedAction: false },
   }
@@ -213,7 +218,18 @@ function admittedInquiryState(catalog: PublicBusinessCatalogApiV2Dto): InquirySo
         offeringSourceHash,
         status: 'published' as const,
         descriptor: path,
-        sourceHash: canonicalDigest({ accessPathRef: path.accessPathRef }),
+        sourceHash: canonicalDigest({
+          accessPathRef: path.accessPathRef,
+          offeringSourceHash,
+          descriptor: path.kind === 'human_request'
+            ? {
+                kind: 'human_request',
+                channel: path.channel,
+                disclosure: path.disclosure,
+                ...(path.url === undefined ? {} : { url: path.url }),
+              }
+            : path,
+        }),
         createdAt: NOW,
         updatedAt: NOW,
       }))

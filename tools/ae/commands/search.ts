@@ -4,7 +4,13 @@ import { CliFailure, callJson, heading, line, printJson, requireOk, table } from
 
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
-  if (query.length === 0) throw new CliFailure('Usage: ae search <query> [--location X] [--mode near_me|whole_catalogue]')
+  if (query.length === 0) throw new CliFailure('Usage: ae search <query> [--location X] [--mode near_me|whole_catalogue]', { kind: 'INVALID_ARGUMENT', code: 'search-usage' })
+  if (options.mode !== undefined && options.mode !== 'near_me' && options.mode !== 'whole_catalogue') {
+    throw new CliFailure(
+      `Invalid --mode: ${options.mode}. Accepted values: near_me, whole_catalogue. Retry with --mode near_me or --mode whole_catalogue.`,
+      { kind: 'INVALID_ARGUMENT', code: 'invalid-search-mode' },
+    )
+  }
 
   const params = new URLSearchParams({ q: query })
   if (options.location !== undefined) params.set('location', options.location)

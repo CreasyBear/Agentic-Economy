@@ -85,12 +85,13 @@ const commercialInfluence = v.union(
     influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
   }),
 )
+const exactAmount = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 const customerOption = v.object({
   optionRef: v.string(), business: v.object({ name: v.string() }),
-  expectedCost: v.object({ currency: v.string(), amountMinor: v.number() }),
-  maximumCost: v.object({ currency: v.string(), amountMinor: v.number() }),
+  expectedCost: exactAmount,
+  maximumCost: exactAmount,
   expectedLatencyMs: v.number(),
-  priceComponents: v.array(v.object({ label: v.string(), amountMinor: v.number() })),
+  priceComponents: v.array(v.object({ label: v.string(), amount: exactAmount })),
   comparableOutputs: v.array(v.object({
     label: v.string(), value: v.union(v.string(), v.number(), v.boolean()),
   })),
@@ -136,7 +137,7 @@ const customerOptionSet = v.object({
 })
 const customerPreparedAction = v.object({
   actionRef: v.string(), businessName: v.string(), offeringLabel: v.string(), summary: v.string(),
-  price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
+  price: v.object({ minimum: exactAmount, maximum: exactAmount }),
   materialTerms: v.array(v.object({ label: v.string(), value: v.string() })),
   cancellation: v.object({ kind: v.union(v.literal('available'), v.literal('unsupported')) }),
   validUntil: v.number(),
@@ -159,13 +160,13 @@ const customerPreparedAction = v.object({
   })),
   alternatives: v.array(v.object({
     businessName: v.string(),
-    price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
+    price: v.object({ minimum: exactAmount, maximum: exactAmount }),
     validUntil: v.number(),
   })),
 })
 const customerBusiness = v.object({ businessRef: v.string(), name: v.string() })
 const customerRouteMaximumCost = v.union(
-  v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
+  v.object({ kind: v.literal('known'), amount: exactAmount }),
   v.object({ kind: v.literal('requires_preparation') }),
 )
 const customerRouteRecipient = v.object({
@@ -219,7 +220,7 @@ const customerRouteComparisonEvidence = v.object({
   freshness: v.object({ state: v.union(v.literal('current'), v.literal('expired')), validUntil: v.number() }),
   commercialInfluence: customerRouteCommercialInfluence,
 })
-const customerRoute = v.object({
+export const customerRoute = v.object({
   routeRef: v.string(), quoteDigest: v.string(), result: customerRouteResult,
   availability: v.union(v.literal('current'), v.literal('expired')),
   stepCount: v.number(), businesses: v.array(customerBusiness),
@@ -576,8 +577,8 @@ const repeatPermissionResult = v.union(
     routeRef: v.string(),
     delegatedCredentialId: v.string(),
     limits: v.object({
-      perUseSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
-      cumulativeSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+      perUseSpend: exactAmount,
+      cumulativeSpend: exactAmount,
       perUseDataAllocations: v.number(),
       cumulativeDataAllocations: v.number(),
       occurrences: v.number(),
@@ -684,10 +685,11 @@ export const preview = action({
         destination: { label: destinationText, request: destinationText },
       })
     }
+    const now = Date.now()
     const result = await previewCustomerRequestApplication(
       { customerJob: args.customerJob, network: args.network },
       {
-        loadRequestGraph: (network) => loadRequestGraph(ctx, network),
+        loadRequestGraph: (network) => loadRequestGraph(ctx, network, now),
         discoverCapabilities: discoverCapabilitiesPort(ctx),
       },
       {
@@ -707,7 +709,7 @@ export const submit = action({
     compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()),
     delegatedAgentId: v.string(), customerJob: v.string(),
     routing: v.object({
-      networkId: v.string(), currency: v.optional(v.string()), maximumSpendMinor: v.optional(v.number()),
+      networkId: v.string(), maximumSpend: v.optional(exactAmount),
       optimizeFor: v.optional(v.union(v.literal('cost'), v.literal('latency'))),
     }),
     serviceAuth: v.optional(serviceAssertion),
@@ -924,7 +926,7 @@ export const allowRepeatRoute = action({
     routeRef: v.string(),
     delegatedCredentialId: v.string(),
     occurrences: v.number(),
-    cumulativeSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+    cumulativeSpend: exactAmount,
     validUntil: v.number(),
     idempotencyKey: v.string(),
     serviceAuth: v.optional(serviceAssertion),
@@ -1508,8 +1510,8 @@ const supportProblemExportResult = v.union(
         state: v.union(v.literal('current'), v.literal('expired'), v.literal('revoked')),
         source: v.literal('customer_confirmation'),
         spend: v.object({
-          limit: v.object({ currency: v.string(), amountMinor: v.number() }),
-          admitted: v.object({ currency: v.string(), amountMinor: v.number() }),
+          limit: exactAmount,
+          admitted: exactAmount,
         }),
         dataSharing: v.array(v.object({
           classification: v.union(
@@ -1741,7 +1743,7 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     ...(durableShell === undefined ? {} : { durableShell }),
   }, {
     replayCommittedCommand: (replayInput) => replayCommittedCommand(ctx, replayInput),
-    loadRequestGraph: (network) => loadRequestGraph(ctx, network),
+    loadRequestGraph: (network) => loadRequestGraph(ctx, network, input.now),
     discoverCapabilities: discoverCapabilitiesPort(ctx),
     commitAggregate: async (commitInput) => await ctx.runMutation(
       internal.customerRequestV2.commitAggregate,
@@ -1774,13 +1776,17 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   return result === undefined ? undefined : toActionResult(result) as ActionResult
 }
 
-async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | RequestGraphUnavailable> {
+async function loadRequestGraph(
+  ctx: ActionCtx,
+  networkId: string,
+  now: number,
+): Promise<RequestGraph | RequestGraphUnavailable> {
   return await loadRequestGraphApplication(networkId, {
     // Routeable, not merely integrated: commitAggregate validates the recorded plan against
     // `listRouteable`, so planning over a wider set guarantees `context_stale` at commit and
     // hands the customer a retry that can never succeed.
     listRouteable: async (id) => await ctx.runQuery(
-      internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
+      internal.capabilitySupply.listRouteable, { networkId: id, limit: 64, now },
     ) as EligibleSupplyResult,
     listMappings: async (id) => await ctx.runQuery(
       internal.capabilitySupply.listMappings, { networkId: id, limit: 128 },

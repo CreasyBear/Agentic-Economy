@@ -1,18 +1,21 @@
 import {
   buildDynamicPublishedInput,
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDevelopmentTimeoutSignal,
   DevelopmentProcessInterruption,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
-  createDevelopmentInvocationApplication,
+  createInvocationApplication,
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
   type DevelopmentHostKind,
   type DevelopmentHostSourceCommands,
-  type DevelopmentInvocationHost,
+  type InvocationHost,
   type DynamicPublishedAdapterSnapshot,
   type DynamicPublishedSnapshotAnchors,
   type InvocationActor,
+  type DynamicPublishedInvocationResult,
   type RichInvocationTaskProjection,
   type StructuredInvocationTaskProjection,
 } from '@/modules/action-invocation'
@@ -169,7 +172,7 @@ async function runHostScenarios(
   return {
     host: hostKind,
     actor: actorFor(hostKind),
-    clarification: clarificationScenario(fixture, hostKind),
+    clarification: await clarificationScenario(fixture, hostKind),
     correction: await correctionScenario(fixture, hostKind),
     success: success.outcome,
     preflightRefusal: await refusalScenario(fixture, hostKind, 'preflight'),
@@ -180,7 +183,7 @@ async function runHostScenarios(
     staleFences: success.staleFences,
     coldResume: await coldResumeScenario(fixture, hostKind),
     completedResultReuse: hostKind === 'standalone_external_agent'
-      ? completedResultReuse(fixture, success)
+      ? await completedResultReuse(fixture, success)
       : {
           firstKind: 'not_applicable',
           secondKind: 'not_applicable',
@@ -196,16 +199,16 @@ async function runHostScenarios(
   }
 }
 
-function clarificationScenario(
+async function clarificationScenario(
   fixture: Fixture,
   hostKind: DevelopmentHostKind,
-): DevelopmentHostScenarioRecord['clarification'] {
+): Promise<DevelopmentHostScenarioRecord['clarification']> {
   const context = createScenario(fixture, hostKind, 'clarification', developmentSuccessRuntime)
-  const gathering = context.host.begin({ symbol: 'BTC' })
+  const gathering = await context.host.begin({ symbol: 'BTC' })
   const rich = context.host.projectRich(gathering.invocationRef, gathering.invocationVersion)
   const structured = context.host.projectStructured(gathering.invocationRef, gathering.invocationVersion)
   const gatheringSnapshot = context.host.exportSnapshot()
-  const prepared = context.host.answer(
+  const prepared = await context.host.answer(
     gathering.invocationRef,
     { convert: 'USD' },
     60_000,
@@ -231,15 +234,15 @@ async function correctionScenario(
   hostKind: DevelopmentHostKind,
 ): Promise<DevelopmentHostScenarioRecord['correction']> {
   const context = createScenario(fixture, hostKind, 'correction', developmentSuccessRuntime)
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const accepted = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const accepted = await context.host.decide(prepared.invocationRef, true)
   if (accepted.kind !== 'accepted') throw new Error(`correction_initial_decision:${accepted.code}`)
   const preparedAuthority = requireAuthority(prepared)
   const presentationBefore = canonicalDigest(context.host.exportSnapshot())
   const presentationPreference = { density: 'compact' }
   void presentationPreference
   const presentationAfter = canonicalDigest(context.host.exportSnapshot())
-  const corrected = context.host.correct(
+  const corrected = await context.host.correct(
     prepared.invocationRef,
     { symbol: 'BTC' },
     60_000,
@@ -248,7 +251,7 @@ async function correctionScenario(
     || corrected.view.authority === undefined) {
     throw new Error(`correction_refused:${corrected.kind === 'refused' ? corrected.code : 'state'}`)
   }
-  const staleDecision = context.adapter.decide({
+  const staleDecision = await context.adapter.decide({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: accepted.view.invocationVersion,
     authorityRef: preparedAuthority.reference,
@@ -256,7 +259,7 @@ async function correctionScenario(
     origin: context.host.origin,
     accept: true,
   })
-  const staleExecution = context.adapter.acquire({
+  const staleExecution = await context.adapter.acquire({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: accepted.view.invocationVersion,
     authorityRef: preparedAuthority.reference,
@@ -280,12 +283,12 @@ async function correctionScenario(
     corrected.view.invocationVersion,
   )
   const projectionSnapshot = context.host.exportSnapshot()
-  const fresh = context.host.decide(corrected.view.invocationRef, true)
+  const fresh = await context.host.decide(corrected.view.invocationRef, true)
   if (fresh.kind !== 'accepted') throw new Error(`correction_fresh_decision:${fresh.code}`)
   const completed = await context.host.continue(corrected.view.invocationRef)
   if (completed.kind !== 'completed') throw new Error(`correction_execution:${continuationCode(completed)}`)
   const source = requireFirst(context.host.exportSnapshot().sourceRows, 'correction_source_missing')
-  const terminalCorrection = context.host.correct(
+  const terminalCorrection = await context.host.correct(
     corrected.view.invocationRef,
     { symbol: 'SOL' },
     60_000,
@@ -296,11 +299,9 @@ async function correctionScenario(
     'released-correction',
     developmentLostResponseRuntime,
   )
-  const releasedPrepared = releasedContext.host.prepare(
-    { symbol: 'BTC', convert: 'USD' },
-    60_000,
-  )
-  const releasedAccepted = releasedContext.host.decide(releasedPrepared.invocationRef, true)
+  const releasedPrepared = await releasedContext.host.prepare({ symbol: 'BTC', convert: 'USD' },
+  60_000,)
+  const releasedAccepted = await releasedContext.host.decide(releasedPrepared.invocationRef, true)
   if (releasedAccepted.kind !== 'accepted') {
     throw new Error(`released_correction_decision:${releasedAccepted.code}`)
   }
@@ -310,7 +311,7 @@ async function correctionScenario(
   }
   const releasedBefore = releasedContext.host.exportSnapshot()
   const releasedEffectsBefore = { ...releasedContext.effects }
-  const releasedRefusal = releasedContext.host.correct(
+  const releasedRefusal = await releasedContext.host.correct(
     releasedPrepared.invocationRef,
     { symbol: 'SOL' },
     60_000,
@@ -369,8 +370,8 @@ async function timeoutScenario(
     undefined,
     timeout.signal,
   )
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const decided = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_timeout_decision:${decided.code}`)
   timeout.fire()
   const timedOut = await context.host.continue(prepared.invocationRef)
@@ -394,8 +395,8 @@ async function releasedRefusalScenario(
     'released-refusal',
     developmentReleasedRefusalRuntime,
   )
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const decided = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_released_refusal_decision:${decided.code}`)
   const refused = await context.host.continue(prepared.invocationRef)
   if (refused.kind !== 'completed' || refused.view.control.state !== 'reconciliation_required') {
@@ -438,13 +439,13 @@ async function successScenario(fixture: Fixture, hostKind: DevelopmentHostKind) 
         : staleGeneration.kind
     },
   )
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const decided = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_success_decision:${decided.code}`)
   const completed = await context.host.continue(prepared.invocationRef)
   if (completed.kind !== 'completed') throw new Error(`host_success_execute:${continuationCode(completed)}`)
   const duplicate = await context.host.continue(prepared.invocationRef)
-  const cancellation = context.host.requestCancellation(prepared.invocationRef)
+  const cancellation = await context.host.requestCancellation(prepared.invocationRef)
   return {
     context,
     outcome: outcome(prepared.invocationRef, requireAuthority(prepared).reference, completed.view, context),
@@ -469,8 +470,8 @@ async function refusalScenario(
     kind,
     kind === 'preflight' ? developmentPreflightRefusalRuntime : developmentSuccessRuntime,
   )
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const decided = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_refusal_decision:${decided.code}`)
   if (kind === 'source') {
     context.source.setCurrent({
@@ -491,14 +492,14 @@ async function uncertaintyScenario(
   hostKind: DevelopmentHostKind,
 ): Promise<DevelopmentHostScenarioRecord['uncertainty']> {
   const context = createScenario(fixture, hostKind, 'uncertainty', developmentLostResponseRuntime)
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const decided = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_uncertain_decision:${decided.code}`)
   const uncertain = await context.host.continue(prepared.invocationRef)
   if (uncertain.kind !== 'completed') throw new Error(`host_uncertain_execute:${continuationCode(uncertain)}`)
   const uncertainSnapshot = context.host.exportSnapshot()
   const retry = await context.host.continue(prepared.invocationRef)
-  const reconciled = context.host.recover(prepared.invocationRef)
+  const reconciled = await context.host.recover(prepared.invocationRef)
   if (reconciled.kind !== 'reconciled') throw new Error(`host_reconcile:${continuationCode(reconciled)}`)
   return {
     ...outcome(prepared.invocationRef, requireAuthority(prepared).reference, uncertain.view, context),
@@ -525,8 +526,8 @@ async function coldResumeScenario(
       }
     },
   )
-  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-  const decided = context.host.decide(prepared.invocationRef, true)
+  const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_cold_decision:${decided.code}`)
   try {
     await context.host.continue(prepared.invocationRef)
@@ -561,7 +562,9 @@ async function coldResumeScenario(
     nextInvocationRef: () => 'cold:unused',
     nextAuthorityRef: () => 'cold:unused',
     nextAttemptRef: () => 'cold:unused',
-    durableState: loaded.durableState,
+    durablePort: loaded.durablePort,
+    initialSnapshot: loaded.initialSnapshot,
+    developmentSnapshot: loaded.developmentSnapshot,
     inputWork: loaded.inputWork,
     inputHistory: loaded.inputHistory,
     paymentAttempts: loaded.paymentAttempts,
@@ -585,10 +588,10 @@ async function coldResumeScenario(
   }
 }
 
-function completedResultReuse(
+async function completedResultReuse(
   fixture: Fixture,
   success: Awaited<ReturnType<typeof successScenario>>,
-): DevelopmentHostScenarioRecord['completedResultReuse'] {
+): Promise<DevelopmentHostScenarioRecord['completedResultReuse']> {
   const before = { ...success.context.effects }
   const controlBefore = success.context.host.exportSnapshot()
   const actor = success.context.actor
@@ -615,20 +618,18 @@ function completedResultReuse(
     candidateAggregate: compiled.aggregate,
   }
   const ports: AttachCompletedTaskReferencePorts = {
-    readCompletedResultIdentity: ({ invocationRef, actor: requestedActor }) =>
+    readCompletedResultIdentity: async ({ invocationRef, actor: requestedActor }) =>
       success.context.adapter.readCompletedResult(invocationRef, requestedActor),
   }
-  const attached = attachCompletedTaskReference(attachInput, ports)
+  const attached = await attachCompletedTaskReference(attachInput, ports)
   const replayed = attached.kind === 'attached'
-    ? attachCompletedTaskReference({
+    ? await attachCompletedTaskReference({
         ...attachInput,
         candidateAggregate: attached.aggregate,
       }, ports)
     : attached
-  const crossPrincipal = success.context.adapter.readCompletedResult(
-    success.outcome.invocationRef,
-    { ...actor, principalRef: 'principal:other' },
-  )
+  const crossPrincipal = await success.context.adapter.readCompletedResult(success.outcome.invocationRef,
+  { ...actor, principalRef: 'principal:other' },)
   const controlAfter = success.context.host.exportSnapshot()
   const referencePayload = attached.kind === 'attached' ? attached.reference : undefined
   return {
@@ -667,6 +668,8 @@ function createScenario(
   const actor = actorFor(hostKind)
   const now = fixture.operation.readiness.observedAt + 1_000
   const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+  const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+  const durablePort = createDevelopmentDurablePort(durableState)
   let authoritySequence = 0
   const adapter = createDynamicPublishedActionInvocationAdapter({
     operation: fixture.operation,
@@ -677,6 +680,8 @@ function createScenario(
     nextAuthorityRef: () => `host:${hostKind}:${scenario}:authority:${++authoritySequence}`,
     nextAttemptRef: () => `host:${hostKind}:${scenario}:attempt`,
     ...(developmentTimeoutSignal === undefined ? {} : { developmentTimeoutSignal }),
+    durablePort,
+    developmentSnapshot: durableState,
   })
   const commands = sourceCommands(fixture, hostKind, now, beforeExecute)
   return {
@@ -694,8 +699,8 @@ function createHost(
   adapter: ReturnType<typeof createDynamicPublishedActionInvocationAdapter>,
   actor: InvocationActor,
   commands: DevelopmentHostSourceCommands,
-): DevelopmentInvocationHost {
-  const application = createDevelopmentInvocationApplication({ adapter, sourceCommands: commands })
+): InvocationHost {
+  const application = createInvocationApplication({ adapter, sourceCommands: commands })
   return hostKind === 'request_owned_human'
     ? application.bindRequestOwned({
       actor,
@@ -739,7 +744,7 @@ function sourceCommands(
 function anchors(
   fixture: Fixture,
   actor: InvocationActor,
-  origin: DevelopmentInvocationHost['origin'],
+  origin: InvocationHost['origin'],
   authorityRef: string,
   _invocationRef: string,
   expectedEffectCount: number,
@@ -769,10 +774,10 @@ function anchors(
 function outcome(
   invocationRef: string,
   authorityRef: string,
-  view: NonNullable<ReturnType<DevelopmentInvocationHost['inspect']>>,
+  view: NonNullable<ReturnType<InvocationHost['inspect']>>,
   context: Readonly<{
     effects: DevelopmentEffectCounts
-    host: DevelopmentInvocationHost
+    host: InvocationHost
   }>,
 ): ScenarioOutcome {
   return {
@@ -801,7 +806,7 @@ function actorFor(hostKind: DevelopmentHostKind): InvocationActor {
 }
 
 function continuationCode(
-  result: Awaited<ReturnType<DevelopmentInvocationHost['continue']>>,
+  result: Awaited<ReturnType<InvocationHost['continue']>>,
 ): string {
   return result.kind === 'refused' ? result.code : result.kind
 }

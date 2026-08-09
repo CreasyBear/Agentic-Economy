@@ -5,8 +5,8 @@ vi.mock('@/lib/server/rate-limit', () => ({
   requestAdmissionKey: () => 'test-admission-key',
 }))
 
-import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
@@ -48,24 +48,31 @@ describe('POST /api/answer/turn boundary follow-up', () => {
   })
 
   it('returns boundary copy for the AE chip even when prior turns fail to load', async () => {
-    setAnswerThreadPortForTests({
-      createThread: async (args) => ({ threadId: args.threadId }),
-      appendTurn: async (args) => ({ turnId: args.turnId }),
-      listSessionThreads: async () => ({ threads: [] }),
-      getPublicThreadProjection: async () => null,
-      getAnswerThread: async (threadId) => ({
-        threadId,
-        pseudonymousSessionId: 'session-boundary',
-        title: 'Boundary',
-        sharePolicy: 'public',
-        createdAt: 1,
-        updatedAt: 1,
-        turnCount: 1,
-      }),
-      getThreadTurns: async () => {
-        throw new Error('convex unavailable')
-      },
+    const store = createAnswerThreadTestStore()
+    store.threads.set('thread-boundary-test', {
+      threadId: 'thread-boundary-test',
+      pseudonymousSessionId: 'session-boundary',
+      title: 'Boundary',
+      createdAt: 1,
+      updatedAt: 1,
     })
+    store.turns.set('boundary-prior', {
+      turnId: 'boundary-prior',
+      threadId: 'thread-boundary-test',
+      seq: 1,
+      query: 'prior',
+      intent: 'refine_search',
+      evidenceJson: '{}',
+      snapshotHash: '',
+      proseJson: '{}',
+      artifactKindsJson: '[]',
+      status: 'complete',
+      createdAt: 1,
+    })
+    store.getThreadTurnsError = new Error('convex unavailable')
+    installAnswerThreadTestPort(store)
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -77,6 +84,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:prior-load-failure',
           },
           body: JSON.stringify({
             threadId: 'thread-boundary-test',
@@ -92,10 +100,12 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('cannot confirm a booking or the work')
-      expect(complete.answer.oneLine).not.toContain('No listed businesses match')
-      expect(complete.answer.summary).toContain('Use the cards to compare published services')
+      expect(complete.answer.oneLine).toContain('cannot book or start the job')
+      expect(complete.answer.oneLine).not.toContain('No businesses match')
+      expect(complete.answer.summary).toContain('Use the cards to compare what is offered')
     } finally {
+      restoreOpenRouter()
+      await server.close()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
@@ -109,10 +119,10 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     installAnswerThreadTestPort(store)
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
-        oneLine: 'No listed businesses match "Emergency plumber Brunswick" yet.',
+        oneLine: 'No businesses match "Emergency plumber Brunswick" yet.',
         summary:
-          'No providers are listed for that yet. You can list a business, or try a different need or suburb.',
-        whatToDoNow: 'Try a nearby suburb, browse services, or list a business that should appear here.',
+          'No matches found yet. You can add a business, or try a different need or suburb.',
+        whatToDoNow: 'Try a nearby suburb, see other options, or add a business that should appear here.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -128,6 +138,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:empty-first',
           },
           body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
         }),
@@ -145,6 +156,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:empty-follow-up',
           },
           body: JSON.stringify({
             threadId,
@@ -160,8 +172,8 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('cannot confirm a booking or the work')
-      expect(complete.answer.summary).not.toContain('No providers are listed for that yet')
+      expect(complete.answer.oneLine).toContain('cannot book or start the job')
+      expect(complete.answer.summary).not.toContain('No matches found yet')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -178,9 +190,9 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     installAnswerThreadTestPort(store)
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
-        oneLine: 'One listed business is listed in Parramatta.',
+        oneLine: 'One business is in Parramatta.',
         summary:
-          'The listing publishes emergency pipe repair around Parramatta. Scope, price, and current availability still need confirmation.',
+          'The business offers emergency pipe repair around Parramatta. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
@@ -197,6 +209,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:parramatta-first',
           },
           body: JSON.stringify({ query: 'plumber parramatta' }),
         }),
@@ -220,6 +233,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:parramatta-follow-up',
           },
           body: JSON.stringify({
             threadId,
@@ -236,8 +250,8 @@ describe('POST /api/answer/turn boundary follow-up', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.providers.length).toBeGreaterThan(0)
-      expect(complete.answer.oneLine).toContain('listed in Parramatta')
-      expect(complete.answer.oneLine).not.toContain('No listed businesses match "Narrow to Parramatta"')
+      expect(complete.answer.oneLine).toContain('matches in Parramatta')
+      expect(complete.answer.oneLine).not.toContain('No businesses match "Narrow to Parramatta"')
       expect(complete.answer.compactLayout).toBe(true)
     } finally {
       restoreOpenRouter()
@@ -275,7 +289,11 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       const first = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: SESSION_COOKIE },
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:adelaide-first',
+          },
           body: JSON.stringify({ query: 'My tooth hurts and I need a dentist near Adelaide this week' }),
         }),
       )
@@ -291,7 +309,11 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       const followUp = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: SESSION_COOKIE },
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+            'X-AE-Turn-Key': 'boundary:adelaide-follow-up',
+          },
           body: JSON.stringify({ threadId, query: 'Only show options near Adelaide' }),
         }),
       )
@@ -301,8 +323,10 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') throw new Error('expected follow-up complete event')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
       expect(complete.answer.oneLine).toContain('Adelaide')
-      expect(server.requests).toHaveLength(1)
-      expect(server.requests[0]?.tools).toBeUndefined()
+      // Retrieval-first reuses the frozen provider snapshot for this location-only follow-up.
+      // Both turns perform the private safety preflight; no answer model request is needed.
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
     } finally {
       restoreOpenRouter()
       await server.close()

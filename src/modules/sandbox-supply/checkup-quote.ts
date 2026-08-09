@@ -1,5 +1,6 @@
 import { addDays, addMilliseconds, addMinutes, getHours, getMinutes, set, startOfMinute, toDate } from 'date-fns'
 
+import type { ExactAmount } from '@/modules/money/public'
 import type { OfferingPrice } from '@/modules/catalog/public'
 
 /**
@@ -24,8 +25,7 @@ const SlotMinutes = 30
 export type CheckupQuoteOfferingFacts = Readonly<{
   name: string
   price: Readonly<{
-    currency: string
-    amountMinor: number
+    amount: ExactAmount
     unit?: OfferingPrice['unit']
     taxTreatment?: OfferingPrice['taxTreatment']
   }>

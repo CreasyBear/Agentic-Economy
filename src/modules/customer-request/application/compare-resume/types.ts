@@ -175,6 +175,7 @@ export type CompareResumePorts = PreparationEgressPorts & Readonly<{
     requestRevision: number
     actionId: string
     principalId: string
+    now: number
   }>) => Promise<PreparationResumeResult>
   egressStatus: (input: Readonly<{
     preparationRef: string

@@ -191,14 +191,14 @@ async function seedRoutedCustomerRequest(backend: Pick<TestConvex<typeof schema>
       publicationRevision: lineage.admittedOperation.publicationRevision,
       resolvedInputs: [],
       deferredInputs: [],
-      price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 0 },
+      price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '0', exponent: 2 } },
       dataUse: [],
       effects: [],
       evidence: [],
       recovery: { idempotency: 'not_applicable' as const, recovery: 'retry_safe' as const },
     }],
     edges: [],
-    maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 0 },
+    maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '0', exponent: 2 } },
     expiresAt: 9_999_999,
     uncertainty: [],
     fallbacks: { ordering: 'unranked' as const, alternatives: [] },
@@ -918,7 +918,7 @@ describe('gardener verbs Convex contract', () => {
   it('refuses a paid Lock while the first-dollar money gate is closed and rereads the refusal receipt', async () => {
     const protectedTarget = {
       ...node({ nodeId: 'target', kind: 'decision', status: 'ready' }),
-      cost: { currency: 'AUD', estimateMinor: 10_000 },
+      cost: { estimate: { currency: 'AUD', units: '10000', exponent: 2 } },
       authorityRef: 'authority:t49',
     }
     const backend = await backendWithTree(baseTree([protectedTarget]))
@@ -1038,8 +1038,8 @@ describe('gardener verbs Convex contract', () => {
       repeatGrant: {
         delegatedCredentialId: 'credential:repeat-agent',
         occurrences: 1,
-        perUseSpend: { currency: 'AUD', amountMinor: 0 },
-        cumulativeSpend: { currency: 'AUD', amountMinor: 0 },
+        perUseSpend: { currency: 'AUD', units: '0', exponent: 2 },
+        cumulativeSpend: { currency: 'AUD', units: '0', exponent: 2 },
         perUseDataAllocations: 1,
         cumulativeDataAllocations: 2,
         validUntil: Date.now() + 60_000,
@@ -1050,8 +1050,8 @@ describe('gardener verbs Convex contract', () => {
       idempotencyKey: 't49:repeat-grant-positive-unpaid',
       repeatGrant: {
         ...lockArgs.repeatGrant,
-        perUseSpend: { currency: 'AUD', amountMinor: 1 },
-        cumulativeSpend: { currency: 'AUD', amountMinor: 1 },
+        perUseSpend: { currency: 'AUD', units: '1', exponent: 2 },
+        cumulativeSpend: { currency: 'AUD', units: '1', exponent: 2 },
       },
     }
     await expect(backend.mutation(decideWorkTree, positiveSpendGrant)).resolves.toMatchObject({
@@ -1085,8 +1085,12 @@ describe('gardener verbs Convex contract', () => {
       proposalDigest: lockArgs.proposalDigest,
       delegatedCredentialId: 'credential:repeat-agent',
       occurrenceLimit: 1,
-      perUseSpendMinor: 0,
-      cumulativeSpendMinor: 0,
+      perUseSpendCurrency: 'AUD',
+      perUseSpendUnits: '0',
+      perUseSpendExponent: 2,
+      cumulativeSpendCurrency: 'AUD',
+      cumulativeSpendUnits: '0',
+      cumulativeSpendExponent: 2,
       cumulativeDataAllocations: 2,
       sourceReceiptId: accepted.receiptId,
     })
@@ -1114,16 +1118,16 @@ describe('gardener verbs Convex contract', () => {
     const baseGrant = {
       delegatedCredentialId: 'credential:repeat-agent',
       occurrences: 1,
-      perUseSpend: { currency: 'AUD', amountMinor: 0 },
-      cumulativeSpend: { currency: 'AUD', amountMinor: 0 },
+      perUseSpend: { currency: 'AUD', units: '0', exponent: 2 },
+      cumulativeSpend: { currency: 'AUD', units: '0', exponent: 2 },
       perUseDataAllocations: 0,
       cumulativeDataAllocations: 0,
       validUntil: Date.now() + 60_000,
     }
     const malformedGrants = [
       { ...baseGrant, occurrences: Number.MAX_SAFE_INTEGER + 1 },
-      { ...baseGrant, perUseSpend: { currency: 'AUD', amountMinor: -1 } },
-      { ...baseGrant, cumulativeSpend: { currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER + 1 } },
+      { ...baseGrant, perUseSpend: { currency: 'AUD', units: '-1', exponent: 2 } },
+      { ...baseGrant, perUseSpend: { currency: 'AUD', units: '1', exponent: 2 } },
       { ...baseGrant, perUseDataAllocations: -1 },
       { ...baseGrant, cumulativeDataAllocations: 0, perUseDataAllocations: 1 },
       { ...baseGrant, validUntil: Number.MAX_SAFE_INTEGER + 1 },

@@ -47,7 +47,10 @@ function input(): WorkTreeMemoProjectionInput {
         dependsOn: [],
         priority: 2,
         timing: { certainty: 'window', leadTimeDays: 3 },
-        cost: { currency: 'AUD', committedMinor: 1200, envelopeMinor: 2500 },
+        cost: {
+          committed: { currency: 'AUD', units: '1200', exponent: 2 },
+          envelope: { currency: 'AUD', units: '2500', exponent: 2 },
+        },
         effort: { humanMinutes: 45 },
         scope: { acceptance: 'criteria', criteria: [{ criterionId: 'c1', label: 'Bounded', accepted: true }] },
         evidenceRefs: [],
@@ -116,8 +119,8 @@ function repeatBinding(status: 'active' | 'withdrawn' = 'active'): WorkTreeRepea
       routeRef: 'route:t49',
       delegatedCredentialId: 'credential:t49',
       limits: {
-        perUseSpend: { currency: 'AUD', amountMinor: 500 },
-        cumulativeSpend: { currency: 'AUD', amountMinor: 1_000 },
+        perUseSpend: { currency: 'AUD', units: '500', exponent: 2 },
+        cumulativeSpend: { currency: 'AUD', units: '1000', exponent: 2 },
         perUseDataAllocations: 1,
         cumulativeDataAllocations: 2,
         occurrences: 2,
@@ -138,7 +141,10 @@ describe('T49 WorkTree memo projection', () => {
     expect(first).toEqual(second)
     expect(first).toMatchObject({
       readbackUrl,
-      cost: { currency: 'AUD', committedMinor: 1200, envelopeMinor: 2500 },
+      cost: {
+        committed: { currency: 'AUD', units: '1200', exponent: 2 },
+        envelope: { currency: 'AUD', units: '2500', exponent: 2 },
+      },
       timingCriticalPathSummary: 'Choose the next bounded step · 3 days',
       effortMinutes: 45,
       scopeCoverage: { accepted: 1, total: 1 },
@@ -241,7 +247,7 @@ describe('T49 WorkTree memo projection', () => {
     })
     expect(refusalReason(validateWorkTreeRepeatUse(repeatUse({ binding: repeatBinding('withdrawn') })))).toBe('permission_revoked')
     expect(refusalReason(validateWorkTreeRepeatUse(repeatUse({
-      requestedSpend: { currency: 'AUD', amountMinor: 501 },
+      requestedSpend: { currency: 'AUD', units: '501', exponent: 2 },
     })))).toBe('scope_widened')
     expect(refusalReason(validateWorkTreeRepeatUse(repeatUse({ proposalDigest: 'proposal:changed' })))).toBe('proposal_changed')
     expect(refusalReason(validateWorkTreeRepeatUse(repeatUse({ workTreeRevision: 9 })))).toBe('revision_changed')
@@ -275,7 +281,7 @@ function repeatPermissionInput(
     routeRef: 'route:t49',
     delegatedCredentialId: 'credential:t49',
     occurrences: 2,
-    cumulativeSpend: { currency: 'AUD', amountMinor: 1_000 },
+    cumulativeSpend: { currency: 'AUD', units: '1000', exponent: 2 },
     validUntil: 200,
     idempotencyKey: 'allow-repeat:t49',
     principalId: 'principal:t49',
@@ -298,7 +304,7 @@ function repeatUse(overrides: Partial<WorkTreeRepeatUseInput> = {}): WorkTreeRep
     proposalDigest: 'proposal:t49',
     delegatedCredentialId: 'credential:t49',
     now: 150,
-    requestedSpend: { currency: 'AUD', amountMinor: 400 },
+    requestedSpend: { currency: 'AUD', units: '4000', exponent: 3 },
     requestedDataAllocations: 1,
     requestedOccurrences: 1,
     ...overrides,

@@ -10,14 +10,14 @@ import { formatRecordTimestamp } from '@/lib/ui/format-time'
 
 const PROOF_BOUNDARY = 'This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.'
 
-export function AeCustomerRecord({ threadId, accessKey }: { threadId: string; accessKey: string | undefined }) {
-  return <CustomerRecordContent threadId={threadId} accessKey={accessKey} />
+export function AeCustomerRecord({ threadId, recordAccessKey }: { threadId: string; recordAccessKey: string | undefined }) {
+  return <CustomerRecordContent threadId={threadId} recordAccessKey={recordAccessKey} />
 }
 
-function CustomerRecordContent({ threadId, accessKey }: { threadId: string; accessKey: string | undefined }) {
-  const result = useCustomerInquiryRecord({ threadId, accessKey })
+function CustomerRecordContent({ threadId, recordAccessKey }: { threadId: string; recordAccessKey: string | undefined }) {
+  const result = useCustomerInquiryRecord({ threadId, accessKey: recordAccessKey })
 
-  if (accessKey === undefined) {
+  if (recordAccessKey === undefined) {
     return <CustomerRecordNotFound />
   }
 

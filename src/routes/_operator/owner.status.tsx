@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { AeOwnerStatusEmptyState } from '@/components/ae/status/AeOwnerStatusEmptyState'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 
@@ -147,9 +148,15 @@ function OwnerSearchGapCard({ readback }: Readonly<{ readback: OwnerSearchGapRea
           <p className="text-sm text-muted-foreground">Last 30 days.</p>
         </div>
         {readback.byFact.length === 0 ? (
-          <p className="text-muted-foreground">
-            No search history yet. When your business appears in customer searches, the details they looked for will show here.
-          </p>
+          <Empty className="border border-dashed p-5">
+            <EmptyHeader>
+              <EmptyTitle>No search history yet</EmptyTitle>
+              <EmptyDescription>When your business appears in customer searches, the details they looked for will show here so you can fill them in.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button asChild variant="secondary" size="sm"><Link to="/owner/offerings">Add a service detail</Link></Button>
+            </EmptyContent>
+          </Empty>
         ) : (
           <div className="flex flex-col gap-3">
             <ul className="m-0 grid list-none gap-3 p-0">

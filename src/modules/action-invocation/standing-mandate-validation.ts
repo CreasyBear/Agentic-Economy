@@ -1,10 +1,10 @@
+import { exactAmountSchema } from '@/modules/money/public'
 import { z } from 'zod'
 
 const nonEmpty = z.string().trim().min(1)
 const positiveSafeInteger = z.number().int().safe().positive()
 const nonNegativeSafeInteger = z.number().int().safe().nonnegative()
 const isoTimestamp = z.iso.datetime({ offset: true })
-const currency = z.string().regex(/^[A-Z]{3}$/)
 const digest = nonEmpty
 
 const actionIdentity = z.strictObject({
@@ -12,10 +12,7 @@ const actionIdentity = z.strictObject({
   version: nonEmpty,
 })
 
-const money = z.strictObject({
-  amountMinor: nonNegativeSafeInteger,
-  currency,
-})
+const money = exactAmountSchema
 
 const exposureOffsetRuleIdentity = z.strictObject({
   evidenceRuleRef: nonEmpty,
@@ -79,14 +76,17 @@ const mandateInput = z.strictObject({
   )) {
     context.addIssue({ code: 'custom', message: 'bounded_action_scope_invalid', path: ['scope', 'actions'] })
   }
+  if (input.scope.maximumLoss !== undefined
+    && (input.scope.maximumLoss.currency !== input.scope.maximumSpend.currency
+      || input.scope.maximumLoss.exponent !== input.scope.maximumSpend.exponent)) {
+    context.addIssue({ code: 'custom', message: 'currency_mismatch', path: ['scope', 'maximumLoss'] })
+  }
   if (mode === 'full_yolo') {
     if (input.scope.actions === undefined) {
       context.addIssue({ code: 'custom', message: 'actions_required', path: ['scope', 'actions'] })
     }
     if (input.scope.maximumLoss === undefined) {
       context.addIssue({ code: 'custom', message: 'maximum_loss_required', path: ['scope', 'maximumLoss'] })
-    } else if (input.scope.maximumLoss.currency !== input.scope.maximumSpend.currency) {
-      context.addIssue({ code: 'custom', message: 'currency_mismatch', path: ['scope', 'maximumLoss'] })
     }
   }
 })
@@ -179,8 +179,8 @@ const policyProposal = z.strictObject({
 const capacity = z.strictObject({
   consumedCount: nonNegativeSafeInteger,
   reservedCount: nonNegativeSafeInteger,
-  committedSpendMinor: nonNegativeSafeInteger,
-  heldWorstCaseLossMinor: nonNegativeSafeInteger,
+  committedSpend: money,
+  heldWorstCaseLoss: money,
 })
 
 const policyDecision = z.strictObject({
@@ -193,15 +193,15 @@ const policyDecision = z.strictObject({
   proposal: policyProposal,
   capacity,
   fallbackOrdinal: nonNegativeSafeInteger,
-  heldWorstCaseLossMinor: nonNegativeSafeInteger,
-  proposedWorstCaseLossMinor: nonNegativeSafeInteger,
-  maximumLossMinor: nonNegativeSafeInteger,
+  heldWorstCaseLoss: money,
+  proposedWorstCaseLoss: money,
+  maximumLoss: money,
   accepted: z.literal(true),
   digest,
 })
 
 // Grant and offset cryptographic semantics remain owned by their existing verifiers.
-// These schemas reject malformed scalar material before those verifiers run.
+// These schemas reject malformed amount material before those verifiers run.
 const grant = z.strictObject({
   format: z.literal('ae.verified-standing-mandate-grant:v1'),
   evidenceRef: nonEmpty,
@@ -241,8 +241,7 @@ const exposureOffset = z.strictObject({
   offsetSubjectRef: nonEmpty,
   offsetResultRef: nonEmpty,
   offsetEvidenceRef: nonEmpty,
-  amountMinor: nonNegativeSafeInteger,
-  currency,
+  amount: money,
   evidenceRuleRef: nonEmpty,
   evidenceRuleSource: nonEmpty,
   evidenceRuleVersion: nonEmpty,

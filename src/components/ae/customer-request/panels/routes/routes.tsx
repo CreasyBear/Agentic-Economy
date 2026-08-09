@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatMoney } from '@/lib/ui/format-money'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { CustomerRequestRepeatPermissionControl } from '../../CustomerRequestRepeatPermissionControl'
 import type { ConversationTurn, CustomerRoute } from '../../workspace-types'
@@ -111,7 +111,7 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
             <Fact label="Cost">
               <FactValue tone={route.maximumTotalCost.kind === 'known' ? 'material' : 'unresolved'}>
                 {route.maximumTotalCost.kind === 'known'
-                  ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
+                  ? `Maximum ${formatCurrencyAmount(route.maximumTotalCost.amount)}`
                   : 'Price needs confirmation'}
               </FactValue>
             </Fact>
@@ -215,7 +215,7 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
           <Fact label="Cost">
             <FactValue tone={route.maximumTotalCost.kind === 'known' ? 'material' : 'unresolved'}>
               {route.maximumTotalCost.kind === 'known'
-                ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
+                ? `Maximum ${formatCurrencyAmount(route.maximumTotalCost.amount)}`
                 : 'Price needs confirmation'}
             </FactValue>
           </Fact>
@@ -502,7 +502,7 @@ function decisionChangeLabel(
   }
   if (change.kind === 'maximum_cost' && change.before.length === 1 && change.after.length === 1
     && change.before[0]?.cost.kind === 'known' && change.after[0]?.cost.kind === 'known') {
-    return `The maximum for ${resultName(change.after[0].resultRef, resultNames)} changed from ${formatMoney(change.before[0].cost.currency, change.before[0].cost.amountMinor)} to ${formatMoney(change.after[0].cost.currency, change.after[0].cost.amountMinor)}.`
+    return `The maximum for ${resultName(change.after[0].resultRef, resultNames)} changed from ${formatCurrencyAmount(change.before[0].cost.amount)} to ${formatCurrencyAmount(change.after[0].cost.amount)}.`
   }
   if (change.kind === 'maximum_cost') {
     return `Maximum costs changed. Before: ${costList(change.before, resultNames)}. Now: ${costList(change.after, resultNames)}.`
@@ -544,6 +544,11 @@ function criteriaList(criteria: readonly Readonly<{ label: string; value: unknow
 }
 function customerValue(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value !== null && typeof value === 'object' && 'currency' in value && 'units' in value && 'exponent' in value
+    && typeof value.currency === 'string' && typeof value.units === 'string' && typeof value.exponent === 'number') {
+    const formatted = formatCurrencyAmount({ currency: value.currency, units: value.units, exponent: value.exponent })
+    if (formatted !== undefined) return formatted
+  }
   return JSON.stringify(value)
 }
 function costList(
@@ -551,7 +556,7 @@ function costList(
   names: ReadonlyMap<string, string>,
 ): string {
   return costs.map(({ resultRef, cost }) => `${resultName(resultRef, names)}: ${cost.kind === 'known'
-    ? formatMoney(cost.currency, cost.amountMinor)
+    ? formatCurrencyAmount(cost.amount)
     : 'price needs confirmation'}`).join(', ') || 'none'
 }
 function routeBusinessList(

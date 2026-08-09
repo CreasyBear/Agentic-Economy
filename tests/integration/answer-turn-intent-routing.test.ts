@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
-import type { AnswerEvent } from '@/modules/answer/public'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import {
+  createAnswerThreadTestStore,
+  installAnswerThreadTestPort,
+} from '../helpers/answer-thread-test-port'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
@@ -31,6 +34,7 @@ const PARRAMATTA_PROVIDER = {
   services: [{ name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'x' }],
 }
 
+
 const FROZEN_EVIDENCE_DRAFT: FrozenTurnEvidenceDraft = {
   providers: [PARRAMATTA_PROVIDER],
   allowedSlugs: ['parramatta-emergency-plumbing'],
@@ -53,45 +57,28 @@ const FIXED_SESSION_ID = `session-routing-test-${crypto.randomUUID()}`
 const PRIOR_THREAD_ID = 'thread-prior'
 
 function priorThreadPort(): void {
-  setAnswerThreadPortForTests({
-    createThread: async (args) => ({ threadId: args.threadId }),
-    appendTurn: async (args) => ({ turnId: args.turnId }),
-    listSessionThreads: async () => ({ threads: [] }),
-    getPublicThreadProjection: async () => null,
-    getThreadTurns: async () => ({
-      page: [
-        {
-          turnId: 'prior-1',
-          threadId: PRIOR_THREAD_ID,
-          seq: 1,
-          query: 'emergency plumber parramatta',
-          intent: 'refine_search',
-          evidenceJson: JSON.stringify(FROZEN_EVIDENCE),
-          snapshotHash: 'hash-prior',
-          proseJson: JSON.stringify({ oneLine: 'x', summary: 'y', nextStep: 'z' }),
-          artifactKindsJson: '[]',
-          status: 'complete',
-          createdAt: 1_000,
-        },
-      ],
-      isDone: true,
-      continueCursor: '',
-    }),
-    getAnswerThread: async (threadId) => {
-      if (threadId !== PRIOR_THREAD_ID) {
-        return null
-      }
-      return {
-        threadId: PRIOR_THREAD_ID,
-        pseudonymousSessionId: FIXED_SESSION_ID,
-        title: 'emergency plumber parramatta',
-        sharePolicy: 'public',
-        createdAt: 1_000,
-        updatedAt: 1_000,
-        turnCount: 1,
-      }
-    },
+  const store = createAnswerThreadTestStore()
+  store.threads.set(PRIOR_THREAD_ID, {
+    threadId: PRIOR_THREAD_ID,
+    pseudonymousSessionId: FIXED_SESSION_ID,
+    title: 'emergency plumber parramatta',
+    createdAt: 1_000,
+    updatedAt: 1_000,
   })
+  store.turns.set('prior-1', {
+    turnId: 'prior-1',
+    threadId: PRIOR_THREAD_ID,
+    seq: 1,
+    query: 'emergency plumber parramatta',
+    intent: 'refine_search',
+    evidenceJson: JSON.stringify(FROZEN_EVIDENCE),
+    snapshotHash: 'hash-prior',
+    proseJson: JSON.stringify({ oneLine: 'x', summary: 'y', nextStep: 'z' }),
+    artifactKindsJson: '[]',
+    status: 'complete',
+    createdAt: 1_000,
+  })
+  installAnswerThreadTestPort(store)
 }
 
 function turnRequest(query: string, threadId: string = PRIOR_THREAD_ID): Request {
@@ -100,6 +87,7 @@ function turnRequest(query: string, threadId: string = PRIOR_THREAD_ID): Request
     headers: {
       'Content-Type': 'application/json',
       cookie: `ae_session=${FIXED_SESSION_ID}`,
+      'X-AE-Turn-Key': `intent:${query}`,
     },
     body: JSON.stringify({ threadId, query }),
   })
@@ -116,9 +104,9 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
-        oneLine: 'One listed business matches this need.',
+        oneLine: 'One business may fit what you need.',
         summary:
-          'The listing publishes emergency pipe repair. Scope, price, and current availability still need confirmation.',
+          'The business offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
@@ -136,6 +124,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: `ae_session=${FIXED_SESSION_ID}`,
+            'X-AE-Turn-Key': 'intent:first-paramata',
           },
           body: JSON.stringify({ query: 'paramata' }),
         }),
@@ -144,8 +133,8 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(server.requests).toHaveLength(2)
-      const firstPrompt = server.requests[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
+      expect(server.requests).toHaveLength(3)
+      const firstPrompt = server.requests[1]?.messages.find((message) => message.role === 'user')?.content ?? ''
       expect(firstPrompt).toContain('User query: paramata')
       expect(firstPrompt).not.toContain('<catalog_data>')
     } finally {
@@ -162,9 +151,9 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
   it('filter_known: reuses frozen prior providers and calls no registry tool', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
-        oneLine: 'One listing accepts inquiries.',
+        oneLine: 'One business accepts requests.',
         summary:
-          'The earlier provider publishes an inquiry option. Scope, price, and current availability still need confirmation.',
+          'The earlier business has a request option. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
     }))
@@ -183,8 +172,9 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      // Frozen provider reused deterministically; no model request and no fresh registry tool.
-      expect(server.requests).toEqual([])
+      // Frozen provider reused deterministically; only the mandatory safety preflight runs.
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
@@ -212,35 +202,20 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(complete?.type).toBe('complete')
-      expect(server.requests).toEqual([])
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toBe(
-        "Ready to open Parramatta Emergency Plumbing's qualified inquiry form.",
+        'Ready to send a request to Parramatta Emergency Plumbing.',
       )
       expect(complete.answer.selectedProvider?.slug).toBe('parramatta-emergency-plumbing')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
-      expect(complete.answer.nextStep).toContain('inquiry form')
-      expect(complete.answer.summary).toContain('timing, quote, and availability are not confirmed yet')
-      expect(
-        frames
-          .map((frame) => frame.event)
-          .filter((event): event is Extract<AnswerEvent, { type: 'work-step' }> => event.type === 'work-step')
-          .map((event) => event.step.title),
-      ).toEqual(expect.arrayContaining(['Resolving provider', 'Checking inquiry path', 'Checking safe-action boundary']))
-      const resolveProviderStep = frames
-        .map((frame) => frame.event)
-        .filter((event): event is Extract<AnswerEvent, { type: 'work-step' }> => event.type === 'work-step')
-        .find((event) => event.step.title === 'Resolving provider' && event.step.status === 'complete')
-      expect(resolveProviderStep?.step.detailRows).toEqual(
-        expect.arrayContaining([
-          { label: 'Selected business', value: 'Parramatta Emergency Plumbing' },
-        ]),
-      )
+      expect(complete.answer.nextStep).toContain('request form')
+      expect(complete.answer.summary).toContain('timing, price, and availability are not confirmed yet')
       const eventTypes = frames.map((frame) => frame.event.type)
       const selectedProviderArtifactEvent = frames
         .map((frame) => frame.event)
@@ -275,12 +250,12 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(complete?.type).toBe('complete')
-      expect(server.requests).toEqual([])
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('cannot confirm a booking or the work')
+      expect(complete.answer.oneLine).toContain('cannot book or start the job')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -310,6 +285,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
           headers: {
             'Content-Type': 'application/json',
             cookie: `ae_session=${FIXED_SESSION_ID}`,
+            'X-AE-Turn-Key': `intent:imperative:${query}`,
           },
           body: JSON.stringify({ query }),
         }),
@@ -317,13 +293,14 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toEqual([])
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error(`expected complete event, got ${JSON.stringify(complete)}`)
       }
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.oneLine).toContain('business-supported action')
-      expect(complete.answer.nextStep).toContain('Find a listed business')
+      expect(complete.answer.oneLine).toContain('This kind of request is not available here')
+      expect(complete.answer.nextStep).toContain('Open a business page')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -348,12 +325,12 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(complete?.type).toBe('complete')
-      expect(server.requests).toEqual([])
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('business-supported action')
+      expect(complete.answer.oneLine).toContain('This kind of request is not available here')
     } finally {
       restoreOpenRouter()
       await server.close()

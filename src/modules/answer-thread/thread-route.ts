@@ -2,9 +2,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
-import { getPublicThreadProjection, type PublicThreadProjection } from '@/modules/answer-thread/public'
+import { getOwnedThreadProjection, parsePublicThreadProjection, type PublicThreadProjection, readAnswerSessionId } from '@/modules/answer-thread/public'
 import { buildPublicThreadSeo, type PublicThreadSeoContract } from '@/modules/seo/public'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+
 
 export type ThreadRouteReadback = {
   projection: PublicThreadProjection | null
@@ -21,11 +22,17 @@ export const readThreadRouteServer = createServerFn()
 
 export async function loadThreadRouteReadback(threadId: string, request?: Request): Promise<ThreadRouteReadback> {
   try {
-    const projection = await getPublicThreadProjection(threadId)
+    const pseudonymousSessionId = request === undefined ? undefined : readAnswerSessionId(request)
+    if (pseudonymousSessionId === undefined) {
+      return unavailableThreadRouteReadback()
+    }
+    const projection = parsePublicThreadProjection(
+      await getOwnedThreadProjection(threadId, pseudonymousSessionId),
+      threadId,
+    )
     if (projection === null) {
       return unavailableThreadRouteReadback()
     }
-
     const firstTurn = projection.turns.at(0)
     return {
       projection,

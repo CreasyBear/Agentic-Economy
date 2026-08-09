@@ -1,5 +1,5 @@
 import type { WorkId } from '@convex-dev/workpool'
-import { convexTest, type TestConvex } from 'convex-test'
+import type { TestConvex } from 'convex-test'
 import { components } from '../../convex/_generated/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,7 +40,7 @@ import {
 } from '../../convex/customerRequestV2'
 
 type RouteTestBackend = TestConvex<typeof schema>
-async function pauseWorkpool(backend: ReturnType<typeof convexTest>) {
+async function pauseWorkpool(backend: RouteTestBackend) {
   await backend.run(async (ctx) => {
     await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 })
   })
@@ -160,8 +160,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const second = await publishAndActivate(backend, admin, 'quoter', downstreamDocument, 700)
     await observeReady(backend, first, 'resolver-stable')
     await observeReady(backend, second, 'quoter-stable')
+    const now = Date.now()
     const supply = await backend.run(async (ctx) => (
-      await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+      await listRouteableCapabilitySupply(ctx.db, {
+        networkId: 'ae:public', limit: 64, now,
+      })
     ))
     if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
     const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
@@ -194,7 +197,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       interpreterId: 'interpreter:production-route-test',
       mappings: [routeServiceReferenceMapping(upstreamModel, downstreamModel)],
       bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
-      models: [upstreamModel, downstreamModel], now: Date.now(),
+      models: [upstreamModel, downstreamModel], now,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
     expect(result).toHaveProperty('routeGeneration')
@@ -232,7 +235,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const route = historical.routeGeneration.routes[0]
     expect(route).toMatchObject({
       requestRevision: 1, authority: 'proposal_only',
-      maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
+      maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '1000', exponent: 2 } },
       comparison: {
         fit: 'all_steps_viable', completeness: 'complete', hardConstraints: 'not_evaluated',
         dataExposureCount: 2, irreversibleEffectCount: 2, evidenceRequirementCount: 2,
@@ -348,10 +351,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
       selectedRoutePlanId: route.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
+      maximumTotalSpend: route.maximumTotalCost.amount,
       expiresAt: Math.min(route.expiresAt, Date.now() + 60_000),
       idempotencyKey: 'confirm:two-step-admission',
     })
@@ -387,10 +387,10 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const second = await admin.mutation(internal.customerRequestRouteMandateAdmission.admitStep, secondCommand)
     expect([first, second]).toEqual([
       expect.objectContaining({ kind: 'admitted', grant: expect.objectContaining({
-        step: expect.objectContaining({ maximumSpend: { currency: 'AUD', amountMinor: 300 } }),
+        step: expect.objectContaining({ maximumSpend: { currency: 'AUD', units: '300', exponent: 2 } }),
       }) }),
       expect.objectContaining({ kind: 'admitted', grant: expect.objectContaining({
-        step: expect.objectContaining({ maximumSpend: { currency: 'AUD', amountMinor: 700 } }),
+        step: expect.objectContaining({ maximumSpend: { currency: 'AUD', units: '700', exponent: 2 } }),
       }) }),
     ])
     await expect(admin.mutation(
@@ -403,9 +403,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     )).resolves.toEqual({ kind: 'refused', reason: 'step_already_reserved' })
     await backend.run(async (ctx) => {
       const reservations = await ctx.db.query('customerRequestRouteStepReservations').collect()
-      expect(reservations.map(({ reservedSpend }) => reservedSpend.amountMinor).sort((a, b) => a - b))
-        .toEqual([300, 700])
-      expect(reservations.reduce((total, row) => total + row.reservedSpend.amountMinor, 0)).toBe(1_000)
+      expect(reservations.map(({ reservedSpend }) => reservedSpend).sort((left, right) => left.units.localeCompare(right.units)))
+        .toEqual([
+          { currency: 'AUD', units: '300', exponent: 2 },
+          { currency: 'AUD', units: '700', exponent: 2 },
+        ])
+      expect(reservations.reduce((total, row) => total + BigInt(row.reservedSpend.units), 0n)).toBe(1_000n)
       expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(2)
       expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(2)
     })
@@ -514,20 +517,20 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         'customer_requests:standing_authority',
       ],
     }
+    const maximumTotalSpend = displayedRoute.maximumTotalCost.kind === 'known'
+      ? displayedRoute.maximumTotalCost.amount
+      : { currency: 'AUD', units: '0', exponent: 2 }
+    const cumulativeSpend = {
+      ...maximumTotalSpend,
+      units: (BigInt(maximumTotalSpend.units) * 2n).toString(),
+    }
     const permissionCommand = {
       requestRef: compared.requestRef,
       revision: compared.revision,
       routeRef: displayedRoute.routeRef,
       delegatedCredentialId: 'credential:repeat-permission',
       occurrences: 2,
-      cumulativeSpend: {
-        currency: displayedRoute.maximumTotalCost.kind === 'known'
-          ? displayedRoute.maximumTotalCost.currency
-          : 'AUD',
-        amountMinor: displayedRoute.maximumTotalCost.kind === 'known'
-          ? displayedRoute.maximumTotalCost.amountMinor * 2
-          : 0,
-      },
+      cumulativeSpend,
       validUntil: Math.min(displayedRoute.validUntil, 5_000),
       idempotencyKey: 'allow-repeat:customer',
     }
@@ -568,14 +571,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       routeRef: displayedRoute.routeRef,
       delegatedCredentialId: 'credential:repeat-permission',
       limits: {
-        perUseSpend: {
-          currency: displayedRoute.maximumTotalCost.kind === 'known'
-            ? displayedRoute.maximumTotalCost.currency
-            : 'AUD',
-          amountMinor: displayedRoute.maximumTotalCost.kind === 'known'
-            ? displayedRoute.maximumTotalCost.amountMinor
-            : 0,
-        },
+        perUseSpend: maximumTotalSpend,
         occurrences: 2,
       },
       fallback: 'ask_for_confirmation',
@@ -871,12 +867,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await backend.run(async (ctx) => {
       const reservations = await ctx.db.query('customerRequestRouteStepReservations').collect()
       const disclosures = await ctx.db.query('customerRequestRouteDataReservations').collect()
-      expect(reservations.reduce((total, row) => total + row.reservedSpend.amountMinor, 0)).toBe(1_000)
+      expect(reservations.reduce((total, row) => total + BigInt(row.reservedSpend.units), 0n)).toBe(1_000n)
       expect(disclosures).toHaveLength(2)
       expect(new Set(disclosures.map(({ allocationRef }) => allocationRef)).size).toBe(2)
     })
   })
-  it('reads deprecated leased route journal rows while current writers stay pending', async () => {
+  it('persists dispatch lease identity and reads historical leased route rows', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const admin = await ownerAdmin(backend, 'user_route_admin')
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'legacy-journal')
@@ -894,8 +890,25 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(current.attempt.state).toBe('queued')
     expect(current.outbox.state).toBe('pending')
-    expect(current.outbox).not.toHaveProperty('leaseOwner')
-    expect(current.outbox).not.toHaveProperty('leaseExpiresAt')
+    expect(current.outbox).toEqual(expect.objectContaining({
+      leaseOwner: `customer-request-route-dispatch:${current.outbox.dispatchRef}`,
+      leaseExpiresAt: current.outbox.createdAt + 30_000,
+    }))
+    await expect(admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:legacy-journal',
+    })).resolves.toMatchObject({
+      kind: 'request',
+      progress: { current: { state: 'queued' } },
+    })
+    const replayed = await backend.run(async (ctx) => ctx.db.get(current.outbox._id))
+    expect(replayed).toEqual(expect.objectContaining({
+      dispatchRef: current.outbox.dispatchRef,
+      dispatchDigest: current.outbox.dispatchDigest,
+      leaseOwner: current.outbox.leaseOwner,
+      leaseExpiresAt: current.outbox.leaseExpiresAt,
+      createdAt: current.outbox.createdAt,
+    }))
 
     await backend.run(async (ctx) => {
       await ctx.db.patch(current.outbox._id, {
@@ -1186,16 +1199,22 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       throw new Error(`curated comparison failed: ${JSON.stringify(compared)}`)
     }
     const displayed = compared.decision.routes[0]
+    if (displayed.steps === undefined) throw new Error('curated displayed route steps missing')
+    expect(displayed.businesses.map(({ name }) => name).sort()).toEqual([
+      'Exa — web search and contents',
+      'Frankfurter — ECB rates',
+    ].sort())
+    expect(displayed.steps.map(({ business }) => business.name).sort()).toEqual([
+      'Exa — web search and contents',
+      'Exa — web search and contents',
+      'Frankfurter — ECB rates',
+    ].sort())
     expect(displayed).toMatchObject({
-      businesses: [
-        { name: 'Agentic Market listing — Exa' },
-        { name: 'Frankfurter — ECB rates' },
-      ],
       stepCount: 3,
-      maximumTotalCost: { kind: 'known', currency: 'USD', amountMinor: 2 },
+      maximumTotalCost: { kind: 'known', amount: { currency: 'USD', units: '2', exponent: 2 } },
       result: {
-        summary: 'Searches the public web through Exa and returns bounded result links for further inspection. Retrieves bounded contents for URLs selected from a public Exa search result. Returns one current European Central Bank reference rate through the public Frankfurter v2 API.',
         deliverables: ['ECB reference rate', 'Retrieved contents', 'Search results'],
+        summary: 'Returns one current European Central Bank reference rate through the public Frankfurter v2 API. Retrieves bounded contents for URLs selected from a public Exa search result. Searches the public web through Exa and returns bounded result links for further inspection.',
       },
     })
     expect(JSON.stringify(compared)).not.toMatch(
@@ -1283,14 +1302,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(completed).toMatchObject({
       kind: 'request', state: 'completed', nextAction: 'none',
-      businesses: [
-        { name: 'Agentic Market listing — Exa' },
-        { name: 'Frankfurter — ECB rates' },
-      ],
-      action: { state: 'completed', result: [
-        { date: '2026-08-04', base: 'EUR', quote: 'USD', rate: 1.08 },
-      ] },
+      action: {
+        state: 'completed',
+        result: { results: [{ url: 'https://exa.example/source-1' }] },
+      },
     })
+    if (completed.kind !== 'request' || completed.businesses === undefined) {
+      throw new Error('curated completed business projection missing')
+    }
+    expect(completed.businesses.map(({ name }) => name).sort()).toEqual([
+      'Exa — web search and contents',
+      'Frankfurter — ECB rates',
+    ].sort())
     await backend.run(async (ctx) => {
       const run = await ctx.db.query('customerRequestRouteRuns')
         .withIndex('by_requestId', (query) => query.eq('requestId', compared.requestRef)).unique()
@@ -1922,8 +1945,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
           state: 'current',
           source: 'customer_confirmation',
           spend: {
-            limit: { currency: 'AUD', amountMinor: 1_000 },
-            admitted: { currency: 'AUD', amountMinor: 300 },
+            limit: { currency: 'AUD', units: '1000', exponent: 2 },
+            admitted: { currency: 'AUD', units: '300', exponent: 2 },
           },
           dataSharing: expect.arrayContaining([
             expect.objectContaining({
@@ -3155,7 +3178,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
           },
           businesses: [{ name: 'Route resolver' }, { name: 'Route quoter' }],
           stepCount: 2,
-          maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
+          maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '1000', exponent: 2 } },
           dataUse: { recipients: expect.arrayContaining([
             expect.objectContaining({ name: 'Route resolver', purposes: ['resolve_service_reference'] }),
             expect.objectContaining({ name: 'Carrier network', purposes: ['prepare_service_quote'] }),
@@ -3276,7 +3299,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'found',
       routeGeneration: {
         generation: 3,
-        routes: [{ maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_025 } }],
+        routes: [{ maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '1025', exponent: 2 } } }],
       },
     })
     if (priceGeneration.kind !== 'found' || priceGeneration.routeGeneration.routes[0] === undefined) {
@@ -3368,7 +3391,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (contractGeneration.kind !== 'found') throw new Error('contract refresh generation readback missing')
     expect(contractGeneration.routeGeneration).toMatchObject({ generation: 5, requestRevision: 1 })
     expect(contractGeneration.routeGeneration.routes[0]).toMatchObject({
-      maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_050 },
+      maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '1050', exponent: 2 } },
       steps: [
         { contractRef: { capabilityId: upstreamDocument.capabilityId, version: 3 } },
         { contractRef: { capabilityId: downstreamDocument.capabilityId, version: 1 } },
@@ -3434,7 +3457,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         })),
     )
     expect(shapeGeneration.routeGeneration.routes[0]).toMatchObject({
-      maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 950 },
+      maximumTotalCost: { kind: 'known', amount: { currency: 'AUD', units: '950', exponent: 2 } },
       steps: [
         { contractRef: { capabilityId: upstreamDocument.capabilityId } },
         { contractRef: { capabilityId: validationDocument.capabilityId }, publicationRef: validator.publicationRef },
@@ -3479,19 +3502,26 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(generate).toHaveBeenCalledTimes(7)
     generate.mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify({ kind: 'capability_candidates', selections: [] }) }, finish_reason: 'stop' }],
+      choices: [{ message: { role: 'assistant', content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        prompt: '',
+        canonicalStatements: [],
+        supersededStatements: [],
+        selections: [],
+      }) }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const unsupportedRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
       idempotencyKey: 'compare:multi-capability:unsupported-refresh',
     })
     expect(unsupportedRefresh).toMatchObject({
-      kind: 'request', revision: 1, state: 'unsupported', nextAction: 'revise_request',
+      kind: 'request', revision: 1, state: 'needs_information', nextAction: 'provide_information',
     })
     await expect(restartedCustomer.action(api.customerRequestApplication.resume, {
       requestRef: submitted.requestRef,
     })).resolves.toMatchObject({
-      kind: 'request', revision: 1, state: 'unsupported', nextAction: 'revise_request',
+      kind: 'request', revision: 1, state: 'needs_information', nextAction: 'provide_information',
     })
 
     typedOutcomeClock.mockRestore()
@@ -3545,8 +3575,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
 
 async function publishAndActivate(
-  backend: ReturnType<typeof convexTest>, admin: ConvexFixtureAdmin,
-  suffix: string, document: RouteCapabilityDocument, amountMinor: number,
+  backend: RouteTestBackend, admin: ConvexFixtureAdmin,
+  suffix: string, document: RouteCapabilityDocument, priceUnits: number,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
   const { businessId, owner } = await publishedBusinessOwner(
@@ -3554,17 +3584,43 @@ async function publishAndActivate(
     suffix,
     { slugPrefix: 'route-', identityPrefix: 'route_' },
   )
+  const connectionRef = `connection:route:${suffix}`
+  const providerRef = `provider:route:${suffix}`
+  const credentialRef = document.capabilityId.includes('quote')
+    ? 'env:ROUTE_ADMISSION_QUOTER_KEY'
+    : 'env:ROUTE_ADMISSION_RESOLVER_KEY'
+  const connection = await admin.mutation(internal.capabilityProviderConnections.create, {
+    commandId: `create:route-connection:${suffix}`,
+    connectionRef,
+    businessId,
+    providerRef,
+    providerAccountRef: `account:route:${suffix}`,
+    adapterId: 'http-json:v1',
+    credentialRef,
+    requestedScopes: [],
+    grantedScopes: [],
+    requestedResources: [],
+    grantedResources: [],
+    evidenceRefs: [`test:connection:${suffix}`],
+    now: 1,
+  })
+  if (connection.kind !== 'applied') throw new Error(`provider connection refused: ${connection.kind}`)
   const offering = {
     offeringId: `offering:route:${suffix}`, networkId: 'ae:public',
     presentation: {
       label: document.name, summary: document.description,
-      price: { kind: 'fixed' as const, currency: 'AUD', amountMinor }, materialTerms: [],
+      price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: String(priceUnits), exponent: 2 } }, materialTerms: [],
       commercialRelationship: { kind: 'none' as const, summary: 'No commercial influence.', influencesEligibility: false, influencesInclusion: false, influencesOrder: false, evidenceRefs: ['test:commercial-neutrality'] },
     },
     searchTerms: ['service', 'quote'], registrationEvidenceRefs: [`test:publication:${suffix}`],
   } satisfies CapabilityPublicationOfferingDraft
   const binding = {
-    bindingId: `binding:route:${suffix}`, endpointUrl: `https://${suffix}.example.test/capability`, credentialRef: `env:ROUTE_${suffix.toUpperCase().replaceAll('-', '_')}_KEY`,
+    bindingId: `binding:route:${suffix}`, endpointUrl: `https://${suffix}.example.test/capability`,
+    authority: {
+      kind: 'provider_connection',
+      connectionRef,
+      providerRef,
+    },
     continuation: { kind: 'single_response' as const, evidenceRefs: ['test:single-response'] },
     cancellation: options.adapterCancellation
       ? { kind: 'adapter_managed' as const, evidenceRefs: ['test:adapter-cancellation'] }
@@ -3573,6 +3629,7 @@ async function publishAndActivate(
       adapterId: 'http-json:v1',
       config: {
         method: 'POST' as const, requestTimeoutMs: 5_000,
+        credential: { kind: 'bearer' as const },
         ...(options.adapterCancellation
           ? { cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 } }
           : {}),
@@ -3611,7 +3668,7 @@ async function publishAndActivate(
 }
 
 async function observeReady(
-  backend: ReturnType<typeof convexTest>, publication: Readonly<{ publicationRef: string; revision: number }>, suffix: string,
+  backend: RouteTestBackend, publication: Readonly<{ publicationRef: string; revision: number }>, suffix: string,
 ) {
   await finishImmediateReadinessProbe(backend)
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
@@ -3623,11 +3680,11 @@ async function observeReady(
 }
 
 async function refreshAndActivate(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteTestBackend,
   admin: ConvexFixtureAdmin,
   current: Awaited<ReturnType<typeof publishAndActivate>>,
   document: RouteCapabilityDocument,
-  amountMinor: number,
+  priceUnits: number,
   suffix: string,
 ) {
   const offering = {
@@ -3637,7 +3694,7 @@ async function refreshAndActivate(
       ...current.offering.presentation,
       label: document.name,
       summary: document.description,
-      price: { kind: 'fixed' as const, currency: 'AUD', amountMinor },
+      price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: String(priceUnits), exponent: 2 } },
     },
     registrationEvidenceRefs: [`test:publication:${suffix}`],
   } satisfies CapabilityPublicationOfferingDraft
@@ -3688,8 +3745,11 @@ async function publishedOperationForModel(
   backend: RouteTestBackend,
   model: CapabilityDecisionModel,
 ) {
+  const now = Date.now()
   const supply = await backend.run(async (ctx) => (
-    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    await listRouteableCapabilitySupply(ctx.db, {
+      networkId: 'ae:public', limit: 64, now,
+    })
   ))
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
   const publication = supply.supplies.find(({ binding }) => (
@@ -3699,10 +3759,25 @@ async function publishedOperationForModel(
   return publication
 }
 
-async function seedCuratedHeterogeneousSupply(backend: ReturnType<typeof convexTest>) {
+async function seedCuratedHeterogeneousSupply(backend: RouteTestBackend) {
   const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await finishImmediateReadinessProbe(backend)
-  const publications = await backend.run(async (ctx) => ctx.db.query('capabilityPublications').collect())
+  const intendedCapabilityIds: Record<string, true> = {
+    'exa.search': true,
+    'exa.contents': true,
+    'frankfurter.single-rate': true,
+  }
+  const publications = await backend.run(async (ctx) => (
+    (await ctx.db.query('capabilityPublications').collect()).filter(({ capabilityId, disposition }) => (
+      disposition === 'current' && intendedCapabilityIds[capabilityId] === true
+    ))
+  ))
+  const actualCapabilityIds = publications.map(({ capabilityId }) => capabilityId).sort()
+  const expectedCapabilityIds = Object.keys(intendedCapabilityIds).sort()
+  if (actualCapabilityIds.length !== expectedCapabilityIds.length
+    || actualCapabilityIds.some((capabilityId, index) => capabilityId !== expectedCapabilityIds[index])) {
+    throw new Error('curated heterogeneous fixture publication set mismatch')
+  }
   for (const publication of publications) {
     await observeReady(backend, {
       publicationRef: publication.publicationRef,
@@ -3713,7 +3788,7 @@ async function seedCuratedHeterogeneousSupply(backend: ReturnType<typeof convexT
 }
 
 async function confirmedTwoStepRoute(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteTestBackend,
   admin: ConvexFixtureAdmin,
   suffix: string,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
@@ -3740,7 +3815,7 @@ async function confirmedTwoStepRoute(
 }
 
 async function committedTwoStepAdmissionRoute(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteTestBackend,
   admin: ConvexFixtureAdmin,
   options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
@@ -3748,8 +3823,11 @@ async function committedTwoStepAdmissionRoute(
   const second = await publishAndActivate(backend, admin, 'admission-quoter', downstreamDocument, 700)
   await observeReady(backend, first, 'admission-resolver-stable')
   await observeReady(backend, second, 'admission-quoter-stable')
+  const now = Date.now()
   const supply = await backend.run(async (ctx) => (
-    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    await listRouteableCapabilitySupply(ctx.db, {
+      networkId: 'ae:public', limit: 64, now,
+    })
   ))
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
   const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
@@ -3803,7 +3881,7 @@ async function committedTwoStepAdmissionRoute(
     mappings: [routeServiceReferenceMapping(upstreamModel, downstreamModel)],
     bindings: registeredEvaluationBindingsFromRouteableSupply(supply, { includePublication: true }),
     models: [upstreamModel, downstreamModel],
-    now: Date.now(),
+    now,
   })
   if (compiled.kind !== 'compiled' || compiled.routeGeneration === undefined) {
     throw new Error(`two-step compile failed: ${compiled.kind === 'compiled' ? 'generation_missing' : compiled.reason}`)
@@ -3823,12 +3901,15 @@ async function committedTwoStepAdmissionRoute(
 }
 
 async function committedOneStepAdmissionRoute(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteTestBackend,
   admin: ConvexFixtureAdmin,
 ) {
   await publishAndActivate(backend, admin, 'one-step-resolver', upstreamDocument, 300)
+  const now = Date.now()
   const supply = await backend.run(async (ctx) => (
-    await listRouteableCapabilitySupply(ctx.db, { networkId: 'ae:public', limit: 64 })
+    await listRouteableCapabilitySupply(ctx.db, {
+      networkId: 'ae:public', limit: 64, now,
+    })
   ))
   if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
   const model = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
@@ -3887,7 +3968,7 @@ async function committedOneStepAdmissionRoute(
       }]
     )),
     models: [model],
-    now: Date.now(),
+    now,
   })
   if (compiled.kind !== 'compiled' || compiled.routeGeneration === undefined) {
     throw new Error(`one-step compile failed: ${compiled.kind === 'compiled' ? 'generation_missing' : compiled.reason}`)
@@ -3910,7 +3991,7 @@ function operationContext(suffix: string) {
   return { operationKey: `op:route:${suffix}`, correlationId: `corr:route:${suffix}`, reasonCode: 'test_multi_capability_route', evidenceRefs: ['test:issue-143'] }
 }
 
-async function finishImmediateReadinessProbe(backend: ReturnType<typeof convexTest>) {
+async function finishImmediateReadinessProbe(backend: RouteTestBackend) {
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
 }
@@ -3954,7 +4035,7 @@ async function finishScheduledRouteWorkers(backend: RouteTestBackend, passes: nu
 }
 
 
-async function supportAdmin(backend: ReturnType<typeof convexTest>) {
+async function supportAdmin(backend: RouteTestBackend) {
   const identity = { subject: 'user_route_support', issuer: 'https://identity.example', tokenIdentifier: 'token_route_support' }
   await backend.run(async (ctx) => {
     await ctx.db.insert('adminMemberships', {
@@ -3969,7 +4050,7 @@ async function supportAdmin(backend: ReturnType<typeof convexTest>) {
   return backend.withIdentity(identity)
 }
 
-async function reviewerAdmin(backend: ReturnType<typeof convexTest>) {
+async function reviewerAdmin(backend: RouteTestBackend) {
   const identity = { subject: 'user_route_reviewer', issuer: 'https://identity.example', tokenIdentifier: 'token_route_reviewer' }
   await backend.run(async (ctx) => {
     await ctx.db.insert('adminMemberships', {
@@ -3985,13 +4066,13 @@ async function reviewerAdmin(backend: ReturnType<typeof convexTest>) {
 }
 
 async function businessOwnerForAttempt(
-  backend: ReturnType<typeof convexTest>,
+  backend: RouteTestBackend,
   attemptRef: string,
 ) {
   const identity = await backend.run(async (ctx) => {
     const attempt = (await ctx.db.query('customerRequestRouteStepAttempts').take(20))
       .find((candidate) => candidate.attemptRef === attemptRef)
-    if (attempt === null) throw new Error('attempt missing')
+    if (attempt === undefined) throw new Error('attempt missing')
     const business = await ctx.db.get(attempt.grant.step.businessId as Id<'businesses'>)
     if (business === null) throw new Error('attempt business missing')
     const owner = await ctx.db.get(business.ownerId)

@@ -1,17 +1,27 @@
+import { validateX402PaymentRequired, type X402ValidatedPaymentRequired } from './x402-payment-signer'
+
 import {
   CAPABILITY_CONTRACT_FORMAT,
+  containsRemoteSchemaReference,
   defineCapabilityContract,
   type CapabilityContractDocument,
   type JsonValue,
 } from '@/modules/capability-contract/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { compareExactAmounts, exactAmountSchema, rescaleExactAmount } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
   CapabilityOfferingRegistration,
   CapabilityTransportBindingRegistration,
 } from '../public'
+import {
+  admitProviderSchema,
+  type AdmitCredentialSpec,
+  type AdmitProviderSchemaRefusal,
+  type SchemaDereferencer,
+} from './admit-provider-schema'
 import { validPublicHttpsEndpoint } from './transport-adapters'
 
 const MAX_SOURCE_BYTES = 262_144
@@ -33,7 +43,7 @@ export type CapabilityContractMetadata = Readonly<
 export type CapabilityImporterCommercialInput = Readonly<{
   offering: CapabilityPublicationOfferingDraft
   bindingId: string
-  credentialRef: string
+  authority: CapabilityTransportBindingRegistration['authority']
   registrationEvidenceRefs: readonly string[]
   requestTimeoutMs: number
 }>
@@ -53,11 +63,21 @@ export type CapabilityPublicationSource =
       evidenceRefs: readonly string[]
     }>
   | Readonly<{
+      kind: 'agent_plugin_mcp'
+      descriptorDigest: string
+      selector: Readonly<{ serverName: string; toolName: string; protocolVersion: string }>
+      evidenceRefs: readonly string[]
+    }>
+  | Readonly<{
       kind: 'x402'
       descriptorDigest: string
       selector: Readonly<{ resourceUrl: string }>
       evidenceRefs: readonly string[]
     }>
+ 
+ 
+ 
+ 
 
 export type CanonicalCapabilityPublicationDraft = Readonly<{
   source: CapabilityPublicationSource
@@ -93,6 +113,16 @@ export type CapabilityPublicationImport =
       evidenceRefs: readonly string[]
     }>
   | Readonly<{
+      kind: 'agent_plugin_mcp'
+      manifest: unknown
+      serverName: string
+      tool: unknown
+      protocolVersion: string
+      contract: CapabilityContractMetadata
+      commercial: CapabilityImporterCommercialInput
+      evidenceRefs: readonly string[]
+    }>
+  | Readonly<{
       kind: 'x402'
       resource: unknown
       contract: CapabilityContractMetadata
@@ -109,26 +139,33 @@ export type CapabilityPublicationImportRefusal =
   | 'operation_not_found'
   | 'schema_missing'
   | 'schema_profile_unsupported'
+  | AdmitProviderSchemaRefusal
   | 'transport_unsupported'
   | 'commercial_metadata_inconsistent'
   | 'payment_execution_unsupported'
+  | 'payment_required_invalid'
 
 export type CapabilityPublicationImportResult =
   | Readonly<{ kind: 'normalized'; draft: CanonicalCapabilityPublicationDraft }>
   | Readonly<{ kind: 'refused'; reason: CapabilityPublicationImportRefusal }>
 
-export function normalizeCapabilityPublication(input: CapabilityPublicationImport): CapabilityPublicationImportResult {
+export async function normalizeCapabilityPublication(
+  input: CapabilityPublicationImport,
+  derefSchema?: SchemaDereferencer,
+): Promise<CapabilityPublicationImportResult> {
   switch (input.kind) {
     case 'ae_envelope': return normalizeDirectEnvelope(input)
-    case 'openapi_http': return importOpenApiHttpCapability(input)
-    case 'mcp': return importMcpCapability(input)
+    case 'openapi_http': return importOpenApiHttpCapability(input, derefSchema)
+    case 'mcp': return importMcpCapability(input, derefSchema)
+    case 'agent_plugin_mcp': return importAgentPluginMcpCapability(input, derefSchema)
     case 'x402': return importX402Capability(input)
   }
 }
 
-export function importOpenApiHttpCapability(
+export async function importOpenApiHttpCapability(
   input: Extract<CapabilityPublicationImport, { kind: 'openapi_http' }>,
-): CapabilityPublicationImportResult {
+  derefSchema?: SchemaDereferencer,
+): Promise<CapabilityPublicationImportResult> {
   const bounded = inspectSource(input.document)
   if (bounded.kind === 'refused') return bounded
   if (!isRecord(input.document) || typeof input.document.openapi !== 'string'
@@ -149,7 +186,11 @@ export function importOpenApiHttpCapability(
   const pathItem = isRecord(paths) ? paths[input.operation.path] : undefined
   const operation = isRecord(pathItem) ? pathItem[input.operation.method] : undefined
   if (!isRecord(operation)) return { kind: 'refused', reason: 'operation_not_found' }
-  const query = input.operation.method === 'get' ? openApiQueryMapping(operation) : undefined
+  const credential = resolveOpenApiCredential(input.document, operation)
+  if (credential.kind === 'refused') return { kind: 'refused', reason: 'transport_unsupported' }
+  const fixedParameterNames = new Set((input.fixedQuery ?? []).map(({ parameter }) => parameter))
+  const excludedParameters = new Set([...credential.parameterNames, ...fixedParameterNames])
+  const query = input.operation.method === 'get' ? openApiQueryMapping(operation, excludedParameters) : undefined
   const fixedQuery = input.operation.method === 'get'
     ? fixedQueryMapping(input.fixedQuery, query?.mapping)
     : input.fixedQuery === undefined ? [] : undefined
@@ -170,34 +211,60 @@ export function importOpenApiHttpCapability(
   if (inputSchema === undefined || outputSchema === undefined) {
     return { kind: 'refused', reason: 'schema_missing' }
   }
-  if (containsUnsupportedReference(inputSchema) || containsUnsupportedReference(outputSchema)) {
+  if (containsRemoteSchemaReference(inputSchema) || containsRemoteSchemaReference(outputSchema)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
+  const admit = await admitProviderSchema({
+    inputSchema,
+    outputSchema,
+    contract: input.contract,
+    authority: input.commercial.authority,
+    credential: credential.spec,
+    resolutionRoot: input.document,
+    credentialParameterNames: credential.parameterNames,
+  }, derefSchema)
+  if (admit.kind === 'refused') return { kind: 'refused', reason: admit.reason }
   const endpoint = new URL(input.operation.path.replace(/^\/+/, ''), ensureTrailingSlash(baseUrl)).toString()
   return normalizedFromSchemas({
     source: {
       kind: 'openapi_http', descriptorDigest: bounded.digest,
       selector: input.operation, evidenceRefs: input.evidenceRefs,
     },
-    contract: input.contract, inputSchema, outputSchema, commercial: input.commercial,
+    contract: admit.contract,
+    inputSchema: admit.inputSchema, outputSchema: admit.outputSchema,
+    commercial: input.commercial,
     endpointUrl: endpoint,
     adapter: {
       adapterId: 'http-json:v1',
       config: input.operation.method === 'get'
         ? {
           method: 'GET',
-          query: query!.mapping,
+          ...(query === undefined || query.mapping.length === 0 ? {} : { query: query.mapping }),
           ...(fixedQuery === undefined || fixedQuery.length === 0 ? {} : { fixedQuery }),
           requestTimeoutMs: input.commercial.requestTimeoutMs,
+          credential: credential.spec.kind === 'keyless'
+            ? { kind: 'none' as const }
+            : credential.spec.kind === 'api_key'
+              ? { kind: 'api_key' as const, location: credential.spec.location, name: credential.spec.name }
+              : { kind: 'bearer' as const },
         }
-        : { method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs },
+        : {
+          method: 'POST',
+          requestTimeoutMs: input.commercial.requestTimeoutMs,
+          credential: credential.spec.kind === 'keyless'
+            ? { kind: 'none' as const }
+            : credential.spec.kind === 'api_key'
+              ? { kind: 'api_key' as const, location: credential.spec.location, name: credential.spec.name }
+              : { kind: 'bearer' as const },
+        },
     },
   })
 }
 
-export function importMcpCapability(
+export async function importMcpCapability(
   input: Extract<CapabilityPublicationImport, { kind: 'mcp' }>,
-): CapabilityPublicationImportResult {
+  derefSchema?: SchemaDereferencer,
+): Promise<CapabilityPublicationImportResult> {
   const bounded = inspectSource(input.tool)
   if (bounded.kind === 'refused') return bounded
   const endpoint = validHttpsUrl(input.serverUrl)
@@ -213,19 +280,28 @@ export function importMcpCapability(
   if (!isRecord(inputSchema) || !isRecord(outputSchema)) {
     return { kind: 'refused', reason: 'schema_missing' }
   }
-  if (containsUnsupportedReference(inputSchema as Readonly<Record<string, JsonValue>>)
-    || containsUnsupportedReference(outputSchema as Readonly<Record<string, JsonValue>>)) {
+  if (containsRemoteSchemaReference(inputSchema as Readonly<Record<string, JsonValue>>)
+    || containsRemoteSchemaReference(outputSchema as Readonly<Record<string, JsonValue>>)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
+  const admit = await admitProviderSchema({
+    inputSchema: inputSchema as Readonly<Record<string, JsonValue>>,
+    outputSchema: outputSchema as Readonly<Record<string, JsonValue>>,
+    contract: input.contract,
+    authority: input.commercial.authority,
+    credential: { kind: 'keyless' },
+    resolutionRoot: input.tool,
+    credentialParameterNames: [],
+  }, derefSchema)
+  if (admit.kind === 'refused') return { kind: 'refused', reason: admit.reason }
   return normalizedFromSchemas({
     source: {
       kind: 'mcp', descriptorDigest: bounded.digest,
       selector: { toolName: input.tool.name, protocolVersion: input.protocolVersion },
       evidenceRefs: input.evidenceRefs,
     },
-    contract: input.contract,
-    inputSchema: inputSchema as Readonly<Record<string, JsonValue>>,
-    outputSchema: outputSchema as Readonly<Record<string, JsonValue>>,
+    contract: admit.contract,
+    inputSchema: admit.inputSchema, outputSchema: admit.outputSchema,
     commercial: input.commercial, endpointUrl: endpoint,
     adapter: {
       adapterId: 'mcp-jsonrpc:v1',
@@ -237,60 +313,175 @@ export function importMcpCapability(
     },
   })
 }
+ 
+export async function importAgentPluginMcpCapability(
+  input: Extract<CapabilityPublicationImport, { kind: 'agent_plugin_mcp' }>,
+  derefSchema?: SchemaDereferencer,
+): Promise<CapabilityPublicationImportResult> {
+  const manifest = inspectSource(input.manifest)
+  if (manifest.kind === 'refused') return manifest
+  if (!isRecord(input.manifest) || !boundedTrimmed(input.manifest.name, MAX_TOOL_NAME_LENGTH)) {
+    return { kind: 'refused', reason: 'source_invalid' }
+  }
+  if (!boundedTrimmed(input.serverName, MAX_TOOL_NAME_LENGTH)) {
+    return { kind: 'refused', reason: 'selector_invalid' }
+  }
+  const servers = input.manifest.mcpServers
+  if (!isRecord(servers)) return { kind: 'refused', reason: 'source_invalid' }
+  const selectedServer = servers[input.serverName]
+  if (!isRecord(selectedServer)) return { kind: 'refused', reason: 'transport_unsupported' }
+  if (selectedServer.type !== 'http' && selectedServer.type !== 'sse') {
+    return { kind: 'refused', reason: 'transport_unsupported' }
+  }
+  if (selectedServer.command !== undefined || selectedServer.args !== undefined
+    || selectedServer.env !== undefined || typeof selectedServer.url !== 'string') {
+    return { kind: 'refused', reason: 'transport_unsupported' }
+  }
+  const serverUrl = validHttpsUrl(selectedServer.url)
+  if (serverUrl === undefined) return { kind: 'refused', reason: 'transport_unsupported' }
+  const normalized = await importMcpCapability({
+    kind: 'mcp',
+    serverUrl,
+    tool: input.tool,
+    protocolVersion: input.protocolVersion,
+    contract: input.contract,
+    commercial: input.commercial,
+    evidenceRefs: input.evidenceRefs,
+  }, derefSchema)
+  if (normalized.kind === 'refused') return normalized
+  if (normalized.draft.source.kind !== 'mcp') return { kind: 'refused', reason: 'source_invalid' }
+  return {
+    kind: 'normalized',
+    draft: {
+      ...normalized.draft,
+      source: {
+        kind: 'agent_plugin_mcp',
+        descriptorDigest: canonicalDigest({
+          manifest: manifest.digest,
+          serverName: input.serverName,
+          tool: normalized.draft.source.descriptorDigest,
+        }),
+        selector: {
+          serverName: input.serverName,
+          toolName: normalized.draft.source.selector.toolName,
+          protocolVersion: normalized.draft.source.selector.protocolVersion,
+        },
+        evidenceRefs: [...input.evidenceRefs],
+      },
+    },
+  }
+}
+
 
 export function importX402Capability(
   input: Extract<CapabilityPublicationImport, { kind: 'x402' }>,
 ): CapabilityPublicationImportResult {
+  // When the x402-kind submission carries a PaymentRequired (402 challenge) document, it must
+  // validate against the canonical @x402/core schema and bind to the admitted payment terms.
+  const resource = isRecord(input.resource) ? input.resource : undefined
+  let paymentRequired: X402ValidatedPaymentRequired | undefined
+  if (resource !== undefined && resource.paymentRequired !== undefined) {
+    try {
+      paymentRequired = validateX402PaymentRequired(resource.paymentRequired)
+    } catch {
+      return { kind: 'refused', reason: 'payment_required_invalid' }
+    }
+  }
   const bounded = inspectSource(input.resource)
   if (bounded.kind === 'refused') return bounded
-  if (!isRecord(input.resource) || typeof input.resource.resourceUrl !== 'string') {
+  const resourceUrl = resource?.resourceUrl
+  if (typeof resourceUrl !== 'string') {
     return { kind: 'refused', reason: 'source_invalid' }
   }
-  const endpoint = validHttpsUrl(input.resource.resourceUrl)
-  if (endpoint === undefined) return { kind: 'refused', reason: 'transport_unsupported' }
-  const inputSchema = input.resource.inputSchema
-  const outputSchema = input.resource.outputSchema
+  const endpoint = validHttpsUrl(resourceUrl)
+  if (endpoint === undefined || resource === undefined) {
+    return { kind: 'refused', reason: 'transport_unsupported' }
+  }
+  const inputSchema = resource.inputSchema
+  const outputSchema = resource.outputSchema
   if (!isRecord(inputSchema) || !isRecord(outputSchema)) {
     return { kind: 'refused', reason: 'schema_missing' }
   }
-  const method: 'GET' | 'POST' | undefined = input.resource.method === undefined
+  const method: 'GET' | 'POST' | undefined = resource.method === undefined
     ? 'POST'
-    : input.resource.method === 'GET' || input.resource.method === 'POST'
-      ? input.resource.method
+    : resource.method === 'GET' || resource.method === 'POST'
+      ? resource.method
       : undefined
-  const query = method === 'GET' ? sourceQueryMapping(input.resource.query) : undefined
+  const query = method === 'GET' ? sourceQueryMapping(resource.query) : undefined
   if (method === undefined || (method === 'GET' && query === undefined)
-    || (method === 'POST' && input.resource.query !== undefined)) {
+    || (method === 'POST' && resource.query !== undefined)) {
     return { kind: 'refused', reason: 'selector_invalid' }
   }
   if (containsUnsupportedReference(inputSchema as Readonly<Record<string, JsonValue>>)
     || containsUnsupportedReference(outputSchema as Readonly<Record<string, JsonValue>>)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
-  if (!isRecord(input.resource.price)
-    || typeof input.resource.price.currency !== 'string'
-    || !Number.isSafeInteger(input.resource.price.amountMinor)) {
+  const resourcePrice = exactAmountSchema.safeParse(resource.price)
+  if (!resourcePrice.success) {
     return { kind: 'refused', reason: 'commercial_metadata_inconsistent' }
   }
   const offeredPrice = input.commercial.offering.presentation.price
   if (offeredPrice.kind !== 'fixed'
-    || offeredPrice.currency !== input.resource.price.currency
-    || offeredPrice.amountMinor !== input.resource.price.amountMinor) {
+    || compareExactAmounts(offeredPrice.amount, resourcePrice.data) !== 0) {
     return { kind: 'refused', reason: 'commercial_metadata_inconsistent' }
   }
-  if (input.resource.scheme !== 'exact'
-    || typeof input.resource.network !== 'string'
-    || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(input.resource.network)
-    || typeof input.resource.asset !== 'string' || input.resource.asset.trim().length === 0
-    || typeof input.resource.payTo !== 'string' || input.resource.payTo.trim().length === 0
-    || typeof input.resource.routeAmountExponent !== 'number'
-    || !Number.isSafeInteger(input.resource.routeAmountExponent)
-    || typeof input.resource.assetAmountExponent !== 'number'
-    || !Number.isSafeInteger(input.resource.assetAmountExponent)
-    || input.resource.routeAmountExponent < 0
-    || input.resource.assetAmountExponent > 18
-    || input.resource.assetAmountExponent < input.resource.routeAmountExponent) {
+  const scheme = resource.scheme
+  const network = resource.network
+  const asset = resource.asset
+  const payTo = resource.payTo
+  const routeAmountExponent = resource.routeAmountExponent
+  const assetAmountExponent = resource.assetAmountExponent
+  if (scheme !== 'exact'
+    || typeof network !== 'string'
+    || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(network)
+    || typeof asset !== 'string' || asset.trim().length === 0
+    || typeof payTo !== 'string' || payTo.trim().length === 0
+    || typeof routeAmountExponent !== 'number'
+    || !Number.isSafeInteger(routeAmountExponent)
+    || typeof assetAmountExponent !== 'number'
+    || !Number.isSafeInteger(assetAmountExponent)
+    || routeAmountExponent < 0
+    || assetAmountExponent > 18
+    || assetAmountExponent < routeAmountExponent) {
     return { kind: 'refused', reason: 'transport_unsupported' }
+  }
+  const paymentAmount = rescaleExactAmount(resourcePrice.data, assetAmountExponent)
+  if (paymentAmount === undefined) {
+    return { kind: 'refused', reason: 'transport_unsupported' }
+  }
+  if (paymentRequired !== undefined) {
+    const matches = paymentRequired.x402Version === 1
+      ? paymentRequired.accepts.some((candidate) => {
+          if (
+            candidate.resource !== endpoint
+            || candidate.scheme !== scheme
+            || candidate.network !== network
+            || candidate.asset.toLowerCase() !== asset.toLowerCase()
+            || candidate.payTo.toLowerCase() !== payTo.toLowerCase()
+          ) return false
+          const parsedAmount = exactAmountSchema.safeParse({
+            currency: resourcePrice.data.currency,
+            units: candidate.maxAmountRequired,
+            exponent: assetAmountExponent,
+          })
+          return parsedAmount.success && compareExactAmounts(parsedAmount.data, paymentAmount) === 0
+        })
+      : paymentRequired.resource.url === endpoint
+        && paymentRequired.accepts.some((candidate) => {
+          if (
+            candidate.scheme !== scheme
+            || candidate.network !== network
+            || candidate.asset.toLowerCase() !== asset.toLowerCase()
+            || candidate.payTo.toLowerCase() !== payTo.toLowerCase()
+          ) return false
+          const parsedAmount = exactAmountSchema.safeParse({
+            currency: resourcePrice.data.currency,
+            units: candidate.amount,
+            exponent: assetAmountExponent,
+          })
+          return parsedAmount.success && compareExactAmounts(parsedAmount.data, paymentAmount) === 0
+        })
+    if (!matches) return { kind: 'refused', reason: 'payment_required_invalid' }
   }
   return normalizedFromSchemas({
     source: {
@@ -305,18 +496,21 @@ export function importX402Capability(
       config: {
         method, ...(query === undefined ? {} : { query: [...query] }),
         requestTimeoutMs: input.commercial.requestTimeoutMs,
-        scheme: input.resource.scheme, network: input.resource.network,
-        currency: input.resource.price.currency,
-        routeAmountExponent: input.resource.routeAmountExponent,
-        assetAmountExponent: input.resource.assetAmountExponent,
-        asset: input.resource.asset,
-        payTo: input.resource.payTo,
+        scheme, network,
+        currency: resourcePrice.data.currency,
+        routeAmountExponent,
+        assetAmountExponent,
+        asset,
+        payTo,
       },
     },
   })
 }
 
-function openApiQueryMapping(operation: Readonly<Record<string, unknown>>): Readonly<{
+function openApiQueryMapping(
+  operation: Readonly<Record<string, unknown>>,
+  excludedParameters: ReadonlySet<string> = new Set(),
+): Readonly<{
   schema: Readonly<Record<string, JsonValue>>
   mapping: readonly Readonly<{ inputPointer: string; parameter: string }>[]
 }> | undefined {
@@ -327,6 +521,7 @@ function openApiQueryMapping(operation: Readonly<Record<string, unknown>>): Read
   for (const parameter of operation.parameters) {
     if (!isRecord(parameter) || parameter.in !== 'query' || typeof parameter.name !== 'string'
       || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(parameter.name) || !isRecord(parameter.schema)) return undefined
+    if (excludedParameters.has(parameter.name)) continue
     const inputName = parameter['x-ae-input-name'] === undefined
       ? parameter.name
       : parameter['x-ae-input-name']
@@ -451,7 +646,7 @@ function normalizedFromSchemas(input: Readonly<{
       binding: {
         bindingId: input.commercial.bindingId,
         endpointUrl: input.endpointUrl,
-        credentialRef: input.commercial.credentialRef,
+        authority: input.commercial.authority,
         continuation: { kind: 'single_response', evidenceRefs: [...input.commercial.registrationEvidenceRefs] },
         cancellation: { kind: 'unsupported', evidenceRefs: [...input.commercial.registrationEvidenceRefs] },
         adapter: input.adapter,
@@ -526,6 +721,61 @@ function containsUnsupportedReference(value: JsonValue): boolean {
   }
   return false
 }
+
+type OpenApiCredentialResolution =
+  | Readonly<{ kind: 'resolved'; spec: AdmitCredentialSpec; parameterNames: readonly string[] }>
+  | Readonly<{ kind: 'refused' }>
+
+function resolveOpenApiCredential(
+  document: unknown,
+  operation: Readonly<Record<string, unknown>>,
+): OpenApiCredentialResolution {
+  const securitySchemes = isRecord(document)
+      && isRecord(document.components)
+      && isRecord(document.components.securitySchemes)
+    ? document.components.securitySchemes
+    : undefined
+  const operationSecurity = operation.security
+  const documentSecurity = isRecord(document) && document.security !== undefined
+    ? Array.isArray(document.security) ? document.security : null
+    : undefined
+  const security = operationSecurity === undefined
+    ? documentSecurity
+    : Array.isArray(operationSecurity) ? operationSecurity : null
+  if (security === null) return { kind: 'refused' }
+  if (security === undefined || security.length === 0) {
+    return { kind: 'resolved', spec: { kind: 'keyless' }, parameterNames: [] }
+  }
+  if (securitySchemes === undefined || security.length !== 1) return { kind: 'refused' }
+  const entry = security[0]
+  if (!isRecord(entry)) return { kind: 'refused' }
+  const schemes = Object.entries(entry)
+  if (schemes.length !== 1 || schemes[0] === undefined) return { kind: 'refused' }
+  const [schemeName, scope] = schemes[0]
+  if (!Array.isArray(scope) || !scope.every((value) => typeof value === 'string')) {
+    return { kind: 'refused' }
+  }
+  const scheme = securitySchemes[schemeName]
+  if (!isRecord(scheme) || !boundedTrimmed(schemeName, MAX_TOOL_NAME_LENGTH)) {
+    return { kind: 'refused' }
+  }
+  if (scheme.type === 'apiKey'
+    && (scheme.in === 'query' || scheme.in === 'header')
+    && typeof scheme.name === 'string'
+    && /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(scheme.name)) {
+    return {
+      kind: 'resolved',
+      spec: { kind: 'api_key', location: scheme.in, name: scheme.name, schemeName },
+      parameterNames: scheme.in === 'query' ? [scheme.name] : [],
+    }
+  }
+  if (scheme.type === 'http' && typeof scheme.scheme === 'string'
+    && scheme.scheme.toLowerCase() === 'bearer') {
+    return { kind: 'resolved', spec: { kind: 'http_bearer', schemeName }, parameterNames: [] }
+  }
+  return { kind: 'refused' }
+}
+
 
 function validHttpsUrl(value: string): string | undefined {
   const url = validPublicHttpsEndpoint(value)

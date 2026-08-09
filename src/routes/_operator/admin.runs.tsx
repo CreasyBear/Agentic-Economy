@@ -26,7 +26,7 @@ export const Route = createFileRoute('/_operator/admin/runs')({
   loader: ({ deps }) => readAdminRunViewerListServer({ data: deps }),
   head: () => ({
     meta: [
-      { title: 'Run evidence | Agentic Economy' },
+      { title: 'Runs | Agentic Economy' },
       {
         name: 'description',
         content: 'Admin-only answer run evidence viewer scaffold.',
@@ -49,7 +49,7 @@ function AdminRunsRoute() {
   return (
     <AeOperatorShell
       operatorRole="admin"
-      title="Run evidence"
+      title="Runs"
       description="Inspect private answer run evidence after admin access is resolved. Raw JSON stays behind the admin detail surface."
       currentPath="/admin/runs"
       navBadges={{ '/admin/runs': result.kind === 'allowed' ? result.rows.length : 0 }}

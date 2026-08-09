@@ -1,4 +1,5 @@
 import { brandNonEmpty } from '../src/modules/common/ids'
+import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 import { isRecord } from '../src/modules/common/is-record'
 import {
   ExternalOperationProvenanceValues,
@@ -163,6 +164,18 @@ function readPersistedOffering(
         readString(pathRecord.accessPathRef, `${context.errorPrefix}_projection_access_path_ref_invalid`),
         'AccessPathRef',
       ),
+      offeringRevision: readNumber(
+        pathRecord.offeringRevision,
+        `${context.errorPrefix}_projection_access_path_offering_revision_invalid`,
+      ),
+      offeringSourceHash: brandNonEmpty(
+        readString(pathRecord.offeringSourceHash, `${context.errorPrefix}_projection_access_path_offering_source_hash_invalid`),
+        'SourceHash',
+      ),
+      sourceHash: brandNonEmpty(
+        readString(pathRecord.sourceHash, `${context.errorPrefix}_projection_access_path_source_hash_invalid`),
+        'SourceHash',
+      ),
       descriptor: readDescriptor(pathRecord.descriptor, context),
     }
   })
@@ -194,19 +207,52 @@ function readPersistedOffering(
 
 function readPrice(value: unknown, context: DecoderContext): OfferingPrice {
   const row = readRecord(value, context.errorPrefix === 'catalog' ? 'catalog_invalid_price' : `invalid_${context.errorPrefix}_price`)
-  const amountMinor = readOptionalNumber(row.amountMinor, priceFieldError(context, 'amountMinor'))
-  const maximumAmountMinor = readOptionalNumber(row.maximumAmountMinor, priceFieldError(context, 'maximumAmountMinor'))
+  const kind = readLiteral(row.kind, OfferingPriceKindValues, priceFieldError(context, 'kind'))
+  const allowedFields = kind === 'quote_only'
+    ? ['kind', 'currency', 'unit', 'taxTreatment']
+    : kind === 'fixed' || kind === 'from'
+      ? ['kind', 'amount', 'unit', 'taxTreatment']
+      : ['kind', 'minimum', 'maximum', 'unit', 'taxTreatment']
+  if (Object.keys(row).some((field) => !allowedFields.includes(field))) {
+    throw new Error(context.errorPrefix === 'catalog' ? 'catalog_invalid_price' : `invalid_${context.errorPrefix}_price`)
+  }
   const unit = row.unit === undefined
     ? undefined
     : readLiteral(row.unit, OfferingPriceUnitValues, priceFieldError(context, 'unit'))
-  return {
-    kind: readLiteral(row.kind, OfferingPriceKindValues, priceFieldError(context, 'kind')),
-    currency: readString(row.currency, priceFieldError(context, 'currency'), context.errorPrefix === 'catalog'),
-    ...(amountMinor === undefined ? {} : { amountMinor }),
-    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
-    ...(unit === undefined ? {} : { unit }),
-    taxTreatment: readLiteral(row.taxTreatment, OfferingPriceTaxTreatmentValues, priceFieldError(context, 'taxTreatment')),
+  const taxTreatment = readLiteral(row.taxTreatment, OfferingPriceTaxTreatmentValues, priceFieldError(context, 'taxTreatment'))
+  if (kind === 'quote_only') {
+    return {
+      kind,
+      currency: readString(row.currency, priceFieldError(context, 'currency'), context.errorPrefix === 'catalog'),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
   }
+  if (kind === 'fixed' || kind === 'from') {
+    return {
+      kind,
+      amount: readExactAmount(row.amount, priceFieldError(context, 'amount')),
+      ...(unit === undefined ? {} : { unit }),
+      taxTreatment,
+    }
+  }
+  const minimum = readExactAmount(row.minimum, priceFieldError(context, 'minimum'))
+  const maximum = readExactAmount(row.maximum, priceFieldError(context, 'maximum'))
+  const comparison = compareExactAmounts(minimum, maximum)
+  if (comparison === undefined || comparison > 0) throw new Error(priceRangeError(context))
+  return {
+    kind,
+    minimum,
+    maximum,
+    ...(unit === undefined ? {} : { unit }),
+    taxTreatment,
+  }
+}
+
+function readExactAmount(value: unknown, error: string) {
+  const parsed = exactAmountSchema.safeParse(value)
+  if (!parsed.success) throw new Error(error)
+  return parsed.data
 }
 
 function readDescriptor(value: unknown, context: DecoderContext): OfferingAccessPathDescriptor {
@@ -339,14 +385,15 @@ function descriptorLiteralError(context: DecoderContext, field: string): string 
 
 function priceFieldError(context: DecoderContext, field: string): string {
   if (context.errorPrefix === 'catalog') return `catalog_invalid_${field}`
-  if (context.errorPrefix === 'registry') {
-    const mapped = field === 'amountMinor' ? 'amount' : field === 'maximumAmountMinor' ? 'maximum' : field
-    return `invalid_registry_${mapped}`
-  }
-  if (field === 'amountMinor') return 'discovery_manifest_price_amount_invalid'
-  if (field === 'maximumAmountMinor') return 'discovery_manifest_price_maximum_invalid'
+  if (context.errorPrefix === 'registry') return `invalid_registry_${field}`
   if (field === 'taxTreatment') return 'discovery_manifest_tax_treatment_invalid'
   return `discovery_manifest_price_${field}_invalid`
+}
+
+function priceRangeError(context: DecoderContext): string {
+  if (context.errorPrefix === 'catalog') return 'catalog_invalid_price_range'
+  if (context.errorPrefix === 'registry') return 'invalid_registry_price_range'
+  return 'discovery_manifest_price_range_invalid'
 }
 
 function readRecord(value: unknown, error: string): Record<string, unknown> {

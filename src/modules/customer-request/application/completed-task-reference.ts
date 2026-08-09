@@ -17,7 +17,7 @@ export type AttachCompletedTaskReferencePorts = Readonly<{
   readCompletedResultIdentity(input: Readonly<{
     invocationRef: string
     actor: Readonly<{ principalRef: string; callerRef: string }>
-  }>): CompletedResultIdentity
+  }>): Promise<CompletedResultIdentity>
 }>
 
 export type AttachCompletedTaskReferenceResult =
@@ -44,14 +44,14 @@ export type AttachCompletedTaskReferenceResult =
  * It reads invocation identity only: authority, attempts, control and raw
  * action results cannot cross this boundary.
  */
-export function attachCompletedTaskReference(
+export async function attachCompletedTaskReference(
   input: AttachCompletedTaskReferenceInput,
   ports: AttachCompletedTaskReferencePorts,
-): AttachCompletedTaskReferenceResult {
+): Promise<AttachCompletedTaskReferenceResult> {
   if (input.candidateAggregate.snapshot.principalId !== input.principalRef) {
     return { kind: 'refused', reason: 'request_not_owned' }
   }
-  const identity = ports.readCompletedResultIdentity({
+  const identity = await ports.readCompletedResultIdentity({
     invocationRef: input.invocationRef,
     actor: { principalRef: input.principalRef, callerRef: input.callerRef },
   })

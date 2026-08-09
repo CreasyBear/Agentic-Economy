@@ -161,7 +161,10 @@ export async function qualifySuppliedCandidate(
   }
 
   if (offering !== null && binding !== null) {
-    const lifecycle = publicationLifecycle(publication, offering, binding, now)
+    const currentConnection = binding.authority.kind === 'provider_connection'
+      ? await ports.loadProviderConnection(binding.authority.connectionRef)
+      : undefined
+    const lifecycle = publicationLifecycle(publication, offering, binding, now, currentConnection)
     for (const reason of lifecycle.reasons) {
       if (reason === 'credential_readiness_unobserved') reasons.push('credential_readiness_unobserved')
       if (reason === 'credential_unavailable') reasons.push('credential_access_unavailable')

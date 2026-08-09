@@ -3,12 +3,16 @@ import type { DatabaseReader } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { v, type GenericId, type Infer } from 'convex/values'
 
-import { offeringPriceCeilingMinor } from '../src/modules/catalog/public'
+import { compareExactAmounts, type ExactAmount } from '../src/modules/money/public'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { PublicStatusValues } from '../src/modules/business/public'
 import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
-import { projectBusinessSupplyToPublicApi } from '../src/modules/registry/public'
-import { canonicalTradeToken, TRADE_CANONICAL_TOKENS, TRADE_WORDS } from '../src/modules/registry/public'
+import {
+  projectBusinessSupplyToPublicApi,
+  registrySearchTokens,
+  TRADE_CANONICAL_TOKENS,
+  TRADE_WORDS,
+} from '../src/modules/registry/public'
 import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import { normalizeSearchText } from '../src/modules/common/normalize-search-text'
 import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
@@ -105,15 +109,49 @@ const healthResult = v.object({
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
 })
 
-const offeringPriceDto = v.object({
-  kind: v.union(v.literal('fixed'), v.literal('from'), v.literal('range'), v.literal('quote_only')),
-  currency: v.string(), amountMinor: v.optional(v.number()), maximumAmountMinor: v.optional(v.number()),
-  unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
-  taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+const exactAmountDto = v.object({
+  currency: v.string(), units: v.string(), exponent: v.number(),
 })
+const offeringPriceDto = v.union(
+  v.object({
+    kind: v.union(v.literal('fixed'), v.literal('from')), amount: exactAmountDto,
+    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  }),
+  v.object({
+    kind: v.literal('range'), minimum: exactAmountDto, maximum: exactAmountDto,
+    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  }),
+  v.object({
+    kind: v.literal('quote_only'), currency: v.string(),
+    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
+  }),
+)
 const offeringAccessPathDto = v.union(
-  v.object({ accessPathRef: v.string(), kind: v.literal('human_request'), channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')), disclosure: v.string(), url: v.optional(v.string()) }),
-  v.object({ accessPathRef: v.string(), kind: v.literal('external_operation'), name: v.string(), summary: v.string(), url: v.string(), method: v.optional(v.string()), documentationUrl: v.optional(v.string()), interfaceDescription: v.optional(v.object({ format: v.string(), url: v.optional(v.string()) })), authenticationSummary: v.optional(v.string()), pricingSummary: v.optional(v.string()), provenance: v.union(v.literal('business_declared'), v.literal('publicly_observed')) }),
+  v.object({
+    accessPathRef: v.string(),
+    offeringRevision: v.number(),
+    kind: v.literal('human_request'),
+    channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')),
+    disclosure: v.string(),
+    url: v.optional(v.string()),
+  }),
+  v.object({
+    accessPathRef: v.string(),
+    offeringRevision: v.number(),
+    kind: v.literal('external_operation'),
+    name: v.string(),
+    summary: v.string(),
+    url: v.string(),
+    method: v.optional(v.string()),
+    documentationUrl: v.optional(v.string()),
+    interfaceDescription: v.optional(v.object({ format: v.string(), url: v.optional(v.string()) })),
+    authenticationSummary: v.optional(v.string()),
+    pricingSummary: v.optional(v.string()),
+    provenance: v.union(v.literal('business_declared'), v.literal('publicly_observed')),
+  }),
 )
 const offeringDto = v.object({
   offeringRef: v.string(), revision: v.number(), name: v.string(), category: v.string(), summary: v.string(),
@@ -146,30 +184,16 @@ export const listPublicBusinessOfferingSupply = queryGeneric({
 export const searchPublicBusinessOfferingSupply = queryGeneric({
   args: {
     query: v.string(), mode: v.optional(v.union(v.literal('near_me'), v.literal('whole_catalogue'))), location: v.optional(v.string()),
-    maxPriceMinor: v.optional(v.number()), hasPrice: v.optional(v.boolean()), cursor: v.optional(v.string()), limit: v.optional(v.number()),
+    maxPrice: v.optional(exactAmountDto), hasPrice: v.optional(v.boolean()), cursor: v.optional(v.string()), limit: v.optional(v.number()),
   }, returns: offeringPageResult,
   handler: async (ctx, args) => {
     const needle = normalizeSearchText(args.query)
     const input = queryInput(args)
-    if (needle.length === 0) return paginateOfferingSupply([], input, '')
-    const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(canonicalTradeToken)
+    const tokens = registrySearchTokens(needle)
+    if (tokens.length === 0) return paginateOfferingSupply([], input, needle)
     const locationKey = resolveSearchLocationKey(args)
-    const searchText = tokens.length === 0 ? needle : tokens.join(' ')
-    const indexedDocuments = await ctx.db.query('registrySearchDocuments')
-      .withSearchIndex('search_searchText_by_publicStatus', (search) => search.search('searchText', searchText).eq('publicStatus', 'published'))
-      .take(SEARCH_DOCUMENT_CANDIDATE_LIMIT)
-    const indexedMatches = indexedDocuments.filter((document) => matchesSearchDocument(document, tokens, locationKey))
-    // Search-index backfills are asynchronous after a clean production reseed, and
-    // relevance candidates may contain no strict token match. Keep the public
-    // catalogue usable in either bounded case without scanning.
-    const documents = indexedMatches.length > 0
-      ? indexedMatches
-      : (await ctx.db.query('registrySearchDocuments')
-          .withIndex('by_publicStatus_updatedAt', (query) => query.eq('publicStatus', 'published'))
-
-          .take(SEARCH_DOCUMENT_CANDIDATE_LIMIT))
-          .filter((document) => matchesSearchDocument(document, tokens, locationKey))
-    const candidateSlugs = uniqueBusinessSlugs(documents).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
+    const documents = await readMatchingSearchDocuments(ctx.db, tokens.join(' '), tokens, locationKey)
+    const candidateSlugs = uniqueBusinessSlugs(documents)
     const businesses = (await Promise.all(candidateSlugs.map((slug) => ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()))).filter((business): business is Doc<'businesses'> => business !== null)
     const offeringSupplyReadPort = createOfferingSupplyReadPort(ctx.db)
     const supply = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(offeringSupplyReadPort, business)))).filter((item): item is OfferingSupplyDto => item !== undefined && matchesOfferingSupply(item, tokens, locationKey))
@@ -305,8 +329,27 @@ export async function readOfferingSupplyForBusiness(
   const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
   return snapshot.status === 'projection_pending' ? { ...projected, disposition: 'stale' } : projected
 }
-const SEARCH_DOCUMENT_CANDIDATE_LIMIT = 250
-const SEARCH_HYDRATION_BUSINESS_LIMIT = 100
+const SEARCH_DOCUMENT_PAGE_SIZE = 250
+
+async function readMatchingSearchDocuments(
+  db: DatabaseReader,
+  searchText: string,
+  tokens: readonly string[],
+  locationKey: string | undefined,
+): Promise<Doc<'registrySearchDocuments'>[]> {
+  const documents: Doc<'registrySearchDocuments'>[] = []
+  let cursor: string | null = null
+  for (;;) {
+    const page = await db.query('registrySearchDocuments')
+      .withSearchIndex('search_searchText_by_publicStatus', (search) => search.search('searchText', searchText).eq('publicStatus', 'published'))
+      .paginate({ cursor, numItems: SEARCH_DOCUMENT_PAGE_SIZE })
+    documents.push(...page.page.filter((document) => matchesSearchDocument(document, tokens, locationKey)))
+    if (page.isDone) return documents
+    if (page.continueCursor === cursor) throw new Error('registry_search_cursor_stalled')
+    cursor = page.continueCursor
+  }
+}
+
 
 function queryInput(args: { cursor?: string; limit?: number }): QueryInput { return { ...(args.cursor === undefined ? {} : { cursor: args.cursor }), ...(args.limit === undefined ? {} : { limit: args.limit }) } }
 
@@ -321,9 +364,31 @@ async function readOfferingSupplyPage(db: DatabaseReader, paginationOpts: Native
 function nativeOfferingPageResultValue(page: OfferingPage) { return { kind: 'ok' as const, schemaVersion: 'public-business-catalog-api:v2' as const, page: page.items.map(toConvexOfferingBusiness), isDone: page.isDone, continueCursor: page.continueCursor } }
 
 function toConvexOfferingAccessPath(path: OfferingSupplyDto['offerings'][number]['accessPaths'][number]): ConvexOfferingAccessPathDto {
-  if (path.kind === 'human_request') return { accessPathRef: path.accessPathRef, kind: 'human_request', channel: path.channel, disclosure: path.disclosure, ...(path.url === undefined ? {} : { url: path.url }) }
+  if (path.kind === 'human_request') {
+    return {
+      accessPathRef: path.accessPathRef,
+      offeringRevision: path.offeringRevision,
+      kind: 'human_request',
+      channel: path.channel,
+      disclosure: path.disclosure,
+      ...(path.url === undefined ? {} : { url: path.url }),
+    }
+  }
   const interfaceDescription = path.interfaceDescription === undefined ? undefined : { format: path.interfaceDescription.format, ...(path.interfaceDescription.url === undefined ? {} : { url: path.interfaceDescription.url }) }
-  return { accessPathRef: path.accessPathRef, kind: 'external_operation', name: path.name, summary: path.summary, url: path.url, ...(path.method === undefined ? {} : { method: path.method }), ...(path.documentationUrl === undefined ? {} : { documentationUrl: path.documentationUrl }), ...(interfaceDescription === undefined ? {} : { interfaceDescription }), ...(path.authenticationSummary === undefined ? {} : { authenticationSummary: path.authenticationSummary }), ...(path.pricingSummary === undefined ? {} : { pricingSummary: path.pricingSummary }), provenance: path.provenance }
+  return {
+    accessPathRef: path.accessPathRef,
+    offeringRevision: path.offeringRevision,
+    kind: 'external_operation',
+    name: path.name,
+    summary: path.summary,
+    url: path.url,
+    ...(path.method === undefined ? {} : { method: path.method }),
+    ...(path.documentationUrl === undefined ? {} : { documentationUrl: path.documentationUrl }),
+    ...(interfaceDescription === undefined ? {} : { interfaceDescription }),
+    ...(path.authenticationSummary === undefined ? {} : { authenticationSummary: path.authenticationSummary }),
+    ...(path.pricingSummary === undefined ? {} : { pricingSummary: path.pricingSummary }),
+    provenance: path.provenance,
+  }
 }
 
 function toConvexOffering(offering: OfferingSupplyDto['offerings'][number]): ConvexOfferingDto {
@@ -335,20 +400,57 @@ function toConvexOfferingBusiness(item: OfferingSupplyDto): ConvexOfferingBusine
   return { schemaVersion: item.schemaVersion, businessId: item.businessId, slug: item.slug, name: item.name, category: item.category, suburb: item.suburb, stateTerritory: item.stateTerritory, ...(item.publishedPhone === undefined ? {} : { publishedPhone: item.publishedPhone }), ...(item.postcode === undefined ? {} : { postcode: item.postcode }), publicUrl: item.publicUrl, trustTier: item.trustTier, ...(item.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: item.responseTimeMinutes }), photos: item.photos.map((photo) => ({ url: photo.url, alt: photo.alt })), observedAt: item.observedAt, disposition: item.disposition, offerings: item.offerings.map(toConvexOffering), accessSummary: { humanRequest: item.accessSummary.humanRequest, externalOperation: item.accessSummary.externalOperation, aeSupportedAction: item.accessSummary.aeSupportedAction } }
 }
 
-function filterOfferingSupplyByPrice(items: readonly OfferingSupplyDto[], args: { maxPriceMinor?: number; hasPrice?: boolean }): readonly OfferingSupplyDto[] {
-  const budgetMinor = Number.isInteger(args.maxPriceMinor) && (args.maxPriceMinor ?? 0) > 0 ? args.maxPriceMinor : undefined
-  if (budgetMinor === undefined && args.hasPrice !== true) return items
-  return items.filter((item) => { if (args.hasPrice === true && !item.offerings.some((offering) => offering.price !== undefined)) return false; if (budgetMinor === undefined) return true; return !item.offerings.every((offering) => { const ceilingMinor = offeringPriceCeilingMinor(offering.price); return ceilingMinor !== undefined && ceilingMinor > budgetMinor }) })
+function offeringPriceCeiling(price: OfferingSupplyDto['offerings'][number]['price']): ExactAmount | undefined {
+  if (price === undefined || price.kind === 'quote_only') return undefined
+  return price.kind === 'range' ? price.maximum : price.amount
 }
 
+function filterOfferingSupplyByPrice(items: readonly OfferingSupplyDto[], args: { maxPrice?: ExactAmount; hasPrice?: boolean }): readonly OfferingSupplyDto[] {
+  if (args.maxPrice === undefined && args.hasPrice !== true) return items
+  return items.filter((item) => {
+    if (args.hasPrice === true && !item.offerings.some((offering) => offering.price !== undefined)) return false
+    const maxPrice = args.maxPrice
+    if (maxPrice === undefined) return true
+    let hasUnpricedOffering = false
+    for (const offering of item.offerings) {
+      const ceiling = offeringPriceCeiling(offering.price)
+      if (ceiling === undefined) {
+        hasUnpricedOffering = true
+        continue
+      }
+      if (ceiling.currency !== maxPrice.currency) continue
+      const comparison = compareExactAmounts(ceiling, maxPrice)
+      if (comparison !== undefined && comparison <= 0) return true
+    }
+    return hasUnpricedOffering
+  })
+}
 function paginateOfferingSupply(items: readonly OfferingSupplyDto[], input: QueryInput, query?: string) {
   const limit = normalizeLimit(input.limit)
-  const startIndex = input.cursor === undefined ? 0 : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
+  const startIndex = input.cursor === undefined
+    ? 0
+    : (() => {
+        const index = items.findIndex((item) => item.slug === input.cursor)
+        if (index < 0) throw new Error('registry_invalid_cursor')
+        return index + 1
+      })()
   const pageItems = items.slice(startIndex, startIndex + limit).map(toConvexOfferingBusiness)
-  const next = items.at(startIndex + limit)
+  const next = items.at(startIndex + pageItems.length)
   return { kind: 'ok' as const, schemaVersion: 'public-business-catalog-api:v2' as const, ...(query === undefined ? {} : { query }), items: pageItems, pagination: { ...(input.cursor === undefined ? {} : { cursor: input.cursor }), ...(next === undefined ? {} : { nextCursor: next.slug }), limit, total: items.length, hasMore: next !== undefined } }
 }
 
+function matchesOfferingSupply(item: OfferingSupplyDto, tokens: readonly string[], locationKey: string | undefined): boolean {
+  if (tokens.length === 0) return false
+  if (locationKey !== undefined && !offeringPlaceKeys(item).includes(locationKey)) return false
+  const haystack = normalizeSearchText([item.slug, item.name, item.category, item.suburb, item.stateTerritory, item.postcode ?? '', ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary, offering.serviceAreaSummary ?? ''])].join(' '))
+  return matchesQueryTokens(haystack, tokens)
+}
+
+function matchesSearchDocument(document: Doc<'registrySearchDocuments'>, tokens: readonly string[], locationKey: string | undefined): boolean {
+  if (tokens.length === 0) return false
+  if (locationKey !== undefined && !document.placeKeys.includes(locationKey)) return false
+  return matchesQueryTokens(document.searchText, tokens)
+}
 async function resolvePublishedInquiryTargetFromDb(db: DatabaseReader, businessSlug: string, offeringRef: string): Promise<{ kind: 'resolved'; businessId: string; offeringRef: string } | { kind: 'not_found'; reason: string }> {
   const business = await db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', businessSlug)).unique()
   if (business === null || business.publicStatus !== 'published') return { kind: 'not_found', reason: 'No published business is discoverable for this slug.' }
@@ -358,16 +460,6 @@ async function resolvePublishedInquiryTargetFromDb(db: DatabaseReader, businessS
   return { kind: 'resolved', businessId: item.businessId, offeringRef: offering.offeringRef }
 }
 
-function matchesOfferingSupply(item: OfferingSupplyDto, tokens: readonly string[], locationKey: string | undefined): boolean {
-  if (locationKey !== undefined && !offeringPlaceKeys(item).includes(locationKey)) return false
-  const haystack = normalizeSearchText([item.slug, item.name, item.category, item.suburb, item.stateTerritory, item.postcode ?? '', ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary, offering.serviceAreaSummary ?? ''])].join(' '))
-  return matchesQueryTokens(haystack, tokens.length === 0 ? [item.slug] : tokens)
-}
-
-function matchesSearchDocument(document: Doc<'registrySearchDocuments'>, tokens: readonly string[], locationKey: string | undefined): boolean {
-  if (locationKey !== undefined && !document.placeKeys.includes(locationKey)) return false
-  return matchesQueryTokens(document.searchText, tokens.length === 0 ? [document.searchText] : tokens)
-}
 
 function uniqueBusinessSlugs(documents: readonly Doc<'registrySearchDocuments'>[]): string[] {
   const slugs = new Set<string>()

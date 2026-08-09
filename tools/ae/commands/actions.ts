@@ -47,24 +47,7 @@ export async function runActionsCommand(_args: readonly string[], options: CliOp
 
 export async function runActionCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const id = args[0]?.trim()
-  if (id === undefined || id.length === 0) throw new CliFailure("Usage: ae action <id> ['<json>'] [--allow-write]")
-
-  const action = findAction(id)
-  if (action === undefined) {
-    throw new CliFailure(`Unknown action: ${id}\nRun: npm run ae -- actions`)
-  }
-
-  const contract = resolveActionContract(action)
-
-  if (!action.readOnly && !options.allowWrite) {
-    heading(`Refused: ${id} is not read-only`)
-    line(`consequence: ${contract.consequenceClass}   authority: ${contract.authorityRequirement}`)
-    line('')
-    line('Boundaries:')
-    for (const boundary of action.boundaries) line(`  - ${boundary}`)
-    line('')
-    throw new CliFailure('Pass --allow-write to run a write-classified action.')
-  }
+  if (id === undefined || id.length === 0) throw new CliFailure("Usage: ae action <id> ['<json>'] [--allow-write]", { kind: 'INVALID_ARGUMENT', code: 'action-usage' })
 
   const rawInput = args.slice(1).join(' ').trim()
   let parsedInput: unknown = {}
@@ -72,19 +55,21 @@ export async function runActionCommand(args: readonly string[], options: CliOpti
     try {
       parsedInput = JSON.parse(rawInput)
     } catch {
-      throw new CliFailure(`Input must be JSON. Received: ${rawInput.slice(0, 200)}`)
+      throw new CliFailure('Input must be valid JSON.', { kind: 'INVALID_ARGUMENT', code: 'action-input' })
     }
+  }
+
+  const action = findAction(id)
+  if (action === undefined) {
+    throw new CliFailure(`Unknown action: ${id}\nRun: npm run -s ae -- actions`, { kind: 'NOT_FOUND', code: 'unknown_action' })
+  }
+  if (!action.readOnly && !options.allowWrite) {
+    throw new CliFailure('Pass --allow-write to run a write-classified action.', { kind: 'PERMISSION_DENIED', code: 'write_requires_allow' })
   }
 
   const validated = action.schema.safeParse(parsedInput)
   if (!validated.success) {
-    throw new CliFailure(`Input does not match ${id} schema:\n${JSON.stringify(validated.error.issues, undefined, 2)}`)
-  }
-
-  if (!options.json) {
-    heading(`Running ${id}`)
-    line(`consequence: ${contract.consequenceClass}   authority: ${contract.authorityRequirement}`)
-    for (const boundary of action.boundaries) line(`  - ${boundary}`)
+    throw new CliFailure(`Input does not match ${id} schema:\n${JSON.stringify(validated.error.issues, undefined, 2)}`, { kind: 'INVALID_ARGUMENT', code: 'action-schema' })
   }
 
   const startedAt = Date.now()
@@ -95,6 +80,7 @@ export async function runActionCommand(args: readonly string[], options: CliOpti
     printJson({ id, durationMs, result })
     return
   }
+  line(`Ran ${id}`)
 
   line('')
   line(`result.kind = ${String(result.kind)} (${durationMs}ms)`)

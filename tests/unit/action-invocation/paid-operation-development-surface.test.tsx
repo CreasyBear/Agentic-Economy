@@ -151,7 +151,7 @@ function serviceFixture(
       summary: 'A labelled local provider will translate the supplied document.',
       blocks: [{ kind: 'text', label: 'Target language', value: 'French' }],
     },
-    maximumAuthorizedCharge: { currency: 'AUD', amountMinor: 250 },
+    maximumAuthorizedCharge: { currency: 'AUD', units: '250', exponent: 2 },
     queryRelease: { state: 'not_released' },
     paymentAuthorization: { state: 'not_created' },
     paymentSubmission: { state: 'not_submitted' },

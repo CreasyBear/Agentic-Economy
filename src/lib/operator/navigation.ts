@@ -78,10 +78,10 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
     label: 'Review',
     items: [
       { href: '/admin/claims', label: 'Claims', icon: ClipboardList, tier: 'core' },
-      { href: '/admin/audit-events', label: 'Audit events', icon: ScrollText, tier: 'advanced' },
-      { href: '/admin/index-health', label: 'Index health', icon: Activity, tier: 'advanced' },
-      { href: '/admin/search-gaps', label: 'Search gaps', icon: Search, tier: 'core' },
-      { href: '/admin/runs', label: 'Run evidence', icon: ListChecks, tier: 'advanced' },
+      { href: '/admin/audit-events', label: 'Activity log', icon: ScrollText, tier: 'advanced' },
+      { href: '/admin/index-health', label: 'Catalog health', icon: Activity, tier: 'advanced' },
+      { href: '/admin/search-gaps', label: 'Unmatched asks', icon: Search, tier: 'core' },
+      { href: '/admin/runs', label: 'Runs', icon: ListChecks, tier: 'advanced' },
     ],
   },
   {
@@ -89,7 +89,7 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
     label: 'Operations',
     items: [
       { href: '/admin/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
-      { href: '/admin/request-problems', label: 'Request problems', icon: CircleHelp, tier: 'core' },
+      { href: '/admin/request-problems', label: 'Failed asks', icon: CircleHelp, tier: 'core' },
     ],
   },
 ] as const

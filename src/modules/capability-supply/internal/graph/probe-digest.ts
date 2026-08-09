@@ -19,7 +19,8 @@ export type ProbeDigestBinding = Pick<
   CapabilityBindingRow,
   | 'bindingId'
   | 'endpointUrl'
-  | 'credentialRef'
+  | 'authority'
+  | 'connectionAuthority'
   | 'adapterId'
   | 'configDigest'
   | 'registrationHash'
@@ -33,13 +34,21 @@ export function probeTargetDigest(
   offering: ProbeDigestOffering,
   binding: ProbeDigestBinding,
 ): string {
+  const authorityMaterial = binding.authority.kind === 'provider_connection'
+    ? {
+      authority: binding.authority,
+      ...(binding.connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: binding.connectionAuthority }),
+    }
+    : { authority: binding.authority }
   return canonicalDigest({
     publicationRef: publication.publicationRef,
     revision: publication.revision,
     bindingId: binding.bindingId,
     capabilityId: publication.capabilityId,
     endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
+    ...authorityMaterial,
     adapterId: binding.adapterId,
     configDigest: binding.configDigest,
     offeringRegistrationHash: offering.registrationHash,

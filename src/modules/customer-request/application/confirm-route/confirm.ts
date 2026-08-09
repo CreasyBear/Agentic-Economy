@@ -32,10 +32,7 @@ export async function confirmCustomerRoute(
     expectedRequestRevision: input.revision,
     expectedGenerationRef: selected.generationRef,
     selectedRoutePlanId: selected.selectedRoute.routePlanId,
-    maximumTotalSpend: {
-      currency: selected.displayedRoute.maximumTotalCost.currency,
-      amountMinor: selected.displayedRoute.maximumTotalCost.amountMinor,
-    },
+    maximumTotalSpend: selected.displayedRoute.maximumTotalCost.amount,
     expiresAt: selected.displayedRoute.validUntil,
     idempotencyKey: input.idempotencyKey,
     ...(input.serviceAuthorization === undefined ? {} : {

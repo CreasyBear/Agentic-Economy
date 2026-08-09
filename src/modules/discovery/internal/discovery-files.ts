@@ -6,9 +6,9 @@ import {
   CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES,
 } from '@/modules/customer-request/public-comprehension'
 import {
+  CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY,
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
-  CUSTOMER_REQUEST_AGENT_SCOPE,
-  CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
+  CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES,
   CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES,
   CUSTOMER_REQUEST_STATE_VALUES,
 } from '@/modules/customer-request/agent-contract'
@@ -25,6 +25,8 @@ export const DiscoveryPublicSurfacePaths = [
   '/.well-known/ucp',
   '/api/businesses',
   '/api/businesses/search?q=',
+  '/api/v1/services',
+  '/api/v1/services/search?q=',
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path,
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath,
 ] as const
@@ -54,31 +56,31 @@ export const DiscoveryListingBoundaryLine =
 function servicesApiLines(): readonly string[] {
   return [
     '## Services API',
-
-    '- GET /api/v1/services: ONE PAGE; fields `summary`, `pricingSummary`, `price`.',
-    '- GET /api/v1/services/search?q={query}; follow `pagination.nextCursor` while `pagination.hasMore`.',
-    '- Provenance `business_declared`/`publicly_observed`; quote response carries provenance `ae_sandbox_provider`; open sandbox.',
-    '- Example: POST /api/sandbox/adelaide-dental-clinic/checkup-quote: priced, time-bounded quote JSON.',
+    '',
+    '- GET /api/v1/services (ONE PAGE): `serviceName`, `tags[]`, `endpoints[]`; list `continueCursor`/`isDone`.',
+    '- GET /api/v1/services/search?q={query}: `pagination.nextCursor`/`pagination.hasMore`.',
+    '- GET /api/v1/services/{id}: detail; `service` equals list item.',
+    '- `ae.offerings[]`: `summary`, `pricingSummary`, `price`; `priceSummary`.',
+    '- `ae.provenance`: `business_declared`/`publicly_observed`; `ae.authentication`, `ae.execution` are public classifications.',
+    '- `ae.access`: open sandbox.',
+    '- Invalid URLs omitted; never infer from documentation.',
+    '- POST /api/sandbox/adelaide-dental-clinic/checkup-quote: priced, time-bounded quote JSON; quote response carries provenance `ae_sandbox_provider`.',
   ]
 }
 
+function customerRequestScopeSummary(): string {
+  return `${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope} plus exactly one mode: ${CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES.slice(1).join(', ')}`
+}
 export function buildLlmsTxt(
   state: DiscoverySourceState,
   options: BuildDiscoveryFileOptions
 ): DiscoveryFileBuildResult {
   const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const catalogs = readEligibleCatalogs(state)
-  const urls = [
-    ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
-    ...catalogs.flatMap((catalog) => [
-      `${canonicalBaseUrl}/${catalog.slug}`,
-      `${canonicalBaseUrl}/${catalog.slug}/ucp`,
-      `${canonicalBaseUrl}/api/businesses/${catalog.slug}`,
-    ]),
-  ]
+  const urls = buildOfferingLlmsUrlsFromSlugs(catalogs.map((catalog) => catalog.slug), options)
   const catalogLines = catalogs.map(
     (catalog) =>
-      `- slug=${catalog.slug} publicUrl=${canonicalBaseUrl}/${catalog.slug} ucpUrl=${canonicalBaseUrl}/${catalog.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${catalog.slug} disposition=${catalog.disposition}`
+      `- slug=${catalog.slug} publicUrl=${canonicalBaseUrl}/${catalog.slug} ucpUrl=${canonicalBaseUrl}/${catalog.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${catalog.slug} serviceApiUrl=${canonicalBaseUrl}/api/v1/services/${catalog.slug} disposition=${catalog.disposition}`
   )
   const body = [
     '# Agentic Economy',
@@ -94,6 +96,7 @@ export function buildLlmsTxt(
     '',
     'Assistant setup:',
     `- ${canonicalBaseUrl}/SKILL.md`,
+    `- ${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${canonicalBaseUrl}${ANSWER_THREAD_AGENT_ENTRYPOINT.path} uses a fresh opaque X-AE-Turn-Key for every turn; it is not a credential`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     'Customer Request API:',
     `- schema=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}`,
@@ -101,7 +104,7 @@ export function buildLlmsTxt(
     `- device_authorization=${canonicalBaseUrl}/oauth/device_authorization`,
     `- token=${canonicalBaseUrl}/oauth/token`,
     `- human_approval=${canonicalBaseUrl}/agent-access/authorize?user_code=...`,
-    `- auth=Bearer ${CUSTOMER_REQUEST_AGENT_SCOPE} plus exactly one mode: ${CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.join(', ')}`,
+    `- auth=${CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY}; scopes=${customerRequestScopeSummary()}`,
     `- protected_resource_metadata=${canonicalBaseUrl}/.well-known/oauth-protected-resource`,
     `- lifecycle=${CUSTOMER_REQUEST_STATE_VALUES.join(' | ')}`,
     `- navigation.actions=${CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES.join(' | ')}`,
@@ -148,14 +151,15 @@ export function buildOfferingLlmsUrlsFromSlugs(
   options: BuildDiscoveryFileOptions,
 ): readonly string[] {
   const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
-  return [
+  return [...new Set([
     ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
     ...slugs.flatMap((slug) => [
       `${canonicalBaseUrl}/${slug}`,
       `${canonicalBaseUrl}/${slug}/ucp`,
+      `${canonicalBaseUrl}/api/v1/services/${slug}`,
       `${canonicalBaseUrl}/api/businesses/${slug}`,
     ]),
-  ]
+  ])]
 }
 
 export function buildOfferingLlmsTxt(
@@ -174,30 +178,23 @@ export function buildOfferingLlmsTxt(
     `- Human entry=${canonicalBaseUrl}/`,
     '',
     'Public surfaces:',
-    `- origin=${canonicalBaseUrl}`,
     ...DiscoveryPublicSurfacePaths.map((path) => `- ${path}`),
     '',
     ...servicesApiLines(),
     '',
     'Assistant setup:',
-    `- ${canonicalBaseUrl}/SKILL.md`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     '',
     'Start here (no key needed):',
     `- ${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${canonicalBaseUrl}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}`,
     `- auth=${ANSWER_THREAD_AGENT_ENTRYPOINT.authentication}; no key and no credential are required`,
     `- body=${JSON.stringify(ANSWER_THREAD_AGENT_ENTRYPOINT.body)}`,
+    `- header=X-AE-Turn-Key: fresh opaque value for every turn; it is an idempotency/correlation value, not a credential`,
     `- response=${ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType}`,
     `- boundary=${ANSWER_THREAD_AGENT_ENTRYPOINT.boundary}`,
-    '',
     'Customer Request API:',
-    `- schema=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}`,
-    `- submit=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,
-    `- device_authorization=${canonicalBaseUrl}/oauth/device_authorization`,
-    `- auth=Bearer AE API key with customer_requests:create, issued to a signed-in account at ${canonicalBaseUrl}/agent-access`,
-    `- token=${canonicalBaseUrl}/oauth/token`,
-    `- human_approval=${canonicalBaseUrl}/agent-access/authorize?user_code=...`,
-    `- auth=Bearer ${CUSTOMER_REQUEST_AGENT_SCOPE} plus exactly one mode: ${CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.join(', ')}`,
+    `- schema=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath} submit=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path} device_authorization=${canonicalBaseUrl}/oauth/device_authorization token=${canonicalBaseUrl}/oauth/token`,
+    `- auth=${CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY}; issued through OAuth after signed-in owner approval at ${canonicalBaseUrl}/agent-access/authorize?user_code=...; scopes=${customerRequestScopeSummary()}`,
     '- escalate=take this path only when the customer wants to confirm and start an option',
     'Request recipe:',
     `- ${canonicalBaseUrl}/SKILL.md carries the full procedure: relation-following, stop rules, and confirmation.`,
@@ -220,7 +217,7 @@ export function buildOfferingLlmsTxt(
   const sample: string[] = []
   let sampleBytes = 0
   for (const business of businesses.slice(0, offeringLlmsSampleLimit)) {
-    const line = `- slug=${business.slug} url=${canonicalBaseUrl}/${business.slug}`
+    const line = `- slug=${business.slug} path=/${business.slug}`
     const cost = encoder.encode(line).length + 1
     /** One entry always survives the ceiling: an entries section that names no
      * entry would misreport a catalog that has them. */
@@ -238,10 +235,10 @@ export function buildSitemapXmlFromSlugs(
 ): DiscoveryFileBuildResult {
   const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const now = new Date(options.now ?? 0).toISOString()
-  const urls = [
+  const urls = [...new Set([
     ...staticSitemapPaths.map((path) => `${canonicalBaseUrl}${path}`),
     ...slugs.map((slug) => `${canonicalBaseUrl}/${slug}`),
-  ]
+  ])]
   const body = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',

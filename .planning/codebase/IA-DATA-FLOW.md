@@ -1,14 +1,15 @@
 # Info Architecture — Schemas & Data-Flow Routes (source-ground walk)
 
-> Walk of the maintained schemas, projections, routes, and invariants against the dirty working tree on 2026-08-08.
+> Walk of the maintained schemas, projections, routes, and invariants against the dirty working tree on 2026-08-09.
 > Authority: Convex durable state and deterministic domain modules. Models, providers, imported documents, and browser
 > input are observations/proposals until deterministic validation. Public and operator surfaces consume projections.
-> Companion: `.planning/codebase/PROMPT-DATA-FLOW.md` owns prompt/model/tool/stream/evaluation flows; this map owns
-> the information architecture, schemas, personas, routes, authority, and reachable gaps.
+> Companion: [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md) owns prompt/model/tool/stream/evaluation flows; this map owns
+> the information architecture, schemas, personas, routes, authority, and reachable gaps. System boundary and update
+> rule: [ARCHITECTURE.md](ARCHITECTURE.md) links both maintained detail maps and requires same-change updates.
 
 ## 0. How to read this
 
-- Every material claim names a current path and symbol (line numbers are re-checked against the dirty tree on 2026-08-08).
+- Every material claim names a current path and symbol (line numbers are re-checked against the dirty tree on 2026-08-09).
 - `src/modules/**/public.ts` and the internal projection modules own domain/public shapes; route and action files are ports.
 - `convex/*.ts` functions are the durable adapters. `convex/schema.ts` registers the in-domain table bundles.
 - `ServiceDto.endpoints[]` is the canonical agent-native listing surface. `operationRef` is the executable operation identity.
@@ -26,7 +27,8 @@
                                                      │
       buyer/public reads                             │ source writes/readbacks
   / → static ask/category/examples → /t/new                  │ source writes/readbacks
-  /t/new → /t/$threadId → /api/answer/turn             │ curated/admin admission
+  /t/new → owner /t/$threadId → /api/answer/turn       │ curated/admin admission
+              └─ explicit share → read-only /s/$shareToken
                                                      ▼
                         deterministic projections, gates, and evidence
 ```
@@ -62,14 +64,14 @@ Personas and current entry points:
   (`src/modules/customer-request/application/interpret-compile/eligibility.ts`,
   `capability-domain.ts`) are the hostile/greenfield/no-candidate and crypto/fiat/none gates.
 - `PreviewCustomerRequestInput`, preview steps/results, `MAX_PREVIEW_STEPS=32`, and
-  `MAX_PREVIEW_OPTIONS=64` (`src/modules/customer-request/application/interpret-compile/preview.ts:1-190`)
+  `MAX_PREVIEW_OPTIONS=64` (`src/modules/customer-request/application/interpret-compile/preview.ts:1-174`)
   are inspect-only, expiring, `authority: 'inspect_only'` outputs.
 - `ConsumerPlan`, `ConsumerPlanOption`, `ConsumerPlanResult`, decision records, next actions, and
   `projectConsumerPlan` (`src/modules/customer-request/application/consumer-plan-projection.ts:1-193`)
   rehydrate options from the same services page; `MAX_PLAN_BYTES=120_000` is a separate cap.
 - Route authority is `RouteMandate`/steps/principals/authorization and compile/verify results
   (`src/modules/customer-request/route-mandate.ts`); durable V2 and route-mandate tables are
-  composed by `src/modules/customer-request/internal/convex-schema.ts:239-286`.
+  composed by `src/modules/customer-request/internal/convex-schema.ts:239-285`.
 
 ### 2.2 Business, catalog, registry, and canonical Service DTOs
 
@@ -83,7 +85,7 @@ Personas and current entry points:
 - `BusinessSupplyProjection` and `PublicOfferingSupplyProjection`
   (`src/modules/catalog/internal/offering-supply.ts:105-137`) are rebuilt from business/context/catalog
   rows by `convex/capabilitySupplyProjection.ts:36-145`; snapshots are stored in
-  `businessSupplyProjectionSnapshots` (`src/modules/catalog/internal/schema.ts:140-211`).
+  `businessSupplyProjectionSnapshots` (`src/modules/catalog/internal/schema.ts:140-202`).
 - Canonical agent-native types are `ServiceEndpointPricingDto`, `ServiceEndpointDto`,
   `ServicePriceSummaryDto`, `ServiceDto`, and `ServiceOfferingDto`
   (`src/modules/registry/internal/service-projection.ts:24-113`). A service is one business with
@@ -110,7 +112,7 @@ Personas and current entry points:
   customerRequest, registry, routingKernel, demand, discovery, harness, inquiry, notificationOutbox,
   observability, security, money, settings, projectSpine, workTree, study, and externalRun.
 - Key in-domain bundle declarations are `business/internal/schema.ts:13-75` (owners, businesses,
-  contexts, claims), `catalog/internal/schema.ts:140-211` (four catalog/projection tables),
+  contexts, claims), `catalog/internal/schema.ts:140-202` (four catalog/projection tables),
   `capability-supply/internal/convex-schema.ts:110-248`, `registry/internal/schema.ts:294-329`
   (four registry tables), `answer-thread/internal/convex-schema.ts:11-56`,
   `inquiries/internal/convex-schema.ts`, `notification-outbox/internal/schema.ts`,
@@ -139,7 +141,7 @@ Personas and current entry points:
   only for exact admitted/integrated catalog-origin links.
 - Keyless execution keeps `operation.execute` as an internal durable evidence action, not a
   model-facing callable tool. `executeKeylessOperation`
-  (`src/modules/capability-execution/operation-execute.server.ts:14-40`) injects the same
+  (`src/modules/capability-execution/operation-execute.server.ts:14-38`) injects the same
   descriptor source plus guarded public-target preflight and Undici fetch into
   `executeOperation` (`src/modules/capability-execution/operation-execute.functions.ts:9-21,75-259`).
   The executor accepts canonical `operation:v1:<64hex>` refs, validates caller input against the
@@ -159,19 +161,27 @@ Personas and current entry points:
   `src/modules/inquiries/internal/convex-schema.ts` and `src/modules/notification-outbox/internal/schema.ts`;
   owner views are refs/status/readbacks rather than raw customer data.
 
-### 2.6 Answer, thread, and evidence artifacts
+### 2.6 Answer, private thread, sharing, and evidence artifacts
 
 - `AnswerEvent`, `AnswerSnapshot`, `AnswerSource`, work steps, plans, artifacts, and artifact
-  discriminators (`src/modules/answer/answer-synthesizer.ts:61-160`,
-  `src/modules/answer/answer-schema.ts:14-122,175-195`) define the answer projection.
-- Thread records, turn/tool-call records, statuses, timing, harness summaries, and frozen evidence
-  (`src/modules/answer-thread/answer-thread.schema.ts:16-249`) are persisted by
-  `src/modules/answer-thread/internal/convex-schema.ts:11-56`; `FrozenTurnEvidence` is the private
-  evidence boundary and `FrozenTurnProse` is the public answer payload.
-- `buildPublicThreadProjection` (`src/modules/answer-thread/internal/public-projection.ts`)
-  redacts private evidence before `getPublicThreadProjection` is served by
-  `convex/answerThreads.ts:591-650`. The SSE wire is `ANSWER_TURN_DATA_PART`/
-  `AnswerTurnFrame` (`src/modules/answer/answer-ui-stream.ts`).
+  discriminators (`src/modules/answer/answer-synthesizer.ts`,
+  `src/modules/answer/answer-schema.ts`) define the redacted answer projection.
+- `answerThreads`, `answerTurnReservations`, `answerTurns`, `answerToolCalls`, and
+  `answerThreadShares` (`src/modules/answer-thread/internal/convex-schema.ts`) separate owner
+  identity, durable request admission, terminal replay, evidence rows, and revocable read grants.
+  Convex allocates `threadId`, `turnId`, and monotonic per-thread `seq` in one reservation
+  transaction before model/tool cost.
+- `FrozenTurnEvidence` is private source-write material. `buildPublicThreadProjection`
+  (`src/modules/answer-thread/internal/public-projection.ts`) exposes the bounded query transcript,
+  sanitized prose, artifacts, work log, and checks only; reservation-only rows become lifecycle-only
+  pending/stopped turns without fabricated evidence, and malformed durable terminal evidence becomes
+  a typed error rather than an authoritative blank complete answer. Owner reads require the matching
+  pseudonymous session; shared reads require a server-verified HMAC token and are read-only, noindex,
+  private/no-store, and no-referrer. `/s/<token>` is blocked/redacted at the telemetry boundary.
+- The SSE wire is transient `ANSWER_TURN_DATA_PART`/`AnswerTurnFrame`
+  (`src/modules/answer/answer-ui-stream.ts`). `answer-turn-state.ts` is the browser state machine;
+  exhaustive wire validation accepts sequence zero once, durable projection readback remains
+  terminal truth, and a null SSR projection gets one client owner read before becoming unavailable.
 
 ### 2.7 Money and governed action
 
@@ -275,12 +285,17 @@ durable supply seams.
 
 ### J4 — Agent thread, engine, execution, and money
 
-**R13 SSE turn + capability execution:** `/t/new` and `/t/$threadId` submit to `POST /api/answer/turn`
-(`src/routes/api.answer.turn.ts:28-42,56-158`). Body, content type, rate, and session/access are
-bounded before `streamAnswerTurn`; `x-ae-turn-key` provides only a process-local 30-second duplicate
-claim (`src/modules/answer-thread/internal/turn-guard.ts:8-29`), not durable turn replay. Retrieval-first
-reads registry operations or web discovery; finalization validates allowed slugs/checksums, emits
-typed events, and persists answer/thread evidence.
+**R13 durable answer turn + capability execution:** `/t/new` and owner-only `/t/$threadId` submit
+to `POST /api/answer/turn` (`src/routes/api.answer.turn.ts`). A required bounded
+`X-AE-Turn-Key`, normalized request digest, owner session, and requested thread/new scope enter
+`reserveAnswerTurn`; Convex checks the persisted-turn/reservation union, enforces the 25-slot cap,
+and atomically allocates server turn identity and sequence before `streamAnswerTurn`. Same
+key+digest replays the reservation lifecycle/terminal result; changed material input returns 409.
+Retrieval-first reads registry operations or web discovery; answer persistence uses a full answer
+digest. Deterministic persistence conflicts remain failures; an unknown persistence result is first
+proved through finalization and otherwise retried as one redacted error. Reservation-bound harness
+finalization verifies the parent owner plus every journal entry's session/run/turn identity and
+converges durably before the single terminal frame.
 
 For capability-eligible asks, `turn-orchestrator.ts:385-433` resolves one
 `KeylessExecutableSourcePort` snapshot and passes that same source into
@@ -295,15 +310,25 @@ absent (tests/evals may inject a fixture source).
 The selected descriptor alone becomes the model-facing strict per-operation capability tool; the
 model supplies only its published input schema while the closure keeps `operationRef` private.
 Durable evidence remains `operation.execute`; `executeKeylessOperation`
-(`src/modules/capability-execution/operation-execute.server.ts:14-40`) re-reads through the same
+(`src/modules/capability-execution/operation-execute.server.ts:14-38`) re-reads through the same
 source and injects Undici DNS/private-target guards into `executeOperation`
 (`src/modules/capability-execution/operation-execute.functions.ts:82-259`), whose response body
 read is bounded at 512 KiB (`:33,197-218`). Detailed AI SDK prompt/tool-loop mechanics are owned
 by `PROMPT-DATA-FLOW.md`.
 
-**R14 thread readback:** `/t/$threadId` → `readThreadRouteServer`
-(`src/routes/t.$threadId.tsx`) → `getPublicThreadProjection` → redacting
-`buildPublicThreadProjection` → `AeChat`.
+**R14 private readback, Stop, and explicit sharing:** `/t/$threadId` and
+`GET /api/answer/threads/$threadId` require the matching owner cookie and conceal misses. A null SSR
+projection triggers one client owner readback; a genuine 404 remains concealed as unavailable.
+`POST /api/answer/turn/stop` durably transitions a reserved/persisted turn to `stopped` before the
+browser aborts its stream; Stop remains available through streaming/settling/pending, requested or
+failed Stop copy disappears when durable status leaves pending, and an already-terminal turn returns
+its persisted status. Terminal stream settlement is confirmed through owner projection readback; one
+bounded retry is allowed only for a network or typed retryable read failure, and it never restarts
+model/tool execution. Share POST/DELETE issue or revoke one opaque HMAC token per thread, and
+`/s/$shareToken` renders the same sanitized transcript without composer, owner controls, raw
+evidence, or telemetry capture. Header share state is keyed by thread. Delete removes the
+parent/share authority before bounded child cleanup, so revocation/deletion immediately makes old
+and racing new tokens unavailable.
 
 **R15 separate plan producer:** customer-request preview produces `ConsumerPlanResult` for its own
 plan UI. The answer artifact union has no consumer-plan member, and the answer turn does not call
@@ -356,13 +381,19 @@ admin membership.
 - **Provenance:** `ServiceDto.a.source` is projected by `services-api-projection.ts`; plan evidence
   copies it in `toConsumerSupplyOption`. Public detail's hardcoded badge is a separate UI limitation.
 - **Redaction:** `projectBusinessSupplyToPublicApi`, inquiry admission projection,
-  `buildPublicThreadProjection`, and admin readbacks expose DTOs/refs/hashes, not raw durable rows or
-  private harness evidence.
+  `buildPublicThreadProjection`, and admin readbacks expose bounded DTOs/refs/hashes rather than raw
+  durable rows or private harness evidence. Answer transcripts intentionally include the bounded
+  user query; raw evidence, tool/model/provider payloads, session IDs, digests, and share tokens are
+  excluded, malformed terminal evidence projects as an error, and `/s/<64hex>` is blocked/redacted
+  from telemetry.
 - **Idempotency/replay:** operation keys and request hashes guard publication/contract writes;
-  route commands, dispatch attempts, and money charges use durable operation/attempt/effect identity
-  and replay-safe transitions. `x-ae-turn-key` is only a process-local 30-second duplicate claim.
-- **Evidence ladder:** readiness/test/route outcomes, capability call events, money receipts, and
-  frozen answer evidence are recorded before a claim is projected as source-owned/complete. A
+  route commands, dispatch attempts, money charges, and answer turns use durable
+  operation/attempt/effect/reservation identity and replay-safe transitions. `x-ae-turn-key` is
+  bound to owner, thread scope, and canonical request digest in `answerTurnReservations`, not a
+  process-local claim. Unknown persistence outcomes may be proved/recovered; deterministic answer
+  digest conflicts are never finalization-recovered.
+- **Evidence ceiling:** source-write admission, parent/entry-bound harness validation/finalization,
+  and frozen answer evidence are recorded before a claim is projected as source-owned/complete. A
   provider result is not completion evidence merely because a model described it.
 - **HTTP boundary:** `src/lib/server/problem.ts:1-21` builds RFC 9457 `application/problem+json`
   responses from the shared problem model. Participating routes can explicitly guard unsupported
@@ -371,7 +402,7 @@ admin membership.
 
 ---
 
-## 5. Reachable gaps and risks (source-proven on 2026-08-08)
+## 5. Reachable gaps and risks (source-proven on 2026-08-09)
 
 - **Detail provenance mismatch:** `AeProviderListingPage` hardcodes `business_published`
   (`src/components/ae/listing/AeProviderListingPage.tsx:230-234`), while canonical services carry
@@ -383,16 +414,12 @@ admin membership.
 - **Provider earnings are bounded:** `convex/moneyLedger.ts:646-662` reads the newest 100 ledger
   rows and returns `truncated: rows.length === 100`; consumers must not treat a truncated response
   as a complete historical statement.
-- **Answer retry idempotency is not durable:** `claimAnswerTurnIdempotency`
-  (`src/modules/answer-thread/internal/turn-guard.ts:8-29`) keeps process-local keys for 30 seconds,
-  while accepted turns receive a fresh UUID (`src/modules/answer-thread/internal/turn-orchestrator.ts:128-133`);
-  retry after response loss, expiry, restart, or another instance can append a duplicate durable turn.
 - **RFC route audit remains necessary:** registry route parsing and action schema validation are
   split across `src/routes/api.businesses.ts:32-77` and `src/modules/registry/registry.actions.ts`;
   any parse thrown outside the shared `problem()` mapper can bypass the intended RFC 9457 envelope.
 
 ---
 
-_Refreshed and anchor-checked against the dirty working tree on 2026-08-08. Source paths above are the
+_Refreshed and anchor-checked against the dirty working tree on 2026-08-09. Source paths above are the
 current authority; this map intentionally does not preserve disproven counts, DTO names, pricing
 shapes, provenance rules, or route claims from earlier walks._

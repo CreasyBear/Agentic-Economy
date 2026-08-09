@@ -17,6 +17,12 @@ export function decodeConvexPublicationSource(value: unknown): unknown {
       const { toolJson, ...source } = value
       return { ...source, tool: JSON.parse(toolJson) }
     }
+    if (value.kind === 'agent_plugin_mcp'
+      && 'manifestJson' in value && typeof value.manifestJson === 'string'
+      && 'toolJson' in value && typeof value.toolJson === 'string') {
+      const { manifestJson, toolJson, ...source } = value
+      return { ...source, manifest: JSON.parse(manifestJson), tool: JSON.parse(toolJson) }
+    }
     if (value.kind === 'x402' && 'resourceJson' in value && typeof value.resourceJson === 'string') {
       const { resourceJson, ...source } = value
       return { ...source, resource: JSON.parse(resourceJson) }

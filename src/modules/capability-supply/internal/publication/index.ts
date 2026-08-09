@@ -31,9 +31,15 @@ export {
   admitCapabilityPublicationCommand,
   type AdmitCapabilityPublicationInput,
   type AdmitCapabilityPublicationResult,
-  type CapabilityPublicationAdmissionSource,
   type CapabilityPublicationAdmissionRefusal,
+  type CapabilityPublicationAdmissionSource,
 } from './admit'
+
+export {
+  publicationValidationFix,
+  validateCapabilityPublication,
+  type CapabilityPublicationValidation,
+} from './validate'
 
 export {
   admitPublicationDraft,

@@ -47,8 +47,8 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
   if (inquiryReadyProviders.length > 0) {
     chips.push({
-      label: 'Only inquiry-ready listings',
-      submitQuery: 'Show only businesses that accept inquiries',
+      label: 'Businesses accepting requests',
+      submitQuery: 'Show only businesses accepting requests',
     })
   }
 
@@ -62,7 +62,7 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
   if (providers.length >= 2) {
     chips.push({
-      label: 'Compare the top two listings',
+      label: 'Compare the top two matches',
       submitQuery: 'Compare the top two',
     })
   }
@@ -119,16 +119,16 @@ function buildInquiryHandoffChip(
   const firstProvider = providers[0]
   if (firstProvider !== undefined && hasPublishedInquiryPath(firstProvider)) {
     return {
-      label: `Prepare qualified inquiry with ${firstProvider.name}`,
-      submitQuery: `Prepare a qualified inquiry for ${firstProvider.name}`,
+      label: `Ask ${firstProvider.name} about this`,
+      submitQuery: `Message ${firstProvider.name}`,
     }
   }
 
   const onlyInquiryReady = inquiryReadyProviders[0]
   if (inquiryReadyProviders.length === 1 && onlyInquiryReady !== undefined) {
     return {
-      label: `Prepare qualified inquiry with ${onlyInquiryReady.name}`,
-      submitQuery: `Prepare a qualified inquiry for ${onlyInquiryReady.name}`,
+      label: `Ask ${onlyInquiryReady.name} about this`,
+      submitQuery: `Message ${onlyInquiryReady.name}`,
     }
   }
 

@@ -6,6 +6,7 @@ import type {
   BindingWritePorts,
 } from '@/modules/capability-supply/public'
 
+import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
@@ -26,6 +27,32 @@ export function capabilitySupplyWriterPorts(
         && business.suppressedAt === undefined
         ? { businessId: String(business._id) }
         : null
+    },
+    loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
+      const row = await db.query('capabilityProviderConnections')
+        .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
+      return row === null ? undefined : {
+        connectionRef: row.connectionRef,
+        businessId: String(row.businessId),
+        providerRef: row.providerRef,
+        providerAccountRef: row.providerAccountRef,
+        adapterId: row.adapterId,
+        credentialRef: row.credentialRef,
+        grantedScopes: row.grantedScopes,
+        grantedResources: row.grantedResources,
+        authorityGeneration: row.authorityGeneration,
+        authorityDigest: row.authorityDigest,
+        lifecycle: row.lifecycle,
+        observedAt: row.observedAt,
+        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
+        ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
+        ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
+        evidenceRefs: row.evidenceRefs,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        lastCommandId: row.lastCommandId,
+        lastCommandDigest: row.lastCommandDigest,
+      }
     },
     resolveExactContract: async (ref) => {
       const result = await getActiveExactCapabilityContract(db, ref)
@@ -100,7 +127,14 @@ export function capabilitySupplyWriterPorts(
         version: row.version,
         contractDigest: row.contractDigest,
         endpointUrl: row.endpointUrl,
-        credentialRef: row.credentialRef,
+        authority: row.authority,
+        ...(row.connectionAuthority === undefined ? {} : {
+          connectionAuthority: {
+            ...row.connectionAuthority,
+            grantedScopes: [...row.connectionAuthority.grantedScopes],
+            grantedResources: [...row.connectionAuthority.grantedResources],
+          },
+        }),
         continuation: {
           ...row.continuation,
           evidenceRefs: [...row.continuation.evidenceRefs],

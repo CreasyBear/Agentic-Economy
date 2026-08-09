@@ -26,7 +26,7 @@ export function projectDurableRun<Result extends ActionResult>(
   }
 }
 
-export function reconstructDevelopmentProviderOperationInvocation(input: Readonly<{
+export async function reconstructDevelopmentProviderOperationInvocation(input: Readonly<{
   invocationRef: string
   action: AnyAction
   durable: ReturnType<typeof projectDurableRun>
@@ -63,7 +63,8 @@ export function reconstructDevelopmentProviderOperationInvocation(input: Readonl
       ...(source.resultIdentity === undefined ? {} : { resultIdentity: source.resultIdentity }),
     }),
   })
-  const view = tracer.coldResume(input.invocationRef).inspect(input.invocationRef)
+  const resumed = await tracer.coldResume(input.invocationRef)
+  const view = resumed.inspect(input.invocationRef)
   if (view === undefined) throw new Error('development_provider_operation_cold_reconstruction_failed')
   return { view, state }
 }

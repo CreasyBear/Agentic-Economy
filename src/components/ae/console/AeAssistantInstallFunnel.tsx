@@ -34,7 +34,7 @@ export function AeAssistantInstallFunnel({ canonicalBaseUrl }: AeAssistantInstal
       <CardHeader>
         <h2 className="text-xl font-semibold tracking-tight text-foreground">Connect your assistant</h2>
         <CardDescription>
-          Let your assistant find the right business and compare real options for your next ask.
+          Connect your assistant so it can find published businesses and compare real offers for your next ask.
         </CardDescription>
       </CardHeader>
 

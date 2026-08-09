@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { currencySchema, moneyRefSchema } from './pricing-contract'
+import { exactAmountSchema, compareExactAmounts } from './exact-amount'
+import { moneyRefSchema } from './pricing-contract'
 import type { MoneyRefusal } from '../public'
 
 export const LIVE_MONEY_COUNSEL_DECISIONS = [
@@ -79,8 +80,7 @@ export function evaluateLiveMoneyGate(policy: LiveMoneyGatePolicy = LIVE_MONEY_G
 }
 
 export const paymentBindingSchema = z.strictObject({
-  amountMinor: z.number().int().nonnegative().safe(),
-  currency: currencySchema,
+  amount: exactAmountSchema,
   providerRef: moneyRefSchema,
   actionVersion: moneyRefSchema,
   expiresAt: z.number().finite(),
@@ -104,8 +104,7 @@ export function validatePaymentBinding(input: Readonly<{
   }
   const approvedBinding = approved.data
   const requestedBinding = requested.data
-  if (approvedBinding.amountMinor !== requestedBinding.amountMinor
-    || approvedBinding.currency !== requestedBinding.currency
+  if (compareExactAmounts(approvedBinding.amount, requestedBinding.amount) !== 0
     || approvedBinding.providerRef !== requestedBinding.providerRef
     || approvedBinding.actionVersion !== requestedBinding.actionVersion
     || approvedBinding.expiresAt !== requestedBinding.expiresAt

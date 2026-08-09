@@ -52,7 +52,7 @@ async function streamFrozenKnownProviderTurn(
 
   const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
   if (!finalized.ok) {
-    return rejectBlockedSnapshot(ctx, [], allowedSlugs, finalized)
+    return rejectBlockedSnapshot([], allowedSlugs, finalized)
   }
   const assembly = await ctx.emitOrDeferSnapshot(
     finalized.snapshot,

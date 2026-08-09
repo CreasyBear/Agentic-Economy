@@ -13,6 +13,10 @@ import {
 } from '../../src/modules/action-invocation'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import {
+  compareExactAmounts,
+  type ExactAmount,
+} from '../../src/modules/money/public'
+import {
   developmentProviderOperationObjectiveStateValid,
   runFullYoloDevelopmentObjective,
 } from './fixtures/provider-operation/development-provider-operation-objective'
@@ -37,6 +41,9 @@ export const developmentEvidenceCustodyFixture = {
 let processColdProofCache: Promise<Awaited<ReturnType<typeof runProcessColdProof>>> | undefined
 const officialClaimCeiling =
   'Labelled local separate-process mock execution only; no independently operated provider, deployment, production safety, or customer value.'
+function exactAud(units: string): ExactAmount {
+  return { currency: 'AUD', units, exponent: 2 }
+}
 
 export type FullYoloEvidence = Awaited<ReturnType<typeof runFullYoloDevelopmentObjective>> & {
   gitRevision: string
@@ -46,7 +53,7 @@ export type FullYoloEvidence = Awaited<ReturnType<typeof runFullYoloDevelopmentO
     countExhaustion: string
     spendExhaustion: string
     lossExhaustion: string
-    unknownHeldLossMinor: number
+    unknownHeldLoss: ExactAmount
   }>
   processColdProof: Awaited<ReturnType<typeof runProcessColdProof>>
 }
@@ -77,8 +84,8 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
     recipientRef: mandate.scope.recipientRefs[0]!,
     purpose: 'create_development_effect',
     dataFields: ['customer.name'],
-    reservedSpend: { amountMinor: 0, currency: 'AUD' },
-    reservedLoss: { amountMinor: 0, currency: 'AUD' },
+    reservedSpend: exactAud('0'),
+    reservedLoss: exactAud('0'),
     fallbackRef: 'provider_a_primary',
     risk: mandate.scope.riskCeiling,
     effectGeneration: 1,
@@ -157,19 +164,21 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
   const countExhaustion = reserve(count, material('count:5'))
   const spend = fresh()
   reserve(spend, material('spend:1', {
-    reservedSpend: { amountMinor: 10_000, currency: 'AUD' },
+    reservedSpend: exactAud('10000'),
   }))
   const spendExhaustion = reserve(spend, material('spend:2', {
-    reservedSpend: { amountMinor: 1, currency: 'AUD' },
+    reservedSpend: exactAud('1'),
   }))
   const loss = fresh()
   reserve(loss, material('loss:1', {
-    reservedLoss: { amountMinor: 5_000, currency: 'AUD' },
+    reservedLoss: exactAud('5000'),
   }))
   const lossExhaustion = reserve(loss, material('loss:2', {
-    reservedLoss: { amountMinor: 1, currency: 'AUD' },
+    reservedLoss: exactAud('1'),
   }))
   loss.settle('loss:1', 'uncertain', developmentNow())
+  const unknownHeldLoss = loss.capacity(mandate.mandateRef).worstCaseLoss
+  if (unknownHeldLoss === undefined) throw new Error('full_yolo_unknown_loss_missing')
   return {
     ...objective,
     gitRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -179,7 +188,7 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
       countExhaustion: refusal(countExhaustion),
       spendExhaustion: refusal(spendExhaustion),
       lossExhaustion: refusal(lossExhaustion),
-      unknownHeldLossMinor: loss.capacity(mandate.mandateRef).worstCaseLossMinor,
+      unknownHeldLoss,
     },
     processColdProof: await (processColdProofCache ??= runProcessColdProof()),
   }
@@ -311,10 +320,12 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || !verifiedGrantMatchesMandate(evidence.grant, mandate, evidence.grant.verifiedAt)
     || evidence.policyDecisions.length !== 3
     || evidence.policyDecisions.map(({ fallbackOrdinal }) => fallbackOrdinal).join(',') !== '0,1,2'
-    || evidence.policyDecisions.map(({ proposedWorstCaseLossMinor }) =>
-      proposedWorstCaseLossMinor).join(',') !== '0,5000,0'
-    || evidence.policyDecisions.map(({ heldWorstCaseLossMinor }) =>
-      heldWorstCaseLossMinor).join(',') !== '0,0,5000'
+    || compareExactAmounts(evidence.policyDecisions[0]?.proposedWorstCaseLoss, exactAud('0')) !== 0
+    || compareExactAmounts(evidence.policyDecisions[1]?.proposedWorstCaseLoss, exactAud('5000')) !== 0
+    || compareExactAmounts(evidence.policyDecisions[2]?.proposedWorstCaseLoss, exactAud('0')) !== 0
+    || compareExactAmounts(evidence.policyDecisions[0]?.heldWorstCaseLoss, exactAud('0')) !== 0
+    || compareExactAmounts(evidence.policyDecisions[1]?.heldWorstCaseLoss, exactAud('0')) !== 0
+    || compareExactAmounts(evidence.policyDecisions[2]?.heldWorstCaseLoss, exactAud('5000')) !== 0
     || evidence.objectiveDecisionRecords.map(({ ordinal }) => ordinal).join(',') !== '0,1,2'
     || evidence.objectiveDecisionRecords[1]?.kind !== 'fallback_after_terms_refusal'
     || evidence.invocations.length !== 3
@@ -381,7 +392,7 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.comparison.fullYoloPrincipalGrantDecisions !== 1
     || evidence.comparison.repeatedPrincipalDecisions !== 0
     || evidence.comparison.retainedExactAuthorityUses !== 3
-    || evidence.capacityAfterCancellation.worstCaseLossMinor !== 0
+    || compareExactAmounts(evidence.capacityAfterCancellation.worstCaseLoss, exactAud('0')) !== 0
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.evidenceRuleRef
       !== developmentCancellationConfirmationRule.evidenceRuleRef
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.evidenceRuleSource
@@ -405,7 +416,7 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.safetyEvals.countExhaustion !== 'mandate_count_exhausted'
     || evidence.safetyEvals.spendExhaustion !== 'mandate_spend_exceeded'
     || evidence.safetyEvals.lossExhaustion !== 'mandate_risk_exceeded'
-    || evidence.safetyEvals.unknownHeldLossMinor !== 5_000
+    || compareExactAmounts(evidence.safetyEvals.unknownHeldLoss, exactAud('5000')) !== 0
     || new Set(processPids).size !== processPids.length
     || evidence.processColdProof.privateKeySerializedInState
     || evidence.processColdProof.operationEffectCounts.providerA !== 1

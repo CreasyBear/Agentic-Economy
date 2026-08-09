@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-export type SupplySourceKind = 'openapi_http' | 'mcp' | 'x402'
+export type SupplySourceKind = 'openapi_http' | 'mcp' | 'agent_plugin_mcp'
 export type SupplyEndpointConfigValue = Readonly<{
   sourceKind: SupplySourceKind
   descriptor: string
@@ -18,7 +18,6 @@ export type SupplyEndpointConfigValue = Readonly<{
   protocolVersion: string
   toolName: string
   requestTimeoutMs: number
-  credentialRef: string
 }>
 
 export function AeSupplyEndpointConfigStep({
@@ -40,7 +39,6 @@ export function AeSupplyEndpointConfigStep({
     protocolVersion: initialValue?.protocolVersion ?? '',
     toolName: initialValue?.toolName ?? '',
     requestTimeoutMs: initialValue?.requestTimeoutMs ?? 10_000,
-    credentialRef: initialValue?.credentialRef ?? 'none',
   }))
   const [pending, setPending] = useState(false)
   const formDisabled = disabled || pending
@@ -82,7 +80,8 @@ export function AeSupplyEndpointConfigStep({
                   <SelectGroup>
                     <SelectItem value="openapi_http">OpenAPI HTTP</SelectItem>
                     <SelectItem value="mcp">MCP</SelectItem>
-                    <SelectItem value="x402">x402</SelectItem>
+                    <SelectItem value="agent_plugin_mcp">Agent Plugin MCP</SelectItem>
+
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -123,7 +122,7 @@ export function AeSupplyEndpointConfigStep({
               <FieldLabel htmlFor="supply-query-mapping">Query mapping (JSON, when required)</FieldLabel>
               <Textarea id="supply-query-mapping" value={value.queryMapping} disabled={formDisabled} onChange={(event) => update({ queryMapping: event.currentTarget.value })} rows={3} className="font-mono text-sm" />
             </Field>
-            {value.sourceKind === 'mcp' ? (
+            {(value.sourceKind === 'mcp' || value.sourceKind === 'agent_plugin_mcp') ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field {...(formDisabled ? { 'data-disabled': true } : {})}>
                   <FieldLabel htmlFor="supply-protocol-version">Protocol version</FieldLabel>
@@ -135,11 +134,7 @@ export function AeSupplyEndpointConfigStep({
                 </Field>
               </div>
             ) : null}
-            <Field {...(formDisabled ? { 'data-disabled': true } : {})}>
-              <FieldLabel htmlFor="supply-access-reference">Access reference</FieldLabel>
-              <Input id="supply-access-reference" value={value.credentialRef} disabled={formDisabled} onChange={(event) => update({ credentialRef: event.currentTarget.value })} className="min-h-11" aria-describedby="supply-access-reference-help" />
-              <FieldDescription id="supply-access-reference-help">Use none when your service needs no access token. References such as env:NAME require deployment setup.</FieldDescription>
-            </Field>
+            <p className="text-sm text-muted-foreground">Access is selected and resolved by AE on the server after publication admission.</p>
           </FieldGroup>
         </details>
       </CardContent>
@@ -153,6 +148,6 @@ export function AeSupplyEndpointConfigStep({
 }
 
 function sourceKindFromValue(value: string): SupplySourceKind {
-  if (value === 'mcp' || value === 'x402') return value
+  if (value === 'mcp' || value === 'agent_plugin_mcp') return value
   return 'openapi_http'
 }

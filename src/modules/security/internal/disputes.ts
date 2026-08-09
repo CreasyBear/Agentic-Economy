@@ -2,7 +2,8 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import type { AuditEventContract } from '@/modules/common/audit-events'
 import { validateAuditEvent } from '@/modules/common/audit-events'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import { assertCsrf } from './duplicates'
 import type {
   DisputeEvidenceInput,
@@ -342,7 +343,7 @@ function toPublicReceipt(dispute: DisputeRecord): RemovalDisputeReceipt {
 }
 
 function mergeEvidenceRefs(existing: readonly string[], next: readonly string[]): string[] {
-  return stableUnique([...existing, ...next])
+  return uniq([...existing, ...next])
 }
 
 function normalizeContactPart(value: string | undefined): string {
@@ -354,5 +355,5 @@ function normalizePublicMessage(value: string | undefined): string {
 }
 
 function normalizePublicText(value: string, maxLength: number): string {
-  return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength)
+  return sanitizeText(value, maxLength)
 }

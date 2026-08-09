@@ -1,5 +1,5 @@
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
-import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
+import { AeOfferingCard } from '@/components/ae/primitives/AeOfferingCard'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 type AeCapabilityListProps = {
@@ -23,7 +23,7 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
     <ul className="m-0 grid list-none gap-4 p-0">
       {catalog.offerings.map((offering) => (
         <li key={offering.offeringRef}>
-          <AeProviderCard variant="offering" offering={offering} />
+          <AeOfferingCard offering={offering} />
         </li>
       ))}
     </ul>

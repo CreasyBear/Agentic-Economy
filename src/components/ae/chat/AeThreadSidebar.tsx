@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
-import { ChevronDownIcon, CopyIcon, EllipsisVerticalIcon, PlusIcon, TrashIcon } from 'lucide-react'
-import { copyThreadLink } from './copy-thread-link'
+import { ChevronDownIcon, CopyIcon, EllipsisVerticalIcon, Link2OffIcon, PlusIcon, TrashIcon } from 'lucide-react'
+import { announceShareFailure, copyAnswerThreadShareLink, revokeAnswerThreadShare } from './copy-thread-link'
 
 import {
   Command,
@@ -11,7 +11,9 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import { neutralizeBidiFormattingControls } from '@/modules/answer/public'
 import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
+import { toast } from '@/lib/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -39,6 +41,7 @@ export type AeThreadSidebarProps = {
   layout?: 'desktop' | 'mobile'
   onDelete?: (threadId: string) => void
   onNavigate?: () => void
+  onNewQuestion?: () => void
 }
 
 export function AeThreadSidebar({
@@ -48,6 +51,7 @@ export function AeThreadSidebar({
   layout = 'desktop',
   onDelete,
   onNavigate,
+  onNewQuestion,
 }: AeThreadSidebarProps) {
   if (!visible) {
     return null
@@ -65,11 +69,9 @@ export function AeThreadSidebar({
           <span className="truncate font-mono text-xs font-medium uppercase leading-tight text-muted-foreground">Recent questions</span>
           <span className="inline-grid min-h-6 min-w-6 place-items-center rounded-sm border border-border bg-card font-mono text-xs leading-none tabular-nums text-muted-foreground" data-numeric>{threads.length}</span>
         </div>
-        <Button asChild variant="secondary" size="sm" className="min-h-11 w-full">
-          <Link to="/" {...(onNavigate === undefined ? {} : { onClick: onNavigate })}>
-            <PlusIcon aria-hidden="true" />
-            New question
-          </Link>
+        <Button variant="secondary" size="sm" className="min-h-11 w-full" onClick={onNewQuestion}>
+          <PlusIcon aria-hidden="true" />
+          New question
         </Button>
       </div>
       {isStructuredAnswerModeEnabled() ? (
@@ -89,6 +91,7 @@ export function AeThreadSidebar({
                 active={thread.threadId === activeThreadId}
                 onDelete={onDelete}
                 onNavigate={onNavigate}
+                onNewQuestion={onNewQuestion}
               />
             ))}
           </ul>
@@ -204,17 +207,43 @@ function AeThreadSidebarRow({
   active,
   onDelete,
   onNavigate,
+  onNewQuestion,
 }: {
   thread: AnswerThreadRecord
   active: boolean
   onDelete: ((threadId: string) => void) | undefined
   onNavigate: (() => void) | undefined
+  onNewQuestion: (() => void) | undefined
 }) {
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [shareBusy, setShareBusy] = useState<'copy' | 'revoke' | null>(null)
+  const [shareRevoked, setShareRevoked] = useState(false)
+  const displayTitle = neutralizeBidiFormattingControls(thread.title)
 
-  async function copyLink() {
-    await copyThreadLink(thread.threadId)
+  async function copyShareLink() {
+    if (shareBusy !== null) return
+    setShareBusy('copy')
+    const result = await copyAnswerThreadShareLink(thread.threadId)
+    if (result.kind === 'copied') setShareRevoked(false)
+    setShareBusy(null)
+    setMenuOpen(false)
+  }
+
+  async function revokeShareLink() {
+    if (shareBusy !== null) return
+    setShareBusy('revoke')
+    const result = await revokeAnswerThreadShare(thread.threadId)
+    if (result.kind === 'revoked') {
+      setShareRevoked(true)
+      toast.success('Share link revoked.')
+    } else if (result.kind === 'already_revoked') {
+      setShareRevoked(true)
+      toast.info('Share link already revoked.')
+    } else {
+      announceShareFailure(result, 'revoke')
+    }
+    setShareBusy(null)
     setMenuOpen(false)
   }
 
@@ -244,7 +273,7 @@ function AeThreadSidebarRow({
         aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
       >
-        <span className="truncate text-sm leading-snug text-foreground">{thread.title}</span>
+        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-sm leading-snug text-foreground">{displayTitle}</span>
         <ClientRelativeTime timestamp={thread.updatedAt} />
       </Link>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -253,7 +282,7 @@ function AeThreadSidebarRow({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label={`Actions for ${thread.title}`}
+            aria-label={`Actions for ${displayTitle}`}
             className="min-h-11 min-w-11 self-center text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/row:opacity-100 group-focus-within/row:opacity-100"
           >
             <EllipsisVerticalIcon aria-hidden="true" />
@@ -269,15 +298,19 @@ function AeThreadSidebarRow({
           >
             Open thread
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void copyLink()}>
+          <DropdownMenuItem onSelect={() => void copyShareLink()} disabled={shareBusy !== null}>
             <CopyIcon aria-hidden="true" />
-            Copy link
+            {shareBusy === 'copy' ? 'Preparing share link…' : 'Copy share link'}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void revokeShareLink()} disabled={shareBusy !== null || shareRevoked}>
+            <Link2OffIcon aria-hidden="true" />
+            {shareBusy === 'revoke' ? 'Revoking share link…' : shareRevoked ? 'Share link revoked' : 'Revoke share link'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
-              void router.navigate({ to: '/' })
               setMenuOpen(false)
+              onNewQuestion?.()
               onNavigate?.()
             }}
           >

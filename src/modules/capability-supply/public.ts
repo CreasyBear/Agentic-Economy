@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import { identifier, jsonValueSchema, type CapabilityContractRef, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
@@ -9,17 +11,7 @@ declare const mappingRefBrand: unique symbol
 
 export type PublicOperationRef = string & Readonly<{ [operationRefBrand]: true }>
 export type RegisteredOperationMappingRef = string & Readonly<{ [mappingRefBrand]: true }>
-export type RegisteredInputMappingRef = RegisteredOperationMappingRef
-
-export const RegisteredOperationMappingKindValues = [
-  'identity',
-  'field',
-  'array_project',
-  'registered_transform',
-] as const
-export type RegisteredOperationMappingKind = (typeof RegisteredOperationMappingKindValues)[number]
-
-type RegisteredOperationMappingContractBinding = Readonly<{
+export type RegisteredOperationMappingContractBinding = Readonly<{
   sourceContractRef: CapabilityContractRef
   targetContractRef: CapabilityContractRef
   sourceSchemaIdentity: string
@@ -180,6 +172,7 @@ export {
   compareCapabilityOperations,
   inspectCapabilityOperationPlan,
   projectCapabilityOperation,
+  rankOperationSearchText,
   serializeOperationDescriptor,
   deserializeOperationDescriptor,
   serializeOperationSearchResult,
@@ -194,6 +187,7 @@ export {
 export type {
   CapabilityOperationSourcePort,
   CapabilityOperationSourceRecord,
+  CatalogOfferingOperationMapEntry,
   InspectPlanInput,
   InspectPlanResult,
   InspectPlanWireResult,
@@ -207,6 +201,7 @@ export type {
   OperationDetailWireResult,
   OperationSearchFilters,
   OperationSearchInput,
+  OperationSearchTextCandidate,
   OperationSearchResult,
   OperationSearchWireResult,
   OperationSurfaceWireResult,
@@ -217,22 +212,53 @@ export type {
   PublicEffectPolicy,
   PublicEvidencePolicy,
   PublicCancellationPolicy,
+  PublicOperationAuthentication,
   PublicOperationAvailability,
   PublicOperationBusinessRef,
+  PublicOperationCatalogPrice,
   PublicOperationDescriptor,
   PublicOperationOfferingRef,
+  PublicOperationParameter,
   PublicOperationPrice,
+  PublicOperationReadiness,
   PublicOperationNavigationRelation,
   PublicRecoveryPolicy,
 } from './operation-projection'
-export { admitRegisteredTransport } from './internal/transport-adapters'
-export type { TransportAdmissionInput, TransportAdmissionResult } from './internal/transport-adapters'
 export {
+  admitRegisteredTransport,
+  injectHttpJsonCredential,
+  parseAdmittedTransportCatalogMetadata,
+  parseAdmittedX402CatalogPayment,
+  parseHttpJsonTransportConfiguration,
+  readHttpJsonProbeConfiguration,
+  validPublicHttpsEndpoint,
+} from './internal/transport-adapters'
+export type {
+  AdmittedTransportCatalogMetadata,
+  HttpJsonCredential,
+  HttpJsonFixedQueryParameter,
+  HttpJsonProbeConfiguration,
+  HttpJsonQueryParameterMapping,
+  HttpJsonTransportConfiguration,
+  TransportAdmissionInput,
+  TransportAdmissionResult,
+  X402CatalogPayment,
+} from './internal/transport-adapters'
+export {
+  importAgentPluginMcpCapability,
   importMcpCapability,
   importOpenApiHttpCapability,
   importX402Capability,
   normalizeCapabilityPublication,
 } from './internal/publication-importers'
+export { admitProviderSchema } from './internal/admit-provider-schema'
+export type {
+  AdmitCredentialSpec,
+  AdmitProviderSchemaInput,
+  AdmitProviderSchemaNormalized,
+  AdmitProviderSchemaRefusal,
+  AdmitProviderSchemaResult,
+} from './internal/admit-provider-schema'
 export type {
   CanonicalCapabilityPublicationDraft,
   CapabilityContractMetadata,
@@ -280,21 +306,18 @@ export type {
   BtcUsdQuoteResult,
 } from './btc-usd-quote-result'
 export {
-  developmentAlternateBtcUsdQuoteSource,
-  projectDevelopmentAlternateBtcUsdQuoteResult,
-} from './development-alternate-btc-usd-quote-result'
-export {
-  buildDevelopmentAlternatePublishedOperationEvidence,
-  verifyDevelopmentAlternatePublishedOperationEvidence,
-} from './development-alternate-published-operation-evidence'
-export {
   bindingObservedRowDigest,
 } from './internal/quarantine'
 export {
   registerCapabilityTransportBinding,
+  connectionAuthoritySnapshotFromProviderConnection,
+  connectionAuthoritySnapshotIsValid,
+  connectionAuthoritySnapshotMatches,
+  connectionAuthoritySnapshotsEqual,
   type BindingInsertRow,
   type BindingWritePorts,
   type CapabilityBindingRow,
+  type CapabilityConnectionAuthoritySnapshot,
 } from './internal/binding'
 export {
   MAX_ELIGIBLE_SUPPLY,
@@ -391,20 +414,22 @@ const commercialRelationshipSchema = z.strictObject({
   influencesOrder: z.boolean(),
   evidenceRefs,
 })
+function exactAmountsOrdered(minimum: ExactAmount, maximum: ExactAmount): boolean {
+  const comparison = compareExactAmounts(minimum, maximum)
+  return comparison !== undefined && comparison <= 0
+}
 const priceSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('fixed'),
-    currency: z.string().trim().regex(/^[A-Z]{3}$/),
-    amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    amount: exactAmountSchema,
   }),
   z.strictObject({
     kind: z.literal('range'),
-    currency: z.string().trim().regex(/^[A-Z]{3}$/),
-    minimumAmountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    maximumAmountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  }).refine((value) => value.minimumAmountMinor <= value.maximumAmountMinor),
+    minimum: exactAmountSchema,
+    maximum: exactAmountSchema,
+  }),
   z.strictObject({ kind: z.literal('on_request') }),
-])
+]).refine((value) => value.kind !== 'range' || exactAmountsOrdered(value.minimum, value.maximum))
 const offeringOriginSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('catalog_offering'),
@@ -448,22 +473,32 @@ const cancellationSchema = z.strictObject({
   kind: z.enum(['unsupported', 'adapter_managed']),
   evidenceRefs,
 })
+const authoritySchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('keyless') }),
+  z.strictObject({
+    kind: z.literal('provider_connection'),
+    connectionRef: identifier,
+    providerRef: identifier,
+  }),
+])
 const bindingSchema = z.strictObject({
   bindingId: identifier,
   offeringId: identifier,
   networkId: identifier,
   contractRef: contractRefSchema,
   endpointUrl: z.string().trim().min(1).max(2_000),
-  credentialRef: z.string().trim().min(1).max(500),
+  authority: authoritySchema,
   continuation: continuationSchema,
   cancellation: cancellationSchema,
   adapter: z.strictObject({ adapterId: identifier, config: jsonValueSchema }),
   registrationEvidenceRefs: evidenceRefs,
 })
 
+export type CapabilityTransportAuthority = Readonly<z.infer<typeof authoritySchema>>
+export type CapabilityTransportBindingRegistration = Readonly<z.infer<typeof bindingSchema>>
+
 export type CapabilityOfferingRegistration = Readonly<z.infer<typeof offeringSchema>>
 export type CapabilityOfferingOrigin = Readonly<z.infer<typeof offeringOriginSchema>>
-export type CapabilityTransportBindingRegistration = Readonly<z.infer<typeof bindingSchema>>
 export type CapabilityContinuation = Readonly<z.infer<typeof continuationSchema>>
 export type CapabilityCancellation = Readonly<z.infer<typeof cancellationSchema>>
 export type AdmittedTransportMaterial = Readonly<{

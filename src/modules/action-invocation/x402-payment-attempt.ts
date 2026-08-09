@@ -1,3 +1,5 @@
+import type { ExactAmount } from '@/modules/money/public'
+
 export type X402PaymentAttemptState =
   | 'prepared'
   | 'possibly_submitted'
@@ -17,12 +19,12 @@ export type X402PaymentAttempt = Readonly<{
   network: string
   asset: string
   payTo: string
-  amount: string
+  amount: ExactAmount
   providerEndpoint: string
   operationRevision: string
   authorizationDigest: string
   custodyRef: string
-  settledAmount?: Readonly<{ currency: string; amountMinor: number }>
+  settledAmount?: ExactAmount
   reconciliationEvidenceRef?: string
   reconciliationEvidenceDigest?: string
   state: X402PaymentAttemptState

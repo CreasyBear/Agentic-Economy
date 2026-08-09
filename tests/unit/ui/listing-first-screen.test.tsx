@@ -246,10 +246,12 @@ function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): stri
           accessPaths: [
             {
               accessPathRef: brandNonEmpty('access:demo-plumbing:emergency-plumbing:phone', 'AccessPathRef'),
+              offeringRevision: 1,
               descriptor: { kind: 'human_request', channel: 'phone', disclosure: STORED_INQUIRY_DISCLOSURE },
             },
             {
               accessPathRef: brandNonEmpty('access:demo-plumbing:emergency-plumbing:inquiry', 'AccessPathRef'),
+              offeringRevision: 1,
               descriptor: { kind: 'human_request', channel: 'ae_inquiry', disclosure: STORED_INQUIRY_DISCLOSURE },
             },
           ],
@@ -288,6 +290,7 @@ function catalogFixture(
     availabilitySummary: 'Mon–Fri, 8am–5pm',
     accessPaths: [{
       accessPathRef: 'access:demo-plumbing:emergency-plumbing:inquiry',
+      offeringRevision: 1,
       kind: 'human_request',
       channel: 'ae_inquiry',
       disclosure: 'Send a written inquiry for owner review.',

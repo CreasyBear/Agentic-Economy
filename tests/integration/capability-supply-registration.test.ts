@@ -8,11 +8,16 @@ import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   capabilityBindingEligibilityHash,
+  type listIntegratedCapabilitySupply,
   type CapabilityOfferingRegistration,
+  type CapabilityTransportAuthority,
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 
 import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
+
+type IntegratedSupply = Extract<Awaited<ReturnType<typeof listIntegratedCapabilitySupply>>, { kind: 'available' }>['supplies'][number]
+type IntegratedSupplyBinding = Pick<IntegratedSupply, 'binding'>
 
 describe('V2 capability supply registration', () => {
   it('refuses anonymous and missing-contract registration without a supply write', async () => {
@@ -40,6 +45,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref),
       ...operationContext('offering'),
@@ -65,7 +71,7 @@ describe('V2 capability supply registration', () => {
     if (binding.kind !== 'registered') throw new Error('binding registration failed')
     await publishAndObserveCapability(backend, owner, businessId, offeringArgs.registration, bindingArgs.registration, 'single')
 
-    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
 
     const eligibility = await admin.mutation(api.capabilitySupply.setEligibility, {
@@ -84,7 +90,7 @@ describe('V2 capability supply registration', () => {
       eligibilityHash: expect.stringMatching(/^sha256:/),
     })
 
-    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() })
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [{
@@ -142,6 +148,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -192,7 +199,7 @@ describe('V2 capability supply registration', () => {
     const revoked = await admin.mutation(api.capabilitySupply.setEligibility, revokeArgs)
     await expect(admin.mutation(api.capabilitySupply.setEligibility, revokeArgs)).resolves.toEqual(revoked)
     expect(revoked).toMatchObject({ kind: 'ineligible', offeringId: offering.offeringId, bindingId: binding.bindingId })
-    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
     const transitions = await backend.run(async (ctx) => ({
       offering: await ctx.db.query('capabilityOfferings').unique(),
@@ -215,6 +222,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -249,6 +257,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -260,8 +269,9 @@ describe('V2 capability supply registration', () => {
       ...bindingRegistration(ref),
       bindingId: 'binding:supply-one:http:second',
       endpointUrl: 'https://second.example.test/capability',
-      credentialRef: 'env:AE_SUPPLY_SECOND_SECRET',
+      authority: providerAuthority('second'),
     }
+    await registerProviderConnection(admin, businessId, secondRegistration)
     const second = await admin.mutation(api.capabilitySupply.registerBinding, {
       registration: secondRegistration, ...operationContext('binding-two'),
     })
@@ -291,10 +301,10 @@ describe('V2 capability supply registration', () => {
     await expect(admin.mutation(api.capabilitySupply.setEligibility, {
       ...revokeFirst, ...operationContext('revoke-one'),
     })).resolves.toMatchObject({ kind: 'ineligible', bindingId: first.bindingId })
-    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
+    const eligible = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() })
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('eligible supply unavailable')
-    expect(eligible.supplies.map((supply) => supply.binding.bindingId)).toEqual([second.bindingId])
+    expect(eligible.supplies.map((supply: IntegratedSupplyBinding) => supply.binding.bindingId)).toEqual([second.bindingId])
   })
 
   it('keeps offering and binding audit identities distinct when their text IDs are equal', async () => {
@@ -302,6 +312,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const sharedId = 'shared:supply-identity'
     const sharedOfferingRegistration = { ...offeringRegistration(businessId, ref), offeringId: sharedId }
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
@@ -340,6 +351,12 @@ describe('V2 capability supply registration', () => {
     const second = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: secondOfferingRegistration, ...operationContext('offering-two'),
     })
+    await registerProviderConnection(admin, secondBusinessId, {
+      ...bindingRegistration(ref),
+      offeringId: secondOfferingRegistration.offeringId,
+      bindingId: 'binding:supply-two:http',
+      endpointUrl: 'https://supply-two.example.test/capability',
+    })
     const secondBinding = await admin.mutation(api.capabilitySupply.registerBinding, {
       registration: {
         ...bindingRegistration(ref), offeringId: secondOfferingRegistration.offeringId,
@@ -376,6 +393,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -410,7 +428,7 @@ describe('V2 capability supply registration', () => {
     await expect(admin.mutation(api.capabilitySupply.setEligibility, {
       ...base, ...operationContext('retired-contract'),
     })).resolves.toEqual({ kind: 'refused', reason: 'contract_not_active' })
-    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() }))
       .resolves.toEqual({ kind: 'available', supplies: [] })
   })
 
@@ -419,6 +437,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -471,10 +490,16 @@ describe('V2 capability supply registration', () => {
       registration: bindingRegistration(ref), ...operationContext('binding'),
     })
     if (binding.kind !== 'registered') throw new Error('binding registration failed')
+    await registerProviderConnection(admin, businessId, {
+      ...bindingRegistration(ref),
+      bindingId: 'binding:supply-one:http:healthy',
+      endpointUrl: 'https://healthy.example.test/capability',
+      authority: providerAuthority('healthy'),
+    })
     const healthyBinding = await admin.mutation(api.capabilitySupply.registerBinding, {
       registration: {
         ...bindingRegistration(ref), bindingId: 'binding:supply-one:http:healthy',
-        endpointUrl: 'https://healthy.example.test/capability', credentialRef: 'env:AE_SUPPLY_HEALTHY_SECRET',
+        endpointUrl: 'https://healthy.example.test/capability', authority: providerAuthority('healthy'),
       },
       ...operationContext('healthy-binding'),
     })
@@ -501,7 +526,7 @@ describe('V2 capability supply registration', () => {
       ...bindingRegistration(ref),
       bindingId: healthyBinding.bindingId,
       endpointUrl: 'https://healthy.example.test/capability',
-      credentialRef: 'env:AE_SUPPLY_HEALTHY_SECRET',
+      authority: providerAuthority('healthy'),
     }, 'healthy')
     await backend.run(async (ctx) => {
       const row = await ctx.db.query('capabilityTransportBindings')
@@ -509,7 +534,7 @@ describe('V2 capability supply registration', () => {
       if (row === null) throw new Error('binding missing')
       await ctx.db.patch(row._id, { registrationHash: 'corrupt' })
     })
-    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 }))
+    await expect(backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() }))
       .resolves.toEqual({ kind: 'unavailable', reason: 'supply_integrity_failure' })
     const controlState = await admin.query(api.capabilitySupply.inspectBindingControlState, {
       bindingId: binding.bindingId,
@@ -519,7 +544,7 @@ describe('V2 capability supply registration', () => {
       bindingId: binding.bindingId, expectedObservedRowDigest: controlState.observedRowDigest,
       ...operationContext('quarantine-corrupt-binding'),
     })).resolves.toMatchObject({ kind: 'quarantined', bindingId: binding.bindingId })
-    const recovered = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32 })
+    const recovered = await backend.query(internal.capabilitySupply.listIntegrated, { networkId: 'ae:public', limit: 32, now: Date.now() })
     expect(recovered).toMatchObject({
       kind: 'available', supplies: [{ binding: { bindingId: healthyBinding.bindingId } }],
     })
@@ -570,6 +595,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -660,6 +686,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -723,6 +750,7 @@ describe('V2 capability supply registration', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
+    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
     const offering = await admin.mutation(api.capabilitySupply.registerOffering, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -764,7 +792,7 @@ function offeringRegistration(businessId: Id<'businesses'>, contractRef: ReturnT
     offeringId: 'offering:supply-one:lookup', businessId, networkId: 'ae:public', contractRef,
     presentation: {
       label: 'Reference lookup', summary: 'A registered capability offering.',
-      price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1_200 },
+      price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
       materialTerms: [{ termId: 'delivery', label: 'Delivery', value: 'One structured response' }],
       commercialRelationship: {
         kind: 'none' as const, summary: 'No commercial influence.',
@@ -776,10 +804,18 @@ function offeringRegistration(businessId: Id<'businesses'>, contractRef: ReturnT
   } satisfies CapabilityOfferingRegistration
 }
 
+function providerAuthority(name: string): CapabilityTransportAuthority {
+  return {
+    kind: 'provider_connection',
+    connectionRef: `connection:ae-supply:${name}`,
+    providerRef: `provider:ae-supply:${name}`,
+  }
+}
+
 function bindingRegistration(contractRef: ReturnType<typeof missingRef>) {
   return {
     bindingId: 'binding:supply-one:http', offeringId: 'offering:supply-one:lookup', networkId: 'ae:public', contractRef,
-    endpointUrl: 'https://example.test/capability', credentialRef: 'env:AE_SUPPLY_SECRET',
+    endpointUrl: 'https://example.test/capability', authority: providerAuthority('default'),
     continuation: { kind: 'single_response' as const, evidenceRefs: ['adapter:single-response'] },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: ['adapter:no-cancellation'] },
     adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },
@@ -808,7 +844,7 @@ async function publishAndObserveCapability(
     binding: {
       bindingId: binding.bindingId,
       endpointUrl: binding.endpointUrl,
-      credentialRef: binding.credentialRef,
+      authority: binding.authority,
       continuation: binding.continuation,
       cancellation: binding.cancellation,
       adapter: binding.adapter,
@@ -837,6 +873,34 @@ async function publishAndObserveCapability(
   if (publications.length === 0) throw new Error('publication readiness missing')
   return published
 }
+async function registerProviderConnection(
+  admin: ConvexFixtureAdmin,
+  businessId: Id<'businesses'>,
+  binding: CapabilityTransportBindingRegistration,
+) {
+  if (binding.authority.kind !== 'provider_connection') return
+  const suffix = binding.authority.connectionRef.split(':').at(-1) ?? 'default'
+  const result = await admin.mutation(internal.capabilityProviderConnections.create, {
+    commandId: `command:capability-supply:connection:${binding.authority.connectionRef}`,
+    connectionRef: binding.authority.connectionRef,
+    businessId,
+    providerRef: binding.authority.providerRef,
+    providerAccountRef: `account:ae-supply:${suffix}`,
+    adapterId: binding.adapter.adapterId,
+    credentialRef: `env:AE_SUPPLY_${suffix.toUpperCase()}_SECRET`,
+    requestedScopes: ['capability:invoke'],
+    grantedScopes: ['capability:invoke'],
+    requestedResources: [`endpoint:${binding.endpointUrl}`],
+    grantedResources: [`endpoint:${binding.endpointUrl}`],
+    reasonCode: 'source_test_provider_connection',
+    evidenceRefs: ['test:capability-supply-provider-connection'],
+    now: Date.now(),
+  })
+  if (result.kind === 'refused') {
+    throw new Error(`provider connection fixture failed: ${result.code}`)
+  }
+}
+
 
 
 function operationContext(suffix: string) {

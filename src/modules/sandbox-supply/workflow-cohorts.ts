@@ -1,3 +1,5 @@
+import type { ExactAmount } from '@/modules/money/public'
+
 export type SandboxWorkflowStep = Readonly<{
   providerKey: string
   businessName: string
@@ -17,7 +19,7 @@ export type SandboxWorkflowStep = Readonly<{
   }>[]
   optionalInputs?: readonly Readonly<{ field: string; semanticIdentity: string }>[]
   completionEvidence: boolean
-  amountMinor: number
+  amount: ExactAmount
   recovery: 'retry_safe' | 'reconcile_required'
 }>
 
@@ -41,7 +43,7 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'A comparable recommendation with supplier evidence; no order or payment.',
     prohibitedClaim: 'Do not claim that a supplier was selected, contracted, ordered, or paid.',
     steps: Object.freeze([
-      step('procurement-brief', 'Procurement Brief Studio', 'Structure procurement requirements', 'request', 'requirementsBrief', undefined, 'ae.requirements-brief:v1', false, 250, 'retry_safe', {
+      step('procurement-brief', 'Procurement Brief Studio', 'Structure procurement requirements', 'request', 'requirementsBrief', undefined, 'ae.requirements-brief:v1', false, '250', 'retry_safe', {
         contractVersion: 2,
         decisionInputs: [{
           field: 'packageDimensions',
@@ -50,8 +52,8 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
           pattern: CARTON_DIMENSIONS_PATTERN,
         }],
       }),
-      step('supplier-options', 'Supplier Options Network', 'Find eligible supplier options', 'requirementsBrief', 'supplierOptionSet', 'ae.requirements-brief:v1', 'ae.supplier-option-set:v1', false, 600, 'retry_safe'),
-      step('procurement-recommendation', 'Procurement Comparison Desk', 'Compare supplier options', 'supplierOptionSet', 'recommendation', 'ae.supplier-option-set:v1', undefined, true, 450, 'reconcile_required'),
+      step('supplier-options', 'Supplier Options Network', 'Find eligible supplier options', 'requirementsBrief', 'supplierOptionSet', 'ae.requirements-brief:v1', 'ae.supplier-option-set:v1', false, '600', 'retry_safe'),
+      step('procurement-recommendation', 'Procurement Comparison Desk', 'Compare supplier options', 'supplierOptionSet', 'recommendation', 'ae.supplier-option-set:v1', undefined, true, '450', 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['carton dimensions change', 'budget is reduced after comparison', 'required evidence is missing']),
   }),
@@ -62,12 +64,12 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'A coherent itinerary and readiness checklist; no reservation or ticketing.',
     prohibitedClaim: 'Do not claim availability, booking, ticketing, or payment.',
     steps: Object.freeze([
-      step('trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints', 'request', 'tripBrief', undefined, 'ae.trip-brief:v1', false, 200, 'retry_safe', { groundFromRequest: true }),
-      step('accessible-transfer', 'Accessible Transfer Planner', 'Plan an accessible airport transfer', 'request', 'transferPlan', undefined, 'ae.transfer-plan:v1', false, 180, 'retry_safe', { groundFromRequest: true }),
-      step('accessible-hotel', 'Accessible Hotel Planner', 'Plan accessible accommodation', 'request', 'hotelPlan', undefined, 'ae.hotel-plan:v1', false, 220, 'retry_safe', { groundFromRequest: true }),
-      step('meeting-schedule', 'Meeting Schedule Planner', 'Plan timed meetings', 'request', 'meetingSchedule', undefined, 'ae.meeting-schedule:v1', false, 160, 'retry_safe', { groundFromRequest: true }),
-      step('dinner-plan', 'Dinner Plan Service', 'Plan dinner', 'request', 'dinnerPlan', undefined, 'ae.dinner-plan:v1', false, 140, 'retry_safe', { groundFromRequest: true }),
-      step('itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary', 'tripBrief', 'itineraryDraft', 'ae.trip-brief:v1', 'ae.itinerary-draft:v1', false, 500, 'retry_safe', {
+      step('trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints', 'request', 'tripBrief', undefined, 'ae.trip-brief:v1', false, '200', 'retry_safe', { groundFromRequest: true }),
+      step('accessible-transfer', 'Accessible Transfer Planner', 'Plan an accessible airport transfer', 'request', 'transferPlan', undefined, 'ae.transfer-plan:v1', false, '180', 'retry_safe', { groundFromRequest: true }),
+      step('accessible-hotel', 'Accessible Hotel Planner', 'Plan accessible accommodation', 'request', 'hotelPlan', undefined, 'ae.hotel-plan:v1', false, '220', 'retry_safe', { groundFromRequest: true }),
+      step('meeting-schedule', 'Meeting Schedule Planner', 'Plan timed meetings', 'request', 'meetingSchedule', undefined, 'ae.meeting-schedule:v1', false, '160', 'retry_safe', { groundFromRequest: true }),
+      step('dinner-plan', 'Dinner Plan Service', 'Plan dinner', 'request', 'dinnerPlan', undefined, 'ae.dinner-plan:v1', false, '140', 'retry_safe', { groundFromRequest: true }),
+      step('itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary', 'tripBrief', 'itineraryDraft', 'ae.trip-brief:v1', 'ae.itinerary-draft:v1', false, '500', 'retry_safe', {
         contractVersion: 2,
         optionalInputs: [
           { field: 'transferPlan', semanticIdentity: 'ae.transfer-plan:v1' },
@@ -76,7 +78,7 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
           { field: 'dinnerPlan', semanticIdentity: 'ae.dinner-plan:v1' },
         ],
       }),
-      step('itinerary-readiness', 'Travel Readiness Review', 'Review itinerary readiness', 'itineraryDraft', 'readinessChecklist', 'ae.itinerary-draft:v1', undefined, true, 300, 'reconcile_required'),
+      step('itinerary-readiness', 'Travel Readiness Review', 'Review itinerary readiness', 'itineraryDraft', 'readinessChecklist', 'ae.itinerary-draft:v1', undefined, true, '300', 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['weather invalidates one day', 'mobility requirement changes', 'an activity has unknown availability']),
   }),
@@ -87,7 +89,7 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'Three attributable synthetic evidence packets with explicit freshness, unknowns, refusals, and next owners; no application, commitment, certification, or approval.',
     prohibitedClaim: 'Do not claim independently operated supply, approval, availability, booking, payment, dispatch, certification, fulfilment, or real customer value.',
     steps: Object.freeze([
-      step('event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements', 'request', 'requirementsPacket', undefined, 'ae.event-requirements-packet:v1', false, 400, 'retry_safe', {
+      step('event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements', 'request', 'requirementsPacket', undefined, 'ae.event-requirements-packet:v1', false, '400', 'retry_safe', {
         contractVersion: 4,
         supplyVersion: 6,
         decisionInputs: [
@@ -97,10 +99,10 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
           { field: 'eventProfile', label: 'Event profile', prompt: 'Is it public or private; which activities are included and excluded; what ISO evidence-cutoff date applies; which fictional recipients and purposes are authorized; and what is the ISO response deadline?', pattern: '^(?=.*authorized:)(?=.*response deadline \\d{4}-\\d{2}-\\d{2}).{40,1600}$' },
         ],
       }),
-      step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe', {
+      step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, '650', 'retry_safe', {
         supplyVersion: 3,
       }),
-      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required', {
+      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, '750', 'reconcile_required', {
         contractVersion: 2,
         supplyVersion: 4,
       }),
@@ -114,9 +116,9 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'A current milestone plan and status synthesis; no hidden operator coordination.',
     prohibitedClaim: 'Do not claim that a physical move, dispatch, or third-party task occurred.',
     steps: Object.freeze([
-      step('journey-case', 'Journey Case Intake', 'Structure a service case', 'request', 'serviceCase', undefined, 'ae.service-case:v1', false, 150, 'retry_safe'),
-      step('milestone-plan', 'Milestone Planning Service', 'Build a milestone plan', 'serviceCase', 'milestonePlan', 'ae.service-case:v1', 'ae.milestone-plan:v1', false, 350, 'retry_safe'),
-      step('progress-synthesis', 'Progress Synthesis Service', 'Synthesize journey progress', 'milestonePlan', 'progressSummary', 'ae.milestone-plan:v1', undefined, true, 250, 'reconcile_required'),
+      step('journey-case', 'Journey Case Intake', 'Structure a service case', 'request', 'serviceCase', undefined, 'ae.service-case:v1', false, '150', 'retry_safe'),
+      step('milestone-plan', 'Milestone Planning Service', 'Build a milestone plan', 'serviceCase', 'milestonePlan', 'ae.service-case:v1', 'ae.milestone-plan:v1', false, '350', 'retry_safe'),
+      step('progress-synthesis', 'Progress Synthesis Service', 'Synthesize journey progress', 'milestonePlan', 'progressSummary', 'ae.milestone-plan:v1', undefined, true, '250', 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['a milestone is overdue', 'ownership changes mid-journey', 'the customer resumes after interruption']),
   }),
@@ -127,9 +129,9 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'A bounded task batch and reconciliation result; no fabricated field completion.',
     prohibitedClaim: 'Do not claim a task was performed without provider evidence.',
     steps: Object.freeze([
-      step('operations-schedule', 'Operations Schedule Service', 'Structure an operating schedule', 'request', 'operatingSchedule', undefined, 'ae.operating-schedule:v1', false, 180, 'retry_safe'),
-      step('task-batch', 'Task Batch Coordinator', 'Prepare a task batch', 'operatingSchedule', 'taskBatch', 'ae.operating-schedule:v1', 'ae.task-batch:v1', false, 420, 'retry_safe'),
-      step('task-reconciliation', 'Task Reconciliation Service', 'Reconcile task outcomes', 'taskBatch', 'reconciliation', 'ae.task-batch:v1', undefined, true, 280, 'reconcile_required'),
+      step('operations-schedule', 'Operations Schedule Service', 'Structure an operating schedule', 'request', 'operatingSchedule', undefined, 'ae.operating-schedule:v1', false, '180', 'retry_safe'),
+      step('task-batch', 'Task Batch Coordinator', 'Prepare a task batch', 'operatingSchedule', 'taskBatch', 'ae.operating-schedule:v1', 'ae.task-batch:v1', false, '420', 'retry_safe'),
+      step('task-reconciliation', 'Task Reconciliation Service', 'Reconcile task outcomes', 'taskBatch', 'reconciliation', 'ae.task-batch:v1', undefined, true, '280', 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['one site is inaccessible', 'a duplicate run is requested', 'some task outcomes remain unknown']),
   }),
@@ -140,9 +142,9 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'A recovery plan with evidence and unresolved unknowns; no claim that recovery actions occurred.',
     prohibitedClaim: 'Do not claim dispatch, replacement, refund, or fulfilment.',
     steps: Object.freeze([
-      step('incident-assessment', 'Incident Assessment Service', 'Assess an exception', 'request', 'incidentAssessment', undefined, 'ae.incident-assessment:v1', false, 220, 'retry_safe'),
-      step('recovery-options', 'Recovery Options Exchange', 'Prepare recovery options', 'incidentAssessment', 'recoveryOptionSet', 'ae.incident-assessment:v1', 'ae.recovery-option-set:v1', false, 480, 'retry_safe'),
-      step('recovery-plan', 'Recovery Coordination Service', 'Build a recovery plan', 'recoveryOptionSet', 'recoveryPlan', 'ae.recovery-option-set:v1', undefined, true, 320, 'reconcile_required'),
+      step('incident-assessment', 'Incident Assessment Service', 'Assess an exception', 'request', 'incidentAssessment', undefined, 'ae.incident-assessment:v1', false, '220', 'retry_safe'),
+      step('recovery-options', 'Recovery Options Exchange', 'Prepare recovery options', 'incidentAssessment', 'recoveryOptionSet', 'ae.incident-assessment:v1', 'ae.recovery-option-set:v1', false, '480', 'retry_safe'),
+      step('recovery-plan', 'Recovery Coordination Service', 'Build a recovery plan', 'recoveryOptionSet', 'recoveryPlan', 'ae.recovery-option-set:v1', undefined, true, '320', 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['a provider denies the request', 'one result is partial', 'the final outcome remains unknown']),
   }),
@@ -329,7 +331,7 @@ function step(
   inputSemanticIdentity: string | undefined,
   outputSemanticIdentity: string | undefined,
   completionEvidence: boolean,
-  amountMinor: number,
+  amountUnits: string,
   recovery: SandboxWorkflowStep['recovery'],
   options: Readonly<Pick<SandboxWorkflowStep, 'groundFromRequest' | 'contractVersion' | 'supplyVersion' | 'decisionInputs' | 'optionalInputs'>> = {},
 ): SandboxWorkflowStep {
@@ -344,6 +346,6 @@ function step(
       decisionInputs: Object.freeze(options.decisionInputs.map((input) => Object.freeze({ ...input }))),
     }),
     ...(options.optionalInputs === undefined ? {} : { optionalInputs: Object.freeze(options.optionalInputs.map((input) => Object.freeze({ ...input }))) }),
-    completionEvidence, amountMinor, recovery,
+    completionEvidence, amount: Object.freeze({ currency: 'AUD', units: amountUnits, exponent: 2 }), recovery,
   })
 }

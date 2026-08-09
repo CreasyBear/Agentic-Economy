@@ -69,7 +69,7 @@ function provider(value: any, rawPayload: unknown) {
     endpoint: value.operation.identity.endpoint.url,
     method: value.operation.identity.endpoint.method,
     resource: value.operation.identity.endpoint.resource,
-    fixedUsdMinorAmount: value.operation.identity.price.amountMinor,
+    fixedUsdAmount: value.operation.identity.price.amount,
     x402: {
       scheme: JSON.parse(value.operation.transport.configJson).scheme,
       network: payment.network,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { ConvexSourceError } from '@/lib/server/convex-source'
 import { handleCustomerRequestGet } from '@/lib/server/customer-request-inspect-api'
 
 describe('customer Request inspect HTTP API', () => {
@@ -30,6 +31,41 @@ describe('customer Request inspect HTTP API', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(projection)
   })
+
+  it('returns an RFC 9457 problem when source authentication is missing', async () => {
+    const inspect = vi.fn().mockRejectedValue(
+      new ConvexSourceError('missing_auth', 'Authenticated owner session is required for this Convex call.', 401),
+    )
+    const response = await handleCustomerRequestGet('request:1', { inspect })
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+    await expect(response.json()).resolves.toMatchObject({
+      type: 'about:blank', status: 401, kind: 'UNAUTHENTICATED', code: 'missing_auth',
+    })
+  })
+
+  it('returns an RFC 9457 problem for an invalid request reference', async () => {
+    const response = await handleCustomerRequestGet('')
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+    await expect(response.json()).resolves.toMatchObject({
+      status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref',
+    })
+  })
+
+  it('returns an RFC 9457 problem when the readback is unavailable', async () => {
+    const response = await handleCustomerRequestGet('request:1', {
+      inspect: async () => { throw new Error('boom') },
+    })
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+    await expect(response.json()).resolves.toMatchObject({
+      status: 503, kind: 'UNAVAILABLE', code: 'request_unavailable',
+    })
+  })
 })
 
 function routeDecisionProjection() {
@@ -49,7 +85,7 @@ function routeDecisionProjection() {
         },
         availability: 'current' as const, stepCount: 1,
         businesses: [{ businessRef: 'business:opaque', name: 'North Star Services' }],
-        maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+        maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
         dataUse: {
           recipientCount: 1,
           recipients: [{
@@ -66,7 +102,7 @@ function routeDecisionProjection() {
         comparison: {
           outcomeRef: 'outcome:opaque', outcomeFit: 'same_promised_result' as const,
           completeness: 'complete' as const, hardConstraints: 'satisfied' as const,
-          maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+          maximumCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '1200', exponent: 2 } },
           dataExposureCount: 1, irreversibleEffectCount: 1, uncertaintyCount: 0,
           duration: 'not_declared' as const, recovery: 'retry_safe' as const,
           trust: 'registered_current_option' as const, evidenceCount: 1,

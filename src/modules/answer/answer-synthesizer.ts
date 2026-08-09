@@ -1,3 +1,5 @@
+import type { AnswerTurnProblem } from '@/lib/errors'
+
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 
@@ -32,7 +34,7 @@ export type AnswerSynthesizerInput = {
   model?: string
 }
 
-const AnswerWorkStepPhaseValues = [
+export const AnswerWorkStepPhaseValues = [
   'interpret',
   'search',
   'read',
@@ -43,7 +45,7 @@ const AnswerWorkStepPhaseValues = [
 
 export type AnswerWorkStepPhase = (typeof AnswerWorkStepPhaseValues)[number]
 
-const AnswerWorkStepStatusValues = [
+export const AnswerWorkStepStatusValues = [
   'running',
   'complete',
   'skipped',
@@ -134,7 +136,17 @@ export type AnswerSnapshot = {
   layoutProfile?: AnswerLayoutProfile
 }
 
-export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'unsupported' | 'error'
+export const AnswerResponseModeValues = [
+  'clarify',
+  'answer',
+  'compare',
+  'filter',
+  'empty',
+  'boundary',
+  'unsupported',
+  'error',
+] as const
+export type AnswerResponseMode = (typeof AnswerResponseModeValues)[number]
 
 export type AnswerProviderBudget = {
   searchLimit: number
@@ -168,7 +180,9 @@ export type AnswerEvent =
   | { type: 'next-step'; nextStep: string }
   | { type: 'artifact'; artifact: AnswerArtifact }
   | { type: 'complete'; answer: AnswerSnapshot }
-  | { type: 'error'; code: string; copyId: string }
+  | { type: 'pending' }
+  | { type: 'stopped' }
+  | { type: 'error'; problem: AnswerTurnProblem }
 
 
 export function buildAgentJsonUrl(

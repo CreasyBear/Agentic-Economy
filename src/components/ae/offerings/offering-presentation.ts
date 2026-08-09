@@ -4,10 +4,23 @@ import type {
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { brandNonEmpty } from '@/modules/common/ids'
 import { formatDate } from '@/lib/ui/format-time'
 
+export type PublicOfferingAccessPathView = Readonly<{
+  accessPathRef: PublicAccessPath['accessPathRef']
+  offeringRevision: PublicAccessPath['offeringRevision']
+  descriptor: PublicAccessPath['descriptor']
+}>
+
+export type PublicOfferingSupplyProjectionView = Readonly<
+  Omit<PublicOfferingSupplyProjection, 'accessPaths'> & {
+    accessPaths: readonly PublicOfferingAccessPathView[]
+  }
+>
+
 export type PublicOfferingSupplyView = Readonly<{
-  offerings: readonly PublicOfferingSupplyProjection[]
+  offerings: readonly PublicOfferingSupplyProjectionView[]
   disposition: 'current' | 'partial' | 'stale'
   observedAt: number
 }>
@@ -18,7 +31,7 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
     observedAt: dto.observedAt,
     offerings: dto.offerings.map((item) => ({
       offering: {
-        offeringRef: item.offeringRef as never,
+        offeringRef: brandNonEmpty(item.offeringRef, 'OfferingRef'),
         revision: item.revision,
         name: item.name,
         category: item.category,
@@ -29,7 +42,8 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
         ...(item.price === undefined ? {} : { price: item.price }),
       },
       accessPaths: item.accessPaths.map((path) => ({
-        accessPathRef: path.accessPathRef as never,
+        accessPathRef: brandNonEmpty(path.accessPathRef, 'AccessPathRef'),
+        offeringRevision: path.offeringRevision,
         descriptor: path.kind === 'human_request'
           ? {
               kind: 'human_request' as const,
@@ -68,7 +82,6 @@ export function plainLanguageCopy(value: string): string {
     .replace(/\bpublished offering\b/giu, 'published service')
     .replace(/\b(?:labelled\s+)?sandbox provider\b/giu, 'demo provider')
     .replace(/\bsandbox\b/giu, 'demo')
-    .replace(/\bofferings?\b/giu, 'service')
     .replace(/\bcapabilities?\b/giu, 'service options')
     .replace(/\bprovenance\b/giu, 'source')
     .replace(/\bendpoint\b/giu, 'web address')
@@ -88,7 +101,7 @@ export type OfferingAccessPresentation = Readonly<{
   technical?: ReadonlyArray<Readonly<{ label: string; value: string }>>
 }>
 
-export function presentOfferingAccessPath(path: PublicAccessPath): OfferingAccessPresentation {
+export function presentOfferingAccessPath(path: PublicOfferingAccessPathView): OfferingAccessPresentation {
   const descriptor = path.descriptor
   if (descriptor.kind === 'human_request') {
     return {

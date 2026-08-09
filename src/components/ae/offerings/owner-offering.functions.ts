@@ -2,9 +2,9 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { exactAmountSchema } from '@/modules/money/public'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
-  OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
   normalizeOfferingPrice,
@@ -77,14 +77,27 @@ const accessDescriptorSchema = z.discriminatedUnion('kind', [
  * checked here; `normalizeOfferingPrice` is still re-run on the way through, so
  * a payload that skipped the editor cannot publish an inconsistent price.
  */
-const offeringPriceSchema = z.object({
-  kind: z.enum(OfferingPriceKindValues),
-  currency: z.string().regex(/^[A-Z]{3}$/u),
-  amountMinor: z.number().int().nonnegative().optional(),
-  maximumAmountMinor: z.number().int().nonnegative().optional(),
-  unit: z.enum(OfferingPriceUnitValues).optional(),
-  taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
-})
+const offeringPriceSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('quote_only'),
+    currency: z.string().regex(/^[A-Z]{3}$/u),
+    unit: z.enum(OfferingPriceUnitValues).optional(),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
+  }),
+  z.strictObject({
+    kind: z.union([z.literal('fixed'), z.literal('from')]),
+    amount: exactAmountSchema,
+    unit: z.enum(OfferingPriceUnitValues).optional(),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
+  }),
+  z.strictObject({
+    kind: z.literal('range'),
+    minimum: exactAmountSchema,
+    maximum: exactAmountSchema,
+    unit: z.enum(OfferingPriceUnitValues).optional(),
+    taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
+  }),
+])
 
 const editorSchema = z.object({
   requestKey: z.string().min(8).max(200),
@@ -205,14 +218,14 @@ function normalizeEditorValue(value: z.infer<typeof editorSchema>['value']): Own
 
 /** Zod optionals arrive as `T | undefined`; the price contract wants absence. */
 function toOfferingPriceInput(price: z.infer<typeof offeringPriceSchema>): OfferingPriceInput {
-  return {
+  const shared = {
     kind: price.kind,
-    currency: price.currency,
     taxTreatment: price.taxTreatment,
-    ...(price.amountMinor === undefined ? {} : { amountMinor: price.amountMinor }),
-    ...(price.maximumAmountMinor === undefined ? {} : { maximumAmountMinor: price.maximumAmountMinor }),
     ...(price.unit === undefined ? {} : { unit: price.unit }),
   }
+  if (price.kind === 'quote_only') return { ...shared, currency: price.currency }
+  if (price.kind === 'range') return { ...shared, minimum: price.minimum, maximum: price.maximum }
+  return { ...shared, amount: price.amount }
 }
 
 function toSaveError(result: Extract<OfferingCommandResult, { kind: 'error' }>): OwnerOfferingSaveResult {

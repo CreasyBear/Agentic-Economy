@@ -15,6 +15,7 @@ import {
 import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { customerRequestViewSchema } from '@/modules/customer-request/agent-contract'
 import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
+import type { ExactAmount } from '@/modules/money/public'
 
 describe('RoutePlan customer projection', () => {
   it('gives every repeat-permission refusal a specific safe customer recovery', () => {
@@ -50,7 +51,7 @@ describe('RoutePlan customer projection', () => {
 
   it('projects one exact generation without exposing compiler choreography or creating authority', () => {
     const decision = projectCustomerRoutePlanDecision({
-      current: generation(1, [route({ amountMinor: 1_200 })]),
+      current: generation(1, [route({ amount: audAmount(1_200) })]),
       businessNames: { 'business:one': 'North Star Services' },
       capabilitySemantics,
       now: 10_000,
@@ -95,7 +96,7 @@ describe('RoutePlan customer projection', () => {
         },
         businesses: [{ name: 'North Star Services' }],
         stepCount: 1,
-        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_200 },
+        maximumTotalCost: { kind: 'known', amount: audAmount(1_200) },
         dataUse: {
           recipients: [{ name: 'North Star Services', purposes: ['prepare_result'] }],
         },
@@ -120,7 +121,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('projects unresolved customer facts into the route and binds them into the quote', () => {
-    const certainRoute = route({ amountMinor: 1_200 })
+    const certainRoute = route({ amount: audAmount(1_200) })
     const uncertainRoute = changed(certainRoute, (value) => {
       value.uncertainty = ['customer_fact_requires_evidence']
     })
@@ -145,8 +146,8 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('recommends a unique price leader only from fresh substitutable routes and explicit customer evidence', () => {
-    const lower = route({ amountMinor: 900, routePlanId: 'route:lower' })
-    const higher = changed(route({ amountMinor: 1_200, routePlanId: 'route:higher' }), (value) => {
+    const lower = route({ amount: audAmount(900), routePlanId: 'route:lower' })
+    const higher = changed(route({ amount: audAmount(1_200), routePlanId: 'route:higher' }), (value) => {
       value.steps[0]!.businessId = 'business:two'
       value.steps[0]!.offeringId = 'offering:two'
       value.steps[0]!.bindingId = 'binding:two'
@@ -191,7 +192,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('fails closed when a historical route has no constraint-evaluation evidence', () => {
-    const historical = changed(route({ amountMinor: 900, routePlanId: 'route:historical' }), (value) => {
+    const historical = changed(route({ amount: audAmount(900), routePlanId: 'route:historical' }), (value) => {
       Reflect.deleteProperty(value.comparison, 'hardConstraints')
     })
     const decision = projectCustomerRoutePlanDecision({
@@ -220,7 +221,7 @@ describe('RoutePlan customer projection', () => {
       routes[0] = changed(routes[0]!, (value) => { delete value.steps[0]!.commercialRelationship })
     }, 'comparison_evidence_missing'],
   ] as const)('refuses to recommend when %s would make the rank misleading', (_case, mutate, reason) => {
-    const routes = [route({ amountMinor: 900, routePlanId: 'route:lower' }), route({ amountMinor: 1_200, routePlanId: 'route:higher' })]
+    const routes = [route({ amount: audAmount(900), routePlanId: 'route:lower' }), route({ amount: audAmount(1_200), routePlanId: 'route:higher' })]
     mutate(routes)
     const decision = projectCustomerRoutePlanDecision({
       current: generation(1, routes),
@@ -234,8 +235,8 @@ describe('RoutePlan customer projection', () => {
 
   it('refuses contradictory ranking evidence instead of accepting a self-serving first place claim', () => {
     const routes = [
-      route({ amountMinor: 900, routePlanId: 'route:lower' }),
-      changed(route({ amountMinor: 1_200, routePlanId: 'route:higher' }), (value) => {
+      route({ amount: audAmount(900), routePlanId: 'route:lower' }),
+      changed(route({ amount: audAmount(1_200), routePlanId: 'route:higher' }), (value) => {
         value.comparison.ordering = {
           kind: 'ranked', objective: 'lowest_maximum_price', position: 1,
           evidenceRef: 'preference:lowest-price',
@@ -258,7 +259,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('fails closed when persisted route dependencies contain a cycle', () => {
-    const cyclic = changed(route({ amountMinor: 900 }), (value) => {
+    const cyclic = changed(route({ amount: audAmount(900) }), (value) => {
       const first = value.steps[0]!
       value.steps.push({
         ...structuredClone(first),
@@ -282,14 +283,14 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('separates routes that do not promise the same result instead of ranking them', () => {
-    const replacement = changed(route({ amountMinor: 800, routePlanId: 'route:replacement' }), (value) => {
+    const replacement = changed(route({ amount: audAmount(800), routePlanId: 'route:replacement' }), (value) => {
       value.steps[0]!.contractRef = {
         capabilityId: 'generic.result.replace', version: 1, contractDigest: 'digest:replacement',
       }
       value.comparison.outcomeSignature = 'outcome:replacement'
     })
     const decision = projectCustomerRoutePlanDecision({
-      current: generation(1, [route({ amountMinor: 900 }), replacement]),
+      current: generation(1, [route({ amount: audAmount(900) }), replacement]),
       businessNames: { 'business:one': 'North Star Services' },
       capabilitySemantics,
       now: 10_000,
@@ -302,8 +303,8 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('derives a price-only delta from immutable generation material without reporting unchanged categories', () => {
-    const previous = generation(1, [route({ amountMinor: 1_200 })])
-    const current = generation(2, [route({ amountMinor: 900, routePlanId: 'route:two' })])
+    const previous = generation(1, [route({ amount: audAmount(1_200) })])
+    const current = generation(2, [route({ amount: audAmount(900), routePlanId: 'route:two' })])
 
     const decision = projectCustomerRoutePlanDecision({
       current,
@@ -320,11 +321,11 @@ describe('RoutePlan customer projection', () => {
         kind: 'maximum_cost',
         before: [{
           resultRef: expect.stringMatching(/^result:/u),
-          cost: { kind: 'known', currency: 'AUD', amountMinor: 1_200 },
+          cost: { kind: 'known', amount: audAmount(1_200) },
         }],
         after: [{
           resultRef: expect.stringMatching(/^result:/u),
-          cost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
+          cost: { kind: 'known', amount: audAmount(900) },
         }],
       }],
     })
@@ -338,10 +339,10 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('reports a changed customer criterion even when the route shape stays the same', () => {
-    const previous = generation(1, [route({ amountMinor: 900 })], [
+    const previous = generation(1, [route({ amount: audAmount(900) })], [
       { label: 'Meeting time', value: '15:00', basis: 'customer_provided' },
     ])
-    const current = generation(2, [route({ amountMinor: 900 })], [
+    const current = generation(2, [route({ amount: audAmount(900) })], [
       { label: 'Meeting time', value: '09:00', basis: 'customer_provided' },
     ])
 
@@ -365,7 +366,7 @@ describe('RoutePlan customer projection', () => {
 
   it('makes an expired generation legible without discarding its exact routes', () => {
     const decision = projectCustomerRoutePlanDecision({
-      current: generation(1, [route({ amountMinor: 1_200 })]),
+      current: generation(1, [route({ amount: audAmount(1_200) })]),
       businessNames: { 'business:one': 'North Star Services' },
       capabilitySemantics,
       now: 60_000,
@@ -384,7 +385,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('detects every customer-material category independently of opaque route identity', () => {
-    const original = route({ amountMinor: 1_200 })
+    const original = route({ amount: audAmount(1_200) })
     const cases: Array<readonly [string, CustomerRequestRoutePlan]> = [
       ['route_result', changed(original, (value) => { value.comparison.ordering = { kind: 'unranked' } })],
       ['businesses', changed(original, (value) => { value.steps[0]!.businessId = 'business:two' })],
@@ -436,7 +437,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('explains a one-for-one route-result change and ignores storage-order churn', () => {
-    const original = route({ amountMinor: 1_200 })
+    const original = route({ amount: audAmount(1_200) })
     const replacement = changed(original, (value) => {
       value.steps[0]!.contractRef = {
         capabilityId: 'generic.result.replace', version: 1, contractDigest: 'digest:replacement',
@@ -463,7 +464,7 @@ describe('RoutePlan customer projection', () => {
       value.routePlanId = 'route:second'
       value.steps[0]!.businessId = 'business:two'
       value.steps[0]!.publicationRef = 'publication:two'
-      value.maximumTotalCost = { kind: 'known', currency: 'AUD', amountMinor: 2_400 }
+      value.maximumTotalCost = { kind: 'known', amount: audAmount(2_400) }
     })
     const reordered = projectCustomerRoutePlanDecision({
       previous: generation(1, [original, second]),
@@ -482,7 +483,7 @@ describe('RoutePlan customer projection', () => {
 
   it('refuses an unbounded projection before it can exceed the response boundary', () => {
     const routes = Array.from({ length: 257 }, (_, index) => ({
-      ...route({ amountMinor: 1_200 }), routePlanId: `route:${index}`,
+      ...route({ amount: audAmount(1_200) }), routePlanId: `route:${index}`,
     }))
     expect(() => projectCustomerRoutePlanDecision({
       current: generation(1, routes),
@@ -493,7 +494,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('counts a business once when it receives information for more than one purpose', () => {
-    const multiPurpose = changed(route({ amountMinor: 1_200 }), (value) => {
+    const multiPurpose = changed(route({ amount: audAmount(1_200) }), (value) => {
       value.steps[0]!.dataUse.push({
         ...structuredClone(value.steps[0]!.dataUse[0]!), purposes: ['confirm_result'],
       })
@@ -520,7 +521,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('renders camel-case registered input pointers as customer-readable field names', () => {
-    const componentInput = changed(route({ amountMinor: 1_200 }), (value) => {
+    const componentInput = changed(route({ amount: audAmount(1_200) }), (value) => {
       value.steps[0]!.dataUse[0]!.inputPointer = '/meetingSchedule'
     })
     const decision = projectCustomerRoutePlanDecision({
@@ -534,7 +535,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('keeps distinct recipients separate when their customer-facing names collide', () => {
-    const sameNameBusinesses = changed(route({ amountMinor: 1_200 }), (value) => {
+    const sameNameBusinesses = changed(route({ amount: audAmount(1_200) }), (value) => {
       value.steps.push({
         ...structuredClone(value.steps[0]!),
         actionId: 'action:two',
@@ -554,7 +555,7 @@ describe('RoutePlan customer projection', () => {
     expect(businessRecipients).toHaveLength(2)
     expect(new Set(businessRecipients.map(({ recipientRef }) => recipientRef)).size).toBe(2)
 
-    const normalizedNamedRecipients = changed(route({ amountMinor: 1_200 }), (value) => {
+    const normalizedNamedRecipients = changed(route({ amount: audAmount(1_200) }), (value) => {
       value.steps[0]!.dataUse = [
         { ...structuredClone(value.steps[0]!.dataUse[0]!), recipient: { kind: 'named_recipient', recipientId: 'foo_bar' } },
         { ...structuredClone(value.steps[0]!.dataUse[0]!), recipient: { kind: 'named_recipient', recipientId: 'foo-bar' } },
@@ -573,7 +574,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('reports a same-count fallback substitution as a material fallback change', () => {
-    const base = route({ amountMinor: 1_200 })
+    const base = route({ amount: audAmount(1_200) })
     const alternativeA = changed(base, (value) => {
       value.routePlanId = 'route:alternative-a'
       value.steps[0]!.offeringId = 'offering:alternative-a'
@@ -610,7 +611,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('keeps same-business same-contract offerings as distinct exact route choices', () => {
-    const first = route({ amountMinor: 1_200 })
+    const first = route({ amount: audAmount(1_200) })
     const second = changed(first, (value) => {
       value.routePlanId = 'route:second-offering'
       value.steps[0]!.offeringId = 'offering:two'
@@ -632,13 +633,13 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('detects reciprocal per-route material swaps instead of comparing global value bags', () => {
-    const first = route({ amountMinor: 1_200 })
+    const first = route({ amount: audAmount(1_200) })
     const second = changed(first, (value) => {
       value.routePlanId = 'route:second'
       value.steps[0]!.offeringId = 'offering:two'
       value.steps[0]!.bindingId = 'binding:two'
       value.steps[0]!.publicationRef = 'publication:two'
-      value.maximumTotalCost = { kind: 'known', currency: 'AUD', amountMinor: 2_400 }
+      value.maximumTotalCost = { kind: 'known', amount: audAmount(2_400) }
       value.expiresAt = 60_000
       value.uncertainty = ['cost_requires_preparation']
       value.steps[0]!.dataUse[0]!.purposes = ['second_purpose']
@@ -664,7 +665,7 @@ describe('RoutePlan customer projection', () => {
   })
 
   it('detects reciprocal business swaps between stable route choices', () => {
-    const first = changed(route({ amountMinor: 1_200 }), (value) => {
+    const first = changed(route({ amount: audAmount(1_200) }), (value) => {
       value.steps.push({
         ...structuredClone(value.steps[0]!),
         actionId: 'action:second-business',
@@ -741,6 +742,10 @@ function copyCustomerMaterial(
   target.steps[0]!.recovery = structuredClone(source.steps[0]!.recovery)
 }
 
+function audAmount(units: number): ExactAmount {
+  return { currency: 'AUD', units: String(units), exponent: 2 }
+}
+
 function generation(
   generationNumber: number,
   routes: readonly CustomerRequestRoutePlan[],
@@ -787,7 +792,7 @@ function generation(
 }
 
 function route(input: Readonly<{
-  amountMinor: number
+  amount: ExactAmount
   routePlanId?: string
 }>): CustomerRequestRoutePlan {
   const routePlanId = input.routePlanId ?? 'route:one'
@@ -827,7 +832,7 @@ function route(input: Readonly<{
       publicationRevision: lineage.admittedOperation.publicationRevision,
       resolvedInputs: [],
       deferredInputs: [],
-      price: { kind: 'fixed', currency: 'AUD', amountMinor: input.amountMinor },
+      price: { kind: 'fixed', amount: input.amount },
       dataUse: [{
         effectId: 'share_request', inputPointer: '/request', classification: 'public', phase: 'preparation',
         recipient: { kind: 'candidate_binding' }, purposes: ['prepare_result'],
@@ -848,7 +853,7 @@ function route(input: Readonly<{
       recovery: { idempotency: 'required', recovery: 'retry_safe' },
     }],
     edges: [],
-    maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: input.amountMinor },
+    maximumTotalCost: { kind: 'known', amount: input.amount },
     expiresAt: 50_000,
     uncertainty: [],
     fallbacks: { ordering: 'unranked', alternatives: [] },

@@ -11,12 +11,15 @@ import {
   writablePresentation,
   type CapabilityOfferingRow,
 } from '@/modules/capability-supply/internal/offering'
+import type { ExactAmount } from '@/modules/money/public'
 
 const contractRef = {
   capabilityId: 'reference.lookup',
   version: 1,
   contractDigest: `sha256:${'1'.repeat(64)}`,
 }
+const audAmount: ExactAmount = { currency: 'AUD', units: '1200', exponent: 2 }
+
 const registration = defineCapabilityOfferingRegistration({
   offeringId: 'offering:sandbox-one:lookup',
   businessId: 'businesses:sandbox-one',
@@ -25,7 +28,7 @@ const registration = defineCapabilityOfferingRegistration({
   presentation: {
     label: 'Sandbox reference lookup',
     summary: 'A labelled sandbox capability used only for source verification.',
-    price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 },
+    price: { kind: 'fixed', amount: audAmount },
     materialTerms: [{ termId: 'sandbox', label: 'Environment', value: 'Sandbox only' }],
     commercialRelationship: {
       kind: 'none',

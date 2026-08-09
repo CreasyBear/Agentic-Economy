@@ -32,6 +32,7 @@ import {
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
+import type { ExactAmount } from '@/modules/money/public'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('V2 Request semantics', () => {
@@ -1067,13 +1068,12 @@ describe('V2 Request semantics', () => {
     const compile = (
       models: [typeof lookup, typeof shipping],
       expectedRouteGeneration = 0,
-      downstreamPriceMinor = 100,
+      downstreamAmount = 100,
     ) => {
       const bindings = models.map((model) => ({
         ...supply(`binding:${model.contractRef.capabilityId}`, model),
         price: {
-          kind: 'fixed' as const, currency: 'AUD',
-          amountMinor: model === shipping ? downstreamPriceMinor : 100,
+          kind: 'fixed' as const, amount: audAmount(model === shipping ? downstreamAmount : 100),
         },
       }))
       return compileCustomerRequest({
@@ -1125,13 +1125,13 @@ describe('V2 Request semantics', () => {
         },
       },
       routeGeneration: { routes: [{
-        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
+        maximumTotalCost: { kind: 'known', amount: audAmount(200) },
         expiresAt: 20_000,
         steps: [
           {
             contractRef: lookup.contractRef, publicationRevision: 1,
             resolvedInputs: [expect.objectContaining({ inputPointer: '/request' })], deferredInputs: [],
-            price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+            price: { kind: 'fixed', amount: audAmount(100) },
             dataUse: [{ purposes: ['return_requested_result'] }],
             effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
             evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
@@ -1141,7 +1141,7 @@ describe('V2 Request semantics', () => {
           {
             contractRef: shipping.contractRef, publicationRevision: 1,
             resolvedInputs: [], deferredInputs: [expect.objectContaining({ semanticIdentity: 'ae.option_id:v1' })],
-            price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+            price: { kind: 'fixed', amount: audAmount(100) },
           },
         ],
         edges: [{ authority: 'registered_contract_semantics' }],
@@ -1361,8 +1361,8 @@ describe('V2 Request semantics', () => {
     )
 
     const mixedCurrency = compileWithPrices([
-      { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
-      { kind: 'fixed', currency: 'USD', amountMinor: 100 },
+      { kind: 'fixed', amount: audAmount(100) },
+      { kind: 'fixed', amount: { currency: 'USD', units: '100', exponent: 2 } },
     ])
     expect(mixedCurrency).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
     expect(mixedCurrency).not.toHaveProperty('routeGeneration')
@@ -1371,13 +1371,13 @@ describe('V2 Request semantics', () => {
       summary: 'AE cannot arrange this request end to end yet.',
     })
     const unsafeSum = compileWithPrices([
-      { kind: 'fixed', currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },
-      { kind: 'fixed', currency: 'AUD', amountMinor: 1 },
+      { kind: 'fixed', amount: audAmount('9007199254740991.5') },
+      { kind: 'fixed', amount: audAmount('1') },
     ])
     expect(unsafeSum).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
     expect(unsafeSum).not.toHaveProperty('routeGeneration')
     const onRequest = compileWithPrices([
-      { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+      { kind: 'fixed', amount: audAmount(100) },
       { kind: 'on_request' },
     ])
     expect(onRequest).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
@@ -1401,17 +1401,17 @@ describe('V2 Request semantics', () => {
           operationId: lookupOperationId, publicationRef: lookupPublicationRef,
           businessId: 'business:binding:lookup:cheap',
         }),
-        price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 150 },
+        price: { kind: 'fixed' as const, amount: audAmount(150) },
       },
       { ...supply('binding:lookup:expensive', lookup, {
         operationId: lookupOperationId, publicationRef: lookupPublicationRef,
-      }), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 200 } },
+      }), price: { kind: 'fixed' as const, amount: audAmount(200) } },
       { ...supply('binding:shipping:expensive', shipping, {
         operationId: shippingOperationId, publicationRef: shippingPublicationRef,
-      }), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 300 } },
+      }), price: { kind: 'fixed' as const, amount: audAmount(300) } },
       { ...supply('binding:shipping:cheap', shipping, {
         operationId: shippingOperationId, publicationRef: shippingPublicationRef,
-      }), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 } },
+      }), price: { kind: 'fixed' as const, amount: audAmount(100) } },
     ]
     const result = compileCustomerRequest({
       requestId: 'request:ranked-fallback', expectedRevision: 0,
@@ -1442,12 +1442,12 @@ describe('V2 Request semantics', () => {
     if (result.routeGeneration === undefined) throw new Error('route generation missing')
     expect(result.routeGeneration.routes).toHaveLength(6)
     expect(result.routeGeneration.routes.map((route) => route.maximumTotalCost)).toEqual([
-      { kind: 'known', currency: 'AUD', amountMinor: 200 },
-      { kind: 'known', currency: 'AUD', amountMinor: 250 },
-      { kind: 'known', currency: 'AUD', amountMinor: 300 },
-      { kind: 'known', currency: 'AUD', amountMinor: 400 },
-      { kind: 'known', currency: 'AUD', amountMinor: 450 },
-      { kind: 'known', currency: 'AUD', amountMinor: 500 },
+      { kind: 'known', amount: audAmount(200) },
+      { kind: 'known', amount: audAmount(250) },
+      { kind: 'known', amount: audAmount(300) },
+      { kind: 'known', amount: audAmount(400) },
+      { kind: 'known', amount: audAmount(450) },
+      { kind: 'known', amount: audAmount(500) },
     ])
     for (const [index, route] of result.routeGeneration.routes.entries()) {
       expect(route.comparison.hardConstraints).toBe('not_evaluated')
@@ -1475,10 +1475,10 @@ describe('V2 Request semantics', () => {
     expect(deriveCustomerMaximumTotalCostCriterion(
       'Source workplace catering and keep the total under AUD 4,000.',
     )).toMatchObject({
-      value: { currency: 'AUD', amountMinor: 400_000 },
+      value: { currency: 'AUD', units: '4000', exponent: 0 },
     })
-    expect(deriveCustomerMaximumTotalCostCriterion('Use both providers but keep the total below AUD 5.')).toMatchObject({
-      label: 'Maximum total cost', value: { currency: 'AUD', amountMinor: 500 }, basis: 'extracted_from_request',
+    expect(deriveCustomerMaximumTotalCostCriterion('Use both providers but keep the total below AUD 5.00.')).toMatchObject({
+      label: 'Maximum total cost', value: { currency: 'AUD', units: '500', exponent: 2 }, basis: 'extracted_from_request',
     })
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
@@ -1486,7 +1486,7 @@ describe('V2 Request semantics', () => {
     const result = compileCustomerRequest({
       requestId: 'request:hard-spend', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
-      intent: 'Use both providers but keep the total below AUD 5.', networkId: 'ae:public',
+      intent: 'Use both providers but keep the total below AUD 5.00.', networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
         operationRef: testOperationRef(model, `v2-semantics:binding:${model === lookup ? 'lookup' : 'shipping'}:hard-spend`),
         selectionKey: model.selectionKey, contractRef: model.contractRef,
@@ -1499,8 +1499,8 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test',
       mappings: [registeredFieldMapping(lookup, shipping, '/optionId', '/optionId')],
       bindings: [
-        { ...supply('binding:lookup:hard-spend', lookup), price: { kind: 'fixed', currency: 'AUD', amountMinor: 300 } },
-        { ...supply('binding:shipping:hard-spend', shipping), price: { kind: 'fixed', currency: 'AUD', amountMinor: 700 } },
+        { ...supply('binding:lookup:hard-spend', lookup), price: { kind: 'fixed', amount: audAmount(300) } },
+        { ...supply('binding:shipping:hard-spend', shipping), price: { kind: 'fixed', amount: audAmount(700) } },
       ],
       models: [lookup, shipping], now: 10_000,
     })
@@ -1642,11 +1642,11 @@ describe('V2 Request semantics', () => {
     const bindings = [
       {
         ...supply('binding:lookup:aud', lookup, { operationId, publicationRef }),
-        price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 1 },
+        price: { kind: 'fixed' as const, amount: audAmount(1) },
       },
       {
         ...supply('binding:lookup:usd', lookup, { operationId, publicationRef }),
-        price: { kind: 'fixed' as const, currency: 'USD', amountMinor: 1 },
+        price: { kind: 'fixed' as const, amount: { currency: 'USD', units: '1', exponent: 2 } },
       },
     ]
     const result = compileCustomerRequest({
@@ -1858,6 +1858,11 @@ describe('V2 Request semantics', () => {
     expect(isBoundedJsonValue(cyclic)).toBe(false)
   })
 })
+
+
+function audAmount(units: number | string): ExactAmount {
+  return { currency: 'AUD', units: String(units), exponent: 2 }
+}
 
 function decisionModelWithCommitment() {
   return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
@@ -2075,7 +2080,7 @@ function supply(
     publicationRef: lineage.admittedOperation.publicationRef,
     publicationRevision: lineage.admittedOperation.publicationRevision,
     readinessValidUntil: lineage.admittedOperation.readinessValidUntil,
-    price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
+    price: { kind: 'fixed' as const, amount: audAmount(100) },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }

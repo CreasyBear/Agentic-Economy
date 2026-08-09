@@ -250,10 +250,12 @@ const NOVU_REQUEST_TIMEOUT_MS = 10_000
 export function readNotificationOutboxSystemKey(env: Env = process.env): string {
   const value = readTrimmedEnv(env, 'AE_NOTIFICATION_OUTBOX_SECRET')
   if (value === undefined) {
+    // The wire detail stays parameter-free; the env var name goes to logs only.
+    console.error('AE_NOTIFICATION_OUTBOX_SECRET is required for notification outbox writes.')
     throw new NotificationProviderError(
       'missing_notification_outbox_secret',
-      'AE_NOTIFICATION_OUTBOX_SECRET is required for notification outbox writes.',
-      500
+      'The notification outbox secret is not configured.',
+      500,
     )
   }
 

@@ -17,6 +17,7 @@ import {
   readCapabilityOperationSearch,
 } from '@/modules/capability-supply/operation-source'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
+import { exactAmountSchema } from '@/modules/money/public'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 
 const operationRef = z.string().regex(/^operation:v1:[0-9a-f]{64}$/)
@@ -28,8 +29,15 @@ const navigation = z.strictObject({
   inputSchema: publicSchema.optional(), precondition: z.string().optional(),
 })
 const price = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('fixed'), currency: z.string(), amountMinor: z.number() }),
-  z.strictObject({ kind: z.literal('range'), currency: z.string(), minimumAmountMinor: z.number(), maximumAmountMinor: z.number() }),
+  z.strictObject({
+    kind: z.literal('fixed'),
+    amount: exactAmountSchema.describe('Exact executable price: currency, integer units, and decimal exponent'),
+  }),
+  z.strictObject({
+    kind: z.literal('range'),
+    minimum: exactAmountSchema.describe('Exact executable lower price: currency, integer units, and decimal exponent'),
+    maximum: exactAmountSchema.describe('Exact executable upper price: currency, integer units, and decimal exponent'),
+  }),
   z.strictObject({ kind: z.literal('on_request') }),
 ])
 const materialTerm = z.strictObject({ label: z.string(), value: z.string() })
@@ -49,12 +57,25 @@ const effect = z.strictObject({
 const evidence = z.strictObject({ evidenceId: z.string(), outputPointer: z.string(), purpose: z.enum(['comparison', 'completion', 'recovery']) })
 const cancellation = z.strictObject({ kind: z.enum(['unsupported', 'adapter_managed']) })
 const recovery = z.strictObject({ idempotency: z.enum(['not_applicable', 'required']), recovery: z.enum(['retry_safe', 'reconcile_required']) })
+const parameter = z.strictObject({
+  group: z.enum(['body', 'path', 'query']), name: z.string(), type: z.string(),
+  description: z.string().optional(), example: jsonValueSchema.optional(),
+  enumValues: z.array(z.string()).optional(), default: jsonValueSchema.optional(),
+  required: z.boolean(),
+})
+const catalogPrice = z.strictObject({
+  scheme: z.enum(['exact', 'upto']).describe('Decimal catalog merchandising scheme'),
+  amount: z.string().optional().describe('Decimal catalog merchandising amount'),
+  minAmount: z.string().optional().describe('Decimal catalog merchandising minimum'),
+  maxAmount: z.string().optional().describe('Decimal catalog merchandising maximum'),
+  currency: z.string().describe('Currency code for the decimal catalog price'),
+})
 const availability = z.strictObject({
   posture: z.enum(['integrated', 'routeable', 'unavailable']),
   observedAt: z.number().optional(), validUntil: z.number().optional(),
   reason: z.enum(['setup_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']).optional(),
 })
-const provenance = z.strictObject({ publisher: z.enum(['provider_owned', 'ae_curated_external']), sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'x402']) })
+const provenance = z.strictObject({ publisher: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']), sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']) })
 const descriptor = z.strictObject({
   operationRef, operationId: z.string(),
   contract: z.strictObject({
@@ -67,13 +88,14 @@ const descriptor = z.strictObject({
   commercial: z.strictObject({ price, materialTerms: z.array(materialTerm), relationship }),
   dataUse: z.array(dataUse), effects: z.array(effect), evidence: z.array(evidence),
   cancellation, recovery, provenance, availability, navigation: z.array(navigation),
+  parameters: z.array(parameter).optional(), catalogPrice: catalogPrice.optional(),
 })
 const searchFilters = z.strictObject({
   networkId: z.string().max(200).optional(), location: z.string().max(200).optional(),
   effects: z.array(z.enum(['data_release', 'financial_exposure', 'external_state_change'])).max(3).optional(),
   dataUse: z.array(z.enum(['public', 'personal', 'sensitive', 'credential'])).max(4).optional(),
   availability: z.array(z.enum(['integrated', 'routeable', 'unavailable'])).max(3).optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/).optional(), maximumPriceMinor: z.number().int().nonnegative().optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(), maximumPrice: exactAmountSchema.optional(),
 })
 const searchInput = z.strictObject({
   query: z.string().max(200), limit: z.number().int().min(1).max(20).optional(), cursor: z.string().max(512).optional(),
@@ -89,7 +111,10 @@ const comparisonFact = z.strictObject({
   })),
 })
 const maximumCost = z.union([
-  z.strictObject({ kind: z.literal('known'), currency: z.string(), amountMinor: z.number() }),
+  z.strictObject({
+    kind: z.literal('known'),
+    amount: exactAmountSchema.describe('Exact maximum cost: currency, integer units, and decimal exponent'),
+  }),
   z.strictObject({ kind: z.literal('requires_preparation') }),
 ])
 const searchOutput = z.union([

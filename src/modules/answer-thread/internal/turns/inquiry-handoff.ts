@@ -41,9 +41,9 @@ async function streamInquiryHandoffTurn(
     id: 'route.resolve_provider',
     phase: 'route',
     status: 'running',
-    title: 'Resolving provider',
-    summary: 'Matching the follow-up to a listed business already in this thread.',
-    detailRows: [{ label: 'Listed businesses in thread', value: String(priorProviders.length) }],
+    title: 'Choosing a business',
+    summary: 'Matching the follow-up to a business already in this thread.',
+    detailRows: [{ label: 'Businesses in this answer', value: String(priorProviders.length) }],
     relatedProviderSlugs: priorProviders.map((provider) => provider.slug),
     startedAtMs: routeStartedAt,
   })
@@ -51,10 +51,10 @@ async function streamInquiryHandoffTurn(
     id: 'route.resolve_provider',
     phase: 'route',
     status: selectedProvider === undefined && resolution.kind !== 'choose_provider' ? 'skipped' : 'complete',
-    title: 'Resolving provider',
+    title: 'Choosing a business',
     summary: describeInquiryHandoffResolution(resolution),
     detailRows: [
-      { label: 'Listed businesses in thread', value: String(priorProviders.length) },
+      { label: 'Businesses in this answer', value: String(priorProviders.length) },
       { label: 'Selected business', value: selectedProvider?.name ?? 'Needs selection' },
     ],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
@@ -67,18 +67,17 @@ async function streamInquiryHandoffTurn(
     id: 'route.inquiry_path',
     phase: 'route',
     status: 'running',
-    title: 'Checking inquiry path',
-    summary: 'Checking whether the selected listing publishes a qualified inquiry form.',
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
+    title: 'Checking how to contact the business',
+    summary: 'Checking whether the selected business has a request form.',
     startedAtMs: pathStartedAt,
   })
   ctx.workLog.emit({
     id: 'route.inquiry_path',
     phase: 'route',
     status: resolution.kind === 'resolved' ? 'complete' : 'skipped',
-    title: 'Checking inquiry path',
+    title: 'Checking how to contact the business',
     summary: describeInquiryPath(resolution),
-    detailRows: [{ label: 'Inquiry path', value: inquiryPathLabel(resolution) }],
+    detailRows: [{ label: 'Contact option', value: inquiryPathLabel(resolution) }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     startedAtMs: pathStartedAt,
     completedAtMs: Date.now(),
@@ -89,9 +88,9 @@ async function streamInquiryHandoffTurn(
     id: 'route.safe_boundary',
     phase: 'route',
     status: 'complete',
-    title: 'Checking safe-action boundary',
-    summary: 'AE can route the inquiry for owner review. The business decides whether to accept it; timing, quote, and availability are not confirmed yet.',
-    detailRows: [{ label: 'Allowed next step', value: 'Qualified inquiry for owner review' }],
+    title: 'Checking what can happen next',
+    summary: 'A request can go to the business for review. The business decides whether to accept it; timing, price, and availability are not confirmed yet.',
+    detailRows: [{ label: 'Next step', value: 'Request for business review' }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     startedAtMs: boundaryStartedAt,
     completedAtMs: Date.now(),
@@ -114,7 +113,7 @@ async function streamInquiryHandoffTurn(
   const allowedSlugs = new Set(ctx.priorAllowedSlugs)
   const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
   if (!finalized.ok) {
-    return rejectBlockedSnapshot(ctx, [], allowedSlugs, finalized)
+    return rejectBlockedSnapshot([], allowedSlugs, finalized)
   }
   const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'inquiry_handoff', { planMode: 'boundary' })
   return {
@@ -130,13 +129,13 @@ async function streamInquiryHandoffTurn(
 function describeInquiryHandoffResolution(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
   switch (resolution.kind) {
     case 'resolved':
-      return `${resolution.provider.name} was selected from the latest listed businesses.`
+      return `${resolution.provider.name} was selected from the latest matches.`
     case 'provider_unavailable':
-      return `${resolution.provider.name} was selected, but it does not publish an AE inquiry form yet.`
+      return `${resolution.provider.name} was selected, but it does not have a request form here yet.`
     case 'choose_provider':
-      return 'More than one listed business could match; the user needs to choose one.'
+      return 'More than one business could help; choose one.'
     case 'no_provider':
-      return 'No listed business is available in the latest answer thread.'
+      return 'No business is available in this answer yet.'
     default: {
       const _exhaustive: never = resolution
       return _exhaustive
@@ -147,13 +146,13 @@ function describeInquiryHandoffResolution(resolution: ReturnType<typeof resolveI
 function describeInquiryPath(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
   switch (resolution.kind) {
     case 'resolved':
-      return `${resolution.provider.name} publishes a qualified inquiry path.`
+      return `${resolution.provider.name} has a request option.`
     case 'provider_unavailable':
-      return `${resolution.provider.name} does not publish an AE inquiry form yet.`
+      return `${resolution.provider.name} does not have a request form here yet.`
     case 'choose_provider':
-      return 'Choose a business before opening an inquiry path.'
+      return 'Choose a business before opening a request option.'
     case 'no_provider':
-      return 'Find a listed business before opening an inquiry path.'
+      return 'Find a business that can help before opening a request option.'
     default: {
       const _exhaustive: never = resolution
       return _exhaustive
@@ -170,7 +169,7 @@ function inquiryPathLabel(resolution: ReturnType<typeof resolveInquiryHandoff>):
     case 'choose_provider':
       return 'Needs business selection'
     case 'no_provider':
-      return 'Needs listed business'
+      return 'Needs a business'
     default: {
       const _exhaustive: never = resolution
       return _exhaustive

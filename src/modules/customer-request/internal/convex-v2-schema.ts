@@ -1,5 +1,41 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import {
+  actionInvocationOriginValue,
+  acceptedAuthorityValue,
+  invocationActorValue,
+} from '../../action-invocation/internal/convex-schema'
+import { connectionAuthoritySnapshotValue } from '../../capability-supply/internal/convex-schema'
+const exactAmountValue = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
+
+const canonicalClaimAuthorityV2Value = v.object({
+  reference: v.string(),
+  decisionDigest: v.string(),
+  targetDigest: v.string(),
+  consequence: v.string(),
+  limits: v.record(v.string(), v.union(v.number(), exactAmountValue)),
+  expiresAt: v.string(),
+  acceptedBasis: acceptedAuthorityValue,
+})
+export const canonicalClaimMaterialV2Value = v.object({
+  invocationRef: v.string(),
+  sourceRef: v.string(),
+  invocationVersion: v.number(),
+  actor: invocationActorValue,
+  origin: actionInvocationOriginValue,
+  action: v.object({ id: v.string(), contractVersion: v.string() }),
+  materialInputDigest: v.string(),
+  authority: canonicalClaimAuthorityV2Value,
+  attempt: v.object({
+    attemptRef: v.string(),
+    attemptNumber: v.number(),
+    effectGeneration: v.number(),
+    operationKey: v.string(),
+    leaseOwner: v.string(),
+    leaseExpiresAt: v.string(),
+  }),
+  recordedAt: v.string(),
+})
 
 export const capabilityContractRefV2Value = v.object({
   capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
@@ -113,10 +149,10 @@ export const durableActionPreparationV2Value = v.union(
   }),
 )
 const preparedActionPriceV2Value = v.object({
-  currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number(),
+  minimum: exactAmountValue, maximum: exactAmountValue,
   components: v.array(v.object({
     kind: v.literal('registered_offering'), label: v.string(),
-    minimumAmountMinor: v.number(), maximumAmountMinor: v.number(), evidenceRefs: v.array(v.string()),
+    minimum: exactAmountValue, maximum: exactAmountValue, evidenceRefs: v.array(v.string()),
   })),
 })
 const preparedActionEvidenceV2Value = v.object({
@@ -247,7 +283,7 @@ export const approvalGrantV2Value = v.object({
     assertionRef: v.string(), operationRef: v.string(), assertedAt: v.number(), validUntil: v.number(),
     responseDigest: v.string(), outputDigest: v.string(), evidenceDigest: v.string(),
   }),
-  spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
+  spend: v.object({ amount: exactAmountValue }),
   disclosure: v.object({ reviewRef: v.string(), reviewDigest: v.string(), authorityScopeDigest: v.string() }),
   dataScope: v.array(approvalGrantDataUseV2Value),
   effectScope: v.array(capabilityEffectV2Value),
@@ -273,7 +309,7 @@ export const actionAttemptV2Value = v.object({
   approvalGrantRef: v.string(), approvalGrantDigest: v.string(), authority: approvalGrantV2Value,
   authorityLineageDigest: v.string(), authorityBudgetRef: v.string(),
   admissionKeyDigest: v.string(), lineage: actionPreparationLineageV2Value,
-  maximumSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+  maximumSpend: exactAmountValue,
   recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
   idempotencyClaimRef: v.string(), spendReservationRef: v.string(), dataReservationRef: v.string(),
   providerReleaseGrantRef: v.string(), disclosureGrantRef: v.string(),
@@ -284,7 +320,7 @@ export const actionAuthorityBudgetV2Value = v.object({
   authorityBudgetRef: v.string(), authorityBudgetDigest: v.string(),
   approvalGrantRef: v.string(), approvalGrantDigest: v.string(), authorityLineageDigest: v.string(),
   state: v.union(v.literal('available'), v.literal('exhausted')),
-  currency: v.string(), maximumSpendMinor: v.number(), reservedSpendMinor: v.number(),
+  currency: v.string(), exponent: v.number(), maximumSpendUnits: v.string(), reservedSpendUnits: v.string(),
   executionScopeDigest: v.string(), maximumExposureCount: v.number(), reservedExposureCount: v.number(),
   updatedAt: v.number(), expiresAt: v.number(),
 })
@@ -303,8 +339,8 @@ export const actionAttemptIdempotencyClaimV2Value = v.object({
 export const actionAttemptSpendReservationV2Value = v.object({
   format: v.literal('ae.action-attempt-spend-reservation:v2'),
   spendReservationRef: v.string(), spendReservationDigest: v.string(), authorityBudgetRef: v.string(),
-  state: v.literal('reserved'), currency: v.string(), amountMinor: v.number(),
-  reservedBeforeMinor: v.number(), reservedAfterMinor: v.number(),
+  state: v.literal('reserved'), currency: v.string(), exponent: v.number(), amountUnits: v.string(),
+  reservedBeforeUnits: v.string(), reservedAfterUnits: v.string(),
   approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
   authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value,
   reservedAt: v.number(), expiresAt: v.number(),
@@ -353,7 +389,7 @@ export const providerInvocationEnvelopeV2Value = v.object({
   disclosureGrantRef: v.string(), disclosureGrantDigest: v.string(),
   input: v.object({ schemaIdentity: v.string(), value: v.any(), valueDigest: v.string() }), // runtime-validated JsonValue boundary
   output: v.object({ schemaIdentity: v.string() }),
-  spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
+  spend: v.object({ amount: exactAmountValue }),
   dataScope: v.array(approvalGrantDataUseV2Value), dataScopeDigest: v.string(),
   effectScope: v.array(capabilityEffectV2Value), evidenceScope: v.array(approvalGrantEvidenceScopeV2Value),
   authorityScopeDigest: v.string(),
@@ -520,8 +556,8 @@ const disclosureV2Value = v.object({
   })),
 })
 const registeredPriceV2Value = v.union(
-  v.object({ kind: v.literal('fixed'), currency: v.string(), amountMinor: v.number() }),
-  v.object({ kind: v.literal('range'), currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
+  v.object({ kind: v.literal('fixed'), amount: exactAmountValue }),
+  v.object({ kind: v.literal('range'), minimum: exactAmountValue, maximum: exactAmountValue }),
   v.object({ kind: v.literal('on_request') }),
 )
 const commercialRelationshipV2Value = v.object({
@@ -635,7 +671,7 @@ const routePlanV2Value = v.object({
     fromStep: v.string(), toStep: v.string(),
   })),
   maximumTotalCost: v.union(
-    v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
+    v.object({ kind: v.literal('known'), amount: exactAmountValue }),
     v.object({ kind: v.literal('requires_preparation') }),
   ),
   expiresAt: v.number(), uncertainty: v.array(v.union(
@@ -923,6 +959,8 @@ export const customerRequestV2Tables = {
     offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
     adapterId: v.string(), adapterConfigDigest: v.string(), adapterConfigJson: v.string(),
     endpointUrl: v.string(), credentialRef: v.string(), projectedInputDigest: v.string(),
+    connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
+    canonicalClaimMaterial: canonicalClaimMaterialV2Value,
     state: preparationEgressStateV2Value, allocatedAt: v.number(), dispatchStartedAt: v.optional(v.number()),
     dispatchAttemptRef: v.optional(v.string()), dispatchLeaseExpiresAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()), evidenceRef: v.optional(v.string()),

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { exactAmountSchema } from '@/modules/money/public'
 import { identifier } from '@/modules/capability-contract/public'
 
 import { defineAction, type ActionParameter } from '@/modules/common/action'
@@ -46,10 +47,7 @@ export const suppliedCandidateQuoteOutputSchema = z.discriminatedUnion('kind', [
     environment: z.literal('MOCK/DEVELOPMENT ONLY'),
     quote: z.strictObject({
       quoteRef: z.string().trim().min(1).max(240),
-      price: z.strictObject({
-        amountMinor: z.number().int().nonnegative(),
-        currency: z.string().regex(/^[A-Z]{3}$/),
-      }),
+      price: exactAmountSchema,
       validUntil: z.number().int().positive(),
       terms: z.array(z.string().max(500)).max(32),
       evidenceRefs: z.array(z.string().trim().min(1).max(240)).min(1).max(32),

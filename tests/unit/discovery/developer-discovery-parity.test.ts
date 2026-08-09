@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+
 import {
   createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
@@ -14,7 +16,7 @@ import {
 import type { DeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery'
 
 const forbiddenPrivateOrAuthorityPattern =
-  /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
+  /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|rawContact(?!Excluded)|private:evidence|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
 
 describe('developer discovery generated artifact parity', () => {
   it('generates schema, examples, and fixtures from public route DTO fields only', () => {
@@ -209,6 +211,15 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
         accessPaths: [
           {
             accessPathRef: 'access:route-derived-solar-repair:inverter-diagnostics',
+            offeringRevision: 1,
+            offeringSourceHash: canonicalDigest({
+              fixture: 'developer-discovery-parity',
+              offeringRef: 'offering:route-derived-solar-repair:inverter-diagnostics',
+            }),
+            sourceHash: canonicalDigest({
+              fixture: 'developer-discovery-parity',
+              accessPathRef: 'access:route-derived-solar-repair:inverter-diagnostics',
+            }),
             kind: 'human_request',
             channel: 'phone',
             disclosure: 'This business has not published a request path.',

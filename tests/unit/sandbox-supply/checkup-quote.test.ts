@@ -19,8 +19,7 @@ describe('checkup quote supply resolution', () => {
       offering: {
         name: 'General dental care',
         price: {
-          currency: 'AUD',
-          amountMinor: 9_500,
+          amount: { currency: 'AUD', units: '9500', exponent: 2 },
           unit: 'visit',
           taxTreatment: 'inclusive',
         },
@@ -32,8 +31,7 @@ describe('checkup quote supply resolution', () => {
       slug: 'adelaide-dental-clinic',
       service: 'General dental care',
       price: {
-        currency: 'AUD',
-        amountMinor: 9_500,
+        amount: { currency: 'AUD', units: '9500', exponent: 2 },
         unit: 'visit',
         taxTreatment: 'inclusive',
       },
@@ -49,7 +47,7 @@ describe('checkup quote supply resolution', () => {
       requestedAt,
       offerings: [{
         name: 'General dental care',
-        price: { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+        price: { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
         accessPaths: [{
           kind: 'external_operation',
           url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/checkup-quote',
@@ -61,7 +59,7 @@ describe('checkup quote supply resolution', () => {
       kind: 'ok',
       code: 'quoted',
       quote: {
-        price: { currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+        price: { amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
         quotedAt: new Date(requestedAt).toISOString(),
       },
     })
@@ -73,7 +71,7 @@ describe('checkup quote supply resolution', () => {
       requestedAt: Date.parse('2026-07-29T10:10:00.000Z'),
       offerings: [{
         name: 'General dental care',
-        price: { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, taxTreatment: 'inclusive' },
+        price: { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 }, taxTreatment: 'inclusive' },
         accessPaths: [{
           kind: 'external_operation',
           url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/other-operation',
@@ -90,7 +88,7 @@ describe('checkup quote supply resolution', () => {
       offerings: [
         {
           name: 'General dental care',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, taxTreatment: 'inclusive' },
+          price: { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 }, taxTreatment: 'inclusive' },
           accessPaths: [{
             kind: 'external_operation',
             url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/checkup-quote',
@@ -99,7 +97,7 @@ describe('checkup quote supply resolution', () => {
         },
         {
           name: 'Extended dental care',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 12_000, taxTreatment: 'inclusive' },
+          price: { kind: 'fixed', amount: { currency: 'AUD', units: '12000', exponent: 2 }, taxTreatment: 'inclusive' },
           accessPaths: [{
             kind: 'external_operation',
             url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/checkup-quote',
@@ -117,7 +115,7 @@ describe('checkup quote supply resolution', () => {
       business: {
         offerings: [{
           name: 'General dental care',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+          price: { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
           accessPaths: [{
             kind: 'external_operation',
             url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/checkup-quote',
@@ -130,7 +128,7 @@ describe('checkup quote supply resolution', () => {
     const response = await handleSandboxCheckupQuoteRequest('adelaide-dental-clinic')
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      price: { currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+      price: { amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
     })
   })
 
@@ -143,7 +141,14 @@ describe('checkup quote supply resolution', () => {
 
     const response = await handleSandboxCheckupQuoteRequest('unknown-business')
     expect(response.status).toBe(404)
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'unknown_offering' })
+    await expect(response.json()).resolves.toEqual({
+      type: 'about:blank',
+      title: 'Not found',
+      status: 404,
+      detail: 'No published fixed-price checkup offering exists for this slug.',
+      kind: 'NOT_FOUND',
+      code: 'unknown_offering',
+    })
   })
 })
 
@@ -154,7 +159,7 @@ describe('sandbox.checkup_quote action', () => {
       business: {
         offerings: [{
           name: 'General dental care',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+          price: { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
           accessPaths: [{
             kind: 'external_operation',
             url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/checkup-quote',
@@ -174,7 +179,7 @@ describe('sandbox.checkup_quote action', () => {
         provenance: 'ae_sandbox_provider',
         slug: 'adelaide-dental-clinic',
         service: 'General dental care',
-        price: { currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+        price: { amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
       },
     })
     expect(sandboxCheckupQuoteAction.outputSchema.safeParse(result).success).toBe(true)
@@ -201,7 +206,7 @@ describe('sandbox.checkup_quote action', () => {
   it('refuses with ambiguous_offering when several fixed-price offerings match', async () => {
     const offering = {
       name: 'General dental care',
-      price: { kind: 'fixed', currency: 'AUD', amountMinor: 9_500 },
+      price: { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 } },
       accessPaths: [{
         kind: 'external_operation',
         url: 'https://agentic.example/api/sandbox/adelaide-dental-clinic/checkup-quote',

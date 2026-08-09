@@ -7,6 +7,7 @@ import {
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   normalizeCapabilityPublication,
+  type CapabilityOfferingOrigin,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
   type CanonicalCapabilityPublicationDraft,
@@ -37,15 +38,15 @@ export type AdmitPublicationDraftRefusal =
   | 'binding_invalid'
   | Extract<ReturnType<typeof admitRegisteredTransport>, { kind: 'refused' }>['reason']
 
-export function preparePublicationDraft(input: Readonly<{
+export async function preparePublicationDraft(input: Readonly<{
   source: unknown
   offering?: CapabilityPublicationOfferingDraft | undefined
   binding?: CapabilityPublicationBindingDraft | undefined
   evidenceRefs: readonly string[]
-}>):
+}>): Promise<
   | Readonly<{ kind: 'prepared'; draft: CanonicalCapabilityPublicationDraft; encoded: EncodedCapabilityContractDocument }>
   | Readonly<{ kind: 'refused'; reason: PreparePublicationDraftRefusal }>
-{
+> {
   let importInput: Parameters<typeof normalizeCapabilityPublication>[0]
   if (isDirectPublicationSource(input.source)) {
     if (input.offering === undefined || input.binding === undefined) {
@@ -65,7 +66,7 @@ export function preparePublicationDraft(input: Readonly<{
   }
   let normalized
   try {
-    normalized = normalizeCapabilityPublication(importInput)
+    normalized = await normalizeCapabilityPublication(importInput)
   } catch {
     return { kind: 'refused', reason: 'source_invalid' }
   }
@@ -88,21 +89,31 @@ export function preparePublicationDraft(input: Readonly<{
   }
 }
 
-export function admitPublicationDraft(input: Readonly<{
+export async function admitPublicationDraft(input: Readonly<{
   source: unknown
   offering?: CapabilityPublicationOfferingDraft | undefined
   binding?: CapabilityPublicationBindingDraft | undefined
   evidenceRefs: readonly string[]
   businessId: string
-}>):
+  /**
+   * Optional `catalog_offering` origin to stamp onto the admitted offering.
+   * Used by the curated seed to link a capability offering to the matching
+   * catalog offering (the W1 business→capability seam). Explicitly not derived
+   * from source so a runtime catalog offeringRef can be threaded through.
+   */
+  origin?: CapabilityOfferingOrigin | undefined
+}>): Promise<
   | Readonly<{ kind: 'admitted' } & AdmittedPublicationDraft>
   | Readonly<{ kind: 'refused'; reason: AdmitPublicationDraftRefusal }>
-{
-  const prepared = preparePublicationDraft(input)
+> {
+  const prepared = await preparePublicationDraft(input)
   if (prepared.kind === 'refused') return prepared
   const { draft, encoded } = prepared
+  const offeringDraft = input.origin === undefined
+    ? draft.offering
+    : { ...draft.offering, origin: input.origin }
   const offeringInput = {
-    ...draft.offering,
+    ...offeringDraft,
     businessId: input.businessId,
     contractRef: encoded.contract.ref,
   }

@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/internal/binding'
 import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
+import {
+  createProviderConnection,
+  type CreateProviderConnectionCommand,
+} from '@/modules/capability-supply/provider-connection'
+import {
+  capabilityBindingEligibilityHash,
+  capabilityOfferingEligibilityHash,
+  capabilityOperationId,
+  createPublicOperationRef,
+} from '@/modules/capability-supply/public'
 import {
   INITIAL_PUBLICATION_LIFECYCLE,
   decodeConvexPublicationSource,
@@ -9,12 +22,34 @@ import {
   publicationLifecycle,
   publicationProjection,
 } from '@/modules/capability-supply/internal/publication'
-import {
-  capabilityBindingEligibilityHash,
-  capabilityOfferingEligibilityHash,
-} from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'1'.repeat(64)}`
+const operationRef = createPublicOperationRef({
+  operationId: capabilityOperationId('cap.demo'),
+  publicationRef: 'offering-1',
+  publicationRevision: 1,
+  contractRef: { capabilityId: 'cap.demo', version: 1, contractDigest: digest },
+})
+const providerConnectionCommand: CreateProviderConnectionCommand = {
+  commandId: 'command:create:demo',
+  connectionRef: 'connection:demo',
+  businessId: 'business-1',
+  providerRef: 'provider:demo',
+  providerAccountRef: 'account:demo',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:DEMO_PROVIDER_SECRET',
+  requestedScopes: ['demo:read'],
+  grantedScopes: ['demo:read'],
+  requestedResources: ['account:demo'],
+  grantedResources: ['account:demo'],
+  evidenceRefs: ['evidence:connection'],
+}
+
+function providerConnection() {
+  const result = createProviderConnection(providerConnectionCommand, 1)
+  if (result.kind !== 'applied') throw new Error(`provider connection fixture failed: ${result.kind}`)
+  return result.connection
+}
 
 function offeringRow(status: 'active' | 'inactive' = 'active'): CapabilityOfferingRow {
   const registrationHash = digest
@@ -59,6 +94,7 @@ function offeringRow(status: 'active' | 'inactive' = 'active'): CapabilityOfferi
 function bindingRow(
   admission: 'admitted' | 'not_admitted' = 'admitted',
   conformance: 'conformant' | 'not_conformant' = 'conformant',
+  connectionAuthority?: CapabilityBindingRow['connectionAuthority'],
 ): CapabilityBindingRow {
   const registrationHash = digest
   const admissionEvidenceRefs = ['evidence:admission']
@@ -73,7 +109,8 @@ function bindingRow(
     version: 1,
     contractDigest: digest,
     endpointUrl: 'https://example.test',
-    credentialRef: 'credential:demo',
+    authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     continuation: { kind: 'single_response', evidenceRefs: ['evidence:continuation'] },
     cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
     adapterId: 'http-json:v1',
@@ -128,26 +165,34 @@ describe('capability-supply publication lifecycle', () => {
   })
 
   it('requires admission, conformance, credential, and health readiness for active', () => {
+    const connection = providerConnection()
+    const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)
     expect(publicationLifecycle(
       {
         disposition: 'current',
         credentialState: 'ready',
         healthState: 'healthy',
         readinessValidUntil: 200,
+        connectionAuthority,
       },
       offeringRow('active'),
-      bindingRow('admitted', 'conformant'),
+      bindingRow('admitted', 'conformant', connectionAuthority),
       100,
+      connection,
     )).toEqual({ state: 'active', reasons: [] })
+    const readinessConnection = providerConnection()
+    const readinessAuthority = connectionAuthoritySnapshotFromProviderConnection(readinessConnection, operationRef)
     expect(publicationLifecycle(
       {
         disposition: 'current',
         credentialState: 'unobserved',
         healthState: 'unobserved',
+        connectionAuthority: readinessAuthority,
       },
       offeringRow('inactive'),
-      bindingRow('not_admitted', 'not_conformant'),
+      bindingRow('not_admitted', 'not_conformant', readinessAuthority),
       100,
+      readinessConnection,
     ).reasons).toEqual(expect.arrayContaining([
       'admission_unproven',
       'conformance_unproven',
@@ -168,5 +213,18 @@ describe('capability-supply publication lifecycle', () => {
       kind: 'mcp',
       toolJson: '{"name":"demo"}',
     })).toEqual({ kind: 'mcp', tool: { name: 'demo' } })
+    expect(decodeConvexPublicationSource({
+      kind: 'agent_plugin_mcp',
+      manifestJson: '{"name":"demo","mcpServers":{"reference":{"type":"http","url":"https://tools.example.test/mcp"}}}',
+      serverName: 'reference',
+      toolJson: '{"name":"demo"}',
+      protocolVersion: '2025-06-18',
+    })).toEqual({
+      kind: 'agent_plugin_mcp',
+      serverName: 'reference',
+      protocolVersion: '2025-06-18',
+      manifest: { name: 'demo', mcpServers: { reference: { type: 'http', url: 'https://tools.example.test/mcp' } } },
+      tool: { name: 'demo' },
+    })
   })
 })

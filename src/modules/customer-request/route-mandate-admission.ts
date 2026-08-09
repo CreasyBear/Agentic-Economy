@@ -1,12 +1,14 @@
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { addExactAmounts, compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 import { routeMandateDigest, type RouteMandate, type RouteMandateStep } from './route-mandate'
 
 export const ROUTE_STEP_GRANT_FORMAT = 'ae.route-step-grant:v1' as const
 
-type RouteStepMaximumSpend = Readonly<{ currency: string; amountMinor: number }>
+type RouteStepMaximumSpend = ExactAmount
 
 export type RouteStepAuthority = Readonly<{
   authorityDigest: string
@@ -80,33 +82,21 @@ export function reserveRouteStepSpend(input: Readonly<{
   priorReservations: readonly RouteStepMaximumSpend[]
   requestedReservation: RouteStepMaximumSpend
 }>): ReserveRouteStepSpendResult {
-  const currency = input.maximumTotalSpend.currency
-  if (!validMoney(currency, input.maximumTotalSpend.amountMinor)
-    || !validMoney(input.requestedReservation.currency, input.requestedReservation.amountMinor)
-    || input.requestedReservation.currency !== currency
-    || input.priorReservations.some((reservation) => (
-      !validMoney(reservation.currency, reservation.amountMinor) || reservation.currency !== currency
-    ))) {
+  if (!exactAmountSchema.safeParse(input.maximumTotalSpend).success
+    || !exactAmountSchema.safeParse(input.requestedReservation).success
+    || input.priorReservations.some((reservation) => !exactAmountSchema.safeParse(reservation).success)) {
     return { kind: 'refused', reason: 'spend_reservation_invalid' }
   }
-  let cumulative = 0
+  let cumulative = input.requestedReservation
   for (const reservation of input.priorReservations) {
-    cumulative += reservation.amountMinor
-    if (!Number.isSafeInteger(cumulative)) {
-      return { kind: 'refused', reason: 'spend_reservation_invalid' }
-    }
+    const next = addExactAmounts(cumulative, reservation)
+    if (next === undefined) return { kind: 'refused', reason: 'spend_reservation_invalid' }
+    cumulative = next
   }
-  cumulative += input.requestedReservation.amountMinor
-  if (!Number.isSafeInteger(cumulative)) {
-    return { kind: 'refused', reason: 'spend_reservation_invalid' }
-  }
-  if (cumulative > input.maximumTotalSpend.amountMinor) {
-    return { kind: 'refused', reason: 'spend_limit_exceeded' }
-  }
-  return {
-    kind: 'reserved',
-    cumulativeReservedSpend: { currency, amountMinor: cumulative },
-  }
+  const comparison = compareExactAmounts(cumulative, input.maximumTotalSpend)
+  if (comparison === undefined) return { kind: 'refused', reason: 'spend_reservation_invalid' }
+  if (comparison > 0) return { kind: 'refused', reason: 'spend_limit_exceeded' }
+  return { kind: 'reserved', cumulativeReservedSpend: cumulative }
 }
 
 /**
@@ -154,7 +144,7 @@ export function deriveRouteStepAuthority(input: Readonly<{
   }
   const maximumSpend = maximumStepSpend(step)
   if (maximumSpend === null
-    || maximumSpend.currency !== mandate.route.maximumTotalSpend.currency) {
+    || compareExactAmounts(maximumSpend, mandate.route.maximumTotalSpend) === undefined) {
     return { kind: 'refused', reason: 'step_spend_unresolved' }
   }
   const material: Omit<RouteStepAuthority, 'authorityDigest'> = {
@@ -247,22 +237,14 @@ export function routeStepGrantDigest<T extends Readonly<{ grantRef: string; gran
 
 function maximumStepSpend(step: RouteMandateStep): RouteStepMaximumSpend | null {
   if (step.price.kind === 'fixed') {
-    return validMoney(step.price.currency, step.price.amountMinor)
-      ? { currency: step.price.currency, amountMinor: step.price.amountMinor }
-      : null
+    return exactAmountSchema.safeParse(step.price.amount).success ? step.price.amount : null
   }
   if (step.price.kind === 'range') {
-    return validMoney(step.price.currency, step.price.maximumAmountMinor)
-      && Number.isSafeInteger(step.price.minimumAmountMinor)
-      && step.price.minimumAmountMinor >= 0
-      && step.price.minimumAmountMinor <= step.price.maximumAmountMinor
-      ? { currency: step.price.currency, amountMinor: step.price.maximumAmountMinor }
-      : null
+    if (!exactAmountSchema.safeParse(step.price.minimum).success
+      || !exactAmountSchema.safeParse(step.price.maximum).success) return null
+    const comparison = compareExactAmounts(step.price.minimum, step.price.maximum)
+    return comparison !== undefined && comparison <= 0 ? step.price.maximum : null
   }
   return null
-}
-
-function validMoney(currency: string, amountMinor: number): boolean {
-  return currency.trim().length > 0 && Number.isSafeInteger(amountMinor) && amountMinor >= 0
 }
 

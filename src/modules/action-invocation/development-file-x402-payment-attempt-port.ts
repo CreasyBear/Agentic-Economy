@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname } from 'node:path'
+import { exactAmountSchema } from '@/modules/money/public'
 
 import {
   x402CustodyDigestReferenceValid,
@@ -104,10 +105,16 @@ function assertState(value: unknown): asserts value is DevelopmentPaymentState {
   if (state.format !== EMPTY.format
     || !Array.isArray(state.attempts)
     || !Array.isArray(state.authorizationEvents)
-    || state.attempts.some((attempt) =>
-      typeof attempt !== 'object'
-      || attempt === null
-      || !x402CustodyDigestReferenceValid(String((attempt as X402PaymentAttempt).custodyRef)))) {
+    || state.attempts.some((attempt) => {
+      if (typeof attempt !== 'object' || attempt === null) return true
+      const paymentAttempt = attempt as X402PaymentAttempt
+      return !x402CustodyDigestReferenceValid(String(paymentAttempt.custodyRef))
+        || !exactAmountSchema.safeParse(paymentAttempt.amount).success
+        || (
+          paymentAttempt.settledAmount !== undefined
+          && !exactAmountSchema.safeParse(paymentAttempt.settledAmount).success
+        )
+    })) {
     throw new Error('x402_development_payment_state_invalid')
   }
 }

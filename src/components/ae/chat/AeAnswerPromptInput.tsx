@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { type ClipboardEvent, useEffect, useId, useState } from 'react'
 import { SearchIcon } from 'lucide-react'
 
 import {
@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import { cn } from '@/lib/utils'
+import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 import { NeedTimingValues, type NeedTiming } from '@/modules/answer/search-context'
 
 import { AeAnswerSuggestions } from './AeSuggestionChips'
@@ -29,6 +30,7 @@ export type AeAnswerPromptInputProps = {
   examples?: readonly string[]
   busy?: boolean
   compact?: boolean
+  showTiming?: boolean
   placeholder?: string
   /** Stable accessible name for the searchbox; defaults to a fixed prompt so it does not shift with the visible placeholder. */
   inputLabel?: string
@@ -38,12 +40,11 @@ export type AeAnswerPromptInputProps = {
 }
 
 const DEFAULT_EXAMPLES: readonly string[] = [
-  'Emergency plumber Brunswick',
-  'Locksmith open now Footscray',
-  'Electrician same day Geelong',
+  'I need an emergency plumber in Brunswick',
+  'I need a locksmith in Footscray right now',
+  'I need an electrician in Geelong today',
 ]
 
-const QUERY_MAX_LENGTH = 200
 
 // Stable accessible name for the query field. The visible placeholder rotates
 // with context (examples, follow-up prompts), but the searchbox's name must not
@@ -58,8 +59,7 @@ export function AeAnswerPromptInput({
   ...props
 }: AeAnswerPromptInputProps) {
   const inputId = useId()
-  const initialValue = defaultValue.slice(0, QUERY_MAX_LENGTH)
-
+  const initialValue = defaultValue
   return (
     <AeAnswerPromptInputInner
       key={`${initialValue}:${initialTiming}:${initialTimingDate}`}
@@ -81,11 +81,12 @@ function AeAnswerPromptInputInner({
   onSubmit,
   examples,
   busy = false,
+  showTiming = true,
   compact: compactOverride,
-  placeholder = 'What do you need done?',
+  placeholder = 'e.g. Get a quote for solar installation, or the current price of bitcoin',
   inputLabel = SEARCHBOX_LABEL,
-  ariaLabel = 'Find local service businesses',
-  submitLabel = 'Search',
+  ariaLabel = 'Ask a question or describe what you need done',
+  submitLabel = 'Ask',
   focusOnMount = false,
 }: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples' | 'initialTiming' | 'initialTimingDate'> & {
   inputId: string
@@ -99,12 +100,14 @@ function AeAnswerPromptInputInner({
   const placeholderId = `${inputId}-placeholder`
   const timingDateId = `${inputId}-timing-date`
   const [value, setValue] = useState(initialValue)
+  const [queryError, setQueryError] = useState(false)
   const [timing, setTiming] = useState<NeedTiming>(initialTiming)
   const hydrated = useClientMounted()
   const [timingDate, setTimingDate] = useState(initialTimingDate)
   const timingDateValid = timing !== 'date' || (timingDate.length > 0 && timingDate >= localToday())
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
-  const showCharacterLimit = charactersRemaining <= 40
+  const queryTooLong = value.length > QUERY_MAX_LENGTH
+  const showCharacterLimit = queryTooLong || charactersRemaining <= 40
   const compact = compactOverride ?? examples.length === 0
 
   useEffect(() => {
@@ -113,20 +116,38 @@ function AeAnswerPromptInputInner({
 
 
   function updateValue(nextValue: string) {
-    setValue(nextValue.slice(0, QUERY_MAX_LENGTH))
+    setValue(nextValue)
+    setQueryError(false)
   }
 
   function submitQuery(query: string) {
-    const trimmed = query.slice(0, QUERY_MAX_LENGTH).trim()
+    if (query.length > QUERY_MAX_LENGTH) {
+      setQueryError(true)
+      return
+    }
+    const trimmed = query.trim()
     if (trimmed.length === 0 || busy || !timingDateValid) {
       return
     }
+    setQueryError(false)
     onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
   }
 
   function handlePromptSubmit(message: PromptInputMessage) {
     submitQuery(message.text)
   }
+
+  function handlePromptPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const pasted = event.clipboardData?.getData('text') ?? ''
+    const start = event.currentTarget.selectionStart ?? value.length
+    const end = event.currentTarget.selectionEnd ?? value.length
+    const nextLength = value.length - (end - start) + pasted.length
+    if (nextLength > QUERY_MAX_LENGTH) {
+      event.preventDefault()
+      setQueryError(true)
+    }
+  }
+
 
   return (
     <div className={cn('flex w-full min-w-0 flex-col', compact ? 'gap-2' : 'gap-3')}>
@@ -140,15 +161,15 @@ function AeAnswerPromptInputInner({
           <PromptInputHeader>
             <span className="inline-flex min-h-6 items-center gap-1 text-xs font-medium text-muted-foreground">
               <SearchIcon aria-hidden="true" className="size-4" />
-              Local service need
+              What you need done?
             </span>
             <span
               id={counterId}
               className={cn('inline-flex min-h-6 items-center font-mono text-xs leading-none text-muted-foreground', showCharacterLimit ? 'opacity-100' : 'opacity-0')}
               data-numeric
-              aria-live="polite"
+              aria-live={showCharacterLimit ? 'polite' : undefined}
             >
-              {charactersRemaining} left
+              {value.length} / {QUERY_MAX_LENGTH} characters
             </span>
           </PromptInputHeader>
         ) : null}
@@ -161,69 +182,86 @@ function AeAnswerPromptInputInner({
             value={value}
             maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => updateValue(event.currentTarget.value)}
+            onInvalid={() => setQueryError(true)}
+            onPaste={handlePromptPaste}
             role="searchbox"
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
             rows={1}
-            aria-describedby={showCharacterLimit ? `${placeholderId} ${hintId} ${counterId}` : `${placeholderId} ${hintId}`}
+            aria-describedby={`${placeholderId} ${hintId} ${counterId}`}
+            aria-invalid={queryError || queryTooLong ? 'true' : undefined}
             aria-label={inputLabel}
             disabled={busy || !hydrated}
           />
         </PromptInputBody>
         <PromptInputFooter className="flex-wrap">
-          <PromptInputTools className="flex-wrap">
-            <fieldset
-              className="flex min-w-0 flex-wrap items-center gap-1 border-0 p-0"
-              disabled={busy || !hydrated}
-            >
-              <legend className="text-xs font-medium text-foreground">When do you need this?</legend>
-              <RadioGroup
-                value={timing}
-                onValueChange={(value) => setTiming(value as NeedTiming)}
-                disabled={busy || !hydrated}
-                aria-label="When do you need this?"
-                className="flex flex-wrap gap-1.5"
+          {/* Timing selection is an idle-only choice: showing it disabled during a
+              turn implies the selection is still editable. Selected timing state
+              lives in this component, so it returns unchanged once the turn settles. */}
+          {busy || !showTiming ? null : (
+            <PromptInputTools className="flex-wrap">
+              <fieldset
+                className="flex min-w-0 flex-wrap items-center gap-1 border-0 p-0"
+                disabled={!hydrated}
               >
-                {NeedTimingValues.map((option) => (
-                  <RadioGroupItem
-                    key={option}
-                    value={option}
-                    className={cn(buttonVariants({ variant: timing === option ? 'default' : 'secondary', size: 'sm' }), 'aspect-auto w-auto [&_[data-slot=radio-group-indicator]]:hidden')}
-                  >
-                    {timingLabel(option)}
-                  </RadioGroupItem>
-                ))}
-              </RadioGroup>
-              {timing === 'date' ? (
-                <Field
-                  orientation="horizontal"
-                  className="w-auto flex-none items-center gap-1.5 [&>[data-slot=field-label]]:flex-none"
+                <legend className="text-xs font-medium text-foreground">When do you need this?</legend>
+                <RadioGroup
+                  value={timing}
+                  onValueChange={(value) => setTiming(value as NeedTiming)}
+                  disabled={!hydrated}
+                  aria-label="When do you need this?"
+                  className="flex flex-wrap gap-1.5"
                 >
-                  <FieldLabel htmlFor={timingDateId} className="text-xs font-medium text-foreground">
-                    Date
-                  </FieldLabel>
-                  <Input
-                    id={timingDateId}
-                    type="date"
-                    value={timingDate}
-                    min={localToday()}
-                    required
-                    className="h-8 w-auto min-w-0 bg-card px-2 text-xs max-sm:h-8 md:text-xs"
-                    onChange={(event) => setTimingDate(event.currentTarget.value)}
-                  />
-                </Field>
-              ) : null}
-            </fieldset>
-          </PromptInputTools>
+                  {NeedTimingValues.map((option) => (
+                    <RadioGroupItem
+                      key={option}
+                      value={option}
+                      className={cn(buttonVariants({ variant: timing === option ? 'default' : 'secondary', size: 'sm' }), 'aspect-auto w-auto [&_[data-slot=radio-group-indicator]]:hidden')}
+                    >
+                      {timingLabel(option)}
+                    </RadioGroupItem>
+                  ))}
+                </RadioGroup>
+                {timing === 'date' ? (
+                  <Field
+                    orientation="horizontal"
+                    className="w-auto flex-none items-center gap-1.5 [&>[data-slot=field-label]]:flex-none"
+                  >
+                    <FieldLabel htmlFor={timingDateId} className="text-xs font-medium text-foreground">
+                      Date
+                    </FieldLabel>
+                    <Input
+                      id={timingDateId}
+                      type="date"
+                      value={timingDate}
+                      min={localToday()}
+                      required
+                      className="h-8 w-auto min-w-0 bg-card px-2 text-xs max-sm:h-8 md:text-xs"
+                      onChange={(event) => setTimingDate(event.currentTarget.value)}
+                    />
+                  </Field>
+                ) : null}
+              </fieldset>
+            </PromptInputTools>
+          )}
           {!compact ? (
             <span className="hidden text-xs text-muted-foreground sm:block">
-              Cited answers from published business details.
+              Answers based on business information.
             </span>
-          ) : null}
+          ) : (
+            <span
+              id={counterId}
+              className="font-mono text-xs tabular-nums text-muted-foreground"
+              data-numeric
+              aria-live={showCharacterLimit ? 'polite' : undefined}
+            >
+              {value.length} / {QUERY_MAX_LENGTH} characters
+            </span>
+          )}
           <PromptInputSubmit
             aria-label={busy ? 'Starting your thread' : submitLabel}
-            disabled={busy || !hydrated || value.trim().length === 0 || !timingDateValid}
+            disabled={busy || !hydrated || value.trim().length === 0 || queryTooLong || !timingDateValid}
             status={busy ? 'submitted' : 'ready'}
           />
         </PromptInputFooter>
@@ -236,13 +274,16 @@ function AeAnswerPromptInputInner({
           aria-label="Example queries"
           onSelect={(example) => {
             setValue(example)
+            setQueryError(false)
             document.getElementById(inputId)?.focus()
           }}
         />
       ) : null}
 
-      <p id={hintId} className={cn('text-sm leading-snug text-muted-foreground', compact && 'hidden')}>
-        Type a real need. Name another place only when you want to search there.
+      <p id={hintId} className="text-sm leading-snug text-muted-foreground">
+        {queryError || queryTooLong
+          ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
+          : `Describe what you need done. Add a place if it matters. Up to ${QUERY_MAX_LENGTH} characters.`}
       </p>
     </div>
   )

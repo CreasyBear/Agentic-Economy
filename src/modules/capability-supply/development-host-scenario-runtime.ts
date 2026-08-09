@@ -83,6 +83,22 @@ export function developmentSuccessRuntime(
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
+    readProviderConnectionCredentialRef: (input) => {
+      if (
+        input.connectionRef !== 'connection:mock-provider'
+        || input.providerRef !== 'provider:mock-provider'
+        || input.adapterId !== 'x402-fetch:v2'
+        || input.authorityGeneration !== 1
+      ) return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+      const authorityDigest = canonicalDigest({
+        connectionRef: 'connection:mock-provider',
+        providerRef: 'provider:mock-provider',
+        authorityGeneration: 1,
+      })
+      return input.authorityDigest === authorityDigest
+        ? { kind: 'resolved' as const, credentialRef: 'connection:mock-provider' }
+        : { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    },
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
@@ -132,6 +148,10 @@ export function developmentPreflightRefusalRuntime(
   return {
     ...base,
     resolveCredential: () => undefined,
+    readProviderConnectionCredentialRef: () => ({
+      kind: 'unavailable' as const,
+      reason: 'credential_unavailable' as const,
+    }),
   }
 }
 

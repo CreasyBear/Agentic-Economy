@@ -49,6 +49,7 @@ export type ResumeActionPreparationArgs = Readonly<{
   requestRevision: number
   actionId: string
   principalId: string
+  now: number
 }>
 
 export type ResumeActionPreparationResult =

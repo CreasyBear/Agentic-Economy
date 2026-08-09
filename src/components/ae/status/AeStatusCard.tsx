@@ -5,6 +5,7 @@ import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import type { AdmissionBlocker } from '@/modules/inquiries/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -48,6 +49,7 @@ function ownerActionForAdmissionBlocker(blocker: AdmissionBlocker): AdmissionOwn
 }
 
 export function AeStatusCard({ readback }: AeStatusCardProps) {
+  const isPreview = readback.projectionMode === 'local_preview'
   const titleId = `ae-status-card-${readback.catalog.slug}`
   const hasUnavailableCapabilities = readback.unavailableCapabilities.length > 0
   const offeringStatuses = readback.catalog.offerings.map((offering) => ({
@@ -72,13 +74,15 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <AeCopyPublicUrlButton
-              slug={readback.catalog.slug}
-              businessId={readPublicCatalogActivationRef(readback.catalog)}
-              size="sm"
-            />
+            {isPreview ? <Badge variant="outline">Preview</Badge> : (
+              <AeCopyPublicUrlButton
+                slug={readback.catalog.slug}
+                businessId={readPublicCatalogActivationRef(readback.catalog)}
+                size="sm"
+              />
+            )}
             <Button asChild variant="secondary" size="sm">
-              <a href={readback.publicUrl}><ExternalLinkIcon aria-hidden="true" />Open page</a>
+              <a href={readback.publicUrl}><ExternalLinkIcon aria-hidden="true" />{isPreview ? 'Open preview' : 'Open page'}</a>
             </Button>
           </div>
         </div>
@@ -105,11 +109,11 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         <div className="grid gap-3">
           <h3 className="block text-lg font-semibold text-foreground">Request admission</h3>
           {readback.admission.admitted ? (
-            <p className="block text-foreground">Your business page can receive requests.</p>
+            <p className="block text-foreground">{isPreview ? 'Preview can receive requests in local testing only.' : 'Your business page can receive requests.'}</p>
           ) : (
             <div className="grid gap-2">
               <p className="block text-sm text-muted-foreground">
-                Complete these checks to start receiving requests from this page.
+                {isPreview ? 'Preview only. Connect the public source before sharing this page.' : 'Complete these checks to start receiving requests from this page.'}
               </p>
               <ul className="m-0 grid list-none gap-3 p-0">
                 {readback.admission.blockers.map((blocker) => {

@@ -37,13 +37,13 @@ export function resolveInquiryHandoff(input: {
 export function buildInquiryHandoffOneLine(resolution: InquiryHandoffResolution): string {
   switch (resolution.kind) {
     case 'resolved':
-      return `Ready to open ${resolution.provider.name}'s qualified inquiry form.`
+      return `Ready to send a request to ${resolution.provider.name}.`
     case 'provider_unavailable':
-      return `${resolution.provider.name} does not publish an AE inquiry form yet.`
+      return `${resolution.provider.name} does not have a request form here yet.`
     case 'choose_provider':
-      return 'Choose which listed business to message.'
+      return 'Choose a business to contact.'
     case 'no_provider':
-      return 'Find a listed business before opening a qualified inquiry form.'
+      return 'Find a business that can help before sending a request.'
   }
 }
 
@@ -51,25 +51,25 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
   switch (resolution.kind) {
     case 'resolved':
       return [
-        `${resolution.provider.name} publishes an inquiry path for owner review.`,
-        'AE can route you to that form. The business reviews the request and decides whether to accept it; timing, quote, and availability are not confirmed yet.',
+        `${resolution.provider.name} offers a way to send a request for business review.`,
+        'I can send your request that way. The business reviews it and decides whether to accept it; timing, price, and availability are not confirmed yet.',
       ].join(' ')
     case 'provider_unavailable':
       return [
         `The published page for ${resolution.provider.name} remains available for review.`,
-        'This listing does not publish an AE inquiry form yet.',
-        'Use the published details and confirm timing, quote, and availability with the business.',
+        'This business does not have a request form here yet.',
+        'Use the published details and confirm timing, price, and availability with the business.',
       ].join(' ')
     case 'choose_provider':
       return [
-        'AE can route you to a qualified inquiry form when a listed business publishes one.',
-        'Name the business you want to contact, or use Open inquiry form from the listed businesses in this answer.',
-        'A submitted inquiry goes to the business for review; timing, quote, and availability are not confirmed yet.',
+        'I can send a request when a business offers that option.',
+        'Name the business you want to contact, or use the request option from the businesses in this answer.',
+        'A submitted request goes to the business for review; timing, price, and availability are not confirmed yet.',
       ].join(' ')
     case 'no_provider':
       return [
-        'No listed business is in this thread yet.',
-        'Search a service and area, or carry a short brief to a provider before opening an inquiry.',
+        'No business is in this answer yet.',
+        'Search for what you need and where, then send a request to a business that can help.',
       ].join(' ')
   }
 }
@@ -77,13 +77,13 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
 export function buildInquiryHandoffNextStep(resolution: InquiryHandoffResolution): string {
   switch (resolution.kind) {
     case 'resolved':
-      return `Open ${resolution.provider.name}'s inquiry form, describe the job, and submit it for owner review.`
+      return `Open ${resolution.provider.name}'s request form, describe what you need, and send it for the business to review.`
     case 'provider_unavailable':
-      return `Open ${resolution.provider.name}'s listing and use the published contact guidance.`
+      return `Open ${resolution.provider.name}'s page and use the contact details they provide.`
     case 'choose_provider':
-      return 'Use Open inquiry form from the listed businesses in this answer, or name the business you want to contact.'
+      return 'Choose a business from this answer, then use its request option, or tell me which business you want to contact.'
     case 'no_provider':
-      return 'Search nearby, then choose a listed business that publishes an inquiry path—or review a provider and use its published contact guidance.'
+      return 'Search for what you need and where, then choose a business that offers a way to send a request—or review a business’s contact details.'
   }
 }
 

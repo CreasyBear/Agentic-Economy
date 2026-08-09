@@ -12,14 +12,18 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import {
+  admitRegisteredTransport,
   capabilityBindingRegistrationHash,
+  capabilityOperationId,
   capabilityOfferingRegistrationHash,
+  connectionAuthoritySnapshotIsValid,
+  createPublicOperationRef,
   type AdmittedTransportMaterial,
-  CapabilityOfferingRegistration,
-  CapabilityTransportBindingRegistration,
+  type CapabilityConnectionAuthoritySnapshot,
+  type CapabilityOfferingRegistration,
+  type CapabilityTransportBindingRegistration,
 } from './public'
 import type { SuppliedCandidateQualification } from './server'
-import { admitRegisteredTransport } from './internal/transport-adapters'
 
 export type PublishedOperationUsageObservation = Readonly<{
   window: Readonly<{ kind: 'rolling'; days: number }>
@@ -63,10 +67,12 @@ export type PublishedOperation = Readonly<{
     price: CapabilityOfferingRegistration['presentation']['price']
     materialTerms: CapabilityOfferingRegistration['presentation']['materialTerms']
     evidenceDigest: string
+    connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   }>
   contract: CapabilityContract
   offering: CapabilityOfferingRegistration
   binding: CapabilityTransportBindingRegistration
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   transport: AdmittedTransportMaterial
   readiness: Readonly<{
     observedAt: number
@@ -111,22 +117,37 @@ export function materializePublishedOperation(input: Readonly<{
   contract: CapabilityContract
   offering: CapabilityOfferingRegistration
   binding: CapabilityTransportBindingRegistration
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   admittedTransport: AdmittedTransportMaterial
   qualification: SuppliedCandidateQualification
   usageObservation?: PublishedOperationUsageObservation
 }>): PublishedOperation {
-  const { publication, contract, offering, binding, qualification, admittedTransport } = input
+  const { publication, contract, offering, binding, connectionAuthority, qualification, admittedTransport } = input
   const admittedConfig = parseAdmittedConfig(admittedTransport)
   const authoritativeAdmission = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
     endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
+    authority: binding.authority,
     continuation: binding.continuation,
     cancellation: binding.cancellation,
     config: binding.adapter.config,
   })
   const offeringDigest = capabilityOfferingRegistrationHash(offering)
   const bindingDigest = capabilityBindingRegistrationHash(binding, admittedTransport)
+  const expectedOperationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(contract.ref.capabilityId),
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+    contractRef: contract.ref,
+  })
+  if (!connectionAuthorityIsExact({
+    authority: binding.authority,
+    adapterId: binding.adapter.adapterId,
+    expectedOperationRef,
+    snapshot: connectionAuthority,
+  })) {
+    throw new Error('published_operation_connection_authority_invalid')
+  }
   const sources = new Map(qualification.sources.map((source) => [source.kind, source]))
   if (authoritativeAdmission.kind !== 'admitted'
     || authoritativeAdmission.transport.configJson !== admittedTransport.configJson
@@ -182,6 +203,7 @@ export function materializePublishedOperation(input: Readonly<{
     price: offering.presentation.price,
     materialTerms: offering.presentation.materialTerms,
     evidenceDigest,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
   } as const
   const materialDigest = canonicalDigest(identity as StableHashValue)
   return {
@@ -193,6 +215,7 @@ export function materializePublishedOperation(input: Readonly<{
     contract,
     offering,
     binding,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     transport: admittedTransport,
     readiness: {
       observedAt: publication.readinessObservedAt,
@@ -331,4 +354,18 @@ function validateUsage(observation: PublishedOperationUsageObservation | undefin
     || observation.source.trim().length === 0 || observation.evidenceRefs.length < 1) {
     throw new Error('published_operation_usage_observation_invalid')
   }
+}
+function connectionAuthorityIsExact(input: Readonly<{
+  authority: CapabilityTransportBindingRegistration['authority']
+  adapterId: string
+  expectedOperationRef: string
+  snapshot: CapabilityConnectionAuthoritySnapshot | undefined
+}>): boolean {
+  if (input.authority.kind === 'keyless') return input.snapshot === undefined
+  const snapshot = input.snapshot
+  return connectionAuthoritySnapshotIsValid(snapshot)
+    && snapshot.connectionRef === input.authority.connectionRef
+    && snapshot.providerRef === input.authority.providerRef
+    && snapshot.adapterId === input.adapterId
+    && snapshot.operationRef === input.expectedOperationRef
 }

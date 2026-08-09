@@ -1,3 +1,6 @@
+import { exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
+
 export function optionalSearchMode(
   value: string | null,
 ): { mode?: 'near_me' | 'whole_catalogue' } {
@@ -19,15 +22,24 @@ export function optionalSearchLocation(value: string | null): { location?: strin
 
 /**
  * A budget an agent cannot express is a budget it will not send. Anything that
- * is not a whole positive number of minor units is dropped rather than
- * rejected: a malformed ceiling must not turn a real search into an error.
+ * is not a complete, valid ExactAmount is dropped rather than rejected: a
+ * malformed ceiling must not turn a real search into an error.
  */
-export function optionalMaxPriceMinor(value: string | null): { maxPriceMinor?: number } {
-  if (value === null) return {}
-  const parsed = Number(value.trim())
-  return Number.isInteger(parsed) && parsed > 0 && parsed <= Number.MAX_SAFE_INTEGER
-    ? { maxPriceMinor: parsed }
-    : {}
+
+export function optionalMaxPrice(
+  currency: string | null,
+  units: string | null,
+  exponent: string | null,
+): { maxPrice?: ExactAmount } {
+  if (currency === null || units === null || exponent === null) return {}
+  const normalizedExponent = exponent.trim()
+  if (!/^(0|[1-9]\d*)$/u.test(normalizedExponent)) return {}
+  const parsed = exactAmountSchema.safeParse({
+    currency,
+    units,
+    exponent: Number(normalizedExponent),
+  })
+  return parsed.success ? { maxPrice: parsed.data } : {}
 }
 
 export function optionalHasPrice(value: string | null): { hasPrice?: boolean } {

@@ -33,17 +33,60 @@ type OpenRouterSchemaProperty = {
 }
 
 /**
- * Maps an AE action's flat `ActionParameter[]` descriptor into an OpenRouter
- * tool spec. OpenRouter only needs model-facing input parameters here; the
- * action carries Zod input and output schemas server-side, and the runner
- * validates both sides before treating a tool result as evidence.
+ * A model-facing worked example appended into a tool's OpenRouter `description`.
  *
- * The JSON-schema converter in `@tanstack/ai` is used for agent-tool
- * descriptors, but this OpenRouter path deliberately preserves the existing
- * flat parameter surface. Constraints such as `max(200)` or `int` remain
- * enforced by the action schema at execution time.
+ * OpenRouter (non-Anthropic) does not surface AI-SDK `inputExamples` natively,
+ * so each example is inlined into the description text: the naïve wording a
+ * user is likely to type (WRONG/catalog reflex) paired with the correct tool
+ * call (RIGHT/execute) and how to answer from the returned JSON. When present,
+ * this sharpens when-to-fire guidance far more than a bare auto description.
  */
-export function actionToOpenRouterTool(action: AnyAction): OpenRouterToolSpec {
+export type ToolInputExample = {
+  /** Short cue for when this tool applies (e.g. 'live crypto price'). */
+  when: string
+  /** The user's natural-language question this tool answers. */
+  userSay: string
+  /** The correct tool call to make (the execute/RIGHT form). */
+  call: string
+  /** What the executed JSON returns and how the answer should be grounded in it. */
+  answer: string
+}
+
+/**
+ * Appends worked `examples` to a tool description, or returns the description
+ * unchanged when there are none (back-compat: tools without examples render as
+ * before). Examples are newline-separated and prefixed so the model reads them
+ * as when-to-fire + execute + ground-the-answer guidance.
+ */
+export function appendToolExamplesToDescription(
+  description: string,
+  examples: readonly ToolInputExample[],
+): string {
+  if (examples.length === 0) {
+    return description
+  }
+  const block = examples
+    .map(
+      (example, index) =>
+        `EXAMPLE ${index + 1} — When: ${example.when}\n` +
+        `  User says: "${example.userSay}"\n` +
+        `  Call with: ${example.call}\n` +
+        `  Then answer from the returned JSON: ${example.answer}`,
+    )
+    .join('\n\n')
+  return `${description}\n\nWHEN TO CALL THIS TOOL:\n${block}`
+}
+
+/**
+ * Maps an AE action's flat `ActionParameter[]` descriptor into an OpenRouter
+ * tool spec, optionally appending worked `inputExamples` into the description
+ * (see {@link appendToolExamplesToDescription}). When `examples` is omitted or
+ * empty the tool renders exactly as before.
+ */
+export function actionToOpenRouterTool(
+  action: AnyAction,
+  examples?: readonly ToolInputExample[],
+): OpenRouterToolSpec {
   const tool = actionToHarnessTool(action)
   const violation = findStrictToolSchemaViolation(tool.inputJsonSchema)
   if (violation !== null) {
@@ -52,11 +95,14 @@ export function actionToOpenRouterTool(action: AnyAction): OpenRouterToolSpec {
   const parameters = openRouterParametersFromJsonSchema(tool.inputJsonSchema) ??
     openRouterParametersFromActionParameters(action)
 
-  const description = [
-    action.summary,
-    'Boundaries:',
-    ...action.boundaries.map((boundary) => `- ${boundary}`),
-  ].join('\n')
+  const description = appendToolExamplesToDescription(
+    [
+      action.summary,
+      'Boundaries:',
+      ...action.boundaries.map((boundary) => `- ${boundary}`),
+    ].join('\n'),
+    examples ?? [],
+  )
 
   return {
     type: 'function',

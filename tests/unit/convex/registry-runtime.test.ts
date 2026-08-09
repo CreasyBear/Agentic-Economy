@@ -6,6 +6,7 @@ import {
   searchPublicBusinessOfferingSupply,
 } from '../../../convex/registry'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { ExactAmount } from '@/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type Filter = { op: 'eq' | 'search'; field: string; value: unknown }
@@ -13,6 +14,7 @@ type ReadTrace = { tableName: string; indexName?: string; operation: 'first' | '
 type IndexBuilder = { eq: (field: string, value: unknown) => IndexBuilder; search: (field: string, value: string) => IndexBuilder }
 type PaginationOpts = { numItems: number; cursor: string | null }
 type QueryCtx = { db: FakeDb }
+type SearchArgs = { query: string; location?: string; maxPrice?: ExactAmount; limit?: number }
 
 type QueryResult = {
   kind: 'ok'
@@ -22,7 +24,7 @@ type QueryResult = {
 }
 
 const listHandler = (listPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: { paginationOpts: PaginationOpts }) => Promise<QueryResult> })._handler
-const searchHandler = (searchPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: { query: string; location?: string; limit?: number }) => Promise<QueryResult> })._handler
+const searchHandler = (searchPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: SearchArgs) => Promise<QueryResult> })._handler
 const detailHandler = (getPublicBusinessOfferingSupplyBySlug as unknown as { _handler: (ctx: QueryCtx, args: { slug: string }) => Promise<unknown> })._handler
 
 describe('Convex registry public read paths', () => {
@@ -119,7 +121,7 @@ describe('Convex registry public read paths', () => {
     })
   })
 
-  it('uses the bounded registry search index and hydrates canonical snapshots', async () => {
+  it('paginates the full-text registry index and hydrates canonical snapshots', async () => {
     const db = new FakeDb()
     seedBusinesses(db, 20)
     db.seed('registrySearchDocuments', {
@@ -149,9 +151,62 @@ describe('Convex registry public read paths', () => {
     const page = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 5 })
 
     expect(page).toMatchObject({ kind: 'ok', query: 'emergency plumber parramatta', items: [{ slug: 'business-007' }], pagination: { total: 1, hasMore: false } })
-    expect(db.reads.some((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'search_searchText_by_publicStatus' && read.operation === 'take' && read.limit === 250)).toBe(true)
+    expect(db.reads.some((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'search_searchText_by_publicStatus' && read.operation === 'paginate' && read.limit === 250)).toBe(true)
     expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
     expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots', 'registrySearchDocuments'].includes(read.tableName))).toBe(true)
+  })
+
+  it('does not broaden a stop-word-only query into all published businesses', async () => {
+    const db = new FakeDb()
+    seedBusinesses(db, 20)
+
+    const page = await searchHandler({ db }, { query: 'find a provider', limit: 5 })
+
+    expect(page).toMatchObject({ kind: 'ok', items: [], pagination: { total: 0, hasMore: false } })
+    expect(db.reads).toEqual([])
+  })
+
+  it('keeps searching past the former 250-document cap', async () => {
+    const db = new FakeDb()
+    seedBusinesses(db, 300)
+    seedRegistrySearchDocuments(db, 300)
+
+    const first = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 50 })
+
+    expect(first).toMatchObject({
+      kind: 'ok',
+      items: expect.arrayContaining([expect.objectContaining({ slug: 'business-001' }), expect.objectContaining({ slug: 'business-050' })]),
+      pagination: { total: 300, hasMore: true, nextCursor: 'business-051' },
+    })
+    expect(first.items).toHaveLength(50)
+    expect(db.reads.filter((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'search_searchText_by_publicStatus' && read.operation === 'paginate')).toHaveLength(2)
+  })
+  it('compares exact prices across scales while requiring matching currencies', async () => {
+    const db = new FakeDb()
+    seedBusinesses(db, 4)
+    seedRegistrySearchDocuments(db, 4)
+    const prices = [
+      { kind: 'fixed' as const, amount: { currency: 'USDC', units: '7000', exponent: 6 }, taxTreatment: 'unstated' as const },
+      { kind: 'fixed' as const, amount: { currency: 'USDC', units: '7001', exponent: 6 }, taxTreatment: 'unstated' as const },
+      { kind: 'fixed' as const, amount: { currency: 'EUR', units: '7000', exponent: 6 }, taxTreatment: 'unstated' as const },
+      { kind: 'fixed' as const, amount: { currency: 'USDC', units: '7', exponent: 3 }, taxTreatment: 'unstated' as const },
+    ]
+    for (const [index, price] of prices.entries()) {
+      const snapshot = db.table('businessSupplyProjectionSnapshots')[index]
+      if (snapshot === undefined) throw new Error('registry snapshot fixture missing')
+      const projection = snapshot.projection as { offerings: Array<{ offering: { price?: (typeof prices)[number] } }> }
+      const offering = projection.offerings[0]?.offering
+      if (offering === undefined) throw new Error('registry offering fixture missing')
+      offering.price = price
+    }
+
+    const page = await searchHandler({ db }, {
+      query: 'emergency plumber parramatta',
+      maxPrice: { currency: 'USDC', units: '7000', exponent: 6 },
+      limit: 5,
+    })
+
+    expect(page.items?.map((item) => item.slug)).toEqual(['business-001', 'business-004'])
   })
 
   it('does not mistake an unqualified capability query for a location', async () => {
@@ -200,7 +255,7 @@ describe('Convex registry public read paths', () => {
     expect(page).toMatchObject({ kind: 'ok', items: [{ slug: 'business-001' }] })
   })
 
-  it('falls back to the bounded public-status index while search documents backfill', async () => {
+  it('does not broaden to a public-status scan while search documents backfill', async () => {
     const db = new FakeDb({ emptySearchIndex: true })
     seedBusinesses(db, 20)
     db.seed('registrySearchDocuments', {
@@ -229,8 +284,8 @@ describe('Convex registry public read paths', () => {
 
     const page = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 5 })
 
-    expect(page).toMatchObject({ kind: 'ok', items: [{ slug: 'business-007' }] })
-    expect(db.reads.some((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'by_publicStatus_updatedAt' && read.operation === 'take' && read.limit === 250)).toBe(true)
+    expect(page).toMatchObject({ kind: 'ok', items: [], pagination: { total: 0, hasMore: false } })
+    expect(db.reads.some((read) => read.indexName === 'by_publicStatus_updatedAt')).toBe(false)
   })
 })
 
@@ -277,6 +332,20 @@ function seedBusinesses(db: FakeDb, count: number): void {
     const slug = `business-${suffix}`
     db.seed('businesses', { _id: businessId, _creationTime: index, ownerId: `owners:${suffix}`, slug, name: `Business ${suffix}`, normalizedName: `business ${suffix}`, category: 'Emergency plumbing', suburb: 'Parramatta', stateTerritory: 'NSW', publicStatus: 'published', trustTier: 'claimed', claimStatus: 'claimed', sourceHash: canonicalDigest(`business:${suffix}`), createdAt: index, updatedAt: index })
     db.seed('businessSupplyProjectionSnapshots', { _id: `snapshots:${suffix}`, _creationTime: index, businessId, sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current', updatedAt: index, status: 'current', projection: { business: { businessId, slug, name: `Business ${suffix}`, category: 'Emergency plumbing', suburb: 'Parramatta', stateTerritory: 'NSW', publicUrl: `/${slug}`, trustTier: 'claimed' }, offerings: [{ offering: { offeringRef: `offering:${suffix}`, revision: 1, name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'Emergency plumbing help for urgent pipe repairs.', serviceAreaSummary: 'Parramatta and nearby suburbs' }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }], sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current' } })
+  }
+}
+
+function seedRegistrySearchDocuments(db: FakeDb, count: number): void {
+  for (let index = 1; index <= count; index += 1) {
+    const suffix = String(index).padStart(3, '0')
+    db.seed('registrySearchDocuments', {
+      _id: `registrySearchDocuments:${suffix}`,
+      _creationTime: index,
+      businessSlug: `business-${suffix}`,
+      placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
+      searchText: `business ${suffix} emergency pipe repair emergency plumbing plumber parramatta nsw`,
+      publicStatus: 'published',
+    })
   }
 }
 

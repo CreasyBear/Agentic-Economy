@@ -3,8 +3,9 @@ import IntervalTree from '@flatten-js/interval-tree'
 import { DirectedGraph } from 'graphology'
 import { hasCycle, topologicalGenerations } from 'graphology-dag'
 
+import { addExactAmounts, compareExactAmounts, rescaleExactAmount } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
-
+import type { ExactAmount } from '@/modules/money/public'
 import {
   MAX_CHILDREN_PER_ELABORATION,
   MAX_NODES_PER_TREE,
@@ -44,28 +45,28 @@ export type TimingRollup = Readonly<{
 
 export type CostCurrencyRollup = Readonly<{
   currency: string
-  estimateMinor: number
-  committedMinor: number
+  estimate: ExactAmount
+  committed: ExactAmount
   /** Sum of envelope fields present on nodes in this currency. */
-  envelopeMinor: number
-  childEnvelopeMinor: number
+  envelope: ExactAmount
+  childEnvelope: ExactAmount
   envelopeBreached: boolean
 }>
 
 export type CostEnvelopeBreach = Readonly<{
   nodeId: string
   currency: string
-  envelopeMinor: number
-  childEnvelopeMinor: number
-  subtreeEstimateMinor: number
-  subtreeCommittedMinor: number
+  envelope: ExactAmount
+  childEnvelope: ExactAmount
+  subtreeEstimate: ExactAmount
+  subtreeCommitted: ExactAmount
   breached: true
 }>
 
 export type CostRollup = Readonly<{
   byCurrency: Readonly<Record<string, CostCurrencyRollup>>
-  estimateMinorByCurrency: Readonly<Record<string, number>>
-  committedMinorByCurrency: Readonly<Record<string, number>>
+  estimateByCurrency: Readonly<Record<string, ExactAmount>>
+  committedByCurrency: Readonly<Record<string, ExactAmount>>
   envelopeBreached: boolean
   breaches: readonly CostEnvelopeBreach[]
 }>
@@ -290,23 +291,67 @@ export function assertValidTree(tree: WorkTree, previousTree?: WorkTree): assert
   }
 }
 
-type CurrencyTotals = { estimateMinor: number; committedMinor: number; envelopeMinor: number }
+type CurrencyTotals = {
+  currency: string
+  estimate: ExactAmount
+  committed: ExactAmount
+  envelope: ExactAmount
+}
 
 type CostSubtree = Readonly<{
   byCurrency: ReadonlyMap<string, CurrencyTotals>
-  childEnvelopeByCurrency: ReadonlyMap<string, number>
+  childEnvelopeByCurrency: ReadonlyMap<string, ExactAmount>
 }>
 
+function zeroAmount(currency: string, exponent: number): ExactAmount {
+  return { currency, units: '0', exponent }
+}
+
+function rescaleAmount(amount: ExactAmount, exponent: number): ExactAmount {
+  const scaled = rescaleExactAmount(amount, exponent)
+  if (scaled === undefined) throw new Error('work_tree_cost_scale_invalid')
+  return scaled
+}
+
+function addAmount(left: ExactAmount, right: ExactAmount): ExactAmount {
+  const exponent = Math.max(left.exponent, right.exponent)
+  const total = addExactAmounts(rescaleAmount(left, exponent), rescaleAmount(right, exponent))
+  if (total === undefined) throw new Error('work_tree_cost_currency_mismatch')
+  return total
+}
+
+function compareAmount(left: ExactAmount, right: ExactAmount): -1 | 0 | 1 {
+  const exponent = Math.max(left.exponent, right.exponent)
+  const comparison = compareExactAmounts(rescaleAmount(left, exponent), rescaleAmount(right, exponent))
+  if (comparison === undefined) throw new Error('work_tree_cost_currency_mismatch')
+  return comparison
+}
+
+function totalsForCost(cost: NonNullable<WorkNode['cost']>): CurrencyTotals | undefined {
+  const first = cost.committed ?? cost.estimate ?? cost.envelope
+  if (first === undefined) return undefined
+  const zero = zeroAmount(first.currency, first.exponent)
+  return {
+    currency: first.currency,
+    estimate: cost.estimate ?? zero,
+    committed: cost.committed ?? zero,
+    envelope: cost.envelope ?? zero,
+  }
+}
+
 function addTotals(target: CurrencyTotals, source: CurrencyTotals): void {
-  target.estimateMinor += source.estimateMinor
-  target.committedMinor += source.committedMinor
-  target.envelopeMinor += source.envelopeMinor
+  target.estimate = addAmount(target.estimate, source.estimate)
+  target.committed = addAmount(target.committed, source.committed)
+  target.envelope = addAmount(target.envelope, source.envelope)
 }
 
 function addCurrency(target: Map<string, CurrencyTotals>, currency: string, totals: CurrencyTotals): void {
-  const current = target.get(currency) ?? { estimateMinor: 0, committedMinor: 0, envelopeMinor: 0 }
+  const current = target.get(currency)
+  if (current === undefined) {
+    target.set(currency, { ...totals })
+    return
+  }
   addTotals(current, totals)
-  target.set(currency, current)
 }
 
 function collectCostSubtree(nodeId: string, nodeById: ReadonlyMap<string, WorkNode>, childrenByParent: ReadonlyMap<string, readonly WorkNode[]>, stack: Set<string>): CostSubtree {
@@ -316,19 +361,15 @@ function collectCostSubtree(nodeId: string, nodeById: ReadonlyMap<string, WorkNo
   const nextStack = new Set(stack)
   nextStack.add(nodeId)
   const byCurrency = new Map<string, CurrencyTotals>()
-  if (node.cost !== undefined) {
-    addCurrency(byCurrency, node.cost.currency, {
-      estimateMinor: node.cost.estimateMinor ?? 0,
-      committedMinor: node.cost.committedMinor ?? 0,
-      envelopeMinor: node.cost.envelopeMinor ?? 0,
-    })
-  }
-  const childEnvelopeByCurrency = new Map<string, number>()
+  const ownTotals = node.cost === undefined ? undefined : totalsForCost(node.cost)
+  if (ownTotals !== undefined) addCurrency(byCurrency, ownTotals.currency, ownTotals)
+  const childEnvelopeByCurrency = new Map<string, ExactAmount>()
   for (const child of childrenByParent.get(nodeId) ?? []) {
     const childRollup = collectCostSubtree(child.nodeId, nodeById, childrenByParent, nextStack)
     for (const [currency, totals] of childRollup.byCurrency) addCurrency(byCurrency, currency, totals)
-    for (const [currency, envelope] of childRollup.byCurrency) {
-      childEnvelopeByCurrency.set(currency, (childEnvelopeByCurrency.get(currency) ?? 0) + envelope.envelopeMinor)
+    for (const [currency, totals] of childRollup.byCurrency) {
+      const current = childEnvelopeByCurrency.get(currency)
+      childEnvelopeByCurrency.set(currency, current === undefined ? totals.envelope : addAmount(current, totals.envelope))
     }
   }
   return { byCurrency, childEnvelopeByCurrency }
@@ -346,59 +387,60 @@ function rollupCost(tree: WorkTree): CostRollup {
   }
   const allTotals = new Map<string, CurrencyTotals>()
   for (const node of nodes) {
-    if (node.cost === undefined) continue
-    addCurrency(allTotals, node.cost.currency, {
-      estimateMinor: node.cost.estimateMinor ?? 0,
-      committedMinor: node.cost.committedMinor ?? 0,
-      envelopeMinor: node.cost.envelopeMinor ?? 0,
-    })
+    const totals = node.cost === undefined ? undefined : totalsForCost(node.cost)
+    if (totals !== undefined) addCurrency(allTotals, totals.currency, totals)
   }
 
   const breaches: CostEnvelopeBreach[] = []
-  const childEnvelopeTotals = new Map<string, number>()
+  const childEnvelopeTotals = new Map<string, ExactAmount>()
   for (const node of nodes) {
-    const cost = node.cost
-    if (cost?.envelopeMinor === undefined) continue
+    const envelope = node.cost?.envelope
+    if (envelope === undefined) continue
     const subtree = collectCostSubtree(node.nodeId, nodeById, childrenByParent, new Set())
-    const subtreeTotals = subtree.byCurrency.get(cost.currency) ?? { estimateMinor: 0, committedMinor: 0, envelopeMinor: 0 }
-    const childEnvelopeMinor = subtree.childEnvelopeByCurrency.get(cost.currency) ?? 0
-    childEnvelopeTotals.set(cost.currency, (childEnvelopeTotals.get(cost.currency) ?? 0) + childEnvelopeMinor)
-    const breached = childEnvelopeMinor > cost.envelopeMinor
-      || subtreeTotals.estimateMinor > cost.envelopeMinor
-      || subtreeTotals.committedMinor > cost.envelopeMinor
+    const subtreeTotals = subtree.byCurrency.get(envelope.currency)
+    const childEnvelope = subtree.childEnvelopeByCurrency.get(envelope.currency)
+      ?? zeroAmount(envelope.currency, envelope.exponent)
+    const currentChildEnvelope = childEnvelopeTotals.get(envelope.currency)
+    childEnvelopeTotals.set(envelope.currency, currentChildEnvelope === undefined ? childEnvelope : addAmount(currentChildEnvelope, childEnvelope))
+    const zero = zeroAmount(envelope.currency, envelope.exponent)
+    const subtreeEstimate = subtreeTotals?.estimate ?? zero
+    const subtreeCommitted = subtreeTotals?.committed ?? zero
+    const breached = compareAmount(childEnvelope, envelope) === 1
+      || compareAmount(subtreeEstimate, envelope) === 1
+      || compareAmount(subtreeCommitted, envelope) === 1
     if (breached) {
       breaches.push({
         nodeId: node.nodeId,
-        currency: cost.currency,
-        envelopeMinor: cost.envelopeMinor,
-        childEnvelopeMinor,
-        subtreeEstimateMinor: subtreeTotals.estimateMinor,
-        subtreeCommittedMinor: subtreeTotals.committedMinor,
+        currency: envelope.currency,
+        envelope,
+        childEnvelope,
+        subtreeEstimate,
+        subtreeCommitted,
         breached: true,
       })
     }
   }
 
   const byCurrency: Record<string, CostCurrencyRollup> = {}
-  const estimateMinorByCurrency: Record<string, number> = {}
-  const committedMinorByCurrency: Record<string, number> = {}
+  const estimateByCurrency: Record<string, ExactAmount> = {}
+  const committedByCurrency: Record<string, ExactAmount> = {}
   for (const [currency, totals] of allTotals) {
     const currencyBreached = breaches.some((breach) => breach.currency === currency)
     byCurrency[currency] = {
       currency,
-      estimateMinor: totals.estimateMinor,
-      committedMinor: totals.committedMinor,
-      envelopeMinor: totals.envelopeMinor,
-      childEnvelopeMinor: childEnvelopeTotals.get(currency) ?? 0,
+      estimate: totals.estimate,
+      committed: totals.committed,
+      envelope: totals.envelope,
+      childEnvelope: childEnvelopeTotals.get(currency) ?? zeroAmount(currency, totals.envelope.exponent),
       envelopeBreached: currencyBreached,
     }
-    estimateMinorByCurrency[currency] = totals.estimateMinor
-    committedMinorByCurrency[currency] = totals.committedMinor
+    estimateByCurrency[currency] = totals.estimate
+    committedByCurrency[currency] = totals.committed
   }
   return Object.freeze({
     byCurrency,
-    estimateMinorByCurrency,
-    committedMinorByCurrency,
+    estimateByCurrency,
+    committedByCurrency,
     envelopeBreached: breaches.length > 0,
     breaches: Object.freeze(breaches),
   })

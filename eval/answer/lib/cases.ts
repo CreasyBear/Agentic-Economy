@@ -1,3 +1,12 @@
+/** Seed-only/test-only capability fixture; no live provider claim. */
+export const SEED_ONLY_CAPABILITY_OPERATION_REF =
+  'operation:v1:3e80c2a3a9b09f6a53b90856f1e077e173b2a151c6bc2530fe3478b76b2d8b31'
+export const SEED_ONLY_CAPABILITY_TOOL_ID = `capability.${SEED_ONLY_CAPABILITY_OPERATION_REF}`
+
+export const SEED_ONLY_CAPABILITY_OUTPUT = {
+  bitcoin: { usd: 94_213 },
+} as const
+
 export type EvalSearchContext = {
   mode: 'near_me' | 'whole_catalogue'
   allowOutsideArea?: boolean
@@ -12,7 +21,10 @@ export type EvalSearchContext = {
 
 export type EvalOpenRouterToolUse = {
   toolCalls: readonly {
-    toolId: 'registry.search' | 'registry.detail'
+    // Per-operation capability tools expose only the operation's strict input
+    // schema; the closure binds its operation reference and persists evidence
+    // under the operation.execute tool id.
+    toolId: string
     input: Record<string, unknown>
   }[]
   prose: {
@@ -78,6 +90,10 @@ export const ANSWER_EVAL_COVERAGE_REQUIREMENTS = [
   {
     tag: 'broad-catalog-scale',
     description: 'Retrieval is exercised against a 100-business, multi-industry, multi-locale catalog.',
+  },
+  {
+    tag: 'capability-tool-execution',
+    description: 'A direct-data query executes against a seed-only test fixture and grounds the answer in returned contract-valid JSON rather than catalog prose.',
   },
 ] as const
 
@@ -158,6 +174,8 @@ export type AnswerTurnEvalCase = {
   query: string
   searchContext?: EvalSearchContext
   openRouterAgent?: EvalOpenRouterToolUse
+  /** Test-only response override for the seed-only capability harness. */
+  capabilityOutput?: unknown
   expected: {
     status: 'complete' | 'error'
     slugs: readonly string[]
@@ -170,6 +188,7 @@ export type AnswerTurnEvalCase = {
     oneLineIncludes?: readonly string[]
     nextStepIncludes?: readonly string[]
     agentJsonIncludes?: readonly string[]
+    forbidCatalogProse?: boolean
     includeArtifactKinds?: readonly string[]
     forbidArtifactKinds?: readonly string[]
     maxProviderCount?: number
@@ -185,6 +204,11 @@ export type AnswerTurnEvalCase = {
     maxModelRequests?: number
     maxModelToolRuns?: number
     maxToolRuns?: number
+    capabilityEvidence?: {
+      operationRef: string
+      input: Record<string, unknown>
+      output: unknown
+    }
   }
 }
 
@@ -218,7 +242,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'emergency plumber parramatta',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['emergency plumber parramatta'],
@@ -231,7 +255,7 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['model.agent_total'],
-      summaryIncludes: ['publish service coverage'],
+      summaryIncludes: ['something that matches what you need'],
       agentJsonIncludes: ['q=emergency+plumber+parramatta'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
@@ -259,16 +283,16 @@ export const ANSWER_TURN_EVAL_CASES = [
       prose: {
         oneLine: 'Two listed businesses match this need.',
         summary:
-          'The listings publish emergency pipe repair in Parramatta. The businesses handle timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          'The listings publish emergency pipe repair in Parramatta. Review the businesses for timing, price, and availability. Agentic Economy does not book or take payment on this page.',
         whatToDoNow:
           'Open the provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
       },
     },
     expected: {
       status: 'complete',
-      expectedModelRequests: 2,
-      maxModelRequests: 2,
+      expectedModelRequests: 3,
       expectedModelToolRuns: 1,
+      maxModelRequests: 3,
       maxModelToolRuns: 1,
       maxToolRuns: 2,
       slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
@@ -277,7 +301,6 @@ export const ANSWER_TURN_EVAL_CASES = [
       toolStatuses: ['complete', 'complete'],
       includeTimingNames: [
         'retrieval.initial_search',
-        'model.agent_total',
         'registry.search.convex',
         'tool.run',
         'sse.emit_snapshot',
@@ -300,7 +323,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'Emergency plumber Brunswick',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: ['Emergency plumber Brunswick', 'Emergency plumber Brunswick'],
@@ -312,8 +335,8 @@ export const ANSWER_TURN_EVAL_CASES = [
         'sse.emit_snapshot',
       ],
       excludeTimingNames: ['model.agent_total'],
-      oneLineIncludes: ['No listed businesses match'],
-      summaryIncludes: ['No listed businesses publish coverage'],
+      oneLineIncludes: ['No businesses match'],
+      summaryIncludes: ['No matches found'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
       maxTotalTimingMs: 5_000,
@@ -332,7 +355,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'businesses in Perth',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: [],
@@ -342,9 +365,9 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['registry.search.convex', 'model.agent_total'],
-      oneLineIncludes: ['What kind of service do you need in Perth'],
-      summaryIncludes: ['once I know the service type'],
-      nextStepIncludes: ['service and place'],
+      oneLineIncludes: ['What do you need done in Perth'],
+      summaryIncludes: ['once I know what you need'],
+      nextStepIncludes: ['what you need'],
       agentJsonIncludes: ['q=businesses+in+Perth'],
       includeArtifactKinds: ['one-line', 'prose', 'what-to-do-now'],
       forbidArtifactKinds: ['provider-cards', 'provider-compare-table', 'location-map', 'recovery-prompts'],
@@ -373,12 +396,12 @@ export const ANSWER_TURN_EVAL_CASES = [
         suburb: 'Perth',
         stateTerritory: 'WA',
         countryCode: 'AU',
-        source: 'default',
+        source: 'user_selected',
       },
     },
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: ['emergency plumber', 'emergency plumber'],
@@ -408,7 +431,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'can you book a plumber for me',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: [],
       toolQueries: [],
@@ -439,7 +462,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'dentist coburg',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: ['coburg-dental-clinic'],
       toolQueries: ['dentist coburg'],
@@ -452,7 +475,7 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['model.agent_total'],
-      summaryIncludes: ['publishes service coverage'],
+      summaryIncludes: ['something that matches what you need'],
       agentJsonIncludes: ['q=dentist+coburg'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
@@ -482,12 +505,12 @@ export const ANSWER_TURN_EVAL_CASES = [
         suburb: 'Perth',
         stateTerritory: 'WA',
         countryCode: 'AU',
-        source: 'default',
+        source: 'user_selected',
       },
     },
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: ['perth-emergency-plumbing'],
       toolQueries: ['emergency plumber'],
@@ -500,7 +523,7 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['model.agent_total'],
-      summaryIncludes: ['publishes service coverage'],
+      summaryIncludes: ['something that matches what you need'],
       agentJsonIncludes: ['location=Perth'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
@@ -523,7 +546,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'family lawyer in Parramatta',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: ['parramatta-family-law'],
       toolQueries: ['family lawyer in Parramatta'],
@@ -536,7 +559,7 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['model.agent_total'],
-      summaryIncludes: ['publishes service coverage'],
+      summaryIncludes: ['something that matches what you need'],
       agentJsonIncludes: ['q=family+lawyer+in+Parramatta'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
@@ -559,7 +582,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'locksmith near Geelong',
     expected: {
       status: 'complete',
-      expectedModelRequests: 0,
+      expectedModelRequests: 1,
       expectedModelToolRuns: 0,
       slugs: ['geelong-locksmith'],
       toolQueries: ['locksmith near Geelong'],
@@ -572,8 +595,58 @@ export const ANSWER_TURN_EVAL_CASES = [
         'turn.persistence_prepare',
       ],
       excludeTimingNames: ['model.agent_total'],
-      summaryIncludes: ['publishes service coverage'],
+      summaryIncludes: ['something that matches what you need'],
       agentJsonIncludes: ['q=locksmith+near+Geelong'],
+      forbidInternalPublicTerms: true,
+      forbidUnsafeClaims: true,
+      maxTotalTimingMs: 5_000,
+    },
+  },
+  {
+    id: 'turn-capability-tool-executes',
+    description: 'A direct-data query executes against a seed-only test fixture and grounds the answer in its returned JSON rather than catalog prose.',
+    covers: [
+      'capability-tool-execution',
+      'timing-trace',
+      'public-copy-boundary',
+      'public-copy-safety-scan',
+    ],
+    query: 'what is the current price of bitcoin',
+    openRouterAgent: {
+      toolCalls: [
+        {
+          toolId: SEED_ONLY_CAPABILITY_TOOL_ID,
+          input: { ids: 'bitcoin', vs_currencies: 'usd' },
+        },
+      ],
+      prose: {
+        oneLine: 'The seed-only test quote for bitcoin is $94,213.00 USD.',
+        summary:
+          'The seed-only test response returned 94213.00 USD (bitcoin to usd).',
+        whatToDoNow:
+          'Use the returned test quote for this evaluation; no provider fulfilment or availability claim is made.',
+      },
+    },
+    capabilityOutput: SEED_ONLY_CAPABILITY_OUTPUT,
+    expected: {
+      status: 'complete',
+      expectedModelRequests: 3,
+      expectedModelToolRuns: 1,
+      maxModelRequests: 3,
+      maxModelToolRuns: 1,
+      maxToolRuns: 2,
+      slugs: [],
+      toolIds: ['operation.execute'],
+      toolStatuses: ['complete'],
+      oneLineIncludes: ['USD'],
+      summaryIncludes: ['94213.00'],
+      capabilityEvidence: {
+        operationRef: SEED_ONLY_CAPABILITY_OPERATION_REF,
+        input: { ids: 'bitcoin', vs_currencies: 'usd' },
+        output: SEED_ONLY_CAPABILITY_OUTPUT,
+      },
+      forbidCatalogProse: true,
+      includeTimingNames: ['model.agent_total', 'tool.run', 'sse.emit_snapshot'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
       maxTotalTimingMs: 5_000,
@@ -597,7 +670,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'emergency plumber parramatta',
         expected: {
           status: 'complete',
-          expectedModelRequests: 0,
+          expectedModelRequests: 1,
           expectedModelToolRuns: 0,
           slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: ['emergency plumber parramatta'],
@@ -612,13 +685,13 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'which take inquiries?',
         expected: {
           status: 'complete',
-          expectedModelRequests: 0,
+          expectedModelRequests: 1,
           expectedModelToolRuns: 0,
           slugs: [],
           toolQueries: [],
           includeTimingNames: ['sse.emit_snapshot'],
           excludeTimingNames: ['retrieval.initial_search', 'model.agent_total'],
-          oneLineIncludes: ['None of the listed businesses accept inquiries yet'],
+          oneLineIncludes: ['No businesses accept requests yet'],
           forbidInternalPublicTerms: true,
           forbidUnsafeClaims: true,
           maxTotalTimingMs: 5_000,
@@ -641,7 +714,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'emergency plumber parramatta',
         expected: {
           status: 'complete',
-          expectedModelRequests: 0,
+          expectedModelRequests: 1,
           expectedModelToolRuns: 0,
           slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: ['emergency plumber parramatta'],
@@ -656,7 +729,7 @@ export const ANSWER_THREAD_EVAL_CASES = [
         query: 'book the first one and pay now',
         expected: {
           status: 'complete',
-          expectedModelRequests: 0,
+          expectedModelRequests: 1,
           expectedModelToolRuns: 0,
           slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
           toolQueries: [],

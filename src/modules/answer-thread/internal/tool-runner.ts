@@ -1,6 +1,5 @@
-import { findAction } from '@/modules/actions'
-import type { ActionTimingSink } from '@/modules/common/action'
-import type { ActionModelRequestObservation } from '@/modules/common/action'
+import { findAnswerReadToolAction } from './answer-tool-registry'
+import type { ActionModelRequestObservation, ActionTimingSink } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
@@ -20,7 +19,6 @@ import type {
   PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
-import { isAnswerReadToolId } from './answer-tool-registry'
 import { parseToolSummary } from './tool-summary'
 
 import type {
@@ -67,13 +65,9 @@ export async function runAnswerToolCall(
   const timings = createTimingCollector()
   const toolCallId = makeToolCallId(input)
 
-  if (!isAnswerReadToolId(input.toolId)) {
-    return refuse(input, toolCallId, 'tool_not_known')
-  }
-
-  const action = findAction(input.toolId)
+  const action = findAnswerReadToolAction(input.toolId)
   if (action === undefined) {
-    return refuse(input, toolCallId, 'tool_not_registered')
+    return refuse(input, toolCallId, 'tool_not_known')
   }
   if (!action.readOnly) {
     return refuse(input, toolCallId, 'tool_not_read_only')
@@ -98,7 +92,7 @@ export async function runAnswerToolCall(
       ? {}
       : {
           onModelRequest: (observation: ActionModelRequestObservation) => {
-            input.harnessLoop?.collector.recordModelRequest(observation)
+            input.harnessLoop?.recordModelRequest(observation)
           },
         }),
   }

@@ -1,4 +1,5 @@
 import type { CustomerRoutePlan } from '@/modules/customer-request/agent-contract'
+import type { ExactAmount } from '@/modules/money/public'
 import type { RepeatPermissionUseRefusalReason } from '@/modules/customer-request/customer-projection'
 import type { CustomerRequestActionResult } from '../action-result'
 import type {
@@ -26,8 +27,8 @@ export type ProjectableStandingPolicy = Readonly<{
   generationRef: string
   routes: readonly Readonly<{ routePlanId: string }>[]
   limits: Readonly<{
-    perUseSpend: Readonly<{ currency: string; amountMinor: number }>
-    cumulativeSpend: Readonly<{ currency: string; amountMinor: number }>
+    perUseSpend: ExactAmount
+    cumulativeSpend: ExactAmount
     perUseDataAllocations: number
     cumulativeDataAllocations: number
     occurrences: number
@@ -46,7 +47,7 @@ export type StandingServiceAssertion = Readonly<{
   signature: string
 }>
 
-export type StandingMoney = Readonly<{ currency: string; amountMinor: number }>
+export type StandingMoney = ExactAmount
 
 export type AllowStandingRouteCommand = Readonly<{
   requestRef: string

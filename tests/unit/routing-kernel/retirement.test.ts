@@ -12,11 +12,17 @@ import { ROUTING_V1_RETIRED_PATHS, routingV1RetiredResponse } from '@/modules/ro
 describe('routing V1 retirement', () => {
   it('answers with an uncacheable 410 naming the replacement API', async () => {
     const response = routingV1RetiredResponse()
-
     expect(response.status).toBe(410)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
+
+    expect(response.headers.get('Content-Type')).toBe('application/problem+json')
     expect(await response.json()).toEqual({
-      error: { code: 'routing_v1_retired', requestApi: '/api/v1/requests' },
+      type: 'about:blank',
+      title: 'Not found',
+      status: 410,
+      kind: 'NOT_FOUND',
+      code: 'routing_v1_retired',
+      requestApi: '/api/v1/requests',
     })
   })
 

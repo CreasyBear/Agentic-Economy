@@ -7,7 +7,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
-import { readPublicBusinessRouteServer } from '@/modules/catalog/public-route.functions'
+import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/modules/catalog/public-route.functions'
 import {
   buildPublicInquiryAffordance,
   projectPublicInquiryAvailability,
@@ -29,7 +29,12 @@ export const Route = createFileRoute('/$slug')({
     }
   },
   loader: async ({ params }) => {
-    const result = await readPublicBusinessRouteServer({ data: { slug: params.slug } })
+    let result: PublicBusinessRouteDataResult
+    try {
+      result = await readPublicBusinessRouteServer({ data: { slug: params.slug } })
+    } catch {
+      return { kind: 'unavailable' as const, reason: 'source_unavailable' as const, retryable: true }
+    }
     if (result.kind === 'not_found') {
       throw notFound({ data: { reason: result.reason } })
     }
@@ -37,6 +42,16 @@ export const Route = createFileRoute('/$slug')({
   },
 
   head: ({ loaderData }) => {
+    if (loaderData?.kind === 'unavailable') {
+      return {
+        meta: [
+          { title: 'Business page unavailable | Agentic Economy' },
+          { name: 'description', content: 'The public business source is unavailable right now. Try again in a moment.' },
+          { name: 'robots', content: 'noindex' },
+        ],
+      }
+    }
+
     if (loaderData === undefined) {
       return {
         meta: [
@@ -184,12 +199,35 @@ function ProviderListingError() {
         <Empty className="border border-border bg-card p-5">
           <EmptyHeader>
             <h1 className="text-lg font-medium tracking-tight">This listing didn't load</h1>
-            <EmptyDescription>Try the page again, or return to services to compare listed businesses.</EmptyDescription>
+            <EmptyDescription>Try the page again, or return to Ask to search again.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-              <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to services</Link></Button>
+              <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+            </div>
+          </EmptyContent>
+        </Empty>
+      </section>
+    </AePublicShell>
+  )
+}
+
+export function PublicBusinessUnavailable() {
+  const { pathname } = useLocation()
+
+  return (
+    <AePublicShell>
+      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
+        <Empty className="border border-border bg-card p-5">
+          <EmptyHeader>
+            <h1 className="text-lg font-medium tracking-tight">Business page temporarily unavailable</h1>
+            <EmptyDescription>The public business source is unavailable right now. Try again in a moment.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
+              <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
             </div>
           </EmptyContent>
         </Empty>
@@ -218,7 +256,7 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
             <EmptyContent>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button asChild variant="default" className="min-h-11"><Link to="/claim">Claim your business page</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Browse businesses</Link></Button>
+                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
               </div>
             </EmptyContent>
           </Empty>
@@ -226,11 +264,11 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
           <Empty className="border border-border bg-card p-5">
             <EmptyHeader>
               <h1 className="text-lg font-medium tracking-tight">No business page at this address</h1>
-              <EmptyDescription>Nothing is published here. Check the address, or browse the businesses that are listed.</EmptyDescription>
+              <EmptyDescription>Nothing is published here. Check the address, or return to Ask.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><Link to="/">Browse businesses</Link></Button>
+                <Button asChild variant="default" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
                 <Button asChild variant="secondary" className="min-h-11"><Link to="/">Ask a question</Link></Button>
               </div>
             </EmptyContent>
@@ -245,12 +283,17 @@ function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const { from, id } = Route.useSearch()
   const location = useLocation()
-  const { page, admission, supply } = Route.useLoaderData()
+  const routeData = Route.useLoaderData()
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
   }
 
+  if (routeData.kind === 'unavailable') {
+    return <PublicBusinessUnavailable />
+  }
+
+  const { page, admission, supply } = routeData
   const catalog = projectPublicInquiryAvailability(page.catalog, admission)
   const inquiryAffordance = buildPublicInquiryAffordance(catalog, undefined, admission)
   const agentJsonUrl = `/api/businesses/${catalog.slug}`

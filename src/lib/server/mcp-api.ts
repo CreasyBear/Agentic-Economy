@@ -4,13 +4,24 @@
  * actions whose declared authority requirement fits the caller's mode.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { ZodObject } from 'zod'
+import { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js'
+import { safeParse, safeParseAsync } from '@modelcontextprotocol/sdk/server/zod-compat.js'
+import { getMethodLiteral, toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
+import { ErrorCode, ListToolsRequestSchema, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
+import type { AnyObjectSchema, SchemaOutput } from '@modelcontextprotocol/sdk/server/zod-compat.js'
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
+import { ZodObject, z } from 'zod'
 
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
-import { readBoundedRequestJson, readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { kindForStatus, type ProblemKind } from '@/lib/errors'
+import { problem } from '@/lib/server/problem'
+import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
+import { ConvexSourceError } from '@/lib/server/convex-source'
 import { authenticateCustomerRequestAgent } from '@/lib/server/customer-request-agent-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 
@@ -21,6 +32,146 @@ export type McpAccessTier = Readonly<{
   authorityMode?: CustomerRequestAuthorityMode
   principalId?: string
 }> 
+
+type SdkServerHandler = (
+  request: unknown,
+  extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
+) => ServerResult | Result | Promise<ServerResult | Result>
+
+type AeServerHandler<T extends AnyObjectSchema> = (
+  request: SchemaOutput<T>,
+  extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
+) => ServerResult | Result | Promise<ServerResult | Result>
+
+/**
+ * Keep request validation in the installed SDK while converting its raw
+ * schema-parse throw into the JSON-RPC Invalid params error the SDK already
+ * defines. McpError prefixes its message for local diagnostics, so this
+ * adapter restores the concise wire-level message without changing the
+ * SDK-owned error code or protocol handling.
+ */
+const INVALID_MCP_REQUEST_PARAMETERS_MESSAGE = 'Invalid MCP request parameters.'
+
+class ConciseMcpRequestError extends McpError {
+  constructor() {
+    super(ErrorCode.InvalidParams, INVALID_MCP_REQUEST_PARAMETERS_MESSAGE)
+    this.message = INVALID_MCP_REQUEST_PARAMETERS_MESSAGE
+  }
+}
+
+class SafeMcpSdkServer extends Server {
+  private readonly captureToolsListHandler: ((handler: SdkServerHandler) => void) | undefined
+
+  constructor(captureToolsListHandler?: (handler: SdkServerHandler) => void) {
+    super({ name: 'agentic-economy', version: '1.0.0' })
+    this.captureToolsListHandler = captureToolsListHandler
+  }
+
+  override setRequestHandler<T extends AnyObjectSchema>(
+    requestSchema: T,
+    handler: AeServerHandler<T>,
+  ): void {
+    const method = getMethodLiteral(requestSchema)
+    const safeRequestSchema = z.looseObject({ method: z.literal(method) })
+    const safeHandler = async (
+      request: unknown,
+      extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
+    ): Promise<ServerResult | Result> => {
+      const parsed = safeParse(requestSchema, request)
+      if (!parsed.success) {
+        throw new ConciseMcpRequestError()
+      }
+      return await handler(parsed.data, extra)
+    }
+
+    if (method === 'tools/list') {
+      this.captureToolsListHandler?.(safeHandler)
+    }
+
+    Reflect.apply(Protocol.prototype.setRequestHandler, this, [safeRequestSchema, safeHandler])
+  }
+}
+
+type McpToolFailure = Readonly<{
+  kind: ProblemKind
+  code: string
+  retryable: boolean
+  detail: string
+}>
+
+function mcpToolFailure(error: unknown): McpToolFailure {
+  if (error instanceof ConvexSourceError) {
+    const kind = kindForStatus(error.status)
+    return {
+      kind,
+      code: error.code,
+      retryable: kind === 'UNAVAILABLE' || kind === 'RESOURCE_EXHAUSTED',
+      detail: safeMcpFailureDetail(kind),
+    }
+  }
+  return {
+    kind: 'INTERNAL',
+    code: 'action_execution_failed',
+    retryable: false,
+    detail: 'Action execution failed.',
+  }
+}
+
+function safeMcpFailureDetail(kind: ProblemKind): string {
+  switch (kind) {
+    case 'UNAVAILABLE':
+      return 'Action source is temporarily unavailable.'
+    case 'UNAUTHENTICATED':
+      return 'Action execution requires authentication.'
+    case 'PERMISSION_DENIED':
+      return 'Action execution is not permitted.'
+    case 'NOT_FOUND':
+      return 'Action target was not found.'
+    default:
+      return 'Action execution failed.'
+  }
+}
+
+function mcpToolError(failure: McpToolFailure): {
+  isError: true
+  content: [{ type: 'text'; text: string }]
+} {
+  return {
+    isError: true,
+    content: [{
+      type: 'text',
+      text: `${failure.detail} (code=${failure.code}; kind=${failure.kind}; retryable=${String(failure.retryable)}).`,
+    }],
+  }
+}
+
+/**
+ * SDK 1.30's high-level list projection only emits object-shaped output
+ * schemas. Project the canonical action schema through that same SDK converter
+ * here so unions remain present without a second hand-maintained schema.
+ */
+function projectMcpToolsList(
+  value: unknown,
+  actions: readonly AnyAction[],
+): ServerResult | Result {
+  if (!isRecord(value) || !Array.isArray(value.tools)) return value as ServerResult
+  const outputSchemas = new Map(actions.map((action) => [mcpToolName(action), action.outputSchema]))
+  return {
+    ...value,
+    tools: value.tools.map((tool) => {
+      if (!isRecord(tool) || typeof tool.name !== 'string') return tool
+      const outputSchema = outputSchemas.get(tool.name)
+      if (outputSchema === undefined) return tool
+      return {
+        ...tool,
+        outputSchema: toJsonSchemaCompat(outputSchema, {
+          strictUnions: true,
+          pipeStrategy: 'output',
+        }),
+      }
+    }),
+  } as ServerResult
+}
 
 export function createAeMcpServer(
   request: Request,
@@ -36,7 +187,14 @@ export function createAeMcpServer(
     }
   }
 
+  let toolsListHandler: SdkServerHandler | undefined
   const server = new McpServer({ name: 'agentic-economy', version: '1.0.0' })
+  const sdkServer = new SafeMcpSdkServer((handler) => {
+    if (toolsListHandler === undefined) toolsListHandler = handler
+  })
+  const serverWithSdk = server as { server: Server }
+  serverWithSdk.server = sdkServer
+
   for (const action of admittedActions) {
     server.registerTool(
       mcpToolName(action),
@@ -54,22 +212,32 @@ export function createAeMcpServer(
       async (data: unknown) => {
         try {
           const result = await action.run({ data, context: { caller: 'mcp', request } })
+          const outputValidation = await safeParseAsync(action.outputSchema, result)
+          if (!outputValidation.success) {
+            return mcpToolError({
+              kind: 'INTERNAL',
+              code: 'action_output_invalid',
+              retryable: false,
+              detail: 'Action returned an invalid result.',
+            })
+          }
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(result) }],
             structuredContent: result,
           }
         } catch (error) {
-          return {
-            isError: true,
-            content: [{
-              type: 'text' as const,
-              text: error instanceof Error ? error.message : 'Action failed.',
-            }],
-          }
+          return mcpToolError(mcpToolFailure(error))
         }
       },
     )
   }
+
+  const baseToolsListHandler = toolsListHandler
+  if (baseToolsListHandler === undefined) throw new Error('MCP tools/list handler was not registered.')
+  sdkServer.removeRequestHandler('tools/list')
+  sdkServer.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
+    return projectMcpToolsList(await baseToolsListHandler(request, extra), admittedActions)
+  })
   return server
 }
 
@@ -80,7 +248,16 @@ type McpRequestOptions = Readonly<{
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   const actions = options.actions ?? listMcpActions()
-  const boundedRequest = await boundedMcpRequest(request)
+  const bounded = await boundedMcpRequest(request)
+  if (!bounded.ok) {
+    return problem({
+      status: 413,
+      kind: 'PAYLOAD_TOO_LARGE',
+      code: bounded.code,
+      detail: 'The MCP request body is too large.',
+    })
+  }
+  const boundedRequest = bounded.request
   const protectedAction = await protectedActionForRequest(boundedRequest, actions)
   if (protectedAction !== undefined) {
     const requiredMode = requiredModeForAction(protectedAction)
@@ -93,12 +270,17 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       const challenge = requiredMode === 'inspect_only'
         ? bearerChallenge(base)
         : bearerModeChallenge(base, requiredMode)
-      const headers = new Headers({
-        'Cache-Control': 'no-store',
-        Vary: 'Authorization',
-        'WWW-Authenticate': challenge,
-      })
-      return Response.json({ kind: 'refused', reason: admitted.reason }, { status: admitted.status, headers })
+      return problem(
+        {
+          status: admitted.status,
+          kind: kindForStatus(admitted.status),
+          code: admitted.reason,
+          detail: admitted.reason === 'authentication_required'
+            ? 'Authentication required.'
+            : 'The provided API key does not carry the required scope.',
+        },
+        { Vary: 'Authorization', 'WWW-Authenticate': challenge },
+      )
     }
     const server = createAeMcpServer(boundedRequest, actions, {
       tier: 'authenticated',
@@ -111,19 +293,24 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
   return await serveMcp(server, boundedRequest)
 }
 
-async function boundedMcpRequest(request: Request): Promise<Request> {
-  if (request.method !== 'POST') return request
+type BoundedMcpRequest =
+  | Readonly<{ ok: true; request: Request }>
+  | Extract<BoundedRequestTextResult, { ok: false }>
+
+async function boundedMcpRequest(request: Request): Promise<BoundedMcpRequest> {
+  if (request.method !== 'POST') return { ok: true, request }
   const init = {
     method: request.method,
     headers: request.headers,
   }
-  try {
-    const boundedBody = await readBoundedRequestText(request, MAX_MCP_REQUEST_BODY_BYTES)
-    return new Request(request.url, { ...init, body: boundedBody.ok ? boundedBody.text : '' })
-  } catch {
-    return new Request(request.url, { ...init, body: '' })
+  const boundedBody = await readBoundedRequestText(request, MAX_MCP_REQUEST_BODY_BYTES)
+  if (!boundedBody.ok) return boundedBody
+  return {
+    ok: true,
+    request: new Request(request.url, { ...init, body: boundedBody.text }),
   }
 }
+
 
 async function serveMcp(server: McpServer, request: Request): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true })

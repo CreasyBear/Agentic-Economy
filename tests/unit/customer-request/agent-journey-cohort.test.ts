@@ -25,7 +25,7 @@ describe('agent journey cohort', () => {
           'https://providers.example/quote',
           'https://providers.example/resolve',
         ],
-        maximumTotalCost: { currency: 'AUD', amountMinor: 1_500 },
+        maximumTotalCost: { currency: 'AUD', units: '1500', exponent: 2 },
       },
     })
     expect(first.digest).toMatch(/^sha256:[0-9a-f]{64}$/u)
@@ -51,7 +51,7 @@ function cohort() {
       'https://providers.example/resolve',
       'https://providers.example/quote',
     ],
-    maximumTotalCost: { currency: 'AUD', amountMinor: 1_500 },
+    maximumTotalCost: { currency: 'AUD', units: '1500', exponent: 2 },
     authorityScope: {
       recipients: ['Sandbox Resolver', 'Sandbox Quoter'],
       purposes: ['resolve_request', 'prepare_quote'],

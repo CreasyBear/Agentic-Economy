@@ -1,9 +1,9 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { BUSINESS_TOOL_AGENT_SCOPE } from '@/modules/business-tools/public'
+import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import {
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
-  CUSTOMER_REQUEST_AGENT_SCOPE,
   CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES,
   CUSTOMER_REQUEST_STATE_VALUES,
@@ -32,6 +32,7 @@ export const SiteDiscoveryEndpointKindValues = [
   'discovery_file',
   'discovery_artifact',
   'customer_request_submit',
+  'answer_turn',
   'customer_request_schema',
   'privacy_request',
 ] as const
@@ -46,8 +47,9 @@ export type SiteDiscoveryEndpointContract = Readonly<{
   url: string
   templated: boolean
   mediaType: string
-  authentication: 'none' | 'ae_api_key'
+  authentication: 'none' | typeof CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication
   requiredScope?: string
+  requiredHeaders?: Readonly<Record<string, string>>
 }>
 
 export type SiteDiscoveryManifestContract = Readonly<{
@@ -63,7 +65,7 @@ export type SiteDiscoveryManifestContract = Readonly<{
     method: 'POST'
     url: string
     schemaUrl: string
-    authentication: 'clerk_api_key'
+    authentication: typeof CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication
     requiredScope: string
     authorityModes: readonly string[]
     deviceAuthorizationUrl: string
@@ -88,7 +90,7 @@ export type SiteDiscoveryManifestContract = Readonly<{
     prepareUrlTemplate: string
     invokeUrlTemplate: string
     method: 'POST'
-    authentication: 'clerk_api_key'
+    authentication: typeof CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication
     requiredScope: string
     keyRequestUrl: string
     toolListSource: string
@@ -139,7 +141,7 @@ export function buildSiteDiscoveryManifest(
       url: `${origin}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,
       schemaUrl: `${origin}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}`,
       authentication: CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication,
-      requiredScope: CUSTOMER_REQUEST_AGENT_SCOPE,
+      requiredScope: CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope,
       authorityModes: CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
       deviceAuthorizationUrl: `${origin}/oauth/device_authorization`,
       tokenUrl: `${origin}/oauth/token`,
@@ -158,7 +160,7 @@ export function buildSiteDiscoveryManifest(
       prepareUrlTemplate: `${origin}${businessToolPath}/prepare`,
       invokeUrlTemplate: `${origin}${businessToolPath}`,
       method: 'POST',
-      authentication: 'clerk_api_key',
+      authentication: CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication,
       requiredScope: BUSINESS_TOOL_AGENT_SCOPE,
       keyRequestUrl: `${origin}${agentKeyPath}`,
       toolListSource: `${origin}${businessManifestPath}`,
@@ -177,11 +179,13 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
   const labels: Readonly<Record<string, string>> = {
     ...humanSurfaceLabels,
     [CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path]: 'Customer Request submission',
+    [ANSWER_THREAD_AGENT_ENTRYPOINT.path]: 'Keyless Answer Thread turn',
     [CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath]: 'Customer Request contract schema',
     ...Object.fromEntries(DeveloperDiscoveryPublicRoutes.map((route) => [route.path, route.label])),
     ...Object.fromEntries(DeveloperDiscoveryArtifacts.map((artifact) => [artifact.route, artifact.label])),
   }
   const paths: readonly string[] = [
+    ANSWER_THREAD_AGENT_ENTRYPOINT.path,
     ...DiscoveryPublicSurfacePaths,
     PublicAgentSkillPath,
     ...DeveloperDiscoveryPublicRoutes.map((route) => route.path),
@@ -206,6 +210,7 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
       mediaType: mediaTypeFor(path),
       authentication: access.authentication,
       ...(access.requiredScope === undefined ? {} : { requiredScope: access.requiredScope }),
+      ...(access.requiredHeaders === undefined ? {} : { requiredHeaders: access.requiredHeaders }),
     })
   }
 
@@ -214,6 +219,7 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
 
 function kindFor(path: string): SiteDiscoveryEndpointKind {
   if (path === SiteDiscoveryManifestPath) return 'site_entry_point'
+  if (path === ANSWER_THREAD_AGENT_ENTRYPOINT.path) return 'answer_turn'
   if (path === CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path) return 'customer_request_submit'
   if (path === CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath) return 'customer_request_schema'
   if (path === PublicAgentSkillPath) return 'assistant_setup'
@@ -228,13 +234,23 @@ function kindFor(path: string): SiteDiscoveryEndpointKind {
   return 'human_surface'
 }
 
-function accessFor(
-  path: string
-): Readonly<{ method: 'GET' | 'POST'; authentication: 'none' | 'ae_api_key'; requiredScope?: string }> {
+function accessFor(path: string): Readonly<{
+  method: 'GET' | 'POST'
+  authentication: 'none' | typeof CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication
+  requiredScope?: string
+  requiredHeaders?: Readonly<Record<string, string>>
+}> {
+  if (path === ANSWER_THREAD_AGENT_ENTRYPOINT.path) {
+    return {
+      method: ANSWER_THREAD_AGENT_ENTRYPOINT.method,
+      authentication: ANSWER_THREAD_AGENT_ENTRYPOINT.authentication,
+      requiredHeaders: ANSWER_THREAD_AGENT_ENTRYPOINT.requiredHeaders,
+    }
+  }
   if (path === CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path) {
     return {
       method: CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method,
-      authentication: 'ae_api_key',
+      authentication: CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication,
       requiredScope: CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope,
     }
   }
@@ -242,6 +258,9 @@ function accessFor(
 }
 
 function mediaTypeFor(path: string): string {
+  if (path === ANSWER_THREAD_AGENT_ENTRYPOINT.path) {
+    return ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType
+  }
   if (path.endsWith('.txt')) return 'text/plain'
   if (path.endsWith('.xml')) return 'application/xml'
   if (path.endsWith('.md')) return 'text/markdown'

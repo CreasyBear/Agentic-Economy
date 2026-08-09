@@ -4,9 +4,22 @@ import {
   buildCustomerRequestContractSchema,
   CUSTOMER_REQUEST_CONTRACT_SCHEMA_VERSION,
 } from '@/modules/customer-request/public-contract-schema'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 
 export const Route = createFileRoute('/api/v1/requests/schema')({
-  server: { handlers: { GET: () => handleCustomerRequestContractSchemaGet() } },
+  server: {
+    handlers: {
+      GET: () => handleCustomerRequestContractSchemaGet(),
+      POST: () => methodNotAllowed(['GET']),
+      PUT: () => methodNotAllowed(['GET']),
+      PATCH: () => methodNotAllowed(['GET']),
+      DELETE: () => methodNotAllowed(['GET']),
+      HEAD: () => methodNotAllowed(['GET']),
+      OPTIONS: () => methodNotAllowed(['GET']),
+      TRACE: () => methodNotAllowed(['GET']),
+      CONNECT: () => methodNotAllowed(['GET']),
+    },
+  },
 })
 
 export function handleCustomerRequestContractSchemaGet(): Response {

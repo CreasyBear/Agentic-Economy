@@ -5,12 +5,12 @@ import {
   type EligiblePublishedBusiness,
   type EligibleSupplyPorts,
 } from '@/modules/capability-supply/public'
+import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
   return {
     listAdmittedConformantBindingsByNetwork: async (networkId, take) => {
@@ -39,6 +39,32 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         && business.suppressedAt === undefined
         ? toPublishedBusiness(business)
         : null
+    },
+    loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
+      const row = await db.query('capabilityProviderConnections')
+        .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
+      return row === null ? undefined : {
+        connectionRef: row.connectionRef,
+        businessId: String(row.businessId),
+        providerRef: row.providerRef,
+        providerAccountRef: row.providerAccountRef,
+        adapterId: row.adapterId,
+        credentialRef: row.credentialRef,
+        grantedScopes: row.grantedScopes,
+        grantedResources: row.grantedResources,
+        authorityGeneration: row.authorityGeneration,
+        authorityDigest: row.authorityDigest,
+        lifecycle: row.lifecycle,
+        observedAt: row.observedAt,
+        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
+        ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
+        ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
+        evidenceRefs: row.evidenceRefs,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        lastCommandId: row.lastCommandId,
+        lastCommandDigest: row.lastCommandDigest,
+      }
     },
     catalogOriginIsCurrent: async (origin, businessId) => {
       const offering = await db.query('businessOfferings')
@@ -107,6 +133,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,
+    ...(doc.connectionAuthority === undefined ? {} : { connectionAuthority: doc.connectionAuthority }),
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),
   }

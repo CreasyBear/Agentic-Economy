@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { getPublicBusinessCatalog, getPublicBusinessPageReadback } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
@@ -18,7 +18,10 @@ import {
   searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
 import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
+import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
+import { handleDurableServiceDetailRequest } from '@/routes/api.v1.services.$serviceId'
 import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.search'
 import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
@@ -306,8 +309,21 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
     return (await handleDurableListBusinessesRequest(new Request(url))).status === 200
   }
 
+  if (path === '/api/v1/services') {
+    return (await handleDurableListServicesRequest(new Request(url))).status === 200
+  }
+
   if (path === '/api/businesses/search') {
     return (await handleDurableSearchBusinessesRequest(new Request(url))).status === 200
+  }
+
+  if (path === '/api/v1/services/search') {
+    return (await handleDurableSearchServicesRequest(new Request(url))).status === 200
+  }
+
+  const serviceDetailMatch = /^\/api\/v1\/services\/([^/]+)$/u.exec(path)
+  if (serviceDetailMatch?.[1] !== undefined) {
+    return (await handleDurableServiceDetailRequest(serviceDetailMatch[1], new Request(url))).status === 200
   }
 
   if (path === '/api/v1/requests') {
@@ -341,7 +357,7 @@ function sitemapLocs(body: string): readonly string[] {
 }
 
 function uniqueUrls(urls: readonly string[]): readonly string[] {
-  return stableUnique(urls)
+  return uniq(urls)
 }
 
 

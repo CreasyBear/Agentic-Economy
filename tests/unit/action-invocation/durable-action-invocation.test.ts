@@ -54,7 +54,7 @@ type AuthorizedDurableFixture = {
 type LegacyAuthorityMode = 'approve_each' | 'standing_mandate_use'
 
 
-function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
+async function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
   const action = findAction('inquiry.submit')!
   const state = createDevelopmentDurableState()
   const port = createDevelopmentDurablePort(state)
@@ -74,7 +74,7 @@ function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
     nextAttemptRef: () => `dev:legacy-authority:${mode}:attempt`,
     resolveSourceState: () => source,
   })
-  const prepared = tracer.prepare({
+  const prepared = await tracer.prepare({
     origin,
     actor,
     input,
@@ -91,7 +91,7 @@ function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
     grantEvidenceRef: 'mock:grant-evidence:legacy',
   }
   const accepted = mode === 'approve_each'
-    ? tracer.decide({
+    ? await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -99,7 +99,7 @@ function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
       origin,
       accept: true,
     })
-    : tracer.authorizeStandingMandateUse({
+    : await tracer.authorizeStandingMandateUse({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -118,21 +118,6 @@ function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
   }
 }
 
-function moveAcceptedAuthorityToLegacyRow(
-  fixture: AuthorizedDurableFixture,
-) {
-  const row = fixture.port.readControl(fixture.prepared.invocationRef)
-  if (row === undefined) throw new Error('legacy_fixture_row_missing')
-  const acceptedAuthority = row.control.acceptedAuthority
-  if (acceptedAuthority === undefined) throw new Error('legacy_fixture_authority_missing')
-  const { acceptedAuthority: _nestedAcceptedAuthority, ...control } = row.control
-  fixture.state.controls.set(fixture.prepared.invocationRef, {
-    ...row,
-    control,
-    acceptedAuthority,
-  })
-  return acceptedAuthority
-}
 describe('durable Action Invocation control', () => {
   it('grants one sync effect permit when two cold workers replay the same token', async () => {
     let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
@@ -149,28 +134,28 @@ describe('durable Action Invocation control', () => {
       prepared: undefined as PreparedInvocation | undefined,
       observedResolution: { state: 'pending' as const },
     }
-    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+    const create = () => createDurableActionInvocationTracer({
       action, port,
       now: () => '2026-07-19T15:15:00.000Z',
       nextInvocationRef: () => 'dev:sync:single-permit',
       nextAuthorityRef: () => 'opaque:sync:single-permit',
       nextAttemptRef: () => 'dev:sync:single-permit:attempt',
       resolveSourceState: () => source,
-    }, resumeRef)
+    })
     const root = create()
     const origin = origins[1]!
-    const prepared = root.prepare({
+    const prepared = await root.prepare({
       origin, actor, input, context: source.context, freshnessMs: 300_000,
     })
     source.prepared = prepared.prepared!
-    const decided = root.decide({
+    const decided = await root.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = root.acquire({
+    const acquired = await root.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -181,8 +166,8 @@ describe('durable Action Invocation control', () => {
     if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
       throw new Error('Expected sync single-permit lease.')
     }
-    const winner = create(prepared.invocationRef)
-    const loser = create(prepared.invocationRef)
+    const winner = await root.coldResume(prepared.invocationRef)
+    const loser = await root.coldResume(prepared.invocationRef)
     const token = acquired.view.control
     const winningCompletion = winner.executeAcquired({
       invocationRef: prepared.invocationRef,
@@ -191,7 +176,7 @@ describe('durable Action Invocation control', () => {
       leaseOwner: token.leaseOwner,
       effectGeneration: token.effectGeneration,
     })
-    expect(adapter).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(adapter).toHaveBeenCalledTimes(1))
     await expect(loser.executeAcquired({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: acquired.view.invocationVersion,
@@ -216,7 +201,7 @@ describe('durable Action Invocation control', () => {
     })
   })
 
-  it('refuses non-monotonic rows while preserving exact duplicate idempotency', () => {
+  it('refuses non-monotonic rows while preserving exact duplicate idempotency', async () => {
     const state = createDevelopmentDurableState()
     const port = createDevelopmentDurablePort(state)
     const invocationRef = 'dev:durable:monotonic'
@@ -227,8 +212,6 @@ describe('durable Action Invocation control', () => {
       control: {
         invocationRef,
         invocationVersion: 1,
-        environment: 'MOCK/DEVELOPMENT ONLY' as const,
-        persistence: 'durable_control' as const,
         origin: origins[1]!,
         owner: actor,
         action: { id: 'inquiry.submit', contractVersion: 'inquiry.submit:v1' },
@@ -251,7 +234,7 @@ describe('durable Action Invocation control', () => {
         kind: 'create',
       },
     }
-    expect(port.transact(create)).toEqual({ kind: 'applied', invocationVersion: 1 })
+    expect(await port.transact(create)).toEqual({ kind: 'applied', invocationVersion: 1 })
     const downgrade = {
       ...create,
       commandId: 'mock:monotonic:downgrade',
@@ -264,7 +247,7 @@ describe('durable Action Invocation control', () => {
         kind: 'downgrade',
       },
     }
-    expect(port.transact(downgrade)).toEqual({
+    expect(await port.transact(downgrade)).toEqual({
       kind: 'refused',
       code: 'stale_invocation_version',
     })
@@ -285,8 +268,8 @@ describe('durable Action Invocation control', () => {
         kind: 'advance',
       },
     }
-    expect(port.transact(advance)).toEqual({ kind: 'applied', invocationVersion: 2 })
-    expect(port.transact(advance)).toEqual({ kind: 'duplicate', invocationVersion: 2 })
+    expect(await port.transact(advance)).toEqual({ kind: 'applied', invocationVersion: 2 })
+    expect(await port.transact(advance)).toEqual({ kind: 'duplicate', invocationVersion: 2 })
   })
 
 
@@ -298,13 +281,13 @@ describe('durable Action Invocation control', () => {
     const adapter = vi.fn()
     const racingPort = {
       ...base,
-      transact(command: Parameters<typeof base.transact>[0]) {
+      async transact(command: Parameters<typeof base.transact>[0]) {
         if (command.history.kind === 'begin_release') {
-          const current = base.readControl(command.row.invocationRef)
+          const current = await base.readControl(command.row.invocationRef)
           if (current === undefined) throw new Error('Missing sync race row.')
           const winnerVersion = current.invocationVersion + 1
           const winnerDigest = canonicalDigest({ winner: command.commandDigest })
-          expect(base.transact({
+          expect(await base.transact({
             ...command,
             commandId: `${command.commandId}:sync-winner`,
             commandDigest: winnerDigest,
@@ -348,18 +331,18 @@ describe('durable Action Invocation control', () => {
       nextAttemptRef: () => 'dev:attempt:sync-cas-race',
       resolveSourceState: () => source,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin, actor, input, context: source.context, freshnessMs: 300_000,
     })
     source.prepared = prepared.prepared!
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = tracer.acquire({
+    const acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -415,11 +398,11 @@ describe('durable Action Invocation control', () => {
       nextAttemptRef: () => `dev:attempt:pre-release-refusal:${origin.kind}`,
       resolveSourceState: () => source,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin, actor, input, context: source.context, freshnessMs: 300_000,
     })
     source.prepared = prepared.prepared!
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -440,17 +423,18 @@ describe('durable Action Invocation control', () => {
       },
     })
     expect(runner).not.toHaveBeenCalled()
-    expect(createDurableActionInvocationTracer({
+    const cold = await createDurableActionInvocationTracer({
       action,
       port: createDevelopmentDurablePort(state),
       now: () => '2026-07-19T12:45:00.000Z',
       nextInvocationRef: () => 'unused',
       resolveSourceState: () => source,
-    }, prepared.invocationRef).inspect(prepared.invocationRef)).toMatchObject({
+    }).coldResume(prepared.invocationRef)
+    expect(cold.inspect(prepared.invocationRef)).toMatchObject({
       control: { state: 'terminal' },
       attempts: [{ release: { state: 'not_released' } }],
     })
-    expect(createDevelopmentDurablePort(state).readHistory(prepared.invocationRef, 0, 20)
+    expect((await createDevelopmentDurablePort(state).readHistory(prepared.invocationRef, 0, 20))
       .map(({ kind }) => kind)).not.toContain('begin_release')
 
   })
@@ -469,7 +453,7 @@ describe('durable Action Invocation control', () => {
       prepared: undefined as PreparedInvocation | undefined,
       observedResolution: { state: 'pending' as const },
     }
-    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+    const create = () => createDurableActionInvocationTracer({
       action,
       port: createDevelopmentDurablePort(state),
       now: () => '2026-07-19T11:30:00.000Z',
@@ -477,20 +461,20 @@ describe('durable Action Invocation control', () => {
       nextAuthorityRef: () => `opaque:durable:release-fence:${origin.kind}`,
       nextAttemptRef: () => `dev:attempt:release-fence:${origin.kind}`,
       resolveSourceState: () => source,
-    }, resumeRef)
+    })
     const tracer = create()
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin, actor, input, context: source.context, freshnessMs: 300_000,
     })
     source.prepared = prepared.prepared!
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = tracer.acquire({
+    const acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -508,21 +492,17 @@ describe('durable Action Invocation control', () => {
       leaseOwner: acquired.view.control.leaseOwner,
       effectGeneration: acquired.view.control.effectGeneration,
     })
-    expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1)
-    const cold = create(prepared.invocationRef)
+    await vi.waitFor(() => expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1))
+    const cold = await tracer.coldResume(prepared.invocationRef)
     const releaseStarted = cold.inspect(prepared.invocationRef)
     expect(releaseStarted).toMatchObject({
       control: { state: 'leased', release: 'possibly_released' },
     })
     if (releaseStarted === undefined) throw new Error('Expected persisted release fence.')
-    const cancelled = cold.cancel({
+    const cancelled = await cold.cancel({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: releaseStarted.invocationVersion,
       actor, origin,
-    })
-    expect(cancelled).toMatchObject({
-      kind: 'accepted',
-      view: { control: { state: 'reconciliation_required' } },
     })
     resolveRunner({
       kind: 'error',
@@ -535,7 +515,7 @@ describe('durable Action Invocation control', () => {
       code: 'stale_invocation_version',
       view: { control: { state: 'reconciliation_required' } },
     })
-    expect(create(prepared.invocationRef).inspect(prepared.invocationRef)?.control)
+    expect((await tracer.coldResume(prepared.invocationRef)).inspect(prepared.invocationRef)?.control)
       .toEqual(cancelled.kind === 'accepted' ? cancelled.view.control : undefined)
   })
 
@@ -551,7 +531,7 @@ describe('durable Action Invocation control', () => {
       prepared: undefined as PreparedInvocation | undefined,
       observedResolution: { state: 'pending' as const },
     }
-    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+    const create = () => createDurableActionInvocationTracer({
       action,
       port: createDevelopmentDurablePort(state),
       now: () => now,
@@ -560,20 +540,20 @@ describe('durable Action Invocation control', () => {
       nextAttemptRef: () => `dev:attempt:expiry:${origin.kind}:${++attemptSequence}`,
       verifyReconciliationEvidence: evidenceSource.verify,
       resolveSourceState: () => source,
-    }, resumeRef)
+    })
     const firstProcess = create()
-    const prepared = firstProcess.prepare({
+    const prepared = await firstProcess.prepare({
       origin, actor, input, context: source.context, freshnessMs: 300_000,
     })
     source.prepared = prepared.prepared!
-    const decided = firstProcess.decide({
+    const decided = await firstProcess.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const firstLease = firstProcess.acquire({
+    const firstLease = await firstProcess.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -585,9 +565,10 @@ describe('durable Action Invocation control', () => {
       throw new Error('Expected initial lease.')
     }
     const firstToken = firstLease.view.control
+    const cold = () => create().coldResume(prepared.invocationRef)
 
     now = '2026-07-19T12:00:02.000Z'
-    const expiry = create(prepared.invocationRef).acquire({
+    const expiry = await (await cold()).acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: firstLease.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -599,7 +580,6 @@ describe('durable Action Invocation control', () => {
       kind: 'refused',
       code: 'reconciliation_required',
       view: {
-        persistence: 'durable_control',
         control: { state: 'reconciliation_required', attemptRef: firstToken.attemptRef },
         attempts: [{
           release: { state: 'possibly_released' },
@@ -608,7 +588,7 @@ describe('durable Action Invocation control', () => {
       },
     })
     if (expiry.view === undefined) throw new Error('Expected durable expiry view.')
-    expect(create(prepared.invocationRef).acquire({
+    expect(await (await cold()).acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: expiry.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -629,7 +609,7 @@ describe('durable Action Invocation control', () => {
       resolution: 'not_released',
       observedAt: now,
     }
-    const reconciled = create(prepared.invocationRef).reconcile({
+    const reconciled = await (await cold()).reconcile({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: expiry.view.invocationVersion,
       attemptRef: firstToken.attemptRef,
@@ -642,7 +622,7 @@ describe('durable Action Invocation control', () => {
       outcome: { state: 'reconciled_not_released', retry: 'safe_after_reconciliation' },
     })
 
-    const takeover = create(prepared.invocationRef).acquire({
+    const takeover = await (await cold()).acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: reconciled.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -654,8 +634,8 @@ describe('durable Action Invocation control', () => {
       throw new Error('Expected reconciled takeover.')
     }
     expect(takeover.view.control.effectGeneration).toBe(firstToken.effectGeneration + 1)
-    const staleWorkerProcess = create(prepared.invocationRef)
-    expect(staleWorkerProcess.publishObservation({
+    const staleWorkerProcess = await cold()
+    expect(await staleWorkerProcess.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: takeover.view.invocationVersion,
       attemptRef: firstToken.attemptRef,
@@ -672,7 +652,7 @@ describe('durable Action Invocation control', () => {
     })).resolves.toMatchObject({ kind: 'refused', code: 'effect_generation_stale' })
     expect(source.context.developmentOnlyInquirySubmitAdapter).not.toHaveBeenCalled()
 
-    const late = create(prepared.invocationRef).recordLateObservation({
+    const late = await (await cold()).recordLateObservation({
       invocationRef: prepared.invocationRef,
       commandId: `mock:late:expiry:${origin.kind}`,
       effectGeneration: firstToken.effectGeneration,
@@ -683,17 +663,16 @@ describe('durable Action Invocation control', () => {
     })
     expect(late.kind).toBe('applied')
     const port = createDevelopmentDurablePort(state)
-    expect(port.readHistory(prepared.invocationRef, 0, 50)).toContainEqual(
+    expect(await port.readHistory(prepared.invocationRef, 0, 50)).toContainEqual(
       expect.objectContaining({
         kind: 'late_observation',
         current: false,
         effectGeneration: firstToken.effectGeneration,
       }),
     )
-    expect(create(prepared.invocationRef).inspect(prepared.invocationRef)).toMatchObject({
+    expect((await cold()).inspect(prepared.invocationRef)).toMatchObject({
       origin,
       owner: actor,
-      persistence: 'durable_control',
       control: {
         state: 'leased',
         leaseOwner: 'mock:worker:new-generation',
@@ -701,35 +680,33 @@ describe('durable Action Invocation control', () => {
       },
     })
     expect(JSON.stringify({
-      control: port.readControl(prepared.invocationRef),
-      attempts: port.readAttempts(prepared.invocationRef, 10),
-      history: port.readHistory(prepared.invocationRef, 0, 50),
+      control: await port.readControl(prepared.invocationRef),
+      attempts: await port.readAttempts(prepared.invocationRef, 10),
+      history: await port.readHistory(prepared.invocationRef, 0, 50),
     })).not.toContain(input.body)
   })
 
 
-  it('composes the module-owned control, attempt and history tables with bounded-read indexes', () => {
-    const exported = JSON.parse(String(Reflect.get(schema, 'export').call(schema))) as {
-      tables: { tableName: string; indexes: { indexDescriptor: string }[] }[]
-    }
-    const indexes = Object.fromEntries(exported.tables.map((table) => [
-      table.tableName,
-      table.indexes.map(({ indexDescriptor }) => indexDescriptor),
-    ]))
-    expect(indexes.actionInvocationControls).toEqual(expect.arrayContaining([
-      'by_invocationRef', 'by_control_owner_principalRef_and_invocationRef', 'by_sourceRef_and_invocationRef',
-    ]))
-    expect(indexes.actionInvocationAttempts).toEqual(expect.arrayContaining([
-      'by_invocationRef_and_attemptNumber', 'by_invocationRef_and_attemptRef',
-      'by_idempotency_effectIdentity_and_attemptRef',
-    ]))
-    expect(indexes.actionInvocationHistory).toEqual(expect.arrayContaining([
-      'by_invocationRef_and_commandId', 'by_invocationRef_and_invocationVersion',
-      'by_invocationRef_and_effectGeneration',
-    ]))
-  })
+  it('composes the module-owned control, attempt and history tables with bounded-read indexes', async () => { const exported = JSON.parse(String(Reflect.get(schema, 'export').call(schema))) as {
+    tables: { tableName: string; indexes: { indexDescriptor: string }[] }[]
+  }
+  const indexes = Object.fromEntries(exported.tables.map((table) => [
+    table.tableName,
+    table.indexes.map(({ indexDescriptor }) => indexDescriptor),
+  ]))
+  expect(indexes.actionInvocationControls).toEqual(expect.arrayContaining([
+    'by_invocationRef', 'by_control_owner_principalRef_and_invocationRef', 'by_sourceRef_and_invocationRef',
+  ]))
+  expect(indexes.actionInvocationAttempts).toEqual(expect.arrayContaining([
+    'by_invocationRef_and_attemptNumber', 'by_invocationRef_and_attemptRef',
+    'by_idempotency_effectIdentity_and_attemptRef',
+  ]))
+  expect(indexes.actionInvocationHistory).toEqual(expect.arrayContaining([
+    'by_invocationRef_and_commandId', 'by_invocationRef_and_invocationVersion',
+    'by_invocationRef_and_effectGeneration',
+  ])) })
 
-  it.each(origins)('persists, cold-resumes and cancels before release for $kind', (origin) => {
+  it.each(origins)('persists, cold-resumes and cancels before release for $kind', async (origin) => {
     const action = findAction('inquiry.submit')!
     const durableState = createDevelopmentDurableState()
     const port = createDevelopmentDurablePort(durableState)
@@ -740,7 +717,7 @@ describe('durable Action Invocation control', () => {
       observedResolution: { state: 'pending' as const },
     }
     let invocationSequence = 0
-    const create = (selectedPort = port, resumeRef?: string) => createDurableActionInvocationTracer({
+    const create = (selectedPort = port) => createDurableActionInvocationTracer({
       action,
       port: selectedPort,
       now: () => '2026-07-19T09:00:00.000Z',
@@ -748,9 +725,9 @@ describe('durable Action Invocation control', () => {
       nextAuthorityRef: () => `opaque:durable:${origin.kind}`,
       nextAttemptRef: () => `dev:attempt:${origin.kind}:1`,
       resolveSourceState: () => source,
-    }, resumeRef)
+    })
     const tracer = create()
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin,
       actor,
       input,
@@ -758,7 +735,7 @@ describe('durable Action Invocation control', () => {
       freshnessMs: 60_000,
     })
     source.prepared = prepared.prepared!
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -767,7 +744,7 @@ describe('durable Action Invocation control', () => {
       accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = tracer.acquire({
+    const acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -781,7 +758,7 @@ describe('durable Action Invocation control', () => {
     expect(prepared.prepared?.materialInputDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(acquired.view.attempts[0]?.idempotency.effectIdentity).toMatch(/^sha256:[0-9a-f]{64}$/)
     if (acquired.view.control.state !== 'leased') throw new Error('Expected lease')
-    const noRelease = tracer.publishObservation({
+    const noRelease = await tracer.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: acquired.view.invocationVersion,
       attemptRef: acquired.view.control.attemptRef,
@@ -791,16 +768,12 @@ describe('durable Action Invocation control', () => {
     })
     if (noRelease.kind !== 'accepted') throw new Error(noRelease.code)
 
-    const freshProcess = create(
-      createDevelopmentDurablePort(durableState),
-      prepared.invocationRef,
-    )
+    const freshProcess = await tracer.coldResume(prepared.invocationRef)
     expect(freshProcess.inspect(prepared.invocationRef)).toMatchObject({
-      persistence: 'durable_control',
       origin,
       control: { state: 'retryable', reason: 'pre_release_failure' },
     })
-    const cancelled = freshProcess.cancel({
+    const cancelled = await freshProcess.cancel({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: noRelease.view.invocationVersion,
       actor,
@@ -812,23 +785,23 @@ describe('durable Action Invocation control', () => {
     })
 
     const persisted = JSON.stringify({
-      control: port.readControl(prepared.invocationRef),
-      attempts: port.readAttempts(prepared.invocationRef, 10),
-      history: port.readHistory(prepared.invocationRef, 0, 20),
+      control: await port.readControl(prepared.invocationRef),
+      attempts: await port.readAttempts(prepared.invocationRef, 10),
+      history: await port.readHistory(prepared.invocationRef, 0, 20),
     })
     expect(persisted).not.toContain(input.body)
     expect(persisted).not.toContain(input.contact.email)
     expect(persisted).toContain(input.operationKey)
-    for (const row of port.readHistory(prepared.invocationRef, 0, 20)) {
+    for (const row of await port.readHistory(prepared.invocationRef, 0, 20)) {
       expect(row.commandDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
     }
     if (origin.kind === 'request_owned') {
-      expect(readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({})))
+      expect(await readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({})))
         .toEqual({ kind: 'refused', code: 'request_owned_refused' })
     }
   })
 
-  it('fences stale generation, preserves uncertainty, and records late evidence as non-current', () => {
+  it('fences stale generation, preserves uncertainty, and records late evidence as non-current', async () => {
     const origin = origins[1]!
     const action = findAction('inquiry.submit')!
     const port = createDevelopmentDurablePort()
@@ -847,18 +820,18 @@ describe('durable Action Invocation control', () => {
       nextAttemptRef: () => 'dev:attempt:uncertain:1',
       resolveSourceState: () => source,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin, actor, input, context: source.context, freshnessMs: 60_000,
     })
     source.prepared = prepared.prepared!
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
       actor, origin, accept: true,
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
-    const acquired = tracer.acquire({
+    const acquired = await tracer.acquire({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decided.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -868,8 +841,8 @@ describe('durable Action Invocation control', () => {
       throw new Error('Expected acquired generation')
     }
     const token = acquired.view.control
-    const competingProcess = tracer.coldResume(prepared.invocationRef)
-    expect(tracer.publishObservation({
+    const competingProcess = await tracer.coldResume(prepared.invocationRef)
+    expect(await tracer.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: acquired.view.invocationVersion,
       attemptRef: token.attemptRef,
@@ -878,7 +851,7 @@ describe('durable Action Invocation control', () => {
       release: 'not_released',
     })).toMatchObject({ kind: 'refused', code: 'effect_generation_stale' })
 
-    const uncertain = tracer.publishObservation({
+    const uncertain = await tracer.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: acquired.view.invocationVersion,
       attemptRef: token.attemptRef,
@@ -890,7 +863,7 @@ describe('durable Action Invocation control', () => {
       kind: 'accepted',
       view: { control: { state: 'reconciliation_required' } },
     })
-    const conflicting = competingProcess.publishObservation({
+    const conflicting = await competingProcess.publishObservation({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: acquired.view.invocationVersion,
       attemptRef: token.attemptRef,
@@ -904,8 +877,8 @@ describe('durable Action Invocation control', () => {
       view: { control: { state: 'reconciliation_required' } },
     })
     expect(competingProcess.inspect(prepared.invocationRef)?.control)
-      .toEqual(port.readControl(prepared.invocationRef)?.control.control)
-    const late = tracer.recordLateObservation({
+      .toEqual((await port.readControl(prepared.invocationRef))?.control.control)
+    const late = await tracer.recordLateObservation({
       invocationRef: prepared.invocationRef,
       commandId: 'mock:late:observation:1',
       effectGeneration: token.effectGeneration,
@@ -915,7 +888,7 @@ describe('durable Action Invocation control', () => {
       evidenceDigest: canonicalDigest('mock evidence'),
     })
     expect(late).toEqual({ kind: 'applied', invocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0 })
-    expect(tracer.recordLateObservation({
+    expect(await tracer.recordLateObservation({
       invocationRef: prepared.invocationRef,
       commandId: 'mock:late:observation:1',
       effectGeneration: token.effectGeneration,
@@ -927,7 +900,7 @@ describe('durable Action Invocation control', () => {
       kind: 'duplicate',
       invocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0,
     })
-    expect(tracer.recordLateObservation({
+    expect(await tracer.recordLateObservation({
       invocationRef: prepared.invocationRef,
       commandId: 'mock:late:observation:1',
       effectGeneration: token.effectGeneration,
@@ -936,10 +909,10 @@ describe('durable Action Invocation control', () => {
       release: 'not_released',
       evidenceDigest: canonicalDigest('different evidence'),
     })).toEqual({ kind: 'refused', code: 'command_identity_conflict' })
-    expect(port.readHistory(prepared.invocationRef, 0, 20)).toContainEqual(
+    expect(await port.readHistory(prepared.invocationRef, 0, 20)).toContainEqual(
       expect.objectContaining({ kind: 'late_observation', current: false }),
     )
-    expect(port.readControl(prepared.invocationRef)?.control.control).toEqual({
+    expect((await port.readControl(prepared.invocationRef))?.control.control).toEqual({
       state: 'reconciliation_required',
       attemptRef: token.attemptRef,
     })
@@ -965,11 +938,11 @@ describe('durable Action Invocation control', () => {
       nextAttemptRef: () => 'dev:attempt:secret-failure',
       resolveSourceState: () => source,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin: origins[1]!, actor, input, context: source.context, freshnessMs: 60_000,
     })
     source.prepared = prepared.prepared!
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -987,9 +960,9 @@ describe('durable Action Invocation control', () => {
       view: { control: { state: 'reconciliation_required' } },
     })
     const persisted = JSON.stringify({
-      control: port.readControl(prepared.invocationRef),
-      attempts: port.readAttempts(prepared.invocationRef, 10),
-      history: port.readHistory(prepared.invocationRef, 0, 20),
+      control: await port.readControl(prepared.invocationRef),
+      attempts: await port.readAttempts(prepared.invocationRef, 10),
+      history: await port.readHistory(prepared.invocationRef, 0, 20),
     })
     expect(persisted).not.toContain(input.body)
     expect(persisted).not.toContain(input.contact.email)
@@ -1034,14 +1007,14 @@ describe('durable Action Invocation control', () => {
       nextAttemptRef: () => 'dev:attempt:completed:1',
       resolveSourceState: () => source,
     })
-    const prepared = tracer.prepare({
+    const prepared = await tracer.prepare({
       origin, actor, input, context: source.context, freshnessMs: 60_000,
     })
     source.prepared = prepared.prepared!
-    expect(readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({
+    expect(await readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({
       sourceResultRef: source.resultIdentity.sourceResultRef, result,
     }))).toEqual({ kind: 'refused', code: 'invocation_not_terminal' })
-    const decided = tracer.decide({
+    const decided = await tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
       authorityRef: prepared.authority!.reference,
@@ -1058,7 +1031,7 @@ describe('durable Action Invocation control', () => {
       kind: 'accepted',
       view: { control: { state: 'terminal' } },
     })
-    expect(readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({
+    expect(await readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({
       sourceResultRef: source.resultIdentity.sourceResultRef, result,
     }))).toMatchObject({
       kind: 'completed_result',
@@ -1067,9 +1040,9 @@ describe('durable Action Invocation control', () => {
       sourceResultRef: 'mock:inquiry-result:durable',
       businessOutcome: 'queued_communication',
     })
-    const completedRow = port.readControl(prepared.invocationRef)!
-    const readIdentity = () => readCompletedResultIdentity(
-      port,
+    const completedRow = await port.readControl(prepared.invocationRef)
+    if (completedRow === undefined) throw new Error('completed_row_missing')
+    const readIdentity = async () => readCompletedResultIdentity(port,
       prepared.invocationRef,
       actor,
       () => ({ sourceResultRef: source.resultIdentity.sourceResultRef, result }),
@@ -1079,7 +1052,7 @@ describe('durable Action Invocation control', () => {
       terminalBusinessOutcome: 'new_action_outcome',
       terminalResultReferenceable: true,
     })
-    expect(readIdentity()).toMatchObject({
+    expect(await readIdentity()).toMatchObject({
       kind: 'completed_result',
       businessOutcome: 'new_action_outcome',
     })
@@ -1087,7 +1060,7 @@ describe('durable Action Invocation control', () => {
       ...completedRow,
       terminalResultReferenceable: false,
     })
-    expect(readIdentity()).toEqual({ kind: 'refused', code: 'outcome_not_referenceable' })
+    expect(await readIdentity()).toEqual({ kind: 'refused', code: 'outcome_not_referenceable' })
     for (const outcome of [
       'queued_communication',
       'completed',
@@ -1100,94 +1073,26 @@ describe('durable Action Invocation control', () => {
         ...rowWithoutClassification,
         terminalBusinessOutcome: outcome,
       })
-      expect(readIdentity()).toEqual({ kind: 'refused', code: 'outcome_not_referenceable' })
+      expect(await readIdentity()).toEqual({ kind: 'refused', code: 'outcome_not_referenceable' })
     }
     durableState.controls.set(prepared.invocationRef, completedRow)
     expect(source.resultIdentity.resultDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
-    expect(readCompletedResultIdentity(
-      port,
-      prepared.invocationRef,
-      { ...actor, principalRef: 'mock:principal:other' },
-      () => ({ sourceResultRef: source.resultIdentity.sourceResultRef, result }),
-    )).toEqual({ kind: 'refused', code: 'cross_principal_refused' })
-    expect(readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({
+    expect(await readCompletedResultIdentity(port,
+    prepared.invocationRef,
+    { ...actor, principalRef: 'mock:principal:other' },
+    () => ({ sourceResultRef: source.resultIdentity.sourceResultRef, result }),)).toEqual({ kind: 'refused', code: 'cross_principal_refused' })
+    expect(await readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({
       sourceResultRef: source.resultIdentity.sourceResultRef,
       result: { ...result, code: 'tampered' } as never,
     }))).toEqual({ kind: 'refused', code: 'source_result_mismatch' })
     expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1)
-    expect(JSON.stringify(port.readControl(prepared.invocationRef))).not.toContain(result.receipt.accessKey)
+    expect(JSON.stringify(await port.readControl(prepared.invocationRef))).not.toContain(result.receipt.accessKey)
     durableState.controls.delete(prepared.invocationRef)
-    expect(port.readControl(prepared.invocationRef)).toBeUndefined()
+    expect(await port.readControl(prepared.invocationRef)).toBeUndefined()
     expect(source.resultIdentity).toEqual({
       sourceResultRef: 'mock:inquiry-result:durable',
       resultDigest: canonicalDigest(result),
     })
     expect(result.receipt.accessKey).toBe('SECRET-MUST-NOT-PERSIST')
-  })
-  it.each(['approve_each', 'standing_mandate_use'] as const)(
-    'reconstructs a legacy %s authority through cold durable read and resume',
-    (mode) => {
-      const fixture = createAuthorizedDurableFixture(mode)
-      const acceptedAuthority = moveAcceptedAuthorityToLegacyRow(fixture)
-      const legacyRow = fixture.port.readControl(fixture.prepared.invocationRef)
-      expect(legacyRow?.acceptedAuthority).toEqual(acceptedAuthority)
-      expect(legacyRow?.control.acceptedAuthority).toBeUndefined()
-
-      const cold = fixture.tracer.coldResume(fixture.prepared.invocationRef)
-      const view = cold.inspect(fixture.prepared.invocationRef)
-      if (view === undefined) throw new Error('legacy_cold_view_missing')
-      expect(view.acceptedAuthority).toEqual(fixture.authority)
-      const resumed = cold.acquire({
-        invocationRef: fixture.prepared.invocationRef,
-        expectedInvocationVersion: view.invocationVersion,
-        authorityRef: view.authority!.reference,
-        actor,
-        origin: fixture.origin,
-        materialInput: input,
-        leaseOwner: `mock:legacy-resume:${mode}`,
-        leaseMs: 30_000,
-        ...(fixture.authority.kind === 'standing_mandate_use'
-          ? { acceptedAuthorityBasis: fixture.authority }
-          : {}),
-      })
-      expect(resumed).toMatchObject({
-        kind: 'accepted',
-        view: {
-          acceptedAuthority: fixture.authority,
-          control: { state: 'leased' },
-        },
-      })
-      expect(fixture.port.readControl(fixture.prepared.invocationRef)?.acceptedAuthority)
-        .toBeUndefined()
-      expect(fixture.port.readControl(fixture.prepared.invocationRef)?.control.acceptedAuthority)
-        .toEqual(fixture.authority)
-    },
-  )
-
-  it('refuses a legacy duplicate authority binding when the nested authority differs', () => {
-    const fixture = createAuthorizedDurableFixture('approve_each')
-    const row = fixture.port.readControl(fixture.prepared.invocationRef)
-    if (row === undefined) throw new Error('mismatch_fixture_row_missing')
-    fixture.state.controls.set(fixture.prepared.invocationRef, {
-      ...row,
-      acceptedAuthority: {
-        kind: 'approve_each',
-        authorityRef: 'opaque:legacy-authority:forged',
-      },
-    })
-    expect(() => fixture.tracer.coldResume(fixture.prepared.invocationRef))
-      .toThrow('durable_control_authority_mismatch')
-  })
-
-  it('leaves a current nested-authority row unchanged across cold read', () => {
-    const fixture = createAuthorizedDurableFixture('approve_each')
-    const before = fixture.port.readControl(fixture.prepared.invocationRef)
-    if (before === undefined) throw new Error('current_fixture_row_missing')
-    expect(before.acceptedAuthority).toBeUndefined()
-    const cold = fixture.tracer.coldResume(fixture.prepared.invocationRef)
-    expect(fixture.port.readControl(fixture.prepared.invocationRef)).toBe(before)
-    expect(cold.inspect(fixture.prepared.invocationRef)).toMatchObject({
-      acceptedAuthority: fixture.authority,
-    })
   })
 })

@@ -1,13 +1,14 @@
 import type { ExactCapabilityContractResult } from '@/modules/capability-contract-registry/public'
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 
-import type { CapabilityBindingRow } from '../binding'
+import type { CapabilityBindingRow, CapabilityConnectionAuthoritySnapshot } from '../binding'
 import type { CapabilityOfferingRow } from '../offering'
 import type { CapabilityPublicationLifecycleRow } from '../publication'
-
+import type { ProviderConnection } from '../../provider-connection'
 export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   id: string
   publicationRef: string
+  operationRef: string
   revision: number
   businessId: string
   offeringId: string
@@ -15,7 +16,7 @@ export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   capabilityId: string
   version: number
   contractDigest: string
-  sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'x402'
+  sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402'
   sourceDigest: string
   registrationEvidenceRefs: readonly string[]
   readinessEvidenceRefs: readonly string[]
@@ -33,6 +34,7 @@ export type GraphPublishedBusiness = Readonly<{
 export type ProbeReadinessPatch = Readonly<{
   credentialState: 'ready' | 'unavailable'
   healthState: 'healthy' | 'unhealthy'
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   readinessObservedAt: number
   readinessValidUntil: number
   readinessEvidenceRefs: readonly string[]
@@ -63,6 +65,7 @@ export type CapabilityGraphPorts = Readonly<{
   loadOfferingByOfferingId: (offeringId: string) => Promise<CapabilityOfferingRow | null>
   loadBindingByBindingId: (bindingId: string) => Promise<CapabilityBindingRow | null>
   loadPublishedBusiness: (businessId: string) => Promise<GraphPublishedBusiness | null>
+  loadProviderConnection: (connectionRef: string) => Promise<ProviderConnection | undefined>
   getActiveExactCapabilityContract: (
     ref: CapabilityContractRef,
   ) => Promise<GraphActiveExactCapabilityContractResult>

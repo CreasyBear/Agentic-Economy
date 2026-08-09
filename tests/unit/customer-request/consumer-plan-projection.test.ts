@@ -8,7 +8,7 @@ import type { PreviewCustomerRequest } from '@/modules/customer-request/applicat
 
 const publishedPrice = {
   kind: 'published' as const,
-  published: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 12000, unit: 'job' as const, taxTreatment: 'inclusive' as const },
+  published: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '12000', exponent: 2 }, unit: 'job' as const, taxTreatment: 'inclusive' as const },
   summary: 'From $120',
 }
 

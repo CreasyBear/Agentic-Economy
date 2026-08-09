@@ -34,6 +34,7 @@ import {
   registryDetailAction,
   registryListAction,
   registrySearchAction,
+  registryServicesDetailAction,
   registryServicesListAction,
   registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
@@ -43,6 +44,7 @@ import {
   registryOperationsInspectPlanAction,
   registryOperationsSearchAction,
 } from '@/modules/registry/operations.actions'
+import { operationExecuteAction } from '@/modules/capability-execution/operation-execute-mcp.actions'
 import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
 import { storefrontEnrichDraftAction, storefrontImportDraftAction, webDiscoverAction } from '@/modules/storefront/storefront.actions'
 import { studyCompleteAction, studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
@@ -72,6 +74,7 @@ const actions: readonly AnyAction[] = [
   submitInquiryAction,
   readCustomerRecordAction,
   registryListAction,
+  registryServicesDetailAction,
   registryServicesListAction,
   registryServicesSearchAction,
   registrySearchAction,
@@ -80,6 +83,7 @@ const actions: readonly AnyAction[] = [
   registryOperationsDetailAction,
   registryOperationsCompareAction,
   registryOperationsInspectPlanAction,
+  operationExecuteAction,
   sandboxCheckupQuoteAction,
   storefrontImportDraftAction,
   storefrontEnrichDraftAction,

@@ -1,3 +1,16 @@
+> **SUPERSESSION BANNER — 2026-08-08.** This roadmap retains historical phase
+> mechanics and implementation evidence, but its earlier category, ICP, wedge,
+> and broad-supply framing is superseded. It is not current category authority.
+>
+> Current authority is [`PROJECT.md`](PROJECT.md),
+> [`VISION-conceptual-map.md`](VISION-conceptual-map.md),
+> [`wayfinder/MAP.md`](wayfinder/MAP.md), [`D-013`](records/PROJECT-RECORDS.md),
+> and the [Agent Services Market category thesis](research/2026-08-08-agent-services-market-category-thesis.md).
+> The current product is the market and controlled transaction layer for
+> supplier-hosted Market Operations; V1 is closed to one family and proof is
+> not yet earned. Do not infer from historical phases that local trades,
+> Australian SMBs, BAS, or a human-service wedge is current direction.
+
 # Agentic Economy — Current Product Roadmap
 
 **Status:** active

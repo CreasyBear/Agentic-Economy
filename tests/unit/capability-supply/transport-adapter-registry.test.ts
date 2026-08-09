@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
 import { admitRegisteredTransport } from '@/modules/capability-supply/public'
+const providerAuthority = {
+  kind: 'provider_connection',
+  connectionRef: 'connection:capability',
+  providerRef: 'provider:capability',
+} as const
+const keylessAuthority = { kind: 'keyless' } as const
+
 
 describe('capability supply transport adapter registry', () => {
   it('refuses unknown adapters before configuration can be persisted', () => {
     expect(admitRegisteredTransport({
       adapterId: 'unknown:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: {},
@@ -18,7 +25,7 @@ describe('capability supply transport adapter registry', () => {
     const admitted = admitRegisteredTransport({
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: { requestTimeoutMs: 5_000, method: 'POST' },
@@ -33,11 +40,11 @@ describe('capability supply transport adapter registry', () => {
     })
   })
 
-  it('admits the public credential sentinel only for HTTP JSON', () => {
+  it('admits explicit keyless authority only for transports that need no payment credential', () => {
     const http = admitRegisteredTransport({
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'none',
+      authority: keylessAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: { requestTimeoutMs: 5_000, method: 'POST' },
@@ -47,16 +54,16 @@ describe('capability supply transport adapter registry', () => {
     expect(admitRegisteredTransport({
       adapterId: 'mcp-jsonrpc:v1',
       endpointUrl: 'https://example.test/mcp',
-      credentialRef: 'none',
+      authority: keylessAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: { protocolVersion: '2025-06-18', toolName: 'lookup', requestTimeoutMs: 5_000 },
-    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+    })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'mcp-jsonrpc:v1' } })
 
     expect(admitRegisteredTransport({
       adapterId: 'x402-fetch:v2',
       endpointUrl: 'https://example.test/paid',
-      credentialRef: 'none',
+      authority: keylessAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: {
@@ -72,7 +79,7 @@ describe('capability supply transport adapter registry', () => {
     const base = {
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['evidence:cancellation'] },
     }
@@ -101,7 +108,7 @@ describe('capability supply transport adapter registry', () => {
     expect(admitRegisteredTransport({
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: {
@@ -115,7 +122,7 @@ describe('capability supply transport adapter registry', () => {
     expect(admitRegisteredTransport({
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'adapter_managed', evidenceRefs: ['evidence:cancellation'] },
       config: {
@@ -135,7 +142,7 @@ describe('capability supply transport adapter registry', () => {
     const base = {
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'adapter_managed' as const, evidenceRefs: ['evidence:cancellation'] },
     }
@@ -163,7 +170,7 @@ describe('capability supply transport adapter registry', () => {
     expect(admitRegisteredTransport({
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: {
@@ -177,14 +184,17 @@ describe('capability supply transport adapter registry', () => {
     const base = {
       adapterId: 'http-json:v1',
       endpointUrl: 'https://example.test/capability',
-      credentialRef: 'env:CAPABILITY_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['evidence:cancellation'] },
       config: { method: 'POST', requestTimeoutMs: 5_000 },
     }
     expect(admitRegisteredTransport({ ...base, endpointUrl: 'http://example.test/capability' }))
       .toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
-    expect(admitRegisteredTransport({ ...base, credentialRef: 'secret-in-source' }))
+    expect(admitRegisteredTransport({
+      ...base,
+      authority: { ...providerAuthority, connectionRef: 'invalid authority' },
+    }))
       .toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
     expect(admitRegisteredTransport({ ...base, config: { ...base.config, businessType: 'shipping' } }))
       .toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
@@ -200,7 +210,7 @@ describe('capability supply transport adapter registry', () => {
     expect(admitRegisteredTransport({
       adapterId: 'x402-fetch:v2',
       endpointUrl: 'https://example.test/paid-capability',
-      credentialRef: 'env:AE_X402_EVM_PRIVATE_KEY',
+      authority: providerAuthority,
       continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
       cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
       config: {

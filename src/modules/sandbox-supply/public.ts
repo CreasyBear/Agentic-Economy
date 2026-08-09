@@ -1,3 +1,4 @@
+import type { ExactAmount } from '@/modules/money/public'
 import type { OfferingPrice } from '@/modules/catalog/public'
 import { error, ok, type ModuleResult } from '@/modules/common/result'
 import {
@@ -209,7 +210,7 @@ export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
     v2BindingId: 'binding:sandbox-option-one:http-json:v3',
     priorV3BindingId: 'binding:sandbox-option-one:http-json:v4',
     v4BindingId: 'binding:sandbox-option-one:http-json:v5',
-    label: 'Sandbox Option One', amountMinor: 1_200, latencyMs: 120,
+    label: 'Sandbox Option One', amount: Object.freeze({ currency: 'AUD', units: '1200', exponent: 2 }) satisfies ExactAmount, latencyMs: 120,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),
   two: Object.freeze({
@@ -223,7 +224,7 @@ export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
     v2BindingId: 'binding:sandbox-option-two:http-json:v3',
     priorV3BindingId: 'binding:sandbox-option-two:http-json:v4',
     v4BindingId: 'binding:sandbox-option-two:http-json:v5',
-    label: 'Sandbox Option Two', amountMinor: 900, latencyMs: 180,
+    label: 'Sandbox Option Two', amount: Object.freeze({ currency: 'AUD', units: '900', exponent: 2 }) satisfies ExactAmount, latencyMs: 180,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),
 })
@@ -244,7 +245,7 @@ export const SANDBOX_ROUTE_PROVIDER_PROFILES = Object.freeze({
     offeringId: 'offering:sandbox-route-resolver:reference-resolve:v6',
     bindingId: 'binding:sandbox-route-resolver:http-json:v6',
     endpointPath: '/api/sandbox/providers/route-resolver',
-    amountMinor: 300, queryTerms: Object.freeze(['resolve sandbox service reference', 'sandbox route']),
+    amount: Object.freeze({ currency: 'AUD', units: '300', exponent: 2 }) satisfies ExactAmount, queryTerms: Object.freeze(['resolve sandbox service reference', 'sandbox route']),
     contract: SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT,
   }),
   quoter: Object.freeze({
@@ -260,7 +261,7 @@ export const SANDBOX_ROUTE_PROVIDER_PROFILES = Object.freeze({
     offeringId: 'offering:sandbox-route-quoter:service-quote:v5',
     bindingId: 'binding:sandbox-route-quoter:http-json:v5',
     endpointPath: '/api/sandbox/providers/route-quoter',
-    amountMinor: 700, queryTerms: Object.freeze(['quote sandbox service reference', 'sandbox route']),
+    amount: Object.freeze({ currency: 'AUD', units: '700', exponent: 2 }) satisfies ExactAmount, queryTerms: Object.freeze(['quote sandbox service reference', 'sandbox route']),
     contract: SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
   }),
 })
@@ -312,7 +313,7 @@ export function resolveCheckupQuote(input: Readonly<{
 }>): ResolveCheckupQuoteResult {
   const matching = input.offerings.flatMap((offering): CheckupQuoteOfferingFacts[] => {
     const price = offering.price
-    if (price?.kind !== 'fixed' || price.amountMinor === undefined) return []
+    if (price?.kind !== 'fixed') return []
     if (!offering.accessPaths.some((path) =>
       path.kind === 'external_operation'
       && path.url !== undefined
@@ -322,8 +323,7 @@ export function resolveCheckupQuote(input: Readonly<{
     return [{
       name: offering.name,
       price: {
-        currency: price.currency,
-        amountMinor: price.amountMinor,
+        amount: price.amount,
         ...(price.unit === undefined ? {} : { unit: price.unit }),
         ...(price.taxTreatment === undefined ? {} : { taxTreatment: price.taxTreatment }),
       },
@@ -378,7 +378,7 @@ export function resolveCategoryQuote(input: Readonly<{
 }>): ResolveCategoryQuoteResult {
   const matching = input.offerings.flatMap((offering): CheckupQuoteOfferingFacts[] => {
     const price = offering.price
-    if (price?.kind !== 'fixed' || price.amountMinor === undefined) return []
+    if (price?.kind !== 'fixed') return []
     if (!offering.accessPaths.some((path) =>
       path.kind === 'external_operation'
       && path.url !== undefined
@@ -394,8 +394,7 @@ export function resolveCategoryQuote(input: Readonly<{
     return [{
       name: offering.name,
       price: {
-        currency: price.currency,
-        amountMinor: price.amountMinor,
+        amount: price.amount,
         ...(price.unit === undefined ? {} : { unit: price.unit }),
         ...(price.taxTreatment === undefined ? {} : { taxTreatment: price.taxTreatment }),
       },

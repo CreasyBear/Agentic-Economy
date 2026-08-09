@@ -56,21 +56,19 @@ export async function buildDevelopmentContinuityEvidence(
     interpreterId: 'mock:interpreter', bindings: [], models: [], mappings: [], now: nowMs,
   })
   if (compiled.kind !== 'compiled') throw new Error('mock_request_compile_failed')
-  const attached = attachCompletedTaskReference({
+  const attached = await attachCompletedTaskReference({
     principalRef: actor.principalRef, callerRef: actor.callerRef,
     invocationRef: standaloneView.invocationRef, referencedAt: nowMs + 1,
     candidateAggregate: compiled.aggregate,
   }, {
-    readCompletedResultIdentity: ({ invocationRef, actor: identity }) =>
-      readCompletedResultIdentity(
-        invocations.standalone.port,
-        invocationRef,
-        identity,
-        () => ({
-          sourceResultRef: invocations.standalone.sourceResultRef,
-          result: invocations.standalone.result,
-        }),
-      ),
+    readCompletedResultIdentity: async ({ invocationRef, actor: identity }) =>
+      await readCompletedResultIdentity(invocations.standalone.port,
+      invocationRef,
+      identity,
+      () => ({
+        sourceResultRef: invocations.standalone.sourceResultRef,
+        result: invocations.standalone.result,
+      }),),
   })
   if (attached.kind === 'refused') throw new Error(attached.reason)
   const actionVersion = resolveActionContract(collectSuppliedCandidateQuoteAction).version
@@ -202,7 +200,7 @@ async function executeDirectConsequential(graph: Graph, input: SuppliedCandidate
           environment: 'MOCK/DEVELOPMENT ONLY',
           quote: {
             quoteRef: 'mock:quote:direct-consequential',
-            price: { amountMinor: 24_500, currency: 'AUD' },
+            price: { currency: 'AUD', units: '24500', exponent: 2 },
             validUntil: nowMs + 3_600_000,
             terms: ['Fixture only; no provider commitment or fulfilment.'],
             evidenceRefs: ['mock:evidence:direct-consequential'],

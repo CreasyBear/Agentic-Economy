@@ -9,6 +9,7 @@ import type {
 
 const AE_INQUIRY_PATH: PublicOfferingAccessPathDto = {
   accessPathRef: 'access:ae',
+  offeringRevision: 1,
   kind: 'human_request',
   channel: 'ae_inquiry',
   disclosure: 'Send an inquiry through Agentic Economy.',
@@ -16,6 +17,7 @@ const AE_INQUIRY_PATH: PublicOfferingAccessPathDto = {
 
 const PHONE_PATH: PublicOfferingAccessPathDto = {
   accessPathRef: 'access:phone',
+  offeringRevision: 1,
   kind: 'human_request',
   channel: 'phone',
   disclosure: 'Call the business directly.',
@@ -23,6 +25,7 @@ const PHONE_PATH: PublicOfferingAccessPathDto = {
 
 const EXTERNAL_PATH: PublicOfferingAccessPathDto = {
   accessPathRef: 'access:api',
+  offeringRevision: 1,
   kind: 'external_operation',
   name: 'Booking API',
   summary: 'Business-declared booking endpoint.',

@@ -18,8 +18,11 @@ function comparisonFact(value: GenericValidator) {
 
 const priceBasisValue = v.object({
   description: v.string(),
-  currency: v.optional(v.string()),
-  amountMinor: v.optional(v.number()),
+  amount: v.optional(v.object({
+    currency: v.string(),
+    units: v.string(),
+    exponent: v.number(),
+  })),
   unit: v.union(v.literal('total'), v.literal('hour'), v.literal('day'), v.literal('month'), v.literal('request'), v.literal('unit')),
 })
 

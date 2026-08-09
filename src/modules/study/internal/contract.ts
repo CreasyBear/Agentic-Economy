@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import type { OfferingPrice } from '@/modules/catalog/public'
+import {
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
+  type OfferingPrice,
+} from '@/modules/catalog/public'
+import { exactAmountSchema } from '@/modules/money/public'
 
 import type { TopsisResult } from './topsis'
 
@@ -27,16 +32,20 @@ export const studyLearningSchema = z.strictObject({
 })
 export type StudyLearning = z.infer<typeof studyLearningSchema>
 
+const studyQuotePriceSchema = z.strictObject({
+  amount: exactAmountSchema,
+  unit: z.enum(OfferingPriceUnitValues).optional(),
+  taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).optional(),
+})
+
 export const studyQuoteSchema = z.strictObject({
   quoteRef: z.string().min(1),
+  operationRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).optional(),
   providerSlug: z.string().min(1),
   providerName: z.string().min(1),
   category: z.string().min(1),
   service: z.string().min(1),
-  price: z.strictObject({
-    currency: z.string().length(3),
-    amountMinor: z.number().int().nonnegative(),
-  }),
+  price: studyQuotePriceSchema,
   nextAvailable: z.iso.datetime(),
   quotedAt: z.iso.datetime(),
   validUntil: z.iso.datetime(),
@@ -97,7 +106,7 @@ export const studyCriterionSchema = z.strictObject({
   label: z.string().min(1),
   weight: z.number().finite().nonnegative(),
   sense: z.enum(['benefit', 'cost']),
-  valueKey: z.enum(['priceMinor', 'qualityScore', 'availabilityEpochMs', 'categoryMatch']),
+  valueKey: z.enum(['price', 'qualityScore', 'availabilityEpochMs', 'categoryMatch']),
 })
 export type StudyCriterion = z.infer<typeof studyCriterionSchema>
 
@@ -106,7 +115,7 @@ export const studyHardNeedSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('location'), value: z.string().min(1) }),
   z.strictObject({ kind: z.literal('fixed_price') }),
   z.strictObject({ kind: z.literal('open_quote') }),
-  z.strictObject({ kind: z.literal('price_ceiling'), maxMinor: z.number().int().nonnegative() }),
+  z.strictObject({ kind: z.literal('price_ceiling'), max: exactAmountSchema }),
 ])
 export type StudyHardNeed = z.infer<typeof studyHardNeedSchema>
 
@@ -115,12 +124,13 @@ export const studyCharterSchema = z.strictObject({
   hardNeeds: z.array(studyHardNeedSchema).max(16),
 })
 export type StudyCharter = z.infer<typeof studyCharterSchema>
-
 export type StudyRegistryEndpoint = Readonly<{
   url: string
   method?: string
   access: 'open' | 'external'
   provenance?: 'business_declared' | 'publicly_observed'
+  offeringRef?: string
+  operationRef?: string
   name?: string
   summary?: string
 }>
@@ -137,13 +147,7 @@ export type StudyRegistryService = Readonly<{
   name: string
   category: string
   summary: string
-  price?: Readonly<{
-    kind: 'fixed' | 'from' | 'range' | 'quote_only'
-    currency: string
-    amountMinor?: number
-    unit?: OfferingPrice['unit']
-    taxTreatment?: OfferingPrice['taxTreatment']
-  }>
+  price?: OfferingPrice
   endpoints: readonly StudyRegistryEndpoint[]
   observedAt?: number
   links?: Readonly<{ business: string; manifest: string }>

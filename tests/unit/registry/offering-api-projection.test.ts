@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { BusinessSupplyProjection, OfferingPrice } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   projectBusinessSupplyToPublicApi,
 } from '@/modules/registry/public'
@@ -35,6 +36,9 @@ describe('Offering-shaped public business API', () => {
         },
         accessPaths: [{
           accessPathRef: brandNonEmpty('access:meridian:graphql', 'AccessPathRef'),
+          offeringRevision: 2,
+          offeringSourceHash: canonicalDigest('offering-source-hash'),
+          sourceHash: canonicalDigest('access-source-hash'),
           descriptor: {
             kind: 'external_operation',
             name: 'GraphQL query',
@@ -64,8 +68,57 @@ describe('Offering-shaped public business API', () => {
       externalOperation: true,
       aeSupportedAction: true,
     })
-    expect(JSON.stringify(dto)).not.toMatch(/routeable|sourceDigest|sourceHash|credential|adapter/i)
+    expect(JSON.stringify(dto)).not.toMatch(/routeable|sourceDigest|credential|adapter/i)
   })
+  it('drops malformed access URLs and never repeats an access-path identity', () => {
+    const accessPath = {
+      accessPathRef: brandNonEmpty('access:meridian:graphql', 'AccessPathRef'),
+      offeringRevision: 1,
+      offeringSourceHash: canonicalDigest('offering-source-hash'),
+      sourceHash: canonicalDigest('access-source-hash'),
+      descriptor: {
+        kind: 'external_operation',
+        name: 'GraphQL query',
+        summary: 'Query the declared GraphQL surface.',
+        url: 'https://api.example.com/graphql',
+        method: 'POST',
+        provenance: 'business_declared',
+      },
+    } as BusinessSupplyProjection['offerings'][number]['accessPaths'][number]
+    const baseOffering = supplyOffering({})
+    const dto = projectBusinessSupplyToPublicApi(projection({
+      offerings: [{
+        ...baseOffering,
+        accessPaths: [
+          accessPath,
+          { ...accessPath },
+          {
+            ...accessPath,
+            accessPathRef: brandNonEmpty('access:meridian:blank', 'AccessPathRef'),
+            descriptor: { ...accessPath.descriptor, url: ' ' },
+          },
+        ],
+      }],
+    }))
+
+    expect(dto.offerings[0]?.accessPaths).toHaveLength(1)
+    expect(dto.offerings[0]?.accessPaths[0]).toMatchObject({
+      accessPathRef: 'access:meridian:graphql',
+      url: 'https://api.example.com/graphql',
+    })
+
+    const conflict = projectBusinessSupplyToPublicApi(projection({
+      offerings: [{
+        ...baseOffering,
+        accessPaths: [
+          accessPath,
+          { ...accessPath, descriptor: { ...accessPath.descriptor, url: 'https://other.example/graphql' } },
+        ],
+      }],
+    }))
+    expect(conflict.offerings[0]?.accessPaths).toEqual([])
+  })
+
 
   it('removes an AE-supported action at readiness expiry without waiting for a rebuild', () => {
     const dto = projectBusinessSupplyToPublicApi(projection({
@@ -135,8 +188,7 @@ describe('Offering-shaped public business API', () => {
   it('publishes the comparable price beside the prose, never derived from it', () => {
     const price: OfferingPrice = {
       kind: 'from',
-      currency: 'AUD',
-      amountMinor: 18000,
+      amount: { currency: 'AUD', units: '18000', exponent: 2 },
       unit: 'visit',
       taxTreatment: 'inclusive',
     }
@@ -184,7 +236,7 @@ function projection(
     },
     offerings: [],
     sourceRevision: 1,
-    sourceDigest: 'private-source-digest',
+    sourceDigest: canonicalDigest('private-source-digest'),
     observedAt: 100,
     disposition: 'current',
     ...overrides,

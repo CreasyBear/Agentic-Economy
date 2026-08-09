@@ -8,6 +8,7 @@ import { loadThreadRouteReadback } from '@/modules/answer-thread/thread-route'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
+  sessionCookieHeader,
 } from '../helpers/answer-thread-test-port'
 
 describe('/t/$threadId route loader', () => {
@@ -36,7 +37,6 @@ describe('/t/$threadId route loader', () => {
       threadId: 'thr_timing',
       pseudonymousSessionId: 'session-private',
       title: 'Replace a leaking kitchen tap',
-      sharePolicy: 'public',
       createdAt: 1_000,
       updatedAt: 2_000,
     }
@@ -87,7 +87,9 @@ describe('/t/$threadId route loader', () => {
       vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'public.agentic.test')
       const readback = await loadThreadRouteReadback(
         thread.threadId,
-        new Request(`https://public.agentic.test/t/${thread.threadId}`),
+        new Request(`https://public.agentic.test/t/${thread.threadId}`, {
+          headers: { cookie: sessionCookieHeader(thread.pseudonymousSessionId) },
+        }),
       )
       expect(readback.projection?.turns[0]).toMatchObject({
         query: turn.query,

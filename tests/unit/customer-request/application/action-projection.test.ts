@@ -76,10 +76,10 @@ describe('customer-request action-projection', () => {
       options: [{
         optionRef: 'opt:1',
         business: { name: 'Ride Co' },
-        expectedCost: { currency: 'USD', amountMinor: 100 },
-        maximumCost: { currency: 'USD', amountMinor: 200 },
+        expectedCost: { currency: 'USD', units: '100', exponent: 2 },
+        maximumCost: { currency: 'USD', units: '200', exponent: 2 },
         expectedLatencyMs: 50,
-        priceComponents: [{ label: 'base', amountMinor: 100 }],
+        priceComponents: [{ label: 'base', amount: { currency: 'USD', units: '100', exponent: 2 } }],
         comparableOutputs: [{ label: 'seats', value: 1 }],
         materialTerms: ['term-a'],
         cancellation: { kind: 'supported', summary: 'Free cancel' },

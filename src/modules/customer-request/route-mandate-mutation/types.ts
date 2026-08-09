@@ -1,5 +1,6 @@
 import type { RouteMandate } from '@/modules/customer-request/route-mandate'
 import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
+import type { ExactAmount } from '@/modules/money/public'
 
 export type AuthenticatedIdentity = Readonly<{
   issuer: string
@@ -34,7 +35,7 @@ export type IssueCommandArgs = Readonly<{
   expectedRequestRevision: number
   expectedGenerationRef: string
   selectedRoutePlanId: string
-  maximumTotalSpend: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalSpend: ExactAmount
   expiresAt: number
   idempotencyKey: string
   serviceAuthorization?: ServiceAuthorization
@@ -108,7 +109,7 @@ type IssueAuthorizationEvidenceBase = Readonly<{
   requestRevision: number
   generationRef: string
   selectedRoutePlanId: string
-  maximumTotalSpend: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalSpend: ExactAmount
   issuedAt: number
   expiresAt: number
   authenticatedActor: AuthenticatedIdentity

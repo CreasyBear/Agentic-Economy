@@ -21,6 +21,7 @@ describe('acceptsHtml', () => {
   it('treats an Accept that excluded HTML as a machine caller', () => {
     expect(acceptsHtml('text/markdown')).toBe(false)
     expect(acceptsHtml('application/json')).toBe(false)
+    expect(acceptsHtml('text/plain')).toBe(false)
     expect(acceptsHtml('text/markdown;q=1.0, application/json;q=0.8')).toBe(false)
   })
 })
@@ -45,6 +46,11 @@ describe('negotiateAgentPage', () => {
   it('never intercepts a route that already answers machines', () => {
     for (const path of ['/api/businesses', '/api/v1/requests', '/llms.txt', '/SKILL.md', '/robots.txt', '/sitemap.xml', '/.well-known/ucp', '/adelaide-locksmith/ucp']) {
       expect(negotiateAgentPage(request(path, 'application/json')).kind).toBe('serve_html')
+    }
+  })
+  it('leaves SKILL.md to its explicit markdown route for every client Accept value', () => {
+    for (const accept of [undefined, '*/*', 'application/json', 'text/markdown', 'text/plain', 'text/html,application/xhtml+xml']) {
+      expect(negotiateAgentPage(request('/SKILL.md', accept))).toEqual({ kind: 'serve_html' })
     }
   })
   it('does not intercept the MCP endpoint for non-HTML clients', () => {

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  createDevelopmentInvocationApplication,
+  createInvocationApplication,
   createDevelopmentPaidOperationApplicationService,
   createPaidOperationApplicationService,
   createDynamicPublishedActionInvocationAdapter,
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -15,7 +17,7 @@ import type { DynamicPublishedInvocationResult } from '@/modules/action-invocati
 describe('paid operation application service', () => {
   it('authorizes reads, fences versions, exposes semantic continuations, and projects one truth', async () => {
     const { service, host } = fixture()
-    const prepared = host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+    const prepared = await host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
 
     expect(service.inspect({
       invocationRef: prepared.invocationRef,
@@ -57,20 +59,18 @@ describe('paid operation application service', () => {
     ])
   })
 
-  it('refuses a different principal and keeps operation interpretation injected', () => {
-    const { host, interpreter, application } = fixture()
-    const prepared = host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-    const other = createDevelopmentPaidOperationApplicationService({
-      host: application.bindStandalone({
-        actor: { callerRef: 'agent:other', principalRef: 'principal:other' },
-      }),
-      interpreter,
-    })
-    expect(other.inspect({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: prepared.invocationVersion,
-    })).toEqual({ kind: 'refused', code: 'cross_principal_refused' })
+  it('refuses a different principal and keeps operation interpretation injected', async () => { const { host, interpreter, application } = fixture()
+  const prepared = await host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const other = createDevelopmentPaidOperationApplicationService({
+    host: application.bindStandalone({
+      actor: { callerRef: 'agent:other', principalRef: 'principal:other' },
+    }),
+    interpreter,
   })
+  expect(other.inspect({
+    invocationRef: prepared.invocationRef,
+    expectedInvocationVersion: prepared.invocationVersion,
+  })).toEqual({ kind: 'refused', code: 'cross_principal_refused' }) })
 
   it('accepts and forwards the exact advertised bounded reconciliation evidence', async () => {
     const { interpreter } = fixture()
@@ -102,7 +102,7 @@ describe('paid operation application service', () => {
       network: 'eip155:8453',
       asset: '0xasset',
       payTo: '0xrecipient',
-      amount: '10000',
+      amount: { currency: 'USD', units: '10000', exponent: 6 },
       invocationRef: evidenceMaterial.invocationRef,
       attemptRef: evidenceMaterial.attemptRef,
       effectGeneration: 1,
@@ -180,7 +180,7 @@ describe('paid operation application service', () => {
 function fixture() {
   const adapter = adapterFixture()
   const actor = { callerRef: 'agent:paid-service', principalRef: 'principal:paid-service' }
-  const application = createDevelopmentInvocationApplication({
+  const application = createInvocationApplication({
     adapter,
     sourceCommands: {
       leaseOwner: () => 'worker:paid-service',
@@ -202,7 +202,7 @@ function fixture() {
         summary: 'Execute one labelled local paid operation.',
         blocks: [{ kind: 'text', label: 'Environment', value: 'Local development' }],
       },
-      maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+      maximumAuthorizedCharge: { currency: 'USD', units: '1', exponent: 2 },
       queryRecipient: 'provider:development',
       resultDelivery: { state: 'not_delivered' },
       environment: {
@@ -222,21 +222,21 @@ function fixture() {
 
 function adapterFixture() {
   const fixture = buildDevelopmentPublishedOperationEvidence()
+  const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   return createDynamicPublishedActionInvocationAdapter({
     operation: fixture.operation,
     source: createDevelopmentDynamicPublishedSource([fixture.operation]),
     runtime: {
-      send: async () => ({
+      send: async () => new Response(JSON.stringify({ ok: true }), {
         status: 200,
-        ok: true,
-        headers: { get: () => null },
-        text: async () => JSON.stringify({ ok: true }),
       }),
-      resolveCredential: () => undefined,
+      resolveCredential: (_connectionRef) => undefined,
     },
     now: () => fixture.operation.readiness.observedAt + 1_000,
     nextInvocationRef: () => `invocation:paid-service:${Math.random()}`,
     nextAuthorityRef: () => `authority:paid-service:${Math.random()}`,
     nextAttemptRef: () => `attempt:paid-service:${Math.random()}`,
+    durablePort: createDevelopmentDurablePort(durableState),
+    developmentSnapshot: durableState,
   })
 }

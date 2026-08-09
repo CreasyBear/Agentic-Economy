@@ -2,13 +2,11 @@ import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { stableStringify } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
-import { formatCurrencyAmount } from './format-currency-amount'
+import { exactAmountSchema, formatCurrencyAmount } from '@/modules/money/public'
 import {
   CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY,
   CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY,
 } from './evaluation'
-import type { PreparedRouteCandidateSet } from './preparation'
-import { projectCustomerOptionSet } from './customer-option-set'
 import { DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID } from './semantic-interpreter'
 import type {
   CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRouteConfirmation,
@@ -231,8 +229,8 @@ export function projectRequestEvaluation(input: Readonly<{
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
-    summary: `No current option stays within your ${formatCurrencyAmount(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
     nextAction: 'revise_request',
+    summary: `No current option stays within your ${formatCurrencyAmount(maximumTotalCost)} maximum.`,
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
     unsupportedRecovery: unsupportedRecovery(
@@ -317,15 +315,10 @@ export function projectRequestEvaluation(input: Readonly<{
 
 function customerMaximumTotalCost(
   criteria: RequestEvaluationProjectionInput['criteria'],
-): Readonly<{ currency: string; amountMinor: number }> | undefined {
+): Readonly<{ currency: string; units: string; exponent: number }> | undefined {
   const value = criteria.find((criterion) => criterion.label === 'Maximum total cost')?.value
-  if (!isRecord(value)) return undefined
-  const currency = value.currency
-  const amountMinor = value.amountMinor
-  return typeof currency === 'string' && currency.length === 3
-    && typeof amountMinor === 'number' && Number.isSafeInteger(amountMinor) && amountMinor >= 0
-    ? { currency, amountMinor }
-    : undefined
+  const parsed = exactAmountSchema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
 }
 
 function customerMaximumResponseTimeMs(
@@ -346,50 +339,6 @@ function customerPurposeLabel(value: string): string {
   const words = value.replace(/[_-]+/g, ' ').trim()
   if (words.length === 0) return 'Compare available options'
   return `${words.at(0)?.toUpperCase() ?? ''}${words.slice(1)}`
-}
-
-function projectPreparingOptions(input: Readonly<{
-  requestRef: string
-  revision: number
-  summary: string
-  criteria?: readonly CustomerCriterion[]
-  disclosureReview?: CustomerRequestView['disclosureReview']
-  preparationRef?: string
-}>): CustomerRequestView {
-  return requestView({ ...input, state: 'preparing_options', nextAction: 'wait' })
-}
-
-function projectOptionsReady(input: Readonly<{
-  requestRef: string
-  revision: number
-  summary: string
-  criteria?: readonly CustomerCriterion[]
-  candidateSet: PreparedRouteCandidateSet
-}>): CustomerRequestView {
-  const optionSet = projectCustomerOptionSet(input.candidateSet)
-  if (optionSet.optionCount === 0 && (optionSet.coverage.pending > 0 || optionSet.coverage.uncertain > 0)) return requestView({
-    requestRef: input.requestRef,
-    revision: input.revision,
-    state: 'needs_attention',
-    summary: input.summary,
-    nextAction: 'retry',
-    optionSet,
-  })
-  if (optionSet.optionCount === 0) return requestView({
-    requestRef: input.requestRef,
-    revision: input.revision,
-    state: 'no_options',
-    summary: input.summary,
-    nextAction: 'revise_request',
-    optionSet,
-  })
-  return requestView({
-    ...input,
-    state: 'options_ready',
-    nextAction: 'inspect_options',
-    optionSet,
-    options: optionSet.options,
-  })
 }
 
 export function projectNeedsAttention(input: Readonly<{

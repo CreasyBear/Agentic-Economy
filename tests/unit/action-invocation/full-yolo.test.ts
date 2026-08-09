@@ -50,8 +50,8 @@ describe('full_yolo bounded authority mode', () => {
       recipientRef: mandate.scope.recipientRefs[0]!,
       purpose: mandate.scope.purposes[0]!,
       dataFields: ['customer.name'],
-      spend: { amountMinor: 0, currency: 'AUD' },
-      worstCaseLoss: { amountMinor: 0, currency: 'AUD' },
+      spend: { currency: 'AUD', units: '0', exponent: 2 },
+      worstCaseLoss: { currency: 'AUD', units: '0', exponent: 2 },
       fallbackRef: mandate.scope.permittedFallbacks[0]!,
       risk: mandate.scope.riskCeiling,
     }
@@ -61,10 +61,10 @@ describe('full_yolo bounded authority mode', () => {
       { recipientRef: 'other' },
       { purpose: 'other' },
       { dataFields: ['customer.phone'] },
-      { spend: { amountMinor: 0, currency: 'USD' } },
+      { spend: { currency: 'USD', units: '0', exponent: 2 } },
       { fallbackRef: 'other' },
       { risk: 'other' },
-      { worstCaseLoss: { amountMinor: 5_001, currency: 'AUD' } },
+      { worstCaseLoss: { currency: 'AUD', units: '5001', exponent: 2 } },
     ]
     for (const variant of variants) {
       expect(evaluateStandingMandatePolicy({
@@ -81,7 +81,11 @@ describe('full_yolo bounded authority mode', () => {
     const snapshot = structuredClone(evidence.mandateSnapshot)
     ;(snapshot as any).exposureOffsets = []
     const store = new StandingMandateStore(snapshot)
-    expect(store.capacity(snapshot.mandates[0]!.mandateRef).worstCaseLossMinor).toBe(5_000)
+    expect(store.capacity(snapshot.mandates[0]!.mandateRef).worstCaseLoss).toEqual({
+      currency: 'AUD',
+      units: '5000',
+      exponent: 2,
+    })
     const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
     expect((store.recordExposureOffset as any)({
       ...offset,
@@ -229,7 +233,7 @@ describe('full_yolo bounded authority mode', () => {
     ['action scope', (copy: any) => { copy.mandateSnapshot.mandates[0].scope.actions[1].id = 'other' }],
     ['policy', (copy: any) => { copy.policyDecisions[1].fallbackOrdinal = 0 }],
     ['fallback order', (copy: any) => { copy.objectiveDecisionRecords.reverse() }],
-    ['loss', (copy: any) => { copy.capacityAfterCancellation.worstCaseLossMinor = 5_000 }],
+    ['loss', (copy: any) => { copy.capacityAfterCancellation.worstCaseLoss = { currency: 'AUD', units: '5000', exponent: 2 } }],
     ['action-use linkage', (copy: any) => { copy.invocations[1].acceptedAuthority.authorityUseRef = 'other' }],
     ['evidence', (copy: any) => { copy.mandateSnapshot.exposureOffsets[0].evidenceRef = 'other' }],
     ['event order', (copy: any) => { copy.invocations[0].events.reverse() }],

@@ -36,7 +36,9 @@ export function operationIntegrityValid(
     | 'adapterConfigJson'
     | 'endpointUrl'
     | 'credentialRef'
+    | 'connectionAuthority'
     | 'projectedInputDigest'
+    | 'canonicalClaimMaterial'
   >,
 ): boolean {
   const material = {
@@ -53,6 +55,9 @@ export function operationIntegrityValid(
     bindingRegistrationHash: operation.bindingRegistrationHash,
     adapterId: operation.adapterId,
     adapterConfigDigest: operation.adapterConfigDigest,
+    ...(operation.connectionAuthority === undefined
+      ? {}
+      : { connectionAuthority: operation.connectionAuthority }),
     adapterConfigJson: operation.adapterConfigJson,
     endpointUrl: operation.endpointUrl,
     credentialRef: operation.credentialRef,
@@ -62,6 +67,30 @@ export function operationIntegrityValid(
     && operation.operationRef === `preparation-egress:${operation.operationDigest}`
     && operation.requestId === operation.lineage.requestId
     && operation.principalId === operation.lineage.principalId
+    && canonicalClaimMaterialValid(operation)
+}
+
+function canonicalClaimMaterialValid(
+  operation: Pick<EgressOperationRow, 'operationRef' | 'principalId' | 'requestId' | 'lineage' | 'projectedInputDigest' | 'canonicalClaimMaterial'>,
+): boolean {
+  const material = operation.canonicalClaimMaterial
+  if (material === undefined) return false
+  return material.invocationRef === `action-invocation:customer-request-preparation:${operation.operationRef}`
+    && material.sourceRef === operation.operationRef
+    && material.invocationVersion === 1
+    && material.actor.callerRef === 'runtime:customer-request-preparation-egress'
+    && material.actor.principalRef === operation.principalId
+    && material.origin.kind === 'request_owned'
+    && material.origin.requestRef === operation.requestId
+    && material.origin.revision === operation.lineage.requestRevision
+    && material.action.id === operation.lineage.actionId
+    && material.action.contractVersion === String(operation.lineage.contractRef.version)
+    && material.materialInputDigest === operation.projectedInputDigest
+    && material.attempt.attemptRef === `action-attempt:customer-request-preparation:${operation.operationRef}`
+    && material.attempt.attemptNumber === 1
+    && material.attempt.effectGeneration === 1
+    && material.attempt.operationKey === operation.operationRef
+    && material.attempt.leaseOwner === 'runtime:customer-request-preparation-egress'
 }
 
 export function allocationIntegrityValid(

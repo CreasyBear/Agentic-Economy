@@ -4,31 +4,18 @@ import { Agent, fetch as guardedFetch } from 'undici'
 import { v, type Infer } from 'convex/values'
 
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import {
+  isOwnerSupplyRecord,
+  ownerSupplyEndpointValue,
+  ownerSupplyPricingValue,
+  ownerSupplyValue,
+} from '@/modules/capability-supply/owner-supply-validators'
 
 import { internal } from './_generated/api'
 import { action, type ActionCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
 
-const ownerSupplyEndpointValue = v.object({
-  sourceKind: v.union(v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
-  descriptor: v.string(),
-  selector: v.string(),
-  endpointUrl: v.string(),
-  method: v.union(v.literal('GET'), v.literal('POST')),
-  queryMapping: v.string(),
-  protocolVersion: v.string(),
-  toolName: v.string(),
-  requestTimeoutMs: v.number(),
-  credentialRef: v.string(),
-})
-const ownerSupplyPricingValue = v.object({
-  version: v.literal('pricing:v1'),
-  unit: v.literal('call'),
-  currency: v.string(),
-  paidAmountMinor: v.number(),
-  freeTier: v.optional(v.object({ maxCalls: v.number(), window: v.union(v.literal('day'), v.literal('month')) })),
-})
 const ownerSupplyActionValue = v.object({
   endpoint: ownerSupplyEndpointValue,
   pricing: v.optional(ownerSupplyPricingValue),
@@ -65,14 +52,6 @@ async function isOwnerSupplyActionAuthorized(ctx: ActionCtx, businessId: Id<'bus
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return false
   return await ctx.runQuery(internal.capabilitySupply.authorizeOwnerSupplyAction, { businessId })
-}
-
-function isOwnerSupplyRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function ownerSupplyValue(value: unknown): Record<string, unknown> {
-  return isOwnerSupplyRecord(value) ? value : {}
 }
 
 function ownerSupplyEndpoint(value: unknown): { kind: 'available'; url: URL } | { kind: 'refused'; refusal: 'target_not_public' } {
@@ -149,3 +128,5 @@ export const runOwnerSupplyTest = action({
     }
   },
 })
+
+

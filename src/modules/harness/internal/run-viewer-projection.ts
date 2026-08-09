@@ -18,7 +18,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { parseBoundedJson } from '@/modules/common/bounded-json'
 import { round2 } from '@/modules/common/round-2'
 import { sumToolDurationMs } from '@/modules/common/tool-duration'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import type {
   HarnessEventCounters,
   HarnessRunReport,
@@ -175,7 +175,7 @@ export function buildHarnessRunViewerDetailProjection(
       filters,
       turnId: input.turnId,
       ...(input.source === undefined ? {} : { source: input.source }),
-      publicMessage: 'No answer turn matched that run evidence request.',
+      publicMessage: 'No answer turn matched that run request.',
       rows: [],
     }
   }
@@ -189,7 +189,7 @@ export function buildHarnessRunViewerDetailProjection(
       filters,
       turnId: input.turnId,
       ...(input.source === undefined ? {} : { source: input.source }),
-      publicMessage: 'That answer turn has no current run evidence available.',
+      publicMessage: 'That answer turn has no current run report available.',
       rows: [],
     }
   }
@@ -356,7 +356,7 @@ function buildEvidenceSummary(
     toolCallCount: evidence?.toolCalls.length ?? 0,
     timingCount: evidence?.timings.length ?? 0,
     workLogCount: evidence?.workLog.length ?? 0,
-    resultHashes: stableUnique(resultHashes).sort((a, b) => a.localeCompare(b)),
+    resultHashes: uniq(resultHashes).sort((a, b) => a.localeCompare(b)),
     ...(evidence === undefined || evidence.agentJsonUrl.trim().length === 0 ? {} : { agentJsonUrl: evidence.agentJsonUrl }),
     artifactKinds,
   }
@@ -371,7 +371,6 @@ function buildPublicProjectionDiff(
     threadId: turn.threadId,
     pseudonymousSessionId: 'admin-run-viewer-redacted',
     title: `Run ${turn.turnId}`,
-    sharePolicy: 'public',
     createdAt: turn.createdAt,
     updatedAt: turn.createdAt,
   }
@@ -622,10 +621,10 @@ function normalizeFilterText(value: string | undefined): string | undefined {
 
 function defaultDeniedMessage(reason: string): string {
   if (reason === 'source_read_not_configured') {
-    return 'Admin run evidence requires a dedicated source read before raw evidence can be shown.'
+    return 'Admin runs require a dedicated source read before raw evidence can be shown.'
   }
 
-  return 'Admin run evidence requires active source-owned membership.'
+  return 'Admin runs require active source-owned membership.'
 }
 
 function previewText(value: string): string {

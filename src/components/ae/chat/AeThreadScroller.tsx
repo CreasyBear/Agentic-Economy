@@ -52,8 +52,6 @@ export function AeThreadScroller({
     >
       <ConversationContent
         aria-label="Chat transcript"
-        aria-live="polite"
-        aria-relevant="additions text"
         className={cn('mx-auto flex w-full max-w-[56rem] flex-col gap-6 p-0', contentClassName)}
         scrollClassName="min-h-0 flex-1 overflow-auto px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-6"
       >

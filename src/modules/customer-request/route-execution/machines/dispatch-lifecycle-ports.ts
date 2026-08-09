@@ -35,6 +35,7 @@ export type DispatchLifecyclePorts = Readonly<{
     }>
     expectedOfferingRegistrationHash: string
     expectedBindingRegistrationHash: string
+    now: number
   }>) => Promise<CancelSupplyLoadResult>
 
   loadPublicationAtRevision: (
@@ -71,6 +72,7 @@ export type DispatchLifecycleOpenPorts = Pick<
   | 'now'
   | 'loadDispatchByRef'
   | 'loadAttemptByRef'
+  | 'loadRunByRef'
   | 'loadActiveMandateForPrincipal'
   | 'loadEligibleExactCapabilitySupply'
   | 'loadPublicationAtRevision'

@@ -18,7 +18,11 @@ const comparison = {
     scopeBasis: { kind: 'known' as const, value: 'emergency plumbing', source: { kind: 'business_supplied' as const }, observedAt: 1 },
     priceBasis: {
       kind: 'known' as const,
-      value: { description: 'per visit', currency: 'AUD', unit: 'unit' as const },
+      value: {
+        description: 'per visit',
+        amount: { currency: 'AUD', units: '18000', exponent: 2 },
+        unit: 'unit' as const,
+      },
       source: { kind: 'business_supplied' as const },
       observedAt: 1,
     },
@@ -26,6 +30,17 @@ const comparison = {
     serviceArea: { kind: 'known' as const, value: 'Perth metro', source: { kind: 'publicly_observed' as const, referenceUrl: 'https://example.test/area' }, observedAt: 1 },
   },
 }
+
+const obsoleteComparison = {
+  ...comparison,
+  profile: {
+    ...comparison.profile,
+    priceBasis: {
+      ...comparison.profile.priceBasis,
+      value: { description: 'per visit', currency: 'AUD', unit: 'unit' as const },
+    },
+  },
+} as const
 
 const currentProjection = (businessId: Id<'businesses'>, slug: string) => ({
   business: { businessId, slug, name: 'Legacy-compatible business', category: 'Emergency plumbing', suburb: 'Perth', stateTerritory: 'WA', publicUrl: `/${slug}`, trustTier: 'listed' as const },
@@ -94,7 +109,7 @@ function legacyDiscoveryManifestRow(businessId: Id<'businesses'>, slug: string) 
 }
 
 describe('catalog, registry, and discovery legacy supply compatibility', () => {
-  it('accepts the exact historical Offering comparison envelope', async () => {
+  it('accepts the current exact Offering comparison envelope', async () => {
     const backend = convexTest(schema, convexModules)
     const { businessId } = await publishedBusinessOwner(backend, 'legacy-comparison')
 
@@ -111,6 +126,23 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
     }))
 
     await expect(backend.run((ctx) => ctx.db.get(revision))).resolves.toMatchObject({ comparison })
+  })
+
+  it('refuses the obsolete pre-cutover Offering comparison envelope', async () => {
+    const backend = convexTest(schema, convexModules)
+    const { businessId } = await publishedBusinessOwner(backend, 'obsolete-comparison')
+
+    await expect(backend.run((ctx) => ctx.db.insert('businessOfferingRevisions', {
+      offeringRef: 'offering:obsolete:pipe',
+      businessId,
+      revision: 1,
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      summary: 'Emergency plumbing help.',
+      comparison: obsoleteComparison,
+      sourceHash: 'digest:obsolete-revision',
+      createdAt: 1,
+    }))).rejects.toThrow()
   })
 
   it('rejects malformed comparison and mixed snapshot rows instead of widening the union', async () => {

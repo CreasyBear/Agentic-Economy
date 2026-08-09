@@ -12,8 +12,8 @@ vi.mock('node:dns/promises', () => ({
 import {
   confirmStorefrontImportDraft,
   extractStorefrontDraftFromHtml,
-  importStorefrontDraftFromWebsite,
 } from '@/modules/storefront/public'
+import { importStorefrontDraftFromWebsite } from '@/modules/storefront/server'
 import { createGuardedLookup, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { handleImportStorefrontDraftRequest } from '@/routes/api.storefront.import-draft'
 

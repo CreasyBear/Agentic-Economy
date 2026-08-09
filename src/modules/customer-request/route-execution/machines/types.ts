@@ -1,8 +1,29 @@
+import type { CustomerRequestCanonicalClaimMaterial } from '@/modules/action-invocation/canonical-claim'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
 import type { RouteMandate } from '@/modules/customer-request/route-mandate'
+import type { ExactAmount } from '@/modules/money/public'
+import type { CapabilityConnectionAuthoritySnapshot, CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 
 import type { RouteAttemptState } from '../journal/export-state'
+
+type RouteExecutionBindingMaterial = Readonly<{
+  adapterId: string
+  endpointUrl: string
+  configJson: string
+  configDigest: string
+}>
+
+export type RouteExecutionBinding =
+  | (RouteExecutionBindingMaterial & Readonly<{
+    authority: Extract<CapabilityTransportAuthority, { kind: 'keyless' }>
+    connectionAuthority?: never
+  }>)
+  | (RouteExecutionBindingMaterial & Readonly<{
+    authority: Extract<CapabilityTransportAuthority, { kind: 'provider_connection' }>
+    connectionAuthority: CapabilityConnectionAuthoritySnapshot
+  }>)
+
 
 export type RunProjection = Readonly<{
   runRef: string
@@ -167,9 +188,8 @@ export type DispatchRecordSnapshot = Readonly<{
   operationKeyDigest: string
   state: 'pending' | 'leased' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
   availableAt: number
-  /** Deprecated persisted lease metadata; current writers leave these absent. */
-  leaseOwner?: string
-  leaseExpiresAt?: number
+  leaseOwner: string
+  leaseExpiresAt: number
   createdAt: number
 }>
 
@@ -240,20 +260,20 @@ export type CancellationAttemptSnapshot = Readonly<{
 }>
 
 export type CancelMandateLoadResult = Readonly<
-  | { kind: 'active'; mandateRef: string; mandateDigest: string; networkId: string }
+  | {
+      kind: 'active'
+      mandateRef: string
+      mandateDigest: string
+      networkId: string
+      mandate: RouteMandate
+    }
   | { kind: 'missing' }
 >
 
 export type CancelSupplyLoadResult = Readonly<
   | {
     kind: 'available'
-    binding: Readonly<{
-      adapterId: string
-      endpointUrl: string
-      credentialRef: string
-      configJson: string
-      configDigest: string
-    }>
+    binding: RouteExecutionBinding
   }
   | { kind: 'unavailable' }
 >
@@ -261,21 +281,24 @@ export type CancelSupplyLoadResult = Readonly<
 export type CancellationInvocation = Readonly<{
   cancellationRef: string
   attemptRef: string
+  requestId: string
+  requestRevision: number
+  principalId: string
+  mandateRef: string
   operationKeyDigest: string
-  binding: Readonly<{
-    adapterId: string
-    endpointUrl: string
-    credentialRef: string
-    configJson: string
-    configDigest: string
-  }>
+  grantRef: string
+  authorityDigest: string
+  actionId: string
+  position: number
+  binding: RouteExecutionBinding
   authority: Readonly<{
     mandateDigest: string
     grantDigest: string
     capabilityContractDigest: string
-    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
+    maximumSpend: ExactAmount
     expiresAt: number
   }>
+  canonical: CustomerRequestCanonicalClaimMaterial
 }>
 
 export type OpenCancellationResult = Readonly<
@@ -311,23 +334,26 @@ export type DispatchInvocation = Readonly<{
   dispatchRef: string
   attemptRef: string
   runRef: string
+  requestId: string
+  requestRevision: number
+  principalId: string
+  mandateRef: string
+  grantRef: string
+  authorityDigest: string
+  actionId: string
+  position: number
   operationKeyDigest: string
   inputJson: string
   inputDigest: string
-  binding: Readonly<{
-    adapterId: string
-    endpointUrl: string
-    credentialRef: string
-    configJson: string
-    configDigest: string
-  }>
+  binding: RouteExecutionBinding
   authority: Readonly<{
     mandateDigest: string
     grantDigest: string
     capabilityContractDigest: string
-    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
+    maximumSpend: ExactAmount
     expiresAt: number
   }>
+  canonical: CustomerRequestCanonicalClaimMaterial
 }>
 
 export type OpenDispatchResult = Readonly<

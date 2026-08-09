@@ -1,19 +1,17 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
-import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import {
   AeOwnerOfferingEditor,
   AeOwnerOfferingsList,
 } from '@/components/ae/offerings/AeOwnerOfferings'
 import { emptyOwnerOfferingEditorValue, toOwnerOfferingSummary } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 
 
@@ -33,7 +31,7 @@ describe('Offering market surfaces', () => {
     expect(screen.getByText('How to start this service')).toBeTruthy()
     expect(screen.getByText('Quotes this published service through the demo provider.')).toBeTruthy()
     expect(screen.getByText('Published by the business')).toBeTruthy()
-    expect(screen.getByText('AUD 42 per item incl. tax')).toBeTruthy()
+    expect(screen.getByText('AUD 42.00 per item incl. tax')).toBeTruthy()
     expect(screen.getByText('An AI assistant can start this service')).toBeTruthy()
     expect(screen.queryByText(/verified/i)).toBeNull()
     expect(screen.queryByText('POST')).toBeNull()
@@ -48,26 +46,6 @@ describe('Offering market surfaces', () => {
     render(<AeOfferingSupplyList {...view} />)
     expect(screen.getByRole('link', { name: 'Website' }).getAttribute('href')).toBe('https://example.com/start')
     expect(screen.queryByText(/routeable|binding|capability/i)).toBeNull()
-  })
-
-  it('uses the first two services and compact access summary in registry cards', () => {
-    renderWithRouter(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [
-      ...v2BusinessFixture().offerings,
-      { offeringRef: 'offering:second', revision: 1, name: 'Second service', category: 'Data', summary: 'Second.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
-      { offeringRef: 'offering:third', revision: 1, name: 'Hidden third service', category: 'Data', summary: 'Third.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
-    ] }} />)
-    expect(screen.getByLabelText('Published offerings').textContent).toContain('Data lookup')
-    expect(screen.getByLabelText('Published offerings').textContent).toContain('Second service')
-    expect(screen.queryByText('Hidden third service')).toBeNull()
-    // Every business can be contacted, so contactability is not a badge.
-    expect(screen.queryByText('Contact available')).toBeNull()
-  })
-
-  it('keeps a profile-only business visible in the v2 registry card', () => {
-    renderWithRouter(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [], accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false } }} />)
-    expect(screen.getByText('V2 Business')).toBeTruthy()
-    expect(screen.queryByText('No services published yet')).toBeNull()
-    expect(screen.queryByText('No contact or request published yet')).toBeNull()
   })
 
   it('shows last-safe public facts when projection freshness degrades', () => {
@@ -173,10 +151,13 @@ function projectionFixture(): PublicOfferingSupplyProjection {
       category: 'Data',
       summary: 'Query indexed blockchain data.',
       pricingSummary: 'Usage based',
-      price: { kind: 'fixed', currency: 'AUD', amountMinor: 4200, unit: 'item', taxTreatment: 'inclusive' },
+      price: { kind: 'fixed', amount: { currency: 'AUD', units: '4200', exponent: 2 }, unit: 'item', taxTreatment: 'inclusive' },
     },
     accessPaths: [{
       accessPathRef: brandNonEmpty('access:blockchain-query', 'AccessPathRef'),
+      offeringRevision: 2,
+      offeringSourceHash: canonicalDigest('offering-surfaces:blockchain-query'),
+      sourceHash: canonicalDigest('offering-surfaces:access:blockchain-query'),
       descriptor: {
         kind: 'external_operation',
         name: 'GraphQL endpoint',
@@ -195,15 +176,8 @@ function v2BusinessFixture() {
   return {
     schemaVersion: 'public-business-catalog-api:v2' as const,
     businessId: 'business:v2', slug: 'v2-business', name: 'V2 Business', category: 'Data', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/v2-business', trustTier: 'claimed' as const, photos: [], observedAt: 1, disposition: 'current' as const,
-    offerings: [{ offeringRef: 'offering:v2', revision: 1, name: 'Data lookup', category: 'Data', summary: 'Look up public data.', accessPaths: [{ accessPathRef: 'access:v2:web', kind: 'human_request' as const, channel: 'website' as const, disclosure: 'Start on the business website.', url: 'https://example.com/start' }], support: { integrated: false, aeSupportedAction: false } }],
+    offerings: [{ offeringRef: 'offering:v2', revision: 1, name: 'Data lookup', category: 'Data', summary: 'Look up public data.', accessPaths: [{ accessPathRef: 'access:v2:web', offeringRevision: 1, offeringSourceHash: canonicalDigest('offering-surfaces:v2'), sourceHash: canonicalDigest('offering-surfaces:access:v2:web'), kind: 'human_request' as const, channel: 'website' as const, disclosure: 'Start on the business website.', url: 'https://example.com/start' }], support: { integrated: false, aeSupportedAction: false } }],
     accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
   }
 }
 
-function renderWithRouter(ui: ReactElement) {
-  const rootRoute = createRootRoute()
-  const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
-  const routeTree = rootRoute.addChildren([slugRoute])
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
-  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
-}

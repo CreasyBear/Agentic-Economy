@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.nvmrc'
           cache: npm
 
       - name: Pin the repository package manager
@@ -42,12 +42,13 @@ jobs:
             --arg workflowRun "${GITHUB_RUN_ID}" \
             --arg evidenceClass "source-release-gate" \
             '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
-            > output/release/source-metadata.json
+          > output/release/source-metadata.json
 
-      - name: Verify committed Convex generated source
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npm run check:convex-codegen
+      - name: Validate the closed deployment manifest
+        run: npm run verify:deployment-manifest -- --environment development
+
+      - name: Run focused provider and recovery conformance
+        run: npm run test:conformance
 
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
@@ -84,6 +85,22 @@ jobs:
       AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      NODE_ENV: production
+      VERCEL_ENV: production
+      AE_CANONICAL_BASE_URL: https://agentic-economy-phi.vercel.app
+      AE_CANONICAL_HOST_ALLOWLIST: agentic-economy-phi.vercel.app
+      CONVEX_URL: ${{ secrets.AE_WORK_TREE_DEPLOY_CONVEX_URL }}
+      AE_CONVEX_SERVER_FUNCTION_TOKEN: ${{ secrets.AE_CONVEX_SERVER_FUNCTION_TOKEN }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+      CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AE_SOURCE_WRITE_KEY_INQUIRY: ${{ secrets.AE_SOURCE_WRITE_KEY_INQUIRY }}
+      AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
+      AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
+      AE_SOURCE_WRITE_KEY_CLAIM: ${{ secrets.AE_SOURCE_WRITE_KEY_CLAIM }}
+      AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
+      AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
+      AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
       AE_WORK_TREE_EVIDENCE_DIR: output/release/work-tree-parity
       AE_WORK_TREE_TIMEOUT_MS: '180000'
     steps:
@@ -91,7 +108,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.nvmrc'
           cache: npm
 
       - name: Pin the repository package manager
@@ -99,6 +116,10 @@ jobs:
 
       - name: Frozen dependency install for independent readback
         run: npm ci
+      - name: Refuse incomplete target production deployment manifest
+        run: npm run verify:deployment-manifest -- --environment production
+
+
 
       - name: Record exact hosted evidence identity
         run: |
@@ -113,6 +134,12 @@ jobs:
 
       - name: Refuse a checkout other than the triggering revision
         run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
+
+      # Convex 1.42 codegen still resolves and uses deployment credentials with --dry-run.
+      - name: Verify committed Convex generated source
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: npm run check:convex-codegen
 
       - name: Deploy the dual-compatible exact clean source revision
         id: deploy

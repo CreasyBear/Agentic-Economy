@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { jsonError } from '@/lib/server/json-error'
+import { problem } from '@/lib/server/problem'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 import { response as jsonResponse } from '@/lib/server/no-store-response'
 import { assertHttpAdmission, rateLimitedResponse, requestAdmissionKey, type RateLimitAdmission } from '@/lib/server/rate-limit'
 
@@ -28,6 +30,14 @@ export const Route = createFileRoute('/api/answer/follow-up-chips')({
   server: {
     handlers: {
       POST: ({ request }) => handleFollowUpChipsRequest(request),
+      GET: () => methodNotAllowed(['POST']),
+      PUT: () => methodNotAllowed(['POST']),
+      PATCH: () => methodNotAllowed(['POST']),
+      DELETE: () => methodNotAllowed(['POST']),
+      HEAD: () => methodNotAllowed(['POST']),
+      OPTIONS: () => methodNotAllowed(['POST']),
+      TRACE: () => methodNotAllowed(['POST']),
+      CONNECT: () => methodNotAllowed(['POST']),
     },
   },
 })
@@ -43,6 +53,10 @@ export async function handleFollowUpChipsRequest(
   options: FollowUpChipsHandlerOptions = {},
 ): Promise<Response> {
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
+
+  if (!request.headers.get('content-type')?.includes('application/json')) {
+    return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
+  }
 
   const boundedBody = await readBoundedRequestJson(request, MAX_FOLLOW_UP_CHIPS_BODY_BYTES)
   if (!boundedBody.ok) {

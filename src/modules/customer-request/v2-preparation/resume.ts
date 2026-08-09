@@ -35,7 +35,7 @@ export async function resumeActionPreparation(
   })
   const action = revision.aggregate.plan.actions.find((candidate) => candidate.actionId === args.actionId)
   if (action === undefined) return { kind: 'stale' }
-  const model = await ports.loadActionCapabilityModel(revision.aggregate, action)
+  const model = await ports.loadActionCapabilityModel(revision.aggregate, action, args.now)
   if (model === undefined) return { kind: 'stale' }
   const projected = projectActionPreparation({
     aggregate: revision.aggregate,

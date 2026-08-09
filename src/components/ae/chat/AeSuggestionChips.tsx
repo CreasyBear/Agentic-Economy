@@ -97,7 +97,7 @@ export function AeFollowUpChips({ turn, onSelect, contextPlacement = 'current' }
   return (
     <section className="grid gap-3 rounded-md border border-border bg-card p-3" aria-label="Continue this thread">
       <div className="grid gap-0.5">
-        <p className="font-heading text-sm text-foreground">Continue with these listings</p>
+        <p className="font-heading text-sm text-foreground">Continue with these options</p>
         <p className="text-xs leading-snug text-muted-foreground">{summary}</p>
       </div>
       <AeAnswerSuggestions
@@ -117,37 +117,37 @@ function followUpSummary(
   contextPlacement: NonNullable<AeFollowUpChipsProps['contextPlacement']>,
 ): string {
   const providers = extractProviders(turn)
-  const hasListedBusinesses = providers.length > 0
+  const hasMatches = providers.length > 0
   const hasInquiryReadyBusiness = providers.some((provider) =>
     typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0)
 
   if (chips.some(isInquiryHandoffChip)) {
     if (contextPlacement === 'carried') {
-      return 'Narrow, compare, or prepare a qualified inquiry from the businesses already found in this thread.'
+      return 'Narrow or compare the options already found here, or ask the business about them.'
     }
-    return 'Narrow, compare, or prepare a qualified inquiry from the listed businesses above.'
+    return 'Narrow or compare the options above, or ask the business about them.'
   }
 
-  if (hasListedBusinesses && !hasInquiryReadyBusiness) {
-    return 'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.'
+  if (hasMatches && !hasInquiryReadyBusiness) {
+    return 'These options do not have a request form yet. Narrow, compare, or review a business.'
   }
 
   if (turn.artifacts.some((artifact) => artifact.kind === 'selected-provider')) {
     if (contextPlacement === 'carried') {
-      return 'Use the selected inquiry path from this thread, or keep narrowing this thread.'
+      return 'Use the selected business\'s request form from this thread, or keep narrowing the options.'
     }
-    return 'Use the selected inquiry path above, or keep narrowing this thread.'
+    return 'Use the selected business\'s request form above, or keep narrowing the options.'
   }
 
-  if (chips.some((chip) => chip.label === 'Only inquiry-ready listings')) {
-    return 'Filter to inquiry-ready listings, or keep narrowing this thread.'
+  if (chips.some((chip) => chip.label === 'Businesses accepting requests')) {
+    return 'Filter to businesses accepting requests, or keep narrowing the options.'
   }
 
-  return 'Narrow or compare the listed businesses from this thread.'
+  return 'Narrow or compare the matches from this thread.'
 }
 
 function isInquiryHandoffChip(chip: FollowUpChip): boolean {
-  return /^(?:prepare|send|start) a qualified inquiry(?:\s+(?:for|to|with)\b|$)/i.test(chip.submitQuery.trim())
+  return /^message\s+.+$/i.test(chip.submitQuery.trim())
 }
 
 function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {

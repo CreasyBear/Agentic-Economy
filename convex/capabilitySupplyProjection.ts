@@ -438,11 +438,20 @@ function catalogOfferingOrigin(value: unknown): CatalogOfferingOrigin | undefine
 
 function offeringPrice(value: unknown): OfferingPrice | undefined {
   if (!isRecord(value)) return undefined
+  const allowedFields = value.kind === 'quote_only'
+    ? ['kind', 'currency', 'unit', 'taxTreatment']
+    : value.kind === 'fixed' || value.kind === 'from'
+      ? ['kind', 'amount', 'unit', 'taxTreatment']
+      : value.kind === 'range'
+        ? ['kind', 'minimum', 'maximum', 'unit', 'taxTreatment']
+        : undefined
+  if (allowedFields === undefined || Object.keys(value).some((field) => !allowedFields.includes(field))) return undefined
   return normalizeOfferingPrice({
     ...(typeof value.kind === 'string' ? { kind: value.kind } : {}),
     ...(typeof value.currency === 'string' ? { currency: value.currency } : {}),
-    ...(typeof value.amountMinor === 'number' ? { amountMinor: value.amountMinor } : {}),
-    ...(typeof value.maximumAmountMinor === 'number' ? { maximumAmountMinor: value.maximumAmountMinor } : {}),
+    ...(value.amount === undefined ? {} : { amount: value.amount }),
+    ...(value.minimum === undefined ? {} : { minimum: value.minimum }),
+    ...(value.maximum === undefined ? {} : { maximum: value.maximum }),
     ...(typeof value.unit === 'string' ? { unit: value.unit } : {}),
     ...(typeof value.taxTreatment === 'string' ? { taxTreatment: value.taxTreatment } : {}),
   })
@@ -520,6 +529,9 @@ function toPersistedProjection(projection: BusinessSupplyProjection, businessId:
       },
       accessPaths: entry.accessPaths.map((path) => ({
         accessPathRef: path.accessPathRef,
+        offeringRevision: path.offeringRevision,
+        offeringSourceHash: path.offeringSourceHash,
+        sourceHash: path.sourceHash,
         descriptor: toPersistedDescriptor(path.descriptor),
       })),
       support: {

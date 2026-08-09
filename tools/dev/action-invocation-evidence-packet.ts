@@ -79,7 +79,7 @@ export async function readAndVerifyEvidencePacket(path: string, expectedRevision
   if (action.id !== 'supply.collectDevelopmentQuote' || action.version !== 'supply.collectDevelopmentQuote:v1') {
     throw new Error('packet_action_identity_refused')
   }
-  const reconstructed = reconstructPacketMeaning(envelope.packet)
+  const reconstructed = await reconstructPacketMeaning(envelope.packet)
   return {
     environment: envelope.packet.environment,
     gitRevision: expectedRevision,
@@ -131,8 +131,8 @@ export async function readAndVerifyProviderOperationPacket(path: string, expecte
       after: ActionInvocationView<DevelopmentProviderOperationResult>
     } }
   }
-  const terminal = reconstructProviderOperationRows(durable.terminal, true)
-  const uncertain = reconstructProviderOperationRows(durable.uncertain, false)
+  const terminal = await reconstructProviderOperationRows(durable.terminal, true)
+  const uncertain = await reconstructProviderOperationRows(durable.uncertain, false)
   validateProviderOperationLinkage(durable.terminal, true)
   validateProviderOperationLinkage(durable.uncertain, false)
   if (
@@ -159,7 +159,7 @@ export async function readAndVerifyProviderOperationPacket(path: string, expecte
 
 function validateProviderOperationAdvertisedChecks(
   packet: Record<string, unknown>,
-  terminal: ReturnType<typeof reconstructProviderOperationRows>,
+  terminal: Awaited<ReturnType<typeof reconstructProviderOperationRows>>,
 ) {
   const input = packet as unknown as ProviderOperationPacket
   const eventOrder = input.eventOrder
@@ -380,7 +380,7 @@ function validateProviderOperationLinkage(durable: PacketDurable, terminal: bool
   }
 }
 
-function reconstructProviderOperationRows(durable: PacketDurable, terminal: boolean) {
+async function reconstructProviderOperationRows(durable: PacketDurable, terminal: boolean) {
   if (!durable.controls?.length || !durable.history?.length) {
     throw new Error('packet_provider_operation_durable_rows_refused')
   }
@@ -424,8 +424,9 @@ function reconstructProviderOperationRows(durable: PacketDurable, terminal: bool
         },
       }),
     }),
-  }, invocationRef)
-  const view = tracer.inspect(invocationRef)
+  })
+  const resumed = await tracer.coldResume(invocationRef)
+  const view = resumed.inspect(invocationRef)
   if (view === undefined || (terminal && view.control.state !== 'terminal')) {
     throw new Error('packet_provider_operation_control_reconstruction_refused')
   }
@@ -444,7 +445,7 @@ type PacketDurable = Readonly<{
   }>
 }>
 
-function reconstructPacketMeaning(packet: Record<string, unknown>) {
+async function reconstructPacketMeaning(packet: Record<string, unknown>) {
   const durable = packet.durable as PacketDurable
   if (!durable.controls?.length || !durable.attempts?.length || !durable.history?.length) {
     throw new Error('packet_durable_meaning_refused')
@@ -493,23 +494,22 @@ function reconstructPacketMeaning(packet: Record<string, unknown>) {
         resultDigest,
       },
     }),
-  }, invocationRef)
-  const view = tracer.inspect(invocationRef)
+  })
+  const resumed = await tracer.coldResume(invocationRef)
+  const view = resumed.inspect(invocationRef)
   if (
     view?.observedResolution.state !== 'returned'
     || view.observedResolution.businessOutcome !== 'completed'
     || view.action.id !== collectSuppliedCandidateQuoteAction.id
     || view.action.contractVersion !== resolveActionContract(collectSuppliedCandidateQuoteAction).version
   ) throw new Error('packet_control_reconstruction_refused')
-  const identity = readCompletedResultIdentity(
-    port,
-    invocationRef,
-    developmentEvidenceActor,
-    () => ({
-      sourceResultRef: durable.source.sourceResultRef,
-      result: durable.source.result,
-    }),
-  )
+  const identity = await readCompletedResultIdentity(port,
+  invocationRef,
+  developmentEvidenceActor,
+  () => ({
+    sourceResultRef: durable.source.sourceResultRef,
+    result: durable.source.result,
+  }),)
   if (identity.kind === 'refused') throw new Error(`packet_result_identity_refused:${identity.code}`)
   const reference = packet.completedReference as Record<string, unknown>
   if (

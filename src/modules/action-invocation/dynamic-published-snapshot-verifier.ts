@@ -5,6 +5,12 @@ import type {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import {
+  compareExactAmounts,
+  exactAmountSchema,
+  rescaleExactAmount,
+  type ExactAmount,
+} from '@/modules/money/public'
 
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
 import type { ActionInvocationView } from './contracts'
@@ -14,23 +20,29 @@ import {
   executableFixedPrice,
 } from './dynamic-published-contract'
 import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter'
-import { reconstructDurableControlRow } from './internal/durable-contracts'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
+import { reconstructDurableControlRow } from './internal/durable-contracts'
 
 const recordSchema = z.looseObject({})
 const nonEmptyStringSchema = z.string().min(1)
 const sensitiveStringPattern = /(private.?key|payment.?signature|credential)/i
-
-function optionalFieldsAreAbsent(value: Record<string, unknown>, fields: readonly string[]): boolean {
-  const keys = Object.keys(value)
-  return fields.every((field) => !(keys.includes(field) && value[field] === undefined))
+function optionalFieldsAreAbsent(value: object, fields: readonly string[]): boolean {
+  const record = value as Record<string, unknown>
+  return fields.every((field) => !Object.hasOwn(value, field) || record[field] !== undefined)
 }
-
 const sourceRowSchema = z.looseObject({
   operationKey: z.string(),
   operation: recordSchema,
   input: recordSchema,
+  moneyCharge: z.strictObject({
+    transactionRef: nonEmptyStringSchema,
+    principalId: nonEmptyStringSchema,
+    chargeState: z.enum(['free_tier', 'paid']),
+    amount: exactAmountSchema,
+    priceDigest: nonEmptyStringSchema,
+  }).optional(),
 })
+
 
 const semanticResultIdentitySchema = z.strictObject({
   sourceResultRef: z.string(),
@@ -56,10 +68,7 @@ const semanticClaimSchema = z.strictObject({
     ? value.outcome === undefined
     : value.outcome !== undefined)
 
-const settledAmountSchema = z.strictObject({
-  currency: nonEmptyStringSchema,
-  amountMinor: z.number().int().safe().min(0),
-})
+const settledAmountSchema = exactAmountSchema
 
 const paymentAttemptSchema = z.strictObject({
   paymentIdentifier: nonEmptyStringSchema,
@@ -72,7 +81,7 @@ const paymentAttemptSchema = z.strictObject({
   network: nonEmptyStringSchema,
   asset: nonEmptyStringSchema,
   payTo: nonEmptyStringSchema,
-  amount: nonEmptyStringSchema,
+  amount: exactAmountSchema,
   providerEndpoint: nonEmptyStringSchema,
   operationRevision: nonEmptyStringSchema,
   authorizationDigest: nonEmptyStringSchema,
@@ -146,7 +155,7 @@ const commandSchema = z.looseObject({
 })
 
 const dynamicPublishedSnapshotShapeSchema = z.strictObject({
-  format: z.literal('dynamic-published-action-invocation:development:v3'),
+  format: z.literal('dynamic-published-action-invocation:development:v4'),
   sourceRows: z.array(sourceRowSchema),
   semanticClaims: z.array(semanticClaimSchema).max(1),
   controls: z.array(sourceGroupSchema),
@@ -199,12 +208,7 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
   anchors: DynamicPublishedSnapshotAnchors
 }>): DynamicPublishedAdapterSnapshot {
   assertDynamicPublishedSnapshotShape(input.snapshot)
-  const rawSnapshot = input.snapshot
-  const normalizedControls = rawSnapshot.controls.map(reconstructDurableControlRow)
-  const snapshot = normalizedControls.length === rawSnapshot.controls.length
-    && normalizedControls.every((row, index) => row === rawSnapshot.controls[index])
-    ? rawSnapshot
-    : { ...rawSnapshot, controls: normalizedControls }
+  const snapshot = input.snapshot
   const {
     operation,
     descriptor,
@@ -214,17 +218,19 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
   } = input.anchors
   const source = snapshot.sourceRows[0]
   const semanticClaim = snapshot.semanticClaims[0]
-  const control = snapshot.controls[0]
+  const rawControl = snapshot.controls[0]
   const attemptGroup = snapshot.attempts[0]
   const historyGroup = snapshot.history[0]
   if (
     source === undefined
-    || control === undefined
+    || rawControl === undefined
     || attemptGroup === undefined
     || historyGroup === undefined
   ) {
     throw new Error('dynamic_published_snapshot_schema_invalid')
   }
+  const control = reconstructDurableControlRow(rawControl)
+  const authorityBinding = control.authorityBinding
   const recomputedInput = buildDynamicPublishedInput({
     operation,
     descriptor,
@@ -275,28 +281,28 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
       !== canonicalDigest(origin)
     || control.control.action.id !== operation.operationId
     || control.control.action.contractVersion !== descriptor.version
-    || control.authorityBinding?.actor.callerRef !== actor.callerRef
-    || control.authorityBinding.actor.principalRef !== actor.principalRef
-    || canonicalDigest(control.authorityBinding.origin)
+    || authorityBinding === undefined
+    || authorityBinding.actor.callerRef !== actor.callerRef
+    || authorityBinding.actor.principalRef !== actor.principalRef
+    || canonicalDigest(authorityBinding.origin)
       !== canonicalDigest(origin)
-    || control.authorityBinding.actionId !== operation.operationId
-    || control.authorityBinding.contractVersion !== descriptor.version
+    || authorityBinding.actionId !== operation.operationId
+    || authorityBinding.contractVersion !== descriptor.version
     || control.control.authority?.reference !== issuedAuthority.reference
-    || control.authorityBinding.reference !== issuedAuthority.reference
-    || control.authorityBinding.digest !== issuedAuthority.materialInputDigest
+    || authorityBinding.reference !== issuedAuthority.reference
+    || authorityBinding.digest !== issuedAuthority.materialInputDigest
     || source.prepared?.materialInputDigest !== issuedAuthority.materialInputDigest
-    || canonicalDigest(source.prepared.target)
-      !== canonicalDigest(recomputedInput.target)
     || control.preparedMaterialDigest !== issuedAuthority.materialInputDigest
     || control.preparedTargetDigest !== canonicalDigest(recomputedInput.target)
-    || control.authorityBinding.targetDigest !== canonicalDigest(recomputedInput.target)
-    || control.authorityBinding.limits.amountMinor !== price.amountMinor
+    || authorityBinding.targetDigest !== canonicalDigest(recomputedInput.target)
+    || !sameExactScale(authorityBinding.limits.amount, price)
+    || compareExactAmounts(authorityBinding.limits.amount, price) !== 0
     || canonicalDigest(control.control.acceptedAuthority)
       !== canonicalDigest(issuedAuthority.accepted)
-    || canonicalDigest(control.authorityBinding.acceptedBasis)
+    || canonicalDigest(authorityBinding.acceptedBasis)
       !== canonicalDigest(issuedAuthority.accepted)
     || canonicalDigest(control.control.acceptedAuthority)
-      !== canonicalDigest(control.authorityBinding.acceptedBasis)
+      !== canonicalDigest(authorityBinding.acceptedBasis)
     || !acceptedAuthorityGenerationValid(control.control.acceptedAuthority)
     || attemptGroup.invocationRef !== control.invocationRef
     || historyGroup.invocationRef !== control.invocationRef
@@ -344,6 +350,12 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
   ) throw new Error('dynamic_published_snapshot_semantics_invalid')
   return snapshot
 }
+function sameExactScale(value: unknown, expected: ExactAmount): boolean {
+  const parsed = exactAmountSchema.safeParse(value)
+  return parsed.success
+    && parsed.data.currency === expected.currency
+    && parsed.data.exponent === expected.exponent
+}
 
 function paymentAttemptsValid(
   paymentAttempts: DynamicPublishedAdapterSnapshot['paymentAttempts'],
@@ -352,16 +364,15 @@ function paymentAttemptsValid(
   invocationRef: string,
   operationKey: string,
   operation: PublishedOperation,
-  price: Readonly<{ currency: string; amountMinor: number }>,
+  price: ExactAmount,
   expectedChallengeDigest: string | undefined,
 ): boolean {
   const payment = operation.identity.payment
   const transport = admittedX402Transport(operation)
   const expectedAmount = payment.kind === 'x402'
     && price.currency === payment.currency
-    && payment.assetAmountExponent >= payment.routeAmountExponent
-    ? (BigInt(price.amountMinor)
-        * (10n ** BigInt(payment.assetAmountExponent - payment.routeAmountExponent))).toString()
+    && price.exponent === payment.routeAmountExponent
+    ? rescaleExactAmount(price, payment.assetAmountExponent)
     : undefined
   const durableAttempts = new Map(attempts.map((attempt) => [
     `${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
@@ -383,7 +394,7 @@ function paymentAttemptsValid(
       && paymentAttempt.network === payment.network
       && paymentAttempt.asset === payment.asset
       && paymentAttempt.payTo === payment.payTo
-      && paymentAttempt.amount === expectedAmount
+      && compareExactAmounts(paymentAttempt.amount, expectedAmount) === 0
       && paymentAttempt.challengeDigest === expectedChallengeDigest
       && durableAttempts.has(key)
   })
@@ -508,9 +519,10 @@ function semanticClaimValid(
 function historyValid(
   history: DynamicPublishedAdapterSnapshot['history'][number]['rows'],
   currentVersion: number,
-  authorityKind: 'approve_each' | 'standing_mandate_use',
+  authorityKind: NonNullable<ActionInvocationView['acceptedAuthority']>['kind'],
   attempts: DynamicPublishedAdapterSnapshot['attempts'][number]['rows'],
 ): boolean {
+  if (authorityKind !== 'approve_each' && authorityKind !== 'standing_mandate_use') return false
   const includesRelease = history.some(({ kind }) => kind === 'begin_release')
   const authorityCommand = authorityKind === 'approve_each'
     ? 'decide'

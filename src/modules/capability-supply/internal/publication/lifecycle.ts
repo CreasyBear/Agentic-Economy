@@ -1,9 +1,15 @@
 import {
+  connectionAuthoritySnapshotMatches,
+  connectionAuthoritySnapshotsEqual,
+  type CapabilityBindingRow,
+  type CapabilityConnectionAuthoritySnapshot,
+} from '../binding'
+import {
   bindingEligibilityIsValid,
   offeringEligibilityIsValid,
 } from '../eligibility/integrity'
-import type { CapabilityBindingRow } from '../binding/registration'
 import type { CapabilityOfferingRow } from '../offering/registration'
+import type { ProviderConnection } from '../../provider-connection'
 
 export type PublicationLifecycleReason =
   | 'admission_unproven' | 'conformance_unproven' | 'credential_readiness_unobserved'
@@ -15,11 +21,11 @@ export type PublicationLifecycle = {
   state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
   reasons: PublicationLifecycleReason[]
 }
-
 export type CapabilityPublicationLifecycleRow = Readonly<{
   disposition: 'current' | 'withdrawn' | 'incompatible' | 'superseded'
   credentialState: 'unobserved' | 'ready' | 'unavailable'
   healthState: 'unobserved' | 'healthy' | 'unhealthy'
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   readinessValidUntil?: number | undefined
   readinessObservedAt?: number | undefined
 }>
@@ -61,6 +67,7 @@ export function publicationLifecycle(
   offering: CapabilityOfferingRow,
   binding: CapabilityBindingRow,
   now: number,
+  currentConnection?: ProviderConnection | null,
 ): PublicationLifecycle {
   if (publication.disposition === 'withdrawn') {
     return { state: 'withdrawn' as const, reasons: ['withdrawn' as const] }
@@ -70,6 +77,20 @@ export function publicationLifecycle(
   }
   const reasons: PublicationLifecycleReason[] = []
   if (!offeringEligibilityIsValid(offering) || !bindingEligibilityIsValid(binding)) {
+    return { state: 'inactive', reasons: ['eligibility_integrity_failure'] }
+  }
+  if (binding.authority.kind === 'provider_connection'
+    && (
+      !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
+        businessId: String(offering.businessId),
+        operationRef: publication.connectionAuthority?.operationRef
+          ?? binding.connectionAuthority?.operationRef
+          ?? '',
+        adapterId: binding.adapterId,
+        now,
+      })
+      || !connectionAuthoritySnapshotsEqual(publication.connectionAuthority, binding.connectionAuthority)
+    )) {
     return { state: 'inactive', reasons: ['eligibility_integrity_failure'] }
   }
   if (binding.admission !== 'admitted' || offering.status !== 'active') reasons.push('admission_unproven')
@@ -83,3 +104,4 @@ export function publicationLifecycle(
   }
   return { state: reasons.length === 0 ? 'active' as const : 'inactive' as const, reasons }
 }
+

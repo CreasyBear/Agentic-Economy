@@ -19,6 +19,7 @@ import type {
   PaidOperationPresentationBlock,
   PaidOperationSemantics,
 } from '@/modules/action-invocation/paid-operation-semantics'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 
 export type AePaidOperationCardProps = Readonly<{
@@ -72,7 +73,7 @@ export function AePaidOperationCard({
       </header>
 
       <dl className="grid gap-3 sm:grid-cols-3">
-        <Fact label="Maximum charge" value={money(semantics.maximumAuthorizedCharge)} />
+        <Fact label="Maximum charge" value={formatCurrencyAmount(semantics.maximumAuthorizedCharge)} />
         <Fact label="Data sharing" value={queryReleaseLabel(semantics)} />
         <Fact label="Provider" value={semantics.operation.providerName} />
       </dl>
@@ -179,7 +180,7 @@ function presentationBlockValue(block: PaidOperationPresentationBlock): string {
     case 'measurement':
       return `${formatNumber(block.value)} ${block.unit}`
     case 'money':
-      return money(block)
+      return formatCurrencyAmount(block.amount)
     case 'timestamp':
       return formatUtcTimestamp(block.value)
     case 'source':
@@ -217,7 +218,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
 
   if (semantics.resultDelivery.state === 'valid') {
     const paymentTruth = semantics.settlement.state === 'settled'
-      ? `Payment of ${money(semantics.settlement.amount)} is supported by the recorded evidence.`
+      ? `Payment of ${formatCurrencyAmount(semantics.settlement.amount)} is supported by the recorded evidence.`
       : 'No independent payment settlement is recorded.'
     return {
       label: 'Result received',
@@ -236,7 +237,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
       label: 'Paid — result unusable',
       badgeVariant: 'secondary',
       icon: AlertTriangleIcon,
-      truth: `Payment of ${money(semantics.settlement.amount)} is supported by the recorded evidence, but the returned result could not be validated.`,
+      truth: `Payment of ${formatCurrencyAmount(semantics.settlement.amount)} is supported by the recorded evidence, but the returned result could not be validated.`,
       nextAction: semantics.continuations.some(({ kind }) => kind === 'reconcile')
         ? 'Check the recorded payment and unusable result before deciding what to do next.'
         : 'Review the payment and result evidence. Do not assume another result is free.',
@@ -332,23 +333,10 @@ function continuationIcon(continuation: PaidOperationContinuation) {
   }
 }
 
-function money(value: Readonly<{ currency: string; amountMinor: number }>): string {
-  let formatter = moneyFormatters.get(value.currency)
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: value.currency,
-    })
-    moneyFormatters.set(value.currency, formatter)
-  }
-  const minorUnitExponent = formatter.resolvedOptions().maximumFractionDigits ?? 2
-  return formatter.format(value.amountMinor / (10 ** minorUnitExponent))
-}
 
 function formatNumber(value: number): string {
   return numberFormatter.format(value)
 }
-const moneyFormatters = new Map<string, Intl.NumberFormat>()
 const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 })
 
 
@@ -381,7 +369,7 @@ function settlementLabel(semantics: PaidOperationSemantics): string {
     case 'not_settled':
       return 'Checked — not settled'
     case 'settled':
-      return `${money(semantics.settlement.amount)} settled`
+      return `${formatCurrencyAmount(semantics.settlement.amount)} settled`
     case 'unknown':
       return 'Settlement unknown'
   }

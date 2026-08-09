@@ -21,9 +21,12 @@ const keyReadback: AgentOperatorKeyReadback = {
   principalId: 'clerk_api_key:key_ui_1',
   account: {
     principalId: 'clerk_api_key:key_ui_1',
-    currency: 'USD',
-    balanceMinor: 1_250,
-    autoRecharge: { enabled: false, thresholdMinor: 0, rechargeAmountMinor: 0 },
+    balance: { currency: 'USD', units: '1250', exponent: 2 },
+    autoRecharge: {
+      enabled: false,
+      threshold: { currency: 'USD', units: '0', exponent: 2 },
+      rechargeAmount: { currency: 'USD', units: '0', exponent: 2 },
+    },
     evidence: 'labelled_local_dev',
   },
   activity: [],
@@ -32,8 +35,7 @@ const keyReadback: AgentOperatorKeyReadback = {
     callCount: 2,
     paidCallCount: 1,
     freeCallCount: 1,
-    grossSpendMinor: 500,
-    currency: 'USD',
+    grossSpend: { currency: 'USD', units: '5005', exponent: 3 },
     states: ['paid', 'free_tier'],
   },
   dataState: 'source',
@@ -56,11 +58,10 @@ describe('assistant access components', () => {
 
     const claudeCopyButton = screen.getByRole('button', { name: 'Copy Claude command' })
     const codexCopyButton = screen.getByRole('button', { name: 'Copy Codex command' })
-
     fireEvent.click(claudeCopyButton)
+
     expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http agentic-economy https://ae.example/mcp')
     const claudeStatus = await screen.findByText('Claude command copied.')
-    expect(claudeStatus.getAttribute('role')).toBe('status')
 
     fireEvent.click(codexCopyButton)
     expect(writeText).toHaveBeenCalledWith('codex mcp add agentic-economy --url https://ae.example/mcp')
@@ -81,10 +82,10 @@ describe('assistant access components', () => {
 
   it('renders per-assistant balance, spend, and permission without internal identifiers', () => {
     render(<AeAgentOperatorConsole items={[keyReadback]} loading={false} onRevoke={() => undefined} />)
-    expect(screen.getByText(/12\.50/u)).toBeTruthy()
+    expect(screen.getByText(/USD 12\.5/u)).toBeTruthy()
     expect(screen.getByRole('heading', { name: /balance/i })).toBeTruthy()
     expect(screen.queryByRole('list')).toBeNull()
-    expect(screen.getByText(/5\.00/u)).toBeTruthy()
+    expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
     expect(screen.getByText(/browse and compare businesses/iu)).toBeTruthy()
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
   })

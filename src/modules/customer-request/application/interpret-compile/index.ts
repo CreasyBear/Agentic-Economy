@@ -40,6 +40,15 @@ export {
 } from './preview'
 export { createDeterministicCustomerRequestInterpreter } from './deterministic-interpreter'
 export {
+  capabilityDomainsConflict,
+  classifyCapabilityDomain,
+  classifyCustomerQueryDomain,
+  domainAppropriatePool,
+  isObservedListing,
+  routeablePool,
+  type CapabilityDomain,
+} from './capability-domain'
+export {
   createConfiguredRequestInterpreter,
   interpreterFailureCode,
   type InterpreterEnvironment,

@@ -1,6 +1,8 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { readBoundedRequestJson, readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import type { RateLimitAdmission } from '@/lib/server/rate-limit'
+import type { ProblemInput } from '@/lib/errors'
+import { problem } from '@/lib/server/problem'
 
 import { bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
@@ -52,7 +54,17 @@ type OAuthApiOptions = Readonly<{
 
 export type { OAuthApiOptions }
 
-type OAuthErrorCode = 'invalid_client' | 'invalid_scope' | 'invalid_request' | 'authorization_pending' | 'slow_down' | 'access_denied' | 'expired_token' | 'invalid_grant'
+type OAuthErrorCode = 'invalid_client' | 'invalid_scope' | 'invalid_request' | 'authorization_pending' | 'slow_down' | 'access_denied' | 'expired_token' | 'invalid_grant' | 'rate_limited'
+const OAUTH_AUTHORIZATION_UNAVAILABLE: ProblemInput = {
+  status: 503,
+  kind: 'UNAVAILABLE',
+  code: 'oauth_authorization_unavailable',
+  detail: 'The authorization request is temporarily unavailable.',
+  retryable: true,
+}
+export function oauthAuthorizationUnavailableResponse(): Response {
+  return problem(OAUTH_AUTHORIZATION_UNAVAILABLE)
+}
 const MAX_OAUTH_FORM_BODY_BYTES = 16 * 1024
 const MAX_OAUTH_JSON_BODY_BYTES = 16 * 1024
 const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code'
@@ -160,7 +172,12 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
     if (limited !== undefined) return limited
     const owner = await ownerIdentity(options)
     if (!owner.isAuthenticated || owner.userId === null) return Response.redirect(new URL('/sign-in', baseUrl(request, options)), 302)
-    const result = await readGrantForConsent(requireStore(options), { userCode, ownerId: owner.userId, now: currentNow(options) })
+    let result: CustomerRequestAgentOAuthTransition<CustomerRequestAgentOAuthGrant>
+    try {
+      result = await readGrantForConsent(requireStore(options), { userCode, ownerId: owner.userId, now: currentNow(options) })
+    } catch {
+      return oauthAuthorizationUnavailableResponse()
+    }
     if (result.kind !== 'ok') return oauthTransitionError(result)
     const mode = modeForGrant(result.value)
     if (mode === undefined) return oauthError('invalid_scope', 400)
@@ -175,7 +192,12 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const challenge = url.searchParams.get('code_challenge')
   const challengeMethod = url.searchParams.get('code_challenge_method')
   const scopeText = url.searchParams.get('scope')
-  const client = await readClient(clientId, options)
+  let client: CustomerRequestAgentOAuthClient | null
+  try {
+    client = await readClient(clientId, options)
+  } catch {
+    return oauthAuthorizationUnavailableResponse()
+  }
   if (client === null || redirectUri === null || responseType !== 'code' || state === null || challenge === null || challengeMethod === null || scopeText === null) {
     return oauthError('invalid_request', 400)
   }
@@ -375,16 +397,9 @@ async function oauthAdmissionResponse(
   if (options.rateLimit === undefined) return undefined
   const admission = await options.rateLimit({ request, keySuffix })
   if (admission.ok) return undefined
-  return Response.json(
-    { error: 'rate_limited' },
-    {
-      status: 429,
-      headers: {
-        'Cache-Control': 'no-store',
-        'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))),
-      },
-    },
-  )
+  return oauthError('rate_limited', 429, {
+    'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))),
+  })
 }
 
 function baseUrl(request: Request, options: OAuthApiOptions): string {
@@ -404,6 +419,8 @@ async function readForm(request: Request): Promise<OAuthFormResult> {
 }
 
 async function readJson(request: Request): Promise<OAuthJsonResult> {
+  const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (mediaType !== 'application/json') return { kind: 'invalid' }
   try {
     const bounded = await readBoundedRequestJson(request, MAX_OAUTH_JSON_BODY_BYTES)
     if (!bounded.ok) return { kind: bounded.code === 'payload_too_large' ? 'too_large' : 'invalid' }
@@ -451,8 +468,40 @@ function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll('\'', '&#39;')
 }
 
-function oauthError(error: OAuthErrorCode, status: 400 | 401 | 403 | 413): Response {
-  return Response.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } })
+type OAuthErrorBody = Readonly<{ error: OAuthErrorCode; error_description: string }>
+
+const OAUTH_ERROR_DESCRIPTIONS: Readonly<Record<OAuthErrorCode, string>> = {
+  invalid_client: 'The OAuth client is invalid.',
+  invalid_scope: 'The requested scope is invalid.',
+  invalid_request: 'The OAuth request is invalid.',
+  authorization_pending: 'Authorization is still pending.',
+  slow_down: 'Authorization is still pending; wait longer before polling again.',
+  access_denied: 'The resource owner denied the request.',
+  expired_token: 'The device or authorization code expired.',
+  invalid_grant: 'The authorization grant is invalid or expired.',
+  rate_limited: 'Too many OAuth requests; retry later.',
+}
+
+function oauthError(
+  error: OAuthErrorCode,
+  status: 400 | 401 | 403 | 413 | 429,
+  headers: Readonly<Record<string, string>> = {},
+): Response {
+  const body: OAuthErrorBody = { error, error_description: OAUTH_ERROR_DESCRIPTIONS[error] }
+  const retryAfter = error === 'authorization_pending'
+    ? '5'
+    : error === 'slow_down'
+      ? '10'
+      : undefined
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...(retryAfter === undefined ? {} : { 'Retry-After': retryAfter }),
+      ...headers,
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    },
+  })
 }
 
 function oauthTransitionError(result: { kind: 'refused' | 'conflict'; reason: string }): Response {
@@ -468,5 +517,8 @@ function oauthTransitionError(result: { kind: 'refused' | 'conflict'; reason: st
 
 export function oauthChallengeResponse(request: Request, requiredScope = CUSTOMER_REQUEST_AGENT_SCOPE): Response {
   const base = resolveCanonicalBaseUrl(request).baseUrl
-  return Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401, headers: { 'Cache-Control': 'no-store', Vary: 'Authorization', 'WWW-Authenticate': bearerChallenge(base, requiredScope) } })
+  return problem(
+    { status: 401, kind: 'UNAUTHENTICATED', code: 'authentication_required', detail: 'Authentication required.' },
+    { 'WWW-Authenticate': bearerChallenge(base, requiredScope), 'Vary': 'Authorization' },
+  )
 }

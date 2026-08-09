@@ -314,7 +314,7 @@ describe('problem-support public interface', () => {
             issuedAt: 5_000,
             expiresAt: 305_000,
             route: {
-              maximumTotalSpend: { currency: 'AUD', amountMinor: 1_000 },
+              maximumTotalSpend: { currency: 'AUD', units: '1000', exponent: 2 },
               steps: [{
                 position: 1,
                 businessId: 'biz-1',
@@ -344,7 +344,7 @@ describe('problem-support public interface', () => {
           businesses: [{ businessRef: 'biz-1', name: 'Resolver' }],
         },
         revocation: null,
-        reservations: [{ reservedSpend: { currency: 'AUD', amountMinor: 300 } }],
+        reservations: [{ reservedSpend: { currency: 'AUD', units: '300', exponent: 2 } }],
         attempts: [{
           position: 1,
           state: 'failed',
@@ -366,7 +366,7 @@ describe('problem-support public interface', () => {
 
       expect(export_.reconstruction?.execution.steps[0]?.state).toBe('failed')
       expect(export_.reconstruction?.authority.spend.admitted).toEqual({
-        currency: 'AUD', amountMinor: 300,
+        currency: 'AUD', units: '300', exponent: 2,
       })
       expect(export_.reconstruction?.authority.dataSharing[0]?.releaseState).toBe('business_step_released')
       expect(export_.reconstruction?.recovery.retry).toBe('safe')

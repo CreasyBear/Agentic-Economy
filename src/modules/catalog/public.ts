@@ -38,7 +38,6 @@ export {
   OfferingPriceUnitValues,
   formatOfferingPrice,
   normalizeOfferingPrice,
-  offeringPriceCeilingMinor,
 } from './internal/offering-price'
 export type {
   OfferingPrice,
@@ -63,6 +62,7 @@ export type {
   OfferingAccessPathDescriptor,
   OfferingAccessPathRecord,
   OfferingAccessPathStatus,
+  OfferingAccessPathValidation,
   OfferingSupportProjection,
   PublicAccessPath,
   PublicBusinessProfile,
@@ -123,6 +123,11 @@ export {
 
 export { publishBusinessCatalog } from './internal/publish'
 
+export {
+  type OfferingsReconcileResult,
+  reconcilePublishedOfferings,
+} from './internal/publish-reconcile'
+
 
 export {
   publicOwnerDefaultClaimInput,
@@ -147,7 +152,7 @@ export type {
   PublicOwnerClaimValidationResult,
   PublicOwnerStatusReadback,
   PublicOwnerUnavailableCapability,
-}
+} from './internal/owner-public-flow'
 
 export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'catalog'> & {
   catalog: PublicBusinessCatalogApiV2Dto

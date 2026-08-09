@@ -60,8 +60,8 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
   const hasSearchCompleted = completedTurnCount > 0
   const hasProviderEvidence = providerCount > 0
 
-  // Nothing to orient yet: no listings found and no inquiry activity. An empty
-  // "inquiry path" only restates "nothing found", so suppress it entirely and
+  // Nothing to orient yet: no matches and no contact activity. An empty
+  // "request" only restates "nothing found", so suppress it entirely and
   // let the answer's own recovery prompts carry the empty case.
   if (!hasProviderEvidence && selectedProvider === undefined && !handoffActive && !handoffComplete && !hasInquiryReadyProvider) {
     return null
@@ -78,7 +78,7 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
             hasInquiryPath: providerHasInquiryPath(selectedProvider),
           },
         }),
-    heading: 'Inquiry path',
+    heading: 'Next steps',
     statusText: buildSessionJourneyStatusText({ providerCount, selectedProvider }),
     guidance: buildSessionJourneyGuidance({
       providerCount,
@@ -91,28 +91,28 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
     steps: [
       {
         id: 'search',
-        label: 'Find listings',
-        detail: hasSearchCompleted ? 'Published matches checked' : 'Checking published details',
+        label: 'Find',
+        detail: hasSearchCompleted ? 'Matches checked' : "Checking what's available",
         status: hasSearchCompleted ? 'complete' : hasSearchStarted ? 'active' : 'pending',
       },
       {
         id: 'compare',
-        label: 'Compare fit',
+        label: 'Compare',
         detail:
           providerCount > 0
-            ? `${providerCount} listed ${providerCount === 1 ? 'business' : 'businesses'}`
-            : 'Service area and response',
+            ? `${providerCount} ${providerCount === 1 ? 'match' : 'matches'}`
+            : 'Area and response',
         status: hasProviderEvidence ? 'complete' : hasSearchCompleted ? 'active' : 'pending',
       },
       {
         id: 'follow_up',
         label: 'Follow up',
-        detail: 'Narrow, compare, or ask limits',
+        detail: 'Narrow, compare, or ask about limits',
         status: hasFollowUp ? 'complete' : hasProviderEvidence ? 'active' : 'pending',
       },
       {
         id: 'inquiry',
-        label: 'Inquiry next step',
+        label: 'Ask the business',
         detail: inquiryStepDetail({ hasInquiryReadyProvider, selectedProvider }),
         status: handoffComplete ? 'complete' : handoffActive ? 'active' : 'pending',
       },
@@ -129,31 +129,31 @@ function buildSessionJourneyGuidance(input: {
   hasSearchCompleted: boolean
 }): string {
   if (input.handoffActive) {
-    return 'AE is preparing the qualified inquiry next step. The business still confirms timing, quote, and availability.'
+    return 'Preparing a request to the business. The business still confirms timing, quote, and availability.'
   }
 
   if (input.handoffComplete) {
     if (input.selectedProvider !== undefined && !providerHasInquiryPath(input.selectedProvider)) {
-      return `${input.selectedProvider.name} is selected for listing review. This business needs a published inquiry path before AE can route contact.`
+      return `${input.selectedProvider.name} is selected for review. This business does not have a request form yet.`
     }
     if (input.selectedProvider !== undefined) {
-      return `${input.selectedProvider.name} is selected for qualified inquiry review. The business still confirms timing, quote, and availability.`
+      return `${input.selectedProvider.name} is selected for contact. The business still confirms timing, quote, and availability.`
     }
   }
 
   if (!input.hasSearchCompleted) {
-    return 'AE is checking published service details before any contact step.'
+    return "Checking what's available before any contact step."
   }
 
   if (input.providerCount <= 0) {
-    return 'No clear listed match yet. Refine the search before contact.'
+    return 'No clear match yet. Refine the request before contacting a business.'
   }
 
   if (input.hasInquiryReadyProvider) {
-    return 'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.'
+    return 'Compare the options, then choose a business to contact. The business still confirms timing, quote, and availability.'
   }
 
-  return 'Compare the published facts first; these listings need a published inquiry path before contact.'
+  return 'Compare the published details first; these options do not have a request form yet.'
 }
 
 function buildSessionJourneyStatusText(input: {
@@ -162,15 +162,15 @@ function buildSessionJourneyStatusText(input: {
 }): string {
   if (input.selectedProvider !== undefined) {
     return providerHasInquiryPath(input.selectedProvider)
-      ? `${input.selectedProvider.name} selected for inquiry review`
-      : `${input.selectedProvider.name} selected for listing review`
+      ? `${input.selectedProvider.name} selected for contact`
+      : `${input.selectedProvider.name} selected for review`
   }
 
   if (input.providerCount > 0) {
-    return `${input.providerCount} listed ${input.providerCount === 1 ? 'business' : 'businesses'} ready to compare`
+    return `${input.providerCount} ${input.providerCount === 1 ? 'match' : 'matches'} ready to compare`
   }
 
-  return 'Finding the right listed business'
+  return 'Finding a match'
 }
 
 function inquiryStepDetail(input: {
@@ -178,9 +178,9 @@ function inquiryStepDetail(input: {
   selectedProvider: AnswerSource | undefined
 }): string {
   if (input.selectedProvider !== undefined) {
-    return providerHasInquiryPath(input.selectedProvider) ? 'Qualified inquiry only' : 'Needs listed inquiry path'
+    return providerHasInquiryPath(input.selectedProvider) ? 'Request form available' : 'No request form yet'
   }
 
-  return input.hasInquiryReadyProvider ? 'Qualified inquiry only' : 'Needs listed inquiry path'
+  return input.hasInquiryReadyProvider ? 'Request form available' : 'Choose a business first'
 }
 

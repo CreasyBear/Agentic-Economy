@@ -6,11 +6,21 @@ const mocks = vi.hoisted(() => ({
   device: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
   register: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
   token: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
+  authorizationUnavailable: vi.fn(() => new Response(JSON.stringify({
+    type: 'about:blank',
+    title: 'Unavailable',
+    status: 503,
+    kind: 'UNAVAILABLE',
+    code: 'oauth_authorization_unavailable',
+    detail: 'The authorization request is temporarily unavailable.',
+    retryable: true,
+  }), { status: 503, headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' } })),
 }))
 
 vi.mock('@/lib/server/customer-request-agent-oauth-api', () => ({
   handleOAuthAuthorizeGet: mocks.authorizeGet,
   handleOAuthConsentPost: mocks.authorizePost,
+  oauthAuthorizationUnavailableResponse: mocks.authorizationUnavailable,
   handleDeviceAuthorizationPost: mocks.device,
   handleOAuthRegisterPost: mocks.register,
   handleOAuthTokenPost: mocks.token,
@@ -57,5 +67,28 @@ describe('OAuth stateful route wiring', () => {
     expect(mocks.device).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
     expect(mocks.register).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
     expect(mocks.token).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
+  })
+  it('returns a typed unavailable problem when the OAuth store cannot be created', async () => {
+    const authorizeHandlers = routeHandlers(AuthorizeRoute)
+    if (authorizeHandlers.GET === undefined) throw new Error('OAuth handlers missing')
+    vi.stubEnv('CONVEX_URL', '')
+    vi.stubEnv('VITE_CONVEX_URL', '')
+    mocks.authorizationUnavailable.mockClear()
+    mocks.authorizeGet.mockClear()
+    try {
+      const response = await authorizeHandlers.GET({ request })
+
+      expect(response.status).toBe(503)
+      expect(response.headers.get('content-type')).toBe('application/problem+json')
+      expect(await response.json()).toMatchObject({
+        kind: 'UNAVAILABLE',
+        code: 'oauth_authorization_unavailable',
+        retryable: true,
+      })
+      expect(mocks.authorizationUnavailable).toHaveBeenCalledOnce()
+      expect(mocks.authorizeGet).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })

@@ -93,7 +93,7 @@ export type InvocableInquiry = Readonly<{ target: InquiryTargetRef }>
  */
 async function readInvocableInquiry(slug: string): Promise<InvocableInquiry | undefined> {
   const page = await readPublicBusinessPageServer({ data: { slug } })
-  if (page.kind === 'not_found') return undefined
+  if (page.kind !== 'available') return undefined
   const target = selectPublicInquiryTarget(page.catalog)
   if (target === undefined) return undefined
   const admission = await readPublicTargetAdmissionServer({ data: target })

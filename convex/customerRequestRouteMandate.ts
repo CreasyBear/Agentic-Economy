@@ -33,12 +33,13 @@ export {
 
 export type { AuthenticatedRequestResult } from '@/modules/customer-request/route-mandate-mutation'
 
+const exactAmount = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 const issueCommand = {
   requestId: v.string(),
   expectedRequestRevision: v.number(),
   expectedGenerationRef: v.string(),
   selectedRoutePlanId: v.string(),
-  maximumTotalSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+  maximumTotalSpend: exactAmount,
   expiresAt: v.number(),
   idempotencyKey: v.string(),
 }

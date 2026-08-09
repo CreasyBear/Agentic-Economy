@@ -36,6 +36,7 @@ export type EligibleSupply = Readonly<{
         evidenceRefs: readonly string[]
       }>
     }>
+    searchTerms?: readonly string[]
     registrationHash: string
   }>
   publication?: Readonly<{

@@ -14,6 +14,10 @@ export const ANSWER_THREAD_AGENT_ENTRYPOINT = Object.freeze({
   path: '/api/answer/turn' as const,
   authentication: 'none' as const,
   responseMediaType: 'text/event-stream' as const,
+  requiredHeaders: Object.freeze({
+    'Content-Type': 'application/json' as const,
+    'X-AE-Turn-Key': 'fresh opaque value for every turn; idempotency/correlation value, not a credential' as const,
+  }),
   /** Mirrors `answerTurnRequestSchema`; keep both in step. */
   body: Object.freeze({
     query: 'natural-language request, 1-200 characters' as const,

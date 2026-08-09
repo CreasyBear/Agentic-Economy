@@ -1,6 +1,7 @@
 import type {
   ChargeAuthorizationResult,
   EntryType,
+  ExactAmount,
   KeyUsageView,
   MoneyAccount,
   MoneyAcceptedCharge,
@@ -11,6 +12,7 @@ import type {
   RakeConfig,
 } from '../public'
 export type { MoneyAccount } from '../public'
+import { addExactAmounts, compareExactAmounts, exactAmountSchema, rescaleExactAmount, subtractExactAmounts } from './exact-amount'
 import { validatePaymentBinding, type PaymentBinding } from './live-money-gate'
 import { computeRakeSplit } from './pricing-config'
 
@@ -47,7 +49,7 @@ export type BeginTransactionInput = Readonly<{
 export type TopupInput = Readonly<{
   transaction: BeginTransactionInput
   accountRef: string
-  amountMinor: number
+  amount: ExactAmount
   sourceDigest: string
   evidenceRefs: readonly string[]
 }>
@@ -57,7 +59,7 @@ export type PaidChargeInput = Readonly<{
   operatorAccountRef: string
   providerAccountRef: string
   rakeAccountRef: string
-  grossAmountMinor: number
+  grossAmount: ExactAmount
   rakeConfig: RakeConfig
   priceDigest: string
   principalId: string
@@ -103,8 +105,7 @@ export type ReconcileChargeInput = Readonly<{
 export type ReleasePayoutInput = Readonly<{
   transaction: BeginTransactionInput
   providerAccountRef: string
-  amountMinor: number
-  currency: string
+  amount: ExactAmount
   payoutRef: string
   businessId: string
   sourceDigest: string
@@ -119,6 +120,7 @@ export function createLedgerState(accounts: readonly MoneyAccount[] = []): Ledge
   for (const account of accounts) nextAccounts.set(account.accountRef, account)
   return { accounts: nextAccounts, entries: [], transactions: [], usageEvents: [], usageSummaries: new Map() }
 }
+
 export function usageSummaryKey(principalId: string, credentialId: string, currency: string): string {
   return `${principalId}\u0000${credentialId}\u0000${currency}`
 }
@@ -134,6 +136,7 @@ export function accountRefForProvider(businessId: string, currency: string): str
 export function accountRefForRake(currency: string): string {
   return `ae:rake:${currency}`
 }
+
 export function validateChargeAccounts(input: Readonly<{
   operator: MoneyAccount | undefined
   provider: MoneyAccount | undefined
@@ -164,8 +167,8 @@ export function validateChargeAccounts(input: Readonly<{
     || input.operatorAccountRef === input.rakeAccountRef
     || input.providerAccountRef === input.rakeAccountRef
   ) return refusalResult('billing_identity_mismatch', false)
-  if (operator.currency !== input.currency || provider.currency !== input.currency || rake.currency !== input.currency) return refusalResult('currency_mismatch', false)
-  return undefined
+  if (operator.balance.currency !== input.currency || provider.balance.currency !== input.currency || rake.balance.currency !== input.currency) return refusalResult('currency_mismatch', false)
+  if (provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) return refusalResult('currency_mismatch', false)
 }
 
 export function beginIdempotentTransaction(input: Readonly<{ state: LedgerState; transaction: BeginTransactionInput }>): LedgerOperationResult<Readonly<{ kind: 'new' } | { kind: 'replay'; transaction: MoneyTransaction } | { kind: 'refused'; refusal: MoneyRefusal }>> {
@@ -180,24 +183,25 @@ export function beginIdempotentTransaction(input: Readonly<{ state: LedgerState;
 }
 
 export function applyTopup(input: TopupInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
-  if (!validAmount(input.amountMinor) || input.evidenceRefs.length === 0) {
+  if (!validAmount(input.amount) || input.evidenceRefs.length === 0 || input.amount.currency !== input.transaction.currency) {
     return { state: input.state, result: refusalResult('credit_topup_amount_invalid', false) }
   }
   const account = input.state.accounts.get(input.accountRef)
-  if (account === undefined || account.accountKind !== 'operator_credit' || account.currency !== input.transaction.currency) {
+  if (account === undefined || account.accountKind !== 'operator_credit' || account.balance.currency !== input.amount.currency) {
     return { state: input.state, result: refusalResult('currency_mismatch', false) }
   }
   if (account.principalId !== input.transaction.principalId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
+  const amount = rescaleExactAmount(input.amount, account.balance.exponent)
+  if (amount === undefined) return { state: input.state, result: refusalResult('currency_mismatch', false) }
   const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
   if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
-  if (begun.result.kind === 'replay') return { state: input.state, result: acceptedTopup(input.transaction.currency, input.amountMinor, input.transaction.inputDigest, input.transaction.transactionRef) }
-  const nextTransaction = transactionFrom(input.transaction, 'topup', 'applied')
+  if (begun.result.kind === 'replay') return { state: input.state, result: acceptedCharge(amount, input.transaction.inputDigest, input.transaction.transactionRef) }
+  const nextTransaction = transactionFrom(input.transaction, 'topup', 'applied', amount.exponent)
   const nextEntry = createEntry({
     accountRef: account.accountRef,
     entryType: 'topup',
     direction: 'credit',
-    amountMinor: input.amountMinor,
-    currency: account.currency,
+    amount,
     transactionRef: input.transaction.transactionRef,
     idempotencyKey: input.transaction.idempotencyKey,
     sourceDigest: input.sourceDigest,
@@ -205,18 +209,18 @@ export function applyTopup(input: TopupInput & Readonly<{ state: LedgerState }>)
     createdAt: input.transaction.now,
     principalId: input.transaction.principalId,
   })
-  const nextAccount = updateBalance(account, input.amountMinor, input.transaction.now)
+  const nextAccount = updateBalance(account, amount, 'credit', input.transaction.now)
   const nextState = withChanges(input.state, nextAccount, [nextEntry], nextTransaction)
-  return { state: nextState, result: acceptedTopup(account.currency, input.amountMinor, input.transaction.inputDigest, input.transaction.transactionRef) }
+  return { state: nextState, result: acceptedCharge(amount, input.transaction.inputDigest, input.transaction.transactionRef) }
 }
 
 export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
   if (input.principalId !== input.transaction.principalId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
+  if (!validAmount(input.grossAmount)) return { state: input.state, result: refusalResult('rake_not_configured', false) }
   if (input.paymentBinding !== undefined) {
     const requestedBinding: PaymentBinding = {
       ...input.paymentBinding.requested,
-      amountMinor: input.grossAmountMinor,
-      currency: input.transaction.currency,
+      amount: input.grossAmount,
       providerRef: input.providerAccountRef,
       idempotencyKey: input.transaction.idempotencyKey,
       ...(input.actionVersion === undefined ? {} : { actionVersion: input.actionVersion }),
@@ -242,16 +246,21 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
   if (operator === undefined || provider === undefined || rake === undefined) {
     return { state: input.state, result: refusalResult('billing_identity_missing', false) }
   }
+  if (input.grossAmount.currency !== input.transaction.currency || provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) {
+    return { state: input.state, result: refusalResult('currency_mismatch', false) }
+  }
+  const grossAmount = rescaleExactAmount(input.grossAmount, operator.balance.exponent)
+  if (grossAmount === undefined) return { state: input.state, result: refusalResult('currency_mismatch', false) }
   const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
   if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
-  if (input.freeTier === true || input.grossAmountMinor === 0) {
+  if (input.freeTier === true || grossAmount.units === '0') {
     if (begun.result.kind === 'replay') {
-      return { state: input.state, result: { kind: 'accepted', chargeState: 'paid', currency: input.transaction.currency, amountMinor: input.grossAmountMinor, priceDigest: input.priceDigest, transactionRef: begun.result.transaction.transactionRef } }
+      return { state: input.state, result: { kind: 'accepted', chargeState: 'paid', amount: grossAmount, priceDigest: input.priceDigest, transactionRef: begun.result.transaction.transactionRef } }
     }
-    const usage = createUsage(input, 'free_tier', 0)
-    return { state: appendUsage(input.state, usage), result: { kind: 'accepted', chargeState: 'free_tier', currency: input.transaction.currency, amountMinor: 0, priceDigest: input.priceDigest } }
+    const usage = createUsage(input, 'free_tier', zeroAmountLike(grossAmount))
+    return { state: appendUsage(input.state, usage), result: { kind: 'accepted', chargeState: 'free_tier', amount: zeroAmountLike(grossAmount), priceDigest: input.priceDigest } }
   }
-  const split = computeRakeSplit(input.grossAmountMinor, input.rakeConfig)
+  const split = computeRakeSplit(grossAmount, input.rakeConfig)
   if ('kind' in split) return { state: input.state, result: refusalResult(split.code, false) }
   if (begun.result.kind === 'replay') {
     return {
@@ -259,23 +268,21 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
       result: {
         kind: 'accepted',
         chargeState: 'paid',
-        currency: input.transaction.currency,
-        amountMinor: input.grossAmountMinor,
+        amount: grossAmount,
         priceDigest: input.priceDigest,
         transactionRef: begun.result.transaction.transactionRef,
-        providerNetMinor: split.providerNetMinor,
-        rakeMinor: split.rakeMinor,
+        providerNet: split.providerNet,
+        rake: split.rake,
       },
     }
   }
-  if (operator.state !== 'active' || operator.balanceMinor < input.grossAmountMinor) {
-    const usage = createUsage(input, 'insufficient_credit', input.grossAmountMinor)
+  if (operator.state !== 'active' || compareExactAmounts(operator.balance, grossAmount) === -1) {
+    const usage = createUsage(input, 'insufficient_credit', grossAmount)
     return {
       state: appendUsage(input.state, usage),
       result: refusalResult('insufficient_credit', false, {
-        currency: operator.currency,
-        requiredAmountMinor: input.grossAmountMinor,
-        availableAmountMinor: operator.balanceMinor,
+        requiredAmount: grossAmount,
+        availableAmount: operator.balance,
         nextAction: 'credit_topup_required',
       }),
     }
@@ -283,28 +290,27 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
   if (input.transaction.expectedAccountVersion !== operator.version) {
     return { state: input.state, result: refusalResult('ledger_cas_conflict', true) }
   }
-  const transaction = transactionFrom(input.transaction, 'charge', 'applied')
+  const transaction = transactionFrom(input.transaction, 'charge', 'applied', grossAmount.exponent)
   const entries = [
-    createEntry({ accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amountMinor: input.grossAmountMinor, currency: operator.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
-    createEntry({ accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amountMinor: split.providerNetMinor, currency: provider.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
-    createEntry({ accountRef: rake.accountRef, entryType: 'rake', direction: 'credit', amountMinor: split.rakeMinor, currency: rake.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
+    createEntry({ accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amount: grossAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
+    createEntry({ accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amount: split.providerNet, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
+    createEntry({ accountRef: rake.accountRef, entryType: 'rake', direction: 'credit', amount: split.rake, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
   ]
-  const nextOperator = updateBalance(operator, -input.grossAmountMinor, input.transaction.now)
-  const nextProvider = updateBalance(provider, split.providerNetMinor, input.transaction.now)
-  const nextRake = updateBalance(rake, split.rakeMinor, input.transaction.now)
-  const usage = createUsage(input, 'paid', input.grossAmountMinor, transaction.transactionRef)
+  const nextOperator = updateBalance(operator, grossAmount, 'debit', input.transaction.now)
+  const nextProvider = updateBalance(provider, split.providerNet, 'credit', input.transaction.now)
+  const nextRake = updateBalance(rake, split.rake, 'credit', input.transaction.now)
+  const usage = createUsage(input, 'paid', grossAmount, transaction.transactionRef)
   const nextState = withChanges(input.state, nextOperator, entries, transaction, [nextProvider, nextRake], usage)
   return {
     state: nextState,
     result: {
       kind: 'accepted',
       chargeState: 'paid',
-      currency: input.transaction.currency,
-      amountMinor: input.grossAmountMinor,
+      amount: grossAmount,
       priceDigest: input.priceDigest,
       transactionRef: transaction.transactionRef,
-      providerNetMinor: split.providerNetMinor,
-      rakeMinor: split.rakeMinor,
+      providerNet: split.providerNet,
+      rake: split.rake,
     },
   }
 }
@@ -328,15 +334,23 @@ export function appendRefundReversal(input: RefundInput & Readonly<{ state: Ledg
   const provider = input.state.accounts.get(providerEntry.accountRef)
   const rake = input.state.accounts.get(rakeEntry.accountRef)
   if (operator === undefined || provider === undefined || rake === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  if (provider.balanceMinor < providerEntry.amountMinor || rake.balanceMinor < rakeEntry.amountMinor) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  const transaction = transactionFrom(input.transaction, 'refund', 'reversed', original.transactionRef)
+  if (input.transaction.currency !== operatorEntry.amount.currency || provider.balance.currency !== operator.balance.currency || rake.balance.currency !== operator.balance.currency || provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  const operatorAmount = rescaleExactAmount(operatorEntry.amount, operator.balance.exponent)
+  const providerAmount = rescaleExactAmount(providerEntry.amount, operator.balance.exponent)
+  const rakeAmount = rescaleExactAmount(rakeEntry.amount, operator.balance.exponent)
+  if (operatorAmount === undefined || providerAmount === undefined || rakeAmount === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  const nextOperatorBalance = addExactAmounts(operator.balance, operatorAmount)
+  const nextProviderBalance = subtractExactAmounts(provider.balance, providerAmount)
+  const nextRakeBalance = subtractExactAmounts(rake.balance, rakeAmount)
+  if (nextOperatorBalance === undefined || nextProviderBalance === undefined || nextRakeBalance === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  const transaction = transactionFrom(input.transaction, 'refund', 'reversed', operatorAmount.exponent, original.transactionRef)
   const entries = [
-    createEntry({ accountRef: operator.accountRef, entryType: 'refund', direction: 'credit', amountMinor: operatorEntry.amountMinor, currency: operator.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
-    createEntry({ accountRef: provider.accountRef, entryType: 'refund', direction: 'debit', amountMinor: providerEntry.amountMinor, currency: provider.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, ...(provider.businessId === undefined ? {} : { businessId: provider.businessId }), sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
-    createEntry({ accountRef: rake.accountRef, entryType: 'refund', direction: 'debit', amountMinor: rakeEntry.amountMinor, currency: rake.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
+    createEntry({ accountRef: operator.accountRef, entryType: 'refund', direction: 'credit', amount: operatorAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
+    createEntry({ accountRef: provider.accountRef, entryType: 'refund', direction: 'debit', amount: providerAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, ...(provider.businessId === undefined ? {} : { businessId: provider.businessId }), sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
+    createEntry({ accountRef: rake.accountRef, entryType: 'refund', direction: 'debit', amount: rakeAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
   ]
-  const nextState = withChanges(input.state, updateBalance(operator, operatorEntry.amountMinor, input.transaction.now), entries, transaction, [updateBalance(provider, -providerEntry.amountMinor, input.transaction.now), updateBalance(rake, -rakeEntry.amountMinor, input.transaction.now)], createUsageFromOriginal(input.state, input, original, 'refunded', transaction.transactionRef))
-  return { state: nextState, result: acceptedTopup(original.currency, 0, original.inputDigest, transaction.transactionRef) }
+  const nextState = withChanges(input.state, updateBalance(operator, operatorAmount, 'credit', input.transaction.now), entries, transaction, [updateBalance(provider, providerAmount, 'debit', input.transaction.now), updateBalance(rake, rakeAmount, 'debit', input.transaction.now)], createUsageFromOriginal(input.state, input, original, 'refunded', transaction.transactionRef))
+  return { state: nextState, result: acceptedCharge(zeroAmountLike(operatorAmount), original.inputDigest, transaction.transactionRef) }
 }
 
 export function markOutcomeUnknown(input: OutcomeUnknownInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
@@ -354,7 +368,9 @@ export function reconcileCharge(input: ReconcileChargeInput & Readonly<{ state: 
   if (input.evidenceRefs.length === 0) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   if (input.evidence === 'reconciled_released') {
     const updated = transaction.state === 'outcome_unknown' ? { ...transaction, state: 'applied' as const, updatedAt: input.observedAt } : transaction
-    return { state: replaceTransaction(input.state, updated), result: { kind: 'accepted', chargeState: 'paid', currency: transaction.currency, amountMinor: 0, priceDigest: transaction.inputDigest, transactionRef: transaction.transactionRef } }
+    const entry = input.state.entries.find((item) => item.transactionRef === transaction.transactionRef)
+    if (entry === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+    return { state: replaceTransaction(input.state, updated), result: acceptedCharge(zeroAmountLike(entry.amount), transaction.inputDigest, transaction.transactionRef) }
   }
   const reversal = appendRefundReversal({
     ...input.refund,
@@ -372,19 +388,21 @@ export function releasePayoutAccrual(input: ReleasePayoutInput & Readonly<{ stat
   if (begun.result.kind === 'replay') {
     const replayed = begun.result.transaction
     const entry = input.state.entries.find((item) => item.transactionRef === replayed.transactionRef && item.entryType === 'payout_accrual' && item.direction === 'debit')
-    return { state: input.state, result: acceptedTopup(entry?.currency ?? input.currency, entry?.amountMinor ?? input.amountMinor, input.transaction.inputDigest, replayed.transactionRef) }
+    return { state: input.state, result: acceptedCharge(entry?.amount ?? input.amount, input.transaction.inputDigest, replayed.transactionRef) }
   }
-  if (!validAmount(input.amountMinor) || input.amountMinor === 0 || input.evidenceRefs.length === 0) return { state: input.state, result: refusalResult('payout_not_ready', false) }
+  if (!validAmount(input.amount) || input.amount.units === '0' || input.evidenceRefs.length === 0 || input.amount.currency !== input.transaction.currency) return { state: input.state, result: refusalResult('payout_not_ready', false) }
   const provider = input.state.accounts.get(input.providerAccountRef)
-  if (provider === undefined || provider.currency !== input.currency || provider.accountKind !== 'provider_earnings' || provider.businessId !== input.businessId) return { state: input.state, result: refusalResult('currency_mismatch', false) }
-  if (provider.balanceMinor < input.amountMinor) return { state: input.state, result: refusalResult('payout_below_threshold', false) }
-  const transaction = transactionFrom(input.transaction, 'payout_accrual', 'applied')
-  const entry = createEntry({ accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'debit', amountMinor: input.amountMinor, currency: input.currency, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.observedAt })
-  const nextState = withChanges(input.state, updateBalance(provider, -input.amountMinor, input.observedAt), [entry], transaction)
-  return { state: nextState, result: acceptedTopup(input.currency, input.amountMinor, input.transaction.inputDigest, transaction.transactionRef) }
+  if (provider === undefined || provider.accountKind !== 'provider_earnings' || provider.businessId !== input.businessId || provider.balance.currency !== input.amount.currency) return { state: input.state, result: refusalResult('currency_mismatch', false) }
+  const amount = rescaleExactAmount(input.amount, provider.balance.exponent)
+  if (amount === undefined) return { state: input.state, result: refusalResult('currency_mismatch', false) }
+  if (compareExactAmounts(provider.balance, amount) === -1) return { state: input.state, result: refusalResult('payout_below_threshold', false) }
+  const transaction = transactionFrom(input.transaction, 'payout_accrual', 'applied', amount.exponent)
+  const entry = createEntry({ accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'debit', amount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.observedAt })
+  const nextState = withChanges(input.state, updateBalance(provider, amount, 'debit', input.observedAt), [entry], transaction)
+  return { state: nextState, result: acceptedCharge(amount, input.transaction.inputDigest, transaction.transactionRef) }
 }
 
-function refusalResult(code: MoneyRefusal['code'], retryable: boolean, extra: Readonly<{ currency?: string; requiredAmountMinor?: number; availableAmountMinor?: number; nextAction?: 'credit_topup_required' }> = {}): MoneyRefusal {
+function refusalResult(code: MoneyRefusal['code'], retryable: boolean, extra: Readonly<{ requiredAmount?: ExactAmount; availableAmount?: ExactAmount; nextAction?: 'credit_topup_required' }> = {}): MoneyRefusal {
   return { kind: 'refused', code, retryable, ...extra }
 }
 
@@ -392,15 +410,20 @@ function refusal(code: MoneyRefusal['code'], retryable: boolean): MoneyRefusal {
   return refusalResult(code, retryable)
 }
 
-function acceptedTopup(currency: string, amountMinor: number, priceDigest: string, transactionRef: string): MoneyAcceptedCharge {
-  return { kind: 'accepted', chargeState: 'paid', currency, amountMinor, priceDigest, transactionRef }
+function acceptedCharge(amount: ExactAmount, priceDigest: string, transactionRef: string): MoneyAcceptedCharge {
+  return { kind: 'accepted', chargeState: 'paid', amount, priceDigest, transactionRef }
 }
 
-function validAmount(amountMinor: number): boolean {
-  return Number.isSafeInteger(amountMinor) && amountMinor >= 0
+function validAmount(amount: ExactAmount): boolean {
+  return exactAmountSchema.safeParse(amount).success
 }
 
-function transactionFrom(input: BeginTransactionInput, kind: EntryType, state: 'applied' | 'reversed', reversalOf?: string): MoneyTransaction {
+
+function zeroAmountLike(amount: ExactAmount): ExactAmount {
+  return { currency: amount.currency, units: '0', exponent: amount.exponent }
+}
+
+function transactionFrom(input: BeginTransactionInput, kind: EntryType, state: 'applied' | 'reversed', exponent: number, reversalOf?: string): MoneyTransaction {
   return {
     transactionRef: input.transactionRef,
     kind,
@@ -408,6 +431,7 @@ function transactionFrom(input: BeginTransactionInput, kind: EntryType, state: '
     inputDigest: input.inputDigest,
     principalId: input.principalId,
     currency: input.currency,
+    exponent,
     state,
     expectedAccountVersion: input.expectedAccountVersion,
     ...(input.externalRef === undefined ? {} : { externalRef: input.externalRef }),
@@ -424,18 +448,17 @@ function createEntry(input: EntryInput): MoneyLedgerEntry {
   return { ...input, entryRef }
 }
 
-function updateBalance(account: MoneyAccount, delta: number, now: number): MoneyAccount {
-  const balanceMinor = account.balanceMinor + delta
-  if (!Number.isSafeInteger(balanceMinor) || balanceMinor < 0) throw new Error('money_balance_overflow')
-  return { ...account, balanceMinor, version: account.version + 1, updatedAt: now }
+function updateBalance(account: MoneyAccount, amount: ExactAmount, direction: 'credit' | 'debit', now: number): MoneyAccount {
+  const balance = direction === 'credit' ? addExactAmounts(account.balance, amount) : subtractExactAmounts(account.balance, amount)
+  if (balance === undefined) throw new Error('money_balance_overflow')
+  return { ...account, balance, version: account.version + 1, updatedAt: now }
 }
 
-function createUsage(input: PaidChargeInput, chargeState: MoneyUsageEvent['chargeState'], amountMinor: number, transactionRef?: string): MoneyUsageEvent {
+function createUsage(input: PaidChargeInput, chargeState: MoneyUsageEvent['chargeState'], amount: ExactAmount, transactionRef?: string): MoneyUsageEvent {
   return {
     usageRef: `${input.invocationRef}:${input.attemptRef}:${input.operationKey}`,
     principalId: input.principalId,
     credentialId: input.credentialId,
-    currency: input.transaction.currency,
     serviceRef: input.serviceRef,
     offeringRef: input.offeringRef,
     businessId: input.businessId,
@@ -444,7 +467,7 @@ function createUsage(input: PaidChargeInput, chargeState: MoneyUsageEvent['charg
     operationKey: input.operationKey,
     priceDigest: input.priceDigest,
     chargeState,
-    amountMinor,
+    amount,
     ...(transactionRef === undefined ? {} : { transactionRef }),
     observedAt: input.observedAt,
   }
@@ -458,12 +481,16 @@ function createUsageFromOriginal(state: LedgerState, input: RefundInput, origina
 
 function appendUsage(state: LedgerState, usage: MoneyUsageEvent): LedgerState {
   if (state.usageEvents.some((item) => item.usageRef === usage.usageRef)) return state
-  const key = usageSummaryKey(usage.principalId, usage.credentialId, usage.currency)
+  const key = usageSummaryKey(usage.principalId, usage.credentialId, usage.amount.currency)
   const prior = state.usageSummaries.get(key)
   const states = prior === undefined || prior.states.includes(usage.chargeState) ? prior?.states ?? [usage.chargeState] : [...prior.states, usage.chargeState]
+  const grossSpend = usage.chargeState === 'paid'
+    ? prior === undefined ? usage.amount : addExactAmounts(prior.grossSpend, usage.amount)
+    : prior?.grossSpend ?? zeroAmountLike(usage.amount)
+  if (grossSpend === undefined) return state
   const summary: MoneyCredentialUsageSummary = prior === undefined
-    ? { principalId: usage.principalId, credentialId: usage.credentialId, currency: usage.currency, callCount: 1, paidCallCount: usage.chargeState === 'paid' ? 1 : 0, freeCallCount: usage.chargeState === 'free_tier' ? 1 : 0, grossSpendMinor: usage.chargeState === 'paid' ? usage.amountMinor : 0, states }
-    : { ...prior, callCount: prior.callCount + 1, paidCallCount: prior.paidCallCount + (usage.chargeState === 'paid' ? 1 : 0), freeCallCount: prior.freeCallCount + (usage.chargeState === 'free_tier' ? 1 : 0), grossSpendMinor: prior.grossSpendMinor + (usage.chargeState === 'paid' ? usage.amountMinor : 0), states }
+    ? { principalId: usage.principalId, credentialId: usage.credentialId, callCount: 1, paidCallCount: usage.chargeState === 'paid' ? 1 : 0, freeCallCount: usage.chargeState === 'free_tier' ? 1 : 0, grossSpend, states }
+    : { ...prior, callCount: prior.callCount + 1, paidCallCount: prior.paidCallCount + (usage.chargeState === 'paid' ? 1 : 0), freeCallCount: prior.freeCallCount + (usage.chargeState === 'free_tier' ? 1 : 0), grossSpend, states }
   const usageSummaries = new Map(state.usageSummaries)
   usageSummaries.set(key, summary)
   return { ...state, usageEvents: [...state.usageEvents, usage], usageSummaries }

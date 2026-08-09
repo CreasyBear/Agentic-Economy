@@ -1,5 +1,6 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
+import type { JsonValue } from '@/modules/capability-contract/public'
 
 /**
  * Agent-native action contract for AE.
@@ -190,7 +191,7 @@ export type ActionInvocationContract = Readonly<{
 export type ActionInvocationPreparation = Readonly<{
   dataUse: Readonly<{
     fields: readonly string[]
-    limits: Readonly<Record<string, number>>
+    limits: Readonly<Record<string, JsonValue>>
   }>
 }>
 

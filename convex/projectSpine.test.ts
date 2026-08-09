@@ -1,15 +1,23 @@
 /// <reference types="vite/client" />
 import { register as registerWorkflow } from '@convex-dev/workflow/test'
 import { register as registerWorkpool } from '@convex-dev/workpool/test'
-import { convexTest } from 'convex-test'
+import { type WorkflowStep } from '@convex-dev/workflow'
+import { convexTest, type TestConvex } from 'convex-test'
+import type { FunctionReturnType } from 'convex/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from './_generated/api'
 import schema from './schema'
 
 const modules = import.meta.glob('./**/*.ts')
+type ProjectSpineBackend = TestConvex<typeof schema>
+type ProjectSpineRead = NonNullable<
+  FunctionReturnType<typeof internal.projectSpine.readProjectSpine>
+>
+type ProjectSpineEvent = ProjectSpineRead['events'][number]
 
-function testBackend() {
+
+function testBackend(): ProjectSpineBackend {
   const t = convexTest(schema, modules)
   registerWorkflow(t)
   registerWorkpool(t)
@@ -34,7 +42,7 @@ describe('project spine workflow spike', () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers)
     const oldPaused = await t.query(internal.projectSpine.readProjectSpine, { projectId: 'cr:v1' })
     expect(oldPaused?.workflow?.status.type).toBe('inProgress')
-    expect(oldPaused?.workflow?.steps.page.some((step) => step.name.includes('projectSpineDecision'))).toBe(true)
+    expect(oldPaused?.workflow?.steps.page.some((step: WorkflowStep) => step.name.includes('projectSpineDecision'))).toBe(true)
 
     await t.mutation(internal.projectSpine.sendDecision, {
       projectId: 'cr:v1', generation: 1, decisionId: 'decision:v1', decisionHash: 'sha256:v1', at: 2_000,
@@ -44,7 +52,7 @@ describe('project spine workflow spike', () => {
     expect(completed?.project).toMatchObject({
       projectId: 'cr:v1', generation: 1, definitionVersion: 'projectSpine_v1', status: 'completed', planRevision: 1,
     })
-    expect(completed?.events.map(({ kind }) => kind)).toEqual([
+    expect(completed?.events.map(({ kind }: ProjectSpineEvent) => kind)).toEqual([
       'workflow_started', 'decision_received', 'chase_recorded', 'quote_refreshed',
     ])
   })
@@ -76,7 +84,7 @@ describe('project spine workflow spike', () => {
     const waiting = await t.query(internal.projectSpine.readProjectSpine, { projectId: 'cr:delay' })
     expect(waiting?.project.status).toBe('awaiting_decision')
     expect(waiting?.workflow?.status.type).toBe('inProgress')
-    expect(waiting?.workflow?.steps.page.some((step) => step.name.includes('projectSpineDecision'))).toBe(true)
+    expect(waiting?.workflow?.steps.page.some((step: WorkflowStep) => step.name.includes('projectSpineDecision'))).toBe(true)
 
     vi.advanceTimersByTime(7 * 24 * 60 * 60 * 1_000)
     await t.mutation(internal.projectSpine.sendDecision, {
@@ -85,7 +93,7 @@ describe('project spine workflow spike', () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers)
     const done = await t.query(internal.projectSpine.readProjectSpine, { projectId: 'cr:delay' })
     expect(done?.project.status).toBe('completed')
-    expect(done?.events.some(({ kind }) => kind === 'chase_recorded')).toBe(true)
+    expect(done?.events.some(({ kind }: ProjectSpineEvent) => kind === 'chase_recorded')).toBe(true)
   })
 
   it('refreshes quote freshness while continuity stays on the same generation', async () => {

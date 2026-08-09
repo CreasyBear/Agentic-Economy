@@ -7,7 +7,7 @@ import type { ServiceDto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 
 import { AeAssistantInstallFunnel } from '../console/AeAssistantInstallFunnel'
-import { AeConsumerPlan } from '../plan/AeConsumerPlan'
+import { AeConsumerPlan, AeConsumerPlanResult } from '../plan/AeConsumerPlan'
 import { AeImportedClaims } from './AeImportedClaims'
 import { AeServiceRow } from './AeServiceRow'
 
@@ -30,14 +30,23 @@ export function AeServiceList({ services, query, plan, canonicalBaseUrl, importe
       </div>
     )
   }
+  // needs_information / unavailable still carry next-actions: surface the plan
+  // result card above the services evidence. `no_current_supply` is covered by the
+  // "Expand the network" empty state below, so it stays on that supply CTA path.
+  const resultCard =
+    plan === undefined || (plan.kind === 'unavailable' && plan.reason === 'no_current_supply')
+      ? null
+      : <AeConsumerPlanResult result={plan} initialQuery={query} />
+
   if (services.length === 0) {
     return (
       <div className="grid gap-6">
+        {resultCard}
         <Card className="grid w-full max-w-3xl gap-5 border border-border bg-card p-6">
           <div role="status" className="grid gap-2">
             <h2 className="text-xl font-semibold text-foreground">Expand the network for this ask</h2>
             <p className="block text-muted-foreground">
-              No listed business covers “{query}” yet. Businesses publish what they do here so agents can bring them work.
+              No listed business covers “{query}” yet. Businesses publish what they do here so people and agents can bring them work.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -58,7 +67,9 @@ export function AeServiceList({ services, query, plan, canonicalBaseUrl, importe
   const moreMatches = services.slice(3)
 
   return (
-    <section aria-labelledby="services-list-title" className="grid gap-5">
+    <div className="grid gap-6">
+      {resultCard}
+      <section aria-labelledby="services-list-title" className="grid gap-5">
       <div className="grid gap-2 border-b border-border pb-4">
         <p className="block text-sm font-semibold text-muted-foreground">OPTIONS FOR THIS ASK</p>
         <h2 id="services-list-title" className="text-xl font-semibold text-foreground">Compare your options</h2>
@@ -90,6 +101,7 @@ export function AeServiceList({ services, query, plan, canonicalBaseUrl, importe
           </ol>
         </details>
       )}
-    </section>
+      </section>
+    </div>
   )
 }

@@ -1,10 +1,11 @@
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type {
-  PublicAccessPath,
+  PublicBusinessPageNotFoundReason,
   PublicBusinessPageRouteReadbackResult,
   PublicOfferingSupplyProjection,
+  PublicAccessPath,
 } from '@/modules/catalog/public'
 import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { BusinessId, OperationKey, CorrelationId, OfferingRef } from '@/modules/common/ids'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
@@ -28,6 +29,11 @@ import {
   type SubmitInquiryErrorCode,
   type R1TargetAdmission,
 } from '@/modules/inquiries/public'
+
+type PublicInquiryAccessPath = Pick<PublicAccessPath, 'accessPathRef' | 'offeringRevision' | 'descriptor'>
+type PublicInquiryOffering = Omit<PublicOfferingSupplyProjection, 'accessPaths'> & {
+  accessPaths: readonly PublicInquiryAccessPath[]
+}
 
 export type PublicInquiryFormInput = {
   body: string
@@ -78,6 +84,11 @@ export type PublicInquiryRouteReadback =
       submitted?: PublicInquirySubmittedReceipt
     }
   | {
+      kind: 'not_found'
+      slug: string
+      reason: PublicBusinessPageNotFoundReason
+    }
+  | {
       kind: 'unavailable'
       slug: string
       reason: string
@@ -85,7 +96,6 @@ export type PublicInquiryRouteReadback =
       businessName?: string
       offeringName?: string
     }
-
 export type PublicInquirySubmittedReceipt = {
   threadId: string
   businessName: string
@@ -226,11 +236,18 @@ export function buildPublicInquiryAffordance(
 
 export function readPublicInquiryRouteReadback(input: PublicInquiryRouteInput): PublicInquiryRouteReadback {
   const page = input.page ?? publicPageFromInquirySourceState(input.state, input.slug)
-  if (page.kind !== 'available') {
+  if (page.kind === 'unavailable') {
     return {
       kind: 'unavailable',
       slug: input.slug,
-      reason: 'This business page is not public.',
+      reason: 'The public business source is unavailable right now. Try again in a moment.',
+    }
+  }
+  if (page.kind === 'not_found') {
+    return {
+      kind: 'not_found',
+      slug: input.slug,
+      reason: page.reason,
     }
   }
 
@@ -273,9 +290,16 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
       ...(firstError === undefined ? {} : { field: firstError.field }),
     }
   }
-
   const readback = readPublicInquiryRouteReadback({ slug: input.slug, state: input.state })
-  if (readback.kind !== 'available') {
+  if (readback.kind === 'not_found') {
+    return {
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: readback.reason,
+    }
+  }
+  if (readback.kind === 'unavailable') {
     return {
       kind: 'error',
       code: 'inquiry_target_not_admitted',
@@ -360,9 +384,15 @@ function publicPageFromInquirySourceState(
     ))
     if (revision === undefined) continue
     const accessPaths = state.offeringAccessPaths
-      .reduce<{ accessPathRef: (typeof state.offeringAccessPaths)[number]['accessPathRef']; descriptor: (typeof state.offeringAccessPaths)[number]['descriptor'] }[]>((acc, path) => {
+      .reduce<PublicAccessPath[]>((acc, path) => {
         if (path.businessId === offering.businessId && path.offeringRef === offering.offeringRef && path.offeringRevision === revision.revision && path.offeringSourceHash === revision.sourceHash && path.status === 'published') {
-          acc.push({ accessPathRef: path.accessPathRef, descriptor: path.descriptor })
+          acc.push({
+            accessPathRef: path.accessPathRef,
+            offeringRevision: path.offeringRevision,
+            offeringSourceHash: path.offeringSourceHash,
+            sourceHash: path.sourceHash,
+            descriptor: path.descriptor,
+          })
         }
         return acc
       }, [])
@@ -457,12 +487,12 @@ export function projectPublicInquiryAvailability(
  * reader is given and the link they can click are the same fact.
  */
 export function projectPublicInquiryOfferingSupply(
-  offerings: readonly PublicOfferingSupplyProjection[],
+  offerings: readonly PublicInquiryOffering[],
   inquiryHref: string | undefined,
-): readonly PublicOfferingSupplyProjection[] {
+): readonly PublicInquiryOffering[] {
   return offerings.map((offering) => ({
     ...offering,
-    accessPaths: offering.accessPaths.flatMap((path): readonly PublicAccessPath[] => {
+    accessPaths: offering.accessPaths.flatMap((path): readonly PublicInquiryAccessPath[] => {
       const descriptor = path.descriptor
       if (descriptor.kind !== 'human_request') return [path]
       if (descriptor.channel === 'ae_inquiry') {

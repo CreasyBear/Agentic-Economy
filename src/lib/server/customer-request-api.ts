@@ -34,8 +34,7 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
       customerJob: input.request,
       routing: {
         networkId: input.routing.network,
-        ...(input.routing.currency === undefined ? {} : { currency: input.routing.currency }),
-        ...(input.routing.maximumSpendMinor === undefined ? {} : { maximumSpendMinor: input.routing.maximumSpendMinor }),
+        ...(input.routing.maximumSpend === undefined ? {} : { maximumSpend: input.routing.maximumSpend }),
         ...(input.routing.optimizeFor === undefined ? {} : { optimizeFor: input.routing.optimizeFor }),
       },
     }),

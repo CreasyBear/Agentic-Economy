@@ -39,7 +39,7 @@ export function AeOperatorDataTable<TData>({
   data,
   filterColumnId,
   filterPlaceholder = 'Filter rows…',
-  emptyMessage = 'No rows match this filter.',
+  emptyMessage = 'No rows match this filter. Adjust the filter or search to see results.',
   caption = 'Operator data',
   maxHeight = 'min(70vh, 40rem)',
 }: AeOperatorDataTableProps<TData>) {

@@ -1,86 +1,99 @@
-import { readAnswerTurnFrames, type AnswerTurnFrame } from '@/modules/answer/public'
+import {
+  parseAnswerTurnProblem,
+  type AnswerTurnProblem,
+} from '@/lib/errors'
+import {
+  AnswerTurnProtocolError,
+  isAbortError,
+  readAnswerTurnFrames,
+  type AnswerTurnFrame,
+} from '@/modules/answer/public'
 import type { AnswerEvent } from '@/modules/answer/public'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 
 export type AnswerStreamFrame = AnswerTurnFrame
-
-export type StreamAnswerResult = 'done' | 'aborted' | 'error' | 'rate_limited'
-
-async function streamAnswerSse(input: {
-  url: string
-  method?: 'GET' | 'POST'
-  body?: string
-  headers?: Record<string, string>
-  signal?: AbortSignal
-  onFrame: (frame: AnswerStreamFrame) => void
-}): Promise<StreamAnswerResult> {
-  try {
-    const method = input.method ?? (input.body === undefined ? 'GET' : 'POST')
-    const response = await fetch(input.url, {
-      method,
-      credentials: 'same-origin',
-      headers: {
-        ...(input.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...input.headers,
-      },
-      ...(input.body === undefined ? {} : { body: input.body }),
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-    })
-
-    if (response.status === 429) {
-      return 'rate_limited'
-    }
-
-    if (!response.ok || response.body === null) {
-      return input.signal?.aborted === true ? 'aborted' : 'error'
-    }
-
-    for await (const frame of readAnswerTurnFrames(response.body)) {
-      input.onFrame(frame)
-    }
-
-    return input.signal?.aborted === true ? 'aborted' : 'done'
-  } catch (cause) {
-    if (input.signal?.aborted === true) {
-      return 'aborted'
-    }
-    if (cause instanceof DOMException && cause.name === 'AbortError') {
-      return 'aborted'
-    }
-    return 'error'
-  }
-}
-
-export type TurnStreamFrame = AnswerStreamFrame
-
 export type TurnThreadMeta = {
   threadId: string
   turnId: string
   turnSeq: number
 }
 
-export async function streamAnswerTurnRequest(input: {
-  query: string
-  threadId?: string
-  searchContext?: AeSearchContext
-  clientTurnKey?: string
+export type AnswerTurnTransportError = Readonly<{
+  kind: 'network' | 'protocol'
+  code: 'network_error' | 'malformed_problem' | 'malformed_sse' | 'missing_stream'
+  detail: string
+}>
+
+export type StreamAnswerResult =
+  | Readonly<{ kind: 'complete' }>
+  | Readonly<{ kind: 'aborted' }>
+  | Readonly<{ kind: 'problem'; problem: AnswerTurnProblem }>
+  | Readonly<{ kind: 'transport_error'; error: AnswerTurnTransportError }>
+
+const networkTransportError: AnswerTurnTransportError = {
+  kind: 'network',
+  code: 'network_error',
+  detail: 'The answer service could not be reached. Try again.',
+}
+
+function protocolTransportError(
+  code: Extract<AnswerTurnTransportError['code'], 'malformed_problem' | 'malformed_sse' | 'missing_stream'>,
+): AnswerTurnTransportError {
+  return {
+    kind: 'protocol',
+    code,
+    detail: code === 'missing_stream'
+      ? 'The answer service returned no answer stream.'
+      : code === 'malformed_problem'
+        ? 'The answer service returned an invalid problem response.'
+        : 'The answer service returned a malformed answer stream.',
+  }
+}
+
+async function parseHttpProblem(response: Response): Promise<AnswerTurnProblem | undefined> {
+  try {
+    return parseAnswerTurnProblem(await response.json())
+  } catch {
+    return undefined
+  }
+}
+
+type AnswerStreamCallbacks = {
   signal?: AbortSignal
-  onFrame: (frame: TurnStreamFrame) => void
+  onFrame: (frame: AnswerStreamFrame) => void
   onThread?: (meta: TurnThreadMeta) => void
-}): Promise<StreamAnswerResult> {
-  return streamAnswerSse({
-    url: '/api/answer/turn',
-    method: 'POST',
-    body: JSON.stringify({
-      query: input.query,
-      ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
-      ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
-    }),
-    ...(input.clientTurnKey === undefined
-      ? {}
-      : { headers: { 'X-AE-Turn-Key': input.clientTurnKey } }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-    onFrame: (frame) => {
+}
+
+async function requestAnswerStream(
+  url: string,
+  body: string,
+  input: AnswerStreamCallbacks & { clientTurnKey?: string },
+): Promise<StreamAnswerResult> {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(input.clientTurnKey === undefined ? {} : { 'X-AE-Turn-Key': input.clientTurnKey }),
+      },
+      body,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    })
+
+    if (!response.ok) {
+      const problem = await parseHttpProblem(response)
+      return problem === undefined
+        ? { kind: 'transport_error', error: protocolTransportError('malformed_problem') }
+        : { kind: 'problem', problem }
+    }
+
+    if (response.body === null) {
+      return { kind: 'transport_error', error: protocolTransportError('missing_stream') }
+    }
+
+    let terminalProblem: AnswerTurnProblem | undefined
+    for await (const frame of readAnswerTurnFrames(response.body)) {
       if (frame.event.type === 'thread') {
         input.onThread?.({
           threadId: frame.event.threadId,
@@ -88,9 +101,73 @@ export async function streamAnswerTurnRequest(input: {
           turnSeq: frame.event.turnSeq,
         })
       }
+      if (frame.event.type === 'error') terminalProblem = frame.event.problem
       input.onFrame(frame)
-    },
-  })
+    }
+
+    if (input.signal?.aborted === true) return { kind: 'aborted' }
+    return terminalProblem === undefined
+      ? { kind: 'complete' }
+      : { kind: 'problem', problem: terminalProblem }
+  } catch (cause) {
+    if (
+      input.signal?.aborted === true
+      || isAbortError(cause)
+      || (typeof DOMException !== 'undefined' && cause instanceof DOMException && cause.name === 'AbortError')
+    ) {
+      return { kind: 'aborted' }
+    }
+    if (cause instanceof AnswerTurnProtocolError) {
+      return { kind: 'transport_error', error: protocolTransportError(cause.code) }
+    }
+    return { kind: 'transport_error', error: networkTransportError }
+  }
+}
+
+export async function streamAnswerTurnRequest(input: {
+  query: string
+  threadId?: string
+  searchContext?: AeSearchContext
+  clientTurnKey: string
+  signal?: AbortSignal
+  onFrame: (frame: AnswerStreamFrame) => void
+  onThread?: (meta: TurnThreadMeta) => void
+}): Promise<StreamAnswerResult> {
+  return requestAnswerStream(
+    '/api/answer/turn',
+    JSON.stringify({
+      query: input.query,
+      ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+      ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
+    }),
+    input,
+  )
+}
+
+export async function resumeAnswerTurnRequest(input: {
+  reservationKey: string
+  requestDigest: string
+  threadId: string
+  turnId: string
+  turnSeq: number
+  generation: number
+  clientTurnKey: string
+  signal?: AbortSignal
+  onFrame: (frame: AnswerStreamFrame) => void
+  onThread?: (meta: TurnThreadMeta) => void
+}): Promise<StreamAnswerResult> {
+  return requestAnswerStream(
+    '/api/answer/turn/resume',
+    JSON.stringify({
+      reservationKey: input.reservationKey,
+      requestDigest: input.requestDigest,
+      threadId: input.threadId,
+      turnId: input.turnId,
+      turnSeq: input.turnSeq,
+      generation: input.generation,
+    }),
+    input,
+  )
 }
 
 export function appendThinkingStep(steps: readonly string[], label: string): string[] {

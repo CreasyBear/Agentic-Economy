@@ -4,6 +4,7 @@ import type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestationMaterial,
 } from '../../../../src/modules/action-invocation'
+import type { ExactAmount } from '../../../../src/modules/money/public'
 import type { DevelopmentProviderOperationSigningCustody } from './development-provider-operation-signing-custody'
 import type {
   DevelopmentProviderOperationCancellationInput,
@@ -24,7 +25,7 @@ export type DevelopmentProviderOperationProviderSnapshot = Readonly<{
     providerRef?: string
     slotRef?: string
     refusal?: 'terms_changed' | 'provider_refused'
-    exposureAmount?: Readonly<{ amountMinor: number; currency: string }>
+    exposureAmount?: ExactAmount
   }>
   effectRecords: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentProviderOperationInput; result: DevelopmentProviderOperationResult }>[]
   cancellations: readonly Readonly<{
@@ -41,7 +42,7 @@ export function createDevelopmentProviderOperationProvider(options: Readonly<{
   providerRef?: string
   slotRef?: string
   refusal?: 'terms_changed' | 'provider_refused'
-  exposureAmount?: Readonly<{ amountMinor: number; currency: string }>
+  exposureAmount?: ExactAmount
   signingCustody?: DevelopmentProviderOperationSigningCustody
   snapshot?: DevelopmentProviderOperationProviderSnapshot
 }> = {}) {
@@ -67,7 +68,10 @@ export function createDevelopmentProviderOperationProvider(options: Readonly<{
     startsAt: '2026-07-21T02:00:00.000Z',
     freshAt: '2026-07-19T04:00:00.000Z',
     expiresAt: '2026-07-19T04:15:00.000Z',
-    termsDigest: canonicalDigest({ cancellation: 'provider_supported_before_start', priceMinor: 0 }),
+    termsDigest: canonicalDigest({
+      cancellation: 'provider_supported_before_start',
+      price: { currency: 'AUD', units: '0', exponent: 2 },
+    }),
     provenance: {
       source: 'mock_provider_availability',
       observationRef: 'mock:availability-observation:001',
@@ -170,7 +174,7 @@ export function createDevelopmentProviderOperationProvider(options: Readonly<{
             originalEvidenceRef: effect.result.evidenceRef,
             cancellationRef,
             cancellationEvidenceRef: evidenceRef,
-            reversedAmount: options.exposureAmount ?? { amountMinor: 5_000, currency: 'AUD' },
+            reversedAmount: options.exposureAmount ?? { currency: 'AUD', units: '5000', exponent: 2 },
             signingCustody: options.signingCustody,
           })
       const result: DevelopmentProviderOperationCancellationResult = {
@@ -210,7 +214,7 @@ function issueExposureReleaseAttestation(input: Readonly<{
   originalEvidenceRef: string
   cancellationRef: string
   cancellationEvidenceRef: string
-  reversedAmount: Readonly<{ amountMinor: number; currency: string }>
+  reversedAmount: ExactAmount
   signingCustody: DevelopmentProviderOperationSigningCustody
 }>) {
   if (

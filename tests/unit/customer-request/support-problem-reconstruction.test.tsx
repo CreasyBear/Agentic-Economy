@@ -23,8 +23,8 @@ describe('support Request reconstruction', () => {
         state: 'current',
         source: 'customer_confirmation',
         spend: {
-          limit: { currency: 'AUD', amountMinor: 1_000 },
-          admitted: { currency: 'AUD', amountMinor: 300 },
+          limit: { currency: 'AUD', units: '1000', exponent: 2 },
+          admitted: { currency: 'AUD', units: '300', exponent: 2 },
         },
         dataSharing: [{
           classification: 'public',
@@ -55,7 +55,7 @@ describe('support Request reconstruction', () => {
 
     expect(html).toContain('Resolve a service reference and prepare its quote')
     expect(html).toContain('Route admission-resolver')
-    expect(html).toContain('AUD 10.00')
+    expect(html).toContain('AUD 10.00 maximum')
     expect(html).toContain('AUD 3.00 admitted so far')
     expect(html).toContain('AE support')
     expect(html).toContain('Wait for the next status update')

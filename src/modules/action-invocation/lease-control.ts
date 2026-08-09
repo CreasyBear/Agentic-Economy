@@ -3,6 +3,7 @@ import type {
   ActionInvocationView,
   DecisionRefusalCode,
 } from './contracts'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createAttempt, replaceAttempt } from './attempts'
 
 export type LeaseToken = Readonly<{
@@ -56,7 +57,7 @@ export function expireLease<Result extends { kind: string }>(
     outcome: {
       state: 'uncertain',
       retry: 'reconcile_before_retry',
-      message: 'Lease expired without final source evidence of non-release.',
+      errorDigest: canonicalDigest('Lease expired without final source evidence of non-release.'),
       reconciliationRequiredAt: observedAt,
     },
   }
@@ -114,7 +115,15 @@ export function publishLeaseObservation<Result extends { kind: string }>(input: 
   const attempt = input.view.attempts.find(({ attemptRef }) => attemptRef === input.attemptRef)
   if (attempt === undefined) return undefined
   const nextAttempt = input.release === 'not_released'
-    ? { ...attempt, release: { state: 'not_released' as const }, outcome: { state: 'failed' as const, retry: 'safe_before_release' as const, message: 'Worker observed no release.' } }
+    ? {
+        ...attempt,
+        release: { state: 'not_released' as const },
+        outcome: {
+          state: 'failed' as const,
+          retry: 'safe_before_release' as const,
+          errorDigest: canonicalDigest('Worker observed no release.'),
+        },
+      }
     : input.release === 'released'
       ? { ...attempt, release: { state: 'released' as const, observedAt: input.observedAt }, outcome: { state: 'reconciled_released' as const, externalOutcome: 'unknown' as const, observedAt: input.observedAt } }
       : {
@@ -123,7 +132,7 @@ export function publishLeaseObservation<Result extends { kind: string }>(input: 
           outcome: {
             state: 'uncertain' as const,
             retry: 'reconcile_before_retry' as const,
-            message: 'Worker could not prove release outcome.',
+            errorDigest: canonicalDigest('Worker could not prove release outcome.'),
             reconciliationRequiredAt: input.observedAt,
           },
         }

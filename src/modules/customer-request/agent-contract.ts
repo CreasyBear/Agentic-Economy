@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { exactAmountSchema } from '@/modules/money/public'
 
 export const CUSTOMER_REQUEST_AGENT_SCOPE = 'customer_requests:create' as const
 export const CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE = 'customer_requests:inspect_only' as const
@@ -82,6 +83,12 @@ export const CUSTOMER_REQUEST_AGENT_ENTRYPOINT = Object.freeze({
   authentication: 'clerk_api_key' as const,
   requiredScope: CUSTOMER_REQUEST_AGENT_SCOPE,
 })
+export const CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY = 'Authorization: Bearer <Clerk API key>' as const
+export const CUSTOMER_REQUEST_AGENT_BEARER_METHOD = 'header' as const
+export const CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES = Object.freeze([
+  CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope,
+  ...CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.map(customerRequestScopeForMode),
+])
 
 const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
 const safeNonnegativeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -99,18 +106,17 @@ export const customerRequestSubmitInputSchema = z.strictObject({
   request: boundedText(2_000),
   routing: z.strictObject({
     network: boundedText(200).default('ae:public'),
-    currency: z.string().regex(/^[A-Z]{3}$/u).optional(),
-    maximumSpendMinor: safeNonnegativeInteger.optional(),
+    maximumSpend: exactAmountSchema.optional(),
     optimizeFor: z.enum(['cost', 'latency']).optional(),
-  }).strict().default({ network: 'ae:public' }),
-}).strict()
+  }).default({ network: 'ae:public' }),
+})
 
 export const customerRequestMessageInputSchema = z.strictObject({
   idempotencyKey: boundedText(200), expectedRevision: safePositiveInteger,
   message: boundedText(2_000), mode: z.enum(['append', 'replace']).default('append'),
   replacesPriorStatement: boundedText(2_000).optional(),
   reportedRouteRef: boundedText(300).optional(),
-}).strict().superRefine((value, context) => {
+}).superRefine((value, context) => {
   if (value.mode === 'replace' && value.replacesPriorStatement !== undefined) {
     context.addIssue({
       code: 'custom',
@@ -130,15 +136,15 @@ export const customerRequestMessageInputSchema = z.strictObject({
 export const customerRequestFactInputSchema = z.strictObject({
   idempotencyKey: boundedText(200), expectedRevision: safePositiveInteger,
   requirementKey: boundedText(300), value: customerRequestJsonValueSchema,
-}).strict()
+})
 
 export const customerRequestOptionsInputSchema = z.strictObject({
   revision: safePositiveInteger, idempotencyKey: boundedText(200),
-}).strict()
+})
 
 export const customerRequestRouteConfirmationInputSchema = z.strictObject({
   revision: safePositiveInteger, routeRef: boundedText(300), idempotencyKey: boundedText(200),
-}).strict()
+})
 
 export const customerRequestRouteActionInputSchema = z.strictObject({
   idempotencyKey: boundedText(200),
@@ -149,10 +155,7 @@ export const customerRequestCancellationInputSchema = z.strictObject({
   mode: z.enum(['current_and_downstream', 'after_current_step']).default('current_and_downstream'),
 })
 
-const repeatPermissionMoneySchema = z.strictObject({
-  currency: z.string().regex(/^[A-Z]{3}$/u),
-  amountMinor: safeNonnegativeInteger,
-})
+const repeatPermissionMoneySchema = exactAmountSchema
 
 export const customerRequestRepeatPermissionAllowInputSchema = z.strictObject({
   revision: safePositiveInteger,
@@ -299,54 +302,54 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
       message: boundedText(1_000),
       recordedAt: safeNonnegativeInteger,
     })).default([]),
-  }).strict()).default([]),
+  })).default([]),
   result: customerRequestJsonValueSchema.optional(),
 })
 
 export const customerRequestAuthorizationInputSchema = z.strictObject({
   revision: safePositiveInteger, preparationRef: boundedText(300), idempotencyKey: boundedText(200),
-}).strict()
+})
 
-const moneySchema = z.strictObject({ currency: z.string(), amountMinor: safeNonnegativeInteger }).strict()
+const moneySchema = exactAmountSchema
 const customerOptionSchema = z.strictObject({
-  optionRef: z.string(), business: z.strictObject({ name: z.string() }).strict(),
+  optionRef: z.string(), business: z.strictObject({ name: z.string() }),
   expectedCost: moneySchema, maximumCost: moneySchema,
   expectedLatencyMs: safeNonnegativeInteger,
-  priceComponents: z.array(z.strictObject({ label: z.string(), amountMinor: safeNonnegativeInteger }).strict()),
+  priceComponents: z.array(z.strictObject({ label: z.string(), amount: moneySchema })),
   comparableOutputs: z.array(z.strictObject({
     label: z.string(), value: z.union([z.string(), z.number(), z.boolean()]),
-  }).strict()),
+  })),
   materialTerms: z.array(z.string()),
   cancellation: z.strictObject({
     kind: z.enum(['supported', 'conditional', 'unsupported']), summary: z.string(),
-  }).strict(),
+  }),
   commercialInfluence: z.union([
-    z.strictObject({ status: z.literal('unknown') }).strict(),
-    z.strictObject({ status: z.literal('none'), summary: z.string() }).strict(),
+    z.strictObject({ status: z.literal('unknown') }),
+    z.strictObject({ status: z.literal('none'), summary: z.string() }),
     z.strictObject({
       status: z.literal('disclosed'), relationship: z.enum(['commission', 'sponsorship', 'rebate', 'ownership', 'other']),
       summary: z.string(), payerName: z.string(), beneficiaryName: z.string(), compensationBasis: z.string(),
       influencesEligibility: z.boolean(), influencesInclusion: z.boolean(), influencesOrder: z.boolean(),
-    }).strict(),
+    }),
   ]),
   expiresAt: safePositiveInteger,
   provenance: z.strictObject({
     kind: z.literal('provider_assertion'), observedAt: safeNonnegativeInteger.optional(), validUntil: safePositiveInteger,
-  }).strict(),
-}).strict()
+  }),
+})
 
 const orderingSchema = z.union([
   z.strictObject({
     kind: z.literal('not_applicable'), commercialInfluence: z.enum(['none', 'disclosed', 'unknown']),
-  }).strict(),
+  }),
   z.strictObject({
     kind: z.literal('unranked'), commercialInfluence: z.enum(['none', 'disclosed', 'unknown']),
-  }).strict(),
+  }),
   z.strictObject({
     kind: z.literal('recommended'), commercialInfluence: z.enum(['none', 'disclosed']),
     objective: z.literal('lowest_maximum_price'), optionRef: z.string(), evidenceRef: z.string(),
     reasons: z.array(z.string()), tradeoffs: z.array(z.string()),
-  }).strict(),
+  }),
 ])
 
 const customerOptionSetSchema = z.strictObject({
@@ -359,53 +362,53 @@ const customerOptionSetSchema = z.strictObject({
       name: z.string(),
       status: z.enum(['not_contacted', 'contact_pending', 'contacted', 'option_received', 'unavailable', 'uncertain']),
       explanation: z.string(),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   options: z.array(customerOptionSchema),
-}).strict()
+})
 
-const customerBusinessSchema = z.strictObject({ businessRef: z.string(), name: z.string() }).strict()
+const customerBusinessSchema = z.strictObject({ businessRef: z.string(), name: z.string() })
 const customerRouteMaximumCostSchema = z.union([
-  z.strictObject({ kind: z.literal('known'), currency: z.string(), amountMinor: safeNonnegativeInteger }).strict(),
-  z.strictObject({ kind: z.literal('requires_preparation') }).strict(),
+  z.strictObject({ kind: z.literal('known'), amount: exactAmountSchema }),
+  z.strictObject({ kind: z.literal('requires_preparation') }),
 ])
 const customerRouteRecipientSchema = z.strictObject({
   recipientRef: z.string(), name: z.string(), purposes: z.array(z.string()),
   fields: z.array(z.strictObject({
     fieldRef: z.string(), label: z.string(),
     classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
-  }).strict()),
-}).strict()
+  })),
+})
 const customerRouteEffectSchema = z.strictObject({
   kind: z.enum(['information_shared', 'financial_commitment', 'external_change']),
   reversibility: z.enum(['not_applicable', 'reversible', 'conditional', 'irreversible']),
-}).strict()
+})
 const customerRouteEvidenceSchema = z.strictObject({
   label: z.string(), purpose: z.enum(['comparison', 'completion', 'recovery']),
-}).strict()
+})
 const customerRouteRecoverySchema = z.strictObject({
   step: safePositiveInteger, businessName: z.string(), posture: z.enum(['retry_safe', 'reconcile_required']),
-}).strict()
+})
 const customerRouteFallbackSchema = z.strictObject({
   available: z.boolean(),
   alternatives: z.array(z.strictObject({
     routeRef: z.string(), when: z.literal('route_unavailable_before_confirmation'),
-  }).strict()),
-}).strict()
+  })),
+})
 const customerRouteResultSchema = z.strictObject({
   resultRef: z.string(), summary: z.string(), deliverables: z.array(z.string()),
-}).strict()
+})
 const customerRouteResultChangeSchema = customerRouteResultSchema.extend({
   position: safePositiveInteger.optional(),
-}).strict()
+})
 
 const customerRouteCommercialInfluenceSchema = z.union([
-  z.strictObject({ status: z.literal('unknown') }).strict(),
-  z.strictObject({ status: z.literal('none'), evidenceRefs: z.array(z.string()) }).strict(),
+  z.strictObject({ status: z.literal('unknown') }),
+  z.strictObject({ status: z.literal('none'), evidenceRefs: z.array(z.string()) }),
   z.strictObject({
     status: z.literal('disclosed'), summaries: z.array(z.string()).min(1),
     evidenceRefs: z.array(z.string()).min(1), affectsDecision: z.boolean(),
-  }).strict(),
+  }),
 ])
 
 const customerRouteComparisonEvidenceSchema = z.strictObject({
@@ -419,9 +422,9 @@ const customerRouteComparisonEvidenceSchema = z.strictObject({
   evidenceCount: safeNonnegativeInteger,
   freshness: z.strictObject({
     state: z.enum(['current', 'expired']), validUntil: safePositiveInteger,
-  }).strict(),
+  }),
   commercialInfluence: customerRouteCommercialInfluenceSchema,
-}).strict()
+})
 
 const customerRoutePlanSchema = z.strictObject({
   routeRef: z.string(),
@@ -435,27 +438,27 @@ const customerRoutePlanSchema = z.strictObject({
     recipientCount: safeNonnegativeInteger,
     recipients: z.array(customerRouteRecipientSchema),
     purposes: z.array(z.string()),
-  }).strict(),
+  }),
   effects: z.array(customerRouteEffectSchema),
   evidence: z.array(customerRouteEvidenceSchema),
   recovery: z.array(customerRouteRecoverySchema),
   cancellation: z.strictObject({
     kind: z.enum(['available', 'partially_available', 'unavailable']), summary: z.string(),
-  }).strict(),
+  }),
   validUntil: safePositiveInteger,
   fallback: customerRouteFallbackSchema,
   uncertainty: z.array(z.enum(['price_needs_confirmation', 'customer_fact_needs_evidence'])),
   comparison: customerRouteComparisonEvidenceSchema,
   steps: z.array(z.strictObject({
     step: safePositiveInteger, business: customerBusinessSchema, after: z.array(safePositiveInteger),
-  }).strict()).optional(),
-}).strict()
+  })).optional(),
+})
 
 export const customerRouteConfirmationSchema = z.strictObject({
   confirmationRef: z.string(), generationRef: z.string(), requestRevision: safePositiveInteger,
   confirmedAt: safeNonnegativeInteger, validUntil: safePositiveInteger,
   route: customerRoutePlanSchema,
-}).strict()
+})
 
 const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
   z.strictObject({
@@ -463,124 +466,124 @@ const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
     before: z.array(z.strictObject({
       label: z.string(), value: customerRequestJsonValueSchema,
       basis: z.enum(['customer_provided', 'extracted_from_request']),
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       label: z.string(), value: customerRequestJsonValueSchema,
       basis: z.enum(['customer_provided', 'extracted_from_request']),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('route_result'),
-    before: z.strictObject({ routeCount: safeNonnegativeInteger, results: z.array(customerRouteResultChangeSchema) }).strict(),
-    after: z.strictObject({ routeCount: safeNonnegativeInteger, results: z.array(customerRouteResultChangeSchema) }).strict(),
-  }).strict(),
+    before: z.strictObject({ routeCount: safeNonnegativeInteger, results: z.array(customerRouteResultChangeSchema) }),
+    after: z.strictObject({ routeCount: safeNonnegativeInteger, results: z.array(customerRouteResultChangeSchema) }),
+  }),
   z.strictObject({
     kind: z.literal('businesses'),
     before: z.array(z.strictObject({
       resultRef: z.string(), businesses: z.array(customerBusinessSchema),
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), businesses: z.array(customerBusinessSchema),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('step_shape'),
     before: z.array(z.strictObject({
       resultRef: z.string(), steps: safePositiveInteger, dependencies: safeNonnegativeInteger,
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), steps: safePositiveInteger, dependencies: safeNonnegativeInteger,
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('maximum_cost'),
-    before: z.array(z.strictObject({ resultRef: z.string(), cost: customerRouteMaximumCostSchema }).strict()),
-    after: z.array(z.strictObject({ resultRef: z.string(), cost: customerRouteMaximumCostSchema }).strict()),
-  }).strict(),
+    before: z.array(z.strictObject({ resultRef: z.string(), cost: customerRouteMaximumCostSchema })),
+    after: z.array(z.strictObject({ resultRef: z.string(), cost: customerRouteMaximumCostSchema })),
+  }),
   z.strictObject({
     kind: z.literal('data_use'),
     before: z.array(z.strictObject({
       resultRef: z.string(), recipients: z.array(customerRouteRecipientSchema),
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), recipients: z.array(customerRouteRecipientSchema),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('effects'),
-    before: z.array(z.strictObject({ resultRef: z.string(), effects: z.array(customerRouteEffectSchema) }).strict()),
-    after: z.array(z.strictObject({ resultRef: z.string(), effects: z.array(customerRouteEffectSchema) }).strict()),
-  }).strict(),
+    before: z.array(z.strictObject({ resultRef: z.string(), effects: z.array(customerRouteEffectSchema) })),
+    after: z.array(z.strictObject({ resultRef: z.string(), effects: z.array(customerRouteEffectSchema) })),
+  }),
   z.strictObject({
     kind: z.literal('evidence'),
-    before: z.array(z.strictObject({ resultRef: z.string(), evidence: z.array(customerRouteEvidenceSchema) }).strict()),
-    after: z.array(z.strictObject({ resultRef: z.string(), evidence: z.array(customerRouteEvidenceSchema) }).strict()),
-  }).strict(),
+    before: z.array(z.strictObject({ resultRef: z.string(), evidence: z.array(customerRouteEvidenceSchema) })),
+    after: z.array(z.strictObject({ resultRef: z.string(), evidence: z.array(customerRouteEvidenceSchema) })),
+  }),
   z.strictObject({
     kind: z.literal('uncertainty'),
     before: z.array(z.strictObject({
       resultRef: z.string(), uncertainty: z.array(z.enum([
         'price_needs_confirmation', 'customer_fact_needs_evidence',
       ])),
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), uncertainty: z.array(z.enum([
         'price_needs_confirmation', 'customer_fact_needs_evidence',
       ])),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('expiry'),
-    before: z.array(z.strictObject({ resultRef: z.string(), validUntil: safePositiveInteger }).strict()),
-    after: z.array(z.strictObject({ resultRef: z.string(), validUntil: safePositiveInteger }).strict()),
-  }).strict(),
+    before: z.array(z.strictObject({ resultRef: z.string(), validUntil: safePositiveInteger })),
+    after: z.array(z.strictObject({ resultRef: z.string(), validUntil: safePositiveInteger })),
+  }),
   z.strictObject({
     kind: z.literal('fallback'),
     before: z.array(z.strictObject({
       resultRef: z.string(), alternatives: z.array(customerRouteResultSchema),
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), alternatives: z.array(customerRouteResultSchema),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('recovery'),
     before: z.array(z.strictObject({
       resultRef: z.string(), steps: z.array(customerRouteRecoverySchema),
-    }).strict()),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), steps: z.array(customerRouteRecoverySchema),
-    }).strict()),
-  }).strict(),
+    })),
+  }),
   z.strictObject({
     kind: z.literal('cancellation'),
     before: z.array(z.strictObject({
       resultRef: z.string(), cancellation: z.strictObject({
         kind: z.enum(['available', 'partially_available', 'unavailable']), summary: z.string(),
-      }).strict(),
-    }).strict()),
+      }),
+    })),
     after: z.array(z.strictObject({
       resultRef: z.string(), cancellation: z.strictObject({
         kind: z.enum(['available', 'partially_available', 'unavailable']), summary: z.string(),
-      }).strict(),
-    }).strict()),
-  }).strict(),
+      }),
+    })),
+  }),
 ])
 
 export const customerRoutePlanDecisionSchema = z.strictObject({
   generationRef: z.string(), requestRevision: safePositiveInteger,
   outcome: z.strictObject({
     kind: z.enum(['routes_available', 'routes_expired']), routeCount: safePositiveInteger, summary: z.string(),
-  }).strict(),
+  }),
   routes: z.array(customerRoutePlanSchema).min(1),
   comparison: z.union([
-    z.strictObject({ kind: z.literal('single'), summary: z.string() }).strict(),
+    z.strictObject({ kind: z.literal('single'), summary: z.string() }),
     z.strictObject({
       kind: z.literal('recommended'), summary: z.string(), routeRef: z.string(),
       objective: z.literal('lowest_maximum_price'), evidenceRef: z.string(),
       commercialInfluence: z.enum(['none', 'disclosed']), reasons: z.array(z.string()).min(1),
       tradeoffs: z.array(z.string()).min(1),
-    }).strict(),
+    }),
     z.strictObject({
       kind: z.literal('unranked'),
       reason: z.enum([
@@ -588,11 +591,11 @@ export const customerRoutePlanDecisionSchema = z.strictObject({
         'stale_evidence', 'comparison_evidence_missing', 'ranking_evidence_invalid',
       ]),
       summary: z.string(),
-    }).strict(),
+    }),
     z.strictObject({
       kind: z.literal('incomparable'), summary: z.string(),
-      groups: z.array(z.strictObject({ outcomeRef: z.string(), routeRefs: z.array(z.string()).min(1) }).strict()).min(2),
-    }).strict(),
+      groups: z.array(z.strictObject({ outcomeRef: z.string(), routeRefs: z.array(z.string()).min(1) })).min(2),
+    }),
   ]),
   actions: z.strictObject({
     review: z.strictObject({
@@ -617,47 +620,47 @@ export const customerRoutePlanDecisionSchema = z.strictObject({
     }),
   }),
   changes: z.union([
-    z.strictObject({ kind: z.literal('initial') }).strict(),
-    z.strictObject({ kind: z.literal('unchanged'), previousGenerationRef: z.string() }).strict(),
+    z.strictObject({ kind: z.literal('initial') }),
+    z.strictObject({ kind: z.literal('unchanged'), previousGenerationRef: z.string() }),
     z.strictObject({
       kind: z.literal('changed'), previousGenerationRef: z.string(),
       items: z.array(customerRouteDecisionChangeSchema).min(1),
-    }).strict(),
+    }),
   ]),
-  nextBoundary: z.strictObject({ kind: z.literal('confirmation'), authorityCreated: z.literal(false) }).strict(),
+  nextBoundary: z.strictObject({ kind: z.literal('confirmation'), authorityCreated: z.literal(false) }),
 })
 
 export const customerPreparedActionSchema = z.strictObject({
   actionRef: z.string(), businessName: z.string(), offeringLabel: z.string(), summary: z.string(),
   price: z.strictObject({
-    currency: z.string(), minimumAmountMinor: safeNonnegativeInteger, maximumAmountMinor: safeNonnegativeInteger,
-  }).strict(),
-  materialTerms: z.array(z.strictObject({ label: z.string(), value: z.string() }).strict()),
-  cancellation: z.strictObject({ kind: z.enum(['available', 'unsupported']) }).strict(),
+    minimum: exactAmountSchema, maximum: exactAmountSchema,
+  }),
+  materialTerms: z.array(z.strictObject({ label: z.string(), value: z.string() })),
+  cancellation: z.strictObject({ kind: z.enum(['available', 'unsupported']) }),
   validUntil: safePositiveInteger,
   selection: z.strictObject({
     basis: z.enum(['single_option', 'lowest_maximum_price']),
     alternativeCount: safeNonnegativeInteger, unavailableCount: safeNonnegativeInteger,
     commercialInfluence: z.enum(['none', 'disclosed']),
-  }).strict(),
+  }),
   dataUse: z.strictObject({
     categories: z.array(z.strictObject({
       label: z.string(), classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
-    }).strict()),
+    })),
     purposes: z.array(z.string()),
-  }).strict(),
+  }),
   effects: z.array(z.strictObject({
     class: z.enum(['data_release', 'financial_exposure', 'external_state_change']),
     reversibility: z.enum(['not_applicable', 'reversible', 'conditional', 'irreversible']),
-  }).strict()),
+  })),
   alternatives: z.array(z.strictObject({
     businessName: z.string(),
     price: z.strictObject({
-      currency: z.string(), minimumAmountMinor: safeNonnegativeInteger, maximumAmountMinor: safeNonnegativeInteger,
-    }).strict(),
+      minimum: exactAmountSchema, maximum: exactAmountSchema,
+    }),
     validUntil: safePositiveInteger,
-  }).strict()),
-}).strict()
+  })),
+})
 
 const customerRequestAgentNavigationInputValueSchema = z.union([
   z.string(), z.number(), z.boolean(), z.null(), z.array(z.string()),
@@ -702,23 +705,23 @@ export const customerRequestViewSchema = z.strictObject({
     'provide_information', 'prepare_options', 'inspect_routes', 'inspect_confirmation', 'wait', 'inspect_options', 'revise_request',
     'review_disclosure', 'retry', 'none',
   ]),
-  missingFields: z.array(z.strictObject({ field: z.string(), label: z.string(), explanation: z.string() }).strict()),
+  missingFields: z.array(z.strictObject({ field: z.string(), label: z.string(), explanation: z.string() })),
   criteria: z.array(z.strictObject({
     label: z.string(), value: customerRequestJsonValueSchema,
     basis: z.enum(['customer_provided', 'extracted_from_request']),
     impact: z.enum(['eligibility_and_comparison', 'uncertainty', 'authority_boundary']),
-  }).strict()).optional(),
+  })).optional(),
   disclosureReview: z.strictObject({
     purpose: z.string(), maximumRecipients: safeNonnegativeInteger,
     categories: z.array(z.strictObject({
       label: z.string(), classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
-    }).strict()),
-  }).strict().optional(),
+    })),
+  }).optional(),
   dataHandling: z.strictObject({
     requestStorage: z.literal('saved_for_revision'),
     businessSharing: z.literal('not_shared'),
     explanation: z.string(),
-  }).strict().optional(),
+  }).optional(),
   unsupportedRecovery: customerUnsupportedRecoverySchema.optional(),
   /**
    * Present only when AE matched keywords from the request text instead of interpreting it,
@@ -730,11 +733,11 @@ export const customerRequestViewSchema = z.strictObject({
   clarification: z.union([
     z.strictObject({
       kind: z.literal('intent_direction'), prompt: z.string(), answerKind: z.literal('natural_language'),
-    }).strict(),
+    }),
     z.strictObject({
       kind: z.literal('contract_fact'), requirementKey: z.string(), prompt: z.string(),
       answerKind: z.literal('typed_value'),
-    }).strict(),
+    }),
   ]).optional(),
   options: z.array(customerOptionSchema), optionSet: customerOptionSetSchema.optional(),
   preparedAction: customerPreparedActionSchema.optional(),
@@ -753,7 +756,7 @@ export const customerRequestViewSchema = z.strictObject({
         'queued', 'leased', 'ready_to_contact', 'contacting', 'awaiting_result',
         'completed', 'needs_attention', 'cancelled',
       ]),
-    }).strict(),
+    }),
     dependencies: z.strictObject({
       completed: z.array(z.strictObject({
         step: safePositiveInteger, business: z.string(),
@@ -763,7 +766,7 @@ export const customerRequestViewSchema = z.strictObject({
         waitingForStep: safePositiveInteger, waitingForBusiness: z.string(),
       })),
     }).optional(),
-  }).strict().optional(),
+  }).optional(),
   activity: z.strictObject({
     actor: z.enum(['ae', 'business', 'customer', 'none', 'ae_for_customer']),
     certainty: z.enum(['pending', 'unknown', 'confirmed', 'failed', 'cancelled']),
@@ -848,7 +851,7 @@ export const customerRequestViewSchema = z.strictObject({
 export const customerRequestConflictSchema = z.strictObject({
   kind: z.literal('conflict'), requestRef: z.string(),
   reason: z.enum(['revision_changed', 'options_changed', 'identity_changed', 'idempotency_key_reused']),
-}).strict()
+})
 
 export const customerRequestRefusalSchema = z.strictObject({
   kind: z.literal('refused'),
@@ -856,7 +859,7 @@ export const customerRequestRefusalSchema = z.strictObject({
     'authentication_required', 'request_not_found', 'interpreter_unavailable', 'capabilities_unavailable',
     'evidence_not_found', 'invalid_amendment', 'rate_limited',
   ]),
-}).strict()
+})
 
 export const customerRequestRepeatPermissionSchema = z.strictObject({
   kind: z.literal('repeat_permission'),
@@ -924,7 +927,7 @@ export const customerRequestInspectResultSchema = z.union([
   customerRequestViewSchema,
   z.strictObject({
     kind: z.literal('refused'), reason: z.enum(['authentication_required', 'request_not_found']),
-  }).strict(),
+  }),
 ])
 
 export type CustomerRequestRepeatPermission = z.infer<typeof customerRequestRepeatPermissionSchema>

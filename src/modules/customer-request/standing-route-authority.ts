@@ -1,4 +1,6 @@
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { addExactAmounts, compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { CustomerRequestRoutePlanGeneration } from './route-plan-generation'
@@ -9,7 +11,7 @@ import {
 
 export const STANDING_ROUTE_POLICY_FORMAT = 'ae.standing-route-policy:v1' as const
 
-type Money = Readonly<{ currency: string; amountMinor: number }>
+type Money = ExactAmount
 type CapabilityContractRef = CustomerRequestRoutePlanGeneration['routes'][number]['steps'][number]['contractRef']
 
 export type StandingRoutePolicy = Readonly<{
@@ -141,9 +143,9 @@ export function evaluateStandingRouteAuthority(input: Readonly<{
     return { kind: 'refused', reason: 'consequential_effect_requires_confirmation' }
   }
   if (route.maximumTotalCost.kind !== 'known'
-    || !sameCurrency(route.maximumTotalCost, policy.limits.perUseSpend)
-    || !sameCurrency(route.maximumTotalCost, policy.limits.cumulativeSpend)
-    || route.maximumTotalCost.amountMinor > policy.limits.perUseSpend.amountMinor) {
+    || compareExactAmounts(route.maximumTotalCost.amount, policy.limits.perUseSpend) === undefined
+    || compareExactAmounts(route.maximumTotalCost.amount, policy.limits.cumulativeSpend) === undefined
+    || compareExactAmounts(route.maximumTotalCost.amount, policy.limits.perUseSpend) === 1) {
     return { kind: 'refused', reason: 'spend_limit_exceeded' }
   }
   const dataAllocations = route.steps.reduce((total, { dataUse }) => total + dataUse.length, 0)
@@ -157,12 +159,14 @@ export function evaluateStandingRouteAuthority(input: Readonly<{
   if (input.priorUses.length >= policy.limits.occurrences) {
     return { kind: 'refused', reason: 'occurrence_limit_exceeded' }
   }
-  const cumulativeSpend = input.priorUses.reduce(
-    (total, use) => total + use.maximumSpend.amountMinor,
-    route.maximumTotalCost.amountMinor,
-  )
-  if (!Number.isSafeInteger(cumulativeSpend)
-    || cumulativeSpend > policy.limits.cumulativeSpend.amountMinor) {
+  let cumulativeSpend = route.maximumTotalCost.amount
+  for (const use of input.priorUses) {
+    const next = addExactAmounts(cumulativeSpend, use.maximumSpend)
+    if (next === undefined) return { kind: 'refused', reason: 'spend_limit_exceeded' }
+    cumulativeSpend = next
+  }
+  const cumulativeSpendComparison = compareExactAmounts(cumulativeSpend, policy.limits.cumulativeSpend)
+  if (cumulativeSpendComparison === undefined || cumulativeSpendComparison > 0) {
     return { kind: 'refused', reason: 'spend_limit_exceeded' }
   }
   const cumulativeData = input.priorUses.reduce(
@@ -188,10 +192,7 @@ export function evaluateStandingRouteAuthority(input: Readonly<{
     routePlanId: route.routePlanId,
     routeDigest: route.routeDigest,
     occurrence,
-    maximumSpend: {
-      currency: route.maximumTotalCost.currency,
-      amountMinor: route.maximumTotalCost.amountMinor,
-    },
+    maximumSpend: route.maximumTotalCost.amount,
     dataAllocations,
     usedAt: input.now,
     mandateExpiresAt: input.mandateExpiresAt,
@@ -230,7 +231,8 @@ function validPriorUse(use: StandingRouteAuthorityUse, policy: StandingRoutePoli
     && canonicalDigest(material as StableHashValue) === use.authorityUseDigest
     && use.standingPolicyRef === policy.policyRef
     && use.standingPolicyDigest === policy.policyDigest
-    && sameCurrency(use.maximumSpend, policy.limits.cumulativeSpend)
+    && exactAmountSchema.safeParse(use.maximumSpend).success
+    && compareExactAmounts(use.maximumSpend, policy.limits.cumulativeSpend) !== undefined
     && validCount(use.dataAllocations)
     && validCount(use.occurrence)
 }
@@ -253,9 +255,6 @@ function contractKey(contract: CapabilityContractRef): string {
   return `${contract.capabilityId}:${contract.version}:${contract.contractDigest}`
 }
 
-function sameCurrency(left: Money, right: Money): boolean {
-  return left.currency === right.currency
-}
 
 function validTime(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0

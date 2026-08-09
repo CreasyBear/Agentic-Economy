@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessSupplyProjection, OfferingPrice } from '@/modules/catalog/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { buildOfferingDiscoveryManifest } from '@/modules/discovery/public'
 import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
@@ -34,6 +35,16 @@ describe('Offering discovery manifest', () => {
       },
       accessPaths: [{
         accessPathRef: brandNonEmpty('access:graph:query', 'AccessPathRef'),
+        offeringRevision: 1,
+        offeringSourceHash: canonicalDigest({
+          fixture: 'offering-discovery-manifest',
+          offeringRef: 'offering:graph:data',
+          revision: 1,
+        }),
+        sourceHash: canonicalDigest({
+          fixture: 'offering-discovery-manifest',
+          accessPathRef: 'access:graph:query',
+        }),
         descriptor: {
           kind: 'external_operation',
           name: 'GraphQL query',
@@ -54,21 +65,20 @@ describe('Offering discovery manifest', () => {
       accessPaths: [{ kind: 'external_operation', provenance: 'business_declared' }],
       support: { integrated: false, aeSupportedAction: false },
     })
-    expect(JSON.stringify(result.manifest)).not.toMatch(/sourceDigest|sourceHash|routeable|credential|adapter|reasons/i)
+    expect(JSON.stringify(result.manifest)).not.toMatch(/sourceDigest|routeable|credential|adapter|reasons/i)
   })
 
   it('carries the comparable price, and strips a bidi control out of the currency', () => {
     const price: OfferingPrice = {
       kind: 'range',
-      currency: 'AUD',
-      amountMinor: 18000,
-      maximumAmountMinor: 42000,
+      minimum: { currency: 'AUD', units: '18000', exponent: 2 },
+      maximum: { currency: 'AUD', units: '42000', exponent: 2 },
       unit: 'job',
       taxTreatment: 'inclusive',
     }
     const business = projectBusinessSupplyToPublicApi(projection([
       pricedOffering('offering:graph:priced', price),
-      pricedOffering('offering:graph:hostile', { ...price, currency: 'A\u202eUD' }),
+      pricedOffering('offering:graph:hostile', { ...price, minimum: { ...price.minimum, currency: 'A\u202eUD' } }),
     ]))
 
     const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://agentic.market', now: 101 })
@@ -79,8 +89,8 @@ describe('Offering discovery manifest', () => {
       pricingSummary: 'Quoted before work starts',
       price,
     })
-    // Every other field is a bounded enum or an integer; currency is free text.
-    expect(result.manifest.offerings[1]?.price?.currency).toBe('AUD')
+    // Currency is free text; exact amount units and exponent remain structured.
+    expect(result.manifest.offerings[1]?.price).toMatchObject({ minimum: { currency: 'AUD' } })
   })
 
   it('publishes no price for an offering that published none', () => {
@@ -125,7 +135,7 @@ describe('Offering discovery manifest', () => {
     const business = projectBusinessSupplyToPublicApi({
       ...projection([humanRequestOffering('phone')]),
       business: { ...projection([]).business, publishedPhone: '(08) 5550 1030' },
-    } as BusinessSupplyProjection)
+    })
 
     const result = buildOfferingDiscoveryManifest({
       business, canonicalBaseUrl: 'https://agentic.market', now: 101, inquiryAdmitted: false,
@@ -153,20 +163,21 @@ describe('Offering discovery manifest', () => {
 function projection(offerings: BusinessSupplyProjection['offerings']): BusinessSupplyProjection {
   return {
     business: {
-      businessId: 'business:graph',
+      businessId: brandNonEmpty('business:graph', 'BusinessId'),
       slug: 'the-graph',
       name: 'The Graph',
       category: 'Data',
       suburb: 'Online',
       stateTerritory: 'Global',
       publicUrl: '/the-graph',
+      trustTier: 'claimed',
     },
     offerings,
     sourceRevision: 1,
-    sourceDigest: 'private-source-digest',
+    sourceDigest: canonicalDigest('offering-discovery-manifest:source'),
     observedAt: 100,
     disposition: 'current',
-  } as BusinessSupplyProjection
+  }
 }
 
 function humanRequestOffering(channel: 'ae_inquiry' | 'phone'): BusinessSupplyProjection['offerings'][number] {
@@ -180,6 +191,12 @@ function humanRequestOffering(channel: 'ae_inquiry' | 'phone'): BusinessSupplyPr
     },
     accessPaths: [{
       accessPathRef: brandNonEmpty(`access:demo:${channel}`, 'AccessPathRef'),
+      offeringRevision: 1,
+      offeringSourceHash: canonicalDigest('offering-discovery-manifest:offering:demo:plumbing'),
+      sourceHash: canonicalDigest({
+        fixture: 'offering-discovery-manifest',
+        accessPathRef: `access:demo:${channel}`,
+      }),
       descriptor: {
         kind: 'human_request',
         channel,
@@ -187,7 +204,7 @@ function humanRequestOffering(channel: 'ae_inquiry' | 'phone'): BusinessSupplyPr
       },
     }],
     support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
-  } as BusinessSupplyProjection['offerings'][number]
+  }
 }
 
 function pricedOffering(ref: string, price: OfferingPrice): BusinessSupplyProjection['offerings'][number] {
@@ -203,5 +220,5 @@ function pricedOffering(ref: string, price: OfferingPrice): BusinessSupplyProjec
     },
     accessPaths: [],
     support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
-  } as BusinessSupplyProjection['offerings'][number]
+  }
 }

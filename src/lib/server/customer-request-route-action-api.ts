@@ -1,7 +1,9 @@
 import { z } from 'zod'
 
+import { kindForStatus } from '@/lib/errors'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
+import { problem } from '@/lib/server/problem'
 import {
   customerRequestCancelAction,
   customerRequestRunAction,
@@ -85,20 +87,23 @@ export async function handleCustomerRequestPostBoundary<Input extends object, Re
   includeInvalidFields = false,
 }: CustomerRequestPostBoundaryOptions<Input, Result>): Promise<Response> {
   if (requestRef !== undefined && (requestRef.trim().length === 0 || requestRef.length > 200)) {
-    return response({ error: 'invalid_request_ref' }, 400)
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref', detail: 'invalid_request_ref' })
   }
   const body = await readBoundedRequestJson(request, maxBodyBytes)
   if (!body.ok) {
     return body.code === 'payload_too_large'
-      ? response({ error: 'request_too_large' }, 413)
-      : response({ error: 'invalid_json' }, 400)
+      ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large' })
+      : problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_json' })
   }
   const parsed = inputSchema.safeParse(body.value)
   if (!parsed.success) {
-    return response({
-      error: 'invalid_request',
-      ...(includeInvalidFields ? { fields: parsed.error.issues.map((issue) => issue.path.join('.')) } : {}),
-    }, 400)
+    return problem({
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_request',
+      ...(includeInvalidFields
+        ? { extras: { fields: parsed.error.issues.map((issue) => issue.path.join('.')) } }
+        : {}),
+    })
   }
   const admitted = domainAdmission?.(parsed.data)
   if (admitted !== undefined) return admitted
@@ -110,8 +115,8 @@ export async function handleCustomerRequestPostBoundary<Input extends object, Re
     const result = resultSchema.parse(await run(command))
     return response(result, resultToStatus(result))
   } catch (error) {
-    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
-    return response({ error: unavailableError }, 503)
+    if (error instanceof ConvexSourceError) return problem({ status: error.status, kind: kindForStatus(error.status), code: error.code })
+    return problem({ status: 503, kind: 'UNAVAILABLE', code: unavailableError, detail: unavailableError })
   }
 }
 

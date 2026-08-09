@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { exactAmountSchema } from '@/modules/money/public'
 
 import type { CustomerRequestView } from '../agent-contract'
 
@@ -170,9 +171,11 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     }),
     turns: z.strictObject({ total: z.number().int().nonnegative() }),
     elapsedMs: z.number().int().nonnegative(),
-    hardConstraintAccuracy: z.strictObject({ state: z.enum(['satisfied', 'not_evaluated']) }),
+    hardConstraintAccuracy: z.strictObject({
+      state: z.enum(['satisfied', 'not_evaluated']),
+    }),
     totalCostAccuracy: z.union([
-      z.strictObject({ state: z.literal('exact'), total: z.strictObject({ currency: z.string(), amountMinor: z.number().int().nonnegative() }) }),
+      z.strictObject({ state: z.literal('exact'), total: exactAmountSchema }),
       z.strictObject({ state: z.literal('unavailable') }),
     ]),
     recovery: z.strictObject({

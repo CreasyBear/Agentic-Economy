@@ -3,6 +3,27 @@ import type { AnswerSource } from '../answer-synthesizer'
 import { parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
 import { buildBoundaryOneLine } from './boundary-prose'
 
+export function buildRationaleFollowUpProse(input: {
+  constraints: readonly string[]
+  budget?: string
+  failure?: string
+}): { oneLine: string; summary: string; nextStep: string } {
+  const facts = [
+    input.constraints.length > 0
+      ? `Retained constraints: ${input.constraints.join('; ')}.`
+      : 'Retained constraints: none were recorded.',
+    input.budget ?? 'Budget: no explicit budget was retained.',
+    input.failure === undefined
+      ? 'Durable failure evidence: no failed search step was recorded.'
+      : `Durable failure evidence: ${input.failure}.`,
+  ]
+  return {
+    oneLine: 'Here is what the earlier search retained.',
+    summary: facts.join(' '),
+    nextStep: 'Revise a constraint or add a location, then search again.',
+  }
+}
+
 export function buildCompactFollowUpProse(input: {
   followUpIntent?: AnswerSynthesizerFollowUpIntent
   displayQuery: string
@@ -19,24 +40,31 @@ export function buildCompactFollowUpProse(input: {
       }
     case 'compare_known':
       return {
-        oneLine: count >= 2 ? 'Comparing the top two listings.' : buildDefaultOneLine(count, input.displayQuery, input.providers),
+        oneLine: count >= 2 ? 'Comparing the top two matches.' : buildDefaultOneLine(count, input.displayQuery, input.providers),
         summary: buildCompareSummary(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
-    case 'inquiry_handoff':
+    case 'inquiry_handoff': {
+      const provider = count === 1 && input.providers[0] !== undefined && hasProviderIdentity(input.providers[0])
+        ? input.providers[0]
+        : undefined
+      const oneLine = provider === undefined
+        ? 'No business is selected yet. Search again before sending a request.'
+        : provider.inquiryUrl === undefined
+          ? `${provider.name} does not have a request form here yet.`
+          : `Ready to send a request to ${provider.name}. ${buildProviderDecisionOneLine(provider)}`
       return {
-        oneLine: count === 1 && input.providers[0] !== undefined
-          ? `Ready to open ${input.providers[0].name}'s qualified inquiry form. ${buildProviderDecisionOneLine(input.providers[0])}`
-          : 'Choose which listed business to message.',
+        oneLine,
         summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
+    }
     case 'explain_boundary':
     case 'unsupported':
       return {
         oneLine: input.followUpIntent === 'explain_boundary'
           ? buildBoundaryOneLine()
-          : 'This request needs a business-supported action that is not available here.',
+          : 'This kind of request is not available here; the business would need to handle it directly.',
         summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
@@ -61,32 +89,32 @@ export function buildCompactFollowUpProse(input: {
 
 function buildNarrowOneLine(count: number, suburb: string, providers: readonly AnswerSource[]): string {
   if (count === 0) {
-    return `No listed businesses in ${suburb} yet.`
+    return `No matches found in ${suburb} yet.`
   }
   if (count === 1 && providers[0] !== undefined) {
     return buildProviderDecisionOneLine(providers[0])
   }
-  return `${count} listed in ${suburb}.`
+  return `${count} matches in ${suburb}.`
 }
 
 function buildFilterOneLine(count: number, providers: readonly AnswerSource[]): string {
   if (count === 0) {
-    return 'None of the listed businesses accept inquiries yet.'
+    return 'No businesses accept requests yet.'
   }
   if (count === 1 && providers[0] !== undefined) {
-    return `1 listed business accepts inquiries: ${buildProviderDecisionOneLine(providers[0])}`
+    return `1 business accepts requests: ${buildProviderDecisionOneLine(providers[0])}`
   }
-  return `${count} listed businesses accept inquiries.`
+  return `${count} businesses accept requests.`
 }
 
 function buildDefaultOneLine(count: number, query: string, providers: readonly AnswerSource[]): string {
   if (count === 0) {
-    return `No listed businesses match "${query}" yet.`
+    return `No businesses match "${query}" yet.`
   }
   if (count === 1 && providers[0] !== undefined) {
     return buildProviderDecisionOneLine(providers[0])
   }
-  return `${count} listed businesses match.`
+  return `${count} businesses match.`
 }
 
 export function buildProviderDecisionOneLine(provider: AnswerSource): string {
@@ -110,16 +138,24 @@ function buildCompareSummary(providers: readonly AnswerSource[]): string {
     return resultsLine(providers)
   }
 
-  return `${first.name} works around ${first.serviceArea || first.suburb}. ${second.name} works around ${second.serviceArea || second.suburb}.`
+  return `${first.name} serves ${first.serviceArea || first.suburb}. ${second.name} serves ${second.serviceArea || second.suburb}.`
 }
 
 function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
-  const inquiryReady = providers.find((provider) => provider.inquiryUrl !== undefined)
-  if (inquiryReady !== undefined) {
-    return 'Open a listed business page and send an inquiry when that option is published.'
+  if (providers.length === 0) {
+    return 'Search again or revise a constraint to find a match.'
   }
 
-  return 'Open a listed business page to review what they publish, then contact the business.'
+  const inquiryReady = providers.find((provider) => provider.inquiryUrl !== undefined)
+  if (inquiryReady !== undefined) {
+    return 'Open the business page and send a request when that option is available.'
+  }
+
+  return 'Review the business details and search again if you need a request option.'
+}
+
+function hasProviderIdentity(provider: AnswerSource | undefined): provider is AnswerSource {
+  return provider !== undefined && provider.slug.trim().length > 0 && provider.name.trim().length > 0
 }
 
 /**
@@ -130,8 +166,8 @@ function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
  */
 function resultsLine(providers: readonly AnswerSource[]): string {
   if (providers.length === 0) {
-    return 'Try a different service or area.'
+    return 'Try describing what you need or choose another area.'
   }
 
-  return 'Each card shows the published services, the service area, and how to get started.'
+  return 'Each card shows what the business offers, where it serves, and how to get in touch.'
 }

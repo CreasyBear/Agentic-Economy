@@ -2,6 +2,7 @@ import { DirectedGraph } from 'graphology'
 import { hasCycle } from 'graphology-dag'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { exactAmountSchema } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -243,9 +244,7 @@ function routesAreInternallyConsistent(generation: CustomerRequestRoutePlanGener
       && route.authority === 'proposal_only'
       && route.steps.length > 0
       && route.maximumTotalCost.kind === 'known'
-      && route.maximumTotalCost.currency.length > 0
-      && Number.isSafeInteger(route.maximumTotalCost.amountMinor)
-      && route.maximumTotalCost.amountMinor >= 0
+      && exactAmountSchema.safeParse(route.maximumTotalCost.amount).success
       && actionRefs.size === route.steps.length
       && routePlanGraphIsValid(route)
       && Number.isSafeInteger(route.expiresAt)

@@ -1,11 +1,37 @@
 # Agentic Economy
 
-Agentic Economy connects a customer job to registered business capabilities, preserves the customer's decision and authority boundaries, and records what happened without exposing routing machinery as the product.
+Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.
+Developers host implementations wherever they choose; AE owns admission, invocation identity, authority and policy, evidence, Qualified Use metering, and payment reconciliation—not runtime hosting. The existing ask → Customer Request → authority → execution → evidence product remains a first-party demand application and proving ground, not the category definition.
+**Category guardrail:** Trades, Australian small businesses, BAS and human-service coordination may be future suppliers/use cases; they are not the category, ICP, wedge or default product frame.
 
 ## Language
+**Agent Service**:
+The market-facing representation of one admitted third-party Market Operation that an authorized Consuming Agent can discover, buy and invoke under a typed contract, declared price and evidence policy. Its implementation is supplier-hosted anywhere; AE owns the market and controlled transaction boundary, not runtime hosting.
+_Avoid_: Skill, repository, whole Supplier portfolio, agent-as-principal framing, local-business/trades category framing
+
+**Principal**:
+The human or organization that owns budget and authority for a transaction and delegates bounded authority to a Consuming Agent. The Principal remains accountable for spend, data use and effects.
+_Avoid_: Consuming Agent as principal, ambient or unbounded authority, Supplier
+
+**Consuming Agent**:
+The software agent acting as the Principal's delegated shopper and distribution interface: it discovers, compares, buys and invokes admitted Market Operations only within the Principal's authority and policy. It cannot make itself the Principal, expand spend, or authorize its own effects.
+_Avoid_: Agent as Principal, budget owner, supplier-hosted implementation, autonomous authority
+
+**Agent Runtime Microservice**:
+A supplier-hosted, remotely callable implementation behind one registered Capability’s Operation: bounded typed input, bounded work, and a typed result/evidence. It becomes market supply only through an admitted callable Operation and evidence path.
+_Avoid_: Skill as supply, repository as service, AE-hosted by default
+
+**Market Operation**:
+The competitive unit of the market: one admitted third-party Operation under an immutable contract, existing Capability and Provider identities, keyed by the existing opaque `operationRef`. An authorized Consuming Agent discovers, compares, buys and invokes it through AE; contract-valid delivery is the boundary for supplier payment.
+_Avoid_: New operation identity, capability slug, provider rollup, schema conformance as semantic correctness
+
+**Supplier**:
+A market-facing portfolio rollup for one existing Provider (the registered Business) and its Market Operations. Supplier metrics aggregate member Market Operations; Supplier does not replace Provider identity or attribute individual execution.
+_Avoid_: Operation, endpoint identity, marketplace-wide provider
+
 
 **Customer Request**:
-The durable statement of the outcome a principal wants, including known facts, hard constraints, preferences, substitution boundaries, completion requirements, and revision history.
+The durable statement of the outcome a Principal wants, including known facts, hard constraints, preferences, substitution boundaries, completion requirements, and revision history.
 _Avoid_: Prompt, household intent, job post
 
 **Imported Claim**:
@@ -13,7 +39,7 @@ A fact, offer, commitment, status or other assertion supplied by a caller about 
 _Avoid_: Imported fact, confirmed external state
 
 **Publisher**:
-The authenticated AE principal that submits a capability Publication. A Publisher may be the Provider's authorized owner or an AE curator preserving an external source; publication authority is not execution authority.
+The authenticated AE identity authorized to submit a capability Publication. A Publisher may be the Provider's authorized owner or an AE curator preserving an external source; publication authority is not execution authority.
 _Avoid_: Provider by inference, catalog operator, endpoint owner
 
 **Provider**:
@@ -65,7 +91,7 @@ The terminal disposition of one Capability Publication revision. It removes curr
 _Avoid_: Delete provider, revoke prior evidence, readiness failure
 
 **Bundle**:
-A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A person or agent may complete one task, continue progressively, or ask AE to coordinate the remaining Bundle. A Bundle does not own a separate authority, attempt, evidence or recovery lifecycle.
+A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A Principal or Consuming Agent may complete one task, continue progressively, or ask AE to coordinate the remaining Bundle. A Bundle does not own a separate authority, attempt, evidence or recovery lifecycle.
 _Avoid_: Wedge-specific engine, mandatory end-to-end journey
 
 **Action Invocation**:

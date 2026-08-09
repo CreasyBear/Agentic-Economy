@@ -1,4 +1,4 @@
-import type { CapabilityBindingRow } from '../binding/registration'
+import type { CapabilityBindingRow, CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
 import { contractRefFromRow, type CapabilityOfferingRow } from '../offering/registration'
 
 export function compareStableIdentifier(left: string, right: string): number {
@@ -15,6 +15,7 @@ export type EligibleOfferingProjection<T extends CapabilityOfferingRow = Capabil
   origin?: T['origin']
   presentation: T['presentation']
   status: 'active'
+  searchTerms?: T['searchTerms']
   registrationHash: T['registrationHash']
 }
 
@@ -25,6 +26,9 @@ export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(
     offeringId: row.offeringId, businessId: row.businessId, networkId: row.networkId,
     ...contractRefFromRow(row), presentation: row.presentation, status: 'active' as const,
     ...(row.origin === undefined ? {} : { origin: row.origin }),
+    ...(row.searchTerms === undefined || row.searchTerms.length === 0
+      ? {}
+      : { searchTerms: row.searchTerms }),
     registrationHash: row.registrationHash,
   }
 }
@@ -37,7 +41,8 @@ export type EligibleBindingProjection<T extends CapabilityBindingRow = Capabilit
   version: T['version']
   contractDigest: T['contractDigest']
   endpointUrl: T['endpointUrl']
-  credentialRef: T['credentialRef']
+  authority: T['authority']
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   continuation: T['continuation']
   cancellation: T['cancellation']
   adapterId: T['adapterId']
@@ -53,10 +58,12 @@ export function eligibleBindingProjection<T extends CapabilityBindingRow>(
 ): EligibleBindingProjection<T> {
   return {
     bindingId: row.bindingId, offeringId: row.offeringId, networkId: row.networkId,
-    ...contractRefFromRow(row), endpointUrl: row.endpointUrl, credentialRef: row.credentialRef,
+    ...contractRefFromRow(row), endpointUrl: row.endpointUrl, authority: row.authority,
+    ...(row.connectionAuthority === undefined ? {} : { connectionAuthority: row.connectionAuthority }),
     continuation: row.continuation, cancellation: row.cancellation,
     adapterId: row.adapterId, configJson: row.configJson, configDigest: row.configDigest,
     admission: 'admitted' as const, conformance: 'conformant' as const,
     registrationHash: row.registrationHash,
   }
 }
+

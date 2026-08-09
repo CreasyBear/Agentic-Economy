@@ -7,19 +7,24 @@ import {
   type StudyQuote,
   type StudyRegistryService,
 } from '@/modules/study/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 const DEVELOPMENT_LABEL = 'MOCK/DEVELOPMENT ONLY'
 const now = Date.parse('2026-08-01T10:00:00.000Z')
 
+function audAmount(units: string, exponent: number): ExactAmount {
+  return { currency: 'AUD', units, exponent }
+}
+
 const charter: StudyCharter = {
   wants: [
-    { id: 'price', label: 'Price', weight: 0.6, sense: 'cost', valueKey: 'priceMinor' },
+    { id: 'price', label: 'Price', weight: 0.6, sense: 'cost', valueKey: 'price' },
     { id: 'quality', label: 'Quality', weight: 0.4, sense: 'benefit', valueKey: 'qualityScore' },
   ],
   hardNeeds: [{ kind: 'fixed_price' }, { kind: 'open_quote' }],
 }
 
-function provider(slug: string, amountMinor: number): StudyRegistryService {
+function provider(slug: string, amount: ExactAmount): StudyRegistryService {
   return {
     id: `fixture:service:${slug}`,
     revision: 1,
@@ -32,7 +37,7 @@ function provider(slug: string, amountMinor: number): StudyRegistryService {
     name: `${DEVELOPMENT_LABEL} service ${slug}`,
     category: 'generic service',
     summary: `${DEVELOPMENT_LABEL} fixture provider`,
-    price: { kind: 'fixed', currency: 'AUD', amountMinor },
+    price: { kind: 'fixed', amount, taxTreatment: 'inclusive' },
     endpoints: [{
       url: `/fixtures/${slug}/quote`,
       method: 'POST',
@@ -42,10 +47,15 @@ function provider(slug: string, amountMinor: number): StudyRegistryService {
   }
 }
 
+function candidateAmount(candidate: StudyRegistryService): ExactAmount {
+  if (candidate.price?.kind !== 'fixed') throw new Error('fixture_price_missing')
+  return candidate.price.amount
+}
+
 function quote(input: {
   providerSlug: string
   providerName: string
-  amountMinor: number
+  amount: ExactAmount
   quotedAt?: number
   expiresAt?: number
 }): StudyQuote {
@@ -57,7 +67,7 @@ function quote(input: {
     providerName: input.providerName,
     category: 'generic service',
     service: `${DEVELOPMENT_LABEL} quote`,
-    price: { currency: 'AUD', amountMinor: input.amountMinor },
+    price: { amount: input.amount, taxTreatment: 'inclusive' },
     nextAvailable: '2026-08-03T10:00:00.000Z',
     quotedAt: new Date(quotedAt).toISOString(),
     validUntil: new Date(expiresAt).toISOString(),
@@ -78,9 +88,9 @@ const baseInput = {
   nodeId: 'study-node:fixture',
   charter,
   registryServices: [
-    provider('alpha', 12_000),
-    provider('beta', 10_000),
-    provider('gamma', 15_000),
+    provider('alpha', audAmount('12000', 2)),
+    provider('beta', audAmount('10000', 2)),
+    provider('gamma', audAmount('15000', 2)),
   ],
   requestedAt: now,
   generation: 2,
@@ -95,7 +105,7 @@ describe('durable Study RFx journal', () => {
       quoteProvider: ({ provider: candidate, requestedAt }) => quote({
         providerSlug: candidate.business.slug,
         providerName: candidate.business.name,
-        amountMinor: candidate.price?.amountMinor ?? 0,
+        amount: candidateAmount(candidate),
         quotedAt: requestedAt,
       }),
     })
@@ -159,7 +169,7 @@ describe('durable Study RFx journal', () => {
       quoteProvider: ({ provider: candidate, requestedAt }) => quote({
         providerSlug: candidate.business.slug,
         providerName: candidate.business.name,
-        amountMinor: candidate.price?.amountMinor ?? 0,
+        amount: candidateAmount(candidate),
         quotedAt: requestedAt - 60_000,
         expiresAt: requestedAt - 1,
       }),
@@ -213,7 +223,7 @@ describe('durable Study RFx journal', () => {
       quoteProvider: ({ provider: candidate, requestedAt }) => quote({
         providerSlug: candidate.business.slug,
         providerName: candidate.business.name,
-        amountMinor: candidate.price?.amountMinor ?? 0,
+        amount: candidateAmount(candidate),
         quotedAt: requestedAt,
       }),
     })
@@ -226,7 +236,7 @@ describe('durable Study RFx journal', () => {
       quoteProvider: ({ provider: candidate, requestedAt }) => quote({
         providerSlug: candidate.business.slug,
         providerName: candidate.business.name,
-        amountMinor: candidate.price?.amountMinor ?? 0,
+        amount: candidateAmount(candidate),
         quotedAt: requestedAt,
       }),
     })

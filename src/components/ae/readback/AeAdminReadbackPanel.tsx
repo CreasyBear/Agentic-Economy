@@ -1,4 +1,4 @@
-import { ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ChevronDown, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useId, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -7,13 +7,14 @@ import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import type { AdminReadbackRow, AdminReadbackSurface, AdminShellReadback } from '@/modules/security/public'
 
 const surfaceLabels = {
   claims_queue: 'Claims queue',
-  audit_events: 'Audit events',
-  index_health: 'Index health',
+  audit_events: 'Activity log',
+  index_health: 'Catalog health',
 } satisfies Record<AdminReadbackSurface, string>
 
 const rowStateLabels = {
@@ -128,10 +129,11 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
         header: ({ column }) => <AeOperatorSortableHeader label="Object" column={column} />,
         cell: ({ row }) => (
           <div className="grid max-w-[16rem] gap-1 whitespace-normal">
-            <span className="break-words font-medium text-foreground">{row.original.objectRef}</span>
+            <span className="font-medium text-foreground">Object ref</span>
             <span className="text-xs text-muted-foreground">
               {row.original.rowType.replaceAll('_', ' ')} · {surfaceLabels[surface]}
             </span>
+            <RefDisclosure raw={row.original.objectRef} />
           </div>
         ),
       },
@@ -158,9 +160,10 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
         accessorFn: (row) => row.correlationId ?? 'Unavailable',
         header: 'Correlation',
         cell: ({ row }) => (
-          <span className="max-w-[12rem] whitespace-normal font-mono text-xs">
-            {row.original.correlationId ?? 'Unavailable'}
-          </span>
+          <div className="grid max-w-[12rem] gap-1 whitespace-normal">
+            <span className="font-medium text-foreground">Correlation ref</span>
+            <RefDisclosure raw={row.original.correlationId ?? 'Unavailable'} />
+          </div>
         ),
       },
     ],
@@ -174,5 +177,26 @@ function ReadbackStat({ label, value }: { label: string; value: string }) {
       <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</span>
       <span className="mt-1 block break-words text-sm font-medium text-foreground" data-numeric>{value}</span>
     </div>
+  )
+}
+
+function RefDisclosure({ raw }: { raw: string }) {
+  return (
+    <Collapsible className="grid gap-1">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          View reference
+          <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <code className="block whitespace-normal break-words font-mono text-xs leading-5 text-muted-foreground">
+          {raw}
+        </code>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

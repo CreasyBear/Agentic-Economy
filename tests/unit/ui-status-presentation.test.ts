@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { brandNonEmpty } from '@/modules/common/ids'
 import {
   aeStatusPresentation,
   aeStatusValues,
@@ -9,6 +10,14 @@ import {
   offeringSupportToAeStatus,
   statusPresentation,
 } from '@/lib/ui/status-presentation'
+
+const statusOfferingRef = brandNonEmpty('offering:status', 'OfferingRef')
+const statusAccessPathRef = brandNonEmpty('access:status', 'AccessPathRef')
+const websitePathDescriptor = {
+  kind: 'human_request' as const,
+  channel: 'website' as const,
+  disclosure: 'Use the website.',
+}
 
 describe('getStatusPresentation', () => {
   it('keeps unavailable capabilities explicit and human-readable', () => {
@@ -67,10 +76,9 @@ describe('getStatusPresentation', () => {
     expect(offeringSupportToAeStatus({ integrated: true, aeSupportedAction: true })).toBe('available')
     expect(offeringAccessToAeStatus([])).toBe('not_queued')
     expect(offeringAccessToAeStatus([{
-      accessPathRef: 'access:status',
-      kind: 'human_request',
-      channel: 'website',
-      disclosure: 'Use the website.',
+      accessPathRef: statusAccessPathRef,
+      offeringRevision: 1,
+      ...websitePathDescriptor,
     }])).toBe('listed')
   })
 })

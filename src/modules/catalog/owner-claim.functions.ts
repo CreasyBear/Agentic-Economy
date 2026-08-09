@@ -25,6 +25,7 @@ import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { readCurrentOwnerTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
 import { selectOwnerAdmissionTarget } from '@/modules/inquiries/route-readbacks'
 import { unconfiguredR1TargetAdmission } from '@/modules/inquiries/public'
+import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type {
   PublicBusinessPageNotFoundReason,
@@ -66,7 +67,11 @@ const ownerStatusInputSchema = z.object({
 })
 
 type ClaimSuccessPageResult =
-  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
+  | {
+      kind: 'available'
+      catalog: PublicBusinessCatalogApiV2Dto
+      projectionMode: 'public_source' | 'local_preview'
+    }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
@@ -160,7 +165,7 @@ async function submitOwnerClaimThroughSource(
       ? result
       : {
           ...result,
-          readback: await buildOwnerStatusRouteReadback(result.readback),
+          readback: await buildOwnerStatusRouteReadback(markLocalPreview(result.readback)),
         }
   }
 
@@ -237,7 +242,25 @@ async function submitOwnerClaimThroughSource(
 
 async function readOwnerClaimSuccessThroughSource(slug: string | undefined): Promise<ClaimSuccessPageResult> {
   const result = await readOwnerStatusThroughSource(slug)
-  return result.kind === 'available' ? { kind: 'available', catalog: result.readback.catalog } : result
+  if (result.kind !== 'available') return result
+  if (isLocalE2EAuthBypassEnabled()) {
+    return {
+      kind: 'available',
+      catalog: result.readback.catalog,
+      projectionMode: 'local_preview',
+    }
+  }
+
+  try {
+    const publicPage = await readPublicBusinessPageThroughSource(result.readback.catalog.slug)
+    if (publicPage.kind !== 'available') return publicPage
+    const detail = await readPublicOfferingRegistryBusinessDetail({ slug: publicPage.catalog.slug })
+    return detail.kind === 'found'
+      ? { kind: 'available', catalog: detail.business, projectionMode: 'public_source' }
+      : { kind: 'not_found', reason: 'not_public' }
+  } catch {
+    return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+  }
 }
 
 export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {
@@ -251,6 +274,8 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
       : await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
 
     if (result.kind === 'available') {
+      const publicDetail = await readPublicOfferingRegistryBusinessDetail({ slug: result.catalog.slug })
+      if (publicDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
       return { kind: 'available', readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(result.catalog)) }
     }
     return localE2E
@@ -264,7 +289,7 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
 }
 
 async function readLocalOwnerStatus(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {
-  const defaultReadback = getDefaultPublicOwnerStatusReadback()
+  const defaultReadback = markLocalPreview(getDefaultPublicOwnerStatusReadback())
   const normalizedSlug = slug?.trim()
   if (normalizedSlug === undefined || normalizedSlug.length === 0 || normalizedSlug === defaultReadback.catalog.slug) {
     return { kind: 'available', readback: await buildOwnerStatusRouteReadback(defaultReadback) }
@@ -273,18 +298,30 @@ async function readLocalOwnerStatus(slug: string | undefined): Promise<PublicOwn
   const readback = getPublicOwnerStatusReadbackBySlug(normalizedSlug)
   return readback === undefined
     ? { kind: 'not_found', reason: 'not_public' }
-    : { kind: 'available', readback: await buildOwnerStatusRouteReadback(readback) }
+    : { kind: 'available', readback: await buildOwnerStatusRouteReadback(markLocalPreview(readback)) }
+}
+
+function markLocalPreview(readback: PublicOwnerStatusReadback): PublicOwnerStatusReadback {
+  return {
+    ...readback,
+    projectionMode: 'local_preview',
+    nextAction: 'Preview only. Connect the public source before sharing this page.',
+  }
 }
 
 async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return getLocalE2ePublicBusinessPageReadback(slug)
-  }
+  try {
+    if (isLocalE2EAuthBypassEnabled()) {
+      return getLocalE2ePublicBusinessPageReadback(slug)
+    }
 
-  const result = await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
-  return result.kind === 'available'
-    ? { kind: 'available', catalog: result.catalog }
-    : { kind: 'not_found', reason: result.reason }
+    const result = await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
+    return result.kind === 'available'
+      ? { kind: 'available', catalog: result.catalog }
+      : { kind: 'not_found', reason: result.reason }
+  } catch {
+    return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+  }
 }
 
 

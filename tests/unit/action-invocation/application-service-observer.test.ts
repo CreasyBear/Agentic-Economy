@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDevelopmentDynamicPublishedSource,
   DevelopmentProcessInterruption,
-  createDevelopmentInvocationApplication,
+  createInvocationApplication,
   createDynamicPublishedActionInvocationAdapter,
-  type DevelopmentHostCommandEvent,
-  type DevelopmentInvocationHost,
+  type InvocationHost,
   type InvocationActor,
+  type DynamicPublishedInvocationResult,
+  type DevelopmentHostCommandEvent,
 } from '@/modules/action-invocation'
 import {
   buildDevelopmentPublishedOperationEvidence,
@@ -19,7 +22,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('development invocation application observer containment', () => {
-  it('records observer failure diagnostically without allowing either observer to change command truth', () => {
+  it('records observer failure diagnostically without allowing either observer to change command truth', async () => {
     const failures: unknown[] = []
     const { host, restoreClock } = createHost(
       'standalone_external_agent',
@@ -32,7 +35,7 @@ describe('development invocation application observer containment', () => {
       },
     )
     try {
-      expect(host.begin({ symbol: 'BTC' })).toMatchObject({ state: 'gathering_information' })
+      expect(await host.begin({ symbol: 'BTC' })).toMatchObject({ state: 'gathering_information' })
       expect(failures).toHaveLength(2)
       expect(failures[0]).toMatchObject({ event: { phase: 'before', command: 'begin' } })
     } finally {
@@ -47,8 +50,8 @@ describe('development invocation application observer containment', () => {
         throw new Error('telemetry_sink_unavailable')
       })
       try {
-        const gathering = host.begin({ symbol: 'BTC' })
-        const preparedFromAnswers = host.answer(
+        const gathering = await host.begin({ symbol: 'BTC' })
+        const preparedFromAnswers = await host.answer(
           gathering.invocationRef,
           { convert: 'USD' },
           60_000,
@@ -56,14 +59,14 @@ describe('development invocation application observer containment', () => {
         expect('control' in preparedFromAnswers && preparedFromAnswers.control.state)
           .toBe('awaiting_authority')
 
-        const corrected = host.correct(
+        const corrected = await host.correct(
           gathering.invocationRef,
           { symbol: 'BTC' },
           60_000,
         )
         expect(corrected.kind).toBe('accepted')
 
-        const decided = host.decide(gathering.invocationRef, true)
+        const decided = await host.decide(gathering.invocationRef, true)
         expect(decided.kind).toBe('accepted')
 
         const completed = await host.continue(gathering.invocationRef)
@@ -71,7 +74,7 @@ describe('development invocation application observer containment', () => {
         expect(host.inspect(gathering.invocationRef)?.control.state).toBe('terminal')
         expect(effects).toEqual({ payment: 1, provider: 1 })
 
-        const cancellation = host.requestCancellation(gathering.invocationRef)
+        const cancellation = await host.requestCancellation(gathering.invocationRef)
         expect(cancellation).toMatchObject({ kind: 'refused', code: 'invalid_control_state' })
       } finally {
         restoreClock()
@@ -90,8 +93,8 @@ describe('development invocation application observer containment', () => {
         }
       })
       try {
-        const prepared = host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-        expect(host.decide(prepared.invocationRef, true).kind).toBe('accepted')
+        const prepared = await host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+        expect((await host.decide(prepared.invocationRef, true)).kind).toBe('accepted')
 
         await expect(host.continue(prepared.invocationRef)).resolves.toMatchObject({
           kind: 'completed',
@@ -112,15 +115,15 @@ describe('development invocation application observer containment', () => {
         throw new Error('telemetry_sink_unavailable')
       }, 'lost_response')
       try {
-        const prepared = host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-        expect(host.decide(prepared.invocationRef, true).kind).toBe('accepted')
+        const prepared = await host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+        expect((await host.decide(prepared.invocationRef, true)).kind).toBe('accepted')
         const uncertain = await host.continue(prepared.invocationRef)
         expect(uncertain).toMatchObject({
           kind: 'completed',
           view: { control: { state: 'reconciliation_required' } },
         })
 
-        expect(host.recover(prepared.invocationRef)).toMatchObject({
+        expect(await host.recover(prepared.invocationRef)).toMatchObject({
           kind: 'reconciled',
           view: { control: { state: 'terminal' } },
         })
@@ -144,8 +147,8 @@ describe('development invocation application observer containment', () => {
         },
       )
       try {
-        const prepared = host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-        expect(host.decide(prepared.invocationRef, true).kind).toBe('accepted')
+        const prepared = await host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+        expect((await host.decide(prepared.invocationRef, true)).kind).toBe('accepted')
 
         await expect(host.continue(prepared.invocationRef)).resolves.toMatchObject({
           kind: 'refused',
@@ -182,8 +185,8 @@ describe('development invocation application observer containment', () => {
       },
     )
     try {
-      const prepared = host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
-      expect(host.decide(prepared.invocationRef, true).kind).toBe('accepted')
+      const prepared = await host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+      expect((await host.decide(prepared.invocationRef, true)).kind).toBe('accepted')
 
       await expect(host.continue(prepared.invocationRef))
         .rejects.toThrow('simulated_process_loss')
@@ -202,7 +205,7 @@ function createHost(
   beforeExecute?: () => void | Promise<void>,
   observerFailureSink?: (failure: unknown) => void,
 ): Readonly<{
-  host: DevelopmentInvocationHost
+  host: InvocationHost
   effects: { payment: number; provider: number }
   restoreClock(): void
 }> {
@@ -217,6 +220,7 @@ function createHost(
       : 'agent:observer-containment',
     principalRef: 'principal:observer-containment',
   }
+  const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   const adapter = createDynamicPublishedActionInvocationAdapter({
     operation: fixture.operation,
     source: createDevelopmentDynamicPublishedSource([fixture.operation]),
@@ -227,8 +231,10 @@ function createHost(
     nextInvocationRef: () => `host:${hostKind}:observer-containment`,
     nextAuthorityRef: () => `authority:${hostKind}:observer-containment`,
     nextAttemptRef: () => `attempt:${hostKind}:observer-containment`,
+    durablePort: createDevelopmentDurablePort(durableState),
+    developmentSnapshot: durableState,
   })
-  const application = createDevelopmentInvocationApplication({
+  const application = createInvocationApplication({
     adapter,
     observer,
     ...(observerFailureSink === undefined ? {} : { observerFailureSink }),

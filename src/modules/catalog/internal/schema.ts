@@ -10,23 +10,41 @@ import {
   HumanRequestChannelValues,
   OfferingAccessPathStatusValues,
   PublicSupportReasonValues,
-} from '@/modules/catalog/public'
+} from './offering-supply'
 
 import {
-  OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
 } from './offering-price'
 
-/** Additive and optional: existing revisions stay valid without a price. */
-const offeringPrice = v.object({
-  kind: literalUnion(OfferingPriceKindValues),
+const exactAmountValue = v.object({
   currency: v.string(),
-  amountMinor: v.optional(v.number()),
-  maximumAmountMinor: v.optional(v.number()),
-  unit: v.optional(literalUnion(OfferingPriceUnitValues)),
-  taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  units: v.string(),
+  exponent: v.number(),
 })
+
+/** Additive and optional: existing revisions stay valid without a price. */
+const offeringPrice = v.union(
+  v.object({
+    kind: v.literal('quote_only'),
+    currency: v.string(),
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+  v.object({
+    kind: v.union(v.literal('fixed'), v.literal('from')),
+    amount: exactAmountValue,
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+  v.object({
+    kind: v.literal('range'),
+    minimum: exactAmountValue,
+    maximum: exactAmountValue,
+    unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+    taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+  }),
+)
 
 const humanRequestAccessPath = v.object({
   kind: v.literal('human_request'),
@@ -52,6 +70,9 @@ const externalOperationAccessPath = v.object({
 })
 const publicAccessPath = v.object({
   accessPathRef: v.string(),
+  offeringRevision: v.number(),
+  offeringSourceHash: v.string(),
+  sourceHash: v.string(),
   descriptor: v.union(humanRequestAccessPath, externalOperationAccessPath),
 })
 

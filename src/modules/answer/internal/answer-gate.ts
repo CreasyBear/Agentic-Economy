@@ -49,8 +49,8 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
 
   const decisionText = joinHumanCopy([snapshot.oneLine, snapshot.summary])
   if (
-    hasUnsupportedProviderClaim(decisionText, snapshot.providers.map((provider) => provider.name)) ||
-    hasUnsupportedPublishedDetail(decisionText, snapshot.providers)
+    hasUnsupportedProviderClaim(decisionText, snapshot.providers.map((provider) => provider.name))
+    || hasUnsupportedPublishedDetail(decisionText, snapshot.providers)
   ) {
     return { ok: false, code: 'unsupported_provider_claim', copyId }
   }
@@ -79,6 +79,7 @@ function hasUnsupportedPublishedDetail(
   text: string,
   providers: AnswerSnapshot['providers'],
 ): boolean {
+  if (providers.length === 0) return false
   const normalizedText = normalizePublishedDetail(text)
   const publishedPrices = providers
     .map((provider) => provider.pricingSummary)

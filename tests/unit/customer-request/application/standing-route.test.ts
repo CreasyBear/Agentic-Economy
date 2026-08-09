@@ -70,7 +70,7 @@ const generation = {
 const displayedRoute = {
   routeRef,
   availability: 'current' as const,
-  maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 2_500 },
+  maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '2500', exponent: 2 } },
   validUntil: FUTURE,
 }
 
@@ -81,8 +81,8 @@ const policy = {
   generationRef,
   routes: [{ routePlanId }],
   limits: {
-    perUseSpend: { currency: 'AUD', amountMinor: 2_500 },
-    cumulativeSpend: { currency: 'AUD', amountMinor: 5_000 },
+    perUseSpend: { currency: 'AUD', units: '2500', exponent: 2 },
+    cumulativeSpend: { currency: 'AUD', units: '5000', exponent: 2 },
     perUseDataAllocations: 1,
     cumulativeDataAllocations: 2,
     occurrences: 2,
@@ -200,7 +200,7 @@ describe('customer-request standing-route', () => {
       routeRef,
       delegatedCredentialId: 'credential:1',
       occurrences: 2,
-      cumulativeSpend: { currency: 'AUD', amountMinor: 5_000 },
+      cumulativeSpend: { currency: 'AUD', units: '5000', exponent: 2 },
       validUntil: FUTURE,
       idempotencyKey: 'allow:1',
       principalId: 'principal:1',
@@ -270,7 +270,7 @@ describe('customer-request standing-route', () => {
       routeRef,
       delegatedCredentialId: 'credential:1',
       occurrences: 2,
-      cumulativeSpend: { currency: 'AUD', amountMinor: 5_000 },
+      cumulativeSpend: { currency: 'AUD', units: '5000', exponent: 2 },
       validUntil: FUTURE,
       idempotencyKey: 'allow:other',
       principalId: 'principal:other',

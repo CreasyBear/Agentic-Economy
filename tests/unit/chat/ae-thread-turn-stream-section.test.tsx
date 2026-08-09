@@ -1,34 +1,73 @@
 // @vitest-environment jsdom
 
-import { act, render } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type AttachStreamInput = Parameters<
-  typeof import('@/components/ae/chat/turn-stream-session').attachAnswerTurnStream
->[0]
+import type { attachAnswerTurnStream } from '@/components/ae/chat/turn-stream-session'
+
+type AttachStreamInput = Parameters<typeof attachAnswerTurnStream>[0]
 
 const streamSession = vi.hoisted(() => ({
   abort: vi.fn(),
   attach: vi.fn<(input: AttachStreamInput) => () => void>(() => vi.fn()),
 }))
+const stopState = vi.hoisted(() => ({
+  request: vi.fn(),
+}))
+const readbackState = vi.hoisted(() => ({
+  request: vi.fn(),
+}))
 
+vi.mock('@/components/ae/chat/turn-stop', () => ({
+  stopAnswerTurnRequest: stopState.request,
+}))
+vi.mock('@/components/ae/chat/thread-readback', () => ({
+  readAnswerThreadProjection: readbackState.request,
+}))
 vi.mock('@/components/ae/chat/turn-stream-session', () => ({
   abortAnswerTurnStream: streamSession.abort,
   attachAnswerTurnStream: streamSession.attach,
 }))
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }))
-vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({ AeGenerativeAnswer: () => <div data-testid="generic-answer" /> }))
+vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
+  AeGenerativeAnswer: ({
+    busy,
+    errorMessage,
+    onStop,
+  }: {
+    busy?: boolean
+    errorMessage?: React.ReactNode
+    onStop?: () => void
+  }) => (
+    <div data-testid="generic-answer">
+      {errorMessage}
+      {onStop !== undefined ? (
+        <button type="button" onClick={onStop} disabled={busy !== true}>Stop</button>
+      ) : null}
+    </div>
+  ),
+}))
 vi.mock('@/components/ai-elements/message', () => ({
   Message: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   MessageContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
-vi.mock('@/components/ae/chat/AeAnswerThinkingTrace', () => ({ AeAnswerThinkingTrace: () => <div /> }))
 vi.mock('@/components/ae/chat/AeThreadTurnQueryHeader', () => ({ AeThreadTurnQueryHeader: () => <div /> }))
 vi.mock('@/components/ae/chat/AeTurnContextLine', () => ({ AeTurnContextLine: () => <div /> }))
 
 import type { AnswerEvent } from '@/modules/answer/public'
+import type { PublicThreadTurn } from '@/modules/answer-thread/public'
+import type { ThreadReadbackResult } from '@/components/ae/chat/thread-readback'
 
 import { AeThreadTurnStreamSection } from '@/components/ae/chat/AeThreadTurnStreamSection'
+
+beforeEach(() => {
+  streamSession.attach.mockClear()
+  streamSession.abort.mockClear()
+  stopState.request.mockReset()
+  readbackState.request.mockReset()
+  stopState.request.mockResolvedValue({ kind: 'not_found' })
+  readbackState.request.mockResolvedValue({ kind: 'not_found' })
+})
 
 describe('thread turn stream lifecycle', () => {
   it('keeps one attachment per generation while callbacks stay fresh', () => {
@@ -38,10 +77,11 @@ describe('thread turn stream lifecycle', () => {
     const view = render(
       <AeThreadTurnStreamSection
         query="Find a plumber"
+        clientTurnKey="turn-key-1"
         generation={1}
         intent="refine_search"
         onThreadCreated={firstThreadCreated}
-      />,
+      />
     )
     expect(streamSession.attach).toHaveBeenCalledTimes(1)
     const firstAttachment = streamSession.attach.mock.calls[0]?.[0]
@@ -50,6 +90,7 @@ describe('thread turn stream lifecycle', () => {
     view.rerender(
       <AeThreadTurnStreamSection
         query="Find a plumber"
+        clientTurnKey="turn-key-1"
         generation={1}
         intent="compare_known"
         threadId="thread:promoted"
@@ -59,14 +100,15 @@ describe('thread turn stream lifecycle', () => {
     )
     expect(streamSession.attach).toHaveBeenCalledTimes(1)
     firstAttachment.subscriber.onThread?.({ threadId: 'thread:created', turnId: 'turn:1', turnSeq: 1 })
-    firstAttachment.subscriber.onResult('rate_limited')
+    firstAttachment.subscriber.onResult({ kind: 'aborted' })
     expect(firstThreadCreated).not.toHaveBeenCalled()
     expect(freshThreadCreated).toHaveBeenCalledWith('thread:created', { turnId: 'turn:1', turnSeq: 1 })
-    expect(freshStreamEnd).toHaveBeenCalledWith('rate_limited')
+    expect(freshStreamEnd).not.toHaveBeenCalled()
 
     view.rerender(
       <AeThreadTurnStreamSection
         query="Find a plumber"
+        clientTurnKey="turn-key-2"
         generation={2}
         intent="compare_known"
         threadId="thread:promoted"
@@ -75,19 +117,19 @@ describe('thread turn stream lifecycle', () => {
     )
     expect(streamSession.attach).toHaveBeenCalledTimes(2)
     expect(streamSession.attach.mock.calls[1]?.[0]).toMatchObject({
-      key: expect.stringContaining('2:Find a plumber:'),
+      key: 'turn-key-2',
       threadId: 'thread:promoted',
     })
-    expect(streamSession.abort).toHaveBeenCalledWith(expect.stringContaining('1:Find a plumber:'))
+    expect(streamSession.abort).not.toHaveBeenCalled()
 
     firstAttachment.subscriber.onThread?.({ threadId: 'thread:late', turnId: 'turn:late', turnSeq: 2 })
     expect(freshThreadCreated).toHaveBeenCalledTimes(1)
   })
   it('keeps the generic answer presenter for streamed answer events', () => {
-    streamSession.attach.mockClear()
     const view = render(
       <AeThreadTurnStreamSection
         query="Find a plumber"
+        clientTurnKey="turn-key-3"
         generation={1}
       />,
     )
@@ -100,5 +142,195 @@ describe('thread turn stream lifecycle', () => {
     })
 
     expect(view.container.querySelector('[data-testid="generic-answer"]')).not.toBeNull()
+  })
+
+  it('keeps Stop actionable through pending settlement and aborts only after stop acknowledgement', async () => {
+    const stopDeferred = Promise.withResolvers<{
+      kind: 'stopped'
+      threadId: string
+      turnId: string
+    }>()
+    const pendingReadback = Promise.withResolvers<ThreadReadbackResult>()
+    const stoppedReadback = Promise.withResolvers<ThreadReadbackResult>()
+    stopState.request.mockReturnValue(stopDeferred.promise)
+    readbackState.request
+      .mockImplementationOnce(() => pendingReadback.promise)
+      .mockImplementationOnce(() => stoppedReadback.promise)
+
+    const pendingTurn = {
+      turnId: 'turn:stop',
+      seq: 1,
+      query: 'Find a plumber',
+      intent: 'refine_search',
+      status: 'pending',
+      workLog: [],
+      artifacts: [],
+      oneLine: '',
+    } satisfies PublicThreadTurn
+    const stoppedTurn = { ...pendingTurn, status: 'stopped' } satisfies PublicThreadTurn
+    const onSettledTurn = vi.fn()
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-stop"
+        generation={1}
+        onSettledTurn={onSettledTurn}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+
+    act(() => {
+      attachment.subscriber.onThread?.({ threadId: 'thread:stop', turnId: 'turn:stop', turnSeq: 1 })
+      attachment.subscriber.onFrame?.({
+        seq: 0,
+        event: { type: 'thread', threadId: 'thread:stop', turnId: 'turn:stop', turnSeq: 1 },
+      })
+      attachment.subscriber.onResult?.({ kind: 'complete' })
+    })
+
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy()
+    pendingReadback.resolve({
+      kind: 'ok',
+      projection: { threadId: 'thread:stop', title: 'Find a plumber', turns: [pendingTurn] },
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(screen.getByText('This answer is still pending. Reload this thread to check its durable status.')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      await Promise.resolve()
+    })
+    expect(stopState.request).toHaveBeenCalledWith({ threadId: 'thread:stop', turnId: 'turn:stop' })
+    expect(streamSession.abort).not.toHaveBeenCalled()
+
+    await act(async () => {
+      stopDeferred.resolve({ kind: 'stopped', threadId: 'thread:stop', turnId: 'turn:stop' })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(streamSession.abort).toHaveBeenCalledTimes(1)
+    expect(readbackState.request).toHaveBeenCalledTimes(2)
+
+    stoppedReadback.resolve({
+      kind: 'ok',
+      projection: { threadId: 'thread:stop', title: 'Find a plumber', turns: [stoppedTurn] },
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(onSettledTurn).toHaveBeenCalledWith(stoppedTurn, 1)
+    expect(screen.getByText('Answer stopped.')).toBeTruthy()
+  })
+  it('retries one transient readback without reattaching the stream', async () => {
+    vi.useFakeTimers()
+    try {
+      const completeTurn = {
+        turnId: 'turn:retry',
+        seq: 1,
+        query: 'Find a plumber',
+        intent: 'refine_search',
+        status: 'complete',
+        workLog: [],
+        artifacts: [],
+        oneLine: 'A durable answer.',
+      } satisfies PublicThreadTurn
+      readbackState.request
+        .mockResolvedValueOnce({
+          kind: 'transport_error',
+          error: {
+            kind: 'network',
+            code: 'network_error',
+            detail: 'The thread could not be reached.',
+          },
+        })
+        .mockResolvedValueOnce({
+          kind: 'ok',
+          projection: { threadId: 'thread:retry', title: 'Find a plumber', turns: [completeTurn] },
+        })
+      const onSettledTurn = vi.fn()
+      const onStreamEnd = vi.fn()
+      const view = render(
+        <AeThreadTurnStreamSection
+          query="Find a plumber"
+          clientTurnKey="turn-key-retry"
+          generation={1}
+          onSettledTurn={onSettledTurn}
+          onStreamEnd={onStreamEnd}
+        />,
+      )
+      const attachment = streamSession.attach.mock.calls[0]?.[0]
+      if (attachment === undefined) throw new Error('missing stream attachment')
+
+      act(() => {
+        attachment.subscriber.onFrame?.({
+          seq: 0,
+          event: { type: 'thread', threadId: 'thread:retry', turnId: 'turn:retry', turnSeq: 1 },
+        })
+        attachment.subscriber.onResult?.({ kind: 'complete' })
+      })
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(readbackState.request).toHaveBeenCalledTimes(1)
+      expect(streamSession.attach).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        vi.runOnlyPendingTimers()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(readbackState.request).toHaveBeenCalledTimes(2)
+      expect(streamSession.attach).toHaveBeenCalledTimes(1)
+      expect(onSettledTurn).toHaveBeenCalledWith(completeTurn, 1)
+      expect(onStreamEnd).toHaveBeenCalledWith('complete')
+      expect(view.container.querySelector('[data-lifecycle="complete"]')).not.toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('keeps a pre-reservation HTTP problem instead of replacing it with missing-stream copy', async () => {
+    const onStreamEnd = vi.fn()
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-unavailable"
+        generation={1}
+        onStreamEnd={onStreamEnd}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+
+    await act(async () => {
+      attachment.subscriber.onResult?.({
+        kind: 'problem',
+        problem: {
+          type: 'about:blank',
+          title: 'Unavailable',
+          status: 503,
+          detail: 'The answer service is temporarily unavailable.',
+          kind: 'UNAVAILABLE',
+          code: 'unavailable',
+          retryable: true,
+        },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(readbackState.request).not.toHaveBeenCalled()
+    expect(onStreamEnd).toHaveBeenCalledWith('error')
+    await waitFor(() => expect(screen.getByText('The answer service is temporarily unavailable.')).toBeTruthy())
+    expect(screen.queryByText(/durable turn identity/i)).toBeNull()
   })
 })

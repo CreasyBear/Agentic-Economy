@@ -15,7 +15,7 @@ import {
   type PublicAnswerCheckSummary,
 } from '../answer-thread.schema'
 import { sumToolDurationMs } from '@/modules/common/tool-duration'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import {
   createHarnessRunCollector,
@@ -24,6 +24,7 @@ import {
   type HarnessToolStatus,
 } from '@/modules/harness/public'
 import { readToolSummaryErrorCode } from './tool-summary'
+import { ANSWER_READ_TOOL_IDS } from '../answer-thread.schema'
 
 export function buildAnswerRunReport(input: {
   intent: FollowUpIntent
@@ -45,7 +46,7 @@ export function buildAnswerRunReport(input: {
     evidence: {
       providerCount: input.evidence.providers.length,
       allowedSlugCount: input.evidence.allowedSlugs.length,
-      resultHashes: stableUnique(toolCalls.map((call) => call.resultHash)).sort((a, b) => a.localeCompare(b)),
+      resultHashes: uniq(toolCalls.map((call) => call.resultHash)).sort((a, b) => a.localeCompare(b)),
       snapshotHash: input.snapshotHash,
     },
     workLog: summarizeWorkLog(workLog),
@@ -70,7 +71,7 @@ export function buildHarnessRunReportForAnswer(input: {
   const toolCalls = input.evidence.toolCalls
   const timings = input.evidence.timings
   const workLog = input.evidence.workLog
-  const collector = createHarnessRunCollector(AnswerToolIdValues)
+  const collector = createHarnessRunCollector(ANSWER_READ_TOOL_IDS)
 
   collector.recordEvent({
     phase: 'intent',
@@ -223,14 +224,17 @@ function buildCoverage(
   summary: AnswerRunSummary,
   workLog: FrozenTurnEvidenceDraft['workLog'],
 ): AnswerRunCoverage {
-  const toolsAvailable = [...AnswerToolIdValues]
-  const toolsInvoked = stableUnique(Object.keys(summary.tools.byName)).sort((a, b) => a.localeCompare(b)).filter(isAnswerToolId)
+  // Coverage is over the DIRECT model toolset. `operation.execute` is a record
+  // seam behind the dynamic per-op capability tools, not itself a callable tool,
+  // so it is deliberately not listed as available.
+  const toolsAvailable = [...ANSWER_READ_TOOL_IDS]
+  const toolsInvoked = uniq(Object.keys(summary.tools.byName)).sort((a, b) => a.localeCompare(b)).filter(isAnswerToolId)
   const invoked = new Set(toolsInvoked)
   return {
     toolsAvailable,
     toolsInvoked,
     toolsUnused: toolsAvailable.filter((toolId) => !invoked.has(toolId)),
-    workLogPhases: stableUnique(workLog.map((step) => step.phase)).sort((a, b) => a.localeCompare(b)),
+    workLogPhases: uniq(workLog.map((step) => step.phase)).sort((a, b) => a.localeCompare(b)),
     hasProviders: summary.evidence.providerCount > 0,
     hasAllowedSlugs: summary.evidence.allowedSlugCount > 0,
     hasSnapshotHash: summary.evidence.snapshotHash.length > 0,

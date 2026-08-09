@@ -10,18 +10,63 @@ import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { AeSupplyFunnel } from '@/components/ae/supply/AeSupplyFunnel'
 import { emptySupplyFunnelDraft, readSupplyFunnelDraft, writeSupplyFunnelDraft } from '@/components/ae/supply/AeSupplyFunnel.exports'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/AeSupplyEarningsCard'
-import type { SupplyFunnelStep, SupplyFunnelStepCompletion } from '@/modules/capability-supply/supply-funnel.functions'
-import type { AgentToolDescriptor } from '@/modules/actions'
+import type {
+  SupplyFunnelStep,
+  SupplyFunnelStepCompletion,
+  SupplyLandingTool,
+} from '@/modules/capability-supply/supply-funnel.functions'
 import type { ServiceDto } from '@/modules/registry/public'
 import { emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 
-const tool: AgentToolDescriptor = {
-  id: 'registry.services_list', name: 'List published services', summary: 'Read published services.', boundaries: ['Read-only.'], readOnly: true,
-  effect: { class: 'observation', reversible: true, recipientKind: 'none', dataClasses: [], spendExposure: 'none', approval: 'none' },
-  parameters: [], hasOutputSchema: true,
+const tool: SupplyLandingTool = {
+  id: 'registry.services_list',
+  name: 'List published services',
+  summary: 'Read published services.',
+  boundaries: ['Read-only.'],
 }
 const service: ServiceDto = {
-  id: 'offering:one', revision: 1, business: { slug: 'example', name: 'Example' }, name: 'Quote API', category: 'Data', summary: 'Returns a quote.', pricingSummary: 'AUD 0 per call', price: { kind: 'fixed', currency: 'AUD', amountMinor: 0, taxTreatment: 'inclusive' }, endpoints: [{ url: 'https://example.test/quote', name: 'Quote', summary: 'Quote', provenance: 'business_declared', access: 'external' }], links: { business: '/api/businesses/example', manifest: '/example/ucp' },
+  id: 'example',
+  name: 'Quote API',
+  category: 'Data',
+  networks: [],
+  enriched: false,
+  integrationType: '3P',
+  serviceName: 'Quote API',
+  tags: [],
+  ae: {
+    publicUrl: '/example',
+    trustTier: 'claimed',
+    photos: [],
+    observedAt: 1,
+    disposition: 'current',
+    source: 'business_published',
+    offerings: [{
+      offeringRef: 'offering:one',
+      revision: 1,
+      name: 'Quote API',
+      category: 'Data',
+      summary: 'Returns a quote.',
+      price: { kind: 'fixed', amount: { currency: 'AUD', units: '0', exponent: 2 }, taxTreatment: 'inclusive' },
+      support: { integrated: false, routeable: false },
+    }],
+    links: { business: '/api/businesses/example', manifest: '/example/ucp' },
+  },
+  endpoints: [{
+    url: 'https://example.test/quote',
+    description: 'Quote',
+    serviceName: 'Quote API',
+    tags: [],
+    parameters: [],
+    quality: null,
+    ae: {
+      offeringRef: 'offering:one',
+      provenance: 'business_declared',
+      access: 'external',
+      authentication: { kind: 'unknown' },
+      execution: 'catalog_only',
+      settlementSupport: 'unpriced',
+    },
+  }],
 }
 
 beforeEach(() => {
@@ -61,6 +106,7 @@ describe('resumable supply draft', () => {
   })
   it('moves through save, check, price, test, and publish effects', async () => {
     const savedValue = { ...emptyOwnerOfferingEditorValue, expectedRevision: 1, name: 'Weather data', category: 'Data', summary: 'Returns a current weather report.' }
+    const expectedPricing = { version: 'pricing:v2', unit: 'call', paidAmount: { currency: 'AUD', units: '125', exponent: 2 } } as const
     const saveOffering = vi.fn(async () => ({ kind: 'saved' as const, value: savedValue, message: 'Saved.' }))
     const advance = vi.fn(async (step: SupplyFunnelStep): Promise<SupplyFunnelStepCompletion> => ({ step, state: 'completed' }))
     const runReadiness = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => ({ step: 'readiness', state: 'completed' }))
@@ -86,21 +132,33 @@ describe('resumable supply draft', () => {
     expect(runReadiness).toHaveBeenCalledWith({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }) })
 
 
-    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '125' } })
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '1.25' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save price' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Run a real test' })).toBeDefined())
-    expect(advance).toHaveBeenCalledWith('pricing', expect.objectContaining({ paidAmountMinor: 125 }))
+    expect(advance).toHaveBeenCalledWith('pricing', expectedPricing)
 
     fireEvent.click(screen.getByRole('button', { name: 'Review and confirm the test' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send the test' })).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: 'Send the test' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Go live' })).toBeDefined())
-    expect(runTest).toHaveBeenCalledWith(expect.objectContaining({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }), pricing: expect.objectContaining({ paidAmountMinor: 125 }) }))
+    expect(runTest).toHaveBeenCalledWith(expect.objectContaining({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }), pricing: expectedPricing }))
 
 
     fireEvent.click(screen.getByRole('button', { name: 'Publish your service' }))
-    await waitFor(() => expect(publish).toHaveBeenCalledWith(expect.objectContaining({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }), pricing: expect.objectContaining({ paidAmountMinor: 125 }) })))
+    await waitFor(() => expect(publish).toHaveBeenCalledWith(expect.objectContaining({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }), pricing: expectedPricing })))
     expect(screen.getAllByText('Done').length).toBe(6)
+  })
+  it('does not advance with a malformed decimal price', async () => {
+    const initial = emptySupplyFunnelDraft('business:one')
+    const states = { ...initial.states, describe: 'completed' as const, endpoint: 'completed' as const, readiness: 'completed' as const }
+    writeSupplyFunnelDraft({ ...initial, states, completedSteps: ['describe', 'endpoint', 'readiness'] })
+    const advance = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => ({ step: 'pricing', state: 'completed' }))
+    render(<AeSupplyFunnel businessId="business:one" initialOffering={emptyOwnerOfferingEditorValue} callbacks={{ saveOffering: vi.fn(), advance, runReadiness: vi.fn(), runTest: vi.fn(), publish: vi.fn() }} />)
+
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '1.234' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }))
+    await waitFor(() => expect(screen.getByText(/two decimal places/i)).toBeDefined())
+    expect(advance).not.toHaveBeenCalled()
   })
   it('marks downstream work fresh again and gives a refusal recovery action without fake earnings', async () => {
     const initial = emptySupplyFunnelDraft('business:one', 'offering:one')
@@ -120,15 +178,15 @@ describe('resumable supply draft', () => {
     expect(screen.queryByText('stale')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Check the service' }))
-    await waitFor(() => expect(screen.getByText(/could not reach this service/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/could not reach the API document/i)).toBeDefined())
     expect(screen.queryByText('source_unavailable')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Check the service' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose a price per call' })).toBeDefined())
     expect(runReadiness).toHaveBeenCalledTimes(2)
 
-    render(<AeSupplyEarningsCard state="unavailable" />)
-    expect(screen.getByText(/No earnings are recorded from setup or test calls/i)).toBeDefined()
+    render(<AeSupplyEarningsCard readback={{ kind: 'not_found' }} />)
+    expect(screen.getByText(/Setup or test calls do not create earnings/i)).toBeDefined()
   })
 })
 

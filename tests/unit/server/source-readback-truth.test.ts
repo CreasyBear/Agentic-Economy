@@ -27,6 +27,9 @@ describe('source readback truth seams', () => {
           { kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' },
         ],
       })
+
+      expect(defaultResult.kind === 'available' ? defaultResult.readback.projectionMode : undefined).toBe('local_preview')
+      expect(defaultResult.kind === 'available' ? defaultResult.readback.nextAction : '').toContain('Preview only')
     })
   })
 

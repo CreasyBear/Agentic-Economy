@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
+import { problem } from '@/lib/server/problem'
 import {
   handleSandboxRouteProviderRequest,
   readSandboxRouteProviderDiscovery,
@@ -20,18 +21,16 @@ export function createSandboxRouteProviderServer(input: Readonly<{
   return createServer(async (request, response) => {
     try {
       const url = requestUrl(request)
-      if (url.pathname !== expectedPath) return send(response, Response.json({ kind: 'not_found' }, { status: 404 }))
+      if (url.pathname !== expectedPath) return send(response, problem({ status: 404, kind: 'NOT_FOUND', code: 'not_found', detail: 'not_found' }))
       if (request.method === 'GET') {
         return send(response, await readSandboxRouteProviderDiscovery(input.routeKey, new Request(url)))
       }
       if (request.method !== 'POST') {
-        return send(response, Response.json({ kind: 'method_not_allowed' }, {
-          status: 405, headers: { Allow: 'GET, POST' },
-        }))
+        return send(response, problem({ status: 405, kind: 'METHOD_NOT_ALLOWED', code: 'method_not_allowed', detail: 'method_not_allowed' }, { Allow: 'GET, POST' }))
       }
       const body = await readBody(request)
       if (body === undefined) {
-        return send(response, Response.json({ kind: 'refused', reason: 'request_too_large' }, { status: 413 }))
+        return send(response, problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large', detail: 'request_too_large' }))
       }
       const providerRequest = new Request(url, {
         method: 'POST',
@@ -42,7 +41,7 @@ export function createSandboxRouteProviderServer(input: Readonly<{
         providerKey: input.providerKey,
       }))
     } catch {
-      return send(response, Response.json({ kind: 'provider_host_error' }, { status: 500 }))
+      return send(response, problem({ status: 500, kind: 'INTERNAL', code: 'provider_host_error', detail: 'provider_host_error' }))
     }
   })
 }

@@ -9,20 +9,34 @@ import { Card } from '@/components/ui/card'
 import {
   artifactsToMessageParts,
   inferLayoutProfileFromArtifacts,
+  neutralizeBidiFormattingControls,
   type AnswerLayoutProfile,
   type AnswerMessagePart,
 } from '@/modules/answer/public'
-import type { AnswerArtifact, AnswerCompareField, AnswerSource } from '@/modules/answer/public'
-import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
+import type { AnswerArtifact, AnswerCompareField, AnswerSource, AnswerWorkStep } from '@/modules/answer/public'
+import type { PublicAnswerCheckSummary, ThinkingStep } from '@/modules/answer-thread/public'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
+import { AeWorkDisclosure } from '@/components/ae/chat/AeWorkDisclosure'
 import { AeGenerativeMap } from './AeGenerativeMap'
-import { AeConsumerPlanResult } from '@/components/ae/plan/AeConsumerPlan'
 import { AeImportedClaims } from '@/components/ae/services/AeImportedClaims'
 import { cn } from '@/lib/utils'
 
+const EmptyWorkSteps: readonly AnswerWorkStep[] = []
+const EmptyThinkingSteps: readonly string[] = []
+
 // Calm fade-only reveal. Slide-from-bottom on every streamed part stacks into
 // jitter when several artifacts arrive in quick succession, so parts just fade.
+const PLAIN_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/iu
+
+function projectPlainActionCopy(text: string): string {
+  const normalized = neutralizeBidiFormattingControls(text)
+  const url = normalized.match(PLAIN_URL_PATTERN)?.[0]?.replace(/[),.;!?]+$/u, '')
+  if (url !== undefined && /\b(?:click|tap)\b/iu.test(normalized)) {
+    return `Copy this URL: ${url}`
+  }
+  return normalized.replace(/\b(?:click|tap)\b/giu, 'Use')
+}
 const REVEAL_ENTER = 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-base motion-safe:ease-standard'
 
 export type AeGenerativeAnswerPhase =
@@ -44,6 +58,14 @@ export type AeGenerativeAnswerProps = {
   errorMessage?: ReactNode | null
   /** Thread this answer belongs to, if one exists yet. Lets provider links carry a "back to answer" origin instead of always falling back to home. */
   threadId?: string
+  /** Real engine work steps rendered as a compact "Worked" disclosure above the answer prose. */
+  workSteps?: readonly AnswerWorkStep[]
+  /** Accumulated thinking labels folded into the disclosure's "Thought" cell. */
+  thinkingSteps?: readonly string[]
+  thinkingLabel?: string
+  thinkingStep?: ThinkingStep
+  /** Settled-turn check summary for replay surfaces (header line + fact grid). */
+  checkSummary?: PublicAnswerCheckSummary
 }
 
 export function AeGenerativeAnswer({
@@ -56,6 +78,11 @@ export function AeGenerativeAnswer({
   phase = 'idle',
   errorMessage = null,
   threadId,
+  workSteps,
+  thinkingSteps,
+  thinkingLabel,
+  thinkingStep,
+  checkSummary,
 }: AeGenerativeAnswerProps) {
   const profile = inferLayoutProfileFromArtifacts({
     artifacts,
@@ -67,9 +94,9 @@ export function AeGenerativeAnswer({
   const oneLinePart = parts.find((part) => part.kind === 'one-line')
   const headline =
     oneLinePart?.kind === 'one-line'
-      ? oneLinePart.text
+      ? neutralizeBidiFormattingControls(oneLinePart.text)
       : oneLineFallback.length > 0
-        ? oneLineFallback
+        ? neutralizeBidiFormattingControls(oneLineFallback)
         : ''
 
   const empty = phase === 'complete' && profile === 'empty_state'
@@ -86,8 +113,9 @@ export function AeGenerativeAnswer({
       part.kind === 'prose' && part.text.trim().length > 0,
   )
   const hasSummary = summaryPart !== undefined
-  const hasNextStep = parts.some((part) => part.kind === 'what-to-do-now' && part.text.trim().length > 0)
-
+  const hasNextStep = parts.some(
+    (part) => part.kind === 'what-to-do-now' && part.text.trim().length > 0,
+  )
   return (
     <section
       className="grid gap-4"
@@ -99,27 +127,29 @@ export function AeGenerativeAnswer({
       <div className="flex items-start justify-between gap-3">
         {headline.length > 0 ? (
           <p
+            dir="auto"
+            style={{ unicodeBidi: 'isolate' }}
             className={cn(
               'min-w-0 flex-1 text-foreground',
               headlineSize,
               isFirstTurnProfile && REVEAL_ENTER,
             )}
-            aria-live={busy ? 'polite' : 'off'}
           >
             {headline}
           </p>
         ) : (
           <p
+            dir="auto"
+            style={{ unicodeBidi: 'isolate' }}
             className={cn('min-w-0 flex-1 text-muted-foreground', headlineSize)}
-            {...(busy ? { 'aria-live': 'polite' as const } : {})}
-            aria-label="Finding the right business"
+            aria-label="Checking what's available"
           >
-            {busy ? <AeStreamingLabel as="span">Finding the right business</AeStreamingLabel> : 'Finding the right business'}
+            {busy ? <AeStreamingLabel as="span">Checking what's available</AeStreamingLabel> : 'Checking what\'s available'}
           </p>
         )}
 
         {phase === 'reconnecting' ? (
-          <span className="shrink-0 text-xs text-muted-foreground" role="status">
+          <span className="shrink-0 text-xs text-muted-foreground">
             <AeStreamingLabel as="span">Reconnecting…</AeStreamingLabel>
           </span>
         ) : null}
@@ -134,6 +164,19 @@ export function AeGenerativeAnswer({
           <div>{errorMessage}</div>
         </div>
       ) : null}
+      {phase === 'stopped' && errorMessage !== null ? (
+        <p className="text-sm text-muted-foreground">{errorMessage}</p>
+      ) : null}
+
+      <AeWorkDisclosure
+        isStreaming={busy}
+        workSteps={workSteps ?? EmptyWorkSteps}
+        thinkingSteps={thinkingSteps ?? EmptyThinkingSteps}
+        thinkingLabel={thinkingLabel ?? ''}
+        {...(thinkingStep === undefined ? {} : { thinkingStep })}
+        {...(checkSummary === undefined ? {} : { checkSummary })}
+        query={query}
+      />
 
       {summaryPart === undefined ? null : (
         <AnswerPartView
@@ -162,8 +205,9 @@ export function AeGenerativeAnswer({
           It stays complete and reachable, but ordinary users do not need to read it first. */}
       {hasProviderEvidence ? (
         <details className="group rounded-md border border-border bg-card">
-          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-            How AE checked this
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            How this was checked
+            <span className="shrink-0 text-xs font-normal text-muted-foreground">Sources reviewed</span>
           </summary>
           <div className="border-t border-border p-4">
             <AeAnswerJourney
@@ -181,7 +225,7 @@ export function AeGenerativeAnswer({
       ) : null}
 
       {phase === 'complete' && !empty ? (
-        <p className="sr-only" role="status">
+        <p className="sr-only">
           Answer ready.
         </p>
       ) : null}
@@ -198,6 +242,30 @@ function isProviderEvidencePart(part: AnswerMessagePart): boolean {
     default:
       return false
   }
+}
+
+/** Flowing Perplexity-style body: split the streamed summary into a quiet reading column. */
+function ProseBody({ text }: { text: string }) {
+  const paragraphs = text
+    .split(/\n\s*\n+/)
+    .map((paragraph) => neutralizeBidiFormattingControls(paragraph.trim()))
+    .filter((paragraph) => paragraph.length > 0)
+
+  return (
+    <div className={cn(REVEAL_ENTER, 'grid gap-3')}>
+      {paragraphs.map((paragraph, index) => (
+        <p
+          key={index}
+          dir="auto"
+          style={{ unicodeBidi: 'isolate' }}
+          className="max-w-[68ch] text-pretty text-base leading-relaxed text-foreground"
+          aria-live="off"
+        >
+          {paragraph}
+        </p>
+      ))}
+    </div>
+  )
 }
 
 type AnswerJourneyState = 'complete' | 'active' | 'pending' | 'error' | 'stopped'
@@ -221,26 +289,26 @@ function AeAnswerJourney({
   const empty = profile === 'empty_state'
   const steps = [
     {
-      label: 'Understand need',
-      detail: 'AE reads the request, place, and service intent.',
-      record: 'need read',
+      label: 'Understand your request',
+      detail: 'Reading the request and what you want done.',
+      record: 'request read',
     },
     {
-      label: 'Find the fit',
-      detail: 'AE checks what businesses publish for this ask.',
-      record: 'published facts',
+      label: "Find what's available",
+      detail: 'Checking the businesses that can help.',
+      record: 'available details',
     },
     {
-      label: 'Compare published facts',
-      detail: 'Published area, response, and next-step details are compared.',
-      record: 'facts compared',
+      label: 'Compare options',
+      detail: 'Comparing area, response, and next-step details.',
+      record: 'options compared',
     },
     {
-      label: 'Hand off next step',
+      label: 'Choose what happens next',
       detail: empty
-        ? 'List a business or sharpen the ask.'
-        : 'Choose a business or send a qualified inquiry for owner review.',
-      record: 'handoff ready',
+        ? 'Ask a business or sharpen the request.'
+        : 'Choose a business or send a request for the business to review.',
+      record: 'next step ready',
     },
   ] as const
 
@@ -251,10 +319,10 @@ function AeAnswerJourney({
       : Math.max(0, Math.min(completedIndex, steps.length - 1))
   const guidance =
     phase === 'streaming'
-      ? 'AE is putting the answer record together as the answer arrives.'
+      ? 'Putting the answer together as information arrives.'
       : empty
-        ? 'No listed match yet. List a business or sharpen the ask.'
-        : 'AE reads, checks, compares, and routes. The business still confirms timing, quote, and availability.'
+        ? 'No clear match yet. Try a more specific request.'
+        : 'Options are compared using published details. The business still confirms timing, price, and availability before anything is sent.'
 
   // The handoff record is settled evidence, not live chrome. During streaming
   // the research trace + streaming answer already show progress, so this stays
@@ -282,7 +350,7 @@ function AeAnswerJourney({
           <div className="grid min-w-0 gap-1">
             <Badge variant="outline" className="w-fit">How this was put together</Badge>
             <p className="text-lg font-semibold text-foreground">
-              The handoff is a record.
+              What was checked, and what happens next.
             </p>
             <p className="max-w-[58ch] text-pretty text-muted-foreground">
               {guidance}
@@ -290,7 +358,7 @@ function AeAnswerJourney({
           </div>
         </div>
         <p className="font-mono tabular-nums text-sm text-muted-foreground">
-          {phase === 'complete' ? 'record ready' : 'handoff record'}
+          {phase === 'complete' ? 'ready' : 'next step'}
         </p>
       </div>
 
@@ -415,14 +483,12 @@ function AnswerPartView({
   hasAnswerFirstSummary: boolean
 }) {
   switch (part.kind) {
-    case 'consumer-plan':
-      return <AeConsumerPlanResult result={part.plan} />
     case 'one-line':
       return null
     case 'selected-provider':
-      return <SelectedProviderConfirmation provider={part.provider} threadId={threadId} />
+      return <SelectedSource provider={part.provider} threadId={threadId} />
     case 'provider-cards':
-      return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} threadId={threadId} />
+      return <SourcesList providers={part.providers} threadId={threadId} />
     case 'imported-claims':
       return <AeImportedClaims claims={part.claims} query={query} />
     case 'provider-compare-table':
@@ -455,27 +521,25 @@ function AnswerPartView({
       return <AeGenerativeMap label={part.label} placeQuery={part.placeQuery} />
     case 'empty-state':
       return empty ? (
-        <div className={cn(REVEAL_ENTER, 'rounded-md border border-border bg-card p-4 text-sm text-foreground')} role="status">
-          <p>{part.text}</p>
+        <div className={cn(REVEAL_ENTER, 'rounded-md border border-border bg-card p-4 text-sm text-foreground')}>
+          <p dir="auto" style={{ unicodeBidi: 'isolate' }}>{neutralizeBidiFormattingControls(part.text)}</p>
         </div>
       ) : null
     case 'prose':
-      return !empty && part.text.length > 0 ? (
-        <p className={cn(REVEAL_ENTER, 'max-w-[68ch] text-pretty text-base leading-relaxed text-foreground')} aria-live="off">
-          {part.text}
-        </p>
-      ) : null
-    case 'what-to-do-now':
-      return !empty && part.text.length > 0 ? (
+      return !empty && part.text.length > 0 ? <ProseBody text={part.text} /> : null
+    case 'what-to-do-now': {
+      const actionText = projectPlainActionCopy(part.text)
+      return !empty && actionText.length > 0 ? (
         part.compact === true ? (
-          <p className={cn(REVEAL_ENTER, 'text-sm text-muted-foreground')}>{part.text}</p>
+          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className={cn(REVEAL_ENTER, 'text-sm text-muted-foreground')}>{actionText}</p>
         ) : (
           <p className={cn(REVEAL_ENTER, 'grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-foreground')}>
             <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">What to do now</span>
-            <span>{part.text}</span>
+            <span dir="auto" style={{ unicodeBidi: 'isolate' }}>{actionText}</span>
           </p>
         )
       ) : null
+    }
     case 'agent-json':
       return <AeAgentJsonAffordance agentJsonUrl={part.url} query={query} />
     case 'protected-by-ae':
@@ -488,7 +552,7 @@ function AnswerPartView({
   }
 }
 
-function SelectedProviderConfirmation({ provider, threadId }: { provider: AnswerSource; threadId: string | undefined }) {
+function SelectedSource({ provider, threadId }: { provider: AnswerSource; threadId: string | undefined }) {
   const inquiryUrl = provider.inquiryUrl
   const hasInquiryForm = inquiryUrl !== undefined
   // Protocol-relative `//host` is external; only a rooted path is router-owned.
@@ -496,44 +560,80 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
   const inquiryIsInternal = inquiryUrl !== undefined && inquiryUrl.startsWith('/') && !inquiryUrl.startsWith('//')
   const threadSearch = threadId === undefined || threadId.length === 0 ? {} : { from: 'thread' as const, id: threadId }
   const selectionScope = threadId === undefined ? 'in this answer' : 'from this thread'
+  const basis = [provider.category.trim(), (provider.serviceArea || provider.suburb).trim()]
+    .map(neutralizeBidiFormattingControls)
+    .filter((part) => part.length > 0)
+    .join(' · ')
+  const providerName = neutralizeBidiFormattingControls(provider.name)
+  const initial = providerName.trim().charAt(0).toUpperCase() || '?'
 
   return (
     <section
-      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-md border border-border bg-card p-4')}
+      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-lg border border-border bg-card p-4')}
       aria-label="Selected business"
     >
-      <header className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-        <div className="grid min-w-0 gap-0.5">
-          <p className="block text-sm font-medium text-muted-foreground">Selected business</p>
-          <p className="font-heading text-base leading-snug text-foreground">{provider.name}</p>
-          <p className="text-sm leading-snug text-muted-foreground">
-            Choice {provider.citationIndex} {selectionScope} · {provider.category} ·{' '}
-            {provider.serviceArea || provider.suburb}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted font-mono text-base font-semibold text-muted-foreground"
+        >
+          {initial}
+        </span>
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Recommended</p>
+          <p className="truncate font-heading text-base font-medium leading-snug text-foreground">
+            {detailIsInternal ? (
+              <Link
+                to="/$slug"
+                params={{ slug: provider.slug }}
+                search={threadSearch}
+                className="underline-offset-4 hover:underline"
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+              >
+                {providerName}
+              </Link>
+            ) : (
+              <a
+                href={provider.detailUrl}
+                className="underline-offset-4 hover:underline"
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+              >
+                {providerName}
+              </a>
+            )}
+          </p>
+          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-sm text-muted-foreground">
+            Choice {provider.citationIndex} {selectionScope} {basis.length > 0 ? `· ${basis}` : ''}
           </p>
         </div>
-        <span className="inline-flex w-fit items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
+        <span
+          className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-xs text-muted-foreground"
+          data-tone={hasInquiryForm ? 'inquiry' : 'review'}
+        >
           <CheckIcon className="size-3" aria-hidden="true" />
-          {hasInquiryForm ? 'Inquiry form published' : 'Review business first'}
+          {hasInquiryForm ? 'Request form available' : 'Review this business first'}
         </span>
-      </header>
-      <p className="text-sm leading-relaxed text-foreground">
+      </div>
+      <p className="text-sm leading-relaxed text-muted-foreground">
         {hasInquiryForm
           ? [
-              'AE can open this business\'s qualified inquiry form for owner review.',
+              'A request can be sent to this business for the business to review.',
               'The business still confirms timing, quote, and availability.',
             ].join(' ')
           : [
-              'This business does not publish an AE inquiry form yet.',
-              'Review the business page and use its published contact guidance.',
+              'This business does not have a request form yet.',
+              'Review the business page and use the contact details it provides.',
             ].join(' ')}
       </p>
       <div className="flex flex-wrap gap-2">
         {inquiryUrl === undefined ? null : (
           <Button asChild variant="default" size="sm">
             {inquiryIsInternal ? (
-              <Link to="/$slug/inquiry" params={{ slug: provider.slug }} search={threadSearch}>Open inquiry form</Link>
+              <Link to="/$slug/inquiry" params={{ slug: provider.slug }} search={threadSearch}>Open request form</Link>
             ) : (
-              <a href={inquiryUrl}>Open inquiry form</a>
+              <a href={inquiryUrl}>Open request form</a>
             )}
           </Button>
         )}
@@ -549,47 +649,77 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
   )
 }
 
-function ProviderCardsRail({
+function SourcesList({
   providers,
-  scroll,
   threadId,
 }: {
   providers: readonly AnswerSource[]
-  scroll: boolean
   threadId: string | undefined
 }) {
+  if (providers.length === 0) {
+    return null
+  }
   return (
-    <section className={cn(REVEAL_ENTER, 'grid gap-3')} aria-label="Business shortlist">
-      <header className="grid gap-1 rounded-md border border-border bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div className="grid min-w-0 gap-0.5">
-          <p className="block text-sm font-medium text-muted-foreground">Business shortlist</p>
-          <p className="text-sm font-medium text-foreground">These are the businesses AE found for this request.</p>
-          <p className="text-xs leading-snug text-muted-foreground">
-            Compare area, response, and next step before choosing a business or opening an inquiry form.
-          </p>
-        </div>
-        <span className="w-fit rounded-md border border-border bg-card px-2 py-1 font-mono text-2xs text-muted-foreground">
-          {listingCountLabel(providers.length)}
-        </span>
+    <section className={cn(REVEAL_ENTER, 'grid gap-3')} aria-label="Sources">
+      <header className="grid gap-0.5">
+        <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
+        <p className="text-sm text-muted-foreground">
+          {listingCountLabel(providers.length)} compared on published area, response, and next step.
+        </p>
       </header>
-      <ul
-        className={
-          scroll
-            ? 'flex snap-x snap-proximity gap-3 overflow-x-auto pb-1 [&>li]:w-[min(18rem,85vw)] [&>li]:shrink-0 [&>li]:snap-start'
-            : 'grid gap-3 sm:grid-cols-2'
-        }
-        aria-label="Businesses found for this answer"
-      >
+      <ul className="grid gap-2 sm:grid-cols-2" aria-label="Sources for this answer">
         {providers.map((source) => (
-          <li key={source.slug}>
-            <AeProviderCard variant="answer" source={source} {...(threadId === undefined ? {} : { threadId })} />
-          </li>
+          <SourceCard key={source.slug} source={source} threadId={threadId} />
         ))}
       </ul>
-      <p className="font-mono text-2xs text-muted-foreground">
-        A person at the business still confirms timing, quote, and availability.
-      </p>
     </section>
+  )
+}
+
+function SourceCard({
+  source,
+  threadId,
+}: {
+  source: AnswerSource
+  threadId: string | undefined
+}) {
+  const detailIsInternal = source.detailUrl.startsWith('/') && !source.detailUrl.startsWith('//')
+  const search = threadId === undefined || threadId.length === 0 ? {} : { from: 'thread' as const, id: threadId }
+  const basis = [source.category.trim(), (source.serviceArea || source.suburb).trim()]
+    .map(neutralizeBidiFormattingControls)
+    .filter((part) => part.length > 0)
+    .join(' · ')
+  const sourceName = neutralizeBidiFormattingControls(source.name)
+  const initial = sourceName.trim().charAt(0).toUpperCase() || '?'
+  const gridCls = 'grid items-center gap-3 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]'
+  const content = (
+    <>
+      <span
+        aria-hidden="true"
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted font-mono text-sm font-semibold text-muted-foreground"
+      >
+        {initial}
+      </span>
+      <span className="grid min-w-0 gap-0.5">
+        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-sm font-medium text-foreground underline-offset-4">{sourceName}</span>
+        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-xs text-muted-foreground">{basis}</span>
+      </span>
+      <span className="hidden shrink-0 items-center justify-center rounded-full border border-border bg-card px-2 py-0.5 font-mono text-2xs tabular-nums text-muted-foreground sm:inline-flex">
+        {source.citationIndex}
+      </span>
+    </>
+  )
+
+  return (
+    <li className="rounded-lg border border-border bg-card transition-colors hover:bg-muted motion-safe:duration-fast motion-safe:ease-standard">
+      {detailIsInternal ? (
+        <Link to="/$slug" params={{ slug: source.slug }} search={search} className={gridCls}>
+          {content}
+        </Link>
+      ) : (
+        <a href={source.detailUrl} className={gridCls}>{content}</a>
+      )}
+    </li>
   )
 }
 
@@ -616,7 +746,7 @@ function ProviderCompareTable({
       <header className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="grid gap-1">
           <p className="block text-sm font-medium text-muted-foreground">Compare</p>
-          <p className="font-heading text-base text-foreground">Published facts, side by side</p>
+          <p className="font-heading text-base text-foreground">Published details, side by side</p>
         </div>
         <p className="shrink-0 font-mono text-2xs text-muted-foreground">{listingCountLabel(providers.length)}</p>
       </header>
@@ -663,23 +793,34 @@ function ProviderCompareRow({
   threadId: string | undefined
 }) {
   const detailSearch = threadId === undefined ? {} : { from: 'thread' as const, id: threadId }
+  const providerName = neutralizeBidiFormattingControls(provider.name)
+  const category = neutralizeBidiFormattingControls(provider.category)
 
   return (
     <tr>
       <th scope="row" className="sticky left-0 z-10 border-t border-border bg-card px-4 py-3 text-left align-top">
         <span className="grid gap-0.5">
-          <Link to="/$slug" params={{ slug: provider.slug }} search={detailSearch} className="font-medium text-foreground underline-offset-4 hover:underline">
-            {provider.name}
+          <Link
+            to="/$slug"
+            params={{ slug: provider.slug }}
+            search={detailSearch}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+            dir="auto"
+            style={{ unicodeBidi: 'isolate' }}
+          >
+            {providerName}
           </Link>
-          <span className="font-mono text-2xs text-muted-foreground">{provider.category}</span>
+          <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-mono text-2xs text-muted-foreground">{category}</span>
         </span>
       </th>
       {fields.map((field) => (
         <td
           key={`${provider.slug}-${field}`}
           className={cn('border-t border-border px-4 py-3 align-top tabular-nums text-muted-foreground', field === 'freshness' && 'font-mono text-2xs tracking-wide')}
+          dir="auto"
+          style={{ unicodeBidi: 'isolate' }}
         >
-          {compareFieldValue(provider, field)}
+          {neutralizeBidiFormattingControls(compareFieldValue(provider, field))}
         </td>
       ))}
     </tr>
@@ -701,11 +842,12 @@ function RecoveryPrompts({
   if (prompts.length === 0 && links.length === 0) {
     return null
   }
+  const titleText = title === undefined ? 'Try a different request' : neutralizeBidiFormattingControls(title)
 
   return (
     <section
       className={cn(REVEAL_ENTER, 'grid gap-3 rounded-lg border border-border bg-card p-4')}
-      aria-label={title ?? 'Try another search'}
+      aria-label={titleText}
     >
       <header className="flex items-center gap-2">
         <span
@@ -715,31 +857,41 @@ function RecoveryPrompts({
           <SearchIcon className="size-4" />
         </span>
         <div className="grid gap-0.5">
-          <p className="block text-sm font-medium text-muted-foreground">Refine search</p>
-          <p className="font-heading text-base text-foreground">{title ?? 'Try a narrower query'}</p>
+          <p className="block text-sm font-medium text-muted-foreground">Try another way</p>
+          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-heading text-base text-foreground">{titleText}</p>
         </div>
       </header>
       {prompts.length > 0 ? (
         <ul className="flex flex-wrap gap-2">
-          {prompts.map((prompt) => (
-            <li key={`${prompt.label}-${prompt.query}`}>
-              <Link
-                className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-foreground transition-colors motion-safe:duration-fast motion-safe:ease-standard hover:bg-muted motion-safe:active:scale-press"
-                to="/"
-                search={{ q: prompt.query }}
-              >
-                {prompt.label}
-              </Link>
-            </li>
-          ))}
+          {prompts.map((prompt) => {
+            const promptLabel = neutralizeBidiFormattingControls(prompt.label)
+            return (
+              <li key={`${prompt.label}-${prompt.query}`}>
+                <Link
+                  className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-foreground transition-colors motion-safe:duration-fast motion-safe:ease-standard hover:bg-muted motion-safe:active:scale-press"
+                  to="/"
+                  search={{ q: prompt.query }}
+                  dir="auto"
+                  style={{ unicodeBidi: 'isolate' }}
+                >
+                  {promptLabel}
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       ) : null}
       {links.length > 0 ? (
         <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground" aria-label="More ways to continue">
           {links.map((link) => (
             <li key={link.href}>
-              <Link className="underline-offset-4 hover:text-foreground hover:underline" to={link.href}>
-                {link.label}
+              <Link
+                className="underline-offset-4 hover:text-foreground hover:underline"
+                to={link.href}
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+              >
+                {neutralizeBidiFormattingControls(link.label)}
               </Link>
             </li>
           ))}
@@ -798,10 +950,10 @@ function compareFieldValue(provider: AnswerSource, field: AnswerCompareField): s
 
 function listingCountLabel(count: number): string {
   if (count === 1) {
-    return '1 business'
+    return '1 match'
   }
   if (count <= 0) {
-    return 'businesses'
+    return 'matches'
   }
-  return `${count} businesses`
+  return `${count} matches`
 }

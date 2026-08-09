@@ -53,6 +53,12 @@ import {
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
+ 
+type SandboxAuthority = Readonly<{ kind: 'keyless' }>
+
+function sandboxAuthority(_scope: string): SandboxAuthority {
+  return { kind: 'keyless' }
+}
 
 export const resetDevData = internalMutation({
   args: {},
@@ -82,13 +88,12 @@ export const seedDevCatalog = internalMutation({
     businessIdsBySlug: v.record(v.string(), v.string()),
   }),
   handler: async (ctx) => {
-    // Drive the canonical real-provider seed first: idempotently ports the
-    // AE-curated Exa + Frankfurter capabilities through the generic
-    // Contract -> Offering -> Binding -> Publication path.
-    await ctx.runMutation(internal.curatedProviders.seed, {})
-
+    // Persist the source catalog before linking curated capabilities to its offerings.
     const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES)
     const result = await persistDevSeedCatalogState(ctx.db, bundle)
+    // Then port the AE-curated Exa + Frankfurter capabilities through the generic
+    // Contract -> Offering -> Binding -> Publication path.
+    await ctx.runMutation(internal.curatedProviders.seed, {})
     let offeringSeed: {
       processed: number
       seeded: number
@@ -180,7 +185,7 @@ async function seedAdelaideCheckupAccessPath(
 
     .unique()
   if (revision === null) return { kind: 'error', code: 'revision_not_found' }
-  if (revision.price?.kind !== 'fixed' || revision.price.amountMinor === undefined) {
+  if (revision.price?.kind !== 'fixed' || revision.price.amount === undefined) {
     return { kind: 'error', code: 'fixed_price_not_found' }
   }
   const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
@@ -397,7 +402,17 @@ export const setSandboxOptionEligibility = internalMutation({
 
 export const seedTestCapabilityPublication = internalMutation({
   args: {},
-  returns: v.object({ publicationRef: v.string(), credentialRef: v.string() }),
+  returns: v.object({
+    publicationRef: v.string(),
+    authority: v.union(
+      v.object({ kind: v.literal('keyless') }),
+      v.object({
+        kind: v.literal('provider_connection'),
+        connectionRef: v.string(),
+        providerRef: v.string(),
+      }),
+    ),
+  }),
   handler: async (ctx) => {
     const profile = SANDBOX_PROVIDER_PROFILES.one
     const [business, initialOffering, initialBinding] = await Promise.all([
@@ -440,7 +455,7 @@ export const seedTestCapabilityPublication = internalMutation({
       offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
     }, Date.now())
-    return { publicationRef, credentialRef: binding.credentialRef }
+    return { publicationRef, authority: binding.authority }
   },
 })
 
@@ -457,20 +472,20 @@ const DEV_SEED_PRICING_BY_SLUG: Readonly<Record<string, string>> = Object.fromEn
  * here seeds prose only, exactly as it did before prices existed.
  */
 const DEV_SEED_PRICE_BY_PRICING_SUMMARY: Readonly<Record<string, OfferingPrice>> = {
-  'Demo price — $180 call-out, quoted before work starts': { kind: 'fixed', currency: 'AUD', amountMinor: 18_000, unit: 'visit', taxTreatment: 'inclusive' },
-  'Demo price — $140 first hour, then $95 per hour': { kind: 'from', currency: 'AUD', amountMinor: 14_000, unit: 'hour', taxTreatment: 'inclusive' },
-  'Demo price — $95 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
-  'Demo price — $350 first consultation': { kind: 'fixed', currency: 'AUD', amountMinor: 35_000, unit: 'visit', taxTreatment: 'inclusive' },
-  'Demo price — $55 per hour, 3 hour minimum': { kind: 'from', currency: 'AUD', amountMinor: 5_500, unit: 'hour', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 5,000–7,000 typical wedding investment': { kind: 'from', currency: 'AUD', amountMinor: 500_000, unit: 'day', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 250 per additional hour': { kind: 'from', currency: 'AUD', amountMinor: 25_000, unit: 'hour', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 1,800 wedding coverage package': { kind: 'fixed', currency: 'AUD', amountMinor: 180_000, unit: 'day', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 4,500 base funeral service': { kind: 'fixed', currency: 'AUD', amountMinor: 450_000, unit: 'job', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 4,200 base funeral service': { kind: 'fixed', currency: 'AUD', amountMinor: 420_000, unit: 'job', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 4,800 base funeral service': { kind: 'fixed', currency: 'AUD', amountMinor: 480_000, unit: 'job', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 150 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 15_000, unit: 'visit', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 19_900, unit: 'visit', taxTreatment: 'inclusive' },
-  'Demo price — publicly observed / development mock — AUD 139 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 13_900, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $180 call-out, quoted before work starts': { kind: 'fixed', amount: { currency: 'AUD', units: '18000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $140 first hour, then $95 per hour': { kind: 'from', amount: { currency: 'AUD', units: '14000', exponent: 2 }, unit: 'hour', taxTreatment: 'inclusive' },
+  'Demo price — $95 check-up and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '9500', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $350 first consultation': { kind: 'fixed', amount: { currency: 'AUD', units: '35000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $55 per hour, 3 hour minimum': { kind: 'from', amount: { currency: 'AUD', units: '5500', exponent: 2 }, unit: 'hour', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 5,000–7,000 typical wedding investment': { kind: 'from', amount: { currency: 'AUD', units: '500000', exponent: 2 }, unit: 'day', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 250 per additional hour': { kind: 'from', amount: { currency: 'AUD', units: '25000', exponent: 2 }, unit: 'hour', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 1,800 wedding coverage package': { kind: 'fixed', amount: { currency: 'AUD', units: '180000', exponent: 2 }, unit: 'day', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 4,500 base funeral service': { kind: 'fixed', amount: { currency: 'AUD', units: '450000', exponent: 2 }, unit: 'job', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 4,200 base funeral service': { kind: 'fixed', amount: { currency: 'AUD', units: '420000', exponent: 2 }, unit: 'job', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 4,800 base funeral service': { kind: 'fixed', amount: { currency: 'AUD', units: '480000', exponent: 2 }, unit: 'job', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 150 check-up and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '15000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '19900', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 139 check-up and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '13900', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
 }
 
 export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = Object.fromEntries(
@@ -520,7 +535,7 @@ export async function seedSandboxCapabilityPublication(
     binding: {
       bindingId: binding.bindingId,
       endpointUrl: binding.endpointUrl,
-      credentialRef: binding.credentialRef,
+      authority: binding.authority,
       continuation: binding.continuation,
       cancellation: binding.cancellation,
       adapter: { adapterId: binding.adapterId, config: JSON.parse(binding.configJson) },
@@ -655,7 +670,7 @@ export async function registerSandboxV2SupplyRegistrations(
         presentation: {
           label: profile.label,
           summary: 'Labelled sandbox supply for source and contract verification only.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          price: { kind: 'fixed', amount: profile.amount },
           materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
           commercialRelationship: {
             kind: 'none',
@@ -680,7 +695,7 @@ export async function registerSandboxV2SupplyRegistrations(
         networkId: 'ae:public',
         contractRef: contract.ref,
         endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v5`, siteUrl).href,
-        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        authority: sandboxAuthority(profileKey),
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
         adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
@@ -727,7 +742,7 @@ export async function registerSandboxRouteSupplyRegistrations(
         presentation: {
           label: profile.label,
           summary: 'Labelled sandbox route supply for source and contract verification only.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          price: { kind: 'fixed', amount: profile.amount },
           materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
           commercialRelationship: {
             kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
@@ -746,7 +761,7 @@ export async function registerSandboxRouteSupplyRegistrations(
         bindingId: profile.bindingId, offeringId: profile.offeringId, networkId: 'ae:public',
         contractRef: contract.ref,
         endpointUrl: new URL(profile.endpointPath, providerOrigin).href,
-        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        authority: sandboxAuthority(profile.slug.replace(/^sandbox-/, '')),
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
         cancellation: profile === SANDBOX_ROUTE_PROVIDER_PROFILES.resolver
           ? { kind: 'adapter_managed', evidenceRefs: ['seed:sandbox-adapter-cancellation'] }
@@ -827,7 +842,7 @@ export async function registerSandboxWorkflowSupplyRegistrations(
         presentation: {
           label: profile.capabilityName,
           summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          price: { kind: 'fixed', amount: profile.amount },
           materialTerms: [{
             termId: 'sandbox_only',
             label: 'Environment',
@@ -860,7 +875,7 @@ export async function registerSandboxWorkflowSupplyRegistrations(
         networkId: 'ae:public',
         contractRef: contract.ref,
         endpointUrl: new URL(profile.endpointPath, siteUrl).href,
-        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        authority: sandboxAuthority(providerKey),
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
         adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
@@ -1002,7 +1017,7 @@ export async function retireSupersededSandboxRouteSupply(
         presentation: {
           label: profile.label,
           summary: 'Labelled sandbox route supply for source and contract verification only.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          price: { kind: 'fixed', amount: profile.amount },
           materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
           commercialRelationship: {
             kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
@@ -1028,7 +1043,7 @@ export async function retireSupersededSandboxRouteSupply(
       || binding.version !== contractRef.version
       || binding.contractDigest !== contractRef.contractDigest
       || binding.endpointUrl !== expected.endpointUrl
-      || binding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+      || binding.authority.kind !== 'keyless'
       || binding.adapterId !== 'http-json:v1'
       || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
       || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
@@ -1107,7 +1122,7 @@ export async function retireSupersededSandboxProcurementSupply(
       presentation: {
         label: profile.capabilityName,
         summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
-        price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+        price: { kind: 'fixed', amount: profile.amount },
         materialTerms: [{
           termId: 'sandbox_only',
           label: 'Environment',
@@ -1145,7 +1160,7 @@ export async function retireSupersededSandboxProcurementSupply(
       || binding.version !== contractRef.version
       || binding.contractDigest !== contractRef.contractDigest
       || binding.endpointUrl !== new URL(profile.endpointPath, historicalOrigin).href
-      || binding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+      || binding.authority.kind !== 'keyless'
       || binding.adapterId !== 'http-json:v1'
       || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
       || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
@@ -1219,7 +1234,7 @@ export async function retireSupersededSandboxItineraryBuilderSupply(
     presentation: {
       label: profile.capabilityName,
       summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
-      price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+      price: { kind: 'fixed', amount: profile.amount },
       materialTerms: [{
         termId: 'sandbox_only', label: 'Environment',
         value: 'Sandbox only; no real supplier order, payment, or fulfilment.',
@@ -1247,7 +1262,7 @@ export async function retireSupersededSandboxItineraryBuilderSupply(
     || binding.version !== contractRef.version
     || binding.contractDigest !== contractRef.contractDigest
     || binding.endpointUrl !== new URL(profile.endpointPath, historicalOrigin).href
-    || binding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+    || binding.authority.kind !== 'keyless'
     || binding.adapterId !== 'http-json:v1'
     || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
     || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
@@ -1304,12 +1319,12 @@ export async function retireSupersededSandboxV2Supply(
       {
         bindingId: profile.legacyV2BindingId,
         endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}`, siteUrl).href,
-        credentialRef: `env:AE_SANDBOX_PROVIDER_${profileKey.toUpperCase()}_KEY`,
+        authority: sandboxAuthority(profileKey),
       },
       {
         bindingId: profile.priorV2BindingId,
         endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v2`, siteUrl).href,
-        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        authority: sandboxAuthority(profileKey),
       },
     ]
     for (const expected of legacyBindings) {
@@ -1330,7 +1345,7 @@ export async function retireSupersededSandboxV2Supply(
         || offering.version !== legacyContractRef.version
         || offering.contractDigest !== legacyContractRef.contractDigest
         || binding.endpointUrl !== expected.endpointUrl
-        || binding.credentialRef !== expected.credentialRef
+        || binding.authority.kind !== 'keyless'
         || binding.adapterId !== 'http-json:v1'
         || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
         || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
@@ -1392,7 +1407,7 @@ export async function retireSupersededSandboxV2Supply(
         || priorOffering.version !== priorContractRef.version
         || priorOffering.contractDigest !== priorContractRef.contractDigest
         || priorBinding.endpointUrl !== new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v3`, siteUrl).href
-        || priorBinding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+        || priorBinding.authority.kind !== 'keyless'
         || priorBinding.adapterId !== 'http-json:v1'
         || priorBinding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
         || priorBinding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
@@ -1450,7 +1465,7 @@ export async function retireSupersededSandboxV2Supply(
       || supersededOffering.version !== corrected.contractRef.version
       || supersededOffering.contractDigest !== corrected.contractRef.contractDigest
       || supersededBinding.endpointUrl !== new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v4`, siteUrl).href
-      || supersededBinding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+      || supersededBinding.authority.kind !== 'keyless'
       || supersededBinding.adapterId !== 'http-json:v1'
       || supersededBinding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
       || supersededBinding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })

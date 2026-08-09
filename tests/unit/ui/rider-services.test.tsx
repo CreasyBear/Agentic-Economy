@@ -10,7 +10,7 @@ import { AeInstantQuote } from '@/components/ae/services/AeInstantQuote'
 import { AeServiceList } from '@/components/ae/services/AeServiceList'
 import { AeServiceRow } from '@/components/ae/services/AeServiceRow'
 import type { ConsumerPlan } from '@/modules/customer-request/application/public'
-import type { EndpointDto, ServiceDto } from '@/modules/registry/public'
+import type { ServiceEndpointDto, ServiceDto } from '@/modules/registry/public'
 
 type QuoteResponse = Readonly<{
   ok: boolean
@@ -27,7 +27,8 @@ describe('rider service surfaces', () => {
   it('uses plain-language copy and a contact action when a service has no instant quote path', () => {
     render(<AeServiceRow service={serviceWithNoQuotePath} />)
 
-    expect(screen.getByText('Demo Dental · Adelaide, SA')).toBeTruthy()
+    expect(screen.getByText('Dental check-up · Adelaide, SA')).toBeTruthy()
+    expect(screen.getByText('Verified')).toBeTruthy()
     const contact = screen.getByRole('link', { name: 'See business details' })
     expect(contact.getAttribute('href')).toBe('/demo-dental')
     expect(contact.getAttribute('data-variant')).toBe('secondary')
@@ -52,10 +53,10 @@ describe('rider service surfaces', () => {
     const moreMatches = container.querySelector('details > ol')
     expect(moreMatches?.children).toHaveLength(2)
     expect(screen.getByText('More matches (2)')).toBeTruthy()
-    expect(screen.getAllByText('AE example')).toHaveLength(5)
-    expect(screen.getAllByText('Example price')).toHaveLength(5)
+    expect(screen.getAllByText('Price')).toHaveLength(5)
+    expect(screen.getAllByText('Preview').length).toBeGreaterThan(0)
     expect(container.querySelectorAll('[data-variant="primary"]')).toHaveLength(1)
-    expect(container.querySelector('[data-variant="primary"]')?.getAttribute('aria-label')).toBe('Get example quote')
+    expect(container.querySelector('[data-variant="primary"]')?.getAttribute('aria-label')).toBe('Get a quote')
   })
 
   it('renders one-step frontier and comparable plan options with accessible state text', () => {
@@ -72,7 +73,7 @@ describe('rider service surfaces', () => {
           optionRef: 'option-1',
           business: { slug: 'demo-dental', name: 'Demo Dental', location: 'Adelaide, SA' },
           offering: { name: 'Dental check-up', summary: 'A routine check-up.' },
-          price: { kind: 'published', published: serviceWithDemoQuote.price!, summary: 'From $95' },
+          price: { kind: 'published', published: serviceWithDemoQuote.ae.offerings[0]!.price!, summary: 'From $95' },
           availability: { kind: 'needs_confirmation' },
           nextAction: { kind: 'inspect', label: 'See business details', href: '/demo-dental' },
           evidence: { source: 'business_published' },
@@ -90,7 +91,7 @@ describe('rider service surfaces', () => {
     renderWithRouter(<AeServiceList services={[]} query="dental check-up in Adelaide" plan={plan} />)
 
     expect(screen.getByRole('heading', { name: 'Dental check-up in Adelaide' })).toBeTruthy()
-    expect(screen.getByText('Ready for your decision')).toBeTruthy()
+    expect(screen.getByText('Verified')).toBeTruthy()
     expect(screen.getByText('Timing is not published; ask the business')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'See business details' }).getAttribute('href')).toBe('/demo-dental')
     expect(document.body.textContent?.match(/booking|reservation|checkout|payment|dispatch|fulfil/gi)).toBeNull()
@@ -102,7 +103,7 @@ describe('rider service surfaces', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'Expand the network for this ask' })).toBeTruthy()
-    expect(screen.getByText(/Businesses publish what they do here so agents can bring them work/)).toBeTruthy()
+    expect(screen.getByText(/Businesses publish what they do here so people and agents can bring them work/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'List your business' }).getAttribute('href')).toBe('/claim?source=supply')
     expect(screen.getByRole('link', { name: 'Try another ask' }).getAttribute('href')).toBe('/')
     expect(container.querySelectorAll('[data-variant="primary"]')).toHaveLength(1)
@@ -117,7 +118,7 @@ describe('rider service surfaces', () => {
 
     render(<AeInstantQuote {...quoteProps} />)
 
-    const getQuote = screen.getByRole('button', { name: 'Get example quote' })
+    const getQuote = screen.getByRole('button', { name: 'Get a quote' })
     expect(getQuote.className).toContain('min-h-11')
     expect(getQuote.getAttribute('data-variant')).toBe('primary')
     fireEvent.click(getQuote)
@@ -133,13 +134,13 @@ describe('rider service surfaces', () => {
       json: async () => ({
         provenance: 'ae_sandbox_provider',
         service: 'Dental check-up',
-        price: { currency: 'AUD', amountMinor: 12000, unit: 'visit', taxTreatment: 'inclusive' },
+        price: { amount: { currency: 'AUD', units: '12000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
         nextAvailable: '2030-01-01T10:00:00.000Z',
         validUntil: '2030-01-02T10:00:00.000Z',
       }),
     })
 
-    await waitFor(() => expect(screen.getByText('AE example')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Preview')).toBeTruthy())
     const quoteCard = document.querySelector('[role="status"][tabindex="-1"]')
     if (quoteCard === null) throw new Error('quote card was not rendered')
     await waitFor(() => expect(document.activeElement).toBe(quoteCard))
@@ -147,11 +148,11 @@ describe('rider service surfaces', () => {
     expect(contact.getAttribute('href')).toBe('/demo-dental')
     expect(contact.getAttribute('data-variant')).toBe('primary')
     expect(contact.className).toContain('min-h-11')
-    const refresh = screen.getByRole('button', { name: 'Refresh example quote' })
+    const refresh = screen.getByRole('button', { name: 'Refresh quote' })
     expect(refresh.className).toContain('min-h-11')
     expect(refresh.getAttribute('data-variant')).toBe('ghost')
     expect(refresh.getAttribute('data-size')).toBe('sm')
-    expect(screen.getByText('Example price')).toBeTruthy()
+    expect(screen.getByText('Price')).toBeTruthy()
   })
 
   it('makes a refused quote recoverable through the business page', async () => {
@@ -162,7 +163,7 @@ describe('rider service surfaces', () => {
     } satisfies QuoteResponse))
 
     render(<AeInstantQuote {...quoteProps} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Get example quote' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Get a quote' }))
 
     await waitFor(() => expect(screen.getByText('No quote returned')).toBeTruthy())
     expect(screen.queryByText('quote_refused_internal')).toBeNull()
@@ -170,43 +171,83 @@ describe('rider service surfaces', () => {
     expect(contact.getAttribute('href')).toBe('/demo-dental')
     expect(contact.getAttribute('data-variant')).toBe('primary')
     expect(contact.className).toContain('min-h-11')
-    expect(screen.getByRole('button', { name: 'Try example quote again' }).getAttribute('data-variant')).toBe('ghost')
+    expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('data-variant')).toBe('ghost')
   })
 })
 
 
 const quoteEndpoint = {
   url: '/api/demo-quote',
-  name: 'Instant quote',
-  summary: 'Returns a price for the selected service.',
-  provenance: 'business_declared',
-  access: 'open',
-} satisfies EndpointDto
+  description: 'Returns a price for the selected service.',
+  providerName: 'Demo Dental',
+  serviceName: 'Demo Dental',
+  tags: [],
+  parameters: [],
+  quality: null,
+  ae: {
+    offeringRef: 'offering:demo-dental:checkup',
+    provenance: 'business_declared',
+    access: 'open',
+    authentication: { kind: 'keyless' },
+    execution: 'request_route',
+    settlementSupport: 'unpriced',
+  },
+} satisfies ServiceEndpointDto
 const quoteProps = {
   endpoint: quoteEndpoint,
   businessName: 'Demo Dental',
   businessSlug: 'demo-dental',
 }
 
-const serviceWithNoQuotePath = {
-  id: 'service:dental-checkup',
+const baseOffering = {
+  offeringRef: 'offering:demo-dental:checkup',
   revision: 1,
-  business: { slug: 'demo-dental', name: 'Demo Dental', suburb: 'Adelaide', stateTerritory: 'SA' },
   name: 'Dental check-up',
   category: 'Dental care',
   summary: 'A routine dental check-up.',
+  support: { integrated: false, routeable: false },
+} satisfies ServiceDto['ae']['offerings'][number]
+
+const serviceWithNoQuotePath = {
+  id: 'demo-dental',
+  name: 'Demo Dental',
+  category: 'Dental care',
+  networks: [],
+  enriched: false,
+  integrationType: '3P',
+  serviceName: 'Demo Dental',
+  tags: [],
+  ae: {
+    suburb: 'Adelaide',
+    stateTerritory: 'SA',
+    publicUrl: '/demo-dental',
+    trustTier: 'claimed',
+    photos: [] as const,
+    observedAt: 1,
+    disposition: 'current',
+    source: 'business_published',
+    offerings: [baseOffering],
+    links: { business: '/demo-dental', manifest: '/demo-dental.txt' },
+  },
   endpoints: [],
-  links: { business: '/demo-dental', manifest: '/demo-dental.txt' },
 } satisfies ServiceDto
 
 const serviceWithDemoQuote = {
   ...serviceWithNoQuotePath,
-  price: {
-    kind: 'fixed',
-    currency: 'AUD',
-    amountMinor: 9500,
-    unit: 'visit',
-    taxTreatment: 'inclusive',
+  ae: {
+    ...serviceWithNoQuotePath.ae,
+    source: 'ae_sandbox' as const,
+    offerings: [
+      {
+        ...baseOffering,
+        price: {
+          kind: 'fixed',
+          amount: { currency: 'AUD', units: '9500', exponent: 2 },
+          unit: 'visit',
+          taxTreatment: 'inclusive',
+        },
+      },
+    ],
   },
   endpoints: [quoteEndpoint],
 } satisfies ServiceDto

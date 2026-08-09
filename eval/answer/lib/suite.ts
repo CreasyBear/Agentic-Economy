@@ -13,6 +13,8 @@ import { auditAnswerEvalCoverage } from './coverage'
 import {
   runAnswerThreadEvalCase,
   runAnswerTurnEvalCase,
+  type AnswerEvalCapabilityOperationRefDialects,
+  type AnswerEvalCapabilityToolCounts,
   type AnswerEvalPerformancePath,
   type AnswerEvalUsage,
   type AnswerThreadEvalResult,
@@ -75,6 +77,12 @@ type AnswerEvalAggregateMetrics = {
   estimatedUsd?: number
   costUnavailableReasons: readonly string[]
   performanceByPath: Record<AnswerEvalPerformancePath, AnswerEvalPerformanceSummary>
+}
+
+type AnswerEvalCapabilityAggregateMetrics = {
+  capabilityToolCounts: AnswerEvalCapabilityToolCounts
+  capabilityOperationRefDialects: AnswerEvalCapabilityOperationRefDialects
+  capabilityEvidenceCompleteTurnCount: number
 }
 
 export type AnswerEvalSuiteCaseReport =
@@ -154,6 +162,9 @@ export type AnswerEvalSuiteReport = {
     modelRequestCount: number
     modelToolRunCount: number
     toolRunCount: number
+    capabilityToolCounts: AnswerEvalCapabilityToolCounts
+    capabilityOperationRefDialects: AnswerEvalCapabilityOperationRefDialects
+    capabilityEvidenceCompleteTurnCount: number
     usage: AnswerEvalUsage
     estimatedUsd?: number
     costUnavailableReasons: readonly string[]
@@ -179,15 +190,19 @@ export type AnswerEvalSuiteReport = {
 export async function runAnswerEvalSuite(): Promise<AnswerEvalSuiteReport> {
   const coverage = auditAnswerEvalCoverage()
   const turnReports: AnswerEvalSuiteCaseReport[] = []
+  const turnEvalResults: AnswerTurnEvalResult[] = []
 
   for (const testCase of ANSWER_TURN_EVAL_CASES) {
     const result = await runAnswerTurnEvalCase(testCase)
+    turnEvalResults.push(result)
     turnReports.push(toTurnReport(testCase, result))
   }
 
   const threadReports: AnswerEvalSuiteCaseReport[] = []
+  const threadEvalResults: AnswerThreadEvalResult[] = []
   for (const testCase of ANSWER_THREAD_EVAL_CASES) {
     const result = await runAnswerThreadEvalCase(testCase)
+    threadEvalResults.push(result)
     threadReports.push(toThreadReport(testCase, result))
   }
 
@@ -195,6 +210,10 @@ export async function runAnswerEvalSuite(): Promise<AnswerEvalSuiteReport> {
   const turnResults = flattenTurnResults(cases)
   const timingValues = turnResults.map((result) => result.totalTimingMs).sort((left, right) => left - right)
   const aggregate = aggregateTurnMetrics(turnResults)
+  const capabilityAggregate = aggregateCapabilityMetrics([
+    ...turnEvalResults,
+    ...threadEvalResults.flatMap((result) => result.turns),
+  ])
   const failedCaseCount = cases.filter((testCase) => !testCase.ok).length
   const scoreValues = cases.map((testCase) => testCase.score)
   const failedScoreCaseCount = cases.filter((testCase) => testCase.score < ANSWER_EVAL_SCORE_THRESHOLD).length
@@ -218,6 +237,7 @@ export async function runAnswerEvalSuite(): Promise<AnswerEvalSuiteReport> {
       p95TurnTimingMs: percentile(timingValues, 95),
       maxTurnTimingMs: timingValues.at(-1) ?? 0,
       ...aggregate,
+      ...capabilityAggregate,
     },
     coverage: {
       ok: coverage.ok,
@@ -385,6 +405,43 @@ function aggregateTurnMetrics(turns: readonly AnswerEvalMeasuredTurn[]): AnswerE
   }
 }
 
+function aggregateCapabilityMetrics(
+  turns: readonly AnswerTurnEvalResult[],
+): AnswerEvalCapabilityAggregateMetrics {
+  const capabilityToolCounts: AnswerEvalCapabilityToolCounts = {
+    total: 0,
+    complete: 0,
+    refused: 0,
+    error: 0,
+  }
+  const capabilityOperationRefDialects: AnswerEvalCapabilityOperationRefDialects = {
+    canonical: 0,
+    readable: 0,
+    invalid: 0,
+    missing: 0,
+  }
+  let capabilityEvidenceCompleteTurnCount = 0
+
+  for (const turn of turns) {
+    capabilityToolCounts.total += turn.capabilityMetrics.capabilityToolCounts.total
+    capabilityToolCounts.complete += turn.capabilityMetrics.capabilityToolCounts.complete
+    capabilityToolCounts.refused += turn.capabilityMetrics.capabilityToolCounts.refused
+    capabilityToolCounts.error += turn.capabilityMetrics.capabilityToolCounts.error
+    capabilityOperationRefDialects.canonical += turn.capabilityMetrics.capabilityOperationRefDialects.canonical
+    capabilityOperationRefDialects.readable += turn.capabilityMetrics.capabilityOperationRefDialects.readable
+    capabilityOperationRefDialects.invalid += turn.capabilityMetrics.capabilityOperationRefDialects.invalid
+    capabilityOperationRefDialects.missing += turn.capabilityMetrics.capabilityOperationRefDialects.missing
+    if (turn.capabilityMetrics.capabilityEvidenceComplete) {
+      capabilityEvidenceCompleteTurnCount += 1
+    }
+  }
+
+  return {
+    capabilityToolCounts,
+    capabilityOperationRefDialects,
+    capabilityEvidenceCompleteTurnCount,
+  }
+}
 function summarizePerformance(turns: readonly AnswerEvalMeasuredTurn[]): AnswerEvalPerformanceSummary {
   const firstProgressValues = turns
     .map((turn) => turn.requestToFirstProgressMs)

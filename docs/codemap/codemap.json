@@ -1,0 +1,1031 @@
+{
+  "generated_at": "2026-08-05T22:33:05+08:00",
+  "generated_from_commit": "4a17c63e0d201d29c5c18a3a6cb7e776609f7258",
+  "scope": [
+    "convex/ (durable Convex functions, schema, seed, workers, cron, http)",
+    "src/modules/ (bounded contexts + internal)",
+    "src/lib/server/ (source adapters, MCP, agent/browser APIs)",
+    "src/routes/ + src/components/ (TanStack UI, HTTP & protocol routes)",
+    "src/start.ts, src/router.tsx (app/request entry)",
+    "tests/ (unit, integration, e2e, deploy-smoke, imports, seo, ui-contract)",
+    "eval/, tools/, scripts/ (evals and operational tooling, lightly mapped)",
+    "excluded: vendor/, node_modules, dist/build/cache, .git, package-lock.json generated dirs"
+  ],
+  "nodes": [
+    {
+      "id": "frontend",
+      "type": "ui",
+      "path": "src/routes|src/components",
+      "role": "TanStack Start presentation: public/owner pages, HTTP & protocol API routes, React UI shells, request middleware. Consumes redacted projections and invokes registered actions; never owns domain transitions.",
+      "entrypoints": [
+        "src/start.ts",
+        "src/router.tsx",
+        "src/routes/index.tsx",
+        "src/routes/api.requests.ts",
+        "src/routes/api.v1.requests.ts",
+        "src/routes/api.answer.turn.ts::handleAnswerTurnRequest",
+        "src/routes/mcp.ts",
+        "src/routes/[.]well-known/ucp.ts"
+      ],
+      "tests": [
+        "tests/e2e/thread-first.spec.ts",
+        "tests/unit/routes/home-work-tree-loop.test.ts",
+        "tests/seo/discovery-files.test.ts",
+        "tests/imports/route-boundary.test.ts"
+      ],
+      "constraints": [
+        "Route files are thin adapters and must not own domain transitions (tests/imports/route-boundary.test.ts)",
+        "src/routeTree.gen.ts is generated; routes are added under src/routes, never by hand-editing the tree"
+      ],
+      "evidence": [
+        "src/routes/api.answer.turn.ts::handleAnswerTurnRequest",
+        "src/routes/index.tsx"
+      ]
+    },
+    {
+      "id": "server-adapters",
+      "type": "service",
+      "path": "src/lib/server",
+      "role": "Server-side transport/adapter seams: Convex HTTP client (sourceQuery/sourceMutation/sourceAction), browser/agent Customer Request APIs, MCP server builder, WorkTree agent API, bounded request-body and source-write admission.",
+      "entrypoints": [
+        "src/lib/server/convex-source.ts::sourceQuery",
+        "src/lib/server/convex-source.ts::sourceMutation",
+        "src/lib/server/customer-request-browser-api.ts",
+        "src/lib/server/customer-request-agent-api.ts",
+        "src/lib/server/mcp-api.ts",
+        "src/lib/server/work-tree-agent-api.ts",
+        "src/lib/server/bounded-request-body.ts"
+      ],
+      "tests": [
+        "tests/unit/actions/registry.test.ts",
+        "tests/integration/customer-request-v2-application-path.test.ts"
+      ],
+      "constraints": [
+        "Auth/guest/API-key principal is derived at this boundary before any Convex write (ARCHITECTURE.md)",
+        "All calls to durable state go through the Convex source transport; no raw HTTP to Convex elsewhere"
+      ],
+      "evidence": [
+        "src/lib/server/convex-source.ts::sourceQuery",
+        "src/lib/server/mcp-api.ts",
+        "src/lib/server/bounded-request-body.ts::readBoundedRequestText"
+      ]
+    },
+    {
+      "id": "action-registry",
+      "type": "infra",
+      "path": "src/modules/actions",
+      "role": "Single explicit cross-surface action registry plus the shared action contract. Registers ~41 actions from owning contexts, derives list/lookup/MCP names, and defines effect/authority metadata.",
+      "entrypoints": [
+        "src/modules/actions/index.ts::listActions",
+        "src/modules/actions/index.ts::findAction",
+        "src/modules/actions/index.ts::listMcpActions",
+        "src/modules/common/action.ts::defineAction",
+        "src/modules/common/action.ts::ActionEffectMetadata"
+      ],
+      "tests": [
+        "tests/unit/actions/registry.test.ts",
+        "tests/unit/actions/action-contract-compatibility.test.ts"
+      ],
+      "constraints": [
+        "A *.actions.ts declaration is inert until imported into src/modules/actions/index.ts",
+        "Action metadata does not grant authority; routes/effects re-validate at the source boundary"
+      ],
+      "evidence": [
+        "src/modules/actions/index.ts::listActions",
+        "src/modules/common/action.ts::defineAction"
+      ]
+    },
+    {
+      "id": "customer-request",
+      "type": "domain",
+      "path": "src/modules/customer-request",
+      "role": "Customer Request engine: natural-language interpretation, deterministic capability-graph compilation, route planning, confirmation, mandate, execution, recovery and customer projections. Hosts interpret-compile (discover->interpreter->compile) and semantic/OpenRouter transports.",
+      "entrypoints": [
+        "src/modules/customer-request/public.ts",
+        "src/modules/customer-request/application/interpret-compile/preview.ts::previewCustomerRequest",
+        "src/modules/customer-request/application/interpret-compile/interpreter.ts::createConfiguredRequestInterpreter",
+        "src/modules/customer-request/application/interpret-compile/discover.ts::discoverAndFilterDescriptors",
+        "src/modules/customer-request/compiler.ts::compileCustomerRequest",
+        "src/modules/customer-request/semantic-interpreter.ts::publicDescriptor",
+        "src/modules/customer-request/openrouter-transport.ts",
+        "src/modules/customer-request/standing-route-authority.ts"
+      ],
+      "tests": [
+        "tests/unit/customer-request/deterministic-interpreter.test.ts",
+        "tests/unit/customer-request/application/preview-retry-needs-info.test.ts",
+        "tests/unit/customer-request/application/discover.test.ts",
+        "tests/unit/customer-request/route-mandate.test.ts",
+        "tests/integration/customer-request-v2-application-path.test.ts"
+      ],
+      "constraints": [
+        "Model output is a bounded proposal only; it cannot create authority or release a provider call (ARCHITECTURE.md)",
+        "Discovery narrows a bounded pool; model zero-selection recovers onto the deterministic searchTerms matcher (interpreter.ts)",
+        "Cross-capability domain guard: a crypto query is never handed ECB-fiat-only ops (capability-domain.ts)"
+      ],
+      "evidence": [
+        "src/modules/customer-request/application/interpret-compile/preview.ts::previewCustomerRequest",
+        "src/modules/customer-request/application/interpret-compile/interpreter.ts::createConfiguredRequestInterpreter",
+        "src/modules/customer-request/compiler.ts::compileCustomerRequest"
+      ]
+    },
+    {
+      "id": "capability-supply",
+      "type": "domain",
+      "path": "src/modules/capability-supply",
+      "role": "Capability supply admission and publication: deterministic OpenAPI/MCP schema admission, publication lifecycle with provenance, eligibility, bindings, operation-ledger, readiness, curated ~20-op catalog payloads, and prepared route transports.",
+      "entrypoints": [
+        "src/modules/capability-supply/public.ts",
+        "src/modules/capability-supply/operation-projection.ts",
+        "src/modules/capability-supply/internal/admit-provider-schema.ts::admitProviderSchema",
+        "src/modules/capability-supply/internal/publication/provenance.ts::validCapabilityPublicationAuthority",
+        "src/modules/capability-supply/internal/publication-importers.ts",
+        "src/modules/capability-supply/route-transport-runtime.ts",
+        "src/modules/capability-supply/curated-cluster-a-publications.ts",
+        "src/modules/capability-supply/curated-provider-publications.ts"
+      ],
+      "tests": [
+        "tests/unit/capability-supply/admit-provider-schema.test.ts",
+        "tests/unit/capability-supply/provenance-tristate.test.ts",
+        "tests/unit/capability-supply/curated-seed-drift-idempotency.test.ts",
+        "tests/unit/capability-supply/route-transport-runtime.test.ts",
+        "tests/integration/curated-provider-registry.test.ts"
+      ],
+      "constraints": [
+        "Admission refuses with a named reason instead of looping on circular/unresolvable/too-deep schemas (admit-provider-schema.ts)",
+        "Every publication carries provenance: authority mode + source revision + digest (provenance.ts)",
+        "Seed is idempotent across source drift: retires stale curated content by capabilityId+version before re-admitting"
+      ],
+      "evidence": [
+        "src/modules/capability-supply/internal/admit-provider-schema.ts::admitProviderSchema",
+        "src/modules/capability-supply/internal/publication/provenance.ts::validCapabilityPublicationAuthority"
+      ]
+    },
+    {
+      "id": "capability-contract",
+      "type": "domain",
+      "path": "src/modules/capability-contract|src/modules/capability-contract-registry",
+      "role": "Capability contract definition, validation and durable encoding. Defines the contract shape (including the inputExamples teaching surface), validates documents, and encodes/decodes the active contract registry.",
+      "entrypoints": [
+        "src/modules/capability-contract/public.ts::defineCapabilityContract",
+        "src/modules/capability-contract/public.ts::resolvePointedSchema",
+        "src/modules/capability-contract-registry/public.ts"
+      ],
+      "tests": [
+        "tests/unit/capability-supply/capability-supply-contract.test.ts",
+        "tests/imports/capability-contract-boundaries.test.ts"
+      ],
+      "constraints": [
+        "Contracts are exact active documents; validation is deterministic and shared (capability-contract-* boundary tests)",
+        "inputExamples are the AI-SDK teaching surface shown to the model for input construction"
+      ],
+      "evidence": [
+        "src/modules/capability-contract/public.ts::defineCapabilityContract",
+        "src/modules/capability-contract/public.ts::resolvePointedSchema"
+      ]
+    },
+    {
+      "id": "catalog-registry",
+      "type": "domain",
+      "path": "src/modules/catalog|src/modules/registry",
+      "role": "Public business/offering publication and service/operation discovery: catalog owner claim/publish, registry list/search/detail, operations search/detail/compare/inspect-plan, and inquiry-target resolution.",
+      "entrypoints": [
+        "src/modules/registry/registry.actions.ts",
+        "src/modules/registry/operations.actions.ts",
+        "src/modules/registry/registry.functions.ts",
+        "src/modules/registry/public.ts",
+        "src/modules/catalog/owner-claim.functions.ts",
+        "src/modules/catalog/public.ts"
+      ],
+      "tests": [
+        "tests/integration/registry-api.test.ts",
+        "tests/unit/convex/registry-runtime.test.ts",
+        "tests/unit/convex/registry-pagination.test.ts",
+        "tests/integration/curated-provider-registry.test.ts"
+      ],
+      "constraints": [
+        "Public readbacks are redacted projections, not reconstructed authority from raw documents",
+        "Operations search/detail serve executable operation descriptors projected from capability supply"
+      ],
+      "evidence": [
+        "src/modules/registry/operations.actions.ts",
+        "src/modules/registry/registry.functions.ts"
+      ]
+    },
+    {
+      "id": "discovery",
+      "type": "domain",
+      "path": "src/modules/discovery|src/modules/storefront",
+      "role": "Developer-facing discovery: UCP manifests, llms.txt, SKILL.md, sitemap, agent page projections, and labelled draft web-discovery observations (storefront).",
+      "entrypoints": [
+        "src/modules/discovery/developer-discovery.ts",
+        "src/modules/discovery/internal/agent-skill.ts",
+        "src/modules/discovery/internal/ucp-manifest.ts",
+        "src/modules/discovery/internal/site-manifest.ts",
+        "src/modules/discovery/internal/offering-manifest.ts",
+        "src/modules/storefront/storefront.actions.ts"
+      ],
+      "tests": [
+        "tests/integration/discovery-routes.test.ts",
+        "tests/integration/discovery-llms-offering-parity.test.ts",
+        "tests/seo/discovery-files.test.ts",
+        "tests/integration/discovery-prompt-injection.test.ts"
+      ],
+      "constraints": [
+        "Web discovery returns explicitly labelled draft observations (claims), never provider admission",
+        "Discovery documents are derived from current public contracts"
+      ],
+      "evidence": [
+        "src/modules/discovery/internal/ucp-manifest.ts",
+        "src/modules/discovery/internal/agent-skill.ts"
+      ]
+    },
+    {
+      "id": "answer",
+      "type": "domain",
+      "path": "src/modules/answer",
+      "role": "Answer semantics: retrieval-first paths, a single LLM tool-use producer, grounding/gates, typed UI stream events, and answer schemas/artifacts.",
+      "entrypoints": [
+        "src/modules/answer/internal/answer-tool-use-agent.ts::runAnswerToolUseAgent",
+        "src/modules/answer/answer-synthesizer.ts",
+        "src/modules/answer/answer-schema.ts",
+        "src/modules/answer/answer-ui-stream.ts",
+        "src/modules/answer/public.ts"
+      ],
+      "tests": [
+        "tests/unit/answer/answer-tool-use-agent.test.ts",
+        "tests/unit/answer/answer-gate.test.ts",
+        "tests/unit/answer/answer-ui-stream.test.ts"
+      ],
+      "constraints": [
+        "Structured answers are sanitized and grounded to allowed public slugs before emission",
+        "Qualifying deterministic/empty-state paths may avoid a model call entirely"
+      ],
+      "evidence": [
+        "src/modules/answer/internal/answer-tool-use-agent.ts::runAnswerToolUseAgent"
+      ]
+    },
+    {
+      "id": "answer-thread",
+      "type": "domain",
+      "path": "src/modules/answer-thread",
+      "role": "Per-turn answer orchestration and thread persistence: the turn orchestrator runs a HarnessRunLoop across intent/plan/retrieval/gate/persist phases and serves redacted thread projections.",
+      "entrypoints": [
+        "src/modules/answer-thread/internal/turn-orchestrator.ts::streamAnswerTurn",
+        "src/modules/answer-thread/thread-route.ts",
+        "src/modules/answer-thread/answer-thread.functions.ts",
+        "src/modules/answer-thread/public.ts",
+        "src/modules/answer-thread/internal/public-projection.ts"
+      ],
+      "tests": [
+        "tests/unit/answer-thread/tool-runner.test.ts",
+        "tests/unit/answer-thread/answer-turn-grounding.test.ts",
+        "tests/unit/answer-thread/public-projection.test.ts"
+      ],
+      "constraints": [
+        "Turn finalization and source-write success are checked before a turn is declared complete",
+        "Durable thread state wins over transient streamed frames after reload"
+      ],
+      "evidence": [
+        "src/modules/answer-thread/internal/turn-orchestrator.ts::streamAnswerTurn",
+        "src/modules/answer-thread/internal/public-projection.ts"
+      ]
+    },
+    {
+      "id": "harness",
+      "type": "domain",
+      "path": "src/modules/harness",
+      "role": "Agent harness: ordered run-loop lifecycle, run collector, tool contract, emission guard, session journal, and run viewer projections; bridges registered actions into harness tools.",
+      "entrypoints": [
+        "src/modules/harness/run-loop.ts::HarnessRunLoop",
+        "src/modules/harness/run-collector.ts",
+        "src/modules/harness/action-tool.ts::actionToHarnessTool",
+        "src/modules/harness/harness.functions.ts",
+        "src/modules/harness/run-viewer.functions.ts",
+        "src/modules/harness/harness.schema.ts"
+      ],
+      "tests": [
+        "tests/unit/harness/run-loop.test.ts",
+        "tests/unit/harness/run-collector.test.ts",
+        "tests/unit/harness/action-tool.test.ts"
+      ],
+      "constraints": [
+        "Harness records ordered phases, model usage/cost observations, tool evidence and approvals",
+        "Only AE-owned state machines decide authority/effect release; harness is a mechanical seam"
+      ],
+      "evidence": [
+        "src/modules/harness/run-loop.ts::HarnessRunLoop",
+        "src/modules/harness/action-tool.ts::actionToHarnessTool"
+      ]
+    },
+    {
+      "id": "action-invocation",
+      "type": "domain",
+      "path": "src/modules/action-invocation",
+      "role": "Durable action invocation: authoritative tracer with cold resume, standing mandate/policy, dynamic contract verification, host projection, and durable attempts/reconciliation.",
+      "entrypoints": [
+        "src/modules/action-invocation/durable.ts::createDurableActionInvocationTracer",
+        "src/modules/action-invocation/application-service.ts",
+        "src/modules/action-invocation/standing-mandate.ts",
+        "src/modules/action-invocation/host-projection.ts",
+        "src/modules/action-invocation/dynamic-published-snapshot-verifier.ts"
+      ],
+      "tests": [
+        "tests/unit/action-invocation/durable-action-invocation.test.ts",
+        "tests/unit/action-invocation/standing-mandate.test.ts",
+        "tests/unit/harness/run-loop.test.ts"
+      ],
+      "constraints": [
+        "Invocation is durable/authoritative: replay and late observations are reconciled from source readback",
+        "Charges flow through MoneyInvocationPort (money seam) with bounded spend authority"
+      ],
+      "evidence": [
+        "src/modules/action-invocation/durable.ts::createDurableActionInvocationTracer"
+      ]
+    },
+    {
+      "id": "model-gateway",
+      "type": "domain",
+      "path": "src/modules/model-gateway",
+      "role": "Single OpenRouter model seam: env configuration, model construction, and cost parsing for AI SDK/LangChain-backed calls.",
+      "entrypoints": [
+        "src/modules/model-gateway/public.ts"
+      ],
+      "tests": [],
+      "constraints": [
+        "Single seam for OpenRouter model construction; provider cache is module-level state",
+        "Model output is an observation until deterministic validation accepts it"
+      ],
+      "evidence": [
+        "src/modules/model-gateway/public.ts"
+      ]
+    },
+    {
+      "id": "work-tree",
+      "type": "domain",
+      "path": "src/modules/work-tree",
+      "role": "Durable project WorkTree (the person's execution loop): host orchestration, bounded gardener verbs, human decisions, repeat-use bounds and approvals, all rendered from append-only source readbacks.",
+      "entrypoints": [
+        "src/modules/work-tree/work-tree.actions.ts::workTreeCreateAction",
+        "src/modules/work-tree/work-tree-agent.actions.ts::workTreeApplyAction",
+        "src/modules/work-tree/work-tree.functions.ts::createWorkTreeThroughSource",
+        "src/modules/work-tree/human-root.functions.ts::startRootWorkTreeServer",
+        "src/modules/work-tree/internal/root-loop.ts::startRootWorkTree",
+        "src/modules/work-tree/internal/verbs.ts"
+      ],
+      "tests": [
+        "tests/unit/work-tree/root-loop.test.ts",
+        "tests/unit/work-tree/human-root.functions.test.ts",
+        "tests/unit/work-tree/agent-work-tree-parity.test.ts",
+        "tests/unit/routes/home-work-tree-loop.test.ts",
+        "convex/workTrees.test.ts"
+      ],
+      "constraints": [
+        "create does not elaborate, decide, contact a business, charge, or claim fulfilment (work-tree.actions.ts)",
+        "Repeat grants are accepted only from an authenticated human for an eligible low-risk Lock (work-tree-agent.actions.ts)",
+        "WorkTree refusal surface includes live money gate / stripe setup (internal/root-loop.ts)"
+      ],
+      "evidence": [
+        "src/modules/work-tree/work-tree.actions.ts::workTreeCreateAction",
+        "src/modules/work-tree/work-tree-agent.actions.ts::workTreeApplyAction"
+      ]
+    },
+    {
+      "id": "study",
+      "type": "domain",
+      "path": "src/modules/study",
+      "role": "Fenced RFx Study over registered public services (with sibling external-run protocol): journal/replay lifecycle, qualification, quotes, deterministic TOPSIS scoring; proposes a recommendation into the WorkTree inbox rather than locking a decision.",
+      "entrypoints": [
+        "src/modules/study/study.actions.ts::studyStartAction",
+        "src/modules/study/study.functions.ts::startStudyThroughSource",
+        "src/modules/study/internal/pipeline.ts::runStudy",
+        "src/modules/study/internal/rfx-machine.ts::replayStudyJournal"
+      ],
+      "tests": [
+        "tests/unit/study-actions.test.ts",
+        "tests/unit/study-rfx-journal.test.ts",
+        "convex/studies.test.ts",
+        "convex/study-worktree-binding.test.ts"
+      ],
+      "constraints": [
+        "Only registered services can become providers or receive quotes; web discovery is learning evidence only (internal/pipeline.ts)",
+        "Study.complete proposes only; it never auto-locks or creates decision authority (study.actions.ts)"
+      ],
+      "evidence": [
+        "src/modules/study/internal/pipeline.ts::runStudy",
+        "src/modules/study/internal/rfx-machine.ts::replayStudyJournal"
+      ]
+    },
+    {
+      "id": "inquiries",
+      "type": "domain",
+      "path": "src/modules/inquiries",
+      "role": "Qualified human->business inquiry flow: governed-send integrity, R1 target admission, customer access keys, notification binding, privacy erasure, owner-inbox readbacks, and the public inquiry.submit conversion action.",
+      "entrypoints": [
+        "src/modules/inquiries/inquiry.actions.ts::submitInquiryAction",
+        "src/modules/inquiries/inquiry.functions.ts::submitPublicInquiryThroughSource",
+        "src/modules/inquiries/public.ts::submitInquiry",
+        "src/modules/inquiries/internal/governed-send.ts::buildGovernedSendIntent",
+        "src/modules/inquiries/internal/admission.ts::evaluateR1TargetAdmission",
+        "src/modules/inquiries/route-readbacks.ts::validatePublicInquiryFormInput"
+      ],
+      "tests": [
+        "tests/unit/inquiries/inquiry-flow.test.ts",
+        "tests/unit/inquiries/governed-send-evidence-integrity.test.ts",
+        "tests/unit/inquiries/admission.test.ts",
+        "tests/unit/inquiries/privacy-erasure.test.ts",
+        "tests/unit/convex/inquiries-runtime.test.ts"
+      ],
+      "constraints": [
+        "inquiry.submit is the only owned conversion action AE exposes today (inquiry.actions.ts)",
+        "Submit does not book, charge, dispatch, or auto-fulfil (inquiry.actions.ts)",
+        "Admission requires current published revision and a published human-request access path on channel ae_inquiry"
+      ],
+      "evidence": [
+        "src/modules/inquiries/inquiry.actions.ts::submitInquiryAction",
+        "src/modules/inquiries/internal/governed-send.ts::buildGovernedSendIntent"
+      ]
+    },
+    {
+      "id": "notification-outbox",
+      "type": "domain",
+      "path": "src/modules/notification-outbox",
+      "role": "Durable notification dispatch outbox: enqueue inquiry notifications, dispatch through a provider-adapter seam, ingest provider webhooks, retry/mark-no-repair, and redacted readbacks + operator serialization.",
+      "entrypoints": [
+        "src/modules/notification-outbox/public.ts::enqueueInquiryNotification",
+        "src/modules/notification-outbox/internal/commands.ts::dispatchNotificationOutbox",
+        "src/modules/notification-outbox/operator/index.ts"
+      ],
+      "tests": [
+        "tests/unit/notification-outbox/operator-thinness.test.ts",
+        "tests/unit/convex/notification-outbox-runtime.test.ts"
+      ],
+      "constraints": [
+        "Dispatch is disabled unless controls allow: notification_dispatch_disabled when !controls.notificationDispatchEnabled (internal/commands.ts)",
+        "Provider seam is an adapter port NotificationProviderAdapter={family,trigger} (internal/commands.ts)"
+      ],
+      "evidence": [
+        "src/modules/notification-outbox/internal/commands.ts::dispatchNotificationOutbox"
+      ]
+    },
+    {
+      "id": "money",
+      "type": "domain",
+      "path": "src/modules/money",
+      "role": "Deterministic money kernel: pricing resolution, double-sided ledger (operator_credit/provider_earnings/ae_rake), charge/refund/reconcile, topup/auto-recharge, payout accrual, live-money compliance gate, and Stripe webhook intake.",
+      "entrypoints": [
+        "src/modules/money/public.ts::readCreditAccount",
+        "src/modules/money/internal/ledger.ts::createLedgerState",
+        "src/modules/money/internal/pricing-config.ts::resolveInvocationPrice",
+        "src/modules/money/internal/live-money-gate.ts::evaluateLiveMoneyGate",
+        "src/modules/money/internal/stripe-webhook.ts::handleStripeWebhookRequest",
+        "src/modules/money/internal/topup.ts::applyCreditTopup"
+      ],
+      "tests": [
+        "tests/unit/money/compliance-gate.test.ts",
+        "tests/unit/action-invocation/paid-operation-application-service.test.ts"
+      ],
+      "constraints": [
+        "LIVE_MONEY_GATE_POLICY is source-owned first-dollar policy; do not replace with an environment flag (internal/live-money-gate.ts)",
+        "Accounts are strictly typed to the operator/provider/rake triple; mismatches reject as billing_identity/currency_mismatch (internal/ledger.ts)",
+        "beginIdempotentTransaction replays same-key same-digest or refuses ledger_idempotency_conflict"
+      ],
+      "evidence": [
+        "src/modules/money/internal/ledger.ts::authorizePaidCharge",
+        "src/modules/money/internal/live-money-gate.ts::evaluateLiveMoneyGate"
+      ]
+    },
+    {
+      "id": "security",
+      "type": "crosscutting",
+      "path": "src/modules/security|src/modules/network-guard|src/modules/observability",
+      "role": "Cross-cutting policy seams: identity/admin/source-write authority (HMAC-SHA256 signing), SSRF network guard, and observability/audit/funnel controls.",
+      "entrypoints": [
+        "src/modules/security/public.ts",
+        "src/modules/security/source-write-admission.ts",
+        "src/modules/security/removal-dispute.functions.ts::openRemovalDisputeThroughSource",
+        "src/modules/security/admin-readback.functions.ts",
+        "src/modules/network-guard/public.ts",
+        "src/modules/observability/public.ts"
+      ],
+      "tests": [
+        "tests/unit/http/security-headers.test.ts",
+        "tests/imports/route-boundary.test.ts"
+      ],
+      "constraints": [
+        "Source-write admission signs/verifies requests before Convex writes (HMAC-SHA256)",
+        "network-guard blocks DNS resolution against private/link-local ranges (SSRF)",
+        "No route duplicates these cross-cutting policies (ARCHITECTURE.md)"
+      ],
+      "evidence": [
+        "src/modules/security/source-write-admission.ts",
+        "src/modules/network-guard/public.ts"
+      ]
+    },
+    {
+      "id": "convex-backend",
+      "type": "backend",
+      "path": "convex",
+      "role": "Durable source of truth and transaction/effect boundary: Convex queries/mutations/actions, composed schema, seed, workers (Workpool/Workflow queues), cron and HTTP routers. Owns identity, revisions, digests, idempotency and effect release.",
+      "entrypoints": [
+        "convex/customerRequestApplication.ts::submit",
+        "convex/customerRequestV2.ts::commitAggregate",
+        "convex/customerRequestRouteExecution.ts::startOrResume",
+        "convex/customerRequestRouteTransportWorker.ts::run",
+        "convex/customerRequestRouteMandate.ts::issue",
+        "convex/curatedProviders.ts::seed",
+        "convex/capabilitySupply.ts::publishCapability",
+        "convex/capabilitySupplyOperations.ts",
+        "convex/registry.ts::searchPublicBusinessOfferingSupply",
+        "convex/catalog.ts::publishBusinessCatalog",
+        "convex/discovery.ts::regenerateDiscoveryManifest",
+        "convex/workTrees.ts::apply",
+        "convex/studies.ts::create",
+        "convex/moneyLedger.ts::authorizeInvocationCharge",
+        "convex/notificationOutbox.ts::dispatchNotificationOutbox",
+        "convex/answerThreads.ts::appendAnswerTurn",
+        "convex/harnessSessions.ts::appendHarnessSessionEntry",
+        "convex/inquiries.ts::submitPublicInquiry",
+        "convex/devSeed.ts::seedDevCatalog",
+        "convex/schema.ts",
+        "convex/http.ts",
+        "convex/crons.ts"
+      ],
+      "tests": [
+        "convex/customerRequestRouteMandate.test.ts",
+        "convex/workTrees.test.ts",
+        "convex/workTreeRepeatLedger.test.ts",
+        "convex/studies.test.ts",
+        "convex/externalRuns.test.ts"
+      ],
+      "constraints": [
+        "Convex is the single source of truth; module authority logic is reached via named ports",
+        "Application functions recheck identity, revisions, digests and idempotency before source writes or external effects",
+        "publish guard: one capabilityId+version -> one content (contract_identity_conflict is a correct invariant)",
+        "The engine reads the DEPLOYED registry, so seeding is required to make ported ops live"
+      ],
+      "evidence": [
+        "convex/customerRequestApplication.ts::submit",
+        "convex/capabilitySupply.ts::publishCapability",
+        "convex/schema.ts",
+        "convex/curatedProviders.ts::seed",
+        "convex/customerRequestRouteTransportWorker.ts::run"
+      ]
+    },
+    {
+      "id": "openrouter",
+      "type": "external",
+      "path": "external:openrouter",
+      "role": "OpenRouter AI model provider accessed through the model-gateway seam (AI SDK / @openrouter/ai-sdk-provider).",
+      "entrypoints": [],
+      "tests": [],
+      "constraints": [
+        "Model calls happen only after durable authority fences",
+        "No raw OpenRouter call outside model-gateway / openrouter-transport"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "clerk",
+      "type": "external",
+      "path": "external:clerk",
+      "role": "Clerk authentication (TanStack Start + Convex auth.config.ts JWT trust).",
+      "entrypoints": [],
+      "tests": [],
+      "constraints": [
+        "convex/auth.config.ts wires Clerk JWT issuer/audience to Convex"
+      ],
+      "evidence": [
+        "convex/auth.config.ts"
+      ]
+    },
+    {
+      "id": "convex-cloud",
+      "type": "external",
+      "path": "external:convex",
+      "role": "Convex cloud hosting & database backend where convex/* functions and tables run.",
+      "entrypoints": [],
+      "tests": [],
+      "constraints": [
+        "Convex is the durable DB; Workpool/Workflow/rate-limiter mounted as components"
+      ],
+      "evidence": [
+        "convex/convex.config.ts"
+      ]
+    },
+    {
+      "id": "notification-providers",
+      "type": "external",
+      "path": "external:resend-novu",
+      "role": "Notification providers (Resend/Novu) reached via bounded server fetch adapters.",
+      "entrypoints": [],
+      "tests": [],
+      "constraints": [
+        "ProviderFamily 'resend'|'novu' dispatch records; signed webhook intake"
+      ],
+      "evidence": [
+        "src/lib/server/notification-provider.ts",
+        "src/lib/server/notification-dispatch.ts"
+      ]
+    },
+    {
+      "id": "stripe",
+      "type": "external",
+      "path": "external:stripe",
+      "role": "Stripe for credit topup / Connect payouts via CreditPaymentPort/ConnectAccountPort.",
+      "entrypoints": [],
+      "tests": [],
+      "constraints": [
+        "Money gate requires Stripe setup before live effects"
+      ],
+      "evidence": [
+        "src/modules/money/internal/ports.ts"
+      ]
+    },
+    {
+      "id": "provider-systems",
+      "type": "external",
+      "path": "external:provider-systems",
+      "role": "External provider systems (Exa, Frankfurter, observed x402 listings, etc.) invoked through prepared route transport (HTTP/MCP/x402).",
+      "entrypoints": [],
+      "tests": [],
+      "constraints": [
+        "Effects release only after durable authority and network-guard endpoint validation"
+      ],
+      "evidence": [
+        "src/modules/capability-supply/route-transport-runtime.ts"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "frontend",
+      "to": "server-adapters",
+      "type": "calls",
+      "evidence": "src/routes/index.tsx"
+    },
+    {
+      "from": "server-adapters",
+      "to": "convex-backend",
+      "type": "calls",
+      "evidence": "src/lib/server/convex-source.ts::sourceMutation"
+    },
+    {
+      "from": "server-adapters",
+      "to": "action-registry",
+      "type": "reads",
+      "evidence": "src/lib/server/mcp-api.ts"
+    },
+    {
+      "from": "server-adapters",
+      "to": "security",
+      "type": "calls",
+      "evidence": "src/modules/security/source-write-admission.ts"
+    },
+    {
+      "from": "server-adapters",
+      "to": "clerk",
+      "type": "calls",
+      "evidence": "convex/auth.config.ts"
+    },
+    {
+      "from": "customer-request",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/customer-request/customer-request.actions.ts"
+    },
+    {
+      "from": "catalog-registry",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/registry/operations.actions.ts"
+    },
+    {
+      "from": "work-tree",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/work-tree/work-tree.actions.ts::workTreeCreateAction"
+    },
+    {
+      "from": "study",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/study/study.actions.ts::studyStartAction"
+    },
+    {
+      "from": "inquiries",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/inquiries/inquiry.actions.ts::submitInquiryAction"
+    },
+    {
+      "from": "discovery",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/storefront/storefront.actions.ts"
+    },
+    {
+      "from": "customer-request",
+      "to": "catalog-registry",
+      "type": "reads",
+      "evidence": "src/modules/customer-request/application/interpret-compile/discover.ts::discoverAndFilterDescriptors"
+    },
+    {
+      "from": "customer-request",
+      "to": "capability-supply",
+      "type": "reads",
+      "evidence": "src/modules/customer-request/application/interpret-compile/graph.ts"
+    },
+    {
+      "from": "customer-request",
+      "to": "model-gateway",
+      "type": "calls",
+      "evidence": "src/modules/customer-request/openrouter-transport.ts"
+    },
+    {
+      "from": "model-gateway",
+      "to": "openrouter",
+      "type": "calls",
+      "evidence": "src/modules/model-gateway/public.ts"
+    },
+    {
+      "from": "answer",
+      "to": "model-gateway",
+      "type": "calls",
+      "evidence": "src/modules/answer/internal/answer-tool-use-agent.ts::runAnswerToolUseAgent"
+    },
+    {
+      "from": "answer-thread",
+      "to": "harness",
+      "type": "calls",
+      "evidence": "src/modules/answer-thread/internal/turn-orchestrator.ts::streamAnswerTurn"
+    },
+    {
+      "from": "answer-thread",
+      "to": "answer",
+      "type": "calls",
+      "evidence": "src/modules/answer-thread/internal/tool-runner.ts"
+    },
+    {
+      "from": "answer-thread",
+      "to": "convex-backend",
+      "type": "writes",
+      "evidence": "src/modules/answer-thread/answer-thread.functions.ts"
+    },
+    {
+      "from": "harness",
+      "to": "action-registry",
+      "type": "imports",
+      "evidence": "src/modules/harness/action-tool.ts::actionToHarnessTool"
+    },
+    {
+      "from": "harness",
+      "to": "convex-backend",
+      "type": "writes",
+      "evidence": "src/modules/harness/harness.functions.ts"
+    },
+    {
+      "from": "action-invocation",
+      "to": "money",
+      "type": "calls",
+      "evidence": "src/modules/money/public.ts::MoneyInvocationPort"
+    },
+    {
+      "from": "capability-supply",
+      "to": "capability-contract",
+      "type": "imports",
+      "evidence": "src/modules/capability-supply/internal/admit-provider-schema.ts::admitProviderSchema"
+    },
+    {
+      "from": "catalog-registry",
+      "to": "capability-supply",
+      "type": "reads",
+      "evidence": "src/modules/registry/operations.actions.ts"
+    },
+    {
+      "from": "discovery",
+      "to": "catalog-registry",
+      "type": "reads",
+      "evidence": "src/modules/discovery/internal/ucp-manifest.ts"
+    },
+    {
+      "from": "discovery",
+      "to": "convex-backend",
+      "type": "writes",
+      "evidence": "src/modules/discovery/discovery.functions.ts"
+    },
+    {
+      "from": "study",
+      "to": "catalog-registry",
+      "type": "calls",
+      "evidence": "src/modules/study/study.actions.ts::studyStartAction"
+    },
+    {
+      "from": "study",
+      "to": "work-tree",
+      "type": "calls",
+      "evidence": "src/modules/study/study.functions.ts::completeStudyThroughSource"
+    },
+    {
+      "from": "inquiries",
+      "to": "catalog-registry",
+      "type": "calls",
+      "evidence": "src/modules/inquiries/inquiry.functions.ts::resolvePublicRegistryInquiryTarget"
+    },
+    {
+      "from": "inquiries",
+      "to": "notification-outbox",
+      "type": "publishes",
+      "evidence": "src/modules/inquiries/internal/schema.ts"
+    },
+    {
+      "from": "inquiries",
+      "to": "security",
+      "type": "imports",
+      "evidence": "src/modules/inquiries/internal/schema.ts::AbuseRateLimitBucketRecord"
+    },
+    {
+      "from": "notification-outbox",
+      "to": "notification-providers",
+      "type": "calls",
+      "evidence": "src/lib/server/notification-provider.ts"
+    },
+    {
+      "from": "money",
+      "to": "stripe",
+      "type": "calls",
+      "evidence": "src/modules/money/internal/stripe-webhook.ts::handleStripeWebhookRequest"
+    },
+    {
+      "from": "money",
+      "to": "capability-supply",
+      "type": "imports",
+      "evidence": "src/modules/money/internal/ledger.ts::authorizePaidCharge"
+    },
+    {
+      "from": "convex-backend",
+      "to": "customer-request",
+      "type": "calls",
+      "evidence": "convex/customerRequestApplication.ts::submit"
+    },
+    {
+      "from": "convex-backend",
+      "to": "capability-supply",
+      "type": "calls",
+      "evidence": "convex/capabilitySupply.ts::publishCapability"
+    },
+    {
+      "from": "convex-backend",
+      "to": "capability-contract",
+      "type": "calls",
+      "evidence": "convex/capabilityContractDocuments.ts"
+    },
+    {
+      "from": "convex-backend",
+      "to": "catalog-registry",
+      "type": "writes",
+      "evidence": "convex/catalog.ts::publishBusinessCatalog"
+    },
+    {
+      "from": "convex-backend",
+      "to": "discovery",
+      "type": "writes",
+      "evidence": "convex/discovery.ts::regenerateDiscoveryManifest"
+    },
+    {
+      "from": "convex-backend",
+      "to": "work-tree",
+      "type": "writes",
+      "evidence": "convex/workTrees.ts::apply"
+    },
+    {
+      "from": "convex-backend",
+      "to": "study",
+      "type": "writes",
+      "evidence": "convex/studies.ts::create"
+    },
+    {
+      "from": "convex-backend",
+      "to": "inquiries",
+      "type": "writes",
+      "evidence": "convex/inquiries.ts::submitPublicInquiry"
+    },
+    {
+      "from": "convex-backend",
+      "to": "notification-outbox",
+      "type": "publishes",
+      "evidence": "convex/notificationOutbox.ts::dispatchNotificationOutbox"
+    },
+    {
+      "from": "convex-backend",
+      "to": "money",
+      "type": "writes",
+      "evidence": "convex/moneyLedger.ts::authorizeInvocationCharge"
+    },
+    {
+      "from": "convex-backend",
+      "to": "answer-thread",
+      "type": "writes",
+      "evidence": "convex/answerThreads.ts::appendAnswerTurn"
+    },
+    {
+      "from": "convex-backend",
+      "to": "harness",
+      "type": "writes",
+      "evidence": "convex/harnessSessions.ts::appendHarnessSessionEntry"
+    },
+    {
+      "from": "convex-backend",
+      "to": "action-invocation",
+      "type": "writes",
+      "evidence": "convex/actionInvocationControl.ts"
+    },
+    {
+      "from": "convex-backend",
+      "to": "capability-supply",
+      "type": "calls",
+      "evidence": "convex/capabilitySupplyOperations.ts"
+    },
+    {
+      "from": "convex-backend",
+      "to": "provider-systems",
+      "type": "calls",
+      "evidence": "convex/customerRequestRouteTransportWorker.ts::run"
+    },
+    {
+      "from": "convex-backend",
+      "to": "convex-cloud",
+      "type": "writes",
+      "evidence": "convex/schema.ts"
+    }
+  ],
+  "flows": [
+    {
+      "trigger": "POST /api/requests (or /api/v1/requests) from browser/agent",
+      "steps": [
+        "frontend",
+        "server-adapters",
+        "convex-backend",
+        "customer-request",
+        "capability-supply",
+        "convex-backend",
+        "provider-systems",
+        "convex-backend"
+      ],
+      "outcome": "A bounded proposal is compiled to a proposal_only route generation; on exact-revision confirmation a bounded mandate is created and a durable run executes the registered transport (HTTP/MCP/x402) under network-guard, records the outcome, reconciles any payment, and projects the customer-safe next action."
+    },
+    {
+      "trigger": "Customer query to planPreview (NL -> discover -> interpret -> compile)",
+      "steps": [
+        "convex-backend",
+        "customer-request",
+        "catalog-registry",
+        "customer-request",
+        "model-gateway",
+        "openrouter",
+        "customer-request",
+        "convex-backend"
+      ],
+      "outcome": "Discovery narrows the routeable pool from the deployed registry; the composite interpreter (model-led with deterministic recovery) proposes; compile returns a typed preview (inspect_only), a typed needs_information ask, or an unavailable reason."
+    },
+    {
+      "trigger": "POST /api/answer/turn",
+      "steps": [
+        "frontend",
+        "server-adapters",
+        "answer-thread",
+        "harness",
+        "answer",
+        "model-gateway",
+        "openrouter",
+        "convex-backend",
+        "answer-thread"
+      ],
+      "outcome": "The turn orchestrator runs a HarnessRunLoop; retrieval-first paths use registered read actions, model paths use the answer tool-use agent; typed stream events are emitted and the durable thread/harness journal is finalized, then served as a redacted projection."
+    },
+    {
+      "trigger": "/ root journey (?q= or ?project=)",
+      "steps": [
+        "frontend",
+        "server-adapters",
+        "catalog-registry",
+        "customer-request",
+        "work-tree",
+        "convex-backend",
+        "frontend"
+      ],
+      "outcome": "A BAS ask starts a durable WorkTree and redirects; a normal ask runs public-services search + plan preview, web-discover claims are labelled, and the UI renders the WorkTree panel or service list from redacted projections."
+    },
+    {
+      "trigger": "Curated supply admission + publication readback",
+      "steps": [
+        "convex-backend",
+        "capability-supply",
+        "capability-contract",
+        "convex-backend",
+        "catalog-registry",
+        "discovery"
+      ],
+      "outcome": "Admission normalizes the provider OpenAPI/MCP schema (or refuses by name), publication carries provenance, contracts are validated/registered, the ~20-op curated catalog is seeded idempotently, and registry/operations + discovery manifests are projected."
+    }
+  ]
+}

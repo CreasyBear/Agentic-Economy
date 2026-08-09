@@ -55,6 +55,18 @@ export const aeStatusValues = [
   'billing_provider_event_held',
   'billing_reconciliation_mismatch',
   'billing_no_repair',
+  // Harness run/tool status vocabulary (operator surface). Additive extension
+  // so the AeStatusBadge can render harness run/tool evidence statuses.
+  'ok',
+  'error',
+  'refused',
+  'blocked',
+  'timeout',
+  'aborted',
+  'skipped',
+  'missing',
+  'pending',
+  'complete',
 ] as const
 
 export type AeStatus = (typeof aeStatusValues)[number]
@@ -582,6 +594,103 @@ export const aeStatusPresentation = {
     publicness: 'private',
     disabledReason: 'Terminal no-repair state blocks paid-activation claims.',
   },
+  // Harness run/tool evidence statuses (operator surface).
+  ok: {
+    label: 'Ok',
+    compactLabel: 'Ok',
+    tone: 'success',
+    description: 'The harness run or tool-call completed as expected.',
+    priority: 'low',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  error: {
+    label: 'Error',
+    compactLabel: 'Error',
+    tone: 'danger',
+    description: 'The harness encountered an error and did not complete.',
+    nextAction: 'Review the run report and tool error codes.',
+    priority: 'high',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  refused: {
+    label: 'Refused',
+    compactLabel: 'Refused',
+    tone: 'warning',
+    description: 'The harness refused the action and did not execute it.',
+    nextAction: 'Check the refusal reason in the run.',
+    priority: 'medium',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  blocked: {
+    label: 'Blocked',
+    compactLabel: 'Blocked',
+    tone: 'danger',
+    description: 'The harness blocked the action before it could run.',
+    nextAction: 'Review the blocking gate in the run report.',
+    priority: 'high',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  timeout: {
+    label: 'Timed out',
+    compactLabel: 'Timeout',
+    tone: 'danger',
+    description: 'The harness stopped the run because it exceeded its time budget.',
+    nextAction: 'Re-run with a longer budget or narrow the request.',
+    priority: 'high',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  aborted: {
+    label: 'Aborted',
+    compactLabel: 'Aborted',
+    tone: 'warning',
+    description: 'The harness aborted the run before completion.',
+    nextAction: 'Review why the run was aborted.',
+    priority: 'medium',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  skipped: {
+    label: 'Skipped',
+    compactLabel: 'Skipped',
+    tone: 'neutral',
+    description: 'The harness skipped this step or tool-call.',
+    priority: 'low',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  missing: {
+    label: 'Missing',
+    compactLabel: 'Missing',
+    tone: 'warning',
+    description: 'Run data is missing for this turn.',
+    nextAction: 'Check whether the turn produced a harness run.',
+    priority: 'medium',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  pending: {
+    label: 'Pending',
+    compactLabel: 'Pending',
+    tone: 'info',
+    description: 'The turn is still running or awaiting evidence.',
+    priority: 'low',
+    audience: 'operator',
+    publicness: 'private',
+  },
+  complete: {
+    label: 'Complete',
+    compactLabel: 'Complete',
+    tone: 'success',
+    description: 'The harness run or turn completed.',
+    priority: 'low',
+    audience: 'operator',
+    publicness: 'private',
+  },
 } satisfies Record<AeStatus, AeStatusPresentation>
 
 export const statusPresentation = aeStatusPresentation
@@ -798,3 +907,16 @@ export function categoryIllustrationPath(category: string): string {
 
   return '/images/illustration/cat-default.png'
 }
+
+/**
+ * Canonical tone -> Badge variant map for row badges in list surfaces.
+ * Lives here (not in a component file) so Fast Refresh stays safe and every
+ * surface derives its Badge variant from one source.
+ */
+export const aeStatusToneVariants = {
+  neutral: 'outline',
+  info: 'secondary',
+  success: 'default',
+  warning: 'outline',
+  danger: 'destructive',
+} satisfies Record<AeTone, 'outline' | 'secondary' | 'default' | 'destructive'>

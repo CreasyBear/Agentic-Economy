@@ -53,7 +53,7 @@ describe('decision inbox projection', () => {
 
   it('flags money-yes items for grouping without adding a batch approval exit', () => {
     const item = decision('deposit', 1_000, {
-      cost: { currency: 'AUD', estimateMinor: 12_500, envelopeMinor: 15_000 },
+      cost: { estimate: { currency: 'AUD', units: '12500', exponent: 2 }, envelope: { currency: 'AUD', units: '15000', exponent: 2 } },
     })
 
     const [projected] = projectDecisionInbox(tree('tree-a', [item]), { nowMs: 1_000 }).items

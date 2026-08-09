@@ -5,6 +5,7 @@ import type { CorrelationId, OperationKey, Slug, SourceHash } from '@/modules/co
 import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { matchingCsrf } from '@/modules/common/matching-csrf'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import { buildOfferingSupplyProjection, createEmptyCatalogSourceState } from './catalog-model'
 import { publishBusinessCatalog } from './publish'
 import type {
@@ -78,6 +79,7 @@ export type PublicOwnerStatusReadback = {
   publicUrl: string
   noindex: true
   catalog: PublicBusinessCatalogApiV2Dto
+  projectionMode: 'public_source' | 'local_preview'
   unavailableCapabilities: readonly PublicOwnerUnavailableCapability[]
   nextAction: string
 }
@@ -96,12 +98,13 @@ export type PublicOwnerClaimFlowResult =
       reason: string
       errors?: readonly PublicOwnerClaimValidationError[]
     }
+export type PublicBusinessPageNotFoundReason = 'no_such_business' | 'not_public'
 
-export type PublicBusinessPageNotFoundReason = 'not_public' | 'no_such_business'
 
 export type PublicBusinessPageReadbackResult =
   | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
+  | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
 export const publicOwnerDefaultClaimInput = {
   businessName: 'Parramatta Emergency Plumbing',
@@ -325,6 +328,7 @@ export function buildPublicOwnerStatusReadback(catalog: PublicBusinessCatalogApi
     publicUrl: `/${catalog.slug}`,
     noindex: true,
     catalog,
+    projectionMode: 'public_source',
     unavailableCapabilities: [
       {
         label: 'Bookings not live',
@@ -451,7 +455,7 @@ function normalizeInput(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowI
 }
 
 function cleanText(value: string): string {
-  return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 280)
+  return sanitizeText(value, 280)
 }
 
 

@@ -1,5 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sameStringList } from '@/modules/common/same-string-list'
+import { exactAmountSchema } from '@/modules/money/public'
+import type { ExactAmount } from '@/modules/money/public'
 
 import type { X402PaymentAttempt } from './x402-payment-attempt'
 
@@ -16,12 +18,12 @@ export type X402PaymentReconciliationEvidenceMaterial = Readonly<{
   network: string
   asset: string
   payTo: string
-  amount: string
+  amount: ExactAmount
   invocationRef: string
   attemptRef: string
   effectGeneration: number
   resolution: 'not_settled' | 'settled'
-  settledAmount?: Readonly<{ currency: string; amountMinor: number }>
+  settledAmount?: ExactAmount
   observedAt: string
 }>
 
@@ -50,10 +52,10 @@ export function validateX402PaymentReconciliationEvidence(input: Readonly<{
   const { evidence, attempt } = input
   if (
     !exactEvidenceShape(evidence)
-    || (evidence.settledAmount !== undefined && !exactKeys(
+    || !exactAmountSchema.safeParse(evidence.amount).success
+    || (evidence.settledAmount !== undefined && !exactAmountSchema.safeParse(
       evidence.settledAmount,
-      ['currency', 'amountMinor'],
-    ))
+    ).success)
     || evidence.kind !== 'x402_payment_reconciliation'
     || evidence.version !== 1
     || evidence.evidenceRef.trim().length === 0
@@ -65,11 +67,6 @@ export function validateX402PaymentReconciliationEvidence(input: Readonly<{
     || (evidence.resolution !== 'not_settled' && evidence.resolution !== 'settled')
     || !Number.isFinite(Date.parse(evidence.observedAt))
     || (evidence.resolution === 'settled') !== (evidence.settledAmount !== undefined)
-    || (evidence.settledAmount !== undefined && (
-      evidence.settledAmount.currency.trim().length === 0
-      || !Number.isSafeInteger(evidence.settledAmount.amountMinor)
-      || evidence.settledAmount.amountMinor < 0
-    ))
   ) return 'payment_evidence_malformed'
   const { digest: _digest, ...material } = evidence
   if (canonicalDigest(material) !== evidence.digest) {
@@ -84,7 +81,11 @@ export function validateX402PaymentReconciliationEvidence(input: Readonly<{
     || evidence.network !== attempt.network
     || evidence.asset !== attempt.asset
     || evidence.payTo !== attempt.payTo
-    || evidence.amount !== attempt.amount
+    || !sameExactAmount(evidence.amount, attempt.amount)
+    || (evidence.settledAmount !== undefined && !sameExactAmount(
+      evidence.settledAmount,
+      attempt.amount,
+    ))
     || evidence.invocationRef !== attempt.invocationRef
     || evidence.attemptRef !== attempt.attemptRef
     || evidence.effectGeneration !== attempt.effectGeneration
@@ -98,6 +99,11 @@ export function validateX402PaymentReconciliationEvidence(input: Readonly<{
     return 'payment_evidence_source_unverified'
   }
   return undefined
+}
+function sameExactAmount(left: ExactAmount, right: ExactAmount): boolean {
+  return left.currency === right.currency
+    && left.units === right.units
+    && left.exponent === right.exponent
 }
 
 function exactEvidenceShape(evidence: X402PaymentReconciliationEvidence): boolean {

@@ -8,9 +8,7 @@ import {
   SendIcon,
   StoreIcon,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
@@ -67,47 +65,31 @@ function TermsRoute() {
   return (
     <AePublicShell>
       <AePageHeader
-        eyebrow="Terms"
-        title="The deal in plain English."
+        title="Terms"
         description="Use AE to find and contact businesses. The business confirms the work."
       />
       <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
-        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
+        <section className="grid gap-4">
           {canDoItems.map(({ icon: Icon, title, body }) => (
-            <Card key={title} className="grid h-full gap-1.5 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                  <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
-                </p>
-                <Badge variant="outline">AE</Badge>
-              </div>
-              <p className="block text-muted-foreground">{body}</p>
-            </Card>
+            <div key={title} className="grid gap-1">
+              <p className="flex items-center gap-2 font-semibold text-foreground">
+                <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
+              </p>
+              <p className="text-muted-foreground">{body}</p>
+            </div>
           ))}
         </section>
 
-        <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.72fr_1.28fr]">
-          <div className="grid content-start gap-2">
-            <h2 className="text-3xl font-semibold text-foreground">
-              Keep expectations clear.
-            </h2>
-          </div>
+        <section className="border-t border-border pt-8">
+          <h2 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
+            What these terms mean in practice
+          </h2>
           <TermsAccordion />
         </section>
 
-        <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl font-semibold text-foreground">
-              Start with what you need.
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-              Ask a question, browse services, or fix a business page.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild variant="default"><Link to="/">Ask a question</Link></Button>
-            <Button asChild variant="secondary"><Link to="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></Link></Button>
-          </div>
+        <section className="flex flex-wrap gap-3 border-t border-border pt-8">
+          <Button asChild variant="default" className="min-h-11"><Link to="/">Ask a question</Link></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
     </AePublicShell>

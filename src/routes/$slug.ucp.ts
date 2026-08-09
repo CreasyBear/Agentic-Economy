@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { methodNotAllowed } from '@/lib/server/method-guard'
+import { problem } from '@/lib/server/problem'
 import { discoveryJsonResponse } from '@/lib/http/discovery-response'
 import { readPublicOfferingDiscoveryManifest } from '@/modules/discovery/discovery.functions'
 import {
@@ -18,6 +20,14 @@ export const Route = createFileRoute('/$slug/ucp')({
   server: {
     handlers: {
       GET: ({ request, params }) => handleDurableUcpManifestRequest(request, params.slug),
+      POST: () => methodNotAllowed(['GET']),
+      PUT: () => methodNotAllowed(['GET']),
+      PATCH: () => methodNotAllowed(['GET']),
+      DELETE: () => methodNotAllowed(['GET']),
+      HEAD: () => methodNotAllowed(['GET']),
+      OPTIONS: () => methodNotAllowed(['GET']),
+      TRACE: () => methodNotAllowed(['GET']),
+      CONNECT: () => methodNotAllowed(['GET']),
     },
   },
 })
@@ -30,14 +40,12 @@ export async function handleDurableUcpManifestRequest(request: Request, slug: st
   })
 
   if (result.kind === 'hidden') {
-    return discoveryJsonResponse(
-      {
-        kind: 'not_found',
-        code: 'discovery_manifest_not_found',
-        reason: 'No public discovery manifest exists for this slug.',
-      },
-      { status: 404 }
-    )
+    return problem({
+      status: 404,
+      kind: 'NOT_FOUND',
+      code: 'discovery_manifest_not_found',
+      detail: 'No public discovery manifest exists for this slug.',
+    })
   }
 
   return discoveryJsonResponse(toPublicOfferingUcpManifest(result.manifest))
@@ -51,14 +59,12 @@ export function handleUcpManifestRequest(request: Request, slug: string): Respon
   })
 
   if (result.kind === 'hidden') {
-    return discoveryJsonResponse(
-      {
-        kind: 'not_found',
-        code: 'discovery_manifest_not_found',
-        reason: 'No public discovery manifest exists for this slug.',
-      },
-      { status: 404 }
-    )
+    return problem({
+      status: 404,
+      kind: 'NOT_FOUND',
+      code: 'discovery_manifest_not_found',
+      detail: 'No public discovery manifest exists for this slug.',
+    })
   }
 
   return discoveryJsonResponse(toPublicUcpManifest(result.manifest))

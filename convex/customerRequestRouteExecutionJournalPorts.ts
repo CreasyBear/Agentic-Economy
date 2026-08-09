@@ -19,7 +19,7 @@ import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseBoundedJson } from '@/modules/common/bounded-json'
 import { readJsonPointer } from '@/modules/common/json-pointer'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import {
   type JournalMutationPorts,
   type OutcomeResult,
@@ -338,6 +338,8 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
         operationKeyDigest: input.grant.operationKeyDigest,
         state: 'pending',
         availableAt: input.now,
+        leaseOwner: `customer-request-route-dispatch:${input.dispatchRef}`,
+        leaseExpiresAt: input.now + 30_000,
         createdAt: input.now,
         updatedAt: input.now,
       })
@@ -751,6 +753,7 @@ export async function queueNextStep(
     createdAt: now,
   }
   const dispatchDigest = canonicalDigest(dispatchMaterial)
+  const dispatchRef = `route-dispatch:v1:${dispatchDigest}`
   await ctx.db.insert('customerRequestRouteStepAttempts', {
     attemptRef,
     attemptDigest,
@@ -768,19 +771,21 @@ export async function queueNextStep(
     updatedAt: now,
   })
   await ctx.db.insert('customerRequestRouteDispatchOutbox', {
-    dispatchRef: `route-dispatch:v1:${dispatchDigest}`,
+    dispatchRef,
     dispatchDigest,
     runRef: run.runRef,
     attemptRef,
     operationKeyDigest: admission.grant.operationKeyDigest,
     state: 'pending',
     availableAt: now,
+    leaseOwner: `customer-request-route-dispatch:${dispatchRef}`,
+    leaseExpiresAt: now + 30_000,
     createdAt: now,
     updatedAt: now,
   })
   await enqueueRouteTransport(
     ctx,
-    `route-dispatch:v1:${dispatchDigest}`,
+    dispatchRef,
     PRE_RELEASE_CANCELLATION_WINDOW_MS,
   )
   await ctx.db.patch(run._id, {
@@ -899,7 +904,7 @@ async function snapshotRouteBusinesses(
   ctx: MutationCtx,
   steps: readonly Readonly<{ businessId: string }>[],
 ): Promise<Array<{ businessRef: string; name: string }> | undefined> {
-  const businessIds = stableUnique(steps.map(({ businessId }) => businessId))
+  const businessIds = uniq(steps.map(({ businessId }) => businessId))
   const businesses = []
   for (const businessId of businessIds) {
     const business = await ctx.db.get(businessId as Id<'businesses'>)

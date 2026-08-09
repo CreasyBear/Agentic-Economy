@@ -19,6 +19,8 @@ import {
 } from '@/modules/inquiries/inquiry.functions'
 import { selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
 import { response } from '@/lib/server/no-store-response'
+import { kindForStatus } from '@/lib/errors'
+import { problem } from '@/lib/server/problem'
 
 const MAX_BUSINESS_TOOL_BODY_BYTES = 4 * 1024
 
@@ -32,6 +34,7 @@ type ToolRefusalCode =
   | 'scope_required'
   | 'unknown_tool'
   | 'tool_not_available'
+  | 'source_unavailable'
   | 'invalid_input'
   | 'request_too_large'
   | 'preparation_failed'
@@ -179,6 +182,12 @@ async function resolveToolTarget(slug: string): Promise<ResolvedToolTarget> {
   if (page.kind === 'not_found') {
     return { kind: 'refused', response: refuse(404, 'tool_not_available', 'No business page is published at this address.') }
   }
+  if (page.kind === 'unavailable') {
+    return {
+      kind: 'refused',
+      response: refuse(503, 'source_unavailable', 'The business source is temporarily unavailable. Try again later.'),
+    }
+  }
   const target = selectPublicInquiryTarget(page.catalog)
   if (target === undefined) {
     return { kind: 'refused', response: refuse(409, 'tool_not_available', 'This business publishes no first-contact path.') }
@@ -204,6 +213,6 @@ async function readJsonBody(request: Request): Promise<JsonBodyResult> {
 }
 
 function refuse(status: number, code: ToolRefusalCode, reason: string): Response {
-  return response({ kind: 'refused', code, reason }, status)
+  return problem({ status, kind: kindForStatus(status), code, detail: reason, reason })
 }
 

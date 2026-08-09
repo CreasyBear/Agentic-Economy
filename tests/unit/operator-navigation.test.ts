@@ -96,7 +96,7 @@ describe('operator navigation', () => {
     const labels = navGroupsForRole('admin', { advanced: false })
       .flatMap((group) => group.items.map((item) => item.label))
 
-    expect(labels).toEqual(['Claims', 'Search gaps', 'Inquiries', 'Request problems'])
+    expect(labels).toEqual(['Claims', 'Unmatched asks', 'Inquiries', 'Failed asks'])
   })
 
   it('marks nested paths active for their nav root', () => {

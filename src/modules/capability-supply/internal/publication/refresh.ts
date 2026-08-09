@@ -36,7 +36,7 @@ export async function refreshCapabilityCommand(
     return { kind: 'refused' as const, reason: 'revision_changed' as const }
   }
 
-  const prepared = preparePublicationDraft({
+  const prepared = await preparePublicationDraft({
     source: input.source,
     offering: input.offering,
     binding: input.binding,
@@ -137,8 +137,8 @@ export async function refreshCapabilityCommand(
       authorityMode: publicationMetadata.authorityMode,
       provenanceDigest: publicationMetadata.provenanceDigest,
       ...encoded.contract.ref,
-      offeringId: draft.offering.offeringId,
-      bindingId: draft.binding.bindingId,
+      offeringId: publication.offeringId,
+      bindingId: publication.bindingId,
       disposition: 'incompatible',
       supersedesRevision: publication.revision,
       registrationEvidenceRefs: [...input.evidenceRefs],
@@ -176,7 +176,7 @@ export async function refreshCapabilityCommand(
   if (offeringResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${offeringResult.reason}`)
   }
-  const bindingResult = await ports.registerBinding(nextBinding, input.now)
+  const bindingResult = await ports.registerBinding(nextBinding, input.now, operationRef)
   if (bindingResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${bindingResult.reason}`)
   }

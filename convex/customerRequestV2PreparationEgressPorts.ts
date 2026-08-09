@@ -10,6 +10,7 @@ import type {
   EligibleSupply,
 } from '@/modules/customer-request/v2-preparation-egress'
 
+import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { customerRequestV2ReadPorts } from './customerRequestV2ReadPorts'
@@ -93,6 +94,7 @@ export function customerRequestV2PreparationEgressPorts(
       const live = await listRouteableCapabilitySupply(db, {
         networkId: input.networkId,
         limit: input.limit,
+        now: input.now,
       })
       if (live.kind !== 'available') return null
       return live.supplies.map(toEligibleSupply)
@@ -134,8 +136,13 @@ export function customerRequestV2PreparationEgressPorts(
     },
 
     insertOperation: async (input) => {
+      const { connectionAuthority, ...operation } = input
       await mutationDb.insert('customerRequestV2PreparationEgressOperations', {
-        ...input,
+        ...operation,
+        ...(connectionAuthority === undefined
+          ? {}
+          : { connectionAuthority: mutableConnectionAuthority(connectionAuthority) }),
+        canonicalClaimMaterial: structuredClone(input.canonicalClaimMaterial),
         businessId: input.businessId as Id<'businesses'>,
         lineage: structuredClone(input.lineage),
       })
@@ -317,7 +324,11 @@ export function toOperationRow(
     adapterConfigJson: row.adapterConfigJson,
     endpointUrl: row.endpointUrl,
     credentialRef: row.credentialRef,
+    ...(row.connectionAuthority === undefined
+      ? {}
+      : { connectionAuthority: structuredClone(row.connectionAuthority) }),
     projectedInputDigest: row.projectedInputDigest,
+    canonicalClaimMaterial: structuredClone(row.canonicalClaimMaterial),
     state: row.state,
     allocatedAt: row.allocatedAt,
     ...(row.dispatchStartedAt === undefined ? {} : { dispatchStartedAt: row.dispatchStartedAt }),
@@ -338,6 +349,16 @@ export function toOperationRow(
     ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
   }
 }
+function mutableConnectionAuthority(
+  authority: NonNullable<EgressOperationRow['connectionAuthority']>,
+) {
+  return {
+    ...authority,
+    grantedScopes: [...authority.grantedScopes],
+    grantedResources: [...authority.grantedResources],
+  }
+}
+
 
 function toEligibleSupply(supply: {
   offering: {
@@ -357,7 +378,8 @@ function toEligibleSupply(supply: {
     version: number
     contractDigest: string
     endpointUrl: string
-    credentialRef: string
+    authority: CapabilityTransportAuthority
+    connectionAuthority?: EligibleSupply['binding']['connectionAuthority']
     cancellation: EligibleSupply['binding']['cancellation']
     adapterId: string
     configJson: string
@@ -398,7 +420,10 @@ function toEligibleSupply(supply: {
       configDigest: binding.configDigest,
       configJson: binding.configJson,
       endpointUrl: binding.endpointUrl,
-      credentialRef: binding.credentialRef,
+      ...(binding.connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: structuredClone(binding.connectionAuthority) }),
+      authority: binding.authority,
       admission: binding.admission,
       conformance: binding.conformance,
       capabilityId: binding.capabilityId,

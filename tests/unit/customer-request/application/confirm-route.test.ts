@@ -51,7 +51,7 @@ const aggregate = {
 const displayedRoute = {
   routeRef,
   availability: 'current' as const,
-  maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 2_500 },
+  maximumTotalCost: { kind: 'known' as const, amount: { currency: 'AUD', units: '2500', exponent: 2 } },
   validUntil: FUTURE,
 }
 
@@ -132,7 +132,7 @@ describe('customer-request confirm-route', () => {
       expectedRequestRevision: 3,
       expectedGenerationRef: generationRef,
       selectedRoutePlanId: routePlanId,
-      maximumTotalSpend: { currency: 'AUD', amountMinor: 2_500 },
+      maximumTotalSpend: { currency: 'AUD', units: '2500', exponent: 2 },
       expiresAt: FUTURE,
       idempotencyKey: 'confirm:1',
     }))

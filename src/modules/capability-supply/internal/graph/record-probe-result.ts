@@ -54,6 +54,9 @@ export async function recordCapabilityProbeResult(
     ports.loadPublishedBusiness(publication.businessId),
     ports.getActiveExactCapabilityContract(contractRefFromRow(publication)),
   ])
+  const currentConnection = binding?.authority.kind === 'provider_connection'
+    ? await ports.loadProviderConnection(binding.authority.connectionRef)
+    : undefined
   if (
     binding === null
     || offering === null
@@ -64,6 +67,7 @@ export async function recordCapabilityProbeResult(
     || binding.conformance !== 'conformant'
     || !offeringIntegrityIsValid(offering)
     || !bindingIntegrityIsValid(binding)
+    || publicationLifecycle(publication, offering, binding, args.now ?? Date.now(), currentConnection).state !== 'active'
     || probeTargetDigest(publication, offering, binding) !== args.targetDigest
   ) {
     return { kind: 'refused' as const, reason: 'target_changed' as const }
@@ -79,6 +83,9 @@ export async function recordCapabilityProbeResult(
   await ports.patchProbeReadiness(publication.id, {
     credentialState,
     healthState,
+    ...(binding.connectionAuthority === undefined
+      ? {}
+      : { connectionAuthority: binding.connectionAuthority }),
     readinessObservedAt: now,
     readinessValidUntil: validUntil,
     readinessEvidenceRefs: [`probe:${args.outcome}`],
@@ -94,6 +101,6 @@ export async function recordCapabilityProbeResult(
       healthState,
       readinessObservedAt: now,
       readinessValidUntil: validUntil,
-    }, offering, binding, now),
+    }, offering, binding, now, currentConnection),
   }
 }

@@ -125,7 +125,8 @@ export const storefrontImportDraftAction = defineAction({
     developmentAttemptTimeoutMs: 60_000,
   },
   run: async ({ data }) => {
-    const { importStorefrontDraftFromWebsite } = await import('@/modules/storefront/public')
+    // Server-only module: static import would pull Node DNS/undici into Convex's default action registry bundle.
+    const { importStorefrontDraftFromWebsite } = await import('@/modules/storefront/server')
     return importStorefrontDraftFromWebsite(data)
   },
 })

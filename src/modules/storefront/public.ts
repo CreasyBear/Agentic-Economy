@@ -4,7 +4,6 @@ export {
   StorefrontImportSourceLabel,
   confirmStorefrontImportDraft,
   extractStorefrontDraftFromHtml,
-  importStorefrontDraftFromWebsite,
 } from './internal/import-draft'
 
 export type {
@@ -13,7 +12,6 @@ export type {
   StorefrontImportDraft,
   StorefrontImportedFact,
   StorefrontImportedFactField,
-  StorefrontImportFetch,
   StorefrontImportInput,
   StorefrontImportResult,
 } from './internal/import-draft'

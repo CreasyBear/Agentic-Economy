@@ -1,16 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { exactAmountSchema } from '@/modules/money/public'
+
 import { clearBrowserGuestSession, readBrowserGuestSession, resolveBrowserGuestSession } from '@/lib/server/browser-guest-session'
 
-import {
-  decideRootWorkTree,
-  readRootWorkTree,
-  startRootWorkTree,
-  type RootWorkTreeReadback,
-  type RootWorkTreeStart,
-  type WorkTreeDecisionReceipt,
-  type WorkTreeSourcePort,
+import type {
+  RootWorkTreeReadback,
+  RootWorkTreeStart,
+  WorkTreeDecisionReceipt,
+  WorkTreeSourcePort,
 } from './internal/root-loop'
 
 import type { WorkTreeApprovalIssueResult } from './work-tree-approval.functions'
@@ -32,12 +31,6 @@ import type { WorkTreeClaimResult } from './work-tree.functions'
  * human and agent parity is a shared implementation rather than two that agree
  * today. Hosts differ only in how they obtain the port and the principal.
  */
-export {
-  decideRootWorkTree,
-  projectRootWorkTree,
-  readRootWorkTree,
-  startRootWorkTree,
-} from './internal/root-loop'
 export type {
   RootWorkTreeReadback,
   RootWorkTreeStart,
@@ -83,10 +76,7 @@ const approvalIssueSchema = z.strictObject({
   credentialId: z.string().trim().min(1).max(200),
   authority: z.strictObject({
     kind: z.literal('per_item'),
-    amount: z.strictObject({
-      currency: z.string().trim().length(3),
-      amountMinor: z.number().int().nonnegative(),
-    }).optional(),
+    amount: exactAmountSchema.optional(),
   }),
   expiresAt: z.number().int().positive(),
   idempotencyKey: z.string().trim().min(1).max(200),
@@ -113,6 +103,8 @@ export const startRootWorkTreeServer = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<RootWorkTreeStart> => {
     const caller = await resolveRootBrowserCaller({ mintGuest: true })
     if (caller.kind === 'unavailable') return { kind: 'refused', reason: 'browser_guest_session_unavailable' }
+    // Static import would pull Graphology-backed scheduling into the browser route.
+    const { startRootWorkTree } = await import('./internal/root-loop')
     return startRootWorkTree({
       outcome: data.outcome,
       ...(data.lineage === undefined ? {} : { lineage: data.lineage }),
@@ -144,6 +136,8 @@ export const readRootWorkTreeServer = createServerFn()
     const caller = await resolveRootBrowserCaller()
     if (caller.kind === 'unavailable') return { kind: 'refused', reason: 'authentication_required' }
     if (caller.kind === 'authenticated') await claimGuestProjectIfPresent(data.projectId)
+    // Static import would pull Graphology-backed scheduling into the browser route.
+    const { readRootWorkTree } = await import('./internal/root-loop')
     return readRootWorkTree({
       projectId: data.projectId,
       nowMs: Date.now(),
@@ -163,6 +157,8 @@ export const decideRootWorkTreeServer = createServerFn({ method: 'POST' })
     }
     if (caller.kind === 'authenticated') await claimGuestProjectIfPresent(data.projectId)
     const authority = caller.kind === 'guest' ? { guestAssertion: caller.assertion } : {}
+    // Static import would pull Graphology-backed scheduling into the browser route.
+    const { decideRootWorkTree } = await import('./internal/root-loop')
     return decideRootWorkTree({
       projectId: data.projectId,
       nodeId: data.nodeId,

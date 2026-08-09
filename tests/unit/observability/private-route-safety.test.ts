@@ -4,6 +4,7 @@ import {
   encodePrivateRecordFragment,
   isTelemetryAllowedForCurrentRoute,
   readPrivateRecordAccessKey,
+  safeTelemetryPath,
   sanitizeTelemetryEvent,
   sanitizeTelemetryValue,
   securePrivateRecordLocation,
@@ -41,5 +42,25 @@ describe('private inquiry record telemetry safety', () => {
     expect(readPrivateRecordAccessKey('inquiry_thread:private-record')).toBe(secret)
     expect(isTelemetryAllowedForCurrentRoute()).toBe(false)
     expect(sanitizeTelemetryEvent({ event: 'pageleave', url: location })).toBeNull()
+  })
+  it('blocks telemetry and redacts share credentials from safe paths', () => {
+    const shareToken = 'a'.repeat(64)
+    const sharePath = `/s/${shareToken}`
+    const location: BrowserLocationLike = { pathname: sharePath, search: '', hash: '' }
+
+    expect(securePrivateRecordLocation(location, {
+      state: undefined,
+      replaceState: () => {},
+    })).toBe(true)
+    expect(safeTelemetryPath(location)).toBe('/s/[Filtered]')
+    expect(sanitizeTelemetryValue({
+      $current_url: `https://example.test${sharePath}`,
+      path: sharePath,
+    })).toEqual({
+      $current_url: '/s/[Filtered]',
+      path: '/s/[Filtered]',
+    })
+    expect(JSON.stringify(sanitizeTelemetryValue({ sharePath }))).not.toContain(shareToken)
+    expect(isTelemetryAllowedForCurrentRoute()).toBe(false)
   })
 })

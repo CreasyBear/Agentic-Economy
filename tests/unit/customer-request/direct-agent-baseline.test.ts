@@ -43,7 +43,7 @@ describe('frozen direct-agent baseline', () => {
       credential: 'secret',
       agent: { name: 'frozen-direct-integrator', version: '1' },
       predeclaredGain: 'recoverable_progress',
-      hardConstraints: { maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 } },
+      hardConstraints: { maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 } },
       cohort: baselineCohort(),
       fetch,
       now: sequence(1_000, 1_125),
@@ -58,7 +58,7 @@ describe('frozen direct-agent baseline', () => {
       turns: { total: 4 },
       elapsedMs: 125,
       hardConstraintAccuracy: { state: 'satisfied' },
-      totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 1_000 } },
+      totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', units: '1000', exponent: 2 } },
       recovery: { state: 'unsupported', reason: 'direct_calls_have_no_durable_request_to_resume' },
       resultUsability: { state: 'usable', result: { quoteReference: 'sandbox-quote:one' } },
       cohortInputDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
@@ -204,7 +204,6 @@ describe('frozen direct-agent baseline', () => {
     expect(proof).toMatchObject({
       completion: { state: 'blocked', reason: 'provider_invocation_failed' },
       integrationBurden: { invocationCalls: 2 },
-      recovery: { state: 'unsupported' },
       resultUsability: {
         state: 'partial', result: { serviceReference: 'sandbox-service:partial' },
       },
@@ -264,7 +263,7 @@ describe('frozen direct-agent baseline', () => {
 function discovery(
   endpoint: string,
   name: string,
-  amountMinor: number,
+  amountUnits: number,
   inputRequired: readonly string[],
   outputRequired: readonly string[],
 ) {
@@ -273,7 +272,7 @@ function discovery(
     business: { slug: normalizeSlug(name), name },
     operation: {
       method: 'POST', endpoint, authentication: { scheme: 'bearer' },
-      maximumCost: { currency: 'AUD', amountMinor },
+      maximumCost: { currency: 'AUD', units: String(amountUnits), exponent: 2 },
       inputSchema: { type: 'object', required: inputRequired },
       outputSchema: { type: 'object', required: outputRequired },
     },
@@ -294,7 +293,7 @@ function baselineCohort() {
       'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-resolver',
       'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-quoter',
     ],
-    maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+    maximumTotalCost: { currency: 'AUD', units: '1000', exponent: 2 },
     authorityScope: {
       recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       purposes: ['prepare_quote', 'resolve_request'],

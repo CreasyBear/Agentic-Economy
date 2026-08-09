@@ -1,4 +1,3 @@
-import type { ConsumerPlanResult } from '@/modules/customer-request/application/public'
 import type { AnswerArtifact, AnswerCompareField } from '../answer-schema'
 import type { AnswerSnapshot, AnswerSource } from '../answer-synthesizer'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
@@ -12,7 +11,6 @@ import {
 } from './snapshot-artifacts'
 
 export type AnswerMessagePart =
-  | { kind: 'consumer-plan'; plan: ConsumerPlanResult }
   | { kind: 'one-line'; text: string }
   | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'imported-claims'; claims: readonly WebDiscoveryClaim[] }
@@ -68,9 +66,6 @@ export function artifactsToMessageParts(
 
   for (const artifact of budgetedArtifacts) {
     switch (artifact.kind) {
-      case 'consumer-plan':
-        parts.push({ kind: 'consumer-plan', plan: artifact.plan })
-        break
       case 'one-line':
         parts.push({ kind: 'one-line', text: artifact.text })
         break

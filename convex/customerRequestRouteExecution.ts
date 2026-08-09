@@ -25,6 +25,8 @@ import {
   startOrResume as startOrResumeMachine,
   updateProblemStatus as updateProblemStatusMachine,
 } from '@/modules/customer-request/route-execution/machines'
+import { canonicalClaimMaterialV2Value } from '@/modules/customer-request/runtime'
+import { connectionAuthoritySnapshotValue } from '@/modules/capability-supply/convex'
 import {
   projectBusinessProblem,
   projectSupportProblemExport,
@@ -52,6 +54,28 @@ import {
   problemSupportReadPorts,
 } from './customerRequestRouteExecutionProblemPorts'
 
+const exactAmount = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
+const routeExecutionBinding = v.union(
+  v.object({
+    adapterId: v.string(),
+    endpointUrl: v.string(),
+    authority: v.object({ kind: v.literal('keyless') }),
+    configJson: v.string(),
+    configDigest: v.string(),
+  }),
+  v.object({
+    adapterId: v.string(),
+    endpointUrl: v.string(),
+    authority: v.object({
+      kind: v.literal('provider_connection'),
+      connectionRef: v.string(),
+      providerRef: v.string(),
+    }),
+    connectionAuthority: connectionAuthoritySnapshotValue,
+    configJson: v.string(),
+    configDigest: v.string(),
+  }),
+)
 const startCommand = v.object({
   requestId: v.string(),
   principalId: v.string(),
@@ -73,7 +97,9 @@ const x402PaymentPrepareArgs = {
   network: v.string(),
   asset: v.string(),
   payTo: v.string(),
-  amount: v.string(),
+  amountUnits: v.string(),
+  currency: v.string(),
+  exponent: v.number(),
 }
 
 const x402PaymentAuthorizationMaterial = v.object({
@@ -105,7 +131,9 @@ const x402PaymentEventArgs = {
   network: v.string(),
   asset: v.string(),
   payTo: v.string(),
-  amount: v.string(),
+  amountUnits: v.string(),
+  currency: v.string(),
+  exponent: v.number(),
   providerEndpoint: v.string(),
   custodyRef: v.string(),
   authorizationDigest: v.string(),
@@ -229,44 +257,58 @@ const dispatchInvocation = v.object({
   dispatchRef: v.string(),
   attemptRef: v.string(),
   runRef: v.string(),
+  requestId: v.string(),
+  requestRevision: v.number(),
+  principalId: v.string(),
+  mandateRef: v.string(),
+  grantRef: v.string(),
+  authorityDigest: v.string(),
+  actionId: v.string(),
+  position: v.number(),
   operationKeyDigest: v.string(),
   inputJson: v.string(),
   inputDigest: v.string(),
-  binding: v.object({
-    adapterId: v.string(), endpointUrl: v.string(), credentialRef: v.string(),
-    configJson: v.string(), configDigest: v.string(),
-  }),
+  binding: routeExecutionBinding,
   authority: v.object({
     mandateDigest: v.string(), grantDigest: v.string(), capabilityContractDigest: v.string(),
-    maximumSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+    maximumSpend: exactAmount,
     expiresAt: v.number(),
   }),
+  canonical: canonicalClaimMaterialV2Value,
 })
+
+const openDispatchResult = v.union(
+  v.object({ kind: v.literal('available'), invocation: dispatchInvocation }),
+  v.object({ kind: v.literal('unavailable') }),
+)
 
 export const openDispatch = internalQuery({
   args: { dispatchRef: v.string() },
-  returns: v.union(
-    v.object({ kind: v.literal('available'), invocation: dispatchInvocation }),
-    v.object({ kind: v.literal('unavailable') }),
-  ),
-  handler: async (ctx, args) => await openDispatchFromJournal(
-    args, dispatchLifecycleOpenPorts(ctx),
+  returns: openDispatchResult,
+  handler: async (ctx, args): Promise<Infer<typeof openDispatchResult>> => (
+    await openDispatchFromJournal(args, dispatchLifecycleOpenPorts(ctx)) as Infer<typeof openDispatchResult>
   ),
 })
 
 const cancellationInvocation = v.object({
   cancellationRef: v.string(),
   attemptRef: v.string(),
+  requestId: v.string(),
+  requestRevision: v.number(),
+  principalId: v.string(),
+  mandateRef: v.string(),
+  grantRef: v.string(),
+  authorityDigest: v.string(),
+  actionId: v.string(),
+  position: v.number(),
   operationKeyDigest: v.string(),
-  binding: v.object({
-    adapterId: v.string(), endpointUrl: v.string(), credentialRef: v.string(),
-    configJson: v.string(), configDigest: v.string(),
-  }),
+  binding: routeExecutionBinding,
   authority: v.object({
     mandateDigest: v.string(), grantDigest: v.string(), capabilityContractDigest: v.string(),
-    maximumSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+    maximumSpend: exactAmount,
     expiresAt: v.number(),
   }),
+  canonical: canonicalClaimMaterialV2Value,
 })
 
 const openCancellationAttemptResult = v.union(
@@ -441,7 +483,9 @@ export const prepareX402PaymentAuthorization = internalMutation({
         || existing.network !== args.network
         || existing.asset !== args.asset
         || existing.payTo !== args.payTo
-        || existing.amount !== args.amount
+        || existing.amountUnits !== args.amountUnits
+        || existing.currency !== args.currency
+        || existing.exponent !== args.exponent
       ) {
         throw new Error('x402_payment_attempt_attribution_invalid')
       }
@@ -550,7 +594,9 @@ export const markX402PaymentPossiblySubmitted = internalMutation({
       || row.network !== args.network
       || row.asset !== args.asset
       || row.payTo !== args.payTo
-      || row.amount !== args.amount
+      || row.amountUnits !== args.amountUnits
+      || row.currency !== args.currency
+      || row.exponent !== args.exponent
       || row.providerEndpoint !== args.providerEndpoint
       || row.authorizationDigest !== args.authorizationDigest
     ) {
@@ -585,7 +631,9 @@ export const observeX402PaymentAttempt = internalMutation({
       || row.network !== args.network
       || row.asset !== args.asset
       || row.payTo !== args.payTo
-      || row.amount !== args.amount
+      || row.amountUnits !== args.amountUnits
+      || row.currency !== args.currency
+      || row.exponent !== args.exponent
       || row.providerEndpoint !== args.providerEndpoint
       || row.authorizationDigest !== args.authorizationDigest
     ) {
@@ -999,8 +1047,8 @@ const supportProblemExport = v.object({
       state: v.union(v.literal('current'), v.literal('expired'), v.literal('revoked')),
       source: v.literal('customer_confirmation'),
       spend: v.object({
-        limit: v.object({ currency: v.string(), amountMinor: v.number() }),
-        admitted: v.object({ currency: v.string(), amountMinor: v.number() }),
+        limit: exactAmount,
+        admitted: exactAmount,
       }),
       dataSharing: v.array(v.object({
         classification: v.union(

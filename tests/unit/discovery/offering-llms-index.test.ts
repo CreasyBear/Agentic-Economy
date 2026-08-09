@@ -41,10 +41,19 @@ describe('Offering llms.txt index', () => {
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}/ucp`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/api/businesses/${business.slug}`)
+      expect(result.urls).toContain(`${canonicalBaseUrl}/api/v1/services/${business.slug}`)
     }
-    // The legacy registry page was retired; the V2 index advertises only current public surfaces.
+    // 11 shared surfaces include the Services list/search; each business has
+    // four resolvable routes: page, UCP, Services detail, and catalog detail.
     expect(result.urls).not.toContain(`${canonicalBaseUrl}/registry`)
-    expect(result.urls).toHaveLength(9 + 50 * 3)
+    expect(result.urls).toHaveLength(11 + 50 * 4)
+  })
+
+  it('deduplicates repeated slugs in the complete URL inventory', () => {
+    const urls = buildOfferingLlmsUrlsFromSlugs(['same-business', 'same-business'], { canonicalBaseUrl })
+
+    expect(urls).toEqual([...new Set(urls)])
+    expect(urls).toHaveLength(11 + 4)
   })
 
   /** Pathological slugs, not just large catalogs, are what push an index past a
@@ -60,7 +69,7 @@ describe('Offering llms.txt index', () => {
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.length).toBeLessThanOrEqual(12)
     expect(result.body).toContain('- total=50;')
-    expect(result.urls).toHaveLength(9 + 50 * 3)
+    expect(result.urls).toHaveLength(11 + 50 * 4)
   })
 
   /** The index points at the full procedure rather than restating it. */
@@ -113,6 +122,7 @@ describe('Offering llms.txt index', () => {
     expect(body).toContain('- response=text/event-stream')
     expect(body).toContain(ANSWER_THREAD_AGENT_ENTRYPOINT.boundary)
     expect(body).toContain('"query"')
+    expect(body).toContain('header=X-AE-Turn-Key: fresh opaque value for every turn')
     expect(body.indexOf('Start here (no key needed):')).toBeLessThan(body.indexOf('Customer Request API:'))
   })
 
@@ -120,7 +130,7 @@ describe('Offering llms.txt index', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
 
     expect(body).toContain(
-      `- auth=Bearer AE API key with customer_requests:create, issued to a signed-in account at ${canonicalBaseUrl}/agent-access`
+      `- auth=Authorization: Bearer <Clerk API key>; issued through OAuth after signed-in owner approval at ${canonicalBaseUrl}/agent-access/authorize?user_code=...; scopes=customer_requests:create plus exactly one mode: customer_requests:inspect_only, customer_requests:approve_each, customer_requests:bounded_mandate, customer_requests:full_yolo`
     )
     expect(body).toContain('- escalate=take this path only when the customer wants to confirm and start an option')
   })
@@ -135,7 +145,7 @@ describe('Offering llms.txt index', () => {
     expect(buildOfferingLlmsUrlsFromSlugs(
       Array.from({ length: 50 }, (_unused, index) => `business-${index}`),
       { canonicalBaseUrl },
-    )).toHaveLength(9 + 50 * 3)
+    )).toHaveLength(11 + 50 * 4)
   })
 
   it('keeps the boundary and correction sections and says none for an empty catalog', () => {

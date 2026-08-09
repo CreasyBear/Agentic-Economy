@@ -14,7 +14,7 @@ test.describe('landing query -> thread answer', () => {
   test('submits a need and streams a cited provider answer on a thread page', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+    await expect(page.getByRole('search', { name: /ask a question or describe what you need done/i })).toBeVisible()
 
     const query = 'emergency plumber parramatta'
     await submitLandingQuery(page, query)
@@ -25,20 +25,20 @@ test.describe('landing query -> thread answer', () => {
     await expect(page.getByRole('link', { name: demoBusiness.businessName })).toBeVisible()
     await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
     await expect(page.getByText(/publishes Emergency pipe repair/i).first()).toBeVisible()
-    await expect(page.getByText(/Published listings do not confirm price or current availability/i).first()).toBeVisible()
-    await expect(page.getByText(/confirm the work, timing, price, and current availability directly/i).first()).toBeVisible()
+    await expect(page.getByText(/Published matches do not confirm price or current availability/i).first()).toBeVisible()
+    await expect(page.getByText(/confirm timing, price, and current availability directly/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/\b(?:KNOWN|UNKNOWN|UNAVAILABLE)\b/)
     await assertPublicLanguage(page)
   })
 
-  test('shows a listing nudge when no providers match', async ({ page }) => {
+  test('shows an options nudge when no matches are found', async ({ page }) => {
     await page.goto('/')
     const query = 'dentist parramatta'
-    const search = page.getByRole('search', { name: /find local service businesses/i })
+    const search = page.getByRole('search', { name: /ask a question or describe what you need done/i })
     const searchbox = search.getByRole('searchbox')
-    const sendButton = search.getByRole('button', { name: /^find businesses$/i })
+    const sendButton = search.getByRole('button', { name: /^ask$/i })
     await expect(searchbox).toBeEditable()
     await searchbox.fill(query)
     await expect(sendButton).toBeEnabled()
@@ -52,8 +52,8 @@ test.describe('landing query -> thread answer', () => {
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     await expectQueryInTranscript(page, query)
 
-    await expect(page.getByText(/No matching listed business was found/i)).toBeVisible()
-    await expect(page.getByRole('link', { name: /Browse listed businesses/i })).toBeVisible()
+    await expect(page.getByText(/No (?:businesses match|matches found)/i)).toBeVisible()
+    await expect(page.getByRole('link', { name: /See other options/i })).toBeVisible()
     await expect(page.getByText('Nothing was sent.', { exact: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Today' })).toHaveAttribute('aria-checked', 'true')
     const jsonAction = page.getByRole('button', { name: 'Data for AI assistants' })
@@ -67,9 +67,9 @@ test.describe('landing query -> thread answer', () => {
 })
 
 async function submitLandingQuery(page: Page, query: string) {
-  const search = page.getByRole('search', { name: /find local service businesses/i })
+  const search = page.getByRole('search', { name: /ask a question or describe what you need done/i })
   const searchbox = search.getByRole('searchbox')
-  const sendButton = search.getByRole('button', { name: /^find businesses$/i })
+  const sendButton = search.getByRole('button', { name: /^ask$/i })
   await expect(async () => {
     await expect(searchbox).toBeEditable()
     await searchbox.fill(query)

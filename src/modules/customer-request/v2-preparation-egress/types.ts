@@ -1,5 +1,12 @@
+import type { CustomerRequestCanonicalClaimMaterial } from '@/modules/action-invocation'
+
 import type { CapabilityDecisionModel } from '@/modules/capability-contract/public'
-import type { AdmittedOperationRef, PublicOperationRef } from '@/modules/capability-supply/public'
+import type {
+  AdmittedOperationRef,
+  CapabilityConnectionAuthoritySnapshot,
+  CapabilityTransportAuthority,
+  PublicOperationRef,
+} from '@/modules/capability-supply/public'
 import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import type {
   ActionPreparationLineage,
@@ -35,6 +42,7 @@ export type EligibleSupply = Readonly<{
     revision: number
     readinessValidUntil: number
     operationRef: PublicOperationRef
+    connectionAuthority?: CapabilityConnectionAuthoritySnapshot
     admittedOperation: AdmittedOperationRef
   }>
   offering: Readonly<{
@@ -55,7 +63,8 @@ export type EligibleSupply = Readonly<{
     configDigest: string
     configJson: string
     endpointUrl: string
-    credentialRef: string
+    connectionAuthority?: CapabilityConnectionAuthoritySnapshot
+    authority: CapabilityTransportAuthority
     admission: string
     conformance: string
   }> & ContractRefFields
@@ -91,7 +100,9 @@ export type EgressOperationRow = Readonly<{
   adapterConfigJson: string
   endpointUrl: string
   credentialRef: string
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   projectedInputDigest: string
+  canonicalClaimMaterial: CustomerRequestCanonicalClaimMaterial
   state: EgressOperationState
   allocatedAt: number
   dispatchStartedAt?: number
@@ -212,10 +223,12 @@ export type BeginDispatchResult =
     kind: 'dispatch'
     endpointUrl: string
     credentialRef: string
+    connectionAuthority?: CapabilityConnectionAuthoritySnapshot
     adapterId: string
     configJson: string
     bodyText: string
     dispatchAttemptRef: string
+    canonicalClaimMaterial: CustomerRequestCanonicalClaimMaterial
   }>
   | Readonly<{ kind: 'in_flight' }>
   | Readonly<{ kind: 'terminal'; state: TerminalEgressState }>
@@ -276,22 +289,27 @@ export type OpenReconciliationResult =
     kind: 'available'
     endpointUrl: string
     credentialRef: string
+    connectionAuthority?: CapabilityConnectionAuthoritySnapshot
     adapterId: string
     configJson: string
+    canonicalClaimMaterial: CustomerRequestCanonicalClaimMaterial
   }>
   | Readonly<{ kind: 'unavailable' }>
 
 export type DispatchPayload = Readonly<{
   endpointUrl: string
   credentialRef: string
+  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   adapterId: string
   configJson: string
   bodyText: string
+  canonicalClaimMaterial: CustomerRequestCanonicalClaimMaterial
 }>
 
 export type DispatchResult = Readonly<{
   state: TerminalEgressState
   evidenceRef: string
+  canonicalDisposition?: 'active' | 'terminal_replay' | 'refused'
   responseStatus?: number
   responseContentType?: string
   responseBodyDigest?: string

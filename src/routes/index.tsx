@@ -1,34 +1,33 @@
-import { createServerFn } from '@tanstack/react-start'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
+import { type FormEvent, useState } from 'react'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 
-import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { AeServiceList } from '@/components/ae/services/AeServiceList'
-import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { ServicesError, ServicesLoading } from '@/components/ae/home/HomeRouteStates'
 import { RootWorkTreeLoop } from '@/components/ae/home/RootWorkTreeLoop'
-import { projectConsumerPlan, type ConsumerPlanResult } from '@/modules/customer-request/application/public'
-import { customerRequestPlanPreviewAction } from '@/modules/customer-request/plan-preview.actions'
-import type { PublicServicesSearchPage, ServiceDto } from '@/modules/registry/public'
-import { toConsumerSupplyOption } from '@/modules/registry/public'
-import { registryServicesSearchAction } from '@/modules/registry/registry.actions'
-import type { WebDiscoveryClaim } from '@/modules/storefront/public'
-import { webDiscoverAction } from '@/modules/storefront/storefront.actions'
+import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 import {
   readRootWorkTreeServer,
   type RootWorkTreeReadback,
 } from '@/modules/work-tree/human-root.functions'
 
 const rootSearchSchema = z.object({
-  q: z.string().max(120).optional().catch(undefined),
+  q: z.string().optional().catch(undefined),
   project: z.string().max(200).optional().catch(undefined),
 })
+
+/** Fixed browse chips that map to preset asks the engine already resolves. */
+const CATEGORY_CHIPS: readonly { label: string; query: string }[] = [
+  { label: 'Finance & crypto', query: 'crypto price' },
+  { label: 'Search & research', query: 'search the web' },
+  { label: 'Geo & maps', query: 'geocode' },
+  { label: 'Reference', query: 'wikipedia' },
+]
 
 
 export type RootSearchParams = {
@@ -36,40 +35,17 @@ export type RootSearchParams = {
   project?: string | undefined
 }
 
-export type ServicesRouteReadback = Readonly<{
-  services: readonly ServiceDto[]
-  plan: ConsumerPlanResult
-  canonicalBaseUrl?: string
-  importedClaims?: readonly WebDiscoveryClaim[]
-}>
-
-/**
- * The two shapes `/` can render once an ask exists. The WorkTree branch carries
- * nothing but a source readback: the durable project reference in the URL is
- * the only state that survives a reload, and a browser thread is never identity.
- */
 export type RootRouteReadback =
   | Readonly<{ kind: 'work-tree'; readback: RootWorkTreeReadback }>
-  | Readonly<{ kind: 'services'; page: ServicesRouteReadback }>
 
 export type RootRouteDeps = Readonly<{
   readWorkTree: (projectId: string) => Promise<RootWorkTreeReadback>
-  loadServices: (search: RootSearchParams) => Promise<ServicesRouteReadback | undefined>
 }>
 
 export const defaultRootRouteDeps: RootRouteDeps = {
   readWorkTree: (projectId) => readRootWorkTreeServer({ data: { projectId } }),
-  loadServices: (search) => readServicesPageServer({ data: search }),
 }
 
-export const readServicesPageServer = createServerFn()
-  .validator((data) => z.object({ q: z.string().max(120).optional().catch(undefined) }).parse(data))
-  .handler(async ({ data }) => {
-    const readback = await loadOneViewReadback(data)
-    if (readback === undefined) return undefined
-    const canonicalBaseUrl = await readCanonicalBaseUrlServer()
-    return { ...readback, canonicalBaseUrl }
-  })
 
 /** Root route readback: explicit project references read the source-backed tree. */
 export async function loadRootRoute(
@@ -77,29 +53,28 @@ export async function loadRootRoute(
   deps: RootRouteDeps = defaultRootRouteDeps,
 ): Promise<RootRouteReadback | undefined> {
   const projectId = search.project?.trim() ?? ''
-  if (projectId.length > 0) {
-    return { kind: 'work-tree', readback: await deps.readWorkTree(projectId) }
+  if (projectId.length === 0) return undefined
+  return { kind: 'work-tree', readback: await deps.readWorkTree(projectId) }
+}
+
+export function validateRootSearch(search: Record<string, unknown>): RootSearchParams {
+  const parsed = rootSearchSchema.parse(search)
+  const query = parsed.q?.trim() ?? ''
+  const project = parsed.project?.trim() ?? ''
+  return {
+    ...(query.length === 0 ? {} : { q: query }),
+    ...(project.length === 0 ? {} : { project }),
   }
-
-  const query = search.q?.trim().slice(0, 120) ?? ''
-  if (query.length === 0) return undefined
-
-
-  const page = await deps.loadServices({ q: query })
-  return page === undefined ? undefined : { kind: 'services', page }
 }
 
 export const Route = createFileRoute('/')({
-  validateSearch: (search: Record<string, unknown>): RootSearchParams => {
-    const parsed = rootSearchSchema.parse(search)
-    const query = parsed.q?.trim().slice(0, 120) ?? ''
-    const project = parsed.project?.trim() ?? ''
-    return {
-      ...(query.length === 0 ? {} : { q: query }),
-      ...(project.length === 0 ? {} : { project }),
+  validateSearch: validateRootSearch,
+  loaderDeps: ({ search }) => ({ project: search.project }),
+  beforeLoad: ({ search }) => {
+    if (search.project === undefined && search.q !== undefined) {
+      throw redirect({ to: '/t/new', search: { q: search.q } })
     }
   },
-  loaderDeps: ({ search }) => search,
   loader: ({ deps }) => loadRootRoute(deps),
   pendingComponent: ServicesLoading,
   errorComponent: ServicesError,
@@ -112,59 +87,39 @@ export const Route = createFileRoute('/')({
   component: ServicesRoute,
 })
 
-export async function loadServicesRouteReadback(search: RootSearchParams): Promise<PublicServicesSearchPage | undefined> {
-  const query = search.q?.trim().slice(0, 120) ?? ''
-  if (query.length === 0) return undefined
-
-  return registryServicesSearchAction.run({
-    data: registryServicesSearchAction.schema.parse({ query, limit: 10 }),
-    context: { caller: 'ui' },
-  })
-}
-
-export async function loadOneViewReadback(search: RootSearchParams): Promise<ServicesRouteReadback | undefined> {
-  const query = search.q?.trim().slice(0, 120) ?? ''
-  if (query.length === 0) return undefined
-  const servicePagePromise = loadServicesRouteReadback(search)
-  const previewPromise = customerRequestPlanPreviewAction.run({
-    data: customerRequestPlanPreviewAction.schema.parse({ customerJob: query, network: 'ae:public' }),
-    context: { caller: 'ui' },
-  }).catch(() => ({
-    kind: 'unavailable' as const,
-    reason: 'preview_unavailable' as const,
-    destination: { label: query, request: query },
-  }))
-  const [servicePage, preview] = await Promise.all([servicePagePromise, previewPromise])
-  if (servicePage === undefined) return undefined
-  const importedClaimsResult = servicePage.services.length === 0
-    ? await webDiscoverAction.run({
-        data: webDiscoverAction.schema.parse({ query }),
-        context: { caller: 'ui' },
-      }).catch(() => undefined)
-    : undefined
-  const importedClaims = importedClaimsResult?.kind === 'found' ? importedClaimsResult.claims : undefined
-  return {
-    services: servicePage.services,
-    plan: projectConsumerPlan(preview, servicePage.services.map(toConsumerSupplyOption)),
-    ...(importedClaims === undefined ? {} : { importedClaims }),
-  }
-}
 
 function ServicesRoute() {
   const { q, project } = Route.useSearch()
   const data = Route.useLoaderData()
-  const hasAnswer = q !== undefined || project !== undefined
-  const page = data?.kind === 'services' ? data.page : undefined
-  const canonicalBaseUrl = page?.canonicalBaseUrl ?? (typeof window === 'undefined' ? undefined : window.location.origin)
+  const navigate = useNavigate()
+  const hasAnswer = project !== undefined
+  const [queryValue, setQueryValue] = useState(q ?? '')
+  const [queryError, setQueryError] = useState(false)
+  const queryTooLong = queryValue.length > QUERY_MAX_LENGTH
+
+  function handleAskSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const rawQuery = String(formData.get('q') ?? '')
+    setQueryValue(rawQuery)
+    if (rawQuery.length > QUERY_MAX_LENGTH) {
+      setQueryError(true)
+      return
+    }
+    const query = rawQuery.trim()
+    if (query.length === 0) return
+    setQueryError(false)
+    void navigate({ to: '/t/new', search: { q: query } })
+  }
 
   return (
     <AePublicShell>
-      <div className="grid w-full gap-12 px-4 py-16 sm:px-6 md:py-24">
-        <section className="mx-auto grid w-full max-w-3xl justify-items-center gap-8 text-center">
+      <div className="grid w-full gap-10 px-4 py-14 sm:px-6 md:py-20">
+        <section className="mx-auto grid w-full max-w-3xl justify-items-center gap-7 text-center">
           <h1
             className={hasAnswer
               ? 'max-w-3xl text-4xl leading-tight tracking-tight md:text-5xl'
-              : 'max-w-4xl text-5xl leading-tight tracking-tight md:text-7xl'}
+              : 'max-w-4xl text-4xl leading-tight tracking-tight md:text-6xl'}
           >
             {HOME.heroHeading}
           </h1>
@@ -173,33 +128,83 @@ function ServicesRoute() {
           </p>
 
           <Card className="w-full border-0 bg-card p-6 shadow-med">
-            <form key={q ?? ''} action="/" method="get" role="search" className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <form key={q ?? ''} role="search" aria-label="Ask a question or describe what you need done" onSubmit={handleAskSubmit} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <Field className="gap-2 text-left">
-                <FieldLabel htmlFor="service-search" className="text-sm font-semibold text-foreground">
-                  What do you need done?
-                </FieldLabel>
+                <div className="flex items-center justify-between gap-3">
+                  <FieldLabel htmlFor="service-search" className="text-sm font-semibold text-foreground">
+                    What do you need done?
+                  </FieldLabel>
+                  <span
+                    id="service-search-count"
+                    className="font-mono text-xs tabular-nums text-muted-foreground"
+                    aria-live="polite"
+                  >
+                    {queryValue.length} / {QUERY_MAX_LENGTH} characters
+                  </span>
+                </div>
                 <Input
                   id="service-search"
                   name="q"
                   type="search"
-                  defaultValue={q ?? ''}
-                  placeholder="Get this contract reviewed by Friday"
+                  value={queryValue}
+                  maxLength={QUERY_MAX_LENGTH}
+                  placeholder="e.g. Get a quote for solar installation, or the current price of bitcoin"
                   autoComplete="off"
+                  aria-describedby="service-search-hint service-search-count"
+                  aria-invalid={queryError || queryTooLong ? 'true' : undefined}
+                  onChange={(event) => {
+                    setQueryValue(event.currentTarget.value)
+                    setQueryError(false)
+                  }}
+                  onInvalid={(event) => {
+                    event.preventDefault()
+                    setQueryError(true)
+                  }}
+                  onPaste={(event) => {
+                    const pasted = event.clipboardData?.getData('text') ?? ''
+                    const start = event.currentTarget.selectionStart ?? queryValue.length
+                    const end = event.currentTarget.selectionEnd ?? queryValue.length
+                    const nextLength = queryValue.length - (end - start) + pasted.length
+                    if (nextLength > QUERY_MAX_LENGTH) {
+                      event.preventDefault()
+                      setQueryError(true)
+                    }
+                  }}
                   className="h-14 border-border bg-card px-4 py-3 text-base text-foreground max-sm:h-14 md:text-base"
                 />
+                <p id="service-search-hint" className="text-sm leading-snug text-muted-foreground">
+                  {queryError || queryTooLong
+                    ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
+                    : `Up to ${QUERY_MAX_LENGTH} characters.`}
+                </p>
               </Field>
-              <Button type="submit" variant="secondary" size="lg" className="min-h-14 w-full sm:w-auto">Find my options</Button>
+              <Button type="submit" variant="secondary" size="lg" className="min-h-14 w-full sm:w-auto">Ask</Button>
             </form>
           </Card>
 
           {hasAnswer ? null : (
-            <nav aria-label="Example asks" className="flex flex-wrap justify-center gap-2">
+            <nav aria-label="Browse by category" className="flex flex-wrap justify-center gap-2.5">
+              {CATEGORY_CHIPS.map((chip) => (
+                <Link
+                  key={chip.label}
+                  to="/t/new"
+                  search={{ q: chip.query }}
+                  className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                >
+                  {chip.label}
+                </Link>
+              ))}
+            </nav>
+          )}
+
+          {hasAnswer ? null : (
+            <nav aria-label="Example asks" className="flex flex-wrap justify-center gap-x-5 gap-y-1.5">
               {HOME.exampleAsks.map((ask) => (
                 <Link
                   key={ask}
-                  to="/"
+                  to="/t/new"
                   search={{ q: ask }}
-                  className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                  className="inline-flex min-h-11 items-center px-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
                 >
                   {ask}
                 </Link>
@@ -215,7 +220,7 @@ function ServicesRoute() {
                   <p className="block text-sm text-muted-foreground">
                     {door.body}
                   </p>
-                  <Link to={door.href} className="text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
+                  <Link to={door.href} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
                     {door.cta}
                   </Link>
                 </Card>
@@ -225,20 +230,7 @@ function ServicesRoute() {
 
           {data?.kind === 'work-tree' ? (
             <RootWorkTreeLoop readback={data.readback} />
-          ) : q === undefined ? null : (
-            <div className="grid gap-6">
-              <AeServiceList
-                services={page?.services ?? []}
-                query={q.trim()}
-                {...(page?.plan === undefined ? {} : { plan: page.plan })}
-                {...(page?.importedClaims === undefined ? {} : { importedClaims: page.importedClaims })}
-                {...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl })}
-              />
-              {page?.plan?.kind === 'plan' || (page?.services?.length ?? 0) === 0 || canonicalBaseUrl === undefined ? null : (
-                <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
-              )}
-            </div>
-          )}
+          ) : null}
         </section>
       </div>
     </AePublicShell>

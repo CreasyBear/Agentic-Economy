@@ -1,9 +1,11 @@
 import { createPrefixedRandomId } from '@/modules/common/random-id'
 
 import {
+  buildAnswerTurnProblem,
   type AnswerEvent,
   type AnswerSnapshot,
   type AnswerSource,
+  type AnswerTurnProblem,
   type AnswerWorkStep,
   computeLayoutProfile,
 } from '@/modules/answer/public'
@@ -51,6 +53,7 @@ export type TurnPathResult = {
   modelRequests?: readonly HarnessModelRequestRecord[]
   allowedSlugs: ReadonlySet<string>
   errorCopyId: string | undefined
+  errorProblem?: AnswerTurnProblem
   gate: AnswerRunGateSummary | undefined
   assembly?: SnapshotAssemblyPlan
 }
@@ -83,6 +86,8 @@ export type TurnPathContext = {
   turnId: string
   sourceWriteRequest: Request | undefined
   query: string
+  /** Canonical query used for a fresh registry search; display query stays user-authored. */
+  registryQuery?: string
   intent: FollowUpIntent
   priorTurnsCount: number
   priorProviders: AnswerSource[]
@@ -125,21 +130,20 @@ export function withFollowUpLayout(
 }
 
 export function rejectBlockedSnapshot(
-  ctx: Pick<TurnPathContext, 'send'>,
   toolCalls: readonly AnswerToolCallRecord[],
   allowedSlugs: ReadonlySet<string>,
   blocked: Extract<FinalizeAnswerTurnSnapshotResult, { ok: false }>,
 ): TurnPathResult {
-  ctx.send({ type: 'error', code: blocked.code, copyId: blocked.copyId })
+  const errorProblem = buildAnswerTurnProblem(blocked.code)
   return {
     snapshot: undefined,
     toolCalls: [...toolCalls],
     allowedSlugs,
     errorCopyId: blocked.copyId,
+    errorProblem,
     gate: blocked.gate,
   }
 }
-
 export function reindexProviders(providers: readonly AnswerSource[]): AnswerSource[] {
   return providers.map((provider, index) => ({
     ...provider,
@@ -151,30 +155,32 @@ export function makeCopyId(): string {
   return createPrefixedRandomId(`turn-${Date.now().toString(36)}-`)
 }
 
-export function describeProviderCount(count: number, noun: string): string {
+export function describeProviderCount(count: number, _noun: string): string {
   if (count === 0) {
-    return `No ${noun}es found.`
+    return 'No matches found yet.'
   }
   if (count === 1) {
-    return `1 ${noun} found.`
+    return '1 match found.'
   }
-  return `${count} ${noun}es found.`
+  return `${count} matches found.`
 }
 
 export function emitReadAndCompareSteps(
   workLog: WorkStepEmitter,
   providers: readonly AnswerSource[],
 ): void {
+  if (providers.length === 0) {
+    return
+  }
+
   const completedAt = Date.now()
   workLog.emit({
     id: 'read.providers',
     phase: 'read',
     status: 'complete',
-    title: 'Reading listed businesses',
-    summary: providers.length === 0
-      ? 'No listed businesses were returned for this search.'
-      : describeProviderCount(providers.length, 'listed business'),
-    detailRows: [{ label: 'Listed businesses', value: String(providers.length) }],
+    title: 'Reading the details',
+    summary: describeProviderCount(providers.length, 'match'),
+    detailRows: [{ label: 'Matches', value: String(providers.length) }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     completedAtMs: completedAt,
   })
@@ -183,10 +189,8 @@ export function emitReadAndCompareSteps(
     id: 'compare.fit',
     phase: 'compare',
     status: 'complete',
-    title: 'Checking fit',
-    summary: providers.length === 0
-      ? 'No listed businesses fit this request yet.'
-      : 'Keeping listed businesses whose published details fit this request.',
+    title: 'Comparing the matches',
+    summary: 'Keeping matches whose published details match what you need.',
     detailRows: [{ label: 'Kept for answer', value: String(providers.length) }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     completedAtMs: completedAt,

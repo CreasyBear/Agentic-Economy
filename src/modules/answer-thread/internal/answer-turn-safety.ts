@@ -20,7 +20,10 @@ export function finalizeAnswerTurnSnapshot(input: {
 }): FinalizeAnswerTurnSnapshotResult {
   const sanitized = sanitizeStructuredAnswer(input.snapshot, input.allowedSlugs)
   const candidate = sanitized ?? input.snapshot
-  const gate = runAnswerGate({ snapshot: candidate, allowedSlugs: input.allowedSlugs })
+  const gate = runAnswerGate({
+    snapshot: candidate,
+    allowedSlugs: input.allowedSlugs,
+  })
 
   if (!gate.ok) {
     return {

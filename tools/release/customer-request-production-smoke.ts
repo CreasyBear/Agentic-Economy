@@ -9,6 +9,7 @@ import {
   type AgentJourneyCohortInput,
 } from '../../src/modules/customer-request/agent-journey-cohort'
 import { runFrozenDirectAgentBaseline } from '../../src/modules/customer-request/direct-agent-baseline'
+import { exactAmountSchema, type ExactAmount } from '../../src/modules/money/public'
 import {
   runHostedCustomerRequestJourney,
   verifyHostedCustomerRequestFrontDoor,
@@ -24,7 +25,7 @@ type DirectBaselineConfig = Readonly<{
   providerOrigins: readonly string[]
   credential: string
   predeclaredGain: 'recoverable_progress'
-  maximumTotalCost: Readonly<{ currency: string; amountMinor: number }>
+  maximumTotalCost: ExactAmount
   cohort: AgentJourneyCohortInput
 }>
 
@@ -138,22 +139,55 @@ export async function runCustomerRequestProductionSmoke(
     agent: { name: 'frozen-direct-provider-integrator', version: '1' },
     fetch: config.fetch,
   })
+  const directForComparison: Parameters<typeof compareAgentJourneys>[0]['direct'] =
+    'recovery' in direct ? direct : { ...direct, recovery: { state: 'unsupported' } }
   if (proof.final.state === 'in_progress') {
     throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
   }
   const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
     structuredClone(config.directBaseline.cohort),
   ))
-  const terminalProof = {
+  const terminalProof: Parameters<typeof compareAgentJourneys>[0]['ae'] = {
     ...proof,
+    final: {
+      ...proof.final,
+      state: terminalJourneyState(proof.final.state),
+      resumedState: terminalJourneyState(proof.final.resumedState),
+    },
+    measurements: {
+      ...proof.measurements,
+      hardConstraintAccuracy: { state: hardConstraintState(proof) },
+    },
     cohortInputDigest: aeCohort.digest,
-  } as Parameters<typeof compareAgentJourneys>[0]['ae']
-  const comparison = compareAgentJourneys({ direct, ae: terminalProof, cohort: aeCohort })
+  }
+  const comparison = compareAgentJourneys({
+    direct: directForComparison, ae: terminalProof, cohort: aeCohort,
+  })
   process.stdout.write(`${JSON.stringify(comparison)}\n`)
   if (comparison.verdict !== 'pass_for_declared_class') {
     throw new Error(`customer_request_comparison_failed:${comparison.failures.join(',')}`)
   }
   return comparison
+}
+
+type TerminalJourneyState = Exclude<HostedCustomerRequestJourneyProof['final']['state'], 'in_progress'>
+
+function terminalJourneyState(
+  value: HostedCustomerRequestJourneyProof['final']['state'],
+): TerminalJourneyState {
+  if (value === 'in_progress') throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
+  return value
+}
+
+function hardConstraintState(
+  proof: HostedCustomerRequestJourneyProof,
+): 'satisfied' | 'not_evaluated' {
+  const measurements: unknown = proof.measurements
+  const accuracy = isRecord(measurements) ? measurements.hardConstraintAccuracy : undefined
+  if (!isRecord(accuracy) || (accuracy.state !== 'satisfied' && accuracy.state !== 'not_evaluated')) {
+    throw new Error('customer_request_comparison_hard_constraint_accuracy_missing')
+  }
+  return accuracy.state
 }
 
 function parseDirectBaseline(
@@ -181,7 +215,7 @@ function parseDirectBaseline(
   if (!Array.isArray(origins) || !origins.every((value) => typeof value === 'string')) {
     throw new Error('AE_DIRECT_PROVIDER_ORIGINS_JSON must contain at least two provider origins')
   }
-  if (!isMoney(maximum)) throw new Error('AE_DIRECT_MAXIMUM_TOTAL_COST_JSON must be nonnegative money')
+  if (!isExactAmount(maximum)) throw new Error('AE_DIRECT_MAXIMUM_TOTAL_COST_JSON must be nonnegative money')
   const config: DirectBaselineConfig = {
     providerOrigins: origins, credential: required(raw.credential, 'AE_DIRECT_PROVIDER_CREDENTIAL'),
     predeclaredGain: raw.gain, maximumTotalCost: maximum, cohort,
@@ -195,7 +229,7 @@ function assertDirectBaselineConfig(config: DirectBaselineConfig): void {
     throw new Error('AE_DIRECT_PROVIDER_ORIGINS_JSON must contain at least two safe provider origins')
   }
   if (config.credential.trim().length === 0) throw new Error('AE_DIRECT_PROVIDER_CREDENTIAL is required')
-  if (!isMoney(config.maximumTotalCost)) {
+  if (!isExactAmount(config.maximumTotalCost)) {
     throw new Error('AE_DIRECT_MAXIMUM_TOTAL_COST_JSON must be nonnegative money')
   }
 }
@@ -211,12 +245,8 @@ function isSafeProviderOrigin(value: string): boolean {
   }
 }
 
-function isMoney(value: unknown): value is Readonly<{ currency: string; amountMinor: number }> {
-  if (!isRecord(value)) return false
-  const candidate = value
-  return typeof candidate.currency === 'string' && candidate.currency.length > 0
-    && typeof candidate.amountMinor === 'number' && Number.isInteger(candidate.amountMinor)
-    && candidate.amountMinor >= 0
+function isExactAmount(value: unknown): value is ExactAmount {
+  return exactAmountSchema.safeParse(value).success
 }
 
 function parseFinish(

@@ -1,16 +1,14 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { WorkNode } from './contract'
 
 export const workTreeApprovalAuthorityKindSchema = z.literal('per_item')
 export type WorkTreeApprovalAuthorityKind = z.infer<typeof workTreeApprovalAuthorityKindSchema>
 
-export const workTreeApprovalAmountSchema = z.strictObject({
-  currency: z.string().trim().length(3),
-  amountMinor: z.number().int().nonnegative(),
-})
+export const workTreeApprovalAmountSchema = exactAmountSchema
 export type WorkTreeApprovalAmount = z.infer<typeof workTreeApprovalAmountSchema>
 
 export const workTreeApprovalAuthoritySchema = z.strictObject({
@@ -96,8 +94,7 @@ export type WorkTreeApprovalValidation =
 export function workTreeNodeAuthorityAmount(node: WorkNode): WorkTreeApprovalAmount | undefined {
   const cost = node.cost
   if (cost === undefined) return undefined
-  const amountMinor = cost.committedMinor ?? cost.envelopeMinor ?? cost.estimateMinor
-  return amountMinor === undefined ? undefined : { currency: cost.currency, amountMinor }
+  return cost.committed ?? cost.envelope ?? cost.estimate
 }
 
 export function workTreeApprovalMaterial(input: Readonly<{
@@ -144,7 +141,7 @@ export function verifyWorkTreeApprovalBinding(
     return { kind: 'refused', code: 'approval_amount_mismatch' }
   }
   if (actualAmount !== undefined && expectedAmount !== undefined
-    && (actualAmount.currency !== expectedAmount.currency || actualAmount.amountMinor !== expectedAmount.amountMinor)) {
+    && compareExactAmounts(actualAmount, expectedAmount) !== 0) {
     return { kind: 'refused', code: 'approval_amount_mismatch' }
   }
   if (expected.now >= artifact.expiresAt) return { kind: 'refused', code: 'approval_expired' }

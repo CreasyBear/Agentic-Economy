@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { methodNotAllowed } from '@/lib/server/method-guard'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
 import {
@@ -35,6 +36,14 @@ export const Route = createFileRoute('/api/discovery/schema')({
   server: {
     handlers: {
       GET: ({ request }) => handleDeveloperDiscoverySchemaRequest(request),
+      POST: () => methodNotAllowed(['GET']),
+      PUT: () => methodNotAllowed(['GET']),
+      PATCH: () => methodNotAllowed(['GET']),
+      DELETE: () => methodNotAllowed(['GET']),
+      HEAD: () => methodNotAllowed(['GET']),
+      OPTIONS: () => methodNotAllowed(['GET']),
+      TRACE: () => methodNotAllowed(['GET']),
+      CONNECT: () => methodNotAllowed(['GET']),
     },
   },
 })

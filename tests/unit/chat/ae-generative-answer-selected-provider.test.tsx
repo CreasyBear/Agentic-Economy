@@ -14,7 +14,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     cleanup()
   })
 
-  it('leads with the grounded answer before the supporting shortlist', () => {
+  it('leads with the grounded answer before the supporting sources', () => {
     const artifacts: AnswerArtifact[] = [
       { kind: 'one-line', text: 'One listed business matches this request.' },
       { kind: 'provider-cards', providers: [provider()] },
@@ -39,13 +39,14 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       />,
     )
 
-    const shortlist = screen.getByRole('region', { name: 'Business shortlist' })
+    const sources = screen.getByRole('region', { name: 'Sources' })
     const summary = screen.getByText('The business handles timing, price, and availability.')
 
-    expect(shortlist.contains(screen.getByText('These are the businesses AE found for this request.'))).toBe(true)
-    expect(shortlist.contains(screen.getByText('Ask this business'))).toBe(true)
-    expect(summary.compareDocumentPosition(shortlist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText('How AE checked this').closest('details')?.open).toBe(false)
+    expect(sources.contains(screen.getByText('1 match compared on published area, response, and next step.'))).toBe(true)
+    expect(sources.contains(screen.getByText('Demo Plumbing'))).toBe(true)
+    expect(sources.contains(screen.getByText('Plumber · Parramatta'))).toBe(true)
+    expect(summary.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('How this was checked').closest('details')?.open).toBe(false)
   })
 
   it('shows the chosen provider before routing to the inquiry form', () => {
@@ -69,12 +70,12 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       />,
     )
 
-    expect(screen.getByText('Selected business')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Selected business' })).toBeTruthy()
     expect(screen.getByText('Demo Plumbing')).toBeTruthy()
     expect(screen.getByText('Choice 1 from this thread · Plumber · Parramatta')).toBeTruthy()
-    expect(screen.getByText('Inquiry form published')).toBeTruthy()
-    expect(screen.getByText(/AE can open this business's qualified inquiry form for owner review/)).toBeTruthy()
-    expect(screen.getByText('Open inquiry form').closest('a')?.getAttribute('href')).toBe(
+    expect(screen.getByText('Request form available')).toBeTruthy()
+    expect(screen.getByText(/A request can be sent to this business for the business to review/)).toBeTruthy()
+    expect(screen.getByText('Open request form').closest('a')?.getAttribute('href')).toBe(
       '/demo-plumbing/inquiry?from=thread&id=thread-123',
     )
     expect(screen.getByText('Review business').closest('a')?.getAttribute('href')).toBe(
@@ -150,6 +151,35 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
 
     expect(summary.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(disclosure.closest('details')?.open).toBe(false)
+  })
+  it('keeps plain provider URLs as copyable text and isolates bidi provider labels', () => {
+    const artifacts: AnswerArtifact[] = [
+      { kind: 'one-line', text: 'A source is available.' },
+      {
+        kind: 'selected-provider',
+        provider: provider({ name: '\u202eDemo Plumbing' }),
+      },
+      {
+        kind: 'what-to-do-now',
+        text: 'Click this URL: https://provider.example/results.',
+      },
+    ]
+
+    renderWithRouter(
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="find a plumber"
+        layoutProfile="refinement_compact"
+        phase="complete"
+      />,
+    )
+
+    const providerLink = screen.getByText('Demo Plumbing').closest('a')
+    expect(providerLink?.getAttribute('dir')).toBe('auto')
+    expect(providerLink?.style.unicodeBidi).toBe('isolate')
+    expect(providerLink?.textContent).not.toContain('\u202e')
+    expect(screen.getByText('Copy this URL: https://provider.example/results')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /provider\.example/iu })).toBeNull()
   })
 })
 

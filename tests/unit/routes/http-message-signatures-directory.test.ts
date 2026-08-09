@@ -37,8 +37,14 @@ describe('web bot auth key directory', () => {
   it('never publishes private key material', async () => {
     const response = directoryResponse(JSON.stringify({ keys: [{ ...PUBLIC_JWK, d: 'private-scalar' }] }))
 
-    expect(response.status).toBe(404)
-    expect(JSON.stringify(await response.json())).not.toContain('private-scalar')
+    expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+    const body = await response.json()
+    expect(body).toMatchObject({
+      kind: 'NOT_FOUND',
+      code: 'wba_directory_unconfigured',
+      detail: 'No public WBA directory keys configured.',
+    })
+    expect(JSON.stringify(body)).not.toContain('private-scalar')
   })
 
   it('fails closed when unconfigured, blank, malformed, or shaped wrong', async () => {
@@ -47,8 +53,12 @@ describe('web bot auth key directory', () => {
     for (const value of rejected) {
       const response = directoryResponse(value)
 
-      expect(response.status).toBe(404)
-      expect(await response.json()).toMatchObject({ kind: 'error', code: 'wba_directory_unconfigured' })
+      expect(response.headers.get('Content-Type')).toBe('application/problem+json')
+      expect(await response.json()).toMatchObject({
+        kind: 'NOT_FOUND',
+        code: 'wba_directory_unconfigured',
+        detail: 'No public WBA directory keys configured.',
+      })
     }
   })
 })

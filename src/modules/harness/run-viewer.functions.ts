@@ -87,7 +87,7 @@ export function accessForHarnessRunViewerAdminMembership(
     return {
       kind: 'denied',
       reason: authority.reason,
-      publicMessage: 'Admin run evidence requires active source-owned membership.',
+      publicMessage: 'Admin runs require active source-owned membership.',
     }
   }
 
@@ -152,7 +152,7 @@ async function readDefaultSourceTurns(filters: HarnessRunViewerFilters): Promise
         access: {
           kind: 'denied',
           reason: result.reason,
-          publicMessage: 'Admin run evidence requires active source-owned membership.',
+          publicMessage: 'Admin runs require active source-owned membership.',
         },
         turns: [],
         source: { kind: 'configured' },
@@ -169,7 +169,7 @@ async function readDefaultSourceTurns(filters: HarnessRunViewerFilters): Promise
       access: {
         kind: 'denied',
         reason: 'missing_membership',
-        publicMessage: 'Admin run evidence requires active source-owned membership.',
+        publicMessage: 'Admin runs require active source-owned membership.',
       },
       turns: [],
       source: { kind: 'configured' },

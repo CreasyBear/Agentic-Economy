@@ -37,6 +37,7 @@ function OwnerSupplyDetailRoute() {
   if (result.supply.kind !== 'available' || offerings.kind !== 'available' || source === undefined || source.revision === undefined) {
     return <AeOperatorShell operatorRole="owner" title="Get your service ready" description="We could not load this service. Return to your services and try again." currentPath="/owner/supply"><div className="grid gap-3"><Alert><AlertTitle>Service unavailable</AlertTitle><AlertDescription>We could not load this service. Return to your services and try again.</AlertDescription></Alert><Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/owner/supply">Return to your services</Link></Button></div></AeOperatorShell>
   }
+  const revision = source.revision
   const initialOffering = toEditorValue(source)
   return (
     <AeOperatorShell operatorRole="owner" title={source.revision.name} description="Describe what you do, set a price, test it, and go live." currentPath="/owner/supply">
@@ -54,7 +55,7 @@ function OwnerSupplyDetailRoute() {
           advance: async (step, value) => advance({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:${step}`, value: { step, ...value } } }),
           runReadiness: async (value) => readiness({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:readiness`, value } }),
           runTest: async (value) => test({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:test`, value } }),
-          publish: async (value) => publish({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:publish`, value } }),
+          publish: async (value) => publish({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, sourceHash: revision.sourceHash, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:publish`, value } }),
         }}
       />
     </AeOperatorShell>

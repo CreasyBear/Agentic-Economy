@@ -40,7 +40,7 @@ const legacyV1HeldCapacitySnapshot = Object.freeze({
       recipientRefs: ['legacy:provider'],
       purposes: ['create_development_effect'],
       allowedDataFields: ['customer.name'],
-      maximumSpend: { amountMinor: 0, currency: 'AUD' },
+      maximumSpend: { currency: 'AUD', units: '0', exponent: 2 },
       maximumActionCount: 2,
       maximumConcurrentReservations: 1,
       startsAt: '2026-07-19T04:00:00.000Z',
@@ -51,7 +51,7 @@ const legacyV1HeldCapacitySnapshot = Object.freeze({
     format: 'ae.action-invocation-standing-mandate:v1',
     mode: 'bounded_mandate',
     revoked: false,
-    digest: 'sha256:30cd923c3c6833eba7581f0d51b543456c5afbd0cce6f10627e8f29e2d5e6a51',
+    digest: 'sha256:ecac4f0b3193e4bfa965be0cdae8d9e8d34f75dacd39eddbfec4ec2c7f60c8d5',
   }],
   grants: [{
     format: 'ae.verified-standing-mandate-grant:v1',
@@ -66,14 +66,14 @@ const legacyV1HeldCapacitySnapshot = Object.freeze({
     principalRef: 'legacy:principal',
     delegateRef: 'legacy:delegate',
     callerRef: 'legacy:caller',
-    scopeDigest: 'sha256:e46c43b597d19662e46cb5957d77a2c563d72a5323111a61987bd3dab702ed5b',
-    mandateDigest: 'sha256:30cd923c3c6833eba7581f0d51b543456c5afbd0cce6f10627e8f29e2d5e6a51',
+    scopeDigest: 'sha256:2d8ea833f2d2f062ebdecca0862c56575d7cf98a0d70f78aa9a6a6b730e7a891',
+    mandateDigest: 'sha256:ecac4f0b3193e4bfa965be0cdae8d9e8d34f75dacd39eddbfec4ec2c7f60c8d5',
     issuedAt: '2026-07-19T04:00:00.000Z',
     verifiedAt: '2026-07-19T04:00:00.000Z',
     freshUntil: '2026-07-19T04:30:00.000Z',
     authenticated: true,
     cryptographicResult: 'valid',
-    digest: 'sha256:3c5a606d0c19e7a64471eedbbae34e63a44ac4f30283bc51db0b39650841562d',
+    digest: 'sha256:7a302a2ae1adba5282440608b9d19beadd85896f447062008078aa0a2d29bde1',
   }],
   uses: [{
     authorityUseRef: 'legacy:use:held',
@@ -90,13 +90,13 @@ const legacyV1HeldCapacitySnapshot = Object.freeze({
     recipientRef: 'legacy:provider',
     purpose: 'create_development_effect',
     dataFields: ['customer.name'],
-    reservedSpend: { amountMinor: 0, currency: 'AUD' },
+    reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
     fallbackRef: null,
     risk: 'legacy_zero_charge',
     effectGeneration: 1,
     state: 'reserved',
     reservedAt: '2026-07-19T04:00:00.000Z',
-    digest: 'sha256:eb62c5751b41a127a1c891c46f45b3a0a564adf619f61f4076e6a8537a1e8166',
+    digest: 'sha256:29329d48475093c9368968d178b2017eefa3a58e988315be6cd67cea950b6f8a',
   }],
   exposureOffsets: [],
   policyDecisions: [],
@@ -118,7 +118,7 @@ const mandateDecision = issueStandingMandate({
     recipientRefs: ['mock:provider:calendar'],
     purposes: ['create_development_effect'],
     allowedDataFields: ['customer.name', 'customer.email'],
-    maximumSpend: { amountMinor: 0, currency: 'AUD' },
+    maximumSpend: { currency: 'AUD', units: '0', exponent: 2 },
     maximumActionCount: 3,
     maximumConcurrentReservations: 1,
     startsAt: now,
@@ -146,7 +146,7 @@ function use(overrides: Partial<AuthorityUseMaterial> = {}): AuthorityUseMateria
     recipientRef: 'mock:provider:calendar',
     purpose: 'create_development_effect',
     dataFields: ['customer.name', 'customer.email'],
-    reservedSpend: { amountMinor: 0, currency: 'AUD' },
+    reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
     fallbackRef: null,
     risk: 'development_provider_operation_zero_charge',
     effectGeneration: 1,
@@ -179,11 +179,11 @@ function providerOperationService(store: StandingMandateStore) {
 
 describe('Action Invocation bounded standing mandate', () => {
   it.each([
-    ['NaN spend', { maximumSpend: { amountMinor: Number.NaN, currency: 'AUD' } }],
-    ['infinite spend', { maximumSpend: { amountMinor: Number.POSITIVE_INFINITY, currency: 'AUD' } }],
-    ['fractional spend', { maximumSpend: { amountMinor: 0.5, currency: 'AUD' } }],
-    ['negative spend', { maximumSpend: { amountMinor: -1, currency: 'AUD' } }],
-    ['unsafe spend', { maximumSpend: { amountMinor: Number.MAX_SAFE_INTEGER + 1, currency: 'AUD' } }],
+    ['NaN spend', { maximumSpend: { currency: 'AUD', units: 'NaN', exponent: 2 } }],
+    ['infinite spend', { maximumSpend: { currency: 'AUD', units: 'Infinity', exponent: 2 } }],
+    ['fractional spend', { maximumSpend: { currency: 'AUD', units: '0.5', exponent: 2 } }],
+    ['negative spend', { maximumSpend: { currency: 'AUD', units: '-1', exponent: 2 } }],
+    ['unsafe spend', { maximumSpend: { currency: 'AUD', units: '0', exponent: Number.MAX_SAFE_INTEGER + 1 } }],
     ['invalid start', { startsAt: 'not-a-date' }],
     ['equal validity window', { startsAt: now, expiresAt: now }],
     ['reversed validity window', { startsAt: '2026-07-19T06:00:00.000Z' }],
@@ -201,17 +201,23 @@ describe('Action Invocation bounded standing mandate', () => {
     })).toEqual({ kind: 'refused', code: 'mandate_material_invalid' })
   })
 
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0.5, -1, Number.MAX_SAFE_INTEGER + 1])(
+  it.each([
+    ['NaN', { currency: 'AUD', units: 'NaN', exponent: 2 }],
+    ['infinite', { currency: 'AUD', units: 'Infinity', exponent: 2 }],
+    ['fractional', { currency: 'AUD', units: '0.5', exponent: 2 }],
+    ['negative', { currency: 'AUD', units: '-1', exponent: 2 }],
+    ['unsafe', { currency: 'AUD', units: '0', exponent: Number.MAX_SAFE_INTEGER + 1 }],
+  ] as const)(
     'refuses malformed reserved spend before it can change capacity: %s',
-    (amountMinor) => {
+    (label, reservedSpend) => {
       const store = issuedStore()
       expect(store.reserve(use({
-        authorityUseRef: `mock:authority-use:invalid:${String(amountMinor)}`,
-        reservedSpend: { amountMinor, currency: 'AUD' },
+        authorityUseRef: `mock:authority-use:invalid:${label}`,
+        reservedSpend,
       }), now)).toEqual({ kind: 'refused', code: 'mandate_material_invalid' })
       expect(store.capacity(mandate.mandateRef)).toMatchObject({
         reservedCount: 0,
-        reservedSpendMinor: 0,
+        reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       })
     },
   )
@@ -221,9 +227,9 @@ describe('Action Invocation bounded standing mandate', () => {
     expect(restored.kind).toBe('accepted')
 
     const malformed = structuredClone(legacyV1HeldCapacitySnapshot) as unknown as {
-      mandates: Array<{ scope: { maximumSpend: { amountMinor: number } } }>
+      mandates: Array<{ scope: { maximumSpend: { units: string } } }>
     }
-    malformed.mandates[0]!.scope.maximumSpend.amountMinor = -1
+    malformed.mandates[0]!.scope.maximumSpend.units = 'NaN'
     expect(restoreStandingMandateStore(malformed)).toEqual({
       kind: 'refused',
       code: 'mandate_material_invalid',
@@ -247,8 +253,8 @@ describe('Action Invocation bounded standing mandate', () => {
         recipientRef: mandate.scope.recipientRefs[0]!,
         purpose: mandate.scope.purposes[0]!,
         dataFields: mandate.scope.allowedDataFields,
-        spend: { amountMinor: -1, currency: 'AUD' },
-        worstCaseLoss: { amountMinor: 0, currency: 'AUD' },
+        spend: { currency: 'AUD', units: '-1', exponent: 2 },
+        worstCaseLoss: { currency: 'AUD', units: '0', exponent: 2 },
         fallbackRef: 'none',
         risk: mandate.scope.riskCeiling,
       },
@@ -272,7 +278,7 @@ describe('Action Invocation bounded standing mandate', () => {
       recipientRef: 'legacy:provider',
       purpose: 'create_development_effect',
       dataFields: ['customer.name'],
-      reservedSpend: { amountMinor: 0, currency: 'AUD' },
+      reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
       fallbackRef: null,
       risk: 'legacy_zero_charge',
       effectGeneration: 1,
@@ -323,7 +329,7 @@ describe('Action Invocation bounded standing mandate', () => {
     expect(store.capacity(mandate.mandateRef)).toMatchObject({
       consumedCount: 2,
       reservedCount: 0,
-      consumedSpendMinor: 0,
+      consumedSpend: { currency: 'AUD', units: '0', exponent: 2 },
     })
     expect(provider.effectCount()).toBe(2)
     expect(runs.flatMap(({ events }) => events).filter(({ kind }) => kind === 'authority_decision')).toHaveLength(0)
@@ -332,7 +338,7 @@ describe('Action Invocation bounded standing mandate', () => {
     const coldMandates = new StandingMandateStore(structuredClone(store.exportSnapshot()))
     expect(coldMandates.capacity(mandate.mandateRef).consumedCount).toBe(2)
     for (const run of runs) {
-      expect(run.tracer.coldResume(run.view.invocationRef).inspect(run.view.invocationRef))
+      expect((await run.tracer.coldResume(run.view.invocationRef)).inspect(run.view.invocationRef))
         .toMatchObject({
           invocationRef: run.view.invocationRef,
           observedResolution: { state: 'returned', result: { kind: 'effect_confirmed' } },
@@ -434,7 +440,7 @@ describe('Action Invocation bounded standing mandate', () => {
     expect(store.inspectUse(authorityUseRef)).toMatchObject({ state: 'not_released' })
     expect(store.capacity(mandate.mandateRef)).toMatchObject({
       reservedCount: 0,
-      reservedSpendMinor: 0,
+      reservedSpend: { currency: 'AUD', units: '0', exponent: 2 },
     })
   })
 
@@ -590,8 +596,8 @@ describe('Action Invocation bounded standing mandate', () => {
     ['mandate_recipient_mismatch', { recipientRef: 'other' }],
     ['mandate_purpose_mismatch', { purpose: 'other' }],
     ['mandate_data_widening', { dataFields: ['customer.name', 'customer.email', 'customer.phone'] }],
-    ['mandate_currency_mismatch', { reservedSpend: { amountMinor: 0, currency: 'USD' } }],
-    ['mandate_spend_exceeded', { reservedSpend: { amountMinor: 1, currency: 'AUD' } }],
+    ['mandate_currency_mismatch', { reservedSpend: { currency: 'USD', units: '0', exponent: 2 } }],
+    ['mandate_spend_exceeded', { reservedSpend: { currency: 'AUD', units: '1', exponent: 2 } }],
     ['mandate_fallback_mismatch', { fallbackRef: 'other' }],
     ['mandate_risk_exceeded', { risk: 'higher' }],
     ['mandate_caller_mismatch', { callerRef: 'other' }],

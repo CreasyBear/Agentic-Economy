@@ -2,8 +2,10 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
-import { stableUnique } from '@/modules/common/stable-unique'
-import { formatCurrencyAmount } from './format-currency-amount'
+import type { ExactAmount } from '@/modules/money/public'
+import { compareExactAmounts, subtractExactAmounts } from '@/modules/money/public'
+import { uniq } from 'es-toolkit/array'
+import { formatCurrencyAmount } from '@/modules/money/public'
 
 import type {
   CustomerRoutePlan,
@@ -53,7 +55,7 @@ type ProjectionRoute = Readonly<{
   }>[]
   edges: readonly Readonly<{ fromStep: string; toStep: string }>[]
   maximumTotalCost:
-    | Readonly<{ kind: 'known'; currency: string; amountMinor: number }>
+    | Readonly<{ kind: 'known'; amount: ExactAmount }>
     | Readonly<{ kind: 'requires_preparation' }>
   expiresAt: number
   uncertainty: readonly ('cost_requires_preparation' | 'customer_fact_requires_evidence')[]
@@ -340,9 +342,11 @@ function projectDecisionComparison(
   const selectedIndex = ranked.findIndex((ordering) => ordering.kind === 'ranked' && ordering.position === 1)
   const selected = routes[selectedIndex]
   const orderedByCost = [...routes].sort((left, right) => {
-    const leftAmount = left.maximumTotalCost.kind === 'known' ? left.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
-    const rightAmount = right.maximumTotalCost.kind === 'known' ? right.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
-    return leftAmount - rightAmount || left.routeRef.localeCompare(right.routeRef)
+    if (left.maximumTotalCost.kind !== 'known' || right.maximumTotalCost.kind !== 'known') {
+      return left.routeRef.localeCompare(right.routeRef)
+    }
+    const comparison = compareExactAmounts(left.maximumTotalCost.amount, right.maximumTotalCost.amount)
+    return (comparison ?? 0) || left.routeRef.localeCompare(right.routeRef)
   })
   const rankedPositionByRouteRef = new Map(routes.map((route, index) => [route.routeRef, positions[index]]))
   if (orderedByCost.some((route, index) => rankedPositionByRouteRef.get(route.routeRef) !== index + 1)) {
@@ -353,15 +357,18 @@ function projectDecisionComparison(
   }
   const next = orderedByCost[1]
   const evidenceRef = [...evidenceRefs][0]
-  if (evidenceRefs.size !== 1 || selected === undefined || next === undefined || evidenceRef === undefined
-    || selected.routeRef !== orderedByCost[0]?.routeRef
-    || selected.maximumTotalCost.kind !== 'known' || next.maximumTotalCost.kind !== 'known'
-    || selected.maximumTotalCost.currency !== next.maximumTotalCost.currency
-    || selected.maximumTotalCost.amountMinor === next.maximumTotalCost.amountMinor) {
+  if (evidenceRefs.size !== 1 || selected === undefined || next === undefined
+    || selected.routeRef !== orderedByCost[0]?.routeRef || evidenceRef === undefined
+    || selected.maximumTotalCost.kind !== 'known' || next.maximumTotalCost.kind !== 'known') {
     return unrankedComparison('tie', 'No current way forward has a unique evidence-backed lead, so AE has not recommended one.')
   }
-  const currency = selected.maximumTotalCost.currency
-  const difference = next.maximumTotalCost.amountMinor - selected.maximumTotalCost.amountMinor
+  const selectedAmount = selected.maximumTotalCost.amount
+  const nextAmount = next.maximumTotalCost.amount
+  const amountComparison = compareExactAmounts(selectedAmount, nextAmount)
+  const difference = subtractExactAmounts(nextAmount, selectedAmount)
+  if (amountComparison === undefined || amountComparison === 0 || difference === undefined) {
+    return unrankedComparison('tie', 'No current way forward has a unique evidence-backed lead, so AE has not recommended one.')
+  }
   return Object.freeze({
     kind: 'recommended' as const,
     summary: 'One way forward best matches the price priority in this Request.',
@@ -372,8 +379,8 @@ function projectDecisionComparison(
       ? 'disclosed' as const
       : 'none' as const,
     reasons: Object.freeze([
-      `Lowest maximum cost: ${formatCurrencyAmount(currency, selected.maximumTotalCost.amountMinor)}.`,
-      `${formatCurrencyAmount(currency, difference)} below the next current way forward.`,
+      `Lowest maximum cost: ${formatCurrencyAmount(selectedAmount)}.`,
+      `${formatCurrencyAmount(difference)} below the next current way forward.`,
     ]),
     tradeoffs: Object.freeze(comparisonTradeoffs(selected, next)),
   })
@@ -425,7 +432,7 @@ function projectRouteCommercialInfluence(route: Route): CustomerRoutePlan['compa
   }
   return Object.freeze({
     status: 'disclosed' as const,
-    summaries: Object.freeze(stableUnique(present.filter(({ kind }) => kind !== 'none').map(({ summary }) => summary))),
+    summaries: Object.freeze(uniq(present.filter(({ kind }) => kind !== 'none').map(({ summary }) => summary))),
     evidenceRefs: Object.freeze(evidenceRefs),
     affectsDecision: present.some(({ influencesEligibility, influencesInclusion, influencesOrder }) => (
       influencesEligibility || influencesInclusion || influencesOrder
@@ -737,7 +744,7 @@ function routeResult(
     if (semantics === undefined) throw new Error('customer_route_plan_capability_semantics_missing')
     return semantics
   })
-  const summaries = stableUnique(terminalSemantics.map(({ description }) => description))
+  const summaries = uniq(terminalSemantics.map(({ description }) => description))
   const deliverables = uniqueSorted(terminalSemantics.flatMap(({ resultLabels }) => resultLabels))
   return Object.freeze({
     resultRef: semanticChoiceRef(route),

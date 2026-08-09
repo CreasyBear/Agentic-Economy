@@ -55,7 +55,7 @@ async function startFirstThread(page: Page, projectName: string) {
   }
 
   await page.goto('/')
-  await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+  await expect(page.getByRole('search', { name: /ask a question or describe what you need done/i })).toBeVisible()
   await submitThreadQuery(page, FIRST_QUERY)
 }
 
@@ -76,7 +76,7 @@ async function submitThreadQuery(page: Page, query: string) {
   await expect(searchbox).toBeEditable({ timeout: 30_000 })
   await searchbox.fill(query)
   await expect(searchbox).toHaveValue(query)
-  const sendButton = page.getByRole('button', { name: /^send$/i })
+  const sendButton = page.getByRole('button', { name: /^ask$/i })
   await expect(sendButton).toBeEnabled()
   await sendButton.click()
   await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })

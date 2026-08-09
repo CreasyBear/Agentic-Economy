@@ -6,6 +6,7 @@ import type {
 } from '@/modules/common/ids'
 import type { TrustTier } from '@/modules/business/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sanitizeText } from '@/modules/common/sanitize-text'
 import type { OfferingPrice } from './offering-price'
 
 export const BusinessOfferingStatusValues = ['draft', 'published', 'paused', 'retired'] as const
@@ -101,6 +102,9 @@ export type OfferingSupportProjection = Readonly<{
 
 export type PublicAccessPath = Readonly<{
   accessPathRef: AccessPathRef
+  offeringRevision: number
+  offeringSourceHash: SourceHash
+  sourceHash: SourceHash
   descriptor: OfferingAccessPathDescriptor
 }>
 
@@ -223,6 +227,9 @@ export function buildPublicOfferingSupplyProjection(input: Readonly<{
       offering: offeringProjection,
       accessPaths: publishedPaths.map((path) => ({
         accessPathRef: path.accessPathRef,
+        offeringRevision: path.offeringRevision,
+        offeringSourceHash: path.offeringSourceHash,
+        sourceHash: path.sourceHash,
         descriptor: path.descriptor,
       })),
       support: input.support,
@@ -354,5 +361,5 @@ function isPublicHttpsUrl(value: string): boolean {
 }
 
 function cleanText(value: string, maximum: number): string {
-  return value.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maximum)
+  return sanitizeText(value, maximum)
 }

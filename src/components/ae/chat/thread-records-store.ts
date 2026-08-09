@@ -43,7 +43,6 @@ export function upsertOptimisticThread(
     threadId: input.threadId,
     pseudonymousSessionId: '',
     title: input.title.length > 0 ? input.title : 'New question',
-    sharePolicy: existing?.sharePolicy ?? 'public',
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
@@ -126,7 +125,6 @@ function readStoredThreadRecord(value: unknown): AnswerThreadRecord[] {
     record.threadId.length === 0 ||
     typeof record.title !== 'string' ||
     record.title.length === 0 ||
-    (record.sharePolicy !== 'public' && record.sharePolicy !== 'unlisted') ||
     typeof record.createdAt !== 'number' ||
     typeof record.updatedAt !== 'number'
   ) {
@@ -136,7 +134,6 @@ function readStoredThreadRecord(value: unknown): AnswerThreadRecord[] {
     threadId: record.threadId,
     pseudonymousSessionId: '',
     title: record.title,
-    sharePolicy: record.sharePolicy,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   })]
@@ -147,7 +144,6 @@ function sanitizeThreadRecord(thread: AnswerThreadRecord): AnswerThreadRecord {
     threadId: thread.threadId,
     pseudonymousSessionId: '',
     title: thread.title.trim().length > 0 ? thread.title.trim() : 'New question',
-    sharePolicy: thread.sharePolicy,
     createdAt: finiteTimestamp(thread.createdAt),
     updatedAt: finiteTimestamp(thread.updatedAt),
   }

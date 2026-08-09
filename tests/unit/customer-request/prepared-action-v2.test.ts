@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ExactAmount } from '@/modules/money/public'
+
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { type ActionPreparationLineage } from '@/modules/customer-request/action-preparation'
@@ -47,7 +49,7 @@ describe('V2 Prepared Action compilation', () => {
         presentation: {
           label: 'Reference lookup',
           summary: 'Returns one registered reference result.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 125 },
+          price: { kind: 'fixed', amount: exactAmount('AUD', 125) },
           materialTerms: [{ termId: 'term:scope', label: 'Scope', value: 'One lookup' }],
           commercialRelationship: {
             kind: 'none', summary: 'No commercial relationship.',
@@ -100,10 +102,11 @@ describe('V2 Prepared Action compilation', () => {
           }],
         },
         price: {
-          currency: 'AUD', minimumAmountMinor: 125, maximumAmountMinor: 125,
+          minimum: exactAmount('AUD', 125),
+          maximum: exactAmount('AUD', 125),
           components: [{
             kind: 'registered_offering', label: 'Reference lookup',
-            minimumAmountMinor: 125, maximumAmountMinor: 125,
+            minimum: exactAmount('AUD', 125), maximum: exactAmount('AUD', 125),
             evidenceRefs: ['registration:offering:one'],
           }],
         },
@@ -128,8 +131,8 @@ describe('V2 Prepared Action compilation', () => {
   it('selects the lowest registered maximum only from comparable uninfluenced options', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const first = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 1_200 })
-    const second = optionCandidate({ model, lineage, suffix: 'two', amountMinor: 900 })
+    const first = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 1_200) })
+    const second = optionCandidate({ model, lineage, suffix: 'two', priceAmount: exactAmount('AUD', 900) })
 
     const result = compilePreparedActionOptions({
       lineage,
@@ -147,7 +150,7 @@ describe('V2 Prepared Action compilation', () => {
       preparedAction: {
         business: { businessId: 'business:two', name: 'Business Two' },
         providerAssertion: { assertionRef: 'provider-assertion:two' },
-        price: { currency: 'AUD', maximumAmountMinor: 900 },
+        price: { maximum: exactAmount('AUD', 900) },
         comparison: {
           kind: 'lowest_maximum_price',
           candidateCount: 2,
@@ -160,7 +163,7 @@ describe('V2 Prepared Action compilation', () => {
           assertionRef: 'provider-assertion:one',
           business: { businessId: 'business:one', name: 'Business One' },
           offeringId: 'offering:one', bindingId: 'binding:one',
-          price: { currency: 'AUD', maximumAmountMinor: 1_200 },
+          price: { maximum: exactAmount('AUD', 1_200) },
           expiresAt: 61_000,
         }],
         fallbacks: [],
@@ -171,8 +174,8 @@ describe('V2 Prepared Action compilation', () => {
   it('refuses price selection when commercial influence affects ordering', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const first = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 1_200 })
-    const second = optionCandidate({ model, lineage, suffix: 'two', amountMinor: 900 })
+    const first = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 1_200) })
+    const second = optionCandidate({ model, lineage, suffix: 'two', priceAmount: exactAmount('AUD', 900) })
     const influenced: PreparedActionOptionCandidate = {
       ...second,
       offering: {
@@ -199,15 +202,15 @@ describe('V2 Prepared Action compilation', () => {
   it('persists no recommendation when registered prices are not comparable', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const first = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 1_200 })
-    const second = optionCandidate({ model, lineage, suffix: 'two', amountMinor: 900 })
+    const first = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 1_200) })
+    const second = optionCandidate({ model, lineage, suffix: 'two', priceAmount: exactAmount('AUD', 900) })
     const differentCurrency: PreparedActionOptionCandidate = {
       ...second,
       offering: {
         ...second.offering,
         presentation: {
           ...second.offering.presentation,
-          price: { kind: 'fixed', currency: 'USD', amountMinor: 900 },
+          price: { kind: 'fixed', amount: exactAmount('USD', 900) },
         },
       },
     }
@@ -224,8 +227,8 @@ describe('V2 Prepared Action compilation', () => {
   it('keeps an unavailable registered business as an evidenced fallback when one valid option remains', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const available = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 900 })
-    const unavailableBase = optionCandidate({ model, lineage, suffix: 'two', amountMinor: 800 })
+    const available = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 900) })
+    const unavailableBase = optionCandidate({ model, lineage, suffix: 'two', priceAmount: exactAmount('AUD', 800) })
     const unavailable: PreparedActionOptionCandidate = {
       ...unavailableBase,
       operation: { ...unavailableBase.operation, state: 'not_released' },
@@ -253,8 +256,8 @@ describe('V2 Prepared Action compilation', () => {
   it('does not select around commercial influence hidden in an unavailable candidate', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const available = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 900 })
-    const influencedBase = optionCandidate({ model, lineage, suffix: 'two', amountMinor: 800 })
+    const available = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 900) })
+    const influencedBase = optionCandidate({ model, lineage, suffix: 'two', priceAmount: exactAmount('AUD', 800) })
     const influenced: PreparedActionOptionCandidate = {
       ...influencedBase,
       operation: { ...influencedBase.operation, state: 'not_released' },
@@ -282,7 +285,7 @@ describe('V2 Prepared Action compilation', () => {
   it('blocks hidden commercial influence even when only one option is available', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const base = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 900 })
+    const base = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 900) })
     const influenced: PreparedActionOptionCandidate = {
       ...base,
       offering: {
@@ -304,7 +307,7 @@ describe('V2 Prepared Action compilation', () => {
   it('returns typed recovery when the only provider option echoes a different binding', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
-    const candidate = optionCandidate({ model, lineage, suffix: 'one', amountMinor: 900 })
+    const candidate = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 900) })
     const envelope = JSON.parse(candidate.operation.responseBodyText ?? '{}') as Record<string, unknown>
     const responseBodyText = JSON.stringify({ ...envelope, bindingId: 'binding:different' })
     expect(compilePreparedActionOptions({
@@ -322,7 +325,7 @@ describe('V2 Prepared Action compilation', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const lineage = actionLineage(model)
     const candidates = Array.from({ length: 64 }, (_, index) => {
-      const candidate = optionCandidate({ model, lineage, suffix: `provider-${index}`, amountMinor: index + 1 })
+      const candidate = optionCandidate({ model, lineage, suffix: `provider-${index}`, priceAmount: exactAmount('AUD', index + 1) })
       return { ...candidate, business: { ...candidate.business, name: 'x'.repeat(10_000) } }
     })
     expect(compilePreparedActionOptions({
@@ -347,7 +350,7 @@ function optionCandidate(input: Readonly<{
   model: ReturnType<typeof openCapabilityDecisionModel>
   lineage: ActionPreparationLineage
   suffix: string
-  amountMinor: number
+  priceAmount: ExactAmount
 }>): PreparedActionOptionCandidate {
   const response = {
     format: 'ae.provider-option:v1' as const,
@@ -377,7 +380,7 @@ function optionCandidate(input: Readonly<{
       registrationEvidenceRefs: [`registration:offering:${input.suffix}`],
       presentation: {
         label: `Reference lookup ${title}`, summary: `Returns option ${input.suffix}.`,
-        price: { kind: 'fixed', currency: 'AUD', amountMinor: input.amountMinor },
+        price: { kind: 'fixed', amount: input.priceAmount },
         materialTerms: [{ termId: 'term:scope', label: 'Scope', value: 'One lookup' }],
         commercialRelationship: {
           kind: 'none', summary: 'No commercial relationship.', influencesEligibility: false,
@@ -393,4 +396,7 @@ function optionCandidate(input: Readonly<{
     },
     disclosure: { outcome: 'released', allocationRefs: [`preparation-disclosure:${input.suffix}`] },
   }
+}
+function exactAmount(currency: string, units: number): ExactAmount {
+  return { currency, units: String(units), exponent: 2 }
 }

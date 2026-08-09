@@ -1,4 +1,6 @@
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   buildDynamicPublishedInput,
@@ -7,6 +9,7 @@ import {
   verifyDynamicPublishedSnapshot,
   type ActionInvocationOrigin,
   type DynamicPublishedAdapterSnapshot,
+  type DynamicPublishedInvocationResult,
   type InvocationActor,
   type DynamicPublishedSnapshotAnchors,
 } from '@/modules/action-invocation'
@@ -17,6 +20,7 @@ import type {
 } from '@/modules/capability-supply/route-transport-runtime'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   encodeX402PaymentRequiredHeader,
@@ -102,8 +106,7 @@ export type DevelopmentDynamicInvocationEvidence = Readonly<{
     actionId: string
     actionVersion: string
     authority: Readonly<{
-      amountMinor: 1
-      currency: 'USD'
+      amount: ExactAmount
       network: string
       asset: string
       payTo: string
@@ -170,6 +173,8 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       const hostActor = origin.kind === 'request_owned' ? requestActor : actor
       const effects = { payment: 0, provider: 0 }
       const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+      const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+      const durablePort = createDevelopmentDurablePort(durableState)
       let invocationSequence = 0
       let authoritySequence = 0
       let attemptSequence = 0
@@ -181,8 +186,10 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         nextInvocationRef: () => `dynamic:invocation:${origin.kind}:${++invocationSequence}`,
         nextAuthorityRef: () => `dynamic:authority:${++authoritySequence}`,
         nextAttemptRef: () => `dynamic:attempt:${++attemptSequence}`,
+        durablePort,
+        developmentSnapshot: durableState,
       })
-      const prepared = adapter.prepare({
+      const prepared = await adapter.prepare({
         origin, actor: hostActor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
       })
       const preparedAuthority = requireDynamicFixture(
@@ -191,14 +198,14 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       )
       const sourceRow = source.list()[0]
       if (sourceRow === undefined) throw new Error('dynamic_published_source_missing')
-      const decided = adapter.decide({
+      const decided = await adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: preparedAuthority.reference,
         actor: hostActor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = adapter.acquire({
+      const acquired = await adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: preparedAuthority.reference,
@@ -222,13 +229,13 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         leaseOwner: acquired.view.control.leaseOwner,
         effectGeneration: acquired.view.control.effectGeneration,
       })
-      const cancellation = adapter.cancel({
+      const cancellation = await adapter.cancel({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: completed.view.invocationVersion,
         actor,
         origin,
       })
-      const snapshot = adapter.exportSnapshot()
+      const snapshot = adapter.exportDevelopmentSnapshot()
       const loaded = loadDynamicPublishedAdapterSnapshot(
         structuredClone(snapshot),
         snapshotAnchors(
@@ -259,7 +266,9 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         nextInvocationRef: () => 'unused',
         nextAuthorityRef: () => 'unused',
         nextAttemptRef: () => 'unused',
-        durableState: loaded.durableState,
+        durablePort: loaded.durablePort,
+        initialSnapshot: loaded.initialSnapshot,
+        developmentSnapshot: loaded.developmentSnapshot,
         paymentAttempts: loaded.paymentAttempts,
         paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
       })
@@ -269,8 +278,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         actionId: completed.view.action.id,
         actionVersion: completed.view.action.contractVersion,
         authority: {
-          amountMinor: 1 as const,
-          currency: 'USD' as const,
+          amount: { currency: 'USD', units: '1', exponent: 2 },
           network: fixture.operation.identity.payment.kind === 'x402'
             ? fixture.operation.identity.payment.network : 'none',
           asset: fixture.operation.identity.payment.kind === 'x402'
@@ -292,6 +300,8 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     }
     const recoveryEffects = { payment: 0, provider: 0 }
     const recoverySource = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const recoveryDurableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+    const recoveryDurablePort = createDevelopmentDurablePort(recoveryDurableState)
     const recoveryOrigin = developmentOriginAt(1)
     const recoveryAdapter = createDynamicPublishedActionInvocationAdapter({
       operation: fixture.operation,
@@ -301,8 +311,10 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       nextInvocationRef: () => 'dynamic:invocation:recovery',
       nextAuthorityRef: () => 'dynamic:authority:recovery',
       nextAttemptRef: () => 'dynamic:attempt:recovery',
+      durablePort: recoveryDurablePort,
+      developmentSnapshot: recoveryDurableState,
     })
-    const recoveryPrepared = recoveryAdapter.prepare({
+    const recoveryPrepared = await recoveryAdapter.prepare({
       origin: recoveryOrigin,
       actor,
       value: { symbol: 'BTC', convert: 'USD' },
@@ -312,14 +324,14 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       recoveryPrepared.authority,
       'dynamic_published_recovery_authority_missing',
     )
-    const recoveryDecided = recoveryAdapter.decide({
+    const recoveryDecided = await recoveryAdapter.decide({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: recoveryPrepared.invocationVersion,
       authorityRef: recoveryAuthority.reference,
       actor, origin: recoveryOrigin, accept: true,
     })
     if (recoveryDecided.kind !== 'accepted') throw new Error(recoveryDecided.code)
-    const recoveryAcquired = recoveryAdapter.acquire({
+    const recoveryAcquired = await recoveryAdapter.acquire({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: recoveryDecided.view.invocationVersion,
       authorityRef: recoveryAuthority.reference,
@@ -345,13 +357,13 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       leaseOwner: recoveryAcquired.view.control.leaseOwner,
       effectGeneration: recoveryAcquired.view.control.effectGeneration,
     })
-    const retry = recoveryAdapter.acquire({
+    const retry = await recoveryAdapter.acquire({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       authorityRef: recoveryAuthority.reference,
       actor, origin: recoveryOrigin, leaseOwner: 'worker:retry', leaseMs: 30_000,
     })
-    const cancellation = recoveryAdapter.cancel({
+    const cancellation = await recoveryAdapter.cancel({
       invocationRef: recoveryPrepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       actor, origin: recoveryOrigin,
@@ -359,7 +371,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     if (retry.kind !== 'refused' || staleWorker.kind !== 'refused' || cancellation.kind !== 'refused') {
       throw new Error('dynamic_published_recovery_fence_failed')
     }
-    const recoverySnapshot = recoveryAdapter.exportSnapshot()
+    const recoverySnapshot = recoveryAdapter.exportDevelopmentSnapshot()
     const recoveryAttempt = uncertain.view.attempts[0]
     if (recoveryAttempt === undefined) throw new Error('dynamic_published_recovery_attempt_missing')
     const evidenceMaterial = {
@@ -373,7 +385,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       resolution: 'released' as const,
       observedAt: new Date(now).toISOString(),
     }
-    const reconciled = recoveryAdapter.reconcile({
+    const reconciled = await recoveryAdapter.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: recoveryAttempt.attemptRef,
@@ -399,6 +411,8 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     }
     const semanticEffects = { payment: 0, provider: 0 }
     const semanticSource = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const semanticDurableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+    const semanticDurablePort = createDevelopmentDurablePort(semanticDurableState)
     let semanticInvocationSequence = 0
     let semanticAuthoritySequence = 0
     let semanticAttemptSequence = 0
@@ -410,9 +424,11 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       nextInvocationRef: () => `semantic:invocation:${++semanticInvocationSequence}`,
       nextAuthorityRef: () => `semantic:authority:${++semanticAuthoritySequence}`,
       nextAttemptRef: () => `semantic:attempt:${++semanticAttemptSequence}`,
+      durablePort: semanticDurablePort,
+      developmentSnapshot: semanticDurableState,
     })
     const executeSemantic = async () => {
-      const prepared = semanticAdapter.prepare({
+      const prepared = await semanticAdapter.prepare({
         origin: developmentOriginAt(1),
         actor,
         value: { symbol: 'BTC', convert: 'USD' },
@@ -422,7 +438,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         prepared.authority,
         'dynamic_published_semantic_authority_missing',
       )
-      const decided = semanticAdapter.decide({
+      const decided = await semanticAdapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: semanticAuthority.reference,
@@ -431,7 +447,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const acquired = semanticAdapter.acquire({
+      const acquired = await semanticAdapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: semanticAuthority.reference,
@@ -460,7 +476,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     }
     const semanticFirst = await executeSemantic()
     const semanticSecond = await executeSemantic()
-    const semanticSnapshot = semanticAdapter.exportSnapshot()
+    const semanticSnapshot = semanticAdapter.exportDevelopmentSnapshot()
     const sharedOutcomeRef = semanticSource.read(semanticFirst.invocationRef)?.resultIdentity?.sourceResultRef
     if (sharedOutcomeRef === undefined
       || semanticSource.read(semanticSecond.invocationRef)?.resultIdentity?.sourceResultRef !== sharedOutcomeRef
@@ -479,6 +495,8 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       })),
     }
     const killSource = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const killDurableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
+    const killDurablePort = createDevelopmentDurablePort(killDurableState)
     const killAdapter = createDynamicPublishedActionInvocationAdapter({
       operation: fixture.operation,
       source: killSource,
@@ -487,8 +505,10 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       nextInvocationRef: () => 'process-kill:invocation:1',
       nextAuthorityRef: () => 'process-kill:authority:1',
       nextAttemptRef: () => 'process-kill:attempt:1',
+      durablePort: killDurablePort,
+      developmentSnapshot: killDurableState,
     })
-    const killPrepared = killAdapter.prepare({
+    const killPrepared = await killAdapter.prepare({
       origin: developmentOriginAt(1),
       actor,
       value: { symbol: 'BTC', convert: 'USD' },
@@ -498,7 +518,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       killPrepared.authority,
       'dynamic_published_process_kill_authority_missing',
     )
-    const killDecided = killAdapter.decide({
+    const killDecided = await killAdapter.decide({
       invocationRef: killPrepared.invocationRef,
       expectedInvocationVersion: killPrepared.invocationVersion,
       authorityRef: killAuthority.reference,
@@ -507,7 +527,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       accept: true,
     })
     if (killDecided.kind !== 'accepted') throw new Error(killDecided.code)
-    const killAcquired = killAdapter.acquire({
+    const killAcquired = await killAdapter.acquire({
       invocationRef: killPrepared.invocationRef,
       expectedInvocationVersion: killDecided.view.invocationVersion,
       authorityRef: killAuthority.reference,
@@ -533,7 +553,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       authorityRef: killAuthority.reference,
       attemptRef: killAcquired.view.control.attemptRef,
       status: 'pending' as const,
-      snapshot: killAdapter.exportSnapshot(),
+      snapshot: killAdapter.exportDevelopmentSnapshot(),
     }
     const sourceDigest = canonicalDigest({
       operation: fixture.operation,
@@ -651,7 +671,9 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       nextInvocationRef: () => 'verifier:unused',
       nextAuthorityRef: () => 'verifier:unused',
       nextAttemptRef: () => 'verifier:unused',
-      durableState: loaded.durableState,
+      durablePort: loaded.durablePort,
+      initialSnapshot: loaded.initialSnapshot,
+      developmentSnapshot: loaded.developmentSnapshot,
       paymentAttempts: loaded.paymentAttempts,
       paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
     })
@@ -755,7 +777,9 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     nextInvocationRef: () => 'verifier:unused',
     nextAuthorityRef: () => 'verifier:unused',
     nextAttemptRef: () => 'verifier:unused',
-    durableState: loadedProcessKill.durableState,
+    durablePort: loadedProcessKill.durablePort,
+    initialSnapshot: loadedProcessKill.initialSnapshot,
+    developmentSnapshot: loadedProcessKill.developmentSnapshot,
     paymentAttempts: loadedProcessKill.paymentAttempts,
     paymentAuthorizationEvents: loadedProcessKill.paymentAuthorizationEvents,
   })
@@ -796,8 +820,9 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     || packet.cases.some((entry) => (
       entry.actionId !== packet.fixture.operation.operationId
       || entry.actionVersion !== packet.fixture.descriptor.version
-      || entry.authority.amountMinor !== 1
-      || entry.authority.currency !== 'USD'
+      || entry.authority.amount.currency !== 'USD'
+      || entry.authority.amount.units !== '1'
+      || entry.authority.amount.exponent !== 2
       || entry.authority.network !== 'eip155:8453'
       || entry.authority.asset !== '0xmock-usdc'
       || entry.authority.payTo !== '0xmock-provider-recipient'
@@ -884,6 +909,22 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
+    readProviderConnectionCredentialRef: (input) => {
+      if (
+        input.connectionRef !== 'connection:mock-provider'
+        || input.providerRef !== 'provider:mock-provider'
+        || input.adapterId !== 'x402-fetch:v2'
+        || input.authorityGeneration !== 1
+      ) return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+      const authorityDigest = canonicalDigest({
+        connectionRef: 'connection:mock-provider',
+        providerRef: 'provider:mock-provider',
+        authorityGeneration: 1,
+      })
+      return input.authorityDigest === authorityDigest
+        ? { kind: 'resolved' as const, credentialRef: 'connection:mock-provider' }
+        : { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    },
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({

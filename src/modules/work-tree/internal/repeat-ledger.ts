@@ -1,15 +1,11 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
 
 const identifier = z.string().trim().min(1).max(300)
 const digest = identifier
-const money = z.strictObject({
-  currency: z.string().trim().regex(/^[A-Z]{3}$/u),
-  amountMinor: z.number().int().nonnegative().safe(),
-})
-
-export type RepeatMoney = z.infer<typeof money>
+const money = exactAmountSchema
 
 export const workTreeRepeatReserveInputSchema = z.strictObject({
   projectId: identifier,
@@ -92,9 +88,9 @@ const finalReceiptSchema = z.strictObject({
   reconcileOperationKey: identifier.optional(),
   state: useStateSchema,
   releasedOccurrences: boundedCount,
+  releasedSpend: money,
   releasedDataAllocations: boundedCount,
-  releasedSpendMinor: boundedCount,
-  heldSpendMinor: boundedCount.optional(),
+  heldSpend: money.optional(),
   heldDataAllocations: boundedCount.optional(),
 })
 const actualSpendSchema = money.optional()
@@ -120,7 +116,7 @@ const repeatInspectUseSchema = z.strictObject({
   actualSpend: actualSpendSchema,
   actualDataAllocations: boundedCount.optional(),
   releasedOccurrences: boundedCount,
-  releasedSpendMinor: boundedCount,
+  releasedSpend: money,
   releasedDataAllocations: boundedCount,
   finalizeOperationKey: identifier.optional(),
   reconcileOperationKey: identifier.optional(),
@@ -195,8 +191,8 @@ export function repeatPermissionDigest(input: Readonly<{
   delegatedCredentialId: string
   validFrom: number
   validUntil: number
-  perUseSpend: RepeatMoney
-  cumulativeSpend: RepeatMoney
+  perUseSpend: ExactAmount
+  cumulativeSpend: ExactAmount
   occurrenceLimit: number
   perUseDataAllocations: number
   cumulativeDataAllocations: number

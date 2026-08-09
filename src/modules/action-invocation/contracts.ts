@@ -1,6 +1,27 @@
 import type { ActionContext, ActionResult } from '@/modules/common/action'
+import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
+import type { JsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ReconciliationEvidence } from './reconciliation-evidence'
+
+export type ActionInvocationLimitValue = number | ExactAmount
+export type ActionInvocationLimits = Readonly<Record<string, ActionInvocationLimitValue>>
+export function parseActionInvocationLimits(
+  value: Readonly<Record<string, JsonValue>>,
+): ActionInvocationLimits | undefined {
+  const limits: Record<string, ActionInvocationLimitValue> = {}
+  for (const [key, raw] of Object.entries(value)) {
+    if (key === 'amount') {
+      const parsed = exactAmountSchema.safeParse(raw)
+      if (!parsed.success) return undefined
+      limits[key] = parsed.data
+      continue
+    }
+    if (typeof raw !== 'number') return undefined
+    limits[key] = raw
+  }
+  return limits
+}
 
 export type ActionInvocationOrigin =
   | Readonly<{ kind: 'request_owned'; requestRef: string; revision: number }>
@@ -16,6 +37,35 @@ export type StandingMandateAuthorityBasis = Readonly<{
   authorityUseRef: string
   grantEvidenceRef: string
 }>
+export type CustomerRequestMandateAuthorityBasis = Readonly<{
+  kind: 'customer_request_mandate_use'
+  mandateRef: string
+  mandateDigest: string
+  requestRevision: number
+  routeGeneration: number
+  authorization:
+    | Readonly<{
+        kind: 'explicit'
+        authorizationEvidenceRef: string
+        authorizationEvidenceDigest: string
+      }>
+    | Readonly<{
+        kind: 'standing_low_risk'
+        standingPolicyRef: string
+        standingPolicyDigest: string
+        authorityUseRef: string
+      }>
+  grantRef: string
+  grantDigest: string
+}>
+export type PublicCapabilityAuthorityBasis = Readonly<{
+  kind: 'public_capability_use'
+  publicationRef: string
+  publicationRevision: number
+  operationRef: string
+  bindingId: string
+  bindingRegistrationHash: string
+}>
 
 export type PreparedInvocation = Readonly<{
   materialInputDigest: string
@@ -23,32 +73,34 @@ export type PreparedInvocation = Readonly<{
   consequence: string
   dataUse: Readonly<{
     fields: readonly string[]
-    limits: Readonly<Record<string, number>>
+    limits: ActionInvocationLimits
   }>
   preparedAt: string
   freshUntil: string
 }>
 
-export type DecisionRefusalCode =
-  | 'invocation_not_found'
-  | 'cross_principal_refused'
-  | 'cross_origin_refused'
-  | 'stale_invocation_version'
-  | 'authority_expired'
-  | 'material_input_changed'
-  | 'authority_not_accepted'
-  | 'reconciliation_required'
-  | 'lease_not_current'
-  | 'effect_generation_stale'
-  | 'invalid_control_state'
-  | 'command_identity_conflict'
-  | 'evidence_malformed'
-  | 'evidence_digest_mismatch'
-  | 'evidence_source_mismatch'
-  | 'evidence_attempt_mismatch'
-  | 'evidence_generation_stale'
-  | 'evidence_time_invalid'
-  | 'evidence_source_unverified'
+export const DecisionRefusalCodeValues = [
+  'invocation_not_found',
+  'cross_principal_refused',
+  'cross_origin_refused',
+  'stale_invocation_version',
+  'authority_expired',
+  'material_input_changed',
+  'authority_not_accepted',
+  'reconciliation_required',
+  'lease_not_current',
+  'effect_generation_stale',
+  'invalid_control_state',
+  'command_identity_conflict',
+  'evidence_malformed',
+  'evidence_digest_mismatch',
+  'evidence_source_mismatch',
+  'evidence_attempt_mismatch',
+  'evidence_generation_stale',
+  'evidence_time_invalid',
+  'evidence_source_unverified',
+] as const
+export type DecisionRefusalCode = (typeof DecisionRefusalCodeValues)[number]
 
 export type ActionAttemptView = Readonly<{
   attemptRef: string
@@ -68,11 +120,11 @@ export type ActionAttemptView = Readonly<{
   outcome:
     | Readonly<{ state: 'running' }>
     | Readonly<{ state: 'returned'; businessOutcome: string }>
-    | Readonly<{ state: 'failed'; retry: 'safe_before_release'; message: string }>
+    | Readonly<{ state: 'failed'; retry: 'safe_before_release'; errorDigest?: string }>
     | Readonly<{
         state: 'uncertain'
         retry: 'reconcile_before_retry'
-        message: string
+        errorDigest?: string
         reconciliationRequiredAt: string
       }>
     | Readonly<{
@@ -88,18 +140,18 @@ export type ActionAttemptView = Readonly<{
 export type ActionInvocationView<Result extends ActionResult = ActionResult> = Readonly<{
   invocationRef: string
   invocationVersion: number
-  environment: 'MOCK/DEVELOPMENT ONLY'
-  persistence: 'in_memory_only' | 'durable_control'
   origin: ActionInvocationOrigin
   owner: InvocationActor
   action: Readonly<{ id: string; contractVersion: string }>
   desired: Readonly<{ state: 'invoke' }>
+  attempts: readonly ActionAttemptView[]
   prepared?: PreparedInvocation
   authority?: Readonly<{ reference: string; expiresAt: string }>
   acceptedAuthority?:
     | Readonly<{ kind: 'approve_each'; authorityRef: string }>
     | StandingMandateAuthorityBasis
-  attempts: readonly ActionAttemptView[]
+    | CustomerRequestMandateAuthorityBasis
+    | PublicCapabilityAuthorityBasis
   observedResolution:
     | Readonly<{ state: 'pending' }>
     | Readonly<{
@@ -151,15 +203,15 @@ export type InvocationDecision<Result extends ActionResult> =
 
 export interface ActionInvocationTracer<Input, Result extends ActionResult> {
   invoke(input: InvokeActionInput<Input>): Promise<ActionInvocationView<Result>>
-  prepare(input: PrepareActionInput<Input>): ActionInvocationView<Result>
+  prepare(input: PrepareActionInput<Input>): Promise<ActionInvocationView<Result>>
   prepareExisting(input: PrepareActionInput<Input> & Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
-  }>): ActionInvocationView<Result>
+  }>): Promise<ActionInvocationView<Result>>
   revisePrepared(input: PrepareActionInput<Input> & Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   decide(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -167,7 +219,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     actor: InvocationActor
     origin: ActionInvocationOrigin
     accept: boolean
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   authorizeStandingMandateUse(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -175,7 +227,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     actor: InvocationActor
     origin: ActionInvocationOrigin
     basis: StandingMandateAuthorityBasis
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   execute(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -194,7 +246,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     leaseOwner: string
     leaseMs: number
     acceptedAuthorityBasis?: StandingMandateAuthorityBasis
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   executeAcquired(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -209,13 +261,13 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     leaseOwner: string
     effectGeneration: number
     release: 'not_released' | 'released' | 'possibly_released'
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   cancel(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
     actor: InvocationActor
     origin: ActionInvocationOrigin
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   reconcile(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -223,7 +275,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     actor: InvocationActor
     origin: ActionInvocationOrigin
     evidence: ReconciliationEvidence
-  }>): InvocationDecision<Result>
+  }>): Promise<InvocationDecision<Result>>
   inspect(invocationRef: string): ActionInvocationView<Result> | undefined
   exportSnapshot(): InMemoryControlSnapshot<Input, Result>
 }
@@ -234,7 +286,7 @@ export type InMemoryControlSnapshot<Input, Result extends ActionResult> = Readon
     sourceRef: string
     control: Pick<
       ActionInvocationView<Result>,
-      'invocationRef' | 'invocationVersion' | 'environment' | 'persistence' |
+      'invocationRef' | 'invocationVersion' |
       'origin' | 'owner' | 'action' | 'desired' | 'authority' | 'attempts' |
       'acceptedAuthority' | 'freshness' | 'control'
     >
@@ -251,11 +303,14 @@ export type AuthorityBindingSnapshot = Readonly<{
   actionId: string
   contractVersion: string
   digest: string
+  expiresAt: string
   targetDigest: string
   consequence: string
-  limits: Readonly<Record<string, number>>
-  expiresAt: string
+  limits: ActionInvocationLimits
   acceptedBasis?:
     | Readonly<{ kind: 'approve_each'; authorityRef: string }>
     | StandingMandateAuthorityBasis
+    | CustomerRequestMandateAuthorityBasis
+    | PublicCapabilityAuthorityBasis
+
 }>

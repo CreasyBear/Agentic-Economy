@@ -1,5 +1,7 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { literalUnion } from '@/modules/common/convex-literals'
+import { DecisionRefusalCodeValues } from '../contracts'
 
 export const actionInvocationOriginValue = v.union(
   v.object({ kind: v.literal('request_owned'), requestRef: v.string(), revision: v.number() }),
@@ -25,7 +27,7 @@ export const invocationControlValue = v.union(
   v.object({ state: v.literal('reconciliation_required'), attemptRef: v.string() }),
   v.object({ state: v.literal('terminal') }),
   v.object({ state: v.literal('cancelled'), effect: v.literal('not_released') }),
-  v.object({ state: v.literal('invalidated'), reason: v.string() }),
+  v.object({ state: v.literal('invalidated'), reason: literalUnion(DecisionRefusalCodeValues) }),
 )
 export const attemptReleaseValue = v.union(
   v.object({ state: v.literal('not_released') }),
@@ -41,14 +43,10 @@ export const durableAttemptOutcomeValue = v.union(
   v.object({
     state: v.literal('failed'), retry: v.literal('safe_before_release'),
     errorDigest: v.optional(v.string()),
-    /** @deprecated Legacy rows only; current writes intentionally omit this field. */
-    message: v.optional(v.string()),
   }),
   v.object({
     state: v.literal('uncertain'), retry: v.literal('reconcile_before_retry'),
     errorDigest: v.optional(v.string()),
-    /** @deprecated Legacy rows only; current writes intentionally omit this field. */
-    message: v.optional(v.string()),
     reconciliationRequiredAt: v.string(),
   }),
   v.object({
@@ -94,17 +92,54 @@ export const acceptedAuthorityValue = v.union(
     authorityUseRef: v.string(),
     grantEvidenceRef: v.string(),
   }),
+  v.object({
+    kind: v.literal('customer_request_mandate_use'),
+    mandateRef: v.string(),
+    mandateDigest: v.string(),
+    requestRevision: v.number(),
+    routeGeneration: v.number(),
+    authorization: v.union(
+      v.object({
+        kind: v.literal('explicit'),
+        authorizationEvidenceRef: v.string(),
+        authorizationEvidenceDigest: v.string(),
+      }),
+      v.object({
+        kind: v.literal('standing_low_risk'),
+        standingPolicyRef: v.string(),
+        standingPolicyDigest: v.string(),
+        authorityUseRef: v.string(),
+      }),
+    ),
+    grantRef: v.string(),
+    grantDigest: v.string(),
+  }),
+  v.object({
+    kind: v.literal('public_capability_use'),
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    operationRef: v.string(),
+    bindingId: v.string(),
+    bindingRegistrationHash: v.string(),
+  }),
 )
+const exactAmountValue = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
+
+const invocationLimitsValue = v.record(v.string(), v.union(v.number(), exactAmountValue))
+
 export const authorityBindingValue = v.object({
   reference: v.string(), invocationRef: v.string(), actor: invocationActorValue, origin: actionInvocationOriginValue,
   invocationVersion: v.number(), actionId: v.string(), contractVersion: v.string(),
   digest: v.string(), targetDigest: v.string(), consequence: v.string(),
-  limits: v.record(v.string(), v.number()), expiresAt: v.string(),
+  limits: invocationLimitsValue, expiresAt: v.string(),
   acceptedBasis: v.optional(acceptedAuthorityValue),
 })
 export const durableControlProjectionValue = v.object({
   invocationRef: v.string(), invocationVersion: v.number(),
-  environment: v.literal('MOCK/DEVELOPMENT ONLY'), persistence: v.literal('durable_control'),
   origin: actionInvocationOriginValue, owner: invocationActorValue,
   action: v.object({ id: v.string(), contractVersion: v.string() }),
   desired: v.object({ state: v.literal('invoke') }),
@@ -126,12 +161,10 @@ export const actionInvocationTables = {
     preparedMaterialDigest: v.optional(v.string()),
     preparedTargetDigest: v.optional(v.string()),
     consequence: v.optional(v.string()),
-    dataLimitSummary: v.optional(v.record(v.string(), v.number())),
+    dataLimitSummary: v.optional(invocationLimitsValue),
     authorityReference: v.optional(v.string()),
     authorityBinding: v.optional(authorityBindingValue),
     authorityDecisionAt: v.optional(v.string()),
-    /** @deprecated Legacy rows only; current writes intentionally omit this field. */
-    acceptedAuthority: v.optional(acceptedAuthorityValue),
     currentAttemptRef: v.optional(v.string()),
     currentEffectGeneration: v.optional(v.number()),
     currentLeaseOwner: v.optional(v.string()),

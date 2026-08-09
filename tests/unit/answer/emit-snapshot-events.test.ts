@@ -23,6 +23,24 @@ describe('emitSnapshotEvents', () => {
     expect(events[5]).toMatchObject({ type: 'summary-delta', delta: 'First sentence.' })
     expect(events[6]).toMatchObject({ type: 'summary-delta', delta: 'Second sentence.' })
   })
+
+  it('uses answer mode for a data answer with no providers', async () => {
+    const { selectedProvider: _selectedProvider, compactLayout: _compactLayout, ...base } = snapshot()
+    const events = []
+    for await (const event of emitSnapshotEvents({
+      ...base,
+      providers: [],
+      layoutProfile: 'data_answer',
+    }, { emitThinking: false, pauseMs: 0 })) {
+      events.push(event)
+    }
+
+    expect(events[0]).toMatchObject({
+      type: 'plan',
+      mode: 'answer',
+      layoutProfile: 'data_answer',
+    })
+  })
 })
 
 function snapshot(): AnswerSnapshot {

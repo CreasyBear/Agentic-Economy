@@ -1,0 +1,59 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import type { ComponentType } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/jsdom-platform'
+
+import { Route as AgentAccessAuthorizeRoute } from '@/routes/_operator/agent-access.authorize'
+
+const Component = AgentAccessAuthorizeRoute.options.component as ComponentType
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe('/agent-access/authorize consent loading', () => {
+  it('shows terminal recovery copy when the consent request is unavailable', async () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({ user_code: 'BAD-CODE' })
+    let resolveResponse: (response: Response) => void = () => undefined
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      () => new Promise<Response>((resolve) => {
+        resolveResponse = resolve
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Component />)
+
+    expect(screen.getByText('Loading access request')).toBeTruthy()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    resolveResponse(new Response(null, { status: 404 }))
+    await waitFor(() => expect(screen.getByText('Access request unavailable')).toBeTruthy())
+
+    expect(screen.queryByText('Loading access request')).toBeNull()
+    expect(screen.getByText('It may have expired. Start a new request from your assistant.')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/oauth/authorize?user_code=BAD-CODE',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
+  })
+
+  it('reaches approval controls after a valid consent response', async () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({ user_code: 'GOOD-CODE' })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      '<main data-ae-consent data-grant-ref="grant-1" data-client-name="Test assistant" data-authority-mode="inspect_only"></main>',
+      { status: 200 },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Component />)
+
+    expect(await screen.findByRole('button', { name: 'Approve access' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
+    expect(screen.queryByText('Loading access request')).toBeNull()
+  })
+})

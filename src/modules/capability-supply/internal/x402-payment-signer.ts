@@ -1,11 +1,14 @@
 import { x402Client } from '@x402/core/client'
 import { decodePaymentRequiredHeader, encodePaymentRequiredHeader, x402HTTPClient } from '@x402/core/http'
+import { validatePaymentRequired, type PaymentRequired as X402SchemaPaymentRequired } from '@x402/core/schemas'
 import type { PaymentRequired } from '@x402/core/types'
 import { ExactEvmScheme } from '@x402/evm/exact/client'
 import { appendPaymentIdentifierToExtensions } from '@x402/extensions/payment-identifier'
 import { privateKeyToAccount } from 'viem/accounts'
 
 import type { X402PaymentSignatureRequest } from '../route-transport-runtime'
+
+export type X402ValidatedPaymentRequired = X402SchemaPaymentRequired
 
 export type X402PaymentRequired = {
   x402Version: number
@@ -32,6 +35,16 @@ export function encodeX402PaymentRequiredHeader(paymentRequired: X402PaymentRequ
 
 export function decodeX402PaymentRequiredHeader(header: string): unknown {
   return decodePaymentRequiredHeader(header)
+}
+
+/**
+ * Validates a PaymentRequired (402 challenge) document against the installed @x402 core schema.
+ * Throws (zod error) when the document is not a valid V1/V2 PaymentRequired. This is the ONLY
+ * admission-side @x402 protocol-SDK call site; the quarantine boundary keeps protocol imports in
+ * this reviewed adapter file.
+ */
+export function validateX402PaymentRequired(value: unknown): X402ValidatedPaymentRequired {
+  return validatePaymentRequired(value)
 }
 
 const privateKeyPattern = /^0x[0-9a-fA-F]{64}$/

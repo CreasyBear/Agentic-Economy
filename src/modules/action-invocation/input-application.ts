@@ -6,7 +6,7 @@ import { materializeRuntimePublishedOperation } from '@/modules/capability-suppl
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 
 import type {
   ActionInvocationOrigin,
@@ -16,7 +16,6 @@ import type {
 } from './contracts'
 import { dynamicPublishedSourceDigest, type DynamicPublishedInvocationResult } from './dynamic-published-contract'
 import { dynamicPublishedOperationSlot, type DynamicPublishedSourcePort } from './dynamic-published-source'
-import type { DevelopmentDurableState } from './internal/development-durable-port'
 import type { DurableActionInvocationPort } from './internal/durable-contracts'
 import {
   inspectUserInputContract,
@@ -36,14 +35,13 @@ type PrepareValue = (request: Readonly<{
     expectedInvocationVersion: number
     revise: boolean
   }>
-}>) => ActionInvocationView<DynamicPublishedInvocationResult>
+}>) => Promise<ActionInvocationView<DynamicPublishedInvocationResult>>
 
 export function createDynamicPublishedInputApplication(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
   source: DynamicPublishedSourcePort
   durablePort: DurableActionInvocationPort<DynamicPublishedInvocationResult>
-  durableState: DevelopmentDurableState<DynamicPublishedInvocationResult>
   work: Map<string, InvocationInputWork>
   history: InvocationInputHistory[]
   now: () => number
@@ -52,11 +50,11 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
   inspect: (invocationRef: string) => ActionInvocationView<DynamicPublishedInvocationResult> | undefined
 }>) {
   return {
-    begin(request: Readonly<{
+    async begin(request: Readonly<{
       origin: ActionInvocationOrigin
       actor: InvocationActor
       partial: Readonly<Record<string, StableHashValue>>
-    }>): InvocationInputWork {
+    }>): Promise<InvocationInputWork> {
       const contract = inspectUserInputContract(input.operation)
       const current = input.source.current(dynamicPublishedOperationSlot(input.operation))
       if (current === undefined
@@ -85,13 +83,12 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
       const commandMaterial: StableHashValue = { kind: 'begin', row }
       const commandDigest = canonicalDigest(commandMaterial)
       const commandId = `${invocationRef}:create:begin_information`
-      const result = input.durablePort.transact({
+      const result = await input.durablePort.transact({
         commandId, commandDigest, expectedInvocationVersion: null,
         row: {
           invocationRef, invocationVersion: 1, sourceRef: invocationRef,
           control: {
-            invocationRef, invocationVersion: 1, environment: 'MOCK/DEVELOPMENT ONLY',
-            persistence: 'durable_control', origin: request.origin, owner: request.actor,
+            invocationRef, invocationVersion: 1, origin: request.origin, owner: request.actor,
             action: { id: input.operation.operationId, contractVersion: input.descriptor.version },
             desired: { state: 'invoke' }, freshness: { state: 'not_observed' },
             control: { state: 'gathering_information', missingFields },
@@ -111,12 +108,12 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
       })
       return row
     },
-    answer(request: Readonly<{
+    async answer(request: Readonly<{
       invocationRef: string
       actor: InvocationActor
       answers: Readonly<Record<string, StableHashValue>>
       freshnessMs: number
-    }>): InvocationInputWork | ActionInvocationView<DynamicPublishedInvocationResult> {
+    }>): Promise<InvocationInputWork | ActionInvocationView<DynamicPublishedInvocationResult>> {
       const current = input.work.get(request.invocationRef)
       if (current === undefined) throw new Error('invocation_information_not_found')
       if (current.owner.callerRef !== request.actor.callerRef
@@ -128,7 +125,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
       const nextVersion = current.invocationVersion + 1
       const now = new Date(input.now()).toISOString()
       if (missingFields.length === 0) {
-        const view = input.prepareValue({
+        const view = await input.prepareValue({
           origin: current.origin, actor: current.owner, value: knownInput as StableHashValue,
           freshnessMs: request.freshnessMs,
           continuation: {
@@ -151,14 +148,14 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
       }
       const next: InvocationInputWork = {
         ...current, invocationVersion: nextVersion, knownInput, missingFields,
-        askedFields: stableUnique([...current.askedFields, ...missingFields]), updatedAt: now,
+        askedFields: uniq([...current.askedFields, ...missingFields]), updatedAt: now,
       }
       const commandMaterial: StableHashValue = { kind: 'answer', current: current.invocationVersion, next }
       const commandDigest = canonicalDigest(commandMaterial)
-      const control = input.durableState.controls.get(current.invocationRef)
+      const control = await input.durablePort.readControl(current.invocationRef)
       if (control === undefined) throw new Error('invocation_control_not_found')
       const commandId = `${current.invocationRef}:${current.invocationVersion}:answer_information`
-      const result = input.durablePort.transact({
+      const result = await input.durablePort.transact({
         commandId, commandDigest, expectedInvocationVersion: current.invocationVersion,
         row: {
           ...control, invocationVersion: nextVersion,
@@ -182,12 +179,12 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
       })
       return next
     },
-    correct(request: Readonly<{
+    async correct(request: Readonly<{
       invocationRef: string
       actor: InvocationActor
       corrections: Readonly<Record<string, StableHashValue>>
       freshnessMs: number
-    }>): InvocationDecision<DynamicPublishedInvocationResult> {
+    }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>> {
       const view = input.inspect(request.invocationRef)
       const row = input.source.read(request.invocationRef)
       if (view === undefined || row === undefined) {
@@ -211,7 +208,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
         ...request.corrections,
       }
       try {
-        const next = input.prepareValue({
+        const next = await input.prepareValue({
           origin: view.origin, actor: view.owner, value, freshnessMs: request.freshnessMs,
           continuation: {
             invocationRef: view.invocationRef,

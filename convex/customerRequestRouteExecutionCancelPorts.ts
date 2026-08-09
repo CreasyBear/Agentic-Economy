@@ -5,6 +5,7 @@ import type {
   CancellationAttemptSnapshot,
   PriorCancelCommand,
 } from '@/modules/customer-request/route-execution/machines'
+import type { RouteMandate } from '@/modules/customer-request/route-mandate'
 import { cancelReplayKind } from '@/modules/customer-request/route-execution/journal'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
@@ -14,10 +15,8 @@ import {
   queueNextStep,
   readRunProjection,
 } from './customerRequestRouteExecutionJournalPorts'
-import {
-  loadActiveRouteMandate,
-  loadEligibleRouteSupply,
-} from './customerRequestRouteExecutionOpenPorts'
+import { loadEligibleRouteSupply } from './customerRequestRouteExecutionOpenPorts'
+import { readCurrentRouteMandateStateForPrincipal } from './customerRequestRouteMandate'
 import {
   requireAttempt,
   requireDispatchByAttempt,
@@ -27,6 +26,17 @@ import {
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
 import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
+
+type CancellationMandateLoad = Readonly<
+  | {
+      kind: 'active'
+      mandateRef: string
+      mandateDigest: string
+      networkId: string
+      mandate: RouteMandate
+    }
+  | { kind: 'missing' }
+>
 
 export function cancelMutationPorts(ctx: MutationCtx): CancelMutationPorts {
   return {
@@ -179,9 +189,9 @@ export function cancelMutationPorts(ctx: MutationCtx): CancelMutationPorts {
 }
 
 export function cancelOpenPorts(ctx: QueryCtx | MutationCtx): CancelOpenPorts {
+  const now = Date.now()
   return {
-    now: () => Date.now(),
-
+    now: () => now,
     loadCancellationAttempt: async (cancellationRef) => {
       const cancellation = await ctx.db.query('customerRequestRouteCancellationAttempts')
         .withIndex('by_cancellationRef', (query) => query.eq('cancellationRef', cancellationRef))
@@ -195,12 +205,28 @@ export function cancelOpenPorts(ctx: QueryCtx | MutationCtx): CancelOpenPorts {
       return attempt === null ? null : toAttemptRecord(attempt)
     },
 
-    loadActiveMandateForCancellation: async (requestId, principalId, now) => (
-      await loadActiveRouteMandate(ctx, requestId, principalId, now)
-    ),
+    loadRunByRef: async (runRef) => {
+      const run = await ctx.db.query('customerRequestRouteRuns')
+        .withIndex('by_runRef', (query) => query.eq('runRef', runRef)).unique()
+      return run === null ? null : toRunRecord(run)
+    },
+
+    loadActiveMandateForCancellation: async (requestId, principalId, now) => {
+      const current = await readCurrentRouteMandateStateForPrincipal(
+        ctx, requestId, principalId, now, { requireCurrentGraph: false },
+      )
+      if (current.kind !== 'active') return { kind: 'missing' } satisfies CancellationMandateLoad
+      return {
+        kind: 'active' as const,
+        mandateRef: current.mandate.mandateRef,
+        mandateDigest: current.mandate.mandateDigest,
+        networkId: current.networkId,
+        mandate: current.mandate,
+      } satisfies CancellationMandateLoad
+    },
 
     loadEligibleExactCapabilitySupply: async (input) => (
-      await loadEligibleRouteSupply(ctx, input)
+      await loadEligibleRouteSupply(ctx, { ...input, now })
     ),
   }
 }

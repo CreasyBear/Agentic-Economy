@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto'
 import { base64Codec } from '@/modules/common/base64-codec'
 import { isRecord } from '@/modules/common/is-record'
+import { parseDecimalExactAmount, type ExactAmount } from '@/modules/money/public'
 
 import type { ShippingQuoteInput } from './public'
 
@@ -23,8 +24,8 @@ type ShippingProviderQuote = Readonly<{
   downstreamCarrier: string
   serviceCode: string
   serviceName?: string
-  expectedCost: Readonly<{ currency: string; amountMinor: number }>
-  maximumCost: Readonly<{ currency: string; amountMinor: number }>
+  expectedCost: ExactAmount
+  maximumCost: ExactAmount
   expectedLatencyMs: number
   dataFields: readonly string[]
   disclosures: readonly string[]
@@ -86,11 +87,11 @@ export function createShippoQuoteAdapter(input: Readonly<{
       const serviceLevel = isRecord(rate?.servicelevel) ? rate.servicelevel : undefined
       const serviceCode = text(serviceLevel?.token)
       const serviceName = text(serviceLevel?.name)
-      const amountMinor = moneyMinor(rate?.amount)
       const currency = currencyCode(rate?.currency)
+      const amount = currency === undefined ? undefined : providerAmount(currency, rate?.amount)
       const observedAt = timestamp(rate?.object_created)
       if (shipmentId === undefined || rateId === undefined || downstreamCarrier === undefined
-        || serviceCode === undefined || amountMinor === undefined || currency === undefined || observedAt === undefined) {
+        || serviceCode === undefined || amount === undefined || currency === undefined || observedAt === undefined) {
         return { kind: 'refused', reason: 'shippo_quote_invalid' }
       }
       const aeRefreshAfter = observedAt + freshnessWindowMs
@@ -98,7 +99,7 @@ export function createShippoQuoteAdapter(input: Readonly<{
       return providerQuote({
         provider: 'shippo', quoteInput, shipmentId, rateId, providerAccountId: input.carrierAccountId,
         downstreamCarrier, serviceCode, ...(serviceName === undefined ? {} : { serviceName }),
-        amountMinor, currency, observedAt, aeRefreshAfter,
+        amount, observedAt, aeRefreshAfter,
         environment: typeof rate?.test === 'boolean' ? (rate.test ? 'test' : 'production') : 'unknown',
         expectedLatencyMs: 2_500,
         delivery: compactDelivery({
@@ -147,11 +148,11 @@ export function createEasyPostQuoteAdapter(input: Readonly<{
       const rateId = text(rate?.id)
       const downstreamCarrier = text(rate?.carrier)
       const serviceCode = text(rate?.service)
-      const amountMinor = moneyMinor(rate?.rate)
       const currency = currencyCode(rate?.currency)
+      const amount = currency === undefined ? undefined : providerAmount(currency, rate?.rate)
       const observedAt = timestamp(rate?.created_at)
       if (shipmentId === undefined || rateId === undefined || downstreamCarrier === undefined
-        || serviceCode === undefined || amountMinor === undefined || currency === undefined || observedAt === undefined) {
+        || serviceCode === undefined || amount === undefined || currency === undefined || observedAt === undefined) {
         return { kind: 'refused', reason: 'easypost_quote_invalid' }
       }
       const aeRefreshAfter = observedAt + freshnessWindowMs
@@ -159,7 +160,7 @@ export function createEasyPostQuoteAdapter(input: Readonly<{
       const mode = rate?.mode
       return providerQuote({
         provider: 'easypost', quoteInput, shipmentId, rateId, providerAccountId: input.carrierAccountId,
-        downstreamCarrier, serviceCode, amountMinor, currency, observedAt, aeRefreshAfter,
+        downstreamCarrier, serviceCode, amount, observedAt, aeRefreshAfter,
         environment: mode === 'test' || mode === 'production' ? mode : 'unknown',
         expectedLatencyMs: 2_000,
         delivery: compactDelivery({
@@ -230,8 +231,7 @@ function providerQuote(input: Readonly<{
   downstreamCarrier: string
   serviceCode: string
   serviceName?: string
-  amountMinor: number
-  currency: string
+  amount: ExactAmount
   observedAt: number
   aeRefreshAfter: number
   environment: 'test' | 'production' | 'unknown'
@@ -247,8 +247,7 @@ function providerQuote(input: Readonly<{
     providerAccountId: input.providerAccountId,
     downstreamCarrier: input.downstreamCarrier,
     serviceCode: input.serviceCode,
-    amountMinor: input.amountMinor,
-    currency: input.currency,
+    amount: input.amount,
     observedAt: input.observedAt,
     aeRefreshAfter: input.aeRefreshAfter,
     inputDigest: input.quoteInput.inputDigest,
@@ -258,8 +257,8 @@ function providerQuote(input: Readonly<{
     providerShipmentId: input.shipmentId, providerRateId: input.rateId,
     providerAccountId: input.providerAccountId, downstreamCarrier: input.downstreamCarrier,
     serviceCode: input.serviceCode, ...(input.serviceName === undefined ? {} : { serviceName: input.serviceName }),
-    expectedCost: Object.freeze({ currency: input.currency, amountMinor: input.amountMinor }),
-    maximumCost: Object.freeze({ currency: input.currency, amountMinor: input.amountMinor }),
+    expectedCost: input.amount,
+    maximumCost: input.amount,
     expectedLatencyMs: input.expectedLatencyMs,
     dataFields: Object.freeze([
       'origin', 'destination', 'parcel',
@@ -272,7 +271,7 @@ function providerQuote(input: Readonly<{
   })
 }
 
-function issueProviderQuoteRef(material: Readonly<Record<string, string | number>>, signingKey: string): string {
+function issueProviderQuoteRef(material: Readonly<Record<string, string | number | ExactAmount>>, signingKey: string): string {
   const payload = base64Codec.toBase64Url(new TextEncoder().encode(JSON.stringify(material)))
   const signature = base64Codec.toBase64Url(createHmac('sha256', signingKey).update(payload).digest())
   return `ae-provider-quote:v2:${payload}:${signature}`
@@ -374,12 +373,12 @@ function currencyCode(value: unknown): string | undefined {
   return /^[A-Z]{3}$/.test(normalized) ? normalized : undefined
 }
 
-function moneyMinor(value: unknown): number | undefined {
-  if (typeof value !== 'string') return undefined
-  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/.exec(value)
-  if (match === null) return undefined
-  const amount = (BigInt(match[1] ?? '0') * 100n) + BigInt((match[2] ?? '').padEnd(2, '0') || '0')
-  return amount <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(amount) : undefined
+function providerAmount(currency: string, value: unknown): ExactAmount | undefined {
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value)) return undefined
+  const decimalPoint = value.indexOf('.')
+  const exponent = decimalPoint === -1 ? 0 : value.length - decimalPoint - 1
+  const amount = parseDecimalExactAmount(currency, value, exponent)
+  return amount === undefined ? undefined : Object.freeze(amount)
 }
 
 function roundOneDecimal(value: number): number {

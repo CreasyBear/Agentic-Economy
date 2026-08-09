@@ -3,6 +3,9 @@ import {
   buildBoundaryNextStep,
   buildBoundaryOneLine,
   buildBoundarySummary,
+  buildSafetyRefusalNextStep,
+  buildSafetyRefusalOneLine,
+  buildSafetyRefusalSummary,
   buildUnsupportedNextStep,
   buildUnsupportedOneLine,
   buildUnsupportedSummary,
@@ -19,7 +22,7 @@ import {
   type TurnPathResult,
 } from './types'
 
-type BoundaryKind = 'boundary_explain' | 'unsupported'
+type BoundaryKind = 'boundary_explain' | 'unsupported' | 'web_search_unavailable' | 'safety_refusal'
 
 export const boundaryTurnPath: TurnPath<[BoundaryKind]> = {
   id: 'boundary_explain',
@@ -32,59 +35,101 @@ async function streamBoundaryTurn(
   ctx: TurnPathContext,
   kind: BoundaryKind,
 ): Promise<TurnPathResult> {
-  const providers = reindexProviders(ctx.priorProviders)
-  const oneLine = kind === 'boundary_explain' ? buildBoundaryOneLine() : buildUnsupportedOneLine()
-  const summary =
-    kind === 'boundary_explain'
-      ? buildBoundarySummary(providers)
-      : buildUnsupportedSummary(providers)
-  const nextStep =
-    kind === 'boundary_explain'
-      ? buildBoundaryNextStep(providers)
-      : buildUnsupportedNextStep(providers)
-  const routeStartedAt = Date.now()
-  ctx.workLog.emit({
-    id: 'route.next_step',
-    phase: 'route',
-    status: 'running',
-    title: 'Preparing the next step',
-    summary: 'Matching this request to the next supported step.',
-    startedAtMs: routeStartedAt,
-  })
-  ctx.workLog.emit({
-    id: 'route.next_step',
-    phase: 'route',
-    status: 'complete',
-    title: 'Preparing the next step',
-    summary: 'The next step stays with the listed business, which confirms timing, price, availability, and the work.',
-    detailRows: [{ label: 'Listed businesses carried forward', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    startedAtMs: routeStartedAt,
-    completedAtMs: Date.now(),
-  })
+  const isWebSearchUnavailable = kind === 'web_search_unavailable'
+  const isSafetyRefusal = kind === 'safety_refusal'
+  const providers = isWebSearchUnavailable || isSafetyRefusal ? [] : reindexProviders(ctx.priorProviders)
+  const oneLine = isWebSearchUnavailable
+    ? 'I cannot search the web here because no executable web-search operation is available.'
+    : isSafetyRefusal
+      ? buildSafetyRefusalOneLine()
+      : kind === 'boundary_explain'
+        ? buildBoundaryOneLine()
+        : buildUnsupportedOneLine()
+  const summary = isWebSearchUnavailable
+    ? 'No web search was run for this request.'
+    : isSafetyRefusal
+      ? buildSafetyRefusalSummary()
+      : kind === 'boundary_explain'
+        ? buildBoundarySummary(providers)
+        : buildUnsupportedSummary(providers)
+  const nextStep = isWebSearchUnavailable
+    ? 'Try again when a web-search operation is available, or ask for a supported live data lookup.'
+    : isSafetyRefusal
+      ? buildSafetyRefusalNextStep()
+      : kind === 'boundary_explain'
+        ? buildBoundaryNextStep(providers)
+        : buildUnsupportedNextStep(providers)
 
-  const snapshot = withFollowUpLayout(
-    {
-      query: ctx.query,
-      oneLine,
-      providers,
-      summary,
-      nextStep,
-      agentJsonUrl: buildAgentJsonUrl(ctx.query, DEFAULT_TURN_PROVIDER_LIMIT),
-    },
-    ctx.priorTurnsCount,
-    ctx.intent,
-  )
+  if (!isWebSearchUnavailable && !isSafetyRefusal) {
+
+    const routeStartedAt = Date.now()
+    ctx.workLog.emit({
+      id: 'route.next_step',
+      phase: 'route',
+      status: 'running',
+      title: 'Putting together the answer',
+      summary: 'Working out what can happen next.',
+      startedAtMs: routeStartedAt,
+    })
+    ctx.workLog.emit({
+      id: 'route.next_step',
+      phase: 'route',
+      status: 'complete',
+      title: 'Putting together the answer',
+      summary: 'The business confirms timing, price, and availability, and decides whether it can take on the request.',
+      detailRows: [{ label: 'Businesses carried forward', value: String(providers.length) }],
+      relatedProviderSlugs: providers.map((provider) => provider.slug),
+      startedAtMs: routeStartedAt,
+      completedAtMs: Date.now(),
+    })
+  }
+
+  const snapshot = isWebSearchUnavailable
+    ? {
+        query: ctx.query,
+        oneLine,
+        providers,
+        summary,
+        nextStep,
+        agentJsonUrl: '',
+        layoutProfile: 'data_answer' as const,
+      }
+    : isSafetyRefusal
+      ? {
+          query: ctx.query,
+          oneLine,
+          providers,
+          summary,
+          nextStep,
+          agentJsonUrl: '',
+          layoutProfile: 'safety_refusal' as const,
+        }
+      : withFollowUpLayout(
+          {
+            query: ctx.query,
+            oneLine,
+            providers,
+            summary,
+            nextStep,
+            agentJsonUrl: buildAgentJsonUrl(ctx.query, DEFAULT_TURN_PROVIDER_LIMIT),
+          },
+          ctx.priorTurnsCount,
+          ctx.intent,
+        )
 
   const allowedSlugs = new Set(ctx.priorAllowedSlugs)
   const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
   if (!finalized.ok) {
-    return rejectBlockedSnapshot(ctx, [], allowedSlugs, finalized)
+    return rejectBlockedSnapshot([], allowedSlugs, finalized)
   }
   const assembly = await ctx.emitOrDeferSnapshot(
     finalized.snapshot,
-    kind,
-    { planMode: kind === 'unsupported' ? 'unsupported' : 'boundary' },
+    isWebSearchUnavailable ? 'capability_unavailable' : kind,
+    {
+      planMode: isWebSearchUnavailable || isSafetyRefusal
+        ? isWebSearchUnavailable ? 'answer' : 'boundary'
+        : kind === 'boundary_explain' ? 'boundary' : 'unsupported',
+    },
   )
   return {
     snapshot: finalized.snapshot,

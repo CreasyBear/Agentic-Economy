@@ -220,7 +220,7 @@ function supply(bindingId: string, model: CapabilityDecisionModel): RegisteredEv
     contractRef: model.contractRef, offeringRegistrationHash: `sha256:offering:${bindingId}`,
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
     publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
-    price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
+    price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '100', exponent: 2 } },
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }

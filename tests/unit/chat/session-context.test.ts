@@ -13,11 +13,11 @@ describe('session context', () => {
     const context = buildSessionContext({ projection: projection([turn()]), liveTurn: null })
 
     expect(context?.badgeLabel).toBe('Saved context')
-    expect(context?.summary).toBe('AE is holding the listed businesses from this thread for comparison and follow-up.')
+    expect(context?.summary).toBe('Keeping the matches from this thread ready for comparison and follow-up.')
     expect(context?.facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'current', value: '2 listed businesses in this answer: Demo Plumber, Northside Plumbing' }),
+      expect.objectContaining({ id: 'current', value: '2 matches in this answer: Demo Plumber, Northside Plumbing' }),
       expect.objectContaining({ id: 'businesses', value: 'Demo Plumber, Northside Plumbing' }),
-      expect.objectContaining({ id: 'inquiry', value: '1 listed business publishes an inquiry path' }),
+      expect.objectContaining({ id: 'inquiry', value: '1 business has a request form' }),
       expect.objectContaining({ id: 'boundary', value: 'Business confirms timing, quote, and availability.' }),
     ]))
   })
@@ -29,7 +29,7 @@ describe('session context', () => {
     })
 
     expect(context?.badgeLabel).toBe('Comparing')
-    expect(context?.summary).toBe('This follow-up is comparing known options using the businesses already found in this thread.')
+    expect(context?.summary).toBe('This follow-up is comparing the options using the matches already found in this thread.')
     expect(context?.facts[0]).toMatchObject({ id: 'focus', label: 'Current follow-up', value: 'compare the first two' })
     expect(context?.facts[1]).toMatchObject({ id: 'current', label: 'Last answer' })
   })
@@ -40,9 +40,9 @@ describe('session context', () => {
       liveTurn: { query: 'Find electricians in Fremantle', intent: 'refine_search' },
     })
 
-    expect(context?.badgeLabel).toBe('Refining')
+    expect(context?.badgeLabel).toBe('Finding more')
     expect(context?.summary).toBe(
-      'This follow-up is searching published listings again while AE keeps this thread visible.',
+      'Checking what\'s available again while keeping this thread visible.',
     )
     expect(context?.facts[0]).toMatchObject({
       id: 'focus',
@@ -58,9 +58,9 @@ describe('session context', () => {
       liveTurn: { query: 'Book the first one for me', intent: 'unsupported' },
     })
 
-    expect(context?.badgeLabel).toBe('Needs redirect')
+    expect(context?.badgeLabel).toBe('Needs another approach')
     expect(context?.summary).toBe(
-      'This follow-up is being routed back to published listings while AE keeps this thread visible.',
+      'This follow-up needs another approach, so the options stay visible here.',
     )
   })
 
@@ -80,7 +80,7 @@ describe('session context', () => {
     })
 
     expect(context?.summary).toBe(
-      'This answer is narrowed to Demo Plumber while AE keeps earlier listed businesses in the thread.',
+      'This answer is narrowed to Demo Plumber while earlier matches stay in the thread.',
     )
     expect(context?.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'current', label: 'Current answer', value: 'Demo Plumber in this answer' }),
@@ -103,11 +103,11 @@ describe('session context', () => {
       liveTurn: null,
     })
 
-    expect(context?.summary).toBe('Northside Plumbing is the current business selected for inquiry review.')
+    expect(context?.summary).toBe('Northside Plumbing is selected for your request.')
     expect(context?.facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'current', value: 'Northside Plumbing selected for inquiry review' }),
+      expect.objectContaining({ id: 'current', value: 'Northside Plumbing selected for contact' }),
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
-      expect.objectContaining({ id: 'inquiry', value: '2 listed businesses publish an inquiry path' }),
+      expect.objectContaining({ id: 'inquiry', value: '2 businesses have a request form' }),
     ]))
   })
 
@@ -140,9 +140,9 @@ describe('session context', () => {
       liveTurn: null,
     })
 
-    expect(context?.summary).toBe('Northside Plumbing is the current business selected for inquiry review.')
+    expect(context?.summary).toBe('Northside Plumbing is selected for your request.')
     expect(context?.facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'current', value: 'No listed business in this answer' }),
+      expect.objectContaining({ id: 'current', value: 'No clear match in this answer' }),
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
     ]))
   })
@@ -163,9 +163,9 @@ describe('session context', () => {
       liveTurn: null,
     })
 
-    expect(context?.summary).toBe('Review Only Plumbing is the current business selected for listing review.')
+    expect(context?.summary).toBe('Review Only Plumbing is selected for review.')
     expect(context?.facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'current', value: 'Review Only Plumbing selected for listing review' }),
+      expect.objectContaining({ id: 'current', value: 'Review Only Plumbing selected for review' }),
       expect.objectContaining({ id: 'selected', value: 'Review Only Plumbing' }),
     ]))
   })
@@ -194,7 +194,7 @@ describe('session context', () => {
     })
 
     expect(context?.summary).toBe(
-      'This answer is narrowed to Demo Plumber while AE keeps earlier listed businesses in the thread.',
+      'This answer is narrowed to Demo Plumber while earlier matches stay in the thread.',
     )
     expect(context?.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'current', value: 'Demo Plumber in this answer' }),
@@ -203,6 +203,21 @@ describe('session context', () => {
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
     ]))
   })
+  it('removes bidi formatting controls from session facts', () => {
+    const context = buildSessionContext({
+      projection: projection([turn({
+        artifacts: [{
+          kind: 'provider-cards',
+          providers: [provider({ name: 'Demo\u202e Plumber' })],
+        }],
+      })]),
+      liveTurn: { query: 'compare\u202e this option', intent: 'compare_known' },
+    })
+
+    expect(context?.facts[0]?.value).toBe('compare this option')
+    expect(JSON.stringify(context)).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/u)
+  })
+
 })
 
 function projection(turns: readonly PublicThreadTurn[]): PublicThreadProjection {

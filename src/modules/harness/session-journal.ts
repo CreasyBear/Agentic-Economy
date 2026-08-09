@@ -1,5 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { stableUnique } from '@/modules/common/stable-unique'
+import { uniq } from 'es-toolkit/array'
 import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 
 import type {
@@ -191,7 +191,7 @@ export function buildHarnessSessionProjection(
   return {
     sessionId,
     entries: sessionEntries,
-    runIds: stableUnique(sessionEntries.map((entry) => entry.runId)),
+    runIds: uniq(sessionEntries.map((entry) => entry.runId)),
     latestByRunId,
     entriesById,
     rootEntryIds,

@@ -31,12 +31,13 @@ export function clearClaimEnrichIntent(): void {
   window.sessionStorage.removeItem(CLAIM_ENRICH_INTENT_STORAGE_KEY)
 }
 
-export function claimFormSearchFor(business: FoundBusiness): ClaimFormSearch {
+export function claimFormSearchFor(business: FoundBusiness, source?: 'supply'): ClaimFormSearch {
   return {
     businessName: business.name,
     category: business.category,
     suburb: business.suburb,
     stateTerritory: business.stateTerritory,
     requestedSlug: business.slug,
+    ...(source === 'supply' ? { source } : {}),
   }
 }

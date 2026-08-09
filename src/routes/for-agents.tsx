@@ -45,6 +45,11 @@ const readSurfaces = [
     description: 'Every published business page as JSON. Search with /api/businesses/search?q=.',
   },
   {
+    href: '/api/v1/services',
+    title: '/api/v1/services',
+    description: 'Canonical agent-native Services with flat endpoints. Search with /api/v1/services/search?q=.',
+  },
+  {
     href: '/.well-known/ucp',
     title: '/.well-known/ucp',
     description: 'The Universal Commerce Protocol descriptor for this deployment.',
@@ -54,8 +59,10 @@ const readSurfaces = [
 const callSurfaces = [
   {
     title: `${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${ANSWER_THREAD_AGENT_ENTRYPOINT.path}`,
-    description: 'Ask a question and stream the answer. No key needed.',
-    authentication: 'No key needed',
+    description: 'Ask a question and stream the answer. No credential needed.',
+    authentication: `No credential. Send ${Object.entries(ANSWER_THREAD_AGENT_ENTRYPOINT.requiredHeaders)
+      .map(([name, value]) => `${name}: ${value}`)
+      .join('; ')}.`,
   },
   {
     title: `${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method} ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,

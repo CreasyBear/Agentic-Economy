@@ -29,4 +29,11 @@ describe('formatTurnQueryLabel', () => {
       role: 'follow-up',
     })
   })
+
+  it('removes bidi formatting controls without changing visible query text', () => {
+    expect(formatTurnQueryLabel({ query: 'مرحبا\u202e fake marker', intent: 'refine_search', seq: 1 })).toEqual({
+      text: 'مرحبا fake marker',
+      role: 'need',
+    })
+  })
 })
