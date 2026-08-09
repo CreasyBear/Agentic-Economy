@@ -1,152 +1,65 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-08
-
-The concerns below are grounded in the current working tree. Source-level behavior is called out as such; no runtime latency, production traffic, or deployment-state claim is inferred where the tree does not provide one.
+**Analysis Date:** 2026-08-09
 
 ## Tech Debt
 
-**Two operation-reference and execution authorities:**
-- Issue: `src/modules/capability-supply/operation-projection.ts` and Convex readers expose hash-shaped `operation:v1:<sha>` references, while `src/modules/capability-execution/seed-supply.ts` derives `operation:v1:<capabilityId>` references and `src/modules/answer/internal/keyless-data-ask.ts` intentionally maps by `capabilityId` between the two.
-- Why: The answer path added an offline curated-seed fallback before every deployment had a reachable Convex reader.
-- Impact: A capability ID is not the canonical identity of one publication/version. A selected operation can be rebound to a different publication, and evidence or replay records can carry a reference that the public registry does not recognize.
-- Fix approach: Use one hash-based operation reference end to end; make any no-Convex seed mode explicit and non-production, rather than accepting a readable capability-ID alias in execution.
-
-**Generic model-facing execution tool remains beside strict per-operation tools:**
-- Issue: `src/modules/answer/internal/answer-tool-use-agent.ts` builds strict tools from operation schemas but also exposes a generic `operation.execute` path whose input is a free-form record.
-- Why: The generic action was retained as a routing/fallback seam while dynamic tools were introduced.
-- Impact: The model can select an underspecified tool instead of a schema-bound operation; strict-provider tool-schema requirements are weakened, and the executor must recover an operation reference after selection.
-- Fix approach: Deterministically choose a bounded registry endpoint candidate, load its authoritative descriptor, expose only a strict tool for that operation, and retain `executeOperation` as the host-side executor rather than a free-form model contract.
-
-**Large authoritative module boundaries:**
-- Issue: `src/modules/capability-contract/public.ts`, `src/modules/discovery/developer-discovery.ts`, and `src/modules/capability-supply/operation-projection.ts` concentrate public schemas, normalization/projection rules, search, and wire-shape logic in files of roughly 1,434, 1,498, and 1,095 lines respectively (source inventory, not a performance measurement).
-- Why: Stable public contracts accumulated implementation detail while preserving import compatibility and byte-identity rules.
-- Impact: Small schema or projection edits have a wide blast radius across Convex adapters, registry routes, answer tools, and tests; reviewers must reason about unrelated policies in the same file.
-- Fix approach: Split internal walkers, validators, search ranking, and wire projections behind the existing public exports. Preserve canonical digest inputs and add contract tests before moving code.
+- **Answer tool authority is represented by several lists.** `src/modules/answer-thread/answer-thread.schema.ts` owns `ANSWER_READ_TOOL_IDS`, `src/modules/harness/tool-contract.ts` repeats the same model-tool IDs as `AnswerModelToolIds`, and `src/modules/answer-thread/internal/answer-tool-registry.ts` separately maintains `ANSWER_READ_ACTIONS`. The model path in `src/modules/answer/internal/answer-tool-use-agent.ts` resolves the local action list while `src/modules/answer-thread/internal/tool-runner.ts` resolves the global action registry. A new read action can therefore be added to one surface and silently omitted from another. Consolidate the IDs and action lookup behind one registry/contract, then keep one drift test at the boundary.
 
 ## Known Bugs
 
-**Seed fallback can execute an operation without current registry readiness:**
-- Symptoms: The answer path can still construct a keyless tool from curated in-process seed data when the Convex descriptor list is empty/unavailable; that descriptor does not carry a live publication lifecycle/readiness decision.
-- Trigger: A live-data ask reaches `matchKeylessDataAsk` in `src/modules/answer/internal/keyless-data-ask.ts`, while `listKeylessExecutableDescriptors` cannot return the deployed DB result and `src/modules/capability-execution/seed-supply.ts` has the same curated operation. A withdrawn, expired, or unavailable publication can therefore be represented by the static seed path.
-- Workaround: Keep the deployed capability-supply reader available and synchronize the curated seed; do not treat the offline fallback as a production authority.
-- Root cause: `src/modules/capability-execution/operation-execute.actions.ts` falls through to `seededDescriptorFor`, and the seed descriptor is derived from static imports rather than readiness/readiness-probe state.
-- Blocked by: A clean deployment policy decision for whether offline execution is allowed at all; fail-closed production behavior should not depend on that fallback.
+- **Homepage category chips advertise two currently unavailable capability asks.** `src/routes/index.tsx` describes the chips as presets the engine already resolves, but sends `Search & research` as `search the web` and `Reference` as `wikipedia`. The current executable feed contract excludes `wikipedia-rest.page-summary`, and excludes search providers such as Exa and Tavily, in `tests/unit/market-terminal/feeds.test.ts`; `src/modules/answer-thread/internal/turn-orchestrator.ts` explicitly marks a general web-search ask unavailable when no selected executable operation exists, producing the refusal in `src/modules/answer-thread/internal/turns/boundary.ts`. A user who follows either chip can receive a refusal or a catalog-oriented answer rather than the promised category. Either hide/disable unsupported chips until their executable operation is onboarded, or change the chip text/query to a supported operation; add a route-level assertion for every published chip.
 
-**Standard wrong methods can fall through machine-only routes:**
-- Symptoms: A route that declares only one standard method can receive another standard method without the route itself returning the RFC 9457 405 response; TanStack Start may then render a document/SPA fallback instead of a machine error.
-- Trigger: Send `GET` to the POST-only `src/routes/$slug.tools.$toolId.ts` or `src/routes/$slug.tools.$toolId.prepare.ts`, or send an unsupported standard method to single-method manifest routes such as `src/routes/$slug.ucp.ts`, `src/routes/SKILL[.]md.ts`, `src/routes/llms[.]txt.ts`, `src/routes/robots[.]txt.ts`, and `src/routes/sitemap[.]xml.ts`.
-- Workaround: Use only the method declared by each route.
-- Root cause: `src/lib/server/method-guard.ts` deliberately rejects only non-standard methods globally and states that routes must add explicit handlers for other standard methods; the listed route files do not register those handlers.
+- **A selected keyless capability is still preceded by local-catalog retrieval.** `src/modules/answer-thread/internal/turn-orchestrator.ts` resolves `keylessDataAsk` and its selected descriptor, but then unconditionally calls `retrievalFirstTurnPath.run`; `src/modules/answer-thread/internal/turns/retrieval-first.ts` immediately runs `registry.search`. Thus a query such as a live-data ask can wait on or fail with a listed-business search before `operation.execute` is allowed to run. This is the root coupling behind the failure mode where registry/Convex search is unhealthy but a keyless descriptor is available. Short-circuit catalog retrieval when a selected operation is present (or give it a bounded, explicitly secondary role), and cover the ordering with an orchestration test.
 
-**Top-ranked lexical match can force an ambiguous live-data operation:**
-- Symptoms: `matchKeylessDataAsk` returns the first keyless item from a top-ten search result and the answer agent can force an execution step even when several operations share a token or the query lacks enough input to identify one operation.
-- Trigger: Submit an underspecified or cross-domain query whose tokens match multiple seeded operations; `src/modules/capability-supply/operation-projection.ts` allows a filter when any token matches, and `src/modules/answer/internal/keyless-data-ask.ts` accepts the first intersecting result without an ambiguity threshold.
-- Workaround: Use an exact operation search/detail path and provide all required inputs; do not rely on a generic natural-language query for a cross-provider choice.
-- Root cause: Relevance ranking is deterministic lexical discovery, not disambiguation or input sufficiency checking. The forced execution path is intentionally host-driven but currently lacks a distinct ambiguity refusal.
+- **Errors after an answer stream opens are flattened to a generic failure.** `src/routes/api.answer.turn.ts` maps Convex errors for admission and reservation before opening the stream, but its in-stream catch sends only `buildAnswerTurnProblem('answer_turn_failed')`, and the stream `onError` also returns the same generic code. A registry or source transport failure during `src/modules/answer-thread/internal/tool-runner.ts` therefore loses the source-unavailable/retryable distinction in the client frame and persisted turn. Preserve a typed unavailable/source error through the stream and persistence boundary, and add an integration test that fails the source after reservation.
 
 ## Security Considerations
 
-**Direct keyless executor has no DNS/IP egress guard:**
-- Risk: A curated or database-supplied HTTPS hostname can resolve to a private, loopback, link-local, or cloud-metadata address. `src/modules/capability-execution/operation-execute.functions.ts` checks only URL syntax, `https:`, and empty userinfo before calling `fetch`; a malicious or compromised endpoint could turn the keyless executor into an SSRF primitive.
-- Current mitigation: Admission checks in `src/modules/capability-supply/internal/transport-adapters.ts` reject statically private hostnames, and `src/modules/capability-supply/route-transport-runtime.ts` plus `src/modules/network-guard/public.ts` provide guarded lookup for the Customer Request transport. Those controls do not wrap the direct `executeOperation` fetch.
-- Recommendations: Route every direct execution through the shared guarded lookup/allowlist implementation, reject private and metadata ranges after DNS resolution (including IPv4-mapped IPv6), and add tests for private DNS answers, redirects, credentials, and timeout behavior.
+- **Deleting a thread leaves its harness journal records.** `convex/answerThreads.ts` `deleteAnswerThreadBatch` deletes answer turns, reservations, and answer tool calls, but does not delete `harnessSessionEntries`. Answer finalization writes those entries with the answer `turnId` and can include `privatePayloadJson` containing the harness run in `src/modules/answer-thread/internal/answer-turn-finalization.ts`; the `by_turnId_seq` index exists in `src/modules/harness/internal/convex-schema.ts`. A user deletion can therefore remove the visible thread while leaving private execution evidence readable through owner/admin harness readbacks. Delete or tombstone all linked harness entries as part of thread deletion (including continuation batches), and test the privacy invariant.
 
-**Provider output crosses into model instructions:**
-- Risk: Raw JSON returned by a keyless provider is serialized into the answer tool record and later incorporated into model context. A provider-controlled string can contain prompt-injection instructions, causing the model to misstate evidence or request an unrelated tool.
-- Current mitigation: `src/modules/capability-execution/operation-execute.functions.ts` validates the output schema and bounds response bytes; `src/modules/answer/internal/answer-gate.ts` and `src/modules/answer/internal/copy-guard-patterns.ts` gate final prose against live evidence and known injection patterns.
-- Recommendations: Keep provider data in a clearly delimited untrusted tool-result channel, constrain or sanitize free-text fields before prompt interpolation, preserve the evidence hash, and add adversarial output fixtures that attempt to override system/tool instructions.
+- **Shared answer links are bearer credentials without expiry or HTTP admission.** `src/modules/answer-thread/internal/share-token.ts` models only active/revoked status and no expiry timestamp; `src/routes/s.$shareToken.tsx` performs a public readback without `withHttpRateLimit`, while `convex/answerThreads.ts` verifies the token and reads the full shared projection. A leaked link remains valid until manual revocation and can be replayed to cause repeated database reads. Add an explicit TTL/expiry check, rate-limit the share read surface by token and requester, and record access/revocation events; do not rely on the 64-hex format as a lifecycle policy.
 
 ## Performance Bottlenecks
 
-**Registry operation search hydrates bounded records and related entities per query:**
-- Problem: `src/modules/capability-supply/operation-projection.ts` searches a source list and projects business, offering, contract, and availability data; `src/modules/capability-supply/operation-source.ts` and Convex readers perform the corresponding multi-document reads.
-- Measurement: Static bounds are `MAX_SOURCE = 256`, `MAX_QUERY = 200`, `MAX_CURSOR = 512`, and `MAX_SCHEMA_BYTES = 65_536` in `src/modules/capability-supply/operation-projection.ts`; no p95 latency measurement is checked into the current tree.
-- Cause: The bounded read model still does per-operation projection work and cannot use a single materialized routeable-operation row for every search/detail request.
-- Improvement path: Maintain a canonical indexed operation projection containing routeability, business, pricing, and schema summaries; hydrate full schemas only for a selected detail/execute operation and retain cursor pagination.
-
-**Answer tool construction scales with the entire keyless catalog:**
-- Problem: `src/modules/answer/internal/answer-tool-use-agent.ts` builds operation tools from the available keyless descriptor list, and `src/modules/capability-execution/operation-execute.actions.ts` can list up to 512 descriptors before tool construction.
-- Measurement: The current source cap is `MAX_KEYLESS_EXECUTABLE = 512`; each descriptor can carry input schema bytes up to the operation projection schema bound. This is a static worst-case bound, not observed prompt latency.
-- Cause: Candidate discovery and model-facing tool construction are not separated; schemas for operations unrelated to the current query can enter one toolset.
-- Improvement path: Search/rank first, retain a small candidate set, load strict schemas only for selected candidates, and enforce a total tool/schema byte budget before model invocation.
+- **Answer catalog tools have no default network timeout.** `src/modules/answer-thread/internal/tool-runner.ts` calls `runHarnessTool` without `timeoutMs`; `src/modules/answer-thread/internal/answer-harness-operation.ts` constructs `HarnessRunLoop` without a run or tool timeout; and `src/modules/harness/tool-contract.ts` drops the `AbortSignal` when invoking an action. Registry actions in `src/modules/registry/registry.actions.ts` call Convex source queries through `src/lib/server/convex-source.ts`, so a stalled source can keep the answer request pending until the client disconnects rather than reaching a tool-timeout result. No current latency measurement is present in this audit. Set an explicit per-tool/run budget and thread cancellation into the Convex fetch/transport, then expose timeout status as evidence instead of a generic hang.
 
 ## Fragile Areas
 
-**Convex host/domain adapter seams:**
-- Why fragile: `convex/capabilitySupplyOperations.ts`, `convex/catalog.ts`, `convex/customerRequestApplication.ts`, and `convex/moneyLedger.ts` bridge generated Convex validators and transactions to `src/modules/*` ports. A validator, identity, or operation-reference change must stay byte- and type-compatible across both layers.
-- Common failures: A source module accepts a shape that its Convex validator rejects; a host wrapper reads a stale field/index; or a new operation reference is accepted by one route but not by registry/answer execution.
-- Safe modification: Change the authoritative `src/modules/*` contract first, update the corresponding `convex/*` validator/port adapter and `convex/schema.ts` in the same change, then exercise the affected host function and route-level contract.
-- Test coverage: There are extensive module and integration tests, but `tests/unit/server/method-guard.test.ts` tests only the helper and not the full generated route tree; direct Convex deployment/schema drift is not proven by unit tests alone.
+- **The Node-only schema dereferencer has a hard Convex graph boundary.** `src/modules/capability-supply/internal/schema-deref.ts` imports `@apidevtools/json-schema-ref-parser`, which brings Node built-ins; its own comment states that the Convex-reachable admission chain cannot bundle `path`/`util`. The current design depends on callers keeping this module out of `convex/` while seed admission uses the separate short-circuit/refusal path. A new convenience import can break Convex code generation or deployment. Keep the dereferencer in a node-only module boundary, enforce the boundary in an import test, and inject it only from node-side callers.
 
-**Answer evidence and tool-loop state machine:**
-- Why fragile: `src/modules/answer/internal/answer-tool-use-agent.ts` coordinates model retries, forced execution, dynamic tool registration, accounting, and final prose; `src/modules/answer/internal/answer-gate.ts` separately enforces grounding.
-- Common failures: Catalog-only prose is emitted for a live-data ask, a model-selected operation differs from the forced operation, a refusal/error is omitted from evidence, or a provider string is treated as trusted instruction.
-- Safe modification: Preserve the recorded `operation.execute` result/refusal, keep operation selection deterministic before tool construction, and update answer-loop, gate, and SSE tests together.
-- Test coverage: `tests/unit/answer/answer-tool-dynamic-ops.test.ts` and answer pipeline tests cover selected happy paths; ambiguous operation selection, provider prompt injection, and DB-unavailable seed fallback are not covered.
-
-**Exact-money and catalog-price boundary:**
-- Why fragile: Catalog decimal prices, account exponents, and charge authorization are represented by different contracts in `src/modules/registry/internal/services-api-projection.ts`, `src/modules/money/internal/exact-amount.ts`, and `src/modules/action-invocation/dynamic-published-adapter.ts`.
-- Common failures: A sub-cent catalog value is displayed as available but cannot be charged, exponents are compared too early, or a price digest changes when a presentation-only field is added.
-- Safe modification: Keep persisted charge amounts as scale-aware integer units, compare with the exact-amount helpers, and preserve the hashed execution price separately from additive catalog presentation fields.
-- Test coverage: Projection tests cover representation and refusal paths; no current test proves a real sub-cent settlement through the durable money ledger and authoritative payment receipt.
+- **Node 22 is enforced only by one launcher.** `package.json` declares `engines.node` as `22.x`, but `tools/dev/local-dev.mjs` performs the hard runtime check only for `npm run dev:local`; direct `dev`, build, typecheck, or Convex commands can still run under a different installed Node. The resulting failure mode is toolchain-dependent rather than source-diagnostic. Make the supported runtime a repository-level preflight (and provide a checked-in version-manager/CI pin) for every Convex/build entry point.
 
 ## Scaling Limits
 
-**Capability operation source and search bounds:**
-- Current capacity: The operation source caps a query at 256 records, 200 query characters, 512 cursor entries, 32 plan items, and 65,536 bytes of schema in `src/modules/capability-supply/operation-projection.ts`.
-- Limit: A catalog larger than the bounded source or schema budget cannot be searched/planned in one request; the implementation returns a typed unavailable/invalid result rather than scanning unbounded data.
-- Symptoms at limit: Search or plan preview returns an unavailable/refused result, or a large operation schema is excluded even when its operation would otherwise match.
-- Scaling path: Move discovery to an indexed/materialized projection, keep bounded cursors, and fetch full contract schemas only after operation selection.
+- **Readiness probing has a recurring batch storm and no fairness/backoff.** `convex/crons.ts` currently schedules readiness every minute; `convex/capabilitySupply.ts` selects at most `MAX_READINESS_REFRESH_BATCH = 20` due publications and schedules all of them immediately. `src/modules/capability-supply/internal/graph/record-probe-result.ts` gives unhealthy observations only a 60-second validity window, so a failed publication remains eligible on every cycle. More than 20 persistently unhealthy rows can occupy the batch and defer healthy rows, while each cycle creates an action, target query, probe, record mutation, and projection rebuild. No current production call/row measurement is present here. Add a durable lease/next-probe field, exponential failure backoff/circuit breaking, and deterministic pagination/fairness before catalog growth makes scheduler load proportional to every failing publication.
 
-**Registry document hydration bounds:**
-- Current capacity: `convex/registry.ts` uses `SEARCH_DOCUMENT_CANDIDATE_LIMIT = 250` and `SEARCH_HYDRATION_BUSINESS_LIMIT = 100` for registry search.
-- Limit: More matching documents/businesses than these caps are not hydrated into one response, even if the underlying search index contains them.
-- Symptoms at limit: Results are incomplete or relevance is biased toward the first bounded candidate set; operators cannot distinguish an empty result from a truncated one unless the response metadata is inspected.
-- Scaling path: Expose explicit truncation/cursor metadata and replace broad hydration with a typed indexed read model keyed by operation/business and query cursor.
+- **Answer and harness data has no scheduled retention policy.** `convex/crons.ts` cleans inquiry abuse buckets, source-write nonces, and OAuth grants, but has no answer-thread or harness-session cleanup. `convex/answerThreads.ts` and `convex/harnessSessions.ts` retain durable rows until an explicit user/admin deletion path, while each answer finalization can append multiple `harnessSessionEntries`. Without a retention/compaction job, storage and owner/admin readback work grow with every historical turn. No current row-count measurement is present in this audit. Define retention by data class, compact or archive old run evidence, and schedule bounded cleanup with an auditable deletion receipt.
+
+- **Harness journal strings have no application-level byte bound.** `convex/harnessSessions.ts` validates `payloadJson`, `publicSummaryJson`, and `privatePayloadJson` only as `v.string()` and `normalizeEntryForStorage` copies them unchanged. `src/modules/answer-thread/internal/answer-turn-finalization.ts` serializes the harness report and private runtime event directly into those fields; downstream `src/modules/harness/replay-projection.ts` only rejects overly complex parsed values, not oversized strings. Large tool/model evidence can therefore inflate document writes and readbacks up to platform limits. No current payload-size measurement is present. Enforce per-field byte caps before the Convex mutation, retain a digest plus bounded summary, and make truncation explicit in the evidence schema.
 
 ## Dependencies at Risk
 
-**`nitro-nightly` build adapter:**
-- Risk: `package.json` aliases `nitro` to `nitro-nightly@^3.0.1-20260628-090458-3df69609`, while `vite.config.ts` imports the Nitro Vite plugin. A nightly dependency can introduce unreviewed route/build/runtime changes through semver-compatible updates.
-- Impact: Vite/TanStack Start builds, server route generation, or deployment output can change independently of application source; method fallthrough and server-only imports may surface only at build/deploy time.
-- Migration plan: Pin and validate a supported stable Nitro/TanStack-compatible release (or pin the exact nightly artifact with a documented reason), then run the repository’s release build gate before upgrading again.
+- **The application depends on a nightly Nitro alias.** `package.json` maps `nitro` to `nitro-nightly@^3.0.1-20260628-090458-3df69609`, and the lockfile preserves that alias. A dated nightly can introduce framework/runtime regressions outside normal stable-release expectations. Move to a stable pinned release when compatible, or isolate the nightly behind a documented compatibility check and CI smoke gate.
+
+- **The schema-ref parser is both runtime-critical and bundler-sensitive.** `package.json` declares `@apidevtools/json-schema-ref-parser` as a production dependency even though its use is restricted to the node-side admission path in `src/modules/capability-supply/internal/schema-deref.ts`. Accidental Convex reachability is a known build-breaking condition, not merely a type concern. Keep the import boundary mechanically checked; if deployment packaging permits, split node-only admission tooling from the Convex-safe dependency set.
 
 ## Missing Critical Features
 
-**Fail-closed production policy for no-Convex keyless execution:**
-- Problem: The seed-derived executor in `src/modules/capability-execution/seed-supply.ts` is intentionally able to build descriptors without Convex, but there is no visible environment-level policy in the execution seam that distinguishes local bootstrap from production authority.
-- Current workaround: Rely on deployment availability and curated seed synchronization; `operation-execute.actions.ts` falls back to the seed descriptor.
-- Blocks: A production operator cannot prove from an execution record whether the operation was selected from current DB publication/readiness state or static seed data.
-- Implementation complexity: [INFERENCE] Medium; requires an explicit runtime mode, fail-closed production branch, and evidence metadata without changing the canonical operation contract.
-
-**Executable exact sub-cent settlement:**
-- Problem: The registry can represent decimal catalog prices, but `src/modules/action-invocation/dynamic-published-adapter.ts` requires the configured paid amount to match the executable fixed price currency and exponent before authorizing a charge; exact sub-cent settlement is not yet a supported money-ledger path.
-- Current workaround: Mark the presentation as catalog-only/unpriced or refuse the published operation rather than silently round.
-- Blocks: Providers cannot safely charge and reconcile an operation priced below the account’s current minor-unit exponent.
-- Implementation complexity: [INFERENCE] High; requires a scale-aware persisted settlement amount, payment-provider token conversion, durable receipt reconciliation, and migration/backfill gates.
+- **Generic agent execution stops at keyless HTTP GET.** `src/modules/capability-execution/operation-execute.functions.ts` hard-codes the executable set to keyless `http-json:v1` `GET` operations, and `src/modules/capability-execution/operation-execute.actions.ts` exposes only keyless descriptors. Curated supply also contains API-key, x402/paid, and POST publications, but those operations cannot be executed by the answer agent or market CLI and are deliberately refused. If those published capabilities are part of the production agent promise, implement credential isolation, payment/approval, and POST/other transport lanes with evidence; otherwise project them as explicitly non-executable so catalog users are not led to expect invocation.
 
 ## Test Coverage Gaps
 
-**Direct keyless HTTP egress safety:**
-- What's not tested: `tests/unit/capability-execution/operation-execute.test.ts` tests non-HTTPS refusal, but no current test exercises DNS resolution to private/metadata ranges, IPv4-mapped IPv6, or redirect handling for the direct executor.
-- Risk: A future endpoint-validation change can reintroduce SSRF without a failing test, and the current implementation can already bypass the guarded transport path.
-- Priority: High
-- Difficulty to test: Requires injecting a resolver/guarded fetch seam and asserting both network policy decisions and no-fetch behavior.
+- **No hosted end-to-end test proves Convex descriptor discovery through answer execution.** `tests/unit/answer/answer-selected-operation-loop.test.ts` mocks `executeKeylessOperation`; `tests/unit/capability-execution/operation-execute.test.ts` uses pure injected dependencies; and `tests/unit/market-terminal/feeds.test.ts` uses `seedKeylessExecutableSource` plus a fake fetch. These prove local seams, not a deployed `capabilitySupplyOperations` read followed by a real guarded provider request and persisted answer evidence. Add a narrowly scoped hosted/local-backend smoke that reads the deployed descriptor, executes one safe keyless operation, and verifies the persisted canonical operation/evidence fields.
 
-**Full route method matrix and API catch-all behavior:**
-- What's not tested: `tests/unit/server/method-guard.test.ts` covers `unsupportedMethodResponse`/`methodNotAllowed`, not each file-based route’s wrong standard methods or the `/api/*` unknown-path response.
-- Risk: A route can return HTML/SPA content or a legacy envelope for a wrong method/unknown API path while helper tests remain green.
-- Priority: High
-- Difficulty to test: Requires starting the TanStack server and probing every machine-only route with declared, wrong-standard, and non-standard methods.
+- **The retrieval-before-operation regression is not exercised end to end.** Existing selected-operation tests assert tool/prose behavior with mocked execution, but do not fail the registry search while asserting that a selected capability still executes promptly. Add a route/orchestrator test with a hanging or failing registry source and a successful selected operation; it should prove no unbounded catalog call blocks the capability path.
 
-**Answer ambiguity, injection, and degraded-authority paths:**
-- What's not tested: No focused test combines an ambiguous lexical match, malicious provider output, and unavailable Convex descriptor source through the complete answer tool loop.
-- Risk: The answer may claim a catalog result, select the wrong operation, or execute a static seed after lifecycle state is unavailable without a regression signal.
-- Priority: High
-- Difficulty to test: Requires deterministic model/fetch fixtures plus an explicit DB-reader failure/refusal seam and assertions over persisted tool evidence and final prose.
+- **Thread deletion has no harness-journal privacy test.** Current answer thread tests cover owner readback and deletion behavior, while harness tests cover append/replay in isolation; there is no assertion that deleting a thread removes all `harnessSessionEntries` linked by its turn IDs. Add a Convex integration test that creates a turn with private harness evidence, deletes the owning thread, and verifies owner/admin harness readbacks cannot recover it.
+
+- **Readiness scheduling lacks failure/backoff and starvation coverage.** The source has the one-minute cron, 20-row batch, and short unhealthy validity window in `convex/crons.ts`, `convex/capabilitySupply.ts`, and `src/modules/capability-supply/internal/graph/record-probe-result.ts`, but no test demonstrates fair progress when more than 20 publications repeatedly fail. Add a deterministic scheduler/probe test that proves leases/backoff and that healthy rows are eventually refreshed.
 
 ---
 
-*Concerns audit: 2026-08-08*
-*Update as issues are fixed or new ones discovered*
+*Concerns audit: 2026-08-09*
+
+Updated from the current dirty working tree on 2026-08-09. Existing planning and papercut artifacts were treated only as leads; each item above was checked against current source paths, with no secret values included.

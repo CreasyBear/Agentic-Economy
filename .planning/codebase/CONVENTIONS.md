@@ -1,113 +1,65 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-08-08
+**Analysis Date:** 2026-08-09
 
 ## Naming Patterns
 
-**Files:**
-- Use kebab-case for application modules and helpers, with role suffixes such as `*.actions.ts`, `*.functions.ts`, `public.ts`, and `internal/`; examples include `src/modules/capability-execution/operation-execute.actions.ts` and `src/modules/customer-request/customer-request.functions.ts`.
-- Use PascalCase filenames for React components, for example `src/components/ae/action-invocation/AePaidOperationCard.tsx`.
-- TanStack file routes use dot-separated route segments and `$` parameters, for example `src/routes/api.v1.requests.$requestRef.messages.ts` and `src/routes/t.$threadId.tsx`; generated route output is `src/routeTree.gen.ts`.
-- Keep Vitest tests in the separate `tests/` tree as `*.test.ts` or `*.test.tsx`; browser tests use `*.spec.ts` under `tests/e2e/` or `tests/deploy-smoke/`. There are no collocated `src/**/*.test.*` files in the current tree.
-
-**Functions:**
-- Use camelCase and named verbs that expose the operation (`create*`, `read*`, `project*`, `parse*`, `validate*`, `handle*`), as in `src/lib/server/convex-source.ts`, `src/modules/money/internal/exact-amount.ts`, and `src/routes/api.businesses.ts`.
-- Async functions have no special name prefix. HTTP handlers conventionally use `handle...Request` or `handle...Post`, while pure transforms use `project...` or `parse...`.
-
-**Variables:**
-- Use camelCase for variables, parameters, and local functions; use `UPPER_SNAKE_CASE` for module constants such as `LIST_QUERY_PARAMS` in `src/routes/api.businesses.ts` and `SEARCH_STOP_WORDS` in `convex/registry.ts`.
-- Prefer `const`; mutable state is local and explicit (for example, the `initialized` flag in `src/lib/observability/sentry.server.ts`).
-
-**Types:**
-- Use PascalCase type names without an `I` prefix. Public records and option objects commonly use `Readonly<{ ... }>`; see `src/modules/common/action.ts` and `src/modules/money/internal/exact-amount.ts`.
-- Model finite outcomes as discriminated unions, usually keyed by `kind` or `status`, and validate the same discriminator at boundaries with Zod or Convex validators; see `src/modules/capability-execution/operation-execute.actions.ts` and `convex/registry.ts`.
-- Use branded string types with `unique symbol` declarations when an identifier must not be confused with another string, as in `src/modules/capability-supply/public.ts`.
+- The repository is strict ESM TypeScript (`package.json` sets `"type": "module"`). Production modules and tests use lower-kebab-case directories/files (`src/modules/capability-supply/`, `src/modules/answer-thread/`); React components use PascalCase filenames and exported component names (`src/components/ae/chat/AeThreadTurnStreamSection.tsx`). TanStack route files follow the generated route identity (`src/routes/api.answer.turn.ts`, `src/routes/t.new.tsx`).
+- Exported types, classes, schemas, and React components are PascalCase. Functions and values are lower camel case, normally named for an action (`canonicalDigest`, `projectPublicServicesPage`, `handleAnswerTurnRequest`). Constants for limits and protocol literals are upper snake case (`MAX_ANSWER_TURN_BODY_BYTES`, `ANSWER_TURN_DATA_PART`) in `src/routes/api.answer.turn.ts` and `src/modules/answer/answer-ui-stream.ts`.
+- Domain state is usually declared as an `as const` value tuple and derived indexed union (`ClaimStatusValues` → `ClaimStatus`, `PublicStatusValues` → `PublicStatus`) in `src/modules/business/public.ts`. Convex and Zod validators then repeat those exact literals at persistence/wire boundaries (`convex/answerThreads.ts`, `src/modules/capability-contract/public.ts`).
+- IDs and hashes have semantic aliases/brands rather than broad strings where a boundary needs identity (`src/modules/common/ids.ts`, `src/modules/common/canonical-digest.ts`). Results and state transitions use discriminated `kind`/`status` literal unions (`src/modules/capability-supply/internal/admit-provider-schema.ts`, `convex/answerThreads.ts`).
+- Tests use `*.test.ts`/`*.test.tsx`; browser tests use Playwright `*.spec.ts`. Test names describe an observable behavior, often including the refused or unsafe case (`tests/integration/answer-turn-ui-stream.test.ts`, `tests/e2e/landing-answer.spec.ts`).
 
 ## Code Style
 
-**Formatting:**
-- The dominant application TypeScript/TSX style is two-space indentation, single-quoted strings, no semicolons, trailing commas in multiline literals/calls, and braces on the same line; examples are `src/lib/errors.ts` and `src/components/ae/action-invocation/AePaidOperationCard.tsx`.
-- No repository Prettier configuration is present. Do not use the semicolon/double-quote style in the retained donor component `src/components/ai-elements/code-block.tsx` as the baseline for new application code.
-- TypeScript is strict and uses `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, and `noImplicitOverride` in `tsconfig.json`.
-
-**Linting:**
-- Use Oxlint with the TypeScript and Oxc plugins, configured in `.oxlintrc.json`; correctness violations are errors, generated Convex code, fixtures, and `vendor/` are ignored.
-- The repository lint command is `npm run lint`, defined in `package.json`; do not add an ESLint-specific convention beside the existing Oxlint gate.
+- Current source uses two-space indentation, single-quoted strings, no semicolons, trailing commas, and native ESM imports. Representative files are `src/start.ts`, `src/modules/common/canonical-digest.ts`, `convex/answerThreads.ts`, and `tools/ae/cli.ts`. There is no repository Prettier/ESLint/Biome configuration; `package.json` makes `oxlint src convex tests tools --deny-warnings` the lint command.
+- TypeScript is deliberately strict: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `isolatedModules`, and `noEmit` are enabled in `tsconfig.json`. Code narrows `unknown` before use, preserves absent optional fields with conditional spreads, and prefers readonly input/result shapes at contract seams (`src/modules/capability-contract/public.ts`, `src/modules/answer/public.ts`).
+- Runtime contracts avoid broad escape hatches. `src/lib/ui/contract-scans.ts` rejects explicit `any`, `as unknown as` double casts, non-null assertions, broad status strings, unbounded Convex returns, hard-coded source-CSRF values, and client-exposed source-write secrets; documented `v.any()` JSON boundaries are explicitly allow-listed there. `.oxlintrc.json` treats correctness as errors, enables TypeScript/OXC plugins, and ignores generated Convex code, fixtures, and vendor code.
+- Zod schemas use strict objects and discriminated unions for public contracts (`src/modules/capability-contract/public.ts`). Convex functions expose exact `v.object`/`v.union` return validators instead of `v.any()` (`convex/answerThreads.ts`, `convex/registry.ts`).
+- Product-owned UI uses semantic tokens and explicit utilities. The UI scanner in `src/lib/ui/contract-scans.ts` rejects raw colors, `space-x`/`space-y`, `transition-all`, hard-coded layers, generic shadows, raw overlays, arbitrary visual tokens, and route-local scroll listeners for `src/components/ae` and `src/routes`; `tests/ui-contract/ui-contract.test.ts` runs that contract.
+- These are dominant practices, not a claim that every historical file is clean. Generated `src/routeTree.gen.ts` contains `as any` casts and is excluded from the standards scan. Evidence tooling uses intentionally loose/deserialization casts in `tools/dev/full-yolo-evidence-packet.ts` and `tools/dev/action-invocation-evidence-packet.ts`. Existing runtime paths still contain non-null assertions (for example `src/components/ae/chat/turn-stream-session.ts` and `src/modules/answer-thread/internal/turn-orchestrator.ts`); treat them as deviations to remove or justify, not as style to copy. `src/components/ai-elements/code-block.tsx` retains a semicolon and direct `console.error` as another legacy/adjacent-component deviation.
 
 ## Import Organization
 
-**Order:**
-1. External package imports.
-2. Internal `@/` alias imports, with `import type` used for type-only dependencies.
-3. Relative imports for same-module or adjacent implementation details.
-4. Generated Convex imports and relative host-adapter imports stay near the boundary in `convex/*.ts`.
-
-**Grouping:**
-- Separate meaningful import groups with blank lines. Keep related value and type imports together when they come from one module; representative examples are `src/modules/capability-supply/public.ts`, `src/routes/api.businesses.ts`, and `convex/registry.ts`.
-- Do not assume alphabetical ordering: current files prioritize external/internal/relative boundaries and semantic proximity rather than a repository-wide alphabetizer.
-
-**Path Aliases:**
-- Use `@/*` for `src/*`; `~/*` is also configured but current production imports overwhelmingly use `@/`. Route-specific `@/routes/owner.*`, `@/routes/admin.*`, and `@/routes/developers.discovery` mappings are defined in `tsconfig.json`.
-- Vitest mirrors the `@` mapping to `src/` in `vitest.config.ts`, including tests that import `tools/ae` modules through the same alias.
+- The common grouping is external/Node imports first, a blank line, then project alias imports (`@/…`), with relative imports for same-module siblings or test helpers. Type-only imports are explicit. See `src/start.ts`, `src/modules/common/canonical-digest.ts`, and `tests/unit/answer/answer-selected-operation-loop.test.ts`.
+- Public module seams are the preferred import boundary: routes and sibling modules import `src/modules/*/public.ts` or a module server seam instead of `internal` implementation files. `src/modules/registry/public.ts` re-exports the registry/capability DTO and operation surface; `src/modules/answer/public.ts` collects answer contracts and behavior. The import scanners in `src/lib/ui/contract-scans.ts` enforce route-private, module-private, route-owned Convex, planning, and forbidden-handshake import restrictions.
+- Convex hosts use generated references and module-owned schema fragments. `convex/answerThreads.ts` imports `./_generated/api` and `./_generated/server`; `convex/schema.ts` composes `internal/convex-schema` table bundles from each domain module. Tooling is kept separate and generally uses relative command/helper imports (`tools/ae/cli.ts`).
+- Import ordering is not mechanically uniform across all current files. `src/components/ae/chat/AeChat.tsx` interleaves aliased imports with same-folder imports, and `src/components/ae/chat/AeThreadTurnStreamSection.tsx` places aliased domain imports before component-local imports. Preserve the applicable public/private boundary rather than inventing a second global sorter.
 
 ## Error Handling
 
-**Patterns:**
-- Return expected domain outcomes as tagged results or `undefined` instead of throwing: `src/modules/capability-execution/operation-execute.actions.ts` defines `ok`/`refused`/`error`, while `src/modules/money/internal/exact-amount.ts` returns `undefined` for invalid amounts.
-- Throw for unavailable configuration, invalid runtime dependencies, or violated host invariants; `src/lib/server/convex-source.ts` uses the typed `ConvexSourceError` for missing auth/deployment configuration.
-- Catch at external or framework boundaries, preserve stable machine codes, and map to the canonical HTTP problem response. `src/lib/errors.ts` owns the RFC 9457 model, `src/lib/server/problem.ts` emits `application/problem+json`, and `src/routes/api.businesses.ts` uses `safeParse` plus `problem(...)` for query failures.
-
-**Error Types:**
-- Prefer stable `kind`/`code`/`reason` fields for expected refusals and errors; do not expose raw provider or exception messages in public envelopes. `src/modules/capability-execution/operation-execute.actions.ts` and `tests/unit/lib/errors.test.ts` exercise this contract.
-- Use `try/catch/finally` around network, provider, and observability boundaries. Deliberate cleanup-only suppression is explicit (for example, `flushPostHogServer().catch(() => undefined)` in `src/start.ts`).
+- HTTP routes project failures to RFC 9457 `application/problem+json` through `src/lib/server/problem.ts` and the canonical kinds/statuses/codes in `src/lib/errors.ts`. `src/lib/server/json-error.ts` is a compatibility-named helper that delegates to the same problem builder and adds retry headers; route handlers validate content type/body/schema, guard methods, and return typed problems (`src/routes/api.answer.turn.ts`).
+- Expected domain outcomes are explicit tagged results instead of exceptions: admission returns `normalized` or `refused` with a named reason (`src/modules/capability-supply/internal/admit-provider-schema.ts`); Convex answer-turn mutations return `reserved`, `replayed`, `conflict`, `refused`, or `not_found` variants (`convex/answerThreads.ts`). Validation and boundary helpers throw only for invalid inputs/configuration or programmer-level invariants (`src/modules/common/canonical-digest.ts`).
+- Unknown errors are narrowed at transport boundaries and mapped/redacted. `src/routes/api.answer.turn.ts` maps Convex source failures to a public problem; `src/lib/errors.ts` collapses unknown private answer codes to the safe `answer_turn_failed` contract. CLI code maps typed source failures to `CliFailure` and emits either one concise human line or a structured `--json` object (`tools/ae/cli.ts`, `tools/ae/lib/output.ts`).
+- Best-effort reads are explicitly optional rather than silently presented as authoritative: the chat sidebar catches refresh failure and leaves persistence unavailable (`src/components/ae/chat/AeChat.tsx`), while durable answer state is read back from the server/Convex projection. Expected errors should retain a stable code/kind and not leak raw provider payloads or secrets.
 
 ## Logging
 
-**Framework:**
-- There is no application-wide pino/winston logger in `package.json`; operational logging uses `console.error`/`console.warn` at boundaries plus Sentry and PostHog integrations in `src/lib/observability/sentry.server.ts`, `src/lib/observability/sentry.client.ts`, and `src/start.ts`.
-
-**Patterns:**
-- Log machine-readable event names and redacted context, not raw credentials or provider payloads. `src/modules/customer-request/application/interpret-compile/interpreter.ts` logs an exhausted provider 4xx fallback but keeps routine model degradation silent; `src/lib/server/notification-provider.ts` logs the missing secret name while its wire detail remains parameter-free.
-- Capture unhandled server exceptions in Sentry with a route tag and rethrow them through the request middleware in `src/start.ts`; keep pure projection/validation helpers free of logging.
+- Request failures and product telemetry go through observability seams, not ad hoc payload dumps. `src/start.ts` initializes Sentry/PostHog only when configured, tags the request path, captures the exception, and flushes in `finally`; client product/funnel events use lazy client-only wrappers in `src/lib/observability/capture-client-events.ts` and `src/lib/observability/posthog.client.ts`.
+- Server/Convex logs are short, machine-searchable event names plus safe codes or redacted detail (`customer_request_semantic_interpretation_failed` in `convex/customerRequestApplication.ts`, `customer_request_route_plan_projection_failed` in `convex/customerRequestCompareResumePorts.ts`). Notification failures explicitly keep the wire detail parameter-free and log only the environment-variable name when configuration is missing (`src/lib/server/notification-provider.ts`).
+- The CLI writes human diagnostics to stderr and JSON/report output to stdout (`tools/ae/cli.ts`, `tools/ae/lib/output.ts`). Do not add secrets, full provider responses, credentials, or private database fields to logs. Direct `console.error` remains in `src/components/ai-elements/code-block.tsx` and a few recovery paths; those are observed exceptions, not the preferred product telemetry path.
 
 ## Comments
 
-**When to Comment:**
-- Explain why, invariant, safety boundary, or fallback behavior rather than restating the next statement. Examples include the unsupported-query rationale in `src/routes/api.businesses.ts`, the middleware ordering explanation in `src/start.ts`, and the credential-free probe rules in `src/modules/capability-supply/internal/readiness-probe.ts`.
-- Use comments to record a non-obvious compatibility seam or intentional exception; `src/lib/server/convex-source.ts` marks a test-required transport seam with `ponytail: intentional seam`.
-
-**JSDoc/TSDoc:**
-- Document exported contracts and public projections with `/** ... */`, including the RFC model in `src/lib/errors.ts`, the action contract in `src/modules/common/action.ts`, and customer-facing component semantics in `src/components/ae/action-invocation/AePaidOperationCard.tsx`.
-- Internal helpers generally rely on self-explanatory signatures; add documentation when the helper encodes a business rule, wire contract, or security constraint.
-
-**TODO Comments:**
-- No `TODO`, `FIXME`, or `HACK` markers were found in the current `src/`, `convex/`, `tools/`, or `tests/` scan. Keep unfinished work out of comments; express a real contract in code or in the tracked planning artifacts.
+- Comments are concise and explain why, authority, security, or lifecycle behavior rather than restating syntax. Examples include middleware ordering and public-read rationale in `src/start.ts`, schema-admission compatibility/dereference guarantees in `src/modules/capability-supply/internal/admit-provider-schema.ts`, and durable-wire/readback invariants in `tests/integration/answer-turn-ui-stream.test.ts`.
+- Public seams and non-obvious pure projections use JSDoc (`src/lib/server/problem.ts`, `src/modules/capability-contract/public.ts`). Tests comment the contract being protected, especially where a negative assertion prevents a false-success or proof-class inflation (`tests/e2e/landing-answer.spec.ts`, `tests/imports/capability-supply-boundaries.test.ts`).
+- Comments may document an intentional scanner exception or legacy boundary, but should not normalize it. Keep protocol/authority rationale near the code that enforces it and avoid speculative TODO scaffolds; `RULES.MD` forbids fake or refusal-only delivery and tautological tests.
 
 ## Function Design
 
-**Size:**
-- Keep new functions single-purpose and extract normalization, validation, projection, and formatting helpers; current examples include the small helpers in `src/modules/money/internal/exact-amount.ts` and the route query helpers in `src/routes/api.businesses.ts`.
-- There is no numeric line-limit rule in the repository. Larger orchestration functions are acceptable at adapter boundaries when they preserve the sequencing contract, as in `src/start.ts` and `src/modules/customer-request/application/interpret-compile/interpreter.ts`.
-
-**Parameters:**
-- Prefer one typed options object for multi-field operations and mark immutable inputs `Readonly`; see `src/lib/server/convex-source.ts` and `src/modules/common/action.ts`.
-- Keep boundary inputs explicitly typed and schema-validated rather than accepting broad `any`; `tsconfig.json` strictness and `tests/imports/ts-standards.test.ts` enforce this direction.
-
-**Return Values:**
-- Use explicit return types on exported boundary functions and route handlers; return early for invalid input, unavailable state, or refusal branches.
-- Preserve discriminated result identity and evidence fields through projections; do not turn an expected refusal into a thrown generic error. See `src/lib/errors.ts` and `src/modules/capability-execution/operation-execute.actions.ts`.
+- Prefer small deterministic functions with explicit input/output types and guard clauses. Pure normalization/projection helpers return exact values or tagged results (`src/modules/common/canonical-digest.ts`, `src/modules/registry/public.ts`); schema functions bound size/depth and report named issues (`src/modules/capability-contract/public.ts`).
+- Effects are isolated behind injected ports or options so route/domain behavior can be tested without a live deployment: `handleAnswerTurnRequest` accepts admission/stream overrides (`src/routes/api.answer.turn.ts`), capability admission accepts an optional dereferencer (`src/modules/capability-supply/internal/admit-provider-schema.ts`), and answer-thread persistence exposes a test port (`src/modules/answer-thread/testing.ts`).
+- Use early returns for refusal/invalid state, explicit `undefined` handling for optional values, and `as const`/`satisfies` for literal result branches. Bound request/result sizes before model context or persistence (`src/routes/api.answer.turn.ts`, `src/modules/answer/internal/answer-tool-use-agent.ts`). React effects keep mounted/generation refs and unsubscribe/abort cleanup to prevent stale async callbacks (`src/components/ae/chat/AeThreadTurnStreamSection.tsx`).
+- Large orchestrators and Convex transactions are a known exception to the small-function ideal: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `convex/answerThreads.ts`, and some route handlers contain multi-step lifecycle logic. New code should deepen an existing seam or extract a focused pure/helper function rather than copy that size by default.
 
 ## Module Design
 
-**Exports:**
-- Prefer named exports for application modules and React components; public module contracts are gathered through `public.ts`, for example `src/modules/capability-supply/public.ts` and `src/modules/registry/public.ts`.
-- Default exports are reserved mainly for framework registrations/configuration such as `convex/schema.ts`, `convex/http.ts`, `convex/crons.ts`, and `vite.config.ts`.
+- Modules are domain-oriented and expose a narrow `public.ts`; implementation details live under `internal/`, server-only operations under `server.ts`, Convex transport under a dedicated seam, and test-only overrides under `testing.ts` (`src/modules/answer/`, `src/modules/answer-thread/`, `src/modules/capability-supply/`). Consumers should depend on the public seam, not reach through internal folders.
+- Routes are adapters: they parse HTTP input, apply method/rate/security guards, call module public/server functions, and project a response. The route-boundary scanner rejects route-owned Convex transport/schema imports and private module imports (`src/lib/ui/contract-scans.ts`; representative route `src/routes/api.answer.turn.ts`).
+- Convex is composed from module-owned schemas and functions. `convex/schema.ts` spreads table bundles from `src/modules/*/internal/convex-schema.ts`; Convex functions use generated API references and exact validators (`convex/answerThreads.ts`, `convex/capabilitySupply.ts`).
+- UI has shared primitives under `src/components/ui`, product/domain components under `src/components/ae`, and route composition under `src/routes`. Tooling/CLI code lives under `tools/` and should call the same public seams rather than reimplementing domain rules (`tools/ae/cli.ts`).
+- Contract and boundary code is the source of truth for state/evidence: Zod/JSON Schema validation in domain modules, Convex validators/persistence, and public projections are kept separate from human copy and rendering. Import/UI scanner tests are executable architecture guardrails (`tests/imports/`, `tests/ui-contract/`).
 
-**Barrel Files:**
-- Treat each module's `public.ts` as the import boundary and keep implementation helpers under `internal/`; `src/modules/capability-supply/public.ts` re-exports public types/functions while `src/modules/capability-supply/internal/` remains implementation detail.
-- Convex host files should adapt and call module exports rather than duplicate domain rules; `convex/registry.ts` imports registry/catalog/money projections from `src/modules/` and exposes typed query handlers. Import-boundary checks live in `tests/imports/`.
+*Convention analysis: 2026-08-09*
 
----
-
-*Convention analysis: 2026-08-08*
-*Update when patterns change*
+Updated from the current dirty working tree on 2026-08-09; legacy/generated deviations are called out where observed.
