@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   buildPublicThreadProjection,
   type AnswerThreadRecord,
-  type AnswerTurnRecord,
 } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import {
   persistReservedAnswerTurn,
   reserveAnswerTurn,
@@ -53,16 +53,6 @@ describe('answerToolCalls persistence', () => {
     if (reservation.kind !== 'reserved') {
       throw new Error(`expected reserved turn, got ${reservation.kind}`)
     }
-    const generation = 0
-    const leaseOwner = 'worker:tool-calls'
-    const reserved = store.reservations.get(reservation.reservationKey)
-    if (reserved === undefined) throw new Error('expected stored reservation')
-    store.reservations.set(reservation.reservationKey, {
-      ...reserved,
-      runGeneration: generation,
-      leaseOwner,
-      leaseExpiresAt: Date.now() + 60_000,
-    })
     const toolCallInputs = buffered.map((record) => ({
       toolCallId: record.toolCallId,
       seq: record.seq,
@@ -72,6 +62,7 @@ describe('answerToolCalls persistence', () => {
       resultJson: record.resultJson,
       resultHash: record.resultHash,
       status: record.status,
+      createdAt: record.createdAt,
     }))
     const evidenceJson = JSON.stringify(currentEvidence({ toolCalls: buffered }))
     const proseJson = JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' })
@@ -87,6 +78,7 @@ describe('answerToolCalls persistence', () => {
         proseJson,
         artifactKindsJson: '[]',
         status: 'complete',
+        createdAt: 1_500,
       },
       toolCalls: toolCallInputs,
     })
@@ -98,8 +90,7 @@ describe('answerToolCalls persistence', () => {
       threadId: reservation.threadId,
       turnId: reservation.turnId,
       turnSeq: reservation.turnSeq,
-      generation,
-      leaseOwner,
+      createdAt: 1_500,
       answerDigest,
       query: 'after hours plumber Preston',
       intent: 'refine_search',

@@ -1,11 +1,7 @@
 export { streamAnswerTurn } from './internal/turn-orchestrator'
 export {
-  acquireAnswerTurnResumeLease,
-  renewAnswerTurnResumeLease,
-  writeAnswerTurnCheckpoint,
   reserveAnswerTurn,
   type AnswerTurnReservationResult,
-  type AnswerTurnResumeLeaseResult,
   type ReserveAnswerTurnArgs,
   stopAnswerTurn,
   type StopAnswerTurnResult,

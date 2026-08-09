@@ -184,16 +184,10 @@ describe('answer HTTP rate limits', () => {
       { admit, stream: NOOP_TURN_STREAM },
     )
 
-    expect(response.status).toBe(500)
+    expect(response.status).toBe(503)
     expect(response.headers.get('content-type')).toContain('application/problem+json')
     const body = await response.json()
-    expect(body).toMatchObject({
-      type: 'about:blank',
-      status: 500,
-      kind: 'INTERNAL',
-      code: 'missing_convex_url',
-      detail: 'Answer service is not configured. Set CONVEX_URL or VITE_CONVEX_URL, then restart the local stack.',
-    })
+    expect(body).toEqual(buildAnswerTurnProblem('missing_convex_url'))
     expect(body).not.toHaveProperty('stack')
     expect(JSON.stringify(body)).not.toContain('source-secret')
   })

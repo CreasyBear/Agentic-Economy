@@ -77,6 +77,7 @@ describe('answer turn finalization convergence', () => {
         proseJson: changedProseJson,
         artifactKindsJson: fixture.artifactKindsJson,
         status: 'complete',
+        createdAt: fixture.reservation.createdAt,
       },
       toolCalls: [],
     })
@@ -88,8 +89,7 @@ describe('answer turn finalization convergence', () => {
       threadId: fixture.reservation.threadId,
       turnId: fixture.reservation.turnId,
       turnSeq: fixture.reservation.seq,
-      generation: fixture.generation,
-      leaseOwner: fixture.leaseOwner,
+      createdAt: fixture.reservation.createdAt,
       answerDigest: changedDigest,
       query: fixture.query,
       intent: 'refine_search',
@@ -103,10 +103,8 @@ describe('answer turn finalization convergence', () => {
 })
 
 type Fixture = {
-  store: AnswerThreadTestStore
   reservation: AnswerTurnReservationRecord
-  generation: number
-  leaseOwner: string
+  store: AnswerThreadTestStore
   answerDigest: string
   requestDigest: string
   query: string
@@ -125,9 +123,6 @@ async function persistedFixture(): Promise<Fixture> {
     updatedAt: 1,
   })
   resets.push(installAnswerThreadTestPort(store))
-  const generation = 0
-  const leaseOwner = 'worker:finalization'
-  const leaseExpiresAt = Date.now() + 60_000
   const query = 'finalization test'
   const requestDigest = 'request-finalization'
   const admission = await reserveAnswerTurn({
@@ -139,14 +134,6 @@ async function persistedFixture(): Promise<Fixture> {
     title: query,
   })
   if (admission.kind !== 'reserved') throw new Error(`expected reserved fixture, got ${admission.kind}`)
-  const reserved = store.reservations.get(admission.reservationKey)
-  if (reserved === undefined) throw new Error('expected stored reservation fixture')
-  store.reservations.set(admission.reservationKey, {
-    ...reserved,
-    runGeneration: generation,
-    leaseOwner,
-    leaseExpiresAt,
-  })
 
   const evidenceJson = '{"providers":[]}'
   const snapshotHash = 'snapshot-finalization'
@@ -164,6 +151,7 @@ async function persistedFixture(): Promise<Fixture> {
       proseJson,
       artifactKindsJson,
       status: 'complete',
+      createdAt: 1,
     },
     toolCalls: [],
   })
@@ -174,8 +162,7 @@ async function persistedFixture(): Promise<Fixture> {
     threadId: admission.threadId,
     turnId: admission.turnId,
     turnSeq: admission.turnSeq,
-    generation,
-    leaseOwner,
+    createdAt: 1,
     answerDigest,
     query,
     intent: 'refine_search',
@@ -187,8 +174,6 @@ async function persistedFixture(): Promise<Fixture> {
   })).resolves.toMatchObject({ kind: 'persisted' })
   return {
     store,
-    generation,
-    leaseOwner,
     reservation: {
       reservationKey: admission.reservationKey,
       sessionId: 'session-finalization',
@@ -199,9 +184,6 @@ async function persistedFixture(): Promise<Fixture> {
       seq: admission.turnSeq,
       query,
       state: 'answer_persisted',
-      runGeneration: generation,
-      leaseOwner,
-      leaseExpiresAt,
       answerDigest,
       createdAt: 1,
       updatedAt: 1,
@@ -215,9 +197,6 @@ async function persistedFixture(): Promise<Fixture> {
   }
 }
 function failureArgs(reservation: AnswerTurnReservationRecord, answerDigest: string) {
-  if (reservation.runGeneration === undefined || reservation.leaseOwner === undefined) {
-    throw new Error('expected acquired reservation lease fixture')
-  }
   return {
     reservationKey: reservation.reservationKey,
     requestDigest: reservation.requestDigest,
@@ -225,8 +204,6 @@ function failureArgs(reservation: AnswerTurnReservationRecord, answerDigest: str
     threadId: reservation.threadId,
     turnId: reservation.turnId,
     turnSeq: reservation.seq,
-    generation: reservation.runGeneration,
-    leaseOwner: reservation.leaseOwner,
     answerDigest,
     errorProblemJson: problemJson,
   }

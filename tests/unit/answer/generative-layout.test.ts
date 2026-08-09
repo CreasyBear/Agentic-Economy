@@ -6,7 +6,8 @@ import { buildArtifactsFromSnapshot } from '@/modules/answer/internal/snapshot-a
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import { buildPublicThreadProjection } from '@/modules/answer-thread/internal/public-projection'
 import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
-import type { AnswerTurnRecord, AnswerThreadRecord } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
+import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
 import type { AnswerSource } from '@/modules/answer/public'
 
 const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({

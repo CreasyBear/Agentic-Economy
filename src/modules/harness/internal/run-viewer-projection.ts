@@ -1,7 +1,5 @@
-import type {
-  AnswerThreadRecord,
-  AnswerTurnRecord,
-} from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
+import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
 import {
   buildPublicAnswerCheckSummary,
   type AnswerToolCallRecord,

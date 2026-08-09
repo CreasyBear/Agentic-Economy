@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { attachAnswerTurnStream } from '@/components/ae/chat/turn-stream-session'
 
@@ -59,6 +59,7 @@ import type { PublicThreadTurn } from '@/modules/answer-thread/public'
 import type { ThreadReadbackResult } from '@/components/ae/chat/thread-readback'
 
 import { AeThreadTurnStreamSection } from '@/components/ae/chat/AeThreadTurnStreamSection'
+afterEach(cleanup)
 
 beforeEach(() => {
   streamSession.attach.mockClear()
@@ -226,6 +227,120 @@ describe('thread turn stream lifecycle', () => {
     expect(onSettledTurn).toHaveBeenCalledWith(stoppedTurn, 1)
     expect(screen.getByText('Answer stopped.')).toBeTruthy()
   })
+  it('keeps the stream running when Stop fails over the network', async () => {
+    const pendingTurn = {
+      turnId: 'turn:stop-network',
+      seq: 1,
+      query: 'Find a plumber',
+      intent: 'refine_search',
+      status: 'pending',
+      workLog: [],
+      artifacts: [],
+      oneLine: '',
+    } satisfies PublicThreadTurn
+    readbackState.request.mockResolvedValue({
+      kind: 'ok',
+      projection: { threadId: 'thread:stop-network', title: 'Find a plumber', turns: [pendingTurn] },
+    })
+    stopState.request.mockResolvedValue({
+      kind: 'transport_error',
+      error: {
+        kind: 'network',
+        code: 'network_error',
+        detail: 'The stop request could not be reached.',
+      },
+    })
+
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-stop-network"
+        generation={1}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+
+    act(() => {
+      attachment.subscriber.onThread?.({ threadId: 'thread:stop-network', turnId: 'turn:stop-network', turnSeq: 1 })
+      attachment.subscriber.onFrame?.({
+        seq: 0,
+        event: { type: 'thread', threadId: 'thread:stop-network', turnId: 'turn:stop-network', turnSeq: 1 },
+      })
+      attachment.subscriber.onResult?.({ kind: 'complete' })
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(stopState.request).toHaveBeenCalledWith({
+      threadId: 'thread:stop-network',
+      turnId: 'turn:stop-network',
+    })
+    expect(streamSession.abort).not.toHaveBeenCalled()
+    expect(screen.getByText('Stop was not confirmed. The answer is still running; try Stop again.')).toBeTruthy()
+    expect(document.querySelector('[data-lifecycle="pending"]')).not.toBeNull()
+  })
+
+  it('detaches on unmount without issuing Stop or aborting the stream', () => {
+    const detach = vi.fn()
+    streamSession.attach.mockReturnValueOnce(detach)
+
+    const view = render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-unmount"
+        generation={1}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+    act(() => {
+      attachment.subscriber.onThread?.({ threadId: 'thread:unmount', turnId: 'turn:unmount', turnSeq: 1 })
+    })
+
+    view.unmount()
+
+    expect(detach).toHaveBeenCalledTimes(1)
+    expect(stopState.request).not.toHaveBeenCalled()
+    expect(streamSession.abort).not.toHaveBeenCalled()
+  })
+
+  it('does not render durable stopped after a local abort without Stop acknowledgement', async () => {
+    const onStreamEnd = vi.fn()
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-local-abort"
+        generation={1}
+        onStreamEnd={onStreamEnd}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+
+    act(() => {
+      attachment.subscriber.onThread?.({ threadId: 'thread:local-abort', turnId: 'turn:local-abort', turnSeq: 1 })
+      attachment.subscriber.onResult?.({ kind: 'aborted' })
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[data-lifecycle="streaming"]')).not.toBeNull()
+    expect(screen.queryByText('Answer stopped.')).toBeNull()
+    expect(readbackState.request).not.toHaveBeenCalled()
+    expect(stopState.request).not.toHaveBeenCalled()
+    expect(onStreamEnd).not.toHaveBeenCalled()
+  })
+
   it('retries one transient readback without reattaching the stream', async () => {
     vi.useFakeTimers()
     try {

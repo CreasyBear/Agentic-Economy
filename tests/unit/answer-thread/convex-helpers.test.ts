@@ -35,6 +35,7 @@ const toolCall = {
   resultJson: '{"items":[]}',
   resultHash: 'result-hash',
   status: 'complete' as const,
+  createdAt: 123,
 }
 
 describe('answer-thread Convex helpers', () => {

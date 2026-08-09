@@ -29,18 +29,40 @@ function answerStreamResponse(event: unknown): Response {
   ].map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n'
   return new Response(body, { headers: { 'content-type': 'text/event-stream' } })
 }
+function terminalStreamResponse(...events: readonly unknown[]): Response {
+  const body = events.map((event, seq) => `data: ${JSON.stringify({
+    type: 'data-answer-event',
+    data: { seq, event },
+  })}\n\n`).join('') + 'data: [DONE]\n\n'
+  return new Response(
+    body,
+    { headers: { 'content-type': 'text/event-stream' } },
+  )
+}
+
+const completeTerminal = {
+  type: 'complete',
+  answer: {
+    query: 'bitcoin price',
+    oneLine: 'A grounded answer.',
+    providers: [],
+    summary: 'A grounded answer.',
+    nextStep: 'Continue.',
+    agentJsonUrl: '/api/agent?q=bitcoin+price',
+  },
+} as const
+const errorTerminal = {
+  type: 'error',
+  problem: buildAnswerTurnProblem('rate_limited'),
+} as const
+
 
 describe('browser answer stream transport', () => {
   it('parses a safe RFC problem response', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
-      type: 'about:blank',
-      title: 'provider leaked',
-      status: 429,
-      kind: 'RESOURCE_EXHAUSTED',
-      code: 'rate_limited',
-      detail: 'secret upstream detail',
-      copyId: 'private-copy-id',
-    }, { status: 429 })))
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      buildAnswerTurnProblem('rate_limited'),
+      { status: 429 },
+    )))
 
     const result = await streamAnswerTurnRequest({
       query: 'bitcoin price',
@@ -71,6 +93,75 @@ describe('browser answer stream transport', () => {
       onFrame: vi.fn(),
     })
     expect(JSON.stringify(network)).not.toContain('socket secret')
+  })
+
+  it('rejects a malformed RFC problem body as a protocol failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      ...buildAnswerTurnProblem('rate_limited'),
+      detail: 'provider detail',
+    }, { status: 429 })))
+
+    const result = await streamAnswerTurnRequest({
+      query: 'bitcoin price',
+      clientTurnKey: 'turn-key-malformed-problem',
+      onFrame: vi.fn(),
+    })
+
+    expect(result).toEqual({
+      kind: 'transport_error',
+      error: expect.objectContaining({ kind: 'protocol', code: 'malformed_problem' }),
+    })
+  })
+
+  it('keeps pending and stopped terminal outcomes distinct from complete', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (
+      JSON.parse(String(init?.body)).query === 'pending'
+        ? terminalStreamResponse({ type: 'pending' })
+        : terminalStreamResponse({ type: 'stopped' })
+    )))
+
+    await expect(streamAnswerTurnRequest({
+      query: 'pending',
+      clientTurnKey: 'turn-key-pending',
+      onFrame: vi.fn(),
+    })).resolves.toEqual({ kind: 'pending' })
+    await expect(streamAnswerTurnRequest({
+      query: 'stopped',
+      clientTurnKey: 'turn-key-stopped',
+      onFrame: vi.fn(),
+    })).resolves.toEqual({ kind: 'stopped' })
+  })
+
+  it.each([
+    ['complete then error', [completeTerminal, errorTerminal]],
+    ['error then complete', [errorTerminal, completeTerminal]],
+  ] as const)('rejects a second terminal frame: %s', async (_label, events) => {
+    vi.stubGlobal('fetch', vi.fn(async () => terminalStreamResponse(...events)))
+
+    await expect(streamAnswerTurnRequest({
+      query: 'bitcoin price',
+      clientTurnKey: `turn-key-duplicate-${_label.replaceAll(' ', '-')}`,
+      onFrame: vi.fn(),
+    })).resolves.toEqual({
+      kind: 'transport_error',
+      error: expect.objectContaining({ kind: 'protocol', code: 'malformed_sse' }),
+    })
+  })
+
+  it('rejects a stream with no terminal frame as a protocol failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => terminalStreamResponse({
+      type: 'one-line',
+      oneLine: 'Still streaming.',
+    })))
+
+    await expect(streamAnswerTurnRequest({
+      query: 'bitcoin price',
+      clientTurnKey: 'turn-key-missing-terminal',
+      onFrame: vi.fn(),
+    })).resolves.toEqual({
+      kind: 'transport_error',
+      error: expect.objectContaining({ kind: 'protocol', code: 'malformed_sse' }),
+    })
   })
 
   it('returns complete only after a valid frame stream and sends the required key', async () => {

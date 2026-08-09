@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { buildAnswerTurnProblem, redactAnswerTurnProblem, type AnswerTurnProblem } from '@/lib/errors'
+import { buildAnswerTurnProblem, parseAnswerTurnProblemStrict, redactAnswerTurnProblem, type AnswerTurnProblem } from '@/lib/errors'
 import {
   AnswerTurnProtocolError,
   readAnswerTurnFrames,
@@ -71,7 +71,15 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
 
   if (!response.ok) {
     const outcome = await readHttpOutcome(response, startedAt)
-    const problem = redactAnswerTurnProblem(outcome.body)
+    const problem = parseAnswerTurnProblemStrict(outcome.body)
+    if (problem === undefined) {
+      throw new CliFailure('The answer service returned an invalid problem response.', {
+        exitCode: 1,
+        kind: 'INTERNAL',
+        code: 'malformed_problem',
+        detail: 'The answer service returned an invalid problem response.',
+      })
+    }
     throw new CliFailure(`${problem.title} (${response.status})`, {
       exitCode: 1,
       kind: problem.kind,

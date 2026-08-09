@@ -42,7 +42,6 @@ import { isPublicWorkStep, publicWorkLog, safeWorkLogUserText } from './public-w
 import type {
   AnswerRunGateSummary,
   AnswerToolCallRecord,
-  AnswerTurnCheckpoint,
   AnswerTurnRecord,
   AnswerTurnTimingEntry,
   FollowUpIntent,
@@ -50,13 +49,9 @@ import type {
   FrozenTurnProse,
 } from '../answer-thread.schema'
 import {
-  acquireAnswerTurnResumeLease,
   getAnswerThreadWithTurns,
-  renewAnswerTurnResumeLease,
   type AnswerHarnessFinalizationResult,
   type AnswerTurnReservationResult,
-  type AnswerTurnResumeLeaseResult,
-  writeAnswerTurnCheckpoint,
 } from '../answer-thread.functions'
 import { normalizeAnswerTurnQuery } from './turn-digests'
 import { resolveIntentRoute, type IntentRoute } from './intent-router'
@@ -265,6 +260,7 @@ type StreamAnswerTurnRuntimeState = {
   isNewThread: boolean
   reservationKey: string
   requestDigest: string
+  createdAt: number
   searchContext: AeSearchContext | undefined
   registryQuery?: string
   priorTurns: readonly AnswerTurnRecordLite[]
@@ -286,10 +282,6 @@ type StreamAnswerTurnRuntimeState = {
   toolCalls: readonly AnswerToolCallRecord[]
   modelRequests?: readonly HarnessModelRequestRecord[] | undefined
   allowedSlugs: ReadonlySet<string>
-  resumeCheckpoint?: AnswerTurnCheckpoint
-  resumeGeneration?: number
-  resumeLeaseOwner?: string
-  resumeLeaseExpiresAt?: number
   gate?: AnswerRunGateSummary | undefined
   finalGate?: AnswerRunGateSummary | undefined
   finalTurnStatus?: AnswerTurnRecord['status'] | undefined
@@ -307,17 +299,6 @@ export type StreamAnswerTurnInput = {
   requestDigest: string
   admission: Extract<AnswerTurnReservationResult, { kind: 'reserved' | 'replayed' }>
   searchContext?: AeSearchContext
-  resume?: {
-    checkpoint?: AnswerTurnCheckpoint
-    generation: number
-    leaseOwner: string
-    leaseExpiresAt: number
-  }
-  checkpointLease?: {
-    generation: number
-    leaseOwner: string
-    leaseExpiresAt: number
-  }
   /** Explicit descriptor source for fixture/local-e2e answer turns. */
   keylessExecutableSource?: KeylessExecutableSourcePort
   /** Narrow fixture/evaluator execution dependencies; production omits this. */
@@ -412,12 +393,8 @@ export async function streamAnswerTurn(
   }
 
   send({ type: 'thread', threadId, turnId, turnSeq })
-  if (input.resume === undefined && admission.kind === 'replayed') {
-    if (
-      admission.state === 'reserved'
-      || admission.state === 'checkpointed'
-      || admission.state === 'answer_persisted'
-    ) {
+  if (admission.kind === 'replayed') {
+    if (admission.state === 'reserved' || admission.state === 'answer_persisted') {
       send({ type: 'pending' })
       return { threadId, turnId, turnSeq }
     }
@@ -430,66 +407,10 @@ export async function streamAnswerTurn(
       turnId,
       sessionId: input.sessionId,
     })
-    if (replay.kind === 'complete') {
-      send({ type: 'complete', answer: replay.answer })
-    } else {
-      send({ type: 'error', problem: replay.problem })
-    }
+    send(replay.kind === 'complete'
+      ? { type: 'complete', answer: replay.answer }
+      : { type: 'error', problem: replay.problem })
     return { threadId, turnId, turnSeq }
-  }
-
-  if (input.resume === undefined && admission.kind === 'reserved') {
-    const leaseOwner = crypto.randomUUID()
-    let lease: AnswerTurnResumeLeaseResult | undefined
-    try {
-      lease = await acquireAnswerTurnResumeLease({
-        reservationKey: admission.reservationKey,
-        requestDigest: input.requestDigest,
-        sessionId: input.sessionId,
-        threadId,
-        turnId,
-        turnSeq,
-        leaseOwner,
-        mode: 'initial',
-        ...(input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.sourceWriteRequest }),
-      })
-    } catch {
-      send({ type: 'error', problem: buildAnswerTurnProblem('unavailable') })
-      return { threadId, turnId, turnSeq }
-    }
-    if (lease?.kind === 'pending') {
-      send({ type: 'pending' })
-      return { threadId, turnId, turnSeq }
-    }
-    if (lease?.kind === 'settled') {
-      if (lease.status === 'stopped') {
-        send({ type: 'stopped' })
-      } else {
-        const replay = await readFinalizedAnswerTurn({
-          threadId,
-          turnId,
-          sessionId: input.sessionId,
-        })
-        send(replay.kind === 'complete'
-          ? { type: 'complete', answer: replay.answer }
-          : { type: 'error', problem: replay.problem })
-      }
-      return { threadId, turnId, turnSeq }
-    }
-    if (lease?.kind === 'conflict') {
-      send({ type: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') })
-      return { threadId, turnId, turnSeq }
-    }
-    if (lease?.kind === 'acquired') {
-      input = {
-        ...input,
-        checkpointLease: {
-          generation: lease.generation,
-          leaseOwner: lease.leaseOwner,
-          leaseExpiresAt: lease.leaseExpiresAt,
-        },
-      }
-    }
   }
 
   const timings = createTurnTimingCollector()
@@ -511,7 +432,7 @@ export async function streamAnswerTurn(
     startedAtMs: interpretStartedAt,
   })
 
-  const resumeCheckpoint = input.resume?.checkpoint
+  const createdAt = Date.now()
   const runResult = await harness.loop.run<StreamAnswerTurnRuntimeState>({
     initialState: {
       query,
@@ -521,6 +442,7 @@ export async function streamAnswerTurn(
       isNewThread,
       reservationKey: admission.reservationKey,
       requestDigest: input.requestDigest,
+      createdAt,
       searchContext: input.searchContext,
       priorTurns: [],
       priorTurnCount: 0,
@@ -530,20 +452,6 @@ export async function streamAnswerTurn(
       toolCalls: [],
       allowedSlugs: new Set<string>(),
       assembled: false,
-      ...(input.resume === undefined
-        ? input.checkpointLease === undefined
-          ? {}
-          : {
-              resumeGeneration: input.checkpointLease.generation,
-              resumeLeaseOwner: input.checkpointLease.leaseOwner,
-              resumeLeaseExpiresAt: input.checkpointLease.leaseExpiresAt,
-            }
-        : {
-            ...(resumeCheckpoint === undefined ? {} : { resumeCheckpoint }),
-            resumeGeneration: input.resume.generation,
-            resumeLeaseOwner: input.resume.leaseOwner,
-            resumeLeaseExpiresAt: input.resume.leaseExpiresAt,
-          }),
     } satisfies StreamAnswerTurnRuntimeState,
     phases: buildStreamAnswerTurnPhases({
       input,
@@ -612,19 +520,6 @@ function buildStreamAnswerTurnPhases(input: {
 }): HarnessRunLoopPhaseHandlers<StreamAnswerTurnRuntimeState> {
   return {
     context: async ({ state }) => {
-      const checkpoint = input.input.resume?.checkpoint
-      if (checkpoint !== undefined) {
-        for (const request of checkpoint.modelRequests) {
-          input.harness.loop.recordModelRequest(request)
-        }
-        input.timings.add(checkpoint.timings, { phase: 'resume_checkpoint' })
-        return {
-          ...state,
-          searchContext: input.input.searchContext,
-          priorTurns: [],
-          priorTurnCount: 0,
-        }
-      }
       const querySafety = await (input.input.querySafetyClassifier ?? classifyAnswerQuerySafety)({
         query: state.query,
         ...(input.input.signal === undefined ? {} : { signal: input.input.signal }),
@@ -651,25 +546,6 @@ function buildStreamAnswerTurnPhases(input: {
       }
     },
     intent: ({ state }) => {
-      if (input.input.resume?.checkpoint !== undefined) {
-        input.stopContextTiming({ resumed: true })
-        input.workLog.emit({
-          id: 'interpret.request',
-          phase: 'interpret',
-          status: 'complete',
-          title: 'Resuming your answer',
-          summary: 'Continuing from the saved capability result.',
-          detailRows: [{ label: 'Request', value: safeWorkLogUserText(state.query) }],
-          startedAtMs: input.interpretStartedAt,
-          completedAtMs: Date.now(),
-        })
-        return {
-          ...state,
-          intent: 'refine_search',
-          priorProviders: [],
-          priorAllowedSlugs: [],
-        }
-      }
       const intent = classifyFollowUpIntent(state.query, state.priorTurnCount)
       input.stopContextTiming({
         priorTurns: state.priorTurns.length,
@@ -701,9 +577,6 @@ function buildStreamAnswerTurnPhases(input: {
       }
     },
     route: ({ state }) => {
-      if (input.input.resume?.checkpoint !== undefined) {
-        return { ...state, route: { kind: 'tool_search' } }
-      }
       if (state.querySafety?.kind === 'refused') {
         return { ...state, route: { kind: 'safety_refusal' } }
       }
@@ -729,12 +602,6 @@ function buildStreamAnswerTurnPhases(input: {
       }
     },
     retrieval: async ({ state }) => {
-      if (input.input.resume?.checkpoint !== undefined) {
-        return {
-          ...state,
-          keylessDataAsk: { kind: 'resolved', descriptors: [], candidates: [] },
-        }
-      }
       if (state.querySafety?.kind === 'refused') {
         return state
       }
@@ -925,62 +792,27 @@ function buildStreamAnswerTurnPhases(input: {
           const keylessDataAsk: KeylessDataAskResolution = state.keylessDataAsk
             ?? { kind: 'resolved', descriptors: [], candidates: [] }
           const selected = keylessDataAsk.kind === 'resolved' ? keylessDataAsk.selected : undefined
-          const resumeInput = input.input.resume
-          const resumeCheckpoint = resumeInput?.checkpoint
-          const activeLease = resumeInput === undefined
-            ? input.input.checkpointLease
-            : resumeCheckpoint === undefined
-              ? resumeInput
-              : undefined
-          const persistIntermediateCheckpoint = activeLease === undefined
-            ? undefined
-            : async (checkpoint: AnswerTurnCheckpoint): Promise<void> => {
-                const generation = state.resumeGeneration
-                const leaseOwner = state.resumeLeaseOwner
-                if (
-                  generation === undefined
-                  || leaseOwner === undefined
-                  || generation !== activeLease.generation
-                  || leaseOwner !== activeLease.leaseOwner
-                ) {
-                  throw new Error('answer_turn_resume_lease_unavailable')
-                }
-                const renewed = await renewAnswerTurnResumeLease({
-                  reservationKey: state.reservationKey,
-                  requestDigest: state.requestDigest,
-                  sessionId: input.input.sessionId,
-                  threadId: state.threadId,
-                  turnId: state.turnId,
-                  turnSeq: state.turnSeq,
-                  generation,
-                  leaseOwner,
-                  ...(input.input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.input.sourceWriteRequest }),
-                })
-                if (
-                  renewed?.kind !== 'acquired'
-                  || renewed.generation !== generation
-                  || renewed.leaseOwner !== leaseOwner
-                ) {
-                  throw new Error('answer_turn_resume_lease_unavailable')
-                }
-                const written = await writeAnswerTurnCheckpoint({
-                  reservationKey: state.reservationKey,
-                  requestDigest: state.requestDigest,
-                  sessionId: input.input.sessionId,
-                  threadId: state.threadId,
-                  turnId: state.turnId,
-                  turnSeq: state.turnSeq,
-                  generation,
-                  leaseOwner,
-                  checkpoint,
-                  ...(input.input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.input.sourceWriteRequest }),
-                })
-                if (written === undefined || written.kind === 'conflict' || written.kind === 'stopped') {
-                  throw new Error('answer_turn_checkpoint_write_failed')
-                }
-              }
-          const result = resumeCheckpoint !== undefined
+          const result = retrievedHasProviders
+            && keylessDataAsk.kind === 'resolved'
+            && selected === undefined
             ? await agentTurnPath.run(
+                runtimeTurnPathContext(input, state),
+                {
+                  query: state.query,
+                  followUpIntent: state.intent,
+                  searchContext: state.searchContext,
+                  priorProviders: retrieved!.snapshot!.providers,
+                  priorAllowedSlugs: [...retrieved!.allowedSlugs],
+                  keylessDataAsk,
+                  keylessExecutableSource,
+                  ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
+                  disableTools: true,
+                },
+                retrieved!.toolCalls,
+                state.responsePlan?.mode,
+                undefined,
+              )
+            : await agentTurnPath.run(
                 runtimeTurnPathContext(input, state),
                 {
                   query: state.query,
@@ -988,56 +820,20 @@ function buildStreamAnswerTurnPhases(input: {
                   searchContext: state.searchContext,
                   keylessDataAsk,
                   keylessExecutableSource,
-                  resumeCheckpoint,
                   ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
+                  // Keep surfaced operation providers as grounding when the
+                  // selected capability tool is enabled.
+                  ...(retrievedHasProviders && selected !== undefined
+                    ? {
+                        priorProviders: retrieved!.snapshot!.providers,
+                        priorAllowedSlugs: [...retrieved!.allowedSlugs],
+                      }
+                    : {}),
                 },
-                [],
+                state.toolCalls,
                 undefined,
-                undefined,
+                state.responsePlan?.toolPolicy,
               )
-            : retrievedHasProviders
-              && keylessDataAsk.kind === 'resolved'
-              && selected === undefined
-              ? await agentTurnPath.run(
-                  runtimeTurnPathContext(input, state),
-                  {
-                    query: state.query,
-                    followUpIntent: state.intent,
-                    searchContext: state.searchContext,
-                    priorProviders: retrieved!.snapshot!.providers,
-                    priorAllowedSlugs: [...retrieved!.allowedSlugs],
-                    keylessDataAsk,
-                    keylessExecutableSource,
-                    ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
-                    disableTools: true,
-                  },
-                  retrieved!.toolCalls,
-                  state.responsePlan?.mode,
-                  undefined,
-                )
-              : await agentTurnPath.run(
-                  runtimeTurnPathContext(input, state),
-                  {
-                    query: state.query,
-                    followUpIntent: state.intent,
-                    searchContext: state.searchContext,
-                    keylessDataAsk,
-                    keylessExecutableSource,
-                    ...(input.input.operationExecuteDeps === undefined ? {} : { operationExecuteDeps: input.input.operationExecuteDeps }),
-                    ...(persistIntermediateCheckpoint === undefined ? {} : { persistIntermediateCheckpoint }),
-                    // Keep surfaced operation providers as grounding when the
-                    // selected capability tool is enabled.
-                    ...(retrievedHasProviders && selected !== undefined
-                      ? {
-                          priorProviders: retrieved!.snapshot!.providers,
-                          priorAllowedSlugs: [...retrieved!.allowedSlugs],
-                        }
-                      : {}),
-                  },
-                  state.toolCalls,
-                  undefined,
-                  state.responsePlan?.toolPolicy,
-                )
           return applyToolLedResult(state, result)
         }
         default: {
@@ -1243,17 +1039,11 @@ function buildPersistAnswerTurnInput(input: {
     status: finalTurnStatus,
     toolCalls: input.state.toolCalls.length,
   })
-  const generation = input.state.resumeGeneration
-  const leaseOwner = input.state.resumeLeaseOwner
-  if (generation === undefined || leaseOwner === undefined) {
-    throw new Error('answer_turn_lease_missing')
-  }
   return {
     reservationKey: input.state.reservationKey,
     requestDigest: input.state.requestDigest,
-    generation,
-    leaseOwner,
     sessionId: input.input.sessionId,
+    createdAt: input.state.createdAt,
     threadId: input.state.threadId,
     isNewThread: input.state.isNewThread,
     title: buildThreadTitle(input.state.query),

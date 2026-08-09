@@ -1,15 +1,16 @@
 import { readCookie, serializeCookie } from '@/lib/http/cookies'
 import type {
   AnswerThreadRecord,
-  AnswerTurnRecord,
   PublicThreadProjection,
 } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
+import { toolCallsMatch } from '@/modules/answer-thread/internal/convex-helpers'
 import {
   buildPublicReservationTurn,
   buildPublicThreadProjection,
 } from '@/modules/answer-thread/internal/public-projection'
 import type { AnswerTurnReservationRecord } from '@/modules/answer-thread/answer-thread.schema'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { AnswerToolCallInputRow } from '@/modules/answer-thread/internal/commands'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 
 export type AnswerThreadTestStore = {
@@ -29,23 +30,16 @@ export type AnswerThreadTestStore = {
   revokeShareError?: unknown
   deleteThreadError?: unknown
 }
+
 type PersistedAnswerTurnRow = Record<string, unknown> & {
   turnId: string
   evidenceJson: string
+  snapshotHash: string
+  createdAt: number
+  toolCalls: readonly AnswerToolCallInputRow[]
   status: AnswerTurnRecord['status']
 }
 
-function clearReservationPrivateState(
-  reservation: AnswerTurnReservationRecord,
-): AnswerTurnReservationRecord {
-  const cleared = { ...reservation }
-  delete cleared.leaseOwner
-  delete cleared.leaseExpiresAt
-  delete cleared.checkpoint
-  delete cleared.checkpointDigest
-  delete cleared.checkpointStep
-  return cleared
-}
 
 export function createAnswerThreadTestStore(): AnswerThreadTestStore {
   return {
@@ -194,306 +188,6 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
         isNewThread: requestedThreadScope === 'new',
       }
     },
-    acquireAnswerTurnResumeLease: async (args) => {
-      const reservation = store.reservations.get(args.reservationKey)
-      if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
-      if (
-        reservation.sessionId !== args.sessionId
-        || reservation.threadId !== args.threadId
-        || reservation.turnId !== args.turnId
-        || reservation.seq !== args.turnSeq
-      ) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-      if (reservation.requestDigest !== args.requestDigest) {
-        return { kind: 'conflict', reason: 'request_digest_mismatch' }
-      }
-      if (args.mode === 'resume' && (
-        args.expectedGeneration === undefined
-        || reservation.runGeneration !== args.expectedGeneration
-      )) {
-        return { kind: 'conflict', reason: 'generation_mismatch' }
-      }
-      const thread = store.threads.get(args.threadId)
-      if (thread === undefined || thread.pseudonymousSessionId !== args.sessionId) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-      if (reservation.state === 'stopped') {
-        return {
-          kind: 'settled',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          status: 'stopped',
-        }
-      }
-      if (reservation.state === 'finalized') {
-        return {
-          kind: 'settled',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          status: reservation.finalStatus ?? 'error',
-        }
-      }
-      if (reservation.state === 'answer_persisted') {
-        if (args.mode !== 'resume') {
-          return {
-            kind: 'pending',
-            reservationKey: reservation.reservationKey,
-            threadId: reservation.threadId,
-            turnId: reservation.turnId,
-          }
-        }
-        const currentGeneration = reservation.runGeneration
-        const currentLeaseOwner = reservation.leaseOwner
-        const currentLeaseExpiresAt = reservation.leaseExpiresAt
-        const finalStatus = reservation.finalStatus
-        if (
-          currentGeneration === undefined
-          || currentLeaseOwner === undefined
-          || currentLeaseExpiresAt === undefined
-          || finalStatus === undefined
-        ) {
-          return { kind: 'conflict', reason: 'non_resumable' }
-        }
-        const timestamp = Date.now()
-        const leaseActive = currentLeaseExpiresAt > timestamp
-        if (leaseActive && currentLeaseOwner !== args.leaseOwner) {
-          return {
-            kind: 'pending',
-            reservationKey: reservation.reservationKey,
-            threadId: reservation.threadId,
-            turnId: reservation.turnId,
-            leaseExpiresAt: currentLeaseExpiresAt,
-          }
-        }
-        const generation = leaseActive ? currentGeneration : currentGeneration + 1
-        const turn = store.turns.get(args.turnId)
-        if (turn === undefined) return { kind: 'conflict', reason: 'non_resumable' }
-        if (turn.status === 'stopped') {
-          store.reservations.set(args.reservationKey, {
-            ...clearReservationPrivateState(reservation),
-            state: 'stopped',
-            updatedAt: timestamp,
-          })
-          return {
-            kind: 'settled',
-            reservationKey: reservation.reservationKey,
-            threadId: reservation.threadId,
-            turnId: reservation.turnId,
-            status: 'stopped',
-          }
-        }
-        if (turn.status !== finalStatus) store.turns.set(args.turnId, { ...turn, status: finalStatus })
-        store.reservations.set(args.reservationKey, {
-          ...clearReservationPrivateState(reservation),
-          state: 'finalized',
-          finalStatus,
-          runGeneration: generation,
-          updatedAt: timestamp,
-        })
-        return {
-          kind: 'settled',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          status: finalStatus,
-        }
-      }
-      if (args.mode === 'resume') {
-        const resumableReserved = reservation.state === 'reserved'
-          && reservation.checkpoint === undefined
-          && reservation.checkpointDigest === undefined
-          && reservation.checkpointStep === undefined
-        const resumableCheckpoint = reservation.state === 'checkpointed'
-          && reservation.runGeneration !== undefined
-          && reservation.checkpoint !== undefined
-          && reservation.checkpointDigest !== undefined
-          && reservation.checkpointStep !== undefined
-        if (!resumableReserved && !resumableCheckpoint) {
-          return { kind: 'conflict', reason: 'non_resumable' }
-        }
-      }
-      const timestamp = Date.now()
-      const leaseActive = reservation.leaseOwner !== undefined
-        && reservation.leaseExpiresAt !== undefined
-        && reservation.leaseExpiresAt > timestamp
-      if (leaseActive && reservation.leaseOwner !== args.leaseOwner) {
-        return {
-          kind: 'pending',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          ...(reservation.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: reservation.leaseExpiresAt }),
-        }
-      }
-      const currentGeneration = reservation.runGeneration
-      if (args.mode === 'resume' && currentGeneration === undefined) {
-        return { kind: 'conflict', reason: 'non_resumable' }
-      }
-      const generation = currentGeneration === undefined
-        ? 0
-        : leaseActive || reservation.leaseOwner === undefined
-          ? currentGeneration
-          : currentGeneration + 1
-      const leaseExpiresAt = timestamp + 60_000
-      store.reservations.set(args.reservationKey, {
-        ...reservation,
-        runGeneration: generation,
-        leaseOwner: args.leaseOwner,
-        leaseExpiresAt,
-        updatedAt: timestamp,
-      })
-      return {
-        kind: 'acquired',
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-        query: reservation.query,
-        ...(reservation.searchContextJson === undefined ? {} : { searchContextJson: reservation.searchContextJson }),
-        generation,
-        leaseOwner: args.leaseOwner,
-        leaseExpiresAt,
-        ...(reservation.checkpoint === undefined ? {} : { checkpoint: reservation.checkpoint }),
-        ...(reservation.checkpointDigest === undefined ? {} : { checkpointDigest: reservation.checkpointDigest }),
-        ...(reservation.checkpointStep === undefined ? {} : { checkpointStep: reservation.checkpointStep }),
-      }
-    },
-    renewAnswerTurnResumeLease: async (args) => {
-      const reservation = store.reservations.get(args.reservationKey)
-      if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
-      if (
-        reservation.sessionId !== args.sessionId
-        || reservation.threadId !== args.threadId
-        || reservation.turnId !== args.turnId
-        || reservation.seq !== args.turnSeq
-      ) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-      if (reservation.requestDigest !== args.requestDigest) {
-        return { kind: 'conflict', reason: 'request_digest_mismatch' }
-      }
-      if (reservation.state === 'stopped') {
-        return {
-          kind: 'settled',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          status: 'stopped',
-        }
-      }
-      if (reservation.state === 'finalized') {
-        return {
-          kind: 'settled',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          status: reservation.finalStatus ?? 'error',
-        }
-      }
-      if (reservation.runGeneration !== args.generation) {
-        return { kind: 'conflict', reason: 'generation_mismatch' }
-      }
-      if (reservation.leaseOwner !== args.leaseOwner) {
-        return { kind: 'conflict', reason: 'lease_active' }
-      }
-      if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
-        return { kind: 'conflict', reason: 'lease_active' }
-      }
-      const leaseExpiresAt = Date.now() + 60_000
-      store.reservations.set(args.reservationKey, { ...reservation, leaseExpiresAt, updatedAt: Date.now() })
-      return {
-        kind: 'acquired',
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-        query: reservation.query,
-        ...(reservation.searchContextJson === undefined ? {} : { searchContextJson: reservation.searchContextJson }),
-        generation: args.generation,
-        leaseOwner: args.leaseOwner,
-        leaseExpiresAt,
-        ...(reservation.checkpoint === undefined ? {} : { checkpoint: reservation.checkpoint }),
-        ...(reservation.checkpointDigest === undefined ? {} : { checkpointDigest: reservation.checkpointDigest }),
-        ...(reservation.checkpointStep === undefined ? {} : { checkpointStep: reservation.checkpointStep }),
-      }
-    },
-    writeAnswerTurnCheckpoint: async (args) => {
-      const reservation = store.reservations.get(args.reservationKey)
-      if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
-      if (
-        reservation.sessionId !== args.sessionId
-        || reservation.threadId !== args.threadId
-        || reservation.turnId !== args.turnId
-        || reservation.seq !== args.turnSeq
-      ) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-      if (reservation.requestDigest !== args.requestDigest) {
-        return { kind: 'conflict', reason: 'request_digest_mismatch' }
-      }
-      if (reservation.state === 'stopped') {
-        return {
-          kind: 'stopped',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-        }
-      }
-      if (reservation.state === 'finalized' || reservation.state === 'answer_persisted') {
-        return { kind: 'conflict', reason: 'finalized' }
-      }
-      if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-        return { kind: 'conflict', reason: 'generation_mismatch' }
-      }
-      if (reservation.leaseOwner !== args.leaseOwner) {
-        return { kind: 'conflict', reason: 'lease_owner_mismatch' }
-      }
-      if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
-        return { kind: 'conflict', reason: 'lease_expired' }
-      }
-      const checkpointDigest = canonicalDigest(args.checkpoint).toString()
-      if (reservation.checkpointDigest === checkpointDigest && reservation.checkpointStep === args.checkpoint.stepIndex) {
-        return {
-          kind: 'replayed',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          generation: args.generation,
-          checkpointDigest,
-          checkpointStep: args.checkpoint.stepIndex,
-        }
-      }
-      if (reservation.checkpointStep !== undefined && args.checkpoint.stepIndex < reservation.checkpointStep) {
-        return { kind: 'conflict', reason: 'checkpoint_step_stale' }
-      }
-      if (
-        reservation.checkpointStep === args.checkpoint.stepIndex
-        && reservation.checkpointDigest !== undefined
-        && reservation.checkpointDigest !== checkpointDigest
-      ) {
-        return { kind: 'conflict', reason: 'checkpoint_conflict' }
-      }
-      store.reservations.set(args.reservationKey, {
-        ...reservation,
-        state: 'checkpointed',
-        checkpoint: args.checkpoint,
-        checkpointDigest,
-        checkpointStep: args.checkpoint.stepIndex,
-        updatedAt: Date.now(),
-      })
-      return {
-        kind: 'checkpointed',
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        generation: args.generation,
-        checkpointDigest,
-        checkpointStep: args.checkpoint.stepIndex,
-      }
-    },
     persistReservedAnswerTurn: async (args) => {
       const reservation = store.reservations.get(args.reservationKey)
       if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
@@ -509,17 +203,6 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
         return { kind: 'conflict', reason: 'request_digest_mismatch' }
       }
       if (reservation.state === 'stopped') return { kind: 'conflict', reason: 'stopped' }
-      if (reservation.state !== 'finalized') {
-        if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-          return { kind: 'conflict', reason: 'generation_mismatch' }
-        }
-        if (reservation.leaseOwner !== args.leaseOwner) {
-          return { kind: 'conflict', reason: 'lease_owner_mismatch' }
-        }
-        if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
-          return { kind: 'conflict', reason: 'lease_expired' }
-        }
-      }
       if (
         (reservation.state === 'answer_persisted' || reservation.state === 'finalized') &&
         reservation.answerDigest !== args.answerDigest
@@ -527,6 +210,26 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
         return { kind: 'conflict', reason: 'answer_digest_conflict' }
       }
       if (reservation.state === 'answer_persisted' || reservation.state === 'finalized') {
+        const existingTurn = store.turns.get(args.turnId)
+        if (
+          existingTurn === undefined
+          || existingTurn.snapshotHash !== args.snapshotHash
+          || existingTurn.createdAt !== args.createdAt
+        ) {
+          return { kind: 'conflict', reason: 'turn_conflict' }
+        }
+        const persistedRow = store.persisted.find(
+          (candidate): candidate is PersistedAnswerTurnRow =>
+            typeof candidate === 'object'
+            && candidate !== null
+            && 'turnId' in candidate
+            && candidate.turnId === args.turnId
+            && 'toolCalls' in candidate
+            && Array.isArray(candidate.toolCalls),
+        )
+        if (persistedRow === undefined || !toolCallsMatch(persistedRow.toolCalls, args.toolCalls)) {
+          return { kind: 'conflict', reason: 'tool_call_conflict' }
+        }
         return {
           kind: 'replayed',
           reservationKey: reservation.reservationKey,
@@ -557,7 +260,7 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
         status: 'pending',
         ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
         ...(args.errorProblemJson === undefined ? {} : { errorProblemJson: args.errorProblemJson }),
-        createdAt: timestamp,
+        createdAt: args.createdAt,
       })
       const persistedRow: PersistedAnswerTurnRow = { ...args, status: 'pending' }
       store.persisted.push(persistedRow)
@@ -622,17 +325,6 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
           threadId: reservation.threadId,
           turnId: reservation.turnId,
           turnSeq: reservation.seq,
-        }
-      }
-      if (reservation.state !== 'finalized') {
-        if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-          return { kind: 'conflict', reason: 'generation_mismatch' }
-        }
-        if (reservation.leaseOwner !== args.leaseOwner) {
-          return { kind: 'conflict', reason: 'lease_owner_mismatch' }
-        }
-        if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
-          return { kind: 'conflict', reason: 'lease_expired' }
         }
       }
       if (reservation.state === 'finalized') {
@@ -853,29 +545,6 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
       }
       if (reservation.state === 'stopped') {
         return { status: 'conflict', reason: 'stopped', message: 'Answer turn was stopped.' }
-      }
-      if (reservation.state !== 'finalized') {
-        if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-          return {
-            status: 'conflict',
-            reason: 'reservation_identity_mismatch',
-            message: 'Answer turn generation does not match finalization.',
-          }
-        }
-        if (reservation.leaseOwner !== args.leaseOwner) {
-          return {
-            status: 'conflict',
-            reason: 'reservation_identity_mismatch',
-            message: 'Answer turn lease owner does not match finalization.',
-          }
-        }
-        if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
-          return {
-            status: 'conflict',
-            reason: 'reservation_identity_mismatch',
-            message: 'Answer turn lease has expired.',
-          }
-        }
       }
       if (reservation.state === 'finalized') {
         if (reservation.harnessFinalizationDigest !== args.finalizationHash) {

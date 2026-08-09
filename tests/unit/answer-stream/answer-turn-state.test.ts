@@ -154,6 +154,23 @@ describe('reduceAnswerTurnState', () => {
     expect(durable.complete).toBe(true)
   })
 
+  it('keeps pending and stopped stream results out of complete', () => {
+    const pending = reduceAnswerTurnState(initialAnswerTurnUiState, {
+      type: 'stream_result',
+      result: { kind: 'pending' },
+    })
+    expect(pending.phase).toBe('pending')
+    expect(pending.complete).toBe(false)
+
+    const stopped = reduceAnswerTurnState(initialAnswerTurnUiState, {
+      type: 'stream_result',
+      result: { kind: 'stopped' },
+    })
+    expect(stopped.phase).toBe('stopped')
+    expect(stopped.stopState).toBe('accepted')
+    expect(stopped.complete).toBe(false)
+  })
+
   it('accepts the first server frame at sequence zero', () => {
     const first = reduceAnswerTurnState(initialAnswerTurnUiState, {
       type: 'frame',

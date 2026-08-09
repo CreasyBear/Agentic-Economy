@@ -100,7 +100,18 @@ export function reduceAnswerTurnState(
       )
     case 'stream_result':
       if (action.result.kind === 'complete') {
-        return { ...state, phase: 'settling' }
+        return { ...state, phase: 'settling', complete: false }
+      }
+      if (action.result.kind === 'pending') {
+        return { ...state, phase: 'pending', complete: false }
+      }
+      if (action.result.kind === 'stopped') {
+        return {
+          ...stopRunningWorkSteps(state),
+          phase: 'stopped',
+          stopState: 'accepted',
+          complete: false,
+        }
       }
       if (action.result.kind === 'aborted') {
         return state
@@ -111,12 +122,14 @@ export function reduceAnswerTurnState(
           phase: state.threadMeta === null ? 'error' : 'settling',
           problem: action.result.problem,
           transportError: null,
+          complete: false,
         }
       }
       return {
         ...state,
         phase: state.threadMeta === null ? 'error' : 'settling',
         transportError: action.result.error,
+        complete: false,
       }
     case 'stop_requested':
       return state.stopState === 'idle'

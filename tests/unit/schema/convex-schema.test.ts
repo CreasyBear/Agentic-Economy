@@ -387,7 +387,7 @@ const requiredIndexes = {
   notificationDispatchAttempts: ['by_attemptId', 'by_dispatch_startedAt', 'by_provider_status'],
   notificationWebhookEvents: ['by_webhookEventId', 'by_provider_event', 'by_dispatch', 'by_status_receivedAt'],
   answerThreads: ['by_threadId', 'by_session_updatedAt'],
-  answerTurns: ['by_turnId', 'by_thread_createdAt'],
+  answerTurns: ['by_turnId', 'by_thread_seq'],
   answerTurnReservations: ['by_reservationKey', 'by_turnId', 'by_thread_seq'],
   answerThreadShares: ['by_threadId', 'by_accessId', 'by_thread_status'],
   answerToolCalls: ['by_toolCallId', 'by_turn_seq'],

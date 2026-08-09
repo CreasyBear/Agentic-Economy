@@ -144,9 +144,6 @@ const finalizeAnswerTurnHarnessRunResult = v.union(
       v.literal('idempotency_conflict'),
       v.literal('parent_conflict'),
       v.literal('stopped'),
-      v.literal('generation_mismatch'),
-      v.literal('lease_owner_mismatch'),
-      v.literal('lease_expired'),
     ),
     message: v.string(),
     activeLeafEntryId: v.optional(v.string()),
@@ -351,8 +348,6 @@ export const finalizeAnswerTurnHarnessRun = mutation({
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
-    generation: v.number(),
-    leaseOwner: v.string(),
     finalStatus: v.union(v.literal('complete'), v.literal('error')),
     snapshotHash: v.string(),
     evidenceJson: v.string(),
@@ -449,29 +444,6 @@ export const finalizeAnswerTurnHarnessRun = mutation({
         message: 'Answer turn has not been durably persisted.',
       }
     }
-    if (reservation.state !== 'finalized') {
-      if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-        return {
-          status: 'conflict' as const,
-          reason: 'generation_mismatch' as const,
-          message: 'Answer turn generation does not match finalization.',
-        }
-      }
-      if (reservation.leaseOwner !== args.leaseOwner) {
-        return {
-          status: 'conflict' as const,
-          reason: 'lease_owner_mismatch' as const,
-          message: 'Answer turn lease owner does not match finalization.',
-        }
-      }
-      if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= Date.now()) {
-        return {
-          status: 'conflict' as const,
-          reason: 'lease_expired' as const,
-          message: 'Answer turn lease has expired.',
-        }
-      }
-    }
     if (
       reservation.state === 'finalized' &&
       reservation.harnessFinalizationDigest !== args.finalizationHash
@@ -559,11 +531,6 @@ export const finalizeAnswerTurnHarnessRun = mutation({
         state: 'finalized',
         finalStatus: args.finalStatus,
         harnessFinalizationDigest: args.finalizationHash,
-        checkpointJson: undefined,
-        checkpointDigest: undefined,
-        checkpointStep: undefined,
-        leaseOwner: undefined,
-        leaseExpiresAt: undefined,
         updatedAt: Date.now(),
       })
     }

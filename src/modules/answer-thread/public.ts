@@ -2,7 +2,6 @@ export { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from './agent
 
 export type {
   AnswerThreadRecord,
-  AnswerTurnRecord,
   AnswerTurnRequest,
   AnswerTurnStatus,
   FollowUpIntent,

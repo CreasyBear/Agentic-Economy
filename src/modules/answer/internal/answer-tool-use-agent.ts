@@ -81,10 +81,6 @@ import {
   type RunAnswerToolCallInput,
   type RunAnswerToolCallResult,
 } from '@/modules/answer-thread/tooling'
-import {
-  projectAnswerTurnCheckpointResponseMessages,
-  type AnswerTurnCheckpoint,
-} from '@/modules/answer-thread/answer-thread.schema'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import type {
   HarnessModelRequestRecord,
@@ -173,10 +169,6 @@ export type AnswerToolUseAgentInput = {
    * frozen prior evidence and never start a fresh catalog search.
    */
   disableTools?: boolean
-  /** Durable checkpoint from a completed selected-capability step. */
-  resumeCheckpoint?: AnswerTurnCheckpoint
-  /** Awaited source-write persistence before any grounded prose request. */
-  persistIntermediateCheckpoint?: (checkpoint: AnswerTurnCheckpoint) => Promise<void>
   /** Hard cap for model-requested tool calls executed during this agent turn. */
   maxToolCalls?: number
   /** Hard cap for model-supplied registry.search limit values. */
@@ -329,12 +321,11 @@ async function runRealToolUseAgent(
   input: AnswerToolUseAgentInput,
   config: OpenRouterGatewayConfig,
 ): Promise<AnswerToolUseAgentResult> {
-  const resumeCheckpoint = input.resumeCheckpoint
-  const modelId = resumeCheckpoint?.modelId ?? input.model ?? config.model
-  const toolCalls: AnswerToolCallRecord[] = [...(resumeCheckpoint?.toolCalls ?? [])]
+  const modelId = input.model ?? config.model
+  const toolCalls: AnswerToolCallRecord[] = []
   const timings: AnswerTurnTimingEntry[] = []
-  const modelRequests: HarnessModelRequestRecord[] = [...(resumeCheckpoint?.modelRequests ?? [])]
-  const providers: AnswerSource[] = [...(resumeCheckpoint?.providers ?? [])]
+  const modelRequests: HarnessModelRequestRecord[] = []
+  const providers: AnswerSource[] = []
   const slugSeen = new Set(providers.map((provider) => provider.slug))
   const maxToolCalls = normalizeMaxToolCalls(input.maxToolCalls)
   let toolCallAttempts = toolCalls.length
@@ -342,12 +333,10 @@ async function runRealToolUseAgent(
   let toolBudgetExhausted = false
   const keylessExecutableSource = input.keylessExecutableSource ?? defaultKeylessExecutableSource
 
-  const initialKeylessDataAsk = resumeCheckpoint === undefined
-    ? input.keylessDataAsk ??
-      (input.disableTools === true
-        ? { kind: 'resolved' as const, descriptors: [], candidates: [] }
-        : await resolveKeylessDataAsk(input.query, keylessExecutableSource))
-    : { kind: 'resolved' as const, descriptors: [], candidates: [] }
+  const initialKeylessDataAsk = input.keylessDataAsk ??
+    (input.disableTools === true
+      ? { kind: 'resolved' as const, descriptors: [], candidates: [] }
+      : await resolveKeylessDataAsk(input.query, keylessExecutableSource))
   if (initialKeylessDataAsk.kind === 'unavailable') {
     throw new AnswerToolUseAgentError(initialKeylessDataAsk.reason)
   }
@@ -544,33 +533,6 @@ async function runRealToolUseAgent(
   }
 
 
-  if (resumeCheckpoint !== undefined) {
-    const grounded = await runGuardedModelCall(input, modelId, modelRequests, (accounting) => generateText({
-      model: openRouterModel(config, modelId, { structuredOutputs: true }),
-      instructions: buildToolUseAgentSystemPrompt(resumeCheckpoint.capabilityToolNames),
-      messages: [
-        { role: 'user', content: resumeCheckpoint.userPrompt },
-        ...resumeCheckpoint.responseMessages,
-      ],
-      maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
-      output: proseOutput,
-      temperature: 0.2,
-      maxRetries: 0,
-      onStepEnd: recordStep(accounting, 'model.openrouter_resume', { tools: 0 }),
-      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-    }))
-    if (grounded.output === undefined) {
-      throw new AnswerToolUseAgentError('prose_failed')
-    }
-    return finalizeAgentResult(
-      { ...input, keylessDataAsk: activeKeylessDataAsk },
-      grounded.output,
-      toolCalls,
-      providers,
-      timings,
-      modelRequests,
-    )
-  }
 
   if (activeKeylessDataAsk.kind === 'resolved'
     && activeKeylessDataAsk.candidates.length === 0
@@ -712,25 +674,6 @@ async function runRealToolUseAgent(
         modelRequests,
       )
     }
-    if (input.persistIntermediateCheckpoint !== undefined) {
-      const forcedStep = forced.steps.at(-1)
-      if (forcedStep === undefined) {
-        throw new AnswerToolUseAgentError('checkpoint_invalid')
-      }
-      await input.persistIntermediateCheckpoint({
-        schemaVersion: 1,
-        phase: 'selected_capability',
-        stepIndex: forcedStep.stepNumber,
-        responseMessages: projectAnswerTurnCheckpointResponseMessages(forced.response.messages),
-        toolCalls: [...toolCalls],
-        modelRequests: [...modelRequests],
-        timings: [...timings],
-        providers: [...providers],
-        capabilityToolNames: [...capabilityToolNames],
-        modelId,
-        userPrompt,
-      })
-    }
     const grounded = await runGuardedModelCall(input, modelId, modelRequests, (accounting) => generateText({
       model: openRouterModel(config, modelId, { structuredOutputs: true }),
       instructions: buildToolUseAgentSystemPrompt(capabilityToolNames),
@@ -772,35 +715,6 @@ async function runRealToolUseAgent(
     }
     return true
   }
-  const checkpointResponseMessages: Array<AnswerTurnCheckpoint['responseMessages'][number]> = []
-  const onGenericStepEnd = async (
-    accounting: ModelCallAccountingState,
-    step: StepResult<ToolSet>,
-  ): Promise<void> => {
-    recordStep(accounting, 'model.openrouter_round', { tools: Object.keys(tools).length })(step)
-    checkpointResponseMessages.push(...step.response.messages)
-    if (input.persistIntermediateCheckpoint === undefined) return
-    const completedCapabilityStep = step.toolResults.some((toolResult) => {
-      const toolName = 'toolName' in toolResult && typeof toolResult.toolName === 'string'
-        ? toolResult.toolName
-        : undefined
-      return toolName === OPERATION_EXECUTE_TOOL_ID || toolName?.startsWith('capability_') === true
-    })
-    if (!completedCapabilityStep) return
-    await input.persistIntermediateCheckpoint({
-      schemaVersion: 1,
-      phase: 'selected_capability',
-      stepIndex: step.stepNumber,
-      responseMessages: projectAnswerTurnCheckpointResponseMessages(checkpointResponseMessages),
-      toolCalls: [...toolCalls],
-      modelRequests: [...modelRequests],
-      timings: [...timings],
-      providers: [...providers],
-      capabilityToolNames: [...capabilityToolNames],
-      modelId,
-      userPrompt,
-    })
-  }
   const result = await runGuardedModelCall(input, modelId, modelRequests, (accounting) => generateText({
     model: openRouterModel(config, modelId, { structuredOutputs: true }),
     instructions: buildToolUseAgentSystemPrompt(capabilityToolNames),
@@ -829,7 +743,7 @@ async function runRealToolUseAgent(
     // Defer the existing round/budget stop once so the same SDK call can make
     // one structured, tool-less prose step after the final tool result.
     stopWhen: [toolStopCondition],
-    onStepEnd: (step) => onGenericStepEnd(accounting, step),
+    onStepEnd: recordStep(accounting, 'model.openrouter_round', { tools: Object.keys(tools).length }),
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   }))
   if (toolBudgetExhausted) {

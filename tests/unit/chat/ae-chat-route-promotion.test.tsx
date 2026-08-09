@@ -124,6 +124,8 @@ describe('AeChat route promotion', () => {
     render(<AeChat initialQuery="duplicate probe" />)
 
     expect(firstKey).toBeDefined()
+    expect(firstKey).toMatch(/^[a-z0-9-]{8,128}$/iu)
+    expect(firstKey).not.toContain('duplicate probe')
     expect(testState.observedClientTurnKeys.at(-1)).toBe(firstKey)
   })
 

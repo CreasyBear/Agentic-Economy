@@ -38,7 +38,6 @@ export const answerThreadTables = {
     createdAt: v.number(),
   })
     .index('by_turnId', ['turnId'])
-    .index('by_thread_createdAt', ['threadId', 'createdAt'])
     .index('by_thread_seq', ['threadId', 'seq']),
 
   answerTurnReservations: defineTable({
@@ -55,13 +54,6 @@ export const answerThreadTables = {
     finalStatus: v.optional(v.union(v.literal('complete'), v.literal('error'))),
     answerDigest: v.optional(v.string()),
     harnessFinalizationDigest: v.optional(v.string()),
-    // Private resume controls; never included in public projections.
-    runGeneration: v.optional(v.number()),
-    leaseOwner: v.optional(v.string()),
-    leaseExpiresAt: v.optional(v.number()),
-    checkpointJson: v.optional(v.string()),
-    checkpointDigest: v.optional(v.string()),
-    checkpointStep: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

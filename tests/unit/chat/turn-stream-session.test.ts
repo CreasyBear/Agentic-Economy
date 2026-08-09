@@ -78,6 +78,7 @@ describe('attachAnswerTurnStream', () => {
     expect(subscriber.onFrame).toHaveBeenCalledTimes(1)
     expect(subscriber.onFrame).toHaveBeenCalledWith(first)
     detach()
+    expect(request.input.signal?.aborted).toBe(false)
   })
 
   it('ignores stale settlement after an aborted session is replaced under the same key', async () => {

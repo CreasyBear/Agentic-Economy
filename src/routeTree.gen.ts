@@ -109,7 +109,6 @@ import { Route as ApiRequestsRequestRefConfirmationRouteImport } from './routes/
 import { Route as ApiRequestsRequestRefCancellationRouteImport } from './routes/api.requests.$requestRef.cancellation'
 import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
 import { Route as ApiAnswerTurnStopRouteImport } from './routes/api.answer.turn.stop'
-import { Route as ApiAnswerTurnResumeRouteImport } from './routes/api.answer.turn.resume'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
 import { Route as OperatorOwnerRequestProblemsReportRefRouteImport } from './routes/_operator/owner.request-problems.$reportRef'
@@ -664,11 +663,6 @@ const ApiAnswerTurnStopRoute = ApiAnswerTurnStopRouteImport.update({
   path: '/stop',
   getParentRoute: () => ApiAnswerTurnRoute,
 } as any)
-const ApiAnswerTurnResumeRoute = ApiAnswerTurnResumeRouteImport.update({
-  id: '/resume',
-  path: '/resume',
-  getParentRoute: () => ApiAnswerTurnRoute,
-} as any)
 const ApiAnswerThreadsThreadIdRoute =
   ApiAnswerThreadsThreadIdRouteImport.update({
     id: '/$threadId',
@@ -920,7 +914,6 @@ export interface FileRoutesByFullPath {
   '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/resume': typeof ApiAnswerTurnResumeRoute
   '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -1048,7 +1041,6 @@ export interface FileRoutesByTo {
   '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/resume': typeof ApiAnswerTurnResumeRoute
   '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -1178,7 +1170,6 @@ export interface FileRoutesById {
   '/_operator/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/resume': typeof ApiAnswerTurnResumeRoute
   '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -1308,7 +1299,6 @@ export interface FileRouteTypes {
     | '/owner/request-problems/$reportRef'
     | '/owner/supply/$offeringRef'
     | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/resume'
     | '/api/answer/turn/stop'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -1436,7 +1426,6 @@ export interface FileRouteTypes {
     | '/owner/request-problems/$reportRef'
     | '/owner/supply/$offeringRef'
     | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/resume'
     | '/api/answer/turn/stop'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -1565,7 +1554,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/request-problems/$reportRef'
     | '/_operator/owner/supply/$offeringRef'
     | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/resume'
     | '/api/answer/turn/stop'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -2372,13 +2360,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnswerTurnStopRouteImport
       parentRoute: typeof ApiAnswerTurnRoute
     }
-    '/api/answer/turn/resume': {
-      id: '/api/answer/turn/resume'
-      path: '/resume'
-      fullPath: '/api/answer/turn/resume'
-      preLoaderRoute: typeof ApiAnswerTurnResumeRouteImport
-      parentRoute: typeof ApiAnswerTurnRoute
-    }
     '/api/answer/threads/$threadId': {
       id: '/api/answer/threads/$threadId'
       path: '/$threadId'
@@ -2854,12 +2835,10 @@ const ApiAnswerThreadsRouteWithChildren =
   ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
 
 interface ApiAnswerTurnRouteChildren {
-  ApiAnswerTurnResumeRoute: typeof ApiAnswerTurnResumeRoute
   ApiAnswerTurnStopRoute: typeof ApiAnswerTurnStopRoute
 }
 
 const ApiAnswerTurnRouteChildren: ApiAnswerTurnRouteChildren = {
-  ApiAnswerTurnResumeRoute: ApiAnswerTurnResumeRoute,
   ApiAnswerTurnStopRoute: ApiAnswerTurnStopRoute,
 }
 

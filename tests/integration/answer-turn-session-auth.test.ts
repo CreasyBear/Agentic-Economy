@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { buildAnswerTurnProblem } from '@/lib/errors'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
@@ -76,13 +77,7 @@ describe('POST /api/answer/turn session auth', () => {
     expect(response.status).toBe(401)
     expect(response.headers.get('content-type')).toContain('application/problem+json')
     const body = await response.json()
-    expect(body).toMatchObject({
-      type: 'about:blank',
-      status: 401,
-      kind: 'UNAUTHENTICATED',
-      code: 'missing_auth',
-      detail: 'Answer service authentication is unavailable. Sign in again; local operators should restart npm run dev:local.',
-    })
+    expect(body).toEqual(buildAnswerTurnProblem('missing_auth'))
     expect(body).not.toHaveProperty('stack')
     expect(JSON.stringify(body)).not.toContain('auth-secret')
   })

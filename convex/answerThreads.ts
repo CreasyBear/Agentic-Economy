@@ -13,7 +13,6 @@ import {
   AnswerToolCallStatusValues,
   AnswerToolIdValues,
   FollowUpIntentValues,
-  parseAnswerTurnCheckpoint,
 } from '../src/modules/answer-thread/answer-thread.schema'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
@@ -44,8 +43,6 @@ const ANSWER_THREAD_MAX_TURNS = 25
 const ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT = ANSWER_THREAD_MAX_TURNS + 1
 const ANSWER_THREAD_PUBLIC_TURN_SNAPSHOT_LIMIT = ANSWER_THREAD_MAX_TURNS
 const ANSWER_THREAD_DELETE_BATCH_SIZE = 100
-const ANSWER_TURN_RESUME_LEASE_MS = 60_000
-const ANSWER_TURN_CHECKPOINT_MAX_JSON_BYTES = 512 * 1024
 
 const now = () => Date.now()
 
@@ -105,6 +102,7 @@ const answerToolCallInput = v.object({
   resultJson: v.string(),
   resultHash: v.string(),
   status: literalUnion(AnswerToolCallStatusValues),
+  createdAt: v.number(),
 })
 const answerTurnReservationResult = v.union(
   v.object({
@@ -134,86 +132,6 @@ const answerTurnReservationResult = v.union(
   }),
 )
 
-const answerTurnResumeLeaseResult = v.union(
-  v.object({
-    kind: v.literal('acquired'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
-    query: v.string(),
-    searchContextJson: v.optional(v.string()),
-    generation: v.number(),
-    leaseOwner: v.string(),
-    leaseExpiresAt: v.number(),
-    checkpointJson: v.optional(v.string()),
-    checkpointDigest: v.optional(v.string()),
-    checkpointStep: v.optional(v.number()),
-  }),
-  v.object({
-    kind: v.literal('pending'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    leaseExpiresAt: v.optional(v.number()),
-  }),
-  v.object({
-    kind: v.literal('settled'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    status: v.union(v.literal('complete'), v.literal('error'), v.literal('stopped')),
-  }),
-  v.object({
-    kind: v.literal('conflict'),
-    reason: v.union(
-      v.literal('reservation_not_found'),
-      v.literal('reservation_identity_mismatch'),
-      v.literal('request_digest_mismatch'),
-      v.literal('stopped'),
-      v.literal('finalized'),
-      v.literal('non_resumable'),
-      v.literal('generation_mismatch'),
-      v.literal('lease_active'),
-    ),
-  }),
-)
-
-const answerTurnCheckpointResult = v.union(
-  v.object({
-    kind: v.union(v.literal('checkpointed'), v.literal('replayed')),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    generation: v.number(),
-    checkpointDigest: v.string(),
-    checkpointStep: v.number(),
-  }),
-  v.object({
-    kind: v.literal('stopped'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-  }),
-  v.object({
-    kind: v.literal('conflict'),
-    reason: v.union(
-      v.literal('reservation_not_found'),
-      v.literal('reservation_identity_mismatch'),
-      v.literal('request_digest_mismatch'),
-      v.literal('stopped'),
-      v.literal('finalized'),
-      v.literal('non_resumable'),
-      v.literal('generation_mismatch'),
-      v.literal('lease_owner_mismatch'),
-      v.literal('lease_expired'),
-      v.literal('checkpoint_invalid'),
-      v.literal('checkpoint_digest_mismatch'),
-      v.literal('checkpoint_conflict'),
-      v.literal('checkpoint_step_stale'),
-    ),
-  }),
-)
 
 const persistReservedAnswerTurnResult = v.union(
   v.object({
@@ -233,9 +151,6 @@ const persistReservedAnswerTurnResult = v.union(
       v.literal('turn_conflict'),
       v.literal('tool_call_conflict'),
       v.literal('stopped'),
-      v.literal('generation_mismatch'),
-      v.literal('lease_owner_mismatch'),
-      v.literal('lease_expired'),
     ),
   }),
 )
@@ -272,9 +187,6 @@ const failPersistedAnswerTurnResult = v.union(
       v.literal('answer_digest_conflict'),
       v.literal('turn_not_found'),
       v.literal('not_persisted'),
-      v.literal('generation_mismatch'),
-      v.literal('lease_owner_mismatch'),
-      v.literal('lease_expired'),
     ),
   }),
 )
@@ -394,7 +306,6 @@ export const reserveAnswerTurn = mutationGeneric({
       query: args.query,
       ...(args.searchContextJson === undefined ? {} : { searchContextJson: args.searchContextJson }),
       state: 'reserved' as const,
-      runGeneration: 0,
       createdAt: timestamp,
       updatedAt: timestamp,
     }
@@ -413,424 +324,7 @@ export const reserveAnswerTurn = mutationGeneric({
   },
 })
 
-type AnswerTurnResumeLeaseArgs = {
-  reservationKey: string
-  requestDigest: string
-  sessionId: string
-  threadId: string
-  turnId: string
-  turnSeq: number
-  leaseOwner: string
-  expectedGeneration?: number
-}
 
-async function acquireAnswerTurnResumeLeaseInternal(
-  ctx: MutationCtx,
-  args: AnswerTurnResumeLeaseArgs,
-  mode: 'initial' | 'resume',
-) {
-  const reservation = await ctx.db
-    .query('answerTurnReservations')
-    .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
-    .unique()
-  if (reservation === null) return { kind: 'conflict' as const, reason: 'reservation_not_found' as const }
-  if (
-    reservation.sessionId !== args.sessionId
-    || reservation.threadId !== args.threadId
-    || reservation.turnId !== args.turnId
-    || reservation.seq !== args.turnSeq
-  ) {
-    return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-  }
-  if (reservation.requestDigest !== args.requestDigest) {
-    return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
-  }
-  if (mode === 'resume' && args.expectedGeneration === undefined) {
-    return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
-  }
-  if (mode === 'resume' && reservation.runGeneration !== args.expectedGeneration) {
-    return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
-  }
-  const thread = await ctx.db
-    .query('answerThreads')
-    .withIndex('by_threadId', (query) => query.eq('threadId', args.threadId))
-    .unique()
-  if (thread === null || thread.pseudonymousSessionId !== args.sessionId) {
-    return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-  }
-  if (reservation.state === 'stopped') {
-    return {
-      kind: 'settled' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      status: 'stopped' as const,
-    }
-  }
-  if (reservation.state === 'finalized') {
-    return {
-      kind: 'settled' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      status: settledAnswerTurnStatus(reservation.finalStatus),
-    }
-  }
-  if (reservation.state === 'answer_persisted') {
-    if (mode !== 'resume') {
-      return {
-        kind: 'pending' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-      }
-    }
-    const currentGeneration = reservation.runGeneration
-    const currentLeaseOwner = reservation.leaseOwner
-    const currentLeaseExpiresAt = reservation.leaseExpiresAt
-    const finalStatus = reservation.finalStatus
-    if (
-      currentGeneration === undefined
-      || currentLeaseOwner === undefined
-      || currentLeaseExpiresAt === undefined
-      || finalStatus === undefined
-    ) {
-      return { kind: 'conflict' as const, reason: 'non_resumable' as const }
-    }
-    const timestamp = now()
-    const leaseActive = currentLeaseExpiresAt > timestamp
-    if (leaseActive && currentLeaseOwner !== args.leaseOwner) {
-      return {
-        kind: 'pending' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        leaseExpiresAt: currentLeaseExpiresAt,
-      }
-    }
-    const generation = leaseActive ? currentGeneration : currentGeneration + 1
-    const turn = await ctx.db
-      .query('answerTurns')
-      .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
-      .unique()
-    if (turn === null) return { kind: 'conflict' as const, reason: 'non_resumable' as const }
-    if (turn.status === 'stopped') {
-      await ctx.db.patch(reservation._id, {
-        state: 'stopped',
-        checkpointJson: undefined,
-        checkpointDigest: undefined,
-        checkpointStep: undefined,
-        leaseOwner: undefined,
-        leaseExpiresAt: undefined,
-        updatedAt: timestamp,
-      })
-      return {
-        kind: 'settled' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        status: 'stopped' as const,
-      }
-    }
-    if (turn.status !== finalStatus) {
-      await ctx.db.patch(turn._id, { status: finalStatus })
-    }
-    await ctx.db.patch(reservation._id, {
-      state: 'finalized',
-      finalStatus,
-      runGeneration: generation,
-      leaseOwner: undefined,
-      leaseExpiresAt: undefined,
-      checkpointJson: undefined,
-      checkpointDigest: undefined,
-      checkpointStep: undefined,
-      updatedAt: timestamp,
-    })
-    return {
-      kind: 'settled' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      status: finalStatus,
-    }
-  }
-  if (mode === 'resume') {
-    const resumableReserved = reservation.state === 'reserved'
-      && reservation.checkpointJson === undefined
-      && reservation.checkpointDigest === undefined
-      && reservation.checkpointStep === undefined
-    const resumableCheckpoint = reservation.state === 'checkpointed'
-      && reservation.checkpointJson !== undefined
-      && reservation.checkpointDigest !== undefined
-      && reservation.checkpointStep !== undefined
-      && isValidCheckpointJson(reservation.checkpointJson, reservation.checkpointDigest)
-    if (!resumableReserved && !resumableCheckpoint) {
-      return { kind: 'conflict' as const, reason: 'non_resumable' as const }
-    }
-  }
-
-  const timestamp = now()
-  const leaseActive = reservation.leaseOwner !== undefined
-    && reservation.leaseExpiresAt !== undefined
-    && reservation.leaseExpiresAt > timestamp
-  if (leaseActive && reservation.leaseOwner !== args.leaseOwner) {
-    return {
-      kind: 'pending' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      ...(reservation.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: reservation.leaseExpiresAt }),
-    }
-  }
-  const currentGeneration = reservation.runGeneration
-  if (mode === 'resume' && currentGeneration === undefined) {
-    return { kind: 'conflict' as const, reason: 'non_resumable' as const }
-  }
-  const generation = currentGeneration === undefined
-    ? 0
-    : leaseActive || reservation.leaseOwner === undefined
-      ? currentGeneration
-      : currentGeneration + 1
-  const leaseExpiresAt = timestamp + ANSWER_TURN_RESUME_LEASE_MS
-  await ctx.db.patch(reservation._id, {
-    runGeneration: generation,
-    leaseOwner: args.leaseOwner,
-    leaseExpiresAt,
-    updatedAt: timestamp,
-  })
-  return {
-    kind: 'acquired' as const,
-    reservationKey: reservation.reservationKey,
-    threadId: reservation.threadId,
-    turnId: reservation.turnId,
-    turnSeq: reservation.seq,
-    query: reservation.query,
-    ...(reservation.searchContextJson === undefined ? {} : { searchContextJson: reservation.searchContextJson }),
-    generation,
-    leaseOwner: args.leaseOwner,
-    leaseExpiresAt,
-    ...(reservation.checkpointJson === undefined ? {} : { checkpointJson: reservation.checkpointJson }),
-    ...(reservation.checkpointDigest === undefined ? {} : { checkpointDigest: reservation.checkpointDigest }),
-    ...(reservation.checkpointStep === undefined ? {} : { checkpointStep: reservation.checkpointStep }),
-  }
-}
-
-export const acquireAnswerTurnResumeLease = mutationGeneric({
-  args: {
-    ...({
-      reservationKey: v.string(),
-      requestDigest: v.string(),
-      sessionId: v.string(),
-      threadId: v.string(),
-      turnId: v.string(),
-      turnSeq: v.number(),
-      leaseOwner: v.string(),
-      mode: v.union(v.literal('initial'), v.literal('resume')),
-      expectedGeneration: v.optional(v.number()),
-      operationKey: v.optional(v.string()),
-      correlationId: v.optional(v.string()),
-    }),
-    ...sourceWriteArgs,
-  },
-  returns: answerTurnResumeLeaseResult,
-  handler: async (ctx, args) => {
-    await requireAnswerThreadSourceWrite(ctx, args)
-    return acquireAnswerTurnResumeLeaseInternal(ctx, args, args.mode)
-  },
-})
-
-export const renewAnswerTurnResumeLease = mutationGeneric({
-  args: {
-    reservationKey: v.string(),
-    requestDigest: v.string(),
-    sessionId: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
-    generation: v.number(),
-    leaseOwner: v.string(),
-    operationKey: v.optional(v.string()),
-    correlationId: v.optional(v.string()),
-    ...sourceWriteArgs,
-  },
-  returns: answerTurnResumeLeaseResult,
-  handler: async (ctx, args) => {
-    await requireAnswerThreadSourceWrite(ctx, args)
-    const reservation = await ctx.db
-      .query('answerTurnReservations')
-      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
-      .unique()
-    if (reservation === null) return { kind: 'conflict' as const, reason: 'reservation_not_found' as const }
-    if (
-      reservation.sessionId !== args.sessionId
-      || reservation.threadId !== args.threadId
-      || reservation.turnId !== args.turnId
-      || reservation.seq !== args.turnSeq
-    ) {
-      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-    }
-    if (reservation.requestDigest !== args.requestDigest) {
-      return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
-    }
-    if (reservation.state === 'stopped') {
-      return {
-        kind: 'settled' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        status: 'stopped' as const,
-      }
-    }
-    if (reservation.state === 'finalized') {
-      return {
-        kind: 'settled' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        status: settledAnswerTurnStatus(reservation.finalStatus),
-      }
-    }
-    if (reservation.runGeneration !== args.generation) {
-      return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
-    }
-    if (reservation.leaseOwner !== args.leaseOwner) {
-      return { kind: 'conflict' as const, reason: 'lease_active' as const }
-    }
-    if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= now()) {
-      return { kind: 'conflict' as const, reason: 'lease_active' as const }
-    }
-    const leaseExpiresAt = now() + ANSWER_TURN_RESUME_LEASE_MS
-    await ctx.db.patch(reservation._id, { leaseExpiresAt, updatedAt: now() })
-    return {
-      kind: 'acquired' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      turnSeq: reservation.seq,
-      query: reservation.query,
-      ...(reservation.searchContextJson === undefined ? {} : { searchContextJson: reservation.searchContextJson }),
-      generation: args.generation,
-      leaseOwner: args.leaseOwner,
-      leaseExpiresAt,
-      ...(reservation.checkpointJson === undefined ? {} : { checkpointJson: reservation.checkpointJson }),
-      ...(reservation.checkpointDigest === undefined ? {} : { checkpointDigest: reservation.checkpointDigest }),
-      ...(reservation.checkpointStep === undefined ? {} : { checkpointStep: reservation.checkpointStep }),
-    }
-  },
-})
-
-export const writeAnswerTurnCheckpoint = mutationGeneric({
-  args: {
-    reservationKey: v.string(),
-    requestDigest: v.string(),
-    sessionId: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
-    generation: v.number(),
-    leaseOwner: v.string(),
-    checkpointJson: v.string(),
-    checkpointDigest: v.string(),
-    checkpointStep: v.number(),
-    operationKey: v.optional(v.string()),
-    correlationId: v.optional(v.string()),
-    ...sourceWriteArgs,
-  },
-  returns: answerTurnCheckpointResult,
-  handler: async (ctx, args) => {
-    await requireAnswerThreadSourceWrite(ctx, args)
-    const reservation = await ctx.db
-      .query('answerTurnReservations')
-      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
-      .unique()
-    if (reservation === null) return { kind: 'conflict' as const, reason: 'reservation_not_found' as const }
-    if (
-      reservation.sessionId !== args.sessionId
-      || reservation.threadId !== args.threadId
-      || reservation.turnId !== args.turnId
-      || reservation.seq !== args.turnSeq
-    ) {
-      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-    }
-    if (reservation.requestDigest !== args.requestDigest) {
-      return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
-    }
-    if (reservation.state === 'stopped') {
-      return {
-        kind: 'stopped' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-      }
-    }
-    if (reservation.state === 'finalized' || reservation.state === 'answer_persisted') {
-      return { kind: 'conflict' as const, reason: 'finalized' as const }
-    }
-    if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-      return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
-    }
-    if (reservation.leaseOwner !== args.leaseOwner) {
-      return { kind: 'conflict' as const, reason: 'lease_owner_mismatch' as const }
-    }
-    if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= now()) {
-      return { kind: 'conflict' as const, reason: 'lease_expired' as const }
-    }
-    if (!isValidCheckpointJson(args.checkpointJson, args.checkpointDigest)) {
-      return { kind: 'conflict' as const, reason: 'checkpoint_invalid' as const }
-    }
-    if (reservation.checkpointDigest === args.checkpointDigest && reservation.checkpointStep === args.checkpointStep) {
-      return {
-        kind: 'replayed' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        generation: args.generation,
-        checkpointDigest: args.checkpointDigest,
-        checkpointStep: args.checkpointStep,
-      }
-    }
-    if (
-      reservation.checkpointStep !== undefined
-      && args.checkpointStep < reservation.checkpointStep
-    ) {
-      return { kind: 'conflict' as const, reason: 'checkpoint_step_stale' as const }
-    }
-    if (
-      reservation.checkpointStep === args.checkpointStep
-      && reservation.checkpointDigest !== undefined
-      && reservation.checkpointDigest !== args.checkpointDigest
-    ) {
-      return { kind: 'conflict' as const, reason: 'checkpoint_conflict' as const }
-    }
-    const timestamp = now()
-    await ctx.db.patch(reservation._id, {
-      state: 'checkpointed',
-      checkpointJson: args.checkpointJson,
-      checkpointDigest: args.checkpointDigest,
-      checkpointStep: args.checkpointStep,
-      updatedAt: timestamp,
-    })
-    return {
-      kind: 'checkpointed' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      generation: args.generation,
-      checkpointDigest: args.checkpointDigest,
-      checkpointStep: args.checkpointStep,
-    }
-  },
-})
-
-function isValidCheckpointJson(checkpointJson: string, checkpointDigest: string): boolean {
-  if (checkpointJson.length > ANSWER_TURN_CHECKPOINT_MAX_JSON_BYTES) return false
-  try {
-    const parsed = JSON.parse(checkpointJson)
-    return parseAnswerTurnCheckpoint(parsed) !== null && canonicalDigest(parsed) === checkpointDigest
-  } catch {
-    return false
-  }
-}
 
 export const persistReservedAnswerTurn = mutationGeneric({
   args: {
@@ -840,8 +334,7 @@ export const persistReservedAnswerTurn = mutationGeneric({
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
-    generation: v.number(),
-    leaseOwner: v.string(),
+    createdAt: v.number(),
     answerDigest: v.string(),
     intent: literalUnion(FollowUpIntentValues),
     evidenceJson: v.string(),
@@ -877,17 +370,6 @@ export const persistReservedAnswerTurn = mutationGeneric({
     }
     if (reservation.state === 'stopped') return { kind: 'conflict' as const, reason: 'stopped' as const }
     const terminalState = reservation.state === 'answer_persisted' || reservation.state === 'finalized'
-    if (reservation.state !== 'finalized') {
-      if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-        return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
-      }
-      if (reservation.leaseOwner !== args.leaseOwner) {
-        return { kind: 'conflict' as const, reason: 'lease_owner_mismatch' as const }
-      }
-      if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= now()) {
-        return { kind: 'conflict' as const, reason: 'lease_expired' as const }
-      }
-    }
     if (terminalState && reservation.answerDigest !== args.answerDigest) {
       return { kind: 'conflict' as const, reason: 'answer_digest_conflict' as const }
     }
@@ -905,7 +387,11 @@ export const persistReservedAnswerTurn = mutationGeneric({
       .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
       .unique()
     if (reservation.state === 'answer_persisted' || reservation.state === 'finalized') {
-      if (existingTurn === null || existingTurn.snapshotHash !== args.snapshotHash) {
+      if (
+        existingTurn === null
+        || existingTurn.snapshotHash !== args.snapshotHash
+        || existingTurn.createdAt !== args.createdAt
+      ) {
         return { kind: 'conflict' as const, reason: 'turn_conflict' as const }
       }
       const existingTools = await ctx.db
@@ -926,6 +412,7 @@ export const persistReservedAnswerTurn = mutationGeneric({
           resultJson: call.resultJson,
           resultHash: call.resultHash,
           status: call.status,
+          createdAt: call.createdAt,
         }
       })
       const incomingToolsWithRequiredFields = args.toolCalls.map((call) => {
@@ -941,6 +428,7 @@ export const persistReservedAnswerTurn = mutationGeneric({
           resultJson: call.resultJson,
           resultHash: call.resultHash,
           status: call.status,
+          createdAt: call.createdAt,
         }
       })
       if (!toolCallsMatch(existingToolsWithRequiredFields, incomingToolsWithRequiredFields)) {
@@ -970,7 +458,7 @@ export const persistReservedAnswerTurn = mutationGeneric({
       status: 'pending',
       ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
       ...(args.errorProblemJson === undefined ? {} : { errorProblemJson: args.errorProblemJson }),
-      createdAt: timestamp,
+      createdAt: args.createdAt,
     })
     for (const call of args.toolCalls) {
       if (call.toolId === undefined || call.status === undefined) {
@@ -986,16 +474,13 @@ export const persistReservedAnswerTurn = mutationGeneric({
         resultJson: call.resultJson,
         resultHash: call.resultHash,
         status: call.status,
-        createdAt: timestamp,
+        createdAt: call.createdAt,
       })
     }
     await ctx.db.patch(reservation._id, {
       state: 'answer_persisted',
       finalStatus: args.finalStatus ?? (args.errorProblemJson === undefined ? 'complete' : 'error'),
       answerDigest: args.answerDigest,
-      checkpointJson: undefined,
-      checkpointDigest: undefined,
-      checkpointStep: undefined,
       updatedAt: timestamp,
     })
     await ctx.db.patch(thread._id, { updatedAt: timestamp })
@@ -1017,8 +502,6 @@ export const failPersistedAnswerTurn = mutationGeneric({
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
-    generation: v.number(),
-    leaseOwner: v.string(),
     answerDigest: v.string(),
     errorCopyId: v.optional(v.string()),
     errorProblemJson: v.string(),
@@ -1051,17 +534,6 @@ export const failPersistedAnswerTurn = mutationGeneric({
         threadId: reservation.threadId,
         turnId: reservation.turnId,
         turnSeq: reservation.seq,
-      }
-    }
-    if (reservation.state !== 'finalized') {
-      if (reservation.runGeneration === undefined || reservation.runGeneration !== args.generation) {
-        return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
-      }
-      if (reservation.leaseOwner !== args.leaseOwner) {
-        return { kind: 'conflict' as const, reason: 'lease_owner_mismatch' as const }
-      }
-      if (reservation.leaseExpiresAt === undefined || reservation.leaseExpiresAt <= now()) {
-        return { kind: 'conflict' as const, reason: 'lease_expired' as const }
       }
     }
     if (reservation.state === 'finalized') {
@@ -1114,11 +586,6 @@ export const failPersistedAnswerTurn = mutationGeneric({
         state: 'finalized',
         finalStatus: turn.status,
         answerDigest: args.answerDigest,
-        checkpointJson: undefined,
-        checkpointDigest: undefined,
-        checkpointStep: undefined,
-        leaseOwner: undefined,
-        leaseExpiresAt: undefined,
         updatedAt: timestamp,
       })
       return {
@@ -1144,11 +611,6 @@ export const failPersistedAnswerTurn = mutationGeneric({
       state: 'finalized',
       finalStatus: 'error',
       answerDigest: args.answerDigest,
-      checkpointJson: undefined,
-      checkpointDigest: undefined,
-      checkpointStep: undefined,
-      leaseOwner: undefined,
-      leaseExpiresAt: undefined,
       updatedAt: timestamp,
     })
     await ctx.db.patch(thread._id, { updatedAt: timestamp })
@@ -1207,11 +669,6 @@ export const stopAnswerTurn = mutationGeneric({
     const timestamp = now()
     await ctx.db.patch(reservation._id, {
       state: 'stopped',
-      checkpointJson: undefined,
-      checkpointDigest: undefined,
-      checkpointStep: undefined,
-      leaseOwner: undefined,
-      leaseExpiresAt: undefined,
       updatedAt: timestamp,
     })
     const turn = await ctx.db

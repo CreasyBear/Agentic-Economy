@@ -493,6 +493,204 @@ describe('answer thread source-write admission', () => {
       nonce: 'nonce-seq-over-limit',
     })).resolves.toEqual({ kind: 'refused', reason: 'thread_turn_limit' })
   })
+  it('conceals a foreign-owner Stop without changing the pending reservation', async () => {
+    const backend = convexTest(schema, modules)
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const ownerSessionId = 'session-stop-owner'
+    const first = await reserveTurn(backend, {
+      sessionId: ownerSessionId,
+      reservationKey: 'reservation-stop-foreign-owner',
+      requestDigest: 'digest-stop-foreign-owner',
+      operationKey: 'answer_thread:reserve:stop-foreign-owner',
+      nonce: 'nonce-stop-foreign-owner-reserve',
+    })
+    expect(first.kind).toBe('reserved')
+    if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
+
+    const stopOperationKey = `answer_thread:stop:${first.turnId}:foreign`
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+      sessionId: 'session-stop-foreign',
+      threadId: first.threadId,
+      turnId: first.turnId,
+      operationKey: stopOperationKey,
+      correlationId: stopOperationKey,
+      sourceWrite: createAdmission(stopOperationKey, stopOperationKey, 'nonce-stop-foreign-owner'),
+    })).resolves.toEqual({ kind: 'not_found' })
+
+    const rows = await backend.run(async (ctx) => ({
+      turn: await ctx.db
+        .query('answerTurns')
+        .withIndex('by_turnId', (query) => query.eq('turnId', first.turnId))
+        .unique(),
+      reservation: await ctx.db
+        .query('answerTurnReservations')
+        .withIndex('by_reservationKey', (query) => query.eq('reservationKey', first.reservationKey))
+        .unique(),
+    }))
+    expect(rows.turn).toBeNull()
+    expect(rows.reservation).toMatchObject({
+      sessionId: ownerSessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      state: 'reserved',
+    })
+  })
+
+  it('transitions an answer-persisted turn to stopped and keeps that terminal state', async () => {
+    const backend = convexTest(schema, modules)
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const sessionId = 'session-stop-persisted-owner'
+    const reservationKey = 'reservation-stop-persisted'
+    const requestDigest = 'digest-stop-persisted'
+    const first = await reserveTurn(backend, {
+      sessionId,
+      reservationKey,
+      requestDigest,
+      operationKey: `answer_thread:reserve:${reservationKey}`,
+      nonce: 'nonce-stop-persisted-reserve',
+    })
+    expect(first.kind).toBe('reserved')
+    if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
+
+    await persistTurn(backend, {
+      reservationKey,
+      requestDigest,
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      seq: first.turnSeq,
+      operationKey: `answer_thread:persist:${first.turnId}`,
+      nonce: 'nonce-stop-persisted-persist',
+      finalize: false,
+    })
+
+    const stopOperationKey = `answer_thread:stop:${first.turnId}:persisted`
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      operationKey: stopOperationKey,
+      correlationId: stopOperationKey,
+      sourceWrite: createAdmission(stopOperationKey, stopOperationKey, 'nonce-stop-persisted-stop'),
+    })).resolves.toEqual({
+      kind: 'stopped',
+      threadId: first.threadId,
+      turnId: first.turnId,
+    })
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      operationKey: `${stopOperationKey}:replay`,
+      correlationId: `${stopOperationKey}:replay`,
+      sourceWrite: createAdmission(`${stopOperationKey}:replay`, `${stopOperationKey}:replay`, 'nonce-stop-persisted-replay'),
+    })).resolves.toEqual({
+      kind: 'already_settled',
+      threadId: first.threadId,
+      turnId: first.turnId,
+      status: 'stopped',
+    })
+
+    const rows = await backend.run(async (ctx) => ({
+      turn: await ctx.db
+        .query('answerTurns')
+        .withIndex('by_turnId', (query) => query.eq('turnId', first.turnId))
+        .unique(),
+      reservation: await ctx.db
+        .query('answerTurnReservations')
+        .withIndex('by_reservationKey', (query) => query.eq('reservationKey', reservationKey))
+        .unique(),
+    }))
+    expect(rows.turn).toMatchObject({ status: 'stopped', threadId: first.threadId, seq: first.turnSeq })
+    expect(rows.reservation).toMatchObject({ state: 'stopped', threadId: first.threadId, seq: first.turnSeq })
+  })
+
+  it('lets exactly one durable terminal winner commit in a real Stop-versus-finalize race', async () => {
+    const backend = convexTest(schema, modules)
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const sessionId = 'session-stop-finalize-race'
+    const reservationKey = 'reservation-stop-finalize-race'
+    const requestDigest = 'digest-stop-finalize-race'
+    const first = await reserveTurn(backend, {
+      sessionId,
+      reservationKey,
+      requestDigest,
+      operationKey: `answer_thread:reserve:${reservationKey}`,
+      nonce: 'nonce-stop-finalize-race-reserve',
+    })
+    expect(first.kind).toBe('reserved')
+    if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
+
+    await persistTurn(backend, {
+      reservationKey,
+      requestDigest,
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      seq: first.turnSeq,
+      operationKey: `answer_thread:persist:${first.turnId}`,
+      nonce: 'nonce-stop-finalize-race-persist',
+      finalize: false,
+    })
+
+    const stopOperationKey = `answer_thread:stop:${first.turnId}:race`
+    const [stopResult, finalizationResult] = await Promise.all([
+      backend.mutation(api.answerThreads.stopAnswerTurn, {
+        sessionId,
+        threadId: first.threadId,
+        turnId: first.turnId,
+        operationKey: stopOperationKey,
+        correlationId: stopOperationKey,
+        sourceWrite: createAdmission(stopOperationKey, stopOperationKey, 'nonce-stop-finalize-race-stop'),
+      }),
+      finalizeHarnessRun(backend, {
+        reservationKey,
+        requestDigest,
+        sessionId,
+        threadId: first.threadId,
+        turnId: first.turnId,
+        turnSeq: first.turnSeq,
+        seq: first.turnSeq,
+        entries: [finalizationEntry({
+          entryId: 'entry-stop-finalize-race',
+          sessionId,
+          runId: first.turnId,
+          turnId: first.turnId,
+        })],
+      }),
+    ])
+
+    const terminalWinners = [
+      stopResult.kind === 'stopped' ? 'stop' : null,
+      finalizationResult.status === 'accepted' ? 'finalize' : null,
+    ].filter((winner): winner is 'stop' | 'finalize' => winner !== null)
+    expect(terminalWinners).toHaveLength(1)
+
+    const rows = await backend.run(async (ctx) => ({
+      turn: await ctx.db
+        .query('answerTurns')
+        .withIndex('by_turnId', (query) => query.eq('turnId', first.turnId))
+        .unique(),
+      reservation: await ctx.db
+        .query('answerTurnReservations')
+        .withIndex('by_reservationKey', (query) => query.eq('reservationKey', reservationKey))
+        .unique(),
+    }))
+    if (terminalWinners[0] === 'stop') {
+      expect(stopResult).toMatchObject({ kind: 'stopped' })
+      expect(finalizationResult).toMatchObject({ status: 'conflict', reason: 'stopped' })
+      expect(rows.turn).toMatchObject({ status: 'stopped' })
+      expect(rows.reservation).toMatchObject({ state: 'stopped' })
+    } else {
+      expect(stopResult).toMatchObject({ kind: 'already_settled', status: 'complete' })
+      expect(finalizationResult).toMatchObject({ status: 'accepted' })
+      expect(rows.turn).toMatchObject({ status: 'complete' })
+      expect(rows.reservation).toMatchObject({ state: 'finalized', finalStatus: 'complete' })
+    }
+  })
+
 
   it('rejects harness finalization after its parent thread is deleted', async () => {
     const backend = convexTest(schema, modules)
@@ -539,8 +737,6 @@ describe('answer thread source-write admission', () => {
       threadId: first.threadId,
       turnId: first.turnId,
       turnSeq: first.turnSeq,
-      generation: 0,
-      leaseOwner: `worker:${first.turnId}`,
       seq: first.turnSeq,
       entries: [finalizationEntry({
         entryId: 'entry-finalization-after-delete',
@@ -622,8 +818,6 @@ describe('answer thread source-write admission', () => {
         requestDigest,
         sessionId,
         threadId: first.threadId,
-        generation: 0,
-        leaseOwner: `worker:${first.turnId}`,
         turnId: first.turnId,
         turnSeq: first.turnSeq,
         seq: first.turnSeq,
@@ -702,8 +896,6 @@ describe('answer thread source-write admission', () => {
       threadId: first.threadId,
       turnId: first.turnId,
       turnSeq: first.turnSeq,
-      generation: 0,
-      leaseOwner: `worker:${first.turnId}`,
       seq: first.turnSeq,
       entries,
     } as const
@@ -951,6 +1143,7 @@ async function persistTurn(
       resultJson: string
       resultHash: string
       status: 'complete'
+      createdAt?: number
     }[]
     finalize?: boolean
   },
@@ -960,7 +1153,8 @@ async function persistTurn(
   const query = `local source-write query ${input.reservationKey}`
   const proseJson = '{}'
   const artifactKindsJson = '[]'
-  const toolCalls = input.toolCalls === undefined ? [] : [...input.toolCalls]
+  const createdAt = 1
+  const toolCalls = input.toolCalls?.map((call) => ({ ...call, createdAt: call.createdAt ?? createdAt })) ?? []
   const answerDigest = answerTurnFinalizationDigest({
     turn: {
       turnId: input.turnId,
@@ -973,25 +1167,10 @@ async function persistTurn(
       proseJson,
       artifactKindsJson,
       status: 'complete',
+      createdAt,
     },
     toolCalls,
   })
-  const leaseOwner = `worker:${input.turnId}`
-  const leaseOperationKey = `answer_thread:lease:${input.turnId}`
-  const lease = await backend.mutation(api.answerThreads.acquireAnswerTurnResumeLease, {
-    reservationKey: input.reservationKey,
-    requestDigest: input.requestDigest,
-    sessionId: input.sessionId,
-    threadId: input.threadId,
-    turnId: input.turnId,
-    turnSeq: input.turnSeq,
-    leaseOwner,
-    mode: 'initial',
-    operationKey: leaseOperationKey,
-    correlationId: leaseOperationKey,
-    sourceWrite: createAdmission(leaseOperationKey, leaseOperationKey, `${input.nonce}-lease`),
-  })
-  if (lease.kind !== 'acquired') throw new Error('expected acquired answer turn lease')
   await expect(backend.mutation(api.answerThreads.persistReservedAnswerTurn, {
     reservationKey: input.reservationKey,
     requestDigest: input.requestDigest,
@@ -999,8 +1178,7 @@ async function persistTurn(
     threadId: input.threadId,
     turnId: input.turnId,
     turnSeq: input.turnSeq,
-    generation: lease.generation,
-    leaseOwner,
+    createdAt,
     answerDigest,
     intent: 'refine_search',
     evidenceJson,
@@ -1029,8 +1207,6 @@ async function persistTurn(
     threadId: input.threadId,
     turnId: input.turnId,
     turnSeq: input.turnSeq,
-    generation: lease.generation,
-    leaseOwner,
     finalStatus: 'complete',
     snapshotHash,
     evidenceJson,
@@ -1077,8 +1253,6 @@ async function finalizeHarnessRun(
     threadId: string
     turnId: string
     turnSeq: number
-    generation: number
-    leaseOwner: string
     seq: number
     entries: readonly AppendHarnessSessionEntrySourceInput[]
   },
@@ -1092,8 +1266,6 @@ async function finalizeHarnessRun(
     threadId: input.threadId,
     turnId: input.turnId,
     turnSeq: input.turnSeq,
-    generation: input.generation,
-    leaseOwner: input.leaseOwner,
     finalStatus: 'complete',
     snapshotHash: `snapshot-${input.seq}`,
     evidenceJson: currentEvidenceJson(`snapshot-${input.seq}`),

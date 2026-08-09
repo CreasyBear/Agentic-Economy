@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import type { FrozenTurnEvidence, FrozenTurnEvidenceDraft, FrozenTurnProse } from '@/modules/answer-thread/harness'
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'

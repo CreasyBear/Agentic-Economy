@@ -2,7 +2,7 @@ import {
   buildArtifactsFromSnapshot,
   type AnswerSnapshot,
 } from '@/modules/answer/projection'
-import { parseAnswerTurnProblem, redactAnswerTurnProblem } from '@/lib/errors'
+import { parseAnswerTurnProblemStrict, redactAnswerTurnProblem } from '@/lib/errors'
 import { isRecord } from '@/modules/common/is-record'
 
 import type {
@@ -65,7 +65,6 @@ export function countAnswerThreadTurns(
   for (const reservation of rows.reservations) {
     if (
       reservation.state !== 'reserved' &&
-      reservation.state !== 'checkpointed' &&
       reservation.state !== 'answer_persisted' &&
       reservation.state !== 'stopped'
     ) {
@@ -181,9 +180,7 @@ export function buildPublicReservationTurn(
 ): PublicThreadTurn | undefined {
   const status = reservation.state === 'stopped'
     ? 'stopped'
-    : reservation.state === 'reserved'
-      || reservation.state === 'checkpointed'
-      || reservation.state === 'answer_persisted'
+    : reservation.state === 'reserved' || reservation.state === 'answer_persisted'
       ? 'pending'
       : undefined
   if (status === undefined) {
@@ -271,7 +268,7 @@ function parsePublicTurnProblem(value: string | undefined): NonNullable<PublicTh
 
   try {
     const parsed: unknown = JSON.parse(value)
-    return parseAnswerTurnProblem(parsed) ?? redactAnswerTurnProblem(parsed)
+    return parseAnswerTurnProblemStrict(parsed) ?? redactAnswerTurnProblem(parsed)
   } catch {
     return redactAnswerTurnProblem(undefined)
   }

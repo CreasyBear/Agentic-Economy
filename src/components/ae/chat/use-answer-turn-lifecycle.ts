@@ -206,6 +206,10 @@ export function useAnswerTurnLifecycle(input: UseAnswerTurnLifecycleInput): {
       if (result.kind === 'aborted') {
         return
       }
+      if (result.kind === 'pending' || result.kind === 'stopped') {
+        await settleFromReadback()
+        return
+      }
       if (
         latestStateRef.current.threadMeta === null
         && (result.kind === 'problem' || result.kind === 'transport_error')

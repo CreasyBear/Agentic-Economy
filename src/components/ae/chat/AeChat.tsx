@@ -14,7 +14,6 @@ import {
   markJourneyViewedAfterReopenWindow,
 } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { mergeThreadRecords, upsertOptimisticThread, useStoredThreadRecords, writeStoredThreadRecords } from './thread-records-store'
 import { mergeProjectionWithOptimisticTurns, type OptimisticTurnRecord } from './projection-merge'
 import { readAnswerThreadProjection } from './thread-readback'
@@ -75,8 +74,7 @@ type ProjectionFetchState = {
 type ThreadRecordsUpdater =
   | readonly AnswerThreadRecord[]
   | ((current: readonly AnswerThreadRecord[]) => readonly AnswerThreadRecord[])
-
-const pageClientTurnScope = createClientTurnKey()
+const INITIAL_CLIENT_TURN_KEY_STORAGE = 'ae.answer.initial-turn-key.v1'
 
 export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
   const navigate = useNavigate()
@@ -93,7 +91,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       ? ({
           query: initialRouteQuery,
           generation: 1,
-          clientTurnKey: canonicalDigest({ pageClientTurnScope, query: initialRouteQuery }),
+          clientTurnKey: readOrCreateInitialClientTurnKey(),
           searchContext: DEFAULT_AE_SEARCH_CONTEXT,
           intent: 'refine_search',
         } satisfies LiveTurn)
@@ -111,6 +109,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [refinementComposerOpen, setRefinementComposerOpen] = useState(false)
   const pendingThreadIdRef = useRef<string | null>(null)
+  const readbackSupportedTurnIdsRef = useRef(new Set<string>())
   const mobileSidebarOpenerRef = useRef<HTMLElement | null>(null)
   const routeFocusHeadingRef = useRef<HTMLHeadingElement | null>(null)
 
@@ -169,6 +168,17 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         optimisticTurns,
       }),
     [serverProjection, streamingThreadId, optimisticTurns],
+  )
+  const hasNonAuthoritativeOptimisticTurn = useMemo(
+    () =>
+      optimisticTurns.some((record) => {
+        if (record.threadId !== streamingThreadId) {
+          return false
+        }
+        const serverSupportsTurn = serverProjection?.turns.some((turn) => turn.turnId === record.turn.turnId) ?? false
+        return !serverSupportsTurn && !readbackSupportedTurnIdsRef.current.has(record.turn.turnId)
+      }),
+    [optimisticTurns, serverProjection, streamingThreadId],
   )
   const turnRenderKeys = useMemo(() => {
     const keys: Record<string, string> = {}
@@ -281,7 +291,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
     setLeavingWelcome(false)
   }, [showWelcome])
-
   function openMobileSidebar() {
     const activeElement = document.activeElement
     mobileSidebarOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null
@@ -297,6 +306,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     context: AeSearchContext = searchContext,
     intent: FollowUpIntent = classifyFollowUpIntent(query, completedTurnCount),
   ) {
+    clearInitialClientTurnKey()
     setStreamingBusy(true)
     const nextGeneration = generationRef.current + 1
     generationRef.current = nextGeneration
@@ -350,6 +360,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     if (threadIdForTurn === null) {
       return
     }
+    readbackSupportedTurnIdsRef.current.add(turn.turnId)
     setOptimisticTurns((current) => {
       const nextRecord = {
         threadId: threadIdForTurn,
@@ -393,6 +404,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       }
     }
 
+    if (
+      (outcome === 'complete' || outcome === 'stopped')
+      && effectiveRouteThreadId === null
+      && initialRouteQuery.length > 0
+    ) {
+      clearInitialClientTurnKey()
+    }
+
     const pendingId = pendingThreadIdRef.current
     if (effectiveRouteThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
@@ -430,7 +449,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   function handleRetry(query: string) {
     const retryIntent = liveTurn?.query === query ? liveTurn.intent : classifyFollowUpIntent(query, completedTurnCount)
-    const retryContext = { ...searchContext, timing: composerTiming, ...(composerTimingDate === undefined ? {} : { timingDate: composerTimingDate }) }
+    const retryContext = {
+      ...searchContext,
+      timing: composerTiming,
+      ...(composerTimingDate === undefined ? {} : { timingDate: composerTimingDate }),
+    }
     startTurn(query, retryContext, retryIntent)
   }
 
@@ -438,12 +461,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     // Reset to a fresh blank thread in place (client-only): the route stays put,
     // but the transcript, live turn, optimistic turns and composer are cleared so
     // the next submitted query starts a brand-new thread and navigates to it.
+    clearInitialClientTurnKey()
     setNewChatDraft(true)
     setStreamingBusy(false)
     generationRef.current = 0
     setLiveTurn(null)
     setSessionThreadId(null)
     pendingThreadIdRef.current = null
+    readbackSupportedTurnIdsRef.current.clear()
     setOptimisticTurns([])
     setRefinementComposerOpen(false)
     setMobileSidebarOpen(false)
@@ -627,6 +652,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 <AeSessionContextPanel projection={sessionProjection} liveTurn={liveTurn} />
               </>
             ) : null}
+            {hasNonAuthoritativeOptimisticTurn ? (
+              <p className="mx-auto w-full max-w-[56rem] px-4 pb-2 text-sm text-muted-foreground md:px-6" role="status">
+                Local answer preview — not authoritative until the saved answer is confirmed by readback.
+              </p>
+            ) : null}
             <AeThreadTranscript
               threadId={streamingThreadId}
               projection={projection}
@@ -711,6 +741,34 @@ function createClientTurnKey(): string {
     return globalThis.crypto.randomUUID()
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
+function readOrCreateInitialClientTurnKey(): string {
+  if (typeof window === 'undefined') {
+    return createClientTurnKey()
+  }
+  try {
+    const stored = window.sessionStorage.getItem(INITIAL_CLIENT_TURN_KEY_STORAGE)
+    if (stored !== null && /^[a-z0-9-]{8,128}$/iu.test(stored)) {
+      return stored
+    }
+    const key = createClientTurnKey()
+    window.sessionStorage.setItem(INITIAL_CLIENT_TURN_KEY_STORAGE, key)
+    return key
+  } catch {
+    return createClientTurnKey()
+  }
+}
+
+function clearInitialClientTurnKey(): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.sessionStorage.removeItem(INITIAL_CLIENT_TURN_KEY_STORAGE)
+  } catch {
+    // Continue without storage; the current in-memory submission still has its key.
+  }
 }
 
 

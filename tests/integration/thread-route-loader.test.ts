@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
-import type { AnswerThreadRecord, AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import { Route } from '@/routes/t.$threadId'
 import { loadThreadRouteReadback } from '@/modules/answer-thread/thread-route'
 import {

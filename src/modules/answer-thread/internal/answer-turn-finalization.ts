@@ -70,8 +70,7 @@ export type PersistAnswerTurnInput = {
   title: string
   reservationKey: string
   requestDigest: string
-  generation: number
-  leaseOwner: string
+  createdAt: number
   turnId: string
   turnSeq: number
   query: string
@@ -177,8 +176,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
     threadId: input.threadId,
     turnId: input.turnId,
     turnSeq: input.turnSeq,
-    generation: input.generation,
-    leaseOwner: input.leaseOwner,
+    createdAt: input.createdAt,
     query: input.query,
     intent: input.intent,
     evidenceJson: JSON.stringify(evidence),
@@ -199,6 +197,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
       resultJson: call.resultJson,
       resultHash: call.resultHash,
       status: call.status,
+      createdAt: call.createdAt,
     })),
   }
   const finalizationDigest = answerTurnFinalizationDigest({
@@ -212,6 +211,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
       snapshotHash: turnRow.snapshotHash,
       proseJson: turnRow.proseJson,
       artifactKindsJson: turnRow.artifactKindsJson,
+      createdAt: input.createdAt,
       status,
       ...(input.errorCopyId === undefined ? {} : { errorCopyId: input.errorCopyId }),
       ...(input.errorProblemJson === undefined ? {} : { errorProblemJson: input.errorProblemJson }),
@@ -280,8 +280,6 @@ export async function finalizePersistedAnswerTurnHarnessRun(args: {
     turnSeq: args.input.turnSeq,
     finalStatus: args.persistResult.status,
     snapshotHash: args.persistResult.snapshotHash,
-    generation: args.input.generation,
-    leaseOwner: args.input.leaseOwner,
     evidenceJson: finalizedEvidence,
     finalizationHash,
     entries,
@@ -304,8 +302,6 @@ export async function failPersistedAnswerTurnDurably(args: {
       threadId: args.input.threadId,
       turnId: args.input.turnId,
       turnSeq: args.input.turnSeq,
-      generation: args.input.generation,
-      leaseOwner: args.input.leaseOwner,
       answerDigest: args.persistResult.finalizationDigest,
       ...(args.input.errorCopyId === undefined ? {} : { errorCopyId: args.input.errorCopyId }),
       errorProblemJson: args.errorProblemJson,

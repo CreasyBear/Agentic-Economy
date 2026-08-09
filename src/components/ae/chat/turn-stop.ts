@@ -1,4 +1,4 @@
-import { parseAnswerTurnProblem, type AnswerTurnProblem } from '@/lib/errors'
+import { parseAnswerTurnProblemStrict, type AnswerTurnProblem } from '@/lib/errors'
 import { isRecord } from '@/modules/common/is-record'
 import type { AnswerTurnTransportError } from './answer-stream'
 import type { AnswerTurnStatus } from '@/modules/answer-thread/public'
@@ -25,15 +25,16 @@ export async function stopAnswerTurnRequest(input: {
       },
       body: JSON.stringify({ threadId: input.threadId, turnId: input.turnId }),
     })
-    if (response.status === 404) {
-      return { kind: 'not_found' }
-    }
     const body = await parseJson(response)
     if (!response.ok) {
-      const problem = parseAnswerTurnProblem(body)
-      return problem === undefined
-        ? { kind: 'transport_error', error: protocolError('The stop response was malformed.') }
-        : { kind: 'problem', problem }
+      const problem = parseAnswerTurnProblemStrict(body)
+      if (problem === undefined) {
+        return { kind: 'transport_error', error: protocolError('The stop response was malformed.') }
+      }
+      if (response.status === 404 && problem.code === 'thread_not_found') {
+        return { kind: 'not_found' }
+      }
+      return { kind: 'problem', problem }
     }
     if (!isRecord(body) || typeof body.kind !== 'string') {
       return { kind: 'transport_error', error: protocolError('The stop response was malformed.') }

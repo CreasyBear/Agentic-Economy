@@ -19,5 +19,6 @@ export type AnswerToolCallInputRow = {
   resultJson: string
   resultHash: string
   status: AnswerToolCallStatus
+  createdAt: number
 }
 

@@ -71,7 +71,14 @@ export function normalizeAdminFilter(value: string | undefined): string | undefi
 
 type ComparableAnswerToolCall = Pick<
   AnswerToolCallRecord,
-  'toolCallId' | 'seq' | 'toolId' | 'inputJson' | 'resultSummaryJson' | 'resultHash' | 'status'
+  | 'toolCallId'
+  | 'seq'
+  | 'toolId'
+  | 'inputJson'
+  | 'resultSummaryJson'
+  | 'resultHash'
+  | 'status'
+  | 'createdAt'
 > & {
   resultJson: string | undefined
 }
@@ -90,7 +97,8 @@ export function toolCallsMatch(
       row.resultSummaryJson === candidate.resultSummaryJson &&
       row.resultJson === candidate.resultJson &&
       row.resultHash === candidate.resultHash &&
-      row.status === candidate.status
+      row.status === candidate.status &&
+      row.createdAt === candidate.createdAt
   })
 }
 

@@ -1,5 +1,5 @@
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import type {
-  AnswerTurnRecord,
   AnswerTurnStatus,
   FollowUpIntent,
   PublicThreadTurn,

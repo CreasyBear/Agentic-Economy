@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
-import { jsonError } from '@/lib/server/json-error'
 import { answerTurnSourceErrorResponse } from '@/lib/server/answer-source-error'
 import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
@@ -62,20 +61,19 @@ export async function handleAnswerTurnRequest(
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
   if (!request.headers.get('content-type')?.includes('application/json')) {
-    return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
+    return problem(buildAnswerTurnProblem('invalid_content_type'))
   }
 
   const boundedBody = await readBoundedRequestJson(request, MAX_ANSWER_TURN_BODY_BYTES)
   if (!boundedBody.ok) {
-    return jsonError(
+    return problem(buildAnswerTurnProblem(
       boundedBody.code === 'payload_too_large' ? 'payload_too_large' : 'invalid_body',
-      boundedBody.code === 'payload_too_large' ? 413 : 400,
-    )
+    ))
   }
 
   const parsed = answerTurnRequestSchema.safeParse(boundedBody.value)
   if (!parsed.success) {
-    return jsonError('invalid_body', 400)
+    return problem(buildAnswerTurnProblem('invalid_body'))
   }
 
   const clientTurnKey = request.headers.get('x-ae-turn-key')?.trim()
@@ -84,7 +82,7 @@ export async function handleAnswerTurnRequest(
     clientTurnKey.length === 0 ||
     clientTurnKey.length > MAX_CLIENT_TURN_KEY_LENGTH
   ) {
-    return jsonError('missing_turn_key', 400)
+    return problem(buildAnswerTurnProblem('missing_turn_key'))
   }
 
   let admission: RateLimitResult
@@ -99,7 +97,9 @@ export async function handleAnswerTurnRequest(
     return problem(buildAnswerTurnProblem('unavailable'))
   }
   if (!admission.ok) {
-    return jsonError('rate_limited', 429, admission.retryAfter)
+    return problem(buildAnswerTurnProblem('rate_limited'), {
+      'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))),
+    })
   }
 
   // Static import would pull Node-only answer execution into the client route graph.
@@ -142,7 +142,7 @@ export async function handleAnswerTurnRequest(
   }
 
   if (reservation.kind === 'conflict') {
-    return jsonError('answer_turn_idempotency_conflict', 409)
+    return problem(buildAnswerTurnProblem('answer_turn_idempotency_conflict'))
   }
   if (reservation.kind === 'refused') {
     return problem(buildAnswerTurnProblem(reservation.reason))

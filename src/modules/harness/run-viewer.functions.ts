@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
-import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import type { AdminMembership } from '@/modules/security/public'
 import { requireAdminAuthority } from '@/modules/security/public'
 import {

@@ -47,6 +47,7 @@ export function answerTurnFinalizationDigest(input: {
     | 'proseJson'
     | 'artifactKindsJson'
     | 'status'
+    | 'createdAt'
   > & { errorCopyId?: string; errorProblemJson?: string }
   toolCalls: readonly Pick<
     AnswerToolCallRecord,
@@ -58,6 +59,7 @@ export function answerTurnFinalizationDigest(input: {
     | 'resultJson'
     | 'resultHash'
     | 'status'
+    | 'createdAt'
   >[]
 }): string {
   return canonicalDigest({
@@ -72,6 +74,7 @@ export function answerTurnFinalizationDigest(input: {
       proseJson: input.turn.proseJson,
       artifactKindsJson: input.turn.artifactKindsJson,
       status: input.turn.status,
+      createdAt: input.turn.createdAt,
       errorCopyId: input.turn.errorCopyId ?? null,
       errorProblemJson: input.turn.errorProblemJson ?? null,
     },
@@ -84,6 +87,7 @@ export function answerTurnFinalizationDigest(input: {
       resultJson: call.resultJson,
       resultHash: call.resultHash,
       status: call.status,
+      createdAt: call.createdAt,
     })),
   }).toString()
 }

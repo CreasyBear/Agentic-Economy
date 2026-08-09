@@ -1,5 +1,5 @@
 import {
-  parseAnswerTurnProblem,
+  parseAnswerTurnProblemStrict,
   type AnswerTurnProblem,
 } from '@/lib/errors'
 import {
@@ -26,6 +26,8 @@ export type AnswerTurnTransportError = Readonly<{
 
 export type StreamAnswerResult =
   | Readonly<{ kind: 'complete' }>
+  | Readonly<{ kind: 'pending' }>
+  | Readonly<{ kind: 'stopped' }>
   | Readonly<{ kind: 'aborted' }>
   | Readonly<{ kind: 'problem'; problem: AnswerTurnProblem }>
   | Readonly<{ kind: 'transport_error'; error: AnswerTurnTransportError }>
@@ -52,7 +54,7 @@ function protocolTransportError(
 
 async function parseHttpProblem(response: Response): Promise<AnswerTurnProblem | undefined> {
   try {
-    return parseAnswerTurnProblem(await response.json())
+    return parseAnswerTurnProblemStrict(await response.json())
   } catch {
     return undefined
   }
@@ -92,7 +94,9 @@ async function requestAnswerStream(
       return { kind: 'transport_error', error: protocolTransportError('missing_stream') }
     }
 
+    let terminalSeen = false
     let terminalProblem: AnswerTurnProblem | undefined
+    let terminalKind: 'complete' | 'pending' | 'stopped' | undefined
     for await (const frame of readAnswerTurnFrames(response.body)) {
       if (frame.event.type === 'thread') {
         input.onThread?.({
@@ -101,14 +105,32 @@ async function requestAnswerStream(
           turnSeq: frame.event.turnSeq,
         })
       }
-      if (frame.event.type === 'error') terminalProblem = frame.event.problem
+      if (
+        frame.event.type === 'error'
+        || frame.event.type === 'complete'
+        || frame.event.type === 'pending'
+        || frame.event.type === 'stopped'
+      ) {
+        if (terminalSeen) {
+          throw new AnswerTurnProtocolError('malformed_sse')
+        }
+        terminalSeen = true
+        if (frame.event.type === 'error') {
+          terminalProblem = frame.event.problem
+        } else {
+          terminalKind = frame.event.type
+        }
+      }
+
       input.onFrame(frame)
     }
 
     if (input.signal?.aborted === true) return { kind: 'aborted' }
-    return terminalProblem === undefined
-      ? { kind: 'complete' }
-      : { kind: 'problem', problem: terminalProblem }
+    if (terminalProblem !== undefined) return { kind: 'problem', problem: terminalProblem }
+    if (terminalKind === 'pending' || terminalKind === 'stopped') return { kind: terminalKind }
+    if (terminalKind === 'complete') return { kind: 'complete' }
+    if (!terminalSeen) throw new AnswerTurnProtocolError('malformed_sse')
+    return { kind: 'complete' }
   } catch (cause) {
     if (
       input.signal?.aborted === true
@@ -144,31 +166,6 @@ export async function streamAnswerTurnRequest(input: {
   )
 }
 
-export async function resumeAnswerTurnRequest(input: {
-  reservationKey: string
-  requestDigest: string
-  threadId: string
-  turnId: string
-  turnSeq: number
-  generation: number
-  clientTurnKey: string
-  signal?: AbortSignal
-  onFrame: (frame: AnswerStreamFrame) => void
-  onThread?: (meta: TurnThreadMeta) => void
-}): Promise<StreamAnswerResult> {
-  return requestAnswerStream(
-    '/api/answer/turn/resume',
-    JSON.stringify({
-      reservationKey: input.reservationKey,
-      requestDigest: input.requestDigest,
-      threadId: input.threadId,
-      turnId: input.turnId,
-      turnSeq: input.turnSeq,
-      generation: input.generation,
-    }),
-    input,
-  )
-}
 
 export function appendThinkingStep(steps: readonly string[], label: string): string[] {
   if (steps.at(-1) === label) {
