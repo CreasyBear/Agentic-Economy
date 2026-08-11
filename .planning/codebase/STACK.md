@@ -1,50 +1,46 @@
 # Technology Stack
-
-**Analysis Date:** 2026-08-09
+**Analysis Date:** 2026-08-11
 
 ## Languages
-
-- TypeScript is the application, server, Convex, and tooling language. `tsconfig.json` enables strict checking, exact optional properties, unchecked-index protection, ES2022 output targeting, ESM modules, bundler resolution, and `@/*`/`~/*` aliases.
-- TSX/JSX is used by the React application and TanStack route components, including `src/routes/__root.tsx` and `src/components/ae/`.
-- Node-oriented JavaScript and TypeScript tools are ESM scripts (`tools/**/*.mjs`, `tools/**/*.ts`, `eval/**/*.mjs`, and `eval/**/*.ts`); `package.json` sets `"type": "module"`.
-- CSS is Tailwind CSS v4-compatible CSS with semantic tokens and layered imports in `src/styles/globals.css`; JSON/YAML configure packages, UI scaffolding, and CI (`components.json`, `.oxlintrc.json`, `.github/workflows/kernel-release-gate.yml`).
+- TypeScript is the application and backend language (`tsconfig.json`, `src/**/*.ts`, `convex/**/*.ts`), with strict checking, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, and no emitted JavaScript.
+- TSX renders the React UI (`src/**/*.tsx`); the package is native ESM (`package.json` `type: module`).
+- JavaScript/MJS remains the scripting language for local tooling and evaluation (`tools/**/*.mjs`, `eval/**/*.mjs`); CSS/Tailwind and YAML are used for styling and CI/evaluation configuration.
 
 ## Runtime
-
-- The supported runtime is Node.js 22.x (`package.json` engines, `.nvmrc`, and the guard in `tools/dev/local-dev.mjs`). npm 11.5.1 is pinned by `package.json`; `package-lock.json` is the npm lockfile v3.
-- `npm run dev` launches Vite on port 3000. `npm run dev:local` selects local Convex, supervises `convex dev`, and launches the Vite child on port 3024 by default (`tools/dev/local-dev.mjs`, `vite.config.ts`).
-- Hosted output uses Nitro's Vercel preset with Node serverless functions and `nodejs22.x` (`vite.config.ts`). Checked-in Vercel metadata currently says Node 24.x (`.vercel/project.json`), so deployment metadata and repository runtime pins are not aligned.
-- Convex is the reactive database/function runtime. Components for workflow, workpool, rate limiting, and the owner-activation aggregate are registered in `convex/convex.config.ts`; Node-only actions are kept in Convex action modules.
-- Playwright's local browser server defaults to port 3020 and runs compact and wide Chromium projects (`playwright.config.ts`).
+- Node.js 22.x is the supported runtime: `.nvmrc` contains `22`, `package.json` requires `engines.node: 22.x`, and `tools/dev/local-dev.mjs` rejects other major versions.
+- npm 11.5.1 is the pinned package manager (`package.json` `packageManager`); `package-lock.json` is lockfile version 3 and is installed with `npm ci` in CI.
+- The local Vite server defaults to `127.0.0.1:3000`; `npm run dev:local` starts Convex development plus Vite on `127.0.0.1:3024` (`vite.config.ts`, `tools/dev/local-dev.mjs`).
+- Browser code targets the React/Vite client while TanStack Start/Nitro run server handlers on Node. No separate runtime is declared for edge execution.
 
 ## Frameworks
-
-- TanStack Start and TanStack Router provide full-stack routing and server handlers (`src/start.ts`, `src/router.tsx`, `src/routes/`, `vite.config.ts`).
-- React 19.2.7 and React DOM 19.2.7 provide the browser runtime. Tailwind CSS v4, shadcn's `new-york` setup, Radix UI, and Lucide supply the component/styling layer (`package.json`, `components.json`, `src/styles/globals.css`).
-- Vite 8, Nitro, the React Vite plugin, Tailwind Vite plugin, and optional Sentry Vite plugin compose the build (`vite.config.ts`).
-- Vitest is the Node test runner; Playwright Test is the browser runner; Promptfoo and Braintrust support answer-evaluation tooling (`vitest.config.ts`, `playwright.config.ts`, `eval/answer/`, `eval/braintrust/`).
+- React 19.2.7 with React DOM 19.2.7 is the UI runtime (`package-lock.json`).
+- TanStack Start 1.168.26 and TanStack Router 1.170.16 provide SSR/server handlers and file-based routing (`src/start.ts`, `src/routes/`, `vite.config.ts`).
+- Convex 1.42.0 supplies the TypeScript backend and database client/server runtime (`convex/schema.ts`, `src/lib/server/convex-source.ts`).
+- Vite 8.1.0 is the build/dev tool. The Vite plugins combine TanStack Start, Nitro, React, and Tailwind CSS (`vite.config.ts`).
+- Nitro nightly `3.0.1-20260628-090458-3df69609` targets Vercel with Node serverless functions; the Vite config explicitly sets Vercel `nodejs22.x` (`vite.config.ts`).
+- Tailwind CSS 4.3.1 is loaded through `@tailwindcss/vite` and `src/styles/globals.css`; shadcn metadata is in `components.json`.
 
 ## Key Dependencies
-
-- `convex` plus `@convex-dev/workflow`, `@convex-dev/workpool`, `@convex-dev/rate-limiter`, and `@convex-dev/aggregate` provide durable state, jobs, rate admission, and aggregation (`package.json`, `convex/convex.config.ts`, `convex/schema.ts`).
-- `ai`, `@openrouter/ai-sdk-provider`, `@ai-sdk/provider-utils`, and `@tanstack/ai` form the model/streaming boundary; model construction is centralized in `src/modules/model-gateway/public.ts`.
-- `@clerk/tanstack-react-start` bridges Clerk browser/server identity into TanStack Start and Convex (`src/start.ts`, `src/routes/__root.tsx`, `convex/auth.config.ts`).
-- Zod 4, `@cfworker/json-schema`, and `@apidevtools/json-schema-ref-parser` validate API, capability, OpenAPI, and publication boundaries (`src/modules/capability-supply/`, `src/modules/capability-contract/`).
-- `undici` and `src/modules/network-guard/public.ts` provide bounded, DNS-vetted outbound HTTP; `@modelcontextprotocol/sdk` provides Streamable HTTP MCP; `@x402/core`, `@x402/evm`, `@x402/extensions`, and `viem` isolate x402 payment handling.
-- `@sentry/node`, `@sentry/react`, `posthog-node`, and `posthog-js` provide error and funnel telemetry (`src/lib/observability/`).
+- `ai` 7.0.44 and `@openrouter/ai-sdk-provider` 3.0.0 provide the single model gateway (`src/modules/model-gateway/public.ts`).
+- `@clerk/tanstack-react-start` 1.4.9 provides Clerk server/client integration (`src/start.ts`, `convex/auth.config.ts`).
+- `@modelcontextprotocol/sdk` 1.30.0 supports MCP server/client protocol paths (`src/routes/mcp.ts`, `src/lib/server/mcp-api.ts`).
+- `@x402/core`, `@x402/evm`, and `@x402/extensions` are 2.18.0 and support paid HTTP operation settlement (`src/modules/capability-supply/internal/x402-payment-signer.ts`).
+- `zod` 4.4.3 is the runtime schema/validation dependency across route and domain boundaries.
+- `@sentry/node`/`@sentry/react` 10.63.0 and `posthog-node` 5.39.0/`posthog-js` 1.398.2 provide optional observability (`src/lib/observability/`).
+- Vitest 4.1.9 and Playwright 1.61.1 provide unit/integration and browser runners (`vitest.config.ts`, `playwright.config.ts`).
 
 ## Configuration
-
-- Compiler behavior and aliases are in `tsconfig.json`; Vite/TanStack/Nitro/Tailwind/Sentry behavior is in `vite.config.ts`; test aliases and setup are in `vitest.config.ts` and `playwright.config.ts`.
-- `package.json` is the command registry for development, Convex codegen, release proof, evaluation, browser runs, and source checks. `.oxlintrc.json` defines lint scope and exclusions.
-- `convex/schema.ts` composes module-owned tables; `convex/convex.config.ts` registers Convex components and the typed Convex environment subset.
-- `.env.example` documents variable names and deployment roles only. `src/lib/deployment/manifest.ts` and `tools/release/verify-deployment-manifest.ts` validate production, preview, development, and test configuration without exposing values.
+- `tsconfig.json` uses ES2022 output semantics, ES2024 library types, bundler module resolution, `@/*` and `~/*` aliases to `src`, JSX automatic runtime, and includes `src`, `convex`, `tests`, and the Vite/Vitest/Playwright configs.
+- `vite.config.ts` enables Vite 8 dependency optimization, TanStack Start, Nitro Vercel preset, React, and Tailwind. Build sourcemaps are enabled only when the Sentry build variables are complete (`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`); the Sentry plugin is otherwise omitted.
+- `npm run build` invokes `vite build`; `npm run dev` invokes Vite directly; `npm run dev:local` wraps `convex dev` and the local Vite process. `npm run typecheck` invokes `tsc --noEmit`.
+- `vitest.config.ts` runs Node-environment tests from `tests/**/*.test.ts(x)` and `convex/**/*.test.ts` with four setup files. `playwright.config.ts` runs compact and wide Chromium projects and starts local Vite unless `PLAYWRIGHT_BASE_URL` is supplied.
+- `.env.example` documents names only. The deployment manifest (`src/lib/deployment/manifest.ts`) validates environment groups and rejects incomplete production configuration before release operations.
 
 ## Platform Requirements
+- Development and CI require Node.js 22.x, npm 11.5.1, a frozen install from `package-lock.json`, and a browser for Playwright checks.
+- Runtime access requires a Convex deployment URL (`CONVEX_URL` or `VITE_CONVEX_URL`) plus Clerk issuer/auth configuration for authenticated calls; local self-hosted/E2E paths additionally use `CONVEX_SELF_HOSTED_ADMIN_KEY` and the explicit local bypass.
+- Production builds target Vercel Node serverless functions through Nitro. `.vercel/project.json` currently records Vercel `nodeVersion: 24.x`, which conflicts with the repository’s Node 22 requirement and `vite.config.ts`’s `nodejs22.x` target; deployment metadata should be reconciled before relying on hosted builds.
 
-- Local development requires Node 22, npm 11.5.1, a reachable local Convex deployment, and a Chromium-capable environment for browser smoke (`.nvmrc`, `tools/dev/local-dev.mjs`, `playwright.config.ts`).
-- Local E2E may use `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` plus a self-hosted Convex admin credential; `src/lib/server/local-e2e-bypass.ts` fails closed if that bypass is enabled in production.
-- Hosted production requires Vercel's Node runtime plus a separately deployed Convex backend, Clerk configuration, and deployment-manifest authorities (`vite.config.ts`, `src/lib/deployment/manifest.ts`). No separate staging product is declared; Vercel preview is the supported pre-production mode.
-- `.github/workflows/kernel-release-gate.yml` installs the pinned Node/npm toolchain, runs source proof in development mode, and gates main-branch hosted proof/deployment in the production environment.
-
-_Stack refresh: 2026-08-09; source/config paths were re-read from the current dirty tree and environment values were intentionally omitted._
+---
+*Stack analysis: 2026-08-11*
+*Update after major dependency changes*
