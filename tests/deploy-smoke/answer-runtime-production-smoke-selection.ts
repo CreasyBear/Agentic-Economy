@@ -1,4 +1,4 @@
-import { LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS } from '../../src/lib/dev/local-e2e-business-fixtures'
+import { LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS } from '../helpers/local-e2e-business-fixtures'
 import { DEV_SEED_BUSINESS_FIXTURES } from '../../src/modules/dev/internal/dev-seed-business-fixtures'
 
 export type PublicBusinessCatalogApiV2Dto = Readonly<{

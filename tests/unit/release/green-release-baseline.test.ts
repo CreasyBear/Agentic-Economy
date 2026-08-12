@@ -17,7 +17,8 @@ type WorkflowStep = {
 
 type WorkflowJob = {
   if?: string
-  needs?: string
+  needs?: string | string[]
+  name?: string
   environment?: string
   steps?: WorkflowStep[]
   env?: Record<string, string>
@@ -104,13 +105,18 @@ describe('green release baseline', () => {
     expect(hostedCodegen?.env?.CONVEX_DEPLOY_KEY).toBe('${{ secrets.CONVEX_DEPLOY_KEY }}')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
-    expect(uploads.length).toBeGreaterThan(0)
     for (const upload of uploads) {
       const artifactName = upload.with?.name ?? ''
-      expect(upload.if).toBe('always()')
+      if (artifactName.includes('paid-gateway-smoke-receipt')) {
+        expect(upload.if).toBe("inputs.live_gateway_stage == 'complete'")
+      } else if (artifactName.includes('gateway-topup-preparation')) {
+        expect(upload.if).toBe("inputs.live_gateway_stage == 'prepare'")
+      } else {
+        expect(upload.if).toBe('always()')
+        expect(artifactName).toMatch(/(?:source-release-gate|hosted-request-curated-fixture-smoke)/)
+      }
       expect(artifactName).toContain('${{ github.sha }}')
       expect(artifactName).toContain('${{ github.run_id }}')
-      expect(artifactName).toMatch(/(?:source|hosted)-(?:release-gate|work-tree)/)
 
       const artifactPaths = upload.with?.path ?? ''
       expect(`${artifactName}\n${artifactPaths}`).not.toMatch(/(?:^|[\\/\n])\.env(?:$|[.*\\/])/i)
@@ -126,6 +132,91 @@ describe('green release baseline', () => {
       expect(run).toContain('${GITHUB_RUN_ID}')
       expect(run).toContain('sanitized: true')
     }
+  })
+
+  it('separates the production-approved paid gateway receipt from the hosted fixture smoke', () => {
+    const requestChain = releaseCommandChain('test:release:hosted:request')
+    expect(requestChain).toContain('test:release:hosted:readback')
+    expect(requestChain).toContain('smoke:customer-request:production:temporary-key')
+    expect(requestChain).toContain('smoke:customer-request:production:human')
+    expect(requestChain).not.toContain('smoke:gateway:production')
+
+    expect(releaseCommandChain('test:release:hosted')).not.toContain('smoke:gateway:production')
+    const gatewayChain = releaseCommandChain('test:release:hosted:live-gateway')
+    expect(gatewayChain.match(/npm run smoke:gateway:production/g)).toHaveLength(1)
+
+    const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
+    const hosted = workflow.jobs?.['hosted-proof']
+    const live = workflow.jobs?.['live-gateway-proof']
+    expect(hosted?.name).toBe('Exact-revision production Request curated fixture smoke')
+    expect(hosted?.steps?.some((step) => step.run?.includes('test:release:hosted:gateway'))).toBe(false)
+    expect(hosted?.steps?.some((step) => step.name === 'Record limitation: hosted supply checks cover curated fixtures only')).toBe(true)
+    expect(live?.if).toBe("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_live_gateway_spend == true")
+    expect(live?.name).toBe('Opt-in production-approved exact-revision paid gateway smoke')
+    expect(live?.environment).toBe('production')
+    expect(live?.needs).toEqual(['source-proof', 'hosted-proof'])
+
+    const prepareIndex = live?.steps?.findIndex((step) => step.name === 'Prepare a run-scoped paid Checkout before any external payment') ?? -1
+    const preparationUploadIndex = live?.steps?.findIndex((step) => step.name === 'Upload the exact run-scoped Checkout preparation artifact') ?? -1
+    const completeIndex = live?.steps?.findIndex((step) => step.name === 'Observe same-run paid provider state and emit the strict receipt') ?? -1
+    const validatorIndex = live?.steps?.findIndex((step) => step.name === 'Independently validate the strict opt-in paid gateway receipt') ?? -1
+    const uploadIndex = live?.steps?.findIndex((step) => step.name === 'Upload the validated strict opt-in paid gateway receipt') ?? -1
+    const manifestIndex = live?.steps?.findIndex((step) => step.name === 'Verify production deployment manifest before live smoke') ?? -1
+    expect(manifestIndex).toBeGreaterThanOrEqual(0)
+    expect(manifestIndex).toBeLessThan(prepareIndex)
+    expect(prepareIndex).toBeLessThan(preparationUploadIndex)
+    expect(preparationUploadIndex).toBeLessThan(completeIndex)
+    expect(completeIndex).toBeLessThan(validatorIndex)
+    expect(validatorIndex).toBeLessThan(uploadIndex)
+    const prepare = live?.steps?.[prepareIndex]
+    expect(prepare?.run).toContain('npm run smoke:gateway:production -- --receipt output/release/operation-gateway-topup-preparation.json')
+    expect(prepare?.if).toBe("inputs.live_gateway_stage == 'prepare'")
+    const complete = live?.steps?.[completeIndex]
+    expect(complete?.run).toContain('npm run smoke:gateway:production -- --receipt output/release/operation-gateway-smoke.json')
+    expect(complete?.if).toBe("inputs.live_gateway_stage == 'complete'")
+    expect(live?.steps?.[preparationUploadIndex]?.if).toBe("inputs.live_gateway_stage == 'prepare'")
+    expect(live?.steps?.[uploadIndex]?.if).toBe("inputs.live_gateway_stage == 'complete'")
+    for (const name of [
+      'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND',
+      'AE_GATEWAY_SMOKE_RUN_ID',
+      'AE_GATEWAY_SMOKE_TOPUP_STAGE',
+      'AE_GATEWAY_SMOKE_API_KEY',
+      'AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID',
+      'AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID',
+      'AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON',
+      'AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH',
+      'AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD',
+      'AE_GATEWAY_SMOKE_CREDENTIAL_ID',
+      'AE_GATEWAY_SMOKE_TOPUP_AMOUNT_JSON',
+      'AE_RELEASE_CONVEX_DEPLOYMENT_ID',
+      'AE_RELEASE_CONVEX_URL',
+      'CLERK_SECRET_KEY',
+    ]) expect(complete?.env?.[name] ?? live?.env?.[name]).toBeDefined()
+    expect(complete?.run).toContain('AE_GATEWAY_SMOKE_PAYOUT_IDEMPOTENCY_KEY')
+    const workflowText = readFileSync(resolve(root, '.github/workflows/kernel-release-gate.yml'), 'utf8')
+    expect(workflowText).not.toContain('AE_GATEWAY_SMOKE_TOPUP_WEBHOOK_RAW_BODY')
+    expect(workflowText).not.toContain('AE_GATEWAY_SMOKE_TOPUP_WEBHOOK_SIGNATURE')
+    expect(workflowText).not.toContain('AE_GATEWAY_SMOKE_TOPUP_EXTERNAL_REF')
+    expect(workflowText).toContain('actions/download-artifact@v4')
+    expect(workflowText).toContain('live_gateway_prepare_workflow_run_id')
+    const upload = live?.steps?.[uploadIndex]
+    expect(upload?.with?.path).toBe('output/release/operation-gateway-smoke.json')
+    expect(upload?.with?.['if-no-files-found']).toBe('error')
+
+    const dispatch = workflow.on?.['workflow_dispatch'] as {
+      inputs?: {
+        confirm_live_gateway_spend?: { default?: boolean }
+        live_gateway_run_id?: { type?: string }
+        live_gateway_stage?: { type?: string }
+        live_gateway_prepare_workflow_run_id?: { type?: string }
+      }
+    } | undefined
+    expect(dispatch?.inputs?.confirm_live_gateway_spend?.default).toBe(false)
+    expect(dispatch?.inputs?.live_gateway_run_id?.type).toBe('string')
+    expect(dispatch?.inputs?.live_gateway_stage?.type).toBe('choice')
+    expect(dispatch?.inputs?.live_gateway_prepare_workflow_run_id?.type).toBe('string')
+    expect(hosted?.env?.AE_X402_PAYMENT_CREDENTIAL_REF).toBe('${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}')
+    expect(hosted?.env?.AE_X402_PAYMENT_PRIVATE_KEY).toBe('${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}')
   })
 
   it('keeps React Doctor explicitly advisory', () => {

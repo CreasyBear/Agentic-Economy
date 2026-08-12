@@ -7,6 +7,7 @@ import {
   listMcpActions,
   mcpToolName,
 } from '@/modules/actions'
+import { projectPublicServicesPage, type PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 
 describe('action registry', () => {
   it('registers only the public inquiry action', () => {
@@ -18,20 +19,27 @@ describe('action registry', () => {
     expect(ids).not.toContain('inquiry.markRead')
     expect(ids).not.toContain('inquiry.close')
   })
-
-  it('registers the registry read actions', () => {
+  it('registers the legacy and canonical public registry read actions', () => {
     const ids = listActions().map((action) => action.id)
     expect(ids).toContain('registry.list')
     expect(ids).toContain('registry.search')
     expect(ids).toContain('registry.detail')
+    expect(ids).toContain('registry.services_list')
+    expect(ids).toContain('registry.services_search')
+    expect(ids).toContain('registry.services_detail')
   })
 
   it('accepts opaque Convex pagination cursors without making them unbounded', () => {
     const cursor = 'x'.repeat(304)
-    expect(findAction('registry.list')?.schema.safeParse({ cursor }).success).toBe(true)
-    expect(findAction('registry.search')?.schema.safeParse({ query: 'plumber', cursor }).success).toBe(true)
+    for (const id of ['registry.list', 'registry.services_list']) {
+      expect(findAction(id)?.schema.safeParse({ cursor }).success).toBe(true)
+    }
+    for (const id of ['registry.search', 'registry.services_search']) {
+      expect(findAction(id)?.schema.safeParse({ query: 'plumber', cursor }).success).toBe(true)
+    }
     expect(findAction('registry.list')?.schema.safeParse({ cursor: 'x'.repeat(513) }).success).toBe(false)
   })
+
 
   it('registers route confirmation as one bounded cross-surface action', () => {
     const action = findAction('customerRequest.confirm')
@@ -57,19 +65,12 @@ describe('action registry', () => {
     expect(findAction('customerRequest.run')?.boundaries.join(' ')).toMatch(/does not let the caller choose/i)
   })
 
-  it('registers storefront import for owner UI and HTTP but not quiet agent tools', () => {
-    const action = findAction('storefront.importDraft')
-    expect(action).toBeDefined()
-    expect(action?.readOnly).toBe(false)
-    expect(action?.surfaces).toEqual(['ui', 'http'])
-    expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['websiteUrl', 'abn'])
-  })
 
-  it('exposes the bounded read and quote actions to the internal answer thread', () => {
+  it('exposes bounded read actions to the internal answer thread', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
     expect(exposed).toContain('registry.search')
     expect(exposed).toContain('registry.detail')
-    expect(exposed).toContain('sandbox.checkup_quote')
+    expect(exposed).not.toContain('sandbox.checkup_quote')
   })
 
   it('exposes the bounded web discovery observation to the internal answer thread', () => {
@@ -89,24 +90,39 @@ describe('action registry', () => {
     expect(action?.schema.safeParse({ query: 'funeral parlours in Parramatta' }).success).toBe(true)
   })
 
-  it('exposes exactly the anonymous read-only tier to the MCP host', () => {
+  it('exposes MCP actions and keeps the anonymous tier read-only', () => {
     const exposed = listMcpActions()
     expect(exposed.map((action) => action.id)).toEqual([
       'registry.services_list', 'registry.services_search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
-      'operation.execute',
-      'sandbox.checkup_quote',
+      'operation.execute', 'operation.invoke', 'operation.status',
+      'operation.cancel', 'operation.reconcile',
     ])
-    for (const action of exposed) {
+
+    const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
+    expect(anonymous.map((action) => action.id)).toEqual([
+      'registry.services_list', 'registry.services_search', 'registry.detail',
+      'registry.operations.search', 'registry.operations.detail',
+      'registry.operations.compare', 'registry.operations.inspectPlan',
+      'operation.execute',
+    ])
+    for (const action of anonymous) {
       expect(action.readOnly).toBe(true)
+    }
+    expect(exposed.find((action) => action.id === 'operation.invoke')?.readOnly).toBe(false)
+    expect(exposed.find((action) => action.id === 'operation.status')?.readOnly).toBe(true)
+    expect(exposed.find((action) => action.id === 'operation.cancel')?.readOnly).toBe(false)
+    expect(exposed.find((action) => action.id === 'operation.reconcile')?.readOnly).toBe(false)
+    for (const id of ['operation.invoke', 'operation.status', 'operation.cancel', 'operation.reconcile']) {
+      expect(exposed.find((action) => action.id === id)?.surfaces).toEqual(['http', 'mcp', 'cli'])
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
       'ae_registry_services_list', 'ae_registry_services_search', 'ae_registry_detail',
       'ae_registry_operations_search', 'ae_registry_operations_detail',
       'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
-      'ae_operation_execute',
-      'ae_sandbox_checkup_quote',
+      'ae_operation_execute', 'ae_operation_invoke', 'ae_operation_status',
+      'ae_operation_cancel', 'ae_operation_reconcile',
     ])
   })
 
@@ -162,23 +178,24 @@ describe('action registry', () => {
   /**
    * The Offering projection publishes `businessId` as a stable public
    * reference, exactly as the UCP manifest already does, so it is no longer
-   * treated as leaked identity. Every other internal identifier must still be
-   * rejected by the strict output schema.
+   * treated as leaked identity. The canonical Service projection carries the
+   * same public reference only through its published links and offering refs.
+   * Every other internal identifier must still be rejected by the strict
+   * output schemas.
    */
-  it('accepts the public Offering DTO and rejects internal identity beyond the published reference', () => {
-    const business = {
+  it('accepts the public Offering and Service DTOs and rejects internal identity', () => {
+    const business: PublicBusinessCatalogApiV2Page['page'][number] = {
       schemaVersion: 'public-business-catalog-api:v2',
       businessId: 'business:adelaide-emergency-plumbing',
       slug: 'adelaide-emergency-plumbing',
       name: 'Adelaide Emergency Plumbing',
       category: 'Emergency plumbing',
-      suburb: 'Adelaide',
-      stateTerritory: 'SA',
+      businessContext: { kind: 'local_human', suburb: 'Adelaide', stateTerritory: 'SA' },
       publicUrl: '/adelaide-emergency-plumbing',
       trustTier: 'claimed',
-      photos: [] as Array<{ url: string; alt: string }>,
+      photos: [],
       observedAt: 1,
-      disposition: 'current' as const,
+      disposition: 'current',
       offerings: [
         {
           offeringRef: 'legacy-offering:adelaide-emergency-plumbing:emergency-pipe-repair',
@@ -192,8 +209,8 @@ describe('action registry', () => {
             {
               accessPathRef: 'legacy-access:adelaide-emergency-plumbing:emergency-pipe-repair',
               offeringRevision: 1,
-              kind: 'human_request' as const,
-              channel: 'ae_inquiry' as const,
+              kind: 'human_request',
+              channel: 'ae_inquiry',
               disclosure: 'Use the inquiry form for a first contact.',
             },
           ],
@@ -219,12 +236,48 @@ describe('action registry', () => {
     })
     expect(detail.success).toBe(true)
 
+    const service = projectPublicServicesPage({
+      kind: 'ok',
+      schemaVersion: 'public-business-catalog-api:v2',
+      page: [business],
+      isDone: true,
+      continueCursor: '',
+    }).services[0]
+    if (service === undefined) throw new Error('Expected a projected Service.')
+
+    const servicesSearch = findAction('registry.services_search')!.outputSchema.safeParse({
+      kind: 'ok',
+      schemaVersion: 'public-services-api:v2',
+      query: 'plumber',
+      services: [service],
+      pagination: { limit: 1, total: 1, hasMore: false },
+    })
+    expect(servicesSearch.success).toBe(true)
+
+    const servicesDetail = findAction('registry.services_detail')!.outputSchema.safeParse({
+      kind: 'found',
+      schemaVersion: 'public-services-api:v2',
+      service,
+    })
+    expect(servicesDetail.success).toBe(true)
+
     for (const leaked of ['ownerId', 'sourceHash', 'rawContactValue'] as const) {
       expect(findAction('registry.detail')!.outputSchema.safeParse({
         kind: 'found',
         schemaVersion: 'public-business-catalog-api:v2',
         business: { ...business, [leaked]: 'internal-value' },
-      }).success, leaked).toBe(false)
+      }).success, `legacy detail leaked ${leaked}`).toBe(false)
+      expect(findAction('registry.services_detail')!.outputSchema.safeParse({
+        kind: 'found',
+        schemaVersion: 'public-services-api:v2',
+        service: { ...service, [leaked]: 'internal-value' },
+      }).success, `Service detail leaked ${leaked}`).toBe(false)
+      expect(findAction('registry.services_search')!.outputSchema.safeParse({
+        kind: 'ok',
+        schemaVersion: 'public-services-api:v2',
+        services: [{ ...service, [leaked]: 'internal-value' }],
+        pagination: { limit: 1, total: 1, hasMore: false },
+      }).success, `Service search leaked ${leaked}`).toBe(false)
     }
   })
 
@@ -239,13 +292,22 @@ describe('action registry', () => {
     expect(detail.hasOutputSchema).toBe(true)
     expect(detail.outputJsonSchema).toBeDefined()
 
+    const servicesSearch = describeActionForAgent(findAction('registry.services_search')!)
+    expect(servicesSearch.hasOutputSchema).toBe(true)
+    expect(servicesSearch.inputJsonSchema?.type).toBe('object')
+    expect(servicesSearch.outputJsonSchema?.type).toBe('object')
+    expect(servicesSearch.effect).toEqual(findAction('registry.services_search')!.effect)
+
+    const servicesDetail = describeActionForAgent(findAction('registry.services_detail')!)
+    expect(servicesDetail.hasOutputSchema).toBe(true)
+    expect(servicesDetail.outputJsonSchema).toBeDefined()
+
     const submit = describeActionForAgent(findAction('inquiry.submit')!)
     expect(submit.hasOutputSchema).toBe(true)
     expect(submit.outputJsonSchema).toBeDefined()
     expect(submit.inputJsonSchema).toBeDefined()
   })
-
-  it('marks the registry actions as read-only with honest boundaries', () => {
+  it('marks legacy and canonical registry actions as read-only with honest boundaries', () => {
     const list = findAction('registry.list')
     expect(list).toBeDefined()
     expect(list?.readOnly).toBe(true)
@@ -264,16 +326,38 @@ describe('action registry', () => {
     expect(detail?.readOnly).toBe(true)
     expect(detail?.surfaces).toContain('answerThread')
     expect(detail?.parameters.map((p) => p.name)).toContain('slug')
-    expect(findAction('registry.services_list')?.surfaces).not.toContain('answerThread')
-    expect(findAction('registry.services_search')?.surfaces).not.toContain('answerThread')
+
+    for (const id of ['registry.services_list', 'registry.services_search', 'registry.services_detail']) {
+      const action = findAction(id)
+      expect(action).toBeDefined()
+      expect(action?.readOnly).toBe(true)
+      expect(action?.surfaces).toContain('agentJson')
+      expect(action?.surfaces).not.toContain('answerThread')
+      expect(action?.parameters.map((p) => p.name)).toContain(id.endsWith('list') ? 'limit' : id.endsWith('search') ? 'query' : 'slug')
+    }
   })
 
 
+
   it('keeps the registry action descriptors free of internal architecture vocabulary', () => {
-    const search = describeActionForAgent(findAction('registry.search')!)
-    const detail = describeActionForAgent(findAction('registry.detail')!)
-    const joined = JSON.stringify([search, detail])
-    expect(joined).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
+    const legacyDescriptors = [
+      describeActionForAgent(findAction('registry.search')!),
+      describeActionForAgent(findAction('registry.detail')!),
+    ]
+    expect(JSON.stringify(legacyDescriptors)).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
+
+    const serviceDescriptors = [
+      describeActionForAgent(findAction('registry.services_search')!),
+      describeActionForAgent(findAction('registry.services_detail')!),
+    ]
+    const serviceProse = serviceDescriptors.map(({ id, name, summary, boundaries, parameters }) => ({
+      id,
+      name,
+      summary,
+      boundaries,
+      parameters,
+    }))
+    expect(JSON.stringify(serviceProse)).not.toMatch(/MCP|OpenAPI|autonomous|DTO|fixture/i)
   })
 
   it('keeps inquiry.submit outside the internal answer-thread tools', () => {
@@ -338,23 +422,25 @@ describe('action registry', () => {
   })
 
   it('accepts an exact price ceiling and refuses malformed ceilings', () => {
-    const schema = findAction('registry.search')!.schema
+    for (const id of ['registry.search', 'registry.services_search']) {
+      const schema = findAction(id)!.schema
 
-    expect(schema.safeParse({ query: 'plumber' }).success).toBe(true)
-    expect(schema.safeParse({
-      query: 'plumber',
-      maxPrice: { currency: 'USD', units: '25000', exponent: 2 },
-      hasPrice: true,
-    }).success).toBe(true)
-    expect(schema.safeParse({
-      query: 'plumber',
-      maxPrice: { currency: 'USD', units: '-1', exponent: 2 },
-    }).success).toBe(false)
-    expect(schema.safeParse({
-      query: 'plumber',
-      maxPrice: { currency: 'USD', units: '250.5', exponent: 2 },
-    }).success).toBe(false)
-    expect(schema.safeParse({ query: 'plumber', hasPrice: 'yes' }).success).toBe(false)
+      expect(schema.safeParse({ query: 'plumber' }).success).toBe(true)
+      expect(schema.safeParse({
+        query: 'plumber',
+        maxPrice: { currency: 'USD', units: '25000', exponent: 2 },
+        hasPrice: true,
+      }).success).toBe(true)
+      expect(schema.safeParse({
+        query: 'plumber',
+        maxPrice: { currency: 'USD', units: '-1', exponent: 2 },
+      }).success).toBe(false)
+      expect(schema.safeParse({
+        query: 'plumber',
+        maxPrice: { currency: 'USD', units: '250.5', exponent: 2 },
+      }).success).toBe(false)
+      expect(schema.safeParse({ query: 'plumber', hasPrice: 'yes' }).success).toBe(false)
+    }
   })
 
   /**
@@ -369,6 +455,10 @@ describe('action registry', () => {
     expect(parameters).toContain('maxPrice')
     expect(parameters).toContain('hasPrice')
 
+    const serviceParameters = describeActionForAgent(findAction('registry.services_search')!)
+      .parameters.map((parameter) => parameter.name)
+    expect(serviceParameters).toContain('maxPrice')
+    expect(serviceParameters).toContain('hasPrice')
     const boundaries = descriptor.boundaries.join(' ')
     expect(boundaries).toMatch(/maxPrice/)
     expect(boundaries).toMatch(/exact currency units and exponent/i)

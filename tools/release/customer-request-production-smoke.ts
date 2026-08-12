@@ -108,12 +108,19 @@ export async function runCustomerRequestProductionSmoke(
   const agentApiKey = required(config.agentApiKey, 'AE_CUSTOMER_REQUEST_API_KEY')
   const expectedRevision = required(config.expectedRevision, 'AE_RELEASE_SOURCE_REVISION')
   const expectedDeploymentId = required(config.expectedDeploymentId, 'AE_RELEASE_DEPLOYMENT_ID')
-  const verifyRelease = async () => await verifyHostedCustomerRequestRelease({
-    baseUrl: config.baseUrl, apiKey: agentApiKey, expectedRevision, expectedDeploymentId,
-    fetchImpl: config.fetch,
-    ...(config.deploymentProtectionBypass === undefined
-      ? {} : { deploymentProtectionBypass: config.deploymentProtectionBypass }),
-  })
+  const verifyRelease = async () => {
+    const release = await verifyHostedCustomerRequestRelease({
+      baseUrl: config.baseUrl, apiKey: agentApiKey, expectedRevision, expectedDeploymentId,
+      fetchImpl: config.fetch,
+      ...(config.deploymentProtectionBypass === undefined
+        ? {} : { deploymentProtectionBypass: config.deploymentProtectionBypass }),
+    })
+    return {
+      kind: release.kind,
+      revision: release.sourceRevision,
+      deploymentId: release.vercelDeploymentId,
+    }
+  }
   const proof = await runHostedCustomerRequestJourney({
     ...frontDoor,
     agentApiKey, expectedRevision, expectedDeploymentId, verifyRelease,

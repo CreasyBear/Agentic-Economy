@@ -102,7 +102,7 @@ describe('Customer Request hosted release readback', () => {
       readback: entrypointMismatch,
     })).toThrow('hosted_release_entrypoint_mismatch')
   })
-  it('returns source-owned hosted Convex identity and refuses exact ID or URL mismatches', () => {
+  it('returns source-owned hosted Convex identity and refuses exact ID, URL, or SHA mismatches', () => {
     const env = {
       ...productionEnvironment,
       CONVEX_DEPLOYMENT_ID: 'happy-animal-123',
@@ -116,22 +116,41 @@ describe('Customer Request hosted release readback', () => {
       id: 'happy-animal-123',
       url: 'https://happy-animal-123.convex.cloud/',
     })
+    const convex = readback.deployment.convex
+    if (convex === undefined) throw new Error('test setup failed')
+    const runtimeReadback = {
+      ...readback,
+      deployment: {
+        ...readback.deployment,
+        convex: { ...convex, sourceRevision: revision },
+      },
+    }
     expect(verifyCustomerRequestHostedRevision({
       expectedRevision: revision,
       expectedDeploymentId: productionEnvironment.VERCEL_DEPLOYMENT_ID,
       expectedConvexDeploymentId: 'happy-animal-123',
       expectedConvexUrl: 'https://happy-animal-123.convex.cloud',
-      readback,
+      readback: runtimeReadback,
     })).toEqual({ kind: 'verified', revision, deploymentId: productionEnvironment.VERCEL_DEPLOYMENT_ID })
     expect(() => verifyCustomerRequestHostedRevision({
       expectedRevision: revision,
+      readback: {
+        ...runtimeReadback,
+        deployment: {
+          ...runtimeReadback.deployment,
+          convex: { ...runtimeReadback.deployment.convex, sourceRevision: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+        },
+      },
+    })).toThrow('hosted_release_convex_source_revision_mismatch')
+    expect(() => verifyCustomerRequestHostedRevision({
+      expectedRevision: revision,
       expectedConvexDeploymentId: 'other-deployment',
-      readback,
+      readback: runtimeReadback,
     })).toThrow('hosted_release_convex_deployment_id_mismatch')
     expect(() => verifyCustomerRequestHostedRevision({
       expectedRevision: revision,
       expectedConvexUrl: 'https://other.convex.cloud',
-      readback,
+      readback: runtimeReadback,
     })).toThrow('hosted_release_convex_url_mismatch')
   })
 })

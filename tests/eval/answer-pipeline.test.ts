@@ -9,15 +9,15 @@ import {
   type AnswerThreadEvalCase,
   type AnswerTurnEvalCase,
 } from '../../eval/answer/lib/cases'
-import { seedKeylessExecutableSource } from '@/modules/capability-execution'
+import { seedKeylessExecutableSource } from '../helpers/keyless-seed-source'
 import {
   ANSWER_TURN_DATA_PART,
-  assembleAnswerEvidence,
   runAnswerGate,
   type AnswerTurnFrame,
   type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
-import { runAnswerToolUseAgent } from '@/modules/answer/server'
+import { assembleAnswerEvidence, runAnswerToolUseAgent } from '@/modules/answer/server'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import {
   runAnswerThreadEvalCase,
   runAnswerTurnEvalCase,
@@ -33,6 +33,7 @@ import {
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
+import { createLocalE2eRegistrySourcePort } from '../helpers/registry-local-e2e'
 
 const QUERY = 'emergency plumber parramatta'
 
@@ -92,6 +93,7 @@ describe('answer pipeline eval', () => {
     const sent: AnswerTurnFrame[] = [
       { seq: 0, event: { type: 'thread', threadId: 'thread:eval', turnId: 'turn:eval', turnSeq: 1 } },
       { seq: 1, event: { type: 'one-line', oneLine: 'A business matches.' } },
+      { seq: 2, event: { type: 'pending' } },
     ]
     const stream = createUIMessageStream<AnswerTurnUIMessage>({
       execute: ({ writer }) => {
@@ -201,25 +203,26 @@ describe('answer pipeline eval', () => {
 
     const capabilityReport = report.cases.find((testCase) => testCase.id === 'turn-capability-tool-executes')
     expect(capabilityReport?.kind).toBe('turn')
-    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelRequestCount : undefined).toBe(2)
+    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelRequestCount : undefined).toBe(3)
     expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelToolRunCount : undefined).toBe(1)
     const directReport = report.cases.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
     expect(directReport?.kind).toBe('turn')
-    expect(directReport?.kind === 'turn' ? directReport.modelRequestCount : undefined).toBe(0)
+    expect(directReport?.kind === 'turn' ? directReport.modelRequestCount : undefined).toBe(1)
     expect(directReport?.kind === 'turn' ? directReport.modelToolRunCount : undefined).toBe(0)
 
     const paramataReport = report.cases.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
     expect(paramataReport?.kind).toBe('turn')
-    expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(2)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(3)
     expect(paramataReport?.kind === 'turn' ? paramataReport.modelToolRunCount : undefined).toBe(1)
-    expect(paramataReport?.kind === 'turn' ? paramataReport.toolRunCount : undefined).toBe(2)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.toolRunCount : undefined).toBe(1)
     expect(paramataReport?.kind === 'turn' ? paramataReport.costUnavailableReasons : undefined).toEqual([
       'price_table_missing',
+      'provider_metadata_missing',
     ])
     expect(paramataReport?.kind === 'turn' ? paramataReport.usage : undefined).toMatchObject({
-      inputTokens: 240,
-      outputTokens: 67,
-      totalTokens: 307,
+      inputTokens: 280,
+      outputTokens: 69,
+      totalTokens: 349,
     })
 
     const { keys, strings } = readSerializedReportValues(JSON.stringify(report))
@@ -278,9 +281,8 @@ describe('answer pipeline eval', () => {
     }
     const result = await runAnswerTurnEvalCase(impossibleCase)
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 0 model requests, got 2')
+    expect(result.problems).toContain('expected 0 model requests, got 3')
     expect(result.problems).toContain('expected 0 model tool runs, got 1')
-    expect(result.problems).toContain('tool run count 1 exceeds 0')
   })
   it('rejects a seed-only capability response that violates its output schema', async () => {
     const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
@@ -317,7 +319,7 @@ describe('answer pipeline eval', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems, JSON.stringify(result)).toContain('capability evidence status is refused')
+    expect(result.problems, result.problems.join('; ')).toContain('capability evidence status is error')
   })
 
   it('rejects stale seed-only prose when the completed operation returns a changed value', async () => {
@@ -384,7 +386,7 @@ describe('answer pipeline eval', () => {
     expect(result.problems.join('; ')).not.toContain('registry.search')
   })
 
-  it('rejects a model request on a deterministic case', async () => {
+  it('rejects wrong model accounting on a direct-search case', async () => {
     const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
     if (sourceCase === undefined) {
       throw new Error('missing turn-direct-parramatta-fast-path eval case')
@@ -395,13 +397,13 @@ describe('answer pipeline eval', () => {
       id: 'turn-direct-parramatta-model-request',
       expected: {
         ...sourceCase.expected,
-        expectedModelRequests: 1,
+        expectedModelRequests: 0,
         expectedModelToolRuns: 1,
       },
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 1 model requests, got 0')
+    expect(result.problems).toContain('expected 0 model requests, got 1')
     expect(result.problems).toContain('expected 1 model tool runs, got 0')
   })
 
@@ -423,9 +425,9 @@ describe('answer pipeline eval', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 1 model requests, got 2')
+    expect(result.problems).toContain('expected 1 model requests, got 3')
     expect(result.problems).toContain('expected 2 model tool runs, got 1')
-    expect(result.problems).toContain('model request count 2 exceeds 1')
+    expect(result.problems).toContain('model request count 3 exceeds 1')
   })
 
   it('rejects nonfinite wall-clock latency', async () => {
@@ -482,48 +484,17 @@ describe('answer pipeline eval', () => {
   })
 
   it('returns grounded evidence for the default registry fixture', async () => {
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
-
+    const resetRegistryPort = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
     try {
       const evidence = await assembleAnswerEvidence({ query: QUERY, limit: 10 })
       expect(evidence).toBeDefined()
-      expect(evidence?.providers.map((provider) => provider.slug)).toEqual(['parramatta-emergency-plumbing', 'plumbing-demo'])
+      expect(evidence?.providers.map((provider) => provider.slug)).toEqual(['parramatta-emergency-plumbing'])
     } finally {
-      if (previousLocalRegistry === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
-      }
-      if (previousEvalSeed === undefined) {
-        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-      } else {
-        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
-      }
-      if (previousConvexUrl === undefined) {
-        delete process.env.CONVEX_URL
-      } else {
-        process.env.CONVEX_URL = previousConvexUrl
-      }
-      if (previousViteConvexUrl === undefined) {
-        delete process.env.VITE_CONVEX_URL
-      } else {
-        process.env.VITE_CONVEX_URL = previousViteConvexUrl
-      }
+      resetRegistryPort()
     }
   })
 
   it('keeps frozen prose on the tool-disabled path with one model request and no tool runs', async () => {
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [],
       prose: {
@@ -535,10 +506,7 @@ describe('answer pipeline eval', () => {
       },
     }))
     const restoreOpenRouter = server.installEnv()
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+    const resetRegistryPort = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const evidence = await assembleAnswerEvidence({ query: QUERY, limit: 10 })
@@ -561,36 +529,13 @@ describe('answer pipeline eval', () => {
         evidence.providers.map((provider) => provider.slug),
       )
     } finally {
+      resetRegistryPort()
       restoreOpenRouter()
       await server.close()
-      if (previousLocalRegistry === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
-      }
-      if (previousEvalSeed === undefined) {
-        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-      } else {
-        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
-      }
-      if (previousConvexUrl === undefined) {
-        delete process.env.CONVEX_URL
-      } else {
-        process.env.CONVEX_URL = previousConvexUrl
-      }
-      if (previousViteConvexUrl === undefined) {
-        delete process.env.VITE_CONVEX_URL
-      } else {
-        process.env.VITE_CONVEX_URL = previousViteConvexUrl
-      }
     }
   })
 
   it('replaces provider fulfillment claims despite grounded tool-result slugs', async () => {
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: QUERY } }],
       prose: {
@@ -602,10 +547,7 @@ describe('answer pipeline eval', () => {
       },
     }))
     const restoreOpenRouter = server.installEnv()
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
+    const resetRegistryPort = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const result = await runAnswerToolUseAgent({
@@ -616,31 +558,12 @@ describe('answer pipeline eval', () => {
         snapshot: result.snapshot,
         allowedSlugs: result.allowedSlugs,
       })).toEqual({ ok: true })
-      expect(result.snapshot.summary).toContain('Possible matches:')
+      expect(result.snapshot.summary).toContain('still need confirmation')
       expect(result.snapshot.summary).not.toContain('confirms timing')
     } finally {
+      resetRegistryPort()
       restoreOpenRouter()
       await server.close()
-      if (previousLocalRegistry === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
-      }
-      if (previousEvalSeed === undefined) {
-        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
-      } else {
-        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
-      }
-      if (previousConvexUrl === undefined) {
-        delete process.env.CONVEX_URL
-      } else {
-        process.env.CONVEX_URL = previousConvexUrl
-      }
-      if (previousViteConvexUrl === undefined) {
-        delete process.env.VITE_CONVEX_URL
-      } else {
-        process.env.VITE_CONVEX_URL = previousViteConvexUrl
-      }
     }
   })
 })

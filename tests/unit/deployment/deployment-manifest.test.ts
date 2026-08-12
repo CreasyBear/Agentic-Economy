@@ -18,6 +18,11 @@ function productionEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
+    AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+    AE_X402_PAYMENT_PRIVATE_KEY: 'x402-payer-private-key',
+    STRIPE_SECRET_KEY: 'sk_live_example',
+    STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
+    VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
     AE_ANSWER_EVAL_PASSED: '1',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
@@ -36,6 +41,9 @@ describe('deployment manifest validator', () => {
     expect(result.resources.map((resource) => resource.id)).toEqual([
       'web-server',
       'convex-components',
+      'agent-access',
+      'durable-invocation-workpool',
+      'operation-gateway',
       'convex-scheduled-jobs',
     ])
     expect(result.readinessProbes.map((probe) => probe.path)).toEqual(['/api/health', '/api/ready', '/api/v1/release'])
@@ -58,6 +66,9 @@ describe('deployment manifest validator', () => {
       'OPENROUTER_API_KEY',
       'AE_SOURCE_WRITE_KEY_INQUIRY',
       'AE_SOURCE_WRITE_KEY_SESSION',
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+      'VITE_STRIPE_PUBLISHABLE_KEY',
     ]))
   })
 
@@ -125,6 +136,29 @@ describe('deployment manifest validator', () => {
     ]))
   })
 
+  it('requires the fixed x402 payer locator and never emits its private-key value', () => {
+    const missing = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_X402_PAYMENT_CREDENTIAL_REF: '',
+      AE_X402_PAYMENT_PRIVATE_KEY: '',
+    }, { nodeMajor: 22 })
+    expect(missing.findings.flatMap((finding) => finding.names)).toEqual(expect.arrayContaining([
+      'AE_X402_PAYMENT_CREDENTIAL_REF',
+      'AE_X402_PAYMENT_PRIVATE_KEY',
+    ]))
+
+    const malformed = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_X402_PAYMENT_CREDENTIAL_REF: 'env:OTHER_PRIVATE_KEY',
+    }, { nodeMajor: 22 })
+    expect(malformed.findings).toContainEqual(expect.objectContaining({
+      kind: 'malformed',
+      names: ['AE_X402_PAYMENT_CREDENTIAL_REF'],
+    }))
+    expect(JSON.stringify(malformed)).not.toContain('x402-payer-private-key')
+  })
+
+
   it('closes partially configured optional notification providers', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),
@@ -134,6 +168,59 @@ describe('deployment manifest validator', () => {
 
     expect(result.ok).toBe(false)
     expect(names).toEqual(expect.arrayContaining(['RESEND_FROM', 'RESEND_WEBHOOK_SECRET', 'AE_NOTIFICATION_OUTBOX_SECRET']))
+  })
+
+  it('requires the whole production live-gateway fixture when spend is confirmed', () => {
+    const partial = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND: 'true',
+    }, { nodeMajor: 22 })
+    const missingLiveGatewayNames = partial.findings
+      .filter(({ code }) => code === 'live_gateway_smoke_configuration_incomplete')
+      .flatMap(({ names }) => names)
+    expect(missingLiveGatewayNames).toEqual(expect.arrayContaining([
+      'AE_GATEWAY_SMOKE_RUN_ID',
+      'AE_GATEWAY_SMOKE_API_KEY',
+      'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
+      'AE_RELEASE_CONVEX_URL',
+      'AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON',
+      'AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH',
+      'AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD',
+    ]))
+
+    const group = DEPLOYMENT_MANIFEST.configuration.conditional.find(({ scope }) => scope === 'release:live-gateway-smoke')
+    expect(group).toBeDefined()
+    const liveGatewayEnvironment = Object.fromEntries(group!.names.map((name) => [
+      name,
+      name === 'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND'
+        ? 'true'
+        : name.endsWith('_URL') || name === 'AE_GATEWAY_SMOKE_BASE_URL'
+          ? 'https://example.com'
+          : name === 'CLERK_SECRET_KEY'
+            ? 'sk_live_example'
+            : 'configured',
+    ]))
+    const complete = validateDeploymentManifest({
+      ...productionEnvironment(),
+      ...liveGatewayEnvironment,
+    }, { nodeMajor: 22 })
+    expect(complete.findings.filter(({ scope }) => scope === 'release:live-gateway-smoke')).toEqual([])
+    expect(complete.findings.filter(({ kind }) => kind === 'unknown')).toEqual([])
+  })
+  it('retires the parallel gateway Convex URL alias', () => {
+    const alias = 'AE_GATEWAY_SMOKE_CONVEX_URL'
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      [alias]: 'https://parallel.example.convex.cloud',
+    }, { nodeMajor: 22 })
+
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      kind: 'unknown',
+      names: [alias],
+    }))
+    expect(DEPLOYMENT_MANIFEST.configuration.conditional
+      .find(({ scope }) => scope === 'release:live-gateway-smoke')
+      ?.names).not.toContain(alias)
   })
 
   it('returns no secret values and fingerprints shape rather than secret material', () => {

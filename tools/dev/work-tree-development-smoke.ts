@@ -244,12 +244,8 @@ export async function runWorkTreeDevelopmentSmoke(config: WorkTreeDevelopmentSmo
         idempotencyKey: `work-tree-development-smoke:${runId}:lock`,
       }))
       if (locked.kind === 'refused') {
-        throw seamRefused(
-          'workTree.decide',
-          'refusalCode' in locked ? locked.refusalCode : locked.code,
-        )
+        throw seamRefused('workTree.decide', locked.refusalCode)
       }
-      if (locked.kind === 'unknown') throw new Error('workTree.decide_unknown_before_reload')
       if (!('receiptId' in locked)) throw new Error('workTree.decide_receipt_missing')
       if (locked.decision !== 'lock' || locked.disposition !== 'locked') {
         throw new Error(`workTree.decide_lock_receipt_invalid:${locked.disposition}`)

@@ -111,6 +111,7 @@ export async function runCancelBeforeRelease(input: Readonly<{
   if (decision.kind !== 'accepted') throw new Error(decision.code)
   const cancelled = await tracer.cancel({
     invocationRef: prepared.invocationRef,
+    idempotencyKey: `cancel:${prepared.invocationRef}:provider-recovery`,
     expectedInvocationVersion: decision.view.invocationVersion,
     actor: owner, origin: input.origin,
   })

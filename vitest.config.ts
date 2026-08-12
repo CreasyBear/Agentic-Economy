@@ -17,7 +17,7 @@ export default defineConfig({
     setupFiles: [
       './tests/setup/web-storage.ts',
       './tests/setup/no-search-gap-writes.ts',
-      './tests/setup/resize-observer.ts',
+      './tests/setup/jsdom-platform.ts',
       './tests/setup/http-rate-limit.ts',
     ],
     globals: false,
