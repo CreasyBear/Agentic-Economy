@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { oauthAuthorizationServerResponse } from '@/lib/server/customer-request-agent-oauth-api'
+import { oauthAuthorizationServerResponse } from '@/lib/server/agent-access-oauth-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 
 export const Route = createFileRoute('/.well-known/oauth-authorization-server')({

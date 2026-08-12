@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '../helpers/local-e2e-business-fixtures'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 
 import { claimBusiness } from '@/modules/business/public'
 import { emptyRegistrySourceState } from '../fixtures/source-state'
@@ -90,7 +91,11 @@ describe('registry public API routes', () => {
       business: {
         slug: 'fremantle-heat-pump-repairs',
         name: 'Fremantle Heat Pump Repairs',
-        suburb: 'Fremantle',
+        businessContext: {
+          kind: 'local_human',
+          suburb: 'Fremantle',
+          stateTerritory: 'WA',
+        },
         offerings: [
           { name: 'Heat pump diagnostics' },
         ],
@@ -139,11 +144,10 @@ describe('registry public API routes', () => {
     })
   })
 
-  it('keeps the shared admitted local fixture continuous across registry search, listing detail, and inquiry admission without contaminating the default fallback', async () => {
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-    vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', undefined)
+  it('keeps the shared admitted local fixture continuous across registry search, listing detail, and inquiry admission without contaminating the default source', async () => {
     vi.stubEnv('CONVEX_URL', undefined)
     vi.stubEnv('VITE_CONVEX_URL', undefined)
+    let restoreLocalSource: (() => void) | undefined = installLocalE2eRegistrySourceForTests()
 
     try {
       const searchQuery = `${admittedLocalE2eOffering.name} ${admittedLocalE2eBusiness.suburb}`
@@ -200,9 +204,14 @@ describe('registry public API routes', () => {
         slug: admittedLocalE2eBusiness.requestedSlug,
         name: admittedLocalE2eBusiness.businessName,
         category: admittedLocalE2eBusiness.category,
-        suburb: admittedLocalE2eBusiness.suburb,
-        stateTerritory: admittedLocalE2eBusiness.stateTerritory,
-        publishedPhone: admittedLocalE2eBusiness.publishedPhone,
+        businessContext: {
+          kind: 'local_human',
+          suburb: admittedLocalE2eBusiness.suburb,
+          stateTerritory: admittedLocalE2eBusiness.stateTerritory,
+          ...(admittedLocalE2eBusiness.publishedPhone === undefined
+            ? {}
+            : { publishedPhone: admittedLocalE2eBusiness.publishedPhone }),
+        },
         offerings: [
           {
             name: admittedLocalE2eOffering.name,
@@ -222,9 +231,8 @@ describe('registry public API routes', () => {
         },
       })
 
-      vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'false')
-      vi.stubEnv('CONVEX_URL', undefined)
-      vi.stubEnv('VITE_CONVEX_URL', undefined)
+      restoreLocalSource()
+      restoreLocalSource = undefined
 
       await expect(handleDurableSearchServicesRequest(
         new Request(`https://ae.example/api/v1/services/search?q=${encodeURIComponent(searchQuery)}`),
@@ -263,6 +271,7 @@ describe('registry public API routes', () => {
         reason: 'No public business catalog exists for this slug.',
       })
     } finally {
+      restoreLocalSource?.()
       vi.unstubAllEnvs()
     }
   })
@@ -300,18 +309,17 @@ describe('registry public API routes', () => {
   })
 
   describe('public catalog HTTP routes', () => {
-    // The routes now run the registered registry actions, which read the v2
-    // Offering seam. Pin that seam to the same in-memory default catalog the
-    // v1 handlers used, and take the Convex URL away so neither the registry
-    // read nor the inquiry-admission overlay can reach a live deployment.
+    let restoreLocalSource: (() => void) | undefined
+
     beforeEach(() => {
-      vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-      vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', 'default')
       vi.stubEnv('CONVEX_URL', undefined)
       vi.stubEnv('VITE_CONVEX_URL', undefined)
+      restoreLocalSource = installLocalE2eRegistrySourceForTests()
     })
 
     afterEach(() => {
+      restoreLocalSource?.()
+      restoreLocalSource = undefined
       vi.unstubAllEnvs()
     })
 
@@ -328,13 +336,13 @@ describe('registry public API routes', () => {
         schemaVersion: 'public-business-catalog-api:v2',
         page: [
           {
-            slug: 'parramatta-emergency-plumbing',
-            publicUrl: '/parramatta-emergency-plumbing',
+            slug: 'adelaide-dental-clinic',
+            publicUrl: '/adelaide-dental-clinic',
             trustTier: 'claimed',
-            disposition: 'current',
+            disposition: 'partial',
             photos: [],
             offerings: [
-              { offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair' },
+              { offeringRef: 'offering:adelaide-dental-clinic:general-dental-care' },
             ],
           },
         ],
@@ -343,7 +351,7 @@ describe('registry public API routes', () => {
       })
       expect(typeof body.page[0].observedAt).toBe('number')
       // v2 publishes a business identifier by contract.
-      expect(body.page[0].businessId).toBe('business:parramatta-emergency-plumbing')
+      expect(body.page[0].businessId).toBe('business:adelaide-dental-clinic')
       expect(JSON.stringify(body)).not.toMatch(
         /ownerId|clerk|sourceHash|rawContact|admin|private:evidence|callable|paymentRequired|MCP|OpenAPI/,
       )
@@ -432,7 +440,7 @@ describe('registry public API routes', () => {
       expect(response.status).toBe(200)
       expect(body).toMatchObject({
         kind: 'ok',
-        query: 'find providers',
+        query: '',
         items: [],
         pagination: { total: 0, hasMore: false },
       })
@@ -452,9 +460,8 @@ describe('registry public API routes', () => {
         query: 'emergency plumber parramatta',
         items: [
           { slug: 'parramatta-emergency-plumbing' },
-          { slug: 'plumbing-demo' },
         ],
-        pagination: { total: 2, hasMore: false },
+        pagination: { total: 1, hasMore: false },
       })
     })
 
@@ -483,9 +490,8 @@ describe('registry public API routes', () => {
         query: 'emergency plumber',
         items: [
           { slug: 'parramatta-emergency-plumbing' },
-          { slug: 'plumbing-demo' },
         ],
-        pagination: { total: 2, hasMore: false },
+        pagination: { total: 1, hasMore: false },
       })
     })
 
@@ -550,10 +556,9 @@ describe('registry public API routes', () => {
       // The local-e2e seed publishes plumbing-demo with an inquiry-only first
       // request and no phone, which is the one shape that becomes an
       // ae_inquiry access path.
-      vi.stubEnv('AE_ANSWER_EVAL_REGISTRY_SEED', undefined)
       const seam = await readPublicOfferingRegistryBusinessDetail({ slug: 'plumbing-demo' })
       if (seam.kind !== 'found') {
-        throw new Error('Expected the local e2e seed to publish plumbing-demo.')
+        throw new Error('Expected the explicit local source to publish plumbing-demo.')
       }
       const seamOffering = seam.business.offerings[0]
       expect(seamOffering?.accessPaths).toEqual([
@@ -775,10 +780,13 @@ function createDurablePublishedRegistryState(input: {
     facts: {
       name: input.businessName,
       category: 'Heat pump repair',
-      suburb: input.suburb,
-      stateTerritory: 'WA',
       requestedSlug: input.requestedSlug,
-      ...(input.publishedPhone === undefined ? {} : { publishedPhone: input.publishedPhone }),
+      businessContext: {
+        kind: 'local_human',
+        suburb: input.suburb,
+        stateTerritory: 'WA',
+        ...(input.publishedPhone === undefined ? {} : { publishedPhone: input.publishedPhone }),
+      },
       ownerMessage: 'Owner supplied durable source facts.',
       sourceRefs: [
         {

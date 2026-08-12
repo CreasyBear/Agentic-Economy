@@ -172,6 +172,7 @@ describe('capability-supply publication lifecycle', () => {
         disposition: 'current',
         credentialState: 'ready',
         healthState: 'healthy',
+        readinessObservedAt: 100,
         readinessValidUntil: 200,
         connectionAuthority,
       },
@@ -199,6 +200,63 @@ describe('capability-supply publication lifecycle', () => {
       'credential_readiness_unobserved',
       'health_unobserved',
     ]))
+  })
+  it('keeps first observations inactive and rejects stale or unbounded freshness', () => {
+    const connection = providerConnection()
+    const authority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)
+    const first = publicationLifecycle({
+      disposition: 'current',
+      credentialState: 'unobserved',
+      healthState: 'unobserved',
+      connectionAuthority: authority,
+    }, offeringRow(), bindingRow('admitted', 'conformant', authority), 100, connection)
+    expect(first.state).toBe('inactive')
+    expect(first.reasons).toEqual(expect.arrayContaining([
+      'credential_readiness_unobserved', 'health_unobserved',
+    ]))
+
+    const expired = publicationLifecycle({
+      disposition: 'current',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessObservedAt: 50,
+      readinessValidUntil: 100,
+      connectionAuthority: authority,
+    }, offeringRow(), bindingRow('admitted', 'conformant', authority), 100, connection)
+    expect(expired.reasons).toContain('health_stale')
+
+    const unbounded = publicationLifecycle({
+      disposition: 'current',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessObservedAt: 100,
+      readinessValidUntil: 100 + 24 * 60 * 60_000 + 1,
+      connectionAuthority: authority,
+    }, offeringRow(), bindingRow('admitted', 'conformant', authority), 100, connection)
+    expect(unbounded.reasons).toContain('health_stale')
+
+    const staleAuthority = publicationLifecycle({
+      disposition: 'current',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessObservedAt: 50,
+      readinessValidUntil: 200,
+      connectionAuthority: { ...authority, authorityDigest: `sha256:${'2'.repeat(64)}` },
+    }, offeringRow(), bindingRow('admitted', 'conformant', authority), 100, connection)
+    expect(staleAuthority).toEqual({
+      state: 'inactive',
+      reasons: ['eligibility_integrity_failure'],
+    })
+
+    const recovered = publicationLifecycle({
+      disposition: 'current',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessObservedAt: 110,
+      readinessValidUntil: 200,
+      connectionAuthority: authority,
+    }, offeringRow(), bindingRow('admitted', 'conformant', authority), 110, connection)
+    expect(recovered).toEqual({ state: 'active', reasons: [] })
   })
 
   it('decodes convex publication sources and recognizes direct envelopes', () => {

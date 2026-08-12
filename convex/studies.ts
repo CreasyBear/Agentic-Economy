@@ -6,11 +6,14 @@ import { v } from 'convex/values'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '../src/modules/common/stable-hash'
 import {
-  studyArtifactSchema,
   studyJournalEventSchema,
-  type StudyArtifact,
   type StudyJournalEvent,
 } from '../src/modules/study/convex'
+import {
+  studyWriteArtifactSchema,
+  studyWriteEvidenceClassSchema,
+  type StudyWriteArtifact,
+} from '../src/modules/study/public'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 
 const MAX_STUDY_EVENTS = 128
@@ -429,7 +432,20 @@ function parseArtifact(value: string) {
   } catch {
     throw new Error('study_artifact_json_invalid')
   }
-  return studyArtifactSchema.parse(parsed)
+  return studyWriteArtifactSchema.parse(parsed)
+}
+
+function assertWritableJournalEvidence(event: StudyJournalEvent): void {
+  const evidenceClasses = [
+    event.evidenceClass,
+    ...(event.type === 'quote_received' ? [event.quote.evidenceClass] : []),
+    ...(event.type === 'recommended' && event.recommendation.evidenceClass !== undefined
+      ? [event.recommendation.evidenceClass]
+      : []),
+  ]
+  if (evidenceClasses.some((value) => !studyWriteEvidenceClassSchema.safeParse(value).success)) {
+    throw new Error('study_evidence_class_invalid')
+  }
 }
 
 function parseJournalEvent(value: string): StudyJournalEvent {
@@ -440,6 +456,7 @@ function parseJournalEvent(value: string): StudyJournalEvent {
     throw new Error('study_event_json_invalid')
   }
   const event = studyJournalEventSchema.parse(parsed)
+  assertWritableJournalEvidence(event)
   const { digest: suppliedDigest, ...unsigned } = event
   if (digest(unsigned) !== suppliedDigest) throw new Error('study_event_digest_mismatch')
   return event
@@ -490,7 +507,7 @@ function assertJournalIdentity(
 }
 
 function assertArtifactIdentity(
-  artifact: StudyArtifact,
+  artifact: StudyWriteArtifact,
   studyId: string,
   projectId: string,
   nodeId: string,
@@ -529,7 +546,7 @@ function readStudyIdentity(
     ownerSessionId?: string
     treeRevision?: number
   },
-  artifact: StudyArtifact,
+  artifact: StudyWriteArtifact,
   generation: number,
   createdAt: number,
   updatedAt: number,
@@ -556,7 +573,7 @@ function studyWithoutId(id: unknown): Readonly<Record<string, unknown>> {
 }
 
 function studyPatch(
-  artifact: StudyArtifact,
+  artifact: StudyWriteArtifact,
   artifactJson: string,
   updatedAt: number,
   treeRevision?: number,

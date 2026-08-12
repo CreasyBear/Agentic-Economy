@@ -10,6 +10,7 @@ import {
   encodeX402PaymentRequiredHeader,
   type X402PaymentRequired,
 } from './server'
+import { developmentProviderConnectionAuthorityDigest } from './development-published-operation-evidence'
 
 export type DevelopmentEffectCounts = {
   payment: number
@@ -83,6 +84,7 @@ export function developmentSuccessRuntime(
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
+    readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     readProviderConnectionCredentialRef: (input) => {
       if (
         input.connectionRef !== 'connection:mock-provider'
@@ -90,15 +92,23 @@ export function developmentSuccessRuntime(
         || input.adapterId !== 'x402-fetch:v2'
         || input.authorityGeneration !== 1
       ) return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
-      const authorityDigest = canonicalDigest({
+      const authorityDigest = developmentProviderConnectionAuthorityDigest({
         connectionRef: 'connection:mock-provider',
+        businessId: 'mock:business:published-api',
         providerRef: 'provider:mock-provider',
-        authorityGeneration: 1,
+        adapterId: 'x402-fetch:v2',
       })
       return input.authorityDigest === authorityDigest
         ? { kind: 'resolved' as const, credentialRef: 'connection:mock-provider' }
         : { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
     },
+    validateProviderConnectionAuthority: (input) =>
+      input.connectionRef === 'connection:mock-provider'
+        && input.providerRef === 'provider:mock-provider'
+        && input.adapterId === 'x402-fetch:v2'
+        && input.authorityGeneration === 1
+        ? { kind: 'valid' as const }
+        : { kind: 'unavailable' as const, reason: 'stale_generation' as const },
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
@@ -147,11 +157,7 @@ export function developmentPreflightRefusalRuntime(
   const base = developmentSuccessRuntime(endpoint, effects)
   return {
     ...base,
-    resolveCredential: () => undefined,
-    readProviderConnectionCredentialRef: () => ({
-      kind: 'unavailable' as const,
-      reason: 'credential_unavailable' as const,
-    }),
+    x402PaymentSigningAvailable: () => false,
   }
 }
 

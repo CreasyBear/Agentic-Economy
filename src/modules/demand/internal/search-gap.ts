@@ -133,6 +133,9 @@ export function evaluateSearchGaps(input: Readonly<{
 export function toSearchGapCandidateV2(
   dto: PublicBusinessCatalogApiV2Dto,
 ): SearchGapCandidate {
+  const localHumanContext = dto.businessContext.kind === 'local_human'
+    ? dto.businessContext
+    : undefined
   return {
     slug: dto.slug,
     facts: {
@@ -141,9 +144,13 @@ export function toSearchGapCandidateV2(
         const value = offering.availabilitySummary?.trim()
         return value !== undefined && value.length > 0 && value !== 'Hours supplied by owner'
       })),
-      location: observe(isNonEmpty(dto.suburb) && isNonEmpty(dto.stateTerritory)),
+      location: observe(
+        localHumanContext !== undefined
+        && isNonEmpty(localHumanContext.suburb)
+        && isNonEmpty(localHumanContext.stateTerritory),
+      ),
       contact: observe(
-        isNonEmpty(dto.publishedPhone)
+        isNonEmpty(localHumanContext?.publishedPhone)
         || dto.offerings.some((offering) => offering.accessPaths.length > 0),
       ),
       service_detail: observe(dto.offerings.some((offering) => isNonEmpty(offering.name))),

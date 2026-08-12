@@ -6,7 +6,7 @@ import { methodNotAllowed } from '@/lib/server/method-guard'
 export const Route = createFileRoute('/api/v1/requests/$requestRef')({
   server: {
     handlers: {
-      GET: ({ params }) => handleAgentCustomerRequestGet(params.requestRef),
+      GET: ({ request, params }) => handleAgentCustomerRequestGet(request, params.requestRef),
       POST: () => methodNotAllowed(['GET']),
       PUT: () => methodNotAllowed(['GET']),
       PATCH: () => methodNotAllowed(['GET']),

@@ -5,7 +5,7 @@ import {
   OfferingPriceUnitValues,
 } from '@/modules/catalog/public'
 import { exactAmountSchema } from '@/modules/money/public'
-import { TrustTierValues } from '@/modules/business/public'
+import { TrustTierValues, type BusinessContext } from '@/modules/business/public'
 import {
   type CatalogOfferingOperationMapEntry,
   type InspectPlanInput,
@@ -183,16 +183,28 @@ const offeringOutputSchema = z.strictObject({
   }),
 })
 
+const businessContextOutputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('local_human'),
+    suburb: z.string(),
+    stateTerritory: z.string(),
+    postcode: z.string().optional(),
+    publishedPhone: z.string().optional(),
+  }),
+  z.strictObject({
+    kind: z.literal('programmable_provider'),
+    website: z.string(),
+    providerIdentifier: z.string(),
+  }),
+]) as z.ZodType<BusinessContext>
+
 const publicBusinessCatalogApiV2DtoOutputSchema = z.strictObject({
   schemaVersion: z.literal(PublicBusinessCatalogApiSchemaVersion),
   businessId: z.string(),
   slug: z.string(),
   name: z.string(),
   category: z.string(),
-  suburb: z.string(),
-  stateTerritory: z.string(),
-  publishedPhone: z.string().optional(),
-  postcode: z.string().optional(),
+  businessContext: businessContextOutputSchema,
   publicUrl: z.string(),
   trustTier: z.enum(TrustTierValues),
   responseTimeMinutes: z.number().optional(),
@@ -299,7 +311,7 @@ const serviceEndpointOutputSchema = z.strictObject({
       operationRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).optional().describe('Canonical execution read link when linked to a capability operation'),
       offeringRef: z.string().describe('Published offering the endpoint belongs to'),
       provenance: z.enum(['business_declared', 'publicly_observed']).describe('How the endpoint was published'),
-      access: z.enum(['open', 'external']).describe('Whether the endpoint is keyless AE sandbox access'),
+      access: z.literal('external').describe('Published external provider endpoint access'),
       authentication: serviceEndpointAuthenticationOutputSchema.describe('Public authentication classification without secret values'),
       execution: z.enum(['answer_tool', 'request_route', 'catalog_only']).describe('Public execution channel'),
       authorityMode: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']).optional().describe('Authoritative source classification when linked'),
@@ -340,9 +352,7 @@ const serviceOutputSchema = z.strictObject({
   ae: z
     .strictObject({
       trustTier: z.enum(TrustTierValues).describe('Published business trust tier'),
-      suburb: z.string().optional().describe('Published business suburb'),
-      stateTerritory: z.string().optional().describe('Published business state or territory'),
-      postcode: z.string().optional().describe('Published business postcode'),
+      businessContext: businessContextOutputSchema.describe('Published business context'),
       publicUrl: z.string().describe('Published business URL'),
       responseTimeMinutes: z.number().optional().describe('Typical response window'),
       photos: z
@@ -350,9 +360,7 @@ const serviceOutputSchema = z.strictObject({
         .describe('Published business photos'),
       observedAt: z.number().describe('Source observation time for freshness context'),
       disposition: z.enum(['current', 'partial', 'stale']).describe('Catalog disposition'),
-      source: z
-        .enum(['business_published', 'ae_sandbox'])
-        .describe('Whether this service is a published business listing or AE sandbox supply'),
+      source: z.literal('business_published').describe('Published business listing provenance'),
       offerings: z.array(serviceOfferingOutputSchema).describe('Local merchandising and inquiry listing view'),
       links: z
         .strictObject({
@@ -603,7 +611,6 @@ export const registryServicesListAction = defineAction({
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
     'Returns one Service per business; AE-local offering facts remain under ae.offerings[].',
-    'An open endpoint is an AE sandbox operation, not proof of provider fulfilment or payment.',
   ],
   schema: registryListInputSchema as z.ZodType<RegistryListActionInput>,
   outputSchema: servicesPageOutputSchema,
@@ -645,7 +652,6 @@ export const registryServicesSearchAction = defineAction({
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
     'Returns one Service per business; AE-local offering facts remain under ae.offerings[].',
-    'An open endpoint is an AE sandbox operation, not proof of provider fulfilment or payment.',
   ],
   schema: registrySearchInputSchema,
   outputSchema: servicesSearchPageOutputSchema,

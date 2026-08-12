@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { pricingConfigDigest } from '@/modules/money/public'
 
 import {
   hasTransientBindingUnavailable,
@@ -94,6 +95,9 @@ const availableGraph = {
     publicationRevision: 1,
     readinessValidUntil: FUTURE,
     price: { kind: 'fixed', amount: { currency: 'AUD', units: '25', exponent: 2 } },
+    priceDigest: pricingConfigDigest({
+      version: 'pricing:v2', unit: 'call', paidAmount: { currency: 'AUD', units: '25', exponent: 2 },
+    }),
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [] },
   }],
 } as unknown as RequestGraph

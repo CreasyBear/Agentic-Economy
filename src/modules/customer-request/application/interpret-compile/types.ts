@@ -13,6 +13,7 @@ import type {
   RegisteredSupplyPrice,
   RequestFact,
 } from '@/modules/customer-request/evaluation'
+import type { PricingConfig } from '@/modules/money/public'
 import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
 import type { ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 export type EligibleSupply = Readonly<{
@@ -45,6 +46,8 @@ export type EligibleSupply = Readonly<{
     publicationRef: string
     revision: number
     readinessValidUntil: number
+    pricingConfig: PricingConfig
+    priceDigest: string
   }>
   binding: Readonly<{
     bindingId: string

@@ -14,11 +14,13 @@ import {
 } from '@/modules/action-invocation'
 import {
   buildDevelopmentPublishedOperationEvidence,
+  createDevelopmentProviderLeaseIssuer,
 } from '@/modules/capability-supply/development-published-operation-evidence'
 import {
   developmentLostResponseRuntime,
   developmentSuccessRuntime,
 } from '@/modules/capability-supply/development-host-scenario-runtime'
+import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('development invocation application observer containment', () => {
@@ -74,7 +76,7 @@ describe('development invocation application observer containment', () => {
         expect(host.inspect(gathering.invocationRef)?.control.state).toBe('terminal')
         expect(effects).toEqual({ payment: 1, provider: 1 })
 
-        const cancellation = await host.requestCancellation(gathering.invocationRef)
+        const cancellation = await host.requestCancellation(gathering.invocationRef, `cancel:${gathering.invocationRef}:observer`)
         expect(cancellation).toMatchObject({ kind: 'refused', code: 'invalid_control_state' })
       } finally {
         restoreClock()
@@ -223,6 +225,10 @@ function createHost(
   const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   const adapter = createDynamicPublishedActionInvocationAdapter({
     operation: fixture.operation,
+    issueProviderLease: createDevelopmentProviderLeaseIssuer(
+      fixture.operation,
+      fixture.operation.readiness.observedAt + 1_000,
+    ),
     source: createDevelopmentDynamicPublishedSource([fixture.operation]),
     runtime: runtime === 'success'
       ? developmentSuccessRuntime(fixture.operation.binding.endpointUrl, effects)
@@ -231,6 +237,7 @@ function createHost(
     nextInvocationRef: () => `host:${hostKind}:observer-containment`,
     nextAuthorityRef: () => `authority:${hostKind}:observer-containment`,
     nextAttemptRef: () => `attempt:${hostKind}:observer-containment`,
+    paymentAttemptPort: createInMemoryX402PaymentAttemptPort(),
     durablePort: createDevelopmentDurablePort(durableState),
     developmentSnapshot: durableState,
   })

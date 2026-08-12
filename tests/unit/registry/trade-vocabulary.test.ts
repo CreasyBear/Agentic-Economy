@@ -14,8 +14,11 @@ function catalogFor(slug: string, name: string, category: string, offeringName: 
     slug,
     name,
     category,
-    suburb: 'Adelaide',
-    stateTerritory: 'SA',
+    businessContext: {
+      kind: 'local_human',
+      suburb: 'Adelaide',
+      stateTerritory: 'SA',
+    },
     publicUrl: `/${slug}`,
     trustTier: 'claimed',
     observedAt: 1,

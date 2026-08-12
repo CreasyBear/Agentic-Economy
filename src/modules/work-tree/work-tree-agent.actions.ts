@@ -5,11 +5,11 @@ import {
   workTreeApplyInputSchema,
   workTreeApplyResultSchema,
   workTreeDecisionInputSchema,
-  workTreeDecisionReceiptSchema,
+  workTreeDecisionResultSchema,
   type WorkTreeApplyInput,
   type WorkTreeApplyResult,
   type WorkTreeDecisionInput,
-  type WorkTreeDecisionReceipt,
+  type WorkTreeDecisionResult,
 } from './work-tree.functions'
 
 const workTreeApplyParameters: readonly ActionParameter[] = [
@@ -144,10 +144,10 @@ export const workTreeApplyAction = defineAction<WorkTreeApplyInput, WorkTreeAppl
   run: async ({ data }): Promise<WorkTreeApplyResult> => await applyWorkTreeThroughSource(data),
 })
 
-export const workTreeDecideAction = defineAction<WorkTreeDecisionInput, WorkTreeDecisionReceipt>({
+export const workTreeDecideAction = defineAction<WorkTreeDecisionInput, WorkTreeDecisionResult>({
   id: 'workTree.decide',
   name: 'Decide a WorkTree item',
-  summary: 'Lock, adjust, or park one exact current WorkTree decision item and receive a durable receipt.',
+  summary: 'Lock, adjust, or park one exact current WorkTree decision item and receive a durable receipt or reconcile-before-retry result.',
   boundaries: [
     'Accepts only lock, adjust, or park for the exact node and proposal digest supplied by the current readback.',
     'The source binds the decision to the authenticated principal and rechecks generation, revision, and proposal digest.',
@@ -156,7 +156,7 @@ export const workTreeDecideAction = defineAction<WorkTreeDecisionInput, WorkTree
     'This development fixture does not book, pay, dispatch, contact a provider, or claim customer or BAS fulfilment.',
   ],
   schema: workTreeDecisionInputSchema,
-  outputSchema: workTreeDecisionReceiptSchema,
+  outputSchema: workTreeDecisionResultSchema,
   parameters: workTreeDecisionParameters,
   readOnly: false,
   effect: {
@@ -185,5 +185,5 @@ export const workTreeDecideAction = defineAction<WorkTreeDecisionInput, WorkTree
       'idempotency key is reused with a different decision payload',
     ],
   },
-  run: async ({ data }): Promise<WorkTreeDecisionReceipt> => await decideWorkTreeThroughSource(data),
+  run: async ({ data }): Promise<WorkTreeDecisionResult> => await decideWorkTreeThroughSource(data),
 })

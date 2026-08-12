@@ -30,6 +30,7 @@ import {
   type ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 
 const contractRef = {
   capabilityId: 'cap.demo',
@@ -110,6 +111,12 @@ const admitted = {
   configJson: '{}',
   configDigest: canonicalDigest({}),
 }
+const pricingConfig: PricingConfig = {
+  version: 'pricing:v2',
+  unit: 'call',
+  paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+}
+const priceDigest = pricingConfigDigest(pricingConfig)
 
 function currentPublication(
   overrides: Partial<Omit<EligiblePublicationRow, 'operationRef'>> = {},
@@ -144,6 +151,8 @@ function currentPublication(
     disposition: 'current',
     credentialState: 'ready',
     healthState: 'healthy',
+    pricingConfig,
+    priceDigest,
     readinessValidUntil: 10_000,
     readinessObservedAt: 1,
     ...overrides,
@@ -229,6 +238,24 @@ function admittedBinding(overrides: Partial<CapabilityBindingRow> = {}): Capabil
   }
 }
 
+function testQualification(
+  candidate: Parameters<EligibleSupplyPorts['qualifySuppliedCandidate']>[0],
+  now: number,
+  reason?: 'readiness_stale' | 'source_integrity_failure',
+) {
+  const reasons = reason === undefined ? [] as const : [reason] as const
+  return {
+    kind: 'supplied_candidate_qualification' as const,
+    environment: 'SOURCE-OWNED DEVELOPMENT EVIDENCE' as const,
+    candidate,
+    status: reason === undefined ? 'eligible' as const : 'blocked' as const,
+    reasons,
+    observedAt: now,
+    qualificationDigest: canonicalDigest({ candidate, now, reasons }),
+    sources: [],
+  }
+}
+
 function emptyPorts(overrides: Partial<EligibleSupplyPorts> = {}): EligibleSupplyPorts {
   return {
     listAdmittedConformantBindingsByNetwork: async () => [],
@@ -238,6 +265,7 @@ function emptyPorts(overrides: Partial<EligibleSupplyPorts> = {}): EligibleSuppl
     loadProviderConnection: async () => demoProviderConnection(),
     catalogOriginIsCurrent: async () => true,
     getActiveExactCapabilityContract: async () => ({ kind: 'unavailable', reason: 'not_found' }),
+    qualifySuppliedCandidate: async (candidate, now) => testQualification(candidate, now),
     loadCurrentPublicationByBindingId: async () => currentPublication(),
     ...overrides,
   }
@@ -351,7 +379,7 @@ describe('capability-supply eligible inventory', () => {
     )
     if (result.kind !== 'available') throw new Error(`supply unavailable: ${result.reason}`)
 
-    expect(result.supplies.map((supply) => supply.binding.bindingId)).toEqual(['binding-a'])
+    expect(result.supplies.map((supply) => supply.binding.bindingId)).toEqual(['binding-a', 'binding-b'])
     expect(result.supplies[0]?.publication).toMatchObject({
       publicationRef: 'pub-a',
       revision: 2,
@@ -417,6 +445,7 @@ describe('capability-supply eligible inventory', () => {
       getActiveExactCapabilityContract: async () => ({
         kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
       }),
+      qualifySuppliedCandidate: async (candidate, now) => testQualification(candidate, now, 'readiness_stale'),
       loadCurrentPublicationByBindingId: async () => currentPublication({ readinessValidUntil: 100 }),
     })
 
@@ -443,7 +472,7 @@ describe('capability-supply eligible inventory', () => {
     expect(exact).toEqual({ kind: 'unavailable' })
 
     expect(integrated.kind).toBe('available')
-    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(0)
+    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(1)
     expect(routeable).toEqual({ kind: 'available', supplies: [] })
   })
   it.each([
@@ -469,6 +498,7 @@ describe('capability-supply eligible inventory', () => {
       getActiveExactCapabilityContract: async () => ({
         kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
       }),
+      qualifySuppliedCandidate: async (candidate, now) => testQualification(candidate, now, 'source_integrity_failure'),
       loadCurrentPublicationByBindingId: async () => currentPublication({ connectionAuthority }),
     })
 
@@ -492,7 +522,7 @@ describe('capability-supply eligible inventory', () => {
       },
     )
 
-    expect(integrated).toEqual({ kind: 'available', supplies: [] })
+    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(1)
     expect(routeable).toEqual({ kind: 'available', supplies: [] })
     expect(exact).toEqual({ kind: 'unavailable' })
   })
@@ -551,6 +581,7 @@ describe('capability-supply eligible inventory', () => {
       getActiveExactCapabilityContract: async () => ({
         kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
       }),
+      qualifySuppliedCandidate: async (candidate, now) => testQualification(candidate, now, 'source_integrity_failure'),
       loadCurrentPublicationByBindingId: async () => currentPublication(),
     })
 
@@ -568,7 +599,7 @@ describe('capability-supply eligible inventory', () => {
       now: 100,
     })
 
-    expect(integrated).toEqual({ kind: 'available', supplies: [] })
+    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(1)
     expect(exact).toEqual({ kind: 'unavailable' })
   })
 

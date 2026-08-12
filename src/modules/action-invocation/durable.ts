@@ -1,6 +1,6 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { stableStringify } from '@/modules/common/stable-hash'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ActionInvocationTracer,
   ActionInvocationView,
@@ -35,6 +35,16 @@ export type DurableTracerOptions<Input, Result extends ActionResult> =
       resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
     }>
   }>
+export function cancellationCommandMaterial(input: Readonly<{
+  invocationRef: string
+  idempotencyKey: string
+}>): StableHashValue {
+  return {
+    format: 'action-invocation-cancel:v1',
+    invocationRef: input.invocationRef,
+    idempotencyKey: input.idempotencyKey,
+  }
+}
 type DurableView<Result extends ActionResult> = ActionInvocationView<Result> & Readonly<{
   persistence: 'durable_control'
 }>
@@ -142,6 +152,8 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
     kind: string,
     expectedEffectGeneration?: number,
     evidence?: ReconciliationEvidence,
+    canonicalCommandMaterialOverride?: StableHashValue,
+    commandIdOverride?: string,
   ): Promise<PersistControlResult> => {
     const snapshot = memory.exportSnapshot()
     const record = snapshot.records.find(({ control }) => control.invocationRef === view.invocationRef)
@@ -207,11 +219,10 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
       nextInvocationVersion: view.invocationVersion,
       control: view.control,
     }
-    const commandDigest = evidence === undefined
-      ? canonicalDigest(commandIdentity)
-      : canonicalDigest(evidence)
+    const commandMaterial = evidence ?? canonicalCommandMaterialOverride ?? commandIdentity
+    const commandDigest = canonicalDigest(commandMaterial)
     const commandId = evidence === undefined
-      ? `${view.invocationRef}:${beforeVersion ?? 'create'}:${kind}`
+      ? commandIdOverride ?? `${view.invocationRef}:${beforeVersion ?? 'create'}:${kind}`
       : `${view.invocationRef}:reconciliation-evidence:${evidence.evidenceRef}`
     return await options.port.transact({
       commandId,
@@ -248,7 +259,7 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
           },
         }),
       },
-      canonicalCommandMaterial: (evidence ?? commandIdentity) as never,
+      canonicalCommandMaterial: commandMaterial,
     })
   }
   let memory = makeMemory()
@@ -258,6 +269,8 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
     decision: InvocationDecision<Result>,
     kind: string,
     generation?: number,
+    canonicalCommandMaterialOverride?: StableHashValue,
+    commandIdOverride?: string,
   ): Promise<InvocationDecision<Result>> => {
     if (decision.kind === 'refused') {
       const releaseRefusal = decision.view === undefined
@@ -295,7 +308,15 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
     const committedReleaseVersion = releaseCommitVersions.get(decision.view.invocationRef)
     const persistenceVersion = committedReleaseVersion ?? beforeVersion
     releaseCommitVersions.delete(decision.view.invocationRef)
-    const result = await persist(persistenceVersion, decision.view, kind, generation)
+    const result = await persist(
+      persistenceVersion,
+      decision.view,
+      kind,
+      generation,
+      undefined,
+      canonicalCommandMaterialOverride,
+      commandIdOverride,
+    )
     if (result.kind === 'refused') {
       memory = makeMemory(await reconstructSnapshot(options.port, decision.view.invocationRef))
       const durableStateView = memory.inspect(decision.view.invocationRef)
@@ -392,7 +413,33 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
       )
     },
     async cancel(input) {
-      return accept(input.expectedInvocationVersion, await memory.cancel(input), 'cancel')
+      const commandId = `${input.invocationRef}:cancel`
+      const commandMaterial = cancellationCommandMaterial(input)
+      const prior = await options.port.readHistoryCommand(input.invocationRef, commandId)
+      if (prior !== undefined) {
+        const current = memory.inspect(input.invocationRef)
+        if (current === undefined) return { kind: 'refused', code: 'invocation_not_found' }
+        if (
+          current.owner.callerRef !== input.actor.callerRef
+          || current.owner.principalRef !== input.actor.principalRef
+        ) {
+          return { kind: 'refused', code: 'cross_principal_refused', view: durableView(current) }
+        }
+        if (stableStringify(current.origin) !== stableStringify(input.origin)) {
+          return { kind: 'refused', code: 'cross_origin_refused', view: durableView(current) }
+        }
+        return prior.commandDigest === canonicalDigest(commandMaterial)
+          ? { kind: 'accepted', view: durableView(current) }
+          : { kind: 'refused', code: 'command_identity_conflict', view: durableView(current) }
+      }
+      return accept(
+        input.expectedInvocationVersion,
+        await memory.cancel(input),
+        'cancel',
+        undefined,
+        commandMaterial,
+        commandId,
+      )
     },
     async reconcile(input) {
       const commandId = `${input.invocationRef}:reconciliation-evidence:${input.evidence.evidenceRef}`

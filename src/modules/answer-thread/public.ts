@@ -1,7 +1,9 @@
 export { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from './agent-entry'
 
 export type {
+  AnswerOperationInvokeContext,
   AnswerThreadRecord,
+  AnswerToolCallStatus,
   AnswerTurnRequest,
   AnswerTurnStatus,
   FollowUpIntent,
@@ -11,6 +13,17 @@ export type {
   ThinkingStep,
 } from './answer-thread.schema'
 export { answerTurnRequestSchema } from './answer-thread.schema'
+export {
+  AnswerTurnReservationStateValues,
+  AnswerTurnStatusValues,
+  AnswerToolCallStatusValues,
+  AnswerToolIdValues,
+  FollowUpIntentValues,
+} from './answer-thread.schema'
+export {
+  MAX_ANSWER_TURN_CHECKPOINT_BYTES,
+  parseAnswerTurnCheckpoint,
+} from './internal/answer-turn-checkpoint'
 export {
   parsePublicThreadProjection,
   PublicAnswerCheckSummarySchema,

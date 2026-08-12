@@ -10,6 +10,13 @@ export type ReconciliationEvidenceMaterial = Readonly<{
   invocationRef: string
   attemptRef: string
   effectGeneration: number
+  operationRef?: string
+  inputDigest?: string
+  requestDigest?: string
+  providerIdentity?: string
+  paymentIdentifier?: string
+  transportObservationDigest?: string
+  paymentObservationDigest?: string
   resolution: ReconciliationResolution
   observedAt: string
 }>
@@ -40,6 +47,13 @@ export function validateReconciliationEvidence(input: Readonly<{
     evidence.version !== 1 ||
     evidence.evidenceRef.length === 0 ||
     evidence.source.length === 0 ||
+    (evidence.operationRef !== undefined && evidence.operationRef.length === 0) ||
+    (evidence.inputDigest !== undefined && evidence.inputDigest.length === 0) ||
+    (evidence.requestDigest !== undefined && evidence.requestDigest.length === 0) ||
+    (evidence.providerIdentity !== undefined && evidence.providerIdentity.length === 0) ||
+    (evidence.paymentIdentifier !== undefined && evidence.paymentIdentifier.length === 0) ||
+    (evidence.transportObservationDigest !== undefined && evidence.transportObservationDigest.length === 0) ||
+    (evidence.paymentObservationDigest !== undefined && evidence.paymentObservationDigest.length === 0) ||
     !Number.isInteger(evidence.effectGeneration) ||
     evidence.effectGeneration < 1 ||
     (evidence.resolution !== 'not_released' && evidence.resolution !== 'released') ||

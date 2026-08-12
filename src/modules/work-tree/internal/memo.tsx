@@ -46,7 +46,7 @@ export type WeeklyMemoChange = Readonly<{
 export type WeeklyMemoReceipt = Readonly<{
   title: string
   detail: string
-  status: 'accepted' | 'replayed' | 'refused' | 'unknown'
+  status: 'accepted' | 'replayed' | 'refused'
 }>
 
 export type WeeklyMemoNextAction = Readonly<{
@@ -124,45 +124,20 @@ export function projectWeeklyMemo(input: WorkTreeMemoProjectionInput): WeeklyMem
       title: eventTitle(event.kind),
       detail: `Revision ${event.revision} recorded at source event ${event.seq}.`,
     }))
-  const receiptProjection = input.receipts.map((receipt) => {
-    if (!('decision' in receipt)) {
-      return {
-        title: 'Authentication required',
-        detail: 'Sign in before deciding this WorkTree item.',
-        status: receipt.kind,
-      }
-    }
-    return {
-      title: `${receipt.decision} · ${receipt.nodeId}`,
-      detail: receipt.kind === 'refused'
-        ? `Refused: ${receipt.refusalCode}.`
-        : `Revision ${receipt.revision} · ${receipt.disposition}.`,
-      status: receipt.kind,
-    }
-  })
+  const receiptProjection = input.receipts.map((receipt) => ({
+    title: `${receipt.decision} · ${receipt.nodeId}`,
+    detail: receipt.kind === 'refused'
+      ? `Refused: ${receipt.refusalCode}.`
+      : `Revision ${receipt.revision} · ${receipt.disposition}.`,
+    status: receipt.kind,
+  }))
   const exceptions: readonly WeeklyMemoException[] = input.receipts.flatMap((receipt): readonly WeeklyMemoException[] => {
-    if (receipt.kind === 'refused') {
-      if (!('decision' in receipt)) {
-        return [{
-          title: 'Authentication required',
-          detail: 'Sign in before deciding this WorkTree item.',
-          severity: 'warning' as const,
-        }]
-      }
-      return [{
-        title: `${receipt.decision} refused`,
-        detail: `The source kept the WorkTree unchanged (${receipt.refusalCode}).`,
-        severity: 'warning' as const,
-      }]
-    }
-    if (receipt.kind === 'unknown') {
-      return [{
-        title: `${receipt.decision} needs reconciliation`,
-        detail: 'Read the current WorkTree before retrying this decision.',
-        severity: 'error' as const,
-      }]
-    }
-    return []
+    if (receipt.kind !== 'refused') return []
+    return [{
+      title: `${receipt.decision} refused`,
+      detail: `The source kept the WorkTree unchanged (${receipt.refusalCode}).`,
+      severity: 'warning' as const,
+    }]
   })
   const nextActions = pendingItems.map((item) => ({
     title: item.title,

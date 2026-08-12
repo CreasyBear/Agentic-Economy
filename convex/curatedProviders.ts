@@ -14,15 +14,23 @@ import {
   CURATED_PROVIDER_PUBLICATIONS,
   EXA_BUSINESS_SLUG,
   FRANKFURTER_BUSINESS_SLUG,
-  normalizeCapabilityPublication,
   parseAdmittedTransportCatalogMetadata,
-  type CapabilityPublicationImportResult,
+  decodeConvexPublicationSource,
+  preparePublicationDraft,
+  type PreparedPublicationMaterial,
+  type CapabilityPublicationImport,
 } from '@/modules/capability-supply/public'
+import type { PricingConfig } from '@/modules/money/public'
 import {
   createProviderConnection,
   type ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
-import { buildDevSeedCatalogState, DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
+import {
+  buildDevSeedCatalogState,
+  DEV_SEED_BUSINESS_FIXTURES,
+  DEV_SEED_OWNER_CLERK_USER_ID,
+  type DevSeedBusinessFixture,
+} from '@/modules/dev/public'
 
 import { internalMutation, type MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
@@ -34,13 +42,14 @@ import {
 } from './capabilitySupply'
 import {
   ensureCatalogProjectionControlsCommand,
+  publishBusinessCatalogCommand,
   upsertOfferingAccessPathCommand,
 } from './catalog'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './capabilitySupplyProjection'
-import { registerSandboxBusinesses } from './devSeed'
+import { claimBusinessCommand } from './business'
 
 const CURATED_PUBLISHER_REF = 'system:curated-provider-bootstrap'
 const CURATED_RETIREMENT_EVIDENCE = ['source:migration:curated-source-drift-retirement']
@@ -119,6 +128,95 @@ function mergeConnectionSeed(current: ConnectionSeed | undefined, next: Connecti
     evidenceRefs: [...new Set([...current.evidenceRefs, ...next.evidenceRefs])],
   }
 }
+async function registerCuratedProviderBusinesses(
+  db: MutationCtx['db'],
+  fixtures: readonly DevSeedBusinessFixture[],
+  registeredAt: number,
+): Promise<{ seededSlugs: string[]; businessIdsBySlug: Record<string, string> }> {
+  const businessIdsBySlug: Record<string, string> = {}
+  for (const [index, fixture] of fixtures.entries()) {
+    const now = registeredAt + index * 1_000
+    const actor = {
+      kind: 'authenticated_owner' as const,
+      clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
+      displayName: 'Dev Seed Owner',
+    }
+    const claim = await claimBusinessCommand(db, {
+      actor,
+      facts: {
+        name: fixture.businessName,
+        category: fixture.category,
+        businessContext: fixture.stateTerritory === 'External'
+          ? {
+            kind: 'programmable_provider',
+            website: curatedProviderWebsite(fixture.sourceLabel),
+            providerIdentifier: fixture.businessName,
+          }
+          : {
+            kind: 'local_human',
+            suburb: fixture.suburb,
+            stateTerritory: fixture.stateTerritory,
+            ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+          },
+        requestedSlug: fixture.requestedSlug,
+        ownerMessage: fixture.ownerMessage,
+        sourceRefs: [{
+          label: fixture.sourceLabel,
+          evidenceRef: `private:evidence:dev-seed:${fixture.requestedSlug}`,
+          sourceHash: canonicalDigest(`dev-seed:${fixture.requestedSlug}`),
+        }],
+      },
+      operationKey: `curated-provider:claim:${fixture.requestedSlug}`,
+      correlationId: `curated-provider:claim:${fixture.requestedSlug}`,
+    }, now)
+    if (claim.kind !== 'ok') {
+      throw new Error(`curated_provider_business_claim_${claim.code}:${fixture.requestedSlug}:${claim.reason}`)
+    }
+    const services = fixture.offerings.map((offering) => ({
+      name: offering.name,
+      category: offering.category,
+      summary: offering.summary,
+      serviceArea: offering.serviceAreaSummary,
+      hoursOrUnknown: offering.availabilitySummary,
+      firstRequest: offering.firstRequestMode === 'not_available_yet'
+        ? {
+            mode: offering.firstRequestMode,
+            publicChannel: 'not_available' as const,
+            noContactReason: offering.noContactReason,
+          }
+        : {
+            mode: offering.firstRequestMode,
+            publicChannel: 'ae_status_only' as const,
+            publicDisclosure: offering.publicDisclosure,
+          },
+    }))
+    const catalogOperationKey = `curated-provider:catalog:${fixture.requestedSlug}:${canonicalDigest(services)}`
+    const published = await publishBusinessCatalogCommand(db, {
+      actor,
+      claimId: claim.claim.claimId,
+      operationKey: catalogOperationKey,
+      correlationId: catalogOperationKey,
+      services,
+    }, now + 500)
+    if (published.kind === 'ok') {
+      businessIdsBySlug[fixture.requestedSlug] = published.business.businessId
+    } else if (published.code === 'catalog_publish_operation_conflict' && claim.claim.businessId !== undefined) {
+      businessIdsBySlug[fixture.requestedSlug] = claim.claim.businessId
+    } else {
+      throw new Error(`curated_provider_business_publish_${published.code}:${fixture.requestedSlug}:${published.reason}`)
+    }
+  }
+  return { seededSlugs: fixtures.map((fixture) => fixture.requestedSlug), businessIdsBySlug }
+}
+function curatedProviderWebsite(sourceLabel: string): string {
+  const matched = sourceLabel.match(/https:\/\/\S+/u)?.[0]
+  if (matched === undefined) throw new Error('curated_provider_source_url_missing')
+  const website = new URL(matched)
+  website.search = ''
+  website.hash = ''
+  return website.href
+}
+
 function parseProviderSlug(value: string): Slug {
   const normalized = normalizeSlug(value)
   return brandNonEmpty(normalized, 'Slug')
@@ -229,13 +327,15 @@ const publicationResult = v.object({
  * separate live observation; this mutation never fabricates it.
  */
 export const seed = internalMutation({
-  args: {},
+  args: { runtimeEnvironment: v.union(v.literal('sandbox'), v.literal('production')) },
   returns: v.object({
+    kind: v.union(v.literal('seeded'), v.literal('source_drift_requires_migration')),
+    sourceDrift: v.array(v.string()),
     businessSlugs: v.array(v.string()),
     publications: v.array(publicationResult),
     mappingRef: v.string(),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const now = Date.now()
     await ensureCatalogProjectionControlsCommand(ctx.db, {
       actorRef: 'system:dev-seed',
@@ -247,7 +347,9 @@ export const seed = internalMutation({
     const currentPublicationRefs = new Set(
       CURATED_PROVIDER_PUBLICATIONS.map(({ publication }) => publication.commercial.offering.offeringId),
     )
-    const removedPublications = (await ctx.db.query('capabilityPublications').collect()).filter((publication) => (
+    const removedPublications = (await ctx.db.query('capabilityPublications')
+      .withIndex('by_networkId_and_disposition', (query) => query.eq('networkId', 'ae:public').eq('disposition', 'current'))
+      .take(100)).filter((publication) => (
       publication.networkId === 'ae:public'
       && publication.publisherRef === CURATED_PUBLISHER_REF
       && !currentPublicationRefs.has(publication.publicationRef)
@@ -256,7 +358,6 @@ export const seed = internalMutation({
       await retireStaleCuratedSupply(ctx, {
         capabilityId: publication.capabilityId,
         version: publication.version,
-        contractDigest: '',
         offeringId: publication.offeringId,
         bindingId: publication.bindingId,
         now: now + index,
@@ -282,7 +383,7 @@ export const seed = internalMutation({
       existing.every((business) => business?.slug !== requestedSlug)
     ))
     if (missing.length > 0) {
-      await registerSandboxBusinesses(ctx.db, missing, now)
+      await registerCuratedProviderBusinesses(ctx.db, missing, now)
     }
 
     const businesses = new Map<string, string>()
@@ -339,10 +440,6 @@ export const seed = internalMutation({
       })
     }
 
-    type NormalizedCuratedPublication = Extract<
-      CapabilityPublicationImportResult,
-      { kind: 'normalized' }
-    >
     type CatalogOfferingLineage = Readonly<{
       offeringRef: string
       revision: number
@@ -352,45 +449,60 @@ export const seed = internalMutation({
       index: number
       entry: typeof CURATED_PROVIDER_PUBLICATIONS[number]
       businessId: string
-      normalized: NormalizedCuratedPublication
+      prepared: PreparedPublicationMaterial
       contract: CapabilityContract
       catalogOffering: CatalogOfferingLineage
       accessPathRef: string
       accessPath: OfferingAccessPathDescriptor
     }>
 
-    // Normalize every source descriptor before mutating either capability
-    // supply or catalog state. The stage is the single source of truth for the
-    // operation-specific path that will be linked to its publication below.
+    // Admit every source descriptor before mutating either capability supply
+    // or catalog state. The prepared material is the single source of truth
+    // for the operation-specific path linked to its publication below.
     const stagedPublications: StagedCuratedPublication[] = []
     const contracts = new Map<string, CapabilityContract>()
     for (const [index, entry] of CURATED_PROVIDER_PUBLICATIONS.entries()) {
       const businessId = businesses.get(entry.businessSlug)
       if (businessId === undefined) throw new Error(`curated_provider_business_missing:${entry.businessSlug}`)
-      const normalized = await normalizeCapabilityPublication(entry.publication)
-      if (normalized.kind !== 'normalized') {
-        throw new Error(`curated_provider_publication_${normalized.reason}`)
+      const sourceOffering = entry.publication.commercial.offering
+      const price = sourceOffering.presentation.price
+      if (price.kind !== 'fixed') {
+        throw new Error(`curated_provider_publication_price_unavailable:${entry.businessSlug}`)
       }
-      const contract = defineCapabilityContract(JSON.parse(normalized.draft.documentJson))
+      const preparedResult = await preparePublicationDraft({
+        source: decodeConvexPublicationSource(entry.publication) as CapabilityPublicationImport,
+        sourceRevision: `system:curated-provider-bootstrap:${sourceOffering.offeringId}:v1`,
+        pricingConfig: {
+          version: 'pricing:v2',
+          unit: 'call',
+          paidAmount: price.amount,
+        } satisfies PricingConfig,
+        evidenceRefs: entry.publication.evidenceRefs,
+      })
+      if (preparedResult.kind !== 'prepared') {
+        throw new Error(`curated_provider_publication_${preparedResult.reason}`)
+      }
+      const prepared = preparedResult.prepared
+      const contract = defineCapabilityContract(JSON.parse(prepared.documentJson))
       const catalogOffering = catalogOfferingByBusiness.get(entry.businessSlug)
       if (catalogOffering === undefined) {
         throw new Error(`curated_provider_catalog_offering_unresolved:${entry.businessSlug}`)
       }
-      const configJson = JSON.stringify(normalized.draft.binding.adapter.config)
+      const configJson = JSON.stringify(prepared.binding.adapter.config)
       if (configJson === undefined) throw new Error('curated_provider_transport_config_unserializable')
       const transport = parseAdmittedTransportCatalogMetadata(
-        normalized.draft.binding.adapter.adapterId,
+        prepared.binding.adapter.adapterId,
         configJson,
       )
       if (transport === undefined) {
         throw new Error(`curated_provider_transport_unresolved:${entry.businessSlug}`)
       }
-      const accessPathRef = `access:${catalogOffering.offeringRef}:curated-operation:${normalized.draft.offering.offeringId}`
+      const accessPathRef = `access:${catalogOffering.offeringRef}:curated-operation:${prepared.offering.offeringId}`
       const accessPath: OfferingAccessPathDescriptor = {
         kind: 'external_operation',
-        name: normalized.draft.offering.presentation.label,
-        summary: normalized.draft.offering.presentation.summary,
-        url: normalized.draft.binding.endpointUrl,
+        name: prepared.offering.presentation.label,
+        summary: prepared.offering.presentation.summary,
+        url: prepared.binding.endpointUrl,
         method: transport.method,
         provenance: 'publicly_observed',
       }
@@ -398,7 +510,7 @@ export const seed = internalMutation({
         index,
         entry,
         businessId,
-        normalized,
+        prepared,
         contract,
         catalogOffering,
         accessPathRef,
@@ -467,18 +579,18 @@ export const seed = internalMutation({
       readiness: 'active' | 'pending' | 'unavailable'
     }> = []
     for (const staged of stagedPublications) {
-      const source = staged.entry.publication
       const path = accessPathLineageByRef.get(staged.accessPathRef)
       if (path === undefined) {
         throw new Error(`curated_provider_access_path_lineage_missing:${staged.entry.businessSlug}`)
       }
       const publishInput = {
         businessId: staged.businessId,
-        source,
-        operationKey: `curated-provider:publish:${staged.normalized.draft.offering.offeringId}`,
+        runtimeEnvironment: args.runtimeEnvironment,
+        prepared: staged.prepared,
+        operationKey: `curated-provider:publish:${staged.prepared.offering.offeringId}`,
         correlationId: `curated-provider:${staged.entry.businessSlug}`,
         reasonCode: 'source_owned_curated_provider_publication',
-        evidenceRefs: [...source.evidenceRefs],
+        evidenceRefs: [...staged.prepared.evidenceRefs],
         origin: {
           kind: 'catalog_offering' as const,
           offeringRef: path.offeringRef,
@@ -489,36 +601,27 @@ export const seed = internalMutation({
         },
         now: now + staged.index,
       } as const
-      let published = await publishCuratedCapability(ctx, publishInput)
-      if (
-        published.kind === 'refused'
-        && (published.reason === 'contract_identity_conflict'
-          || published.reason === 'offering_identity_conflict')
-      ) {
-        // The local deployment still holds state registered by an earlier source
-        // revision whose content no longer matches the source-authoritative
-        // content for the same identity. contract_identity_conflict means an
-        // earlier contract revision's digest differs for the same
-        // capabilityId+version; offering_identity_conflict means the stored
-        // offering/publication registered for the same offeringId carries a
-        // different offering registrationHash (e.g. enriched searchTerms) or
-        // source digest than the current source produces. The canonical seed is
-        // idempotent across its own source drift by retiring that stale
-        // source-owned state and re-admitting the current content. This is
-        // retire-and-replace, NOT a weakened identity guard: a capabilityId+
-        // version (and an offeringId) still maps to exactly one content, the
-        // source-authoritative one.
-        await retireStaleCuratedSupply(ctx, {
-          capabilityId: staged.contract.ref.capabilityId,
-          version: staged.contract.ref.version,
-          contractDigest: staged.contract.ref.contractDigest,
-          offeringId: staged.normalized.draft.offering.offeringId,
-          bindingId: staged.normalized.draft.binding.bindingId,
-          now: now + staged.index,
-        })
-        published = await publishCuratedCapability(ctx, publishInput)
-      }
-      if (published.kind !== 'published') {
+      const published = await publishCuratedCapability(ctx, publishInput)
+      if (published.kind === 'refused') {
+        if (
+          published.reason === 'contract_identity_conflict'
+          || published.reason === 'offering_identity_conflict'
+        ) {
+          await retireStaleCuratedSupply(ctx, {
+            capabilityId: staged.contract.ref.capabilityId,
+            version: staged.contract.ref.version,
+            offeringId: staged.prepared.offering.offeringId,
+            bindingId: staged.prepared.binding.bindingId,
+            now: now + staged.index,
+          })
+          return {
+            kind: 'source_drift_requires_migration' as const,
+            sourceDrift: [`${staged.entry.businessSlug}:${staged.prepared.offering.offeringId}:${published.reason}`],
+            businessSlugs: [...PROVIDER_SLUGS],
+            publications: [],
+            mappingRef: '',
+          }
+        }
         throw new Error(`curated_provider_publication_${published.reason}`)
       }
 
@@ -537,7 +640,7 @@ export const seed = internalMutation({
           operationKey: `curated-provider:eligibility:${published.bindingId}`,
           correlationId: `curated-provider:${staged.entry.businessSlug}`,
           reasonCode: 'source_owned_contract_and_transport_conformance',
-          evidenceRefs: [...source.evidenceRefs],
+          evidenceRefs: [...staged.prepared.evidenceRefs],
         },
         eligibility: {
           offeringId: published.offeringId,
@@ -546,8 +649,8 @@ export const seed = internalMutation({
           decision: 'admit',
           expectedOfferingRegistrationHash: offering.registrationHash,
           expectedBindingRegistrationHash: binding.registrationHash,
-          admissionEvidenceRefs: [...source.evidenceRefs],
-          conformanceEvidenceRefs: ['source:tests:provider-conformance', ...source.evidenceRefs],
+          admissionEvidenceRefs: [...staged.prepared.evidenceRefs],
+          conformanceEvidenceRefs: ['source:tests:provider-conformance', ...staged.prepared.evidenceRefs],
         },
       }, now + staged.index + 100)
       if (eligibility.kind !== 'eligible') {
@@ -620,6 +723,8 @@ export const seed = internalMutation({
     }
 
     return {
+      kind: 'seeded' as const,
+      sourceDrift: [],
       businessSlugs: [...PROVIDER_SLUGS],
       publications,
       mappingRef: mappingResult.mappingRef,
@@ -628,200 +733,46 @@ export const seed = internalMutation({
 })
 
 /**
- * Retires the stale source-owned supply state for one curated publication whose
- * content has drifted from an earlier seed revision (either the contract
- * digest for a capabilityId+version, or the offering registrationHash / source
- * digest for an offeringId, e.g. enriched searchTerms), so the reseed can
- * re-admit the source-authoritative content. Only ever touches rows owned by
- * the curated provider bootstrap (publisherRef ownership); it never touches
- * other workstreams' data and it never weakens the
- * contract_identity_conflict / offering_identity_conflict guards (a
- * capabilityId+version and an offeringId still map to exactly one content — we
- * are replacing stale curated content with the current source content,
- * deliberately).
+ * Withdraws current source-owned supply when a curated source identity drifts.
+ * Historical rows remain readable; the caller reports migration required rather
+ * than deleting/re-registering the same logical identity in one seed run.
  */
 async function retireStaleCuratedSupply(
   ctx: MutationCtx,
   input: Readonly<{
     capabilityId: string
     version: number
-    contractDigest: string
     offeringId: string
     bindingId: string
     now: number
   }>,
 ): Promise<{ retired: number }> {
-  const existingPublications = await ctx.db.query('capabilityPublications').collect()
-  const colliding = existingPublications.filter((publication) => (
-    publication.networkId === 'ae:public'
-    && publication.publisherRef === CURATED_PUBLISHER_REF
-    && (
-      (publication.capabilityId === input.capabilityId && publication.version === input.version)
-      || publication.publicationRef === input.offeringId
-      || publication.bindingId === input.bindingId
-    )
-  ))
-  if (colliding.length === 0) return { retired: 0 }
-
-  const offeringIds = new Set<string>([input.offeringId])
-  const bindingIds = new Set<string>([input.bindingId])
-  const bindingToOffering = new Map<string, string>([[input.bindingId, input.offeringId]])
+  const colliding = (await ctx.db.query('capabilityPublications')
+    .withIndex('by_networkId_and_disposition', (query) => query.eq('networkId', 'ae:public').eq('disposition', 'current'))
+    .take(1000)).filter((publication) => (
+      publication.publisherRef === CURATED_PUBLISHER_REF
+      && (
+        (publication.capabilityId === input.capabilityId && publication.version === input.version)
+        || publication.publicationRef === input.offeringId
+        || publication.bindingId === input.bindingId
+      )
+    ))
+  let retired = 0
   for (const publication of colliding) {
-    if (publication.disposition === 'current') {
-      const withdrawn = await withdrawCuratedCapability(ctx, {
-        publicationRef: publication.publicationRef,
-        expectedRevision: publication.revision,
-        evidenceRefs: [...CURATED_RETIREMENT_EVIDENCE],
-        now: input.now,
-      })
-      if (withdrawn.kind !== 'withdrawn') {
-        throw new Error(`curated_provider_stale_retirement_${withdrawn.reason}`)
-      }
+    const withdrawn = await withdrawCuratedCapability(ctx, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: publication.revision,
+      evidenceRefs: [...CURATED_RETIREMENT_EVIDENCE],
+      now: input.now,
+    })
+    if (withdrawn.kind !== 'withdrawn') {
+      throw new Error(`curated_provider_stale_retirement_${withdrawn.reason}`)
     }
-    offeringIds.add(publication.offeringId)
-    bindingIds.add(publication.bindingId)
-    bindingToOffering.set(publication.bindingId, publication.offeringId)
+    retired += 1
   }
-
-
-  // Delete the retired publication rows (any revision/disposition) and the
-  // stale offering rows, all scoped to the curated offeringIds collected above.
-  for (const offeringId of offeringIds) {
-    const publicationRows = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (query) => (
-        query.eq('publicationRef', offeringId)
-      ))
-      .collect()
-    for (const row of publicationRows) {
-      if (row.publisherRef !== CURATED_PUBLISHER_REF) continue
-      await ctx.db.delete(row._id)
-    }
-    await deleteCuratedOperationKey(
-      ctx,
-      'publishCapability',
-      `curated-provider:publish:${offeringId}`,
-    )
-    const offering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (query) => query.eq('offeringId', offeringId))
-      .unique()
-    if (offering !== null) await ctx.db.delete(offering._id)
-  }
-
-  for (const bindingId of bindingIds) {
-    const binding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId))
-      .unique()
-    if (binding !== null) await ctx.db.delete(binding._id)
-    await deleteCuratedOperationKey(
-      ctx,
-      'setCapabilitySupplyEligibility',
-      `curated-provider:eligibility:${bindingId}`,
-    )
-  }
-
-  // Only retire the stored contract when it is NOT the source-authoritative
-  // content; a matching contract must never be deleted.
-  const contractDocument = await ctx.db.query('capabilityContractDocuments')
-    .withIndex('by_capabilityId_and_version', (query) => (
-      query.eq('capabilityId', input.capabilityId).eq('version', input.version)
-    ))
-    .unique()
-  if (contractDocument !== null && contractDocument.contractDigest !== input.contractDigest) {
-    await ctx.db.delete(contractDocument._id)
-  }
-
-  // The curated operation mapping refs embed the drifted contract digests, so
-  // the stale mapping + its ledger entry are retired; the seed re-registers the
-  // mapping with the current refs.
-  const staleMappings = await ctx.db.query('registeredOperationMappings')
-    .withIndex('by_networkId_and_mappingRef', (query) => query.eq('networkId', 'ae:public'))
-    .collect()
-  for (const mapping of staleMappings) {
-    if (mapping.publisherRef !== CURATED_PUBLISHER_REF) continue
-    await ctx.db.delete(mapping._id)
-  }
-  const staleMappingKeys = await ctx.db.query('operationKeys')
-    .withIndex('by_actor_operation_key', (query) => (
-      query.eq('actorRef', CURATED_PUBLISHER_REF).eq('operationName', 'registerMapping')
-    ))
-    .collect()
-  for (const operation of staleMappingKeys) {
-    await ctx.db.delete(operation._id)
-  }
-
-  // Retire the supply-audit events written by the earlier source revision for
-  // the purged operations (their event ids are deterministic). The re-admit
-  // rewrites them with the current source content.
-  const staleAuditEventIds = new Set<string>()
-  for (const offeringId of offeringIds) {
-    staleAuditEventIds.add(curatedSupplyAuditEventId({
-      action: 'publish_capability',
-      eventType: 'capability_publication.published',
-      targetType: 'capability_publication',
-      targetRef: offeringId,
-      operationKey: `curated-provider:publish:${offeringId}`,
-    }))
-  }
-  for (const [bindingId, offeringId] of bindingToOffering) {
-    const operationKey = `curated-provider:eligibility:${bindingId}`
-    staleAuditEventIds.add(curatedSupplyAuditEventId({
-      action: 'set_eligibility',
-      eventType: 'capability_supply.eligibility_changed',
-      targetType: 'capability_offering',
-      targetRef: offeringId,
-      operationKey,
-    }))
-    staleAuditEventIds.add(curatedSupplyAuditEventId({
-      action: 'set_eligibility',
-      eventType: 'capability_supply.eligibility_changed',
-      targetType: 'capability_binding',
-      targetRef: bindingId,
-      operationKey,
-    }))
-  }
-  for (const eventId of staleAuditEventIds) {
-    const existing = await ctx.db.query('auditEvents')
-      .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
-      .unique()
-    if (existing !== null) await ctx.db.delete(existing._id)
-  }
-
-  return { retired: colliding.length }
+  return { retired }
 }
 
-/** Mirrors the deterministic supply-audit event id (src/modules/capability-supply/internal/shared/supply-audit.ts). */
-function curatedSupplyAuditEventId(input: Readonly<{
-  action: string
-  eventType: string
-  targetType: string
-  targetRef: string
-  operationKey: string
-}>): string {
-  return `audit:capability_supply:${canonicalDigest({
-    action: input.action,
-    eventType: input.eventType,
-    targetType: input.targetType,
-    targetRef: input.targetRef,
-    actorKind: 'system',
-    actorRef: CURATED_PUBLISHER_REF,
-    operationKey: input.operationKey,
-  })}`
-}
-
-async function deleteCuratedOperationKey(
-  ctx: MutationCtx,
-  operationName: string,
-  key: string,
-): Promise<void> {
-  const operation = await ctx.db.query('operationKeys')
-    .withIndex('by_actor_operation_key', (query) => (
-      query.eq('actorRef', CURATED_PUBLISHER_REF)
-        .eq('operationName', operationName)
-        .eq('key', key)
-    ))
-    .unique()
-  if (operation !== null) await ctx.db.delete(operation._id)
-}
 
 export const retireLegacyExaV1 = internalMutation({
   args: {},

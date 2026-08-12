@@ -1,4 +1,4 @@
-import { authenticateCustomerRequestAgent } from '@/lib/server/customer-request-agent-auth'
+import { authenticateAgentAccess } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import {
   BUSINESS_TOOL_AGENT_SCOPE,
@@ -49,7 +49,7 @@ type ToolRefusalCode =
  * refuses here rather than failing deeper in.
  */
 export type BusinessToolHandlerOptions = Readonly<{
-  authenticate?: NonNullable<Parameters<typeof authenticateCustomerRequestAgent>[0]>['authenticate']
+  authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
 }>
 
 export async function handleBusinessToolPrepare(
@@ -160,7 +160,7 @@ async function authenticateToolCall(
   toolId: string,
   options: BusinessToolHandlerOptions,
 ): Promise<Response | undefined> {
-  const authenticated = await authenticateCustomerRequestAgent({
+  const authenticated = await authenticateAgentAccess({
     requiredScope: BUSINESS_TOOL_AGENT_SCOPE,
     ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
   })

@@ -35,7 +35,9 @@ const sourceRowSchema = z.looseObject({
   operation: recordSchema,
   input: recordSchema,
   moneyCharge: z.strictObject({
-    transactionRef: nonEmptyStringSchema,
+    transactionRef: nonEmptyStringSchema.optional(),
+    usageRef: nonEmptyStringSchema,
+    observedAt: z.number().int().nonnegative(),
     principalId: nonEmptyStringSchema,
     chargeState: z.enum(['free_tier', 'paid']),
     amount: exactAmountSchema,

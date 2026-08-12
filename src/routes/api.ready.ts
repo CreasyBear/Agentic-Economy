@@ -31,7 +31,11 @@ export async function handleReadyRequest(
     const readiness = await readServerReadiness(options)
     const response = readiness.status === 'ready'
       ? Response.json(
-          { status: 'ready', checks: { config: 'ready', convex: 'ready' } },
+          {
+            status: 'ready',
+            checks: { config: 'ready', convex: 'ready' },
+            diagnostics: readiness.diagnostics,
+          },
           { headers: { 'Cache-Control': 'no-store' } },
         )
       : problem({
@@ -40,7 +44,10 @@ export async function handleReadyRequest(
           code: 'server_not_ready',
           retryable: true,
           detail: 'Required server readiness checks did not pass.',
-          extras: { checks: projectChecks(readiness.checks) },
+          extras: {
+            checks: projectChecks(readiness.checks),
+            diagnostics: readiness.diagnostics,
+          },
         })
     const projected = head
       ? new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers })

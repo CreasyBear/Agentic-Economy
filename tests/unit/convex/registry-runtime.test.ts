@@ -67,8 +67,7 @@ describe('Convex registry public read paths', () => {
       slug: 'legacy-business',
       name: 'Legacy Business',
       category: 'Emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
+      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
       publicStatus: 'published',
       trustTier: 'claimed',
     })
@@ -87,8 +86,7 @@ describe('Convex registry public read paths', () => {
           slug: 'legacy-business',
           name: 'Legacy Business',
           category: 'Emergency plumbing',
-          suburb: 'Parramatta',
-          stateTerritory: 'NSW',
+          businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
           publicUrl: '/legacy-business',
           trustTier: 'claimed',
         },
@@ -99,6 +97,11 @@ describe('Convex registry public read paths', () => {
             name: 'Emergency pipe repair',
             category: 'Emergency plumbing',
             summary: 'Emergency plumbing help.',
+            price: {
+              kind: 'fixed',
+              amount: { currency: 'AUD', units: '18000', exponent: 2 },
+              taxTreatment: 'unstated',
+            },
           },
           accessPaths: [],
           support: { integrated: false, routeable: false, reasons: [] },
@@ -135,8 +138,7 @@ describe('Convex registry public read paths', () => {
       name: 'Emergency pipe repair',
       category: 'Emergency plumbing',
       categoryKey: 'emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
+      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
       trustTier: 'claimed',
       firstRequestMode: 'not_available_yet',
       keywords: ['emergency', 'plumber', 'plumbing'],
@@ -237,8 +239,7 @@ describe('Convex registry public read paths', () => {
       name: 'Currency exchange rates',
       category: 'Currency data',
       categoryKey: 'currency data',
-      suburb: 'Online',
-      stateTerritory: 'External',
+      businessContext: { kind: 'programmable_provider', website: 'https://api.frankfurter.app', providerIdentifier: 'frankfurter' },
       trustTier: 'claimed',
       firstRequestMode: 'not_available_yet',
       keywords: ['currency', 'exchange', 'rates'],
@@ -269,8 +270,7 @@ describe('Convex registry public read paths', () => {
       name: 'Emergency pipe repair',
       category: 'Emergency plumbing',
       categoryKey: 'emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
+      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
       trustTier: 'claimed',
       firstRequestMode: 'not_available_yet',
       keywords: ['emergency', 'plumber', 'plumbing'],
@@ -330,8 +330,8 @@ function seedBusinesses(db: FakeDb, count: number): void {
     const suffix = String(index).padStart(3, '0')
     const businessId = `businesses:${suffix}`
     const slug = `business-${suffix}`
-    db.seed('businesses', { _id: businessId, _creationTime: index, ownerId: `owners:${suffix}`, slug, name: `Business ${suffix}`, normalizedName: `business ${suffix}`, category: 'Emergency plumbing', suburb: 'Parramatta', stateTerritory: 'NSW', publicStatus: 'published', trustTier: 'claimed', claimStatus: 'claimed', sourceHash: canonicalDigest(`business:${suffix}`), createdAt: index, updatedAt: index })
-    db.seed('businessSupplyProjectionSnapshots', { _id: `snapshots:${suffix}`, _creationTime: index, businessId, sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current', updatedAt: index, status: 'current', projection: { business: { businessId, slug, name: `Business ${suffix}`, category: 'Emergency plumbing', suburb: 'Parramatta', stateTerritory: 'NSW', publicUrl: `/${slug}`, trustTier: 'claimed' }, offerings: [{ offering: { offeringRef: `offering:${suffix}`, revision: 1, name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'Emergency plumbing help for urgent pipe repairs.', serviceAreaSummary: 'Parramatta and nearby suburbs' }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }], sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current' } })
+    db.seed('businesses', { _id: businessId, _creationTime: index, ownerId: `owners:${suffix}`, slug, name: `Business ${suffix}`, normalizedName: `business ${suffix}`, category: 'Emergency plumbing', businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' }, publicStatus: 'published', trustTier: 'claimed', claimStatus: 'claimed', sourceHash: canonicalDigest(`business:${suffix}`), createdAt: index, updatedAt: index })
+    db.seed('businessSupplyProjectionSnapshots', { _id: `snapshots:${suffix}`, _creationTime: index, businessId, sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current', updatedAt: index, status: 'current', projection: { business: { businessId, slug, name: `Business ${suffix}`, category: 'Emergency plumbing', businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' }, publicUrl: `/${slug}`, trustTier: 'claimed' }, offerings: [{ offering: { offeringRef: `offering:${suffix}`, revision: 1, name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'Emergency plumbing help for urgent pipe repairs.', serviceAreaSummary: 'Parramatta and nearby suburbs', price: { kind: 'fixed', amount: { currency: 'AUD', units: '18000', exponent: 2 }, taxTreatment: 'unstated' } }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }], sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current' } })
   }
 }
 
@@ -341,9 +341,23 @@ function seedRegistrySearchDocuments(db: FakeDb, count: number): void {
     db.seed('registrySearchDocuments', {
       _id: `registrySearchDocuments:${suffix}`,
       _creationTime: index,
+      documentId: `business-${suffix}__emergency-pipe-repair`,
+      schemaVersion: 'registry-search-document:v1',
       businessSlug: `business-${suffix}`,
+      offeringRef: `offering:${suffix}`,
+      businessName: `Business ${suffix}`,
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      categoryKey: 'emergency plumbing',
+      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
+      trustTier: 'claimed',
+      firstRequestMode: 'not_available_yet',
       placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
+      keywords: ['emergency', 'plumber', 'plumbing'],
       searchText: `business ${suffix} emergency pipe repair emergency plumbing plumber parramatta nsw`,
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+      generatedHash: `hash:registry-search-${suffix}`,
+      updatedAt: index,
       publicStatus: 'published',
     })
   }

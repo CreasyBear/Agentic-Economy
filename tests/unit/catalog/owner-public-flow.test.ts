@@ -20,7 +20,11 @@ describe('public owner claim flow', () => {
       kind: 'ok',
       catalog: {
         slug: 'parramatta-emergency-plumbing',
-        stateTerritory: 'NSW',
+        businessContext: {
+          kind: 'local_human',
+          suburb: 'Parramatta',
+          stateTerritory: 'NSW',
+        },
         offerings: [
           {
             name: 'Emergency pipe repair',
@@ -63,20 +67,26 @@ describe('public owner claim flow', () => {
   it('trims and publishes an owner-entered Australian phone, and rejects invalid shapes', () => {
     const published = submitPublicOwnerClaimFlow({
       ...publicOwnerDefaultClaimInput,
-      publishedPhone: '  +61 412 345 678  ',
+      businessContext: {
+        ...publicOwnerDefaultClaimInput.businessContext,
+        publishedPhone: '  +61 412 345 678  ',
+      },
     })
 
     expect(published).toMatchObject({
       kind: 'ok',
-      catalog: { publishedPhone: '+61 412 345 678' },
+      catalog: { businessContext: { publishedPhone: '+61 412 345 678' } },
     })
 
     expect(validatePublicOwnerClaimFlowInput({
       ...publicOwnerDefaultClaimInput,
-      publishedPhone: 'owner@example.test',
+      businessContext: {
+        ...publicOwnerDefaultClaimInput.businessContext,
+        publishedPhone: 'owner@example.test',
+      },
     })).toEqual({
       kind: 'invalid',
-      errors: [{ field: 'publishedPhone', message: 'Enter a valid Australian phone number.' }],
+      errors: [{ field: 'businessContext', message: 'Enter a valid Australian phone number.' }],
     })
   })
 
@@ -102,8 +112,11 @@ describe('public owner claim flow', () => {
 
     const result = submitPublicOwnerClaimFlow({
       ...confirmed.input,
-      suburb: 'Preston',
-      stateTerritory: 'VIC',
+      businessContext: {
+        kind: 'local_human',
+        suburb: 'Preston',
+        stateTerritory: 'VIC',
+      },
       serviceArea: 'Preston and nearby suburbs',
       hoursOrUnknown: 'Owner confirmed hours are not listed yet',
       noContactReason: 'Owner has not supplied public contact instructions.',

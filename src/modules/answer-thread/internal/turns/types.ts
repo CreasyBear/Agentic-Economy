@@ -1,26 +1,30 @@
 import { createPrefixedRandomId } from '@/modules/common/random-id'
 
 import {
+  type AnswerToolUseAgentCheckpoint,
   buildAnswerTurnProblem,
   type AnswerEvent,
   type AnswerSnapshot,
   type AnswerSource,
+  type AnswerOperationCandidate,
   type AnswerTurnProblem,
   type AnswerWorkStep,
   computeLayoutProfile,
 } from '@/modules/answer/public'
 import type { HarnessModelRequestRecord } from '@/modules/harness/public'
 import type { AeSearchContext } from '@/modules/answer/search-context'
-
 import type {
+  AnswerOperationInvokeContext,
+  AnswerTurnCheckpoint,
+  AnswerTurnOperationArtifacts,
   AnswerRunGateSummary,
   AnswerToolCallRecord,
   AnswerTurnTimingEntry,
   FollowUpIntent,
 } from '../../answer-thread.schema'
-import type { FinalizeAnswerTurnSnapshotResult } from '../answer-turn-safety'
 import { ANSWER_SEARCH_PROVIDER_LIMIT } from '../answer-response-planner'
 import type { LiveAnswerHarnessOperation } from '../answer-harness-operation'
+import type { FinalizeAnswerTurnSnapshotResult } from '../answer-turn-safety'
 
 export const DEFAULT_TURN_PROVIDER_LIMIT = ANSWER_SEARCH_PROVIDER_LIMIT
 
@@ -55,6 +59,7 @@ export type TurnPathResult = {
   errorCopyId: string | undefined
   errorProblem?: AnswerTurnProblem
   gate: AnswerRunGateSummary | undefined
+  operationArtifacts?: AnswerTurnOperationArtifacts
   assembly?: SnapshotAssemblyPlan
 }
 
@@ -79,12 +84,15 @@ export type TurnTimingCollector = {
   ) => void
   entries: () => readonly AnswerTurnTimingEntry[]
 }
-
 export type TurnPathContext = {
   sessionId: string
   threadId: string
   turnId: string
+  reservationKey: string
+  requestDigest: string
+  generation: number
   sourceWriteRequest: Request | undefined
+  sourceWriteBody: string | Uint8Array | undefined
   query: string
   /** Canonical query used for a fresh registry search; display query stays user-authored. */
   registryQuery?: string
@@ -92,8 +100,12 @@ export type TurnPathContext = {
   priorTurnsCount: number
   priorProviders: AnswerSource[]
   priorAllowedSlugs: readonly string[]
+  operationCandidates: readonly AnswerOperationCandidate[]
   searchContext: AeSearchContext | undefined
   signal: AbortSignal | undefined
+  operationInvokeContext?: AnswerOperationInvokeContext
+  resumeCheckpoint?: AnswerTurnCheckpoint
+  persistCheckpoint?: (checkpoint: AnswerToolUseAgentCheckpoint) => Promise<void>
   send: (event: AnswerEvent) => void
   timings: TurnTimingCollector
   workLog: WorkStepEmitter

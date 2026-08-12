@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+
 import {
   CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY,
   CUSTOMER_REQUEST_AGENT_BEARER_METHOD,
@@ -13,20 +15,19 @@ import { bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oaut
 import {
   buildOfferingLlmsTxt,
   buildPublicAgentSkillMarkdown,
-  buildSiteBriefMarkdown,
   buildSiteDiscoveryManifest,
 } from '@/modules/discovery/public'
 
 const canonicalBaseUrl = 'https://ae.example'
 const modeScopes = CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.map(customerRequestScopeForMode)
 const requiredScopes = [CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope, ...modeScopes]
+const oauthScopes = [MARKET_OPERATIONS_INVOKE_SCOPE, ...requiredScopes]
 const authSummary = CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY
 
 const schema = buildCustomerRequestContractSchema()
 const manifest = buildSiteDiscoveryManifest({ canonicalBaseUrl, now: 1_700_000_000_000 })
 const llms = buildOfferingLlmsTxt([], { canonicalBaseUrl }).body
 const skill = buildPublicAgentSkillMarkdown({ canonicalBaseUrl })
-const siteBrief = buildSiteBriefMarkdown({ canonicalBaseUrl })
 const metadata = oauthProtectedResourceMetadata(canonicalBaseUrl)
 
 function customerRequestSubmitEndpoint() {
@@ -46,21 +47,18 @@ describe('Customer Request public authentication parity', () => {
     expect(schema.entrypoint.requiredScope).toBe(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope)
     expect(manifest.customerRequest.authentication).toBe(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication)
     expect(customerRequestSubmitEndpoint().authentication).toBe(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication)
+    expect(manifest.operationGateway.scope).toBe(MARKET_OPERATIONS_INVOKE_SCOPE)
 
-    for (const scope of requiredScopes) {
-      expect(llms).toContain(scope)
-      expect(skill).toContain(scope)
-    }
-    expect(llms).toContain(`auth=${authSummary}`)
-    expect(skill).toContain(authSummary)
-    expect(siteBrief).toContain(`${authSummary} with \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\``)
+    expect(skill).toContain(MARKET_OPERATIONS_INVOKE_SCOPE)
+    expect(llms).toContain(MARKET_OPERATIONS_INVOKE_SCOPE)
+    expect(skill).toContain('Authorization: Bearer $AE_API_KEY')
 
     expect(metadata).toMatchObject({
       bearer_methods_supported: [CUSTOMER_REQUEST_AGENT_BEARER_METHOD],
-      scopes_supported: requiredScopes,
+      scopes_supported: oauthScopes,
     })
     expect(bearerChallenge(canonicalBaseUrl)).toBe(
-      `Bearer resource_metadata="${canonicalBaseUrl}/.well-known/oauth-protected-resource", scope="${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}"`,
+      `Bearer resource_metadata="${canonicalBaseUrl}/.well-known/oauth-protected-resource", scope="${MARKET_OPERATIONS_INVOKE_SCOPE}"`,
     )
     for (const mode of CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES) {
       expect(bearerChallenge(canonicalBaseUrl, customerRequestScopeForMode(mode))).toContain(
@@ -68,7 +66,7 @@ describe('Customer Request public authentication parity', () => {
       )
     }
 
-    for (const surface of [llms, skill, siteBrief]) {
+    for (const surface of [llms, skill]) {
       expect(surface).not.toContain('ae_api_key')
       expect(surface).not.toContain('Bearer AE API key')
     }

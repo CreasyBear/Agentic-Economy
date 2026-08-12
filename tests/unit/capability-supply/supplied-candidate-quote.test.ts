@@ -22,6 +22,7 @@ import {
 } from '@/modules/capability-supply/internal/binding'
 import type {
   CapabilityGraphPorts,
+  GraphCatalogAccessPath,
   GraphPublicationRow,
 } from '@/modules/capability-supply/internal/graph'
 import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
@@ -49,6 +50,7 @@ import {
   type SuppliedCandidateQuoteResult,
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { pricingConfigDigest } from '@/modules/money/public'
 import { resolveActionContract } from '@/modules/common/action'
 import {
   type ActionInvocationOrigin,
@@ -93,6 +95,7 @@ const contract = defineCapabilityContract(capabilityContractV2({
 const candidate = {
   publicationRef: 'dev:publication',
   revision: 3,
+  networkId: 'ae:public',
   businessId: 'dev:business',
   offeringId: 'dev:offering',
   bindingId: 'dev:binding',
@@ -104,6 +107,42 @@ const operationRef = createPublicOperationRef({
   publicationRevision: candidate.revision,
   contractRef: contract.ref,
 })
+const catalogOrigin = {
+  kind: 'catalog_offering' as const,
+  offeringRef: 'catalog-offering:development-quote',
+  offeringRevision: 2,
+  offeringSourceHash: canonicalDigest({
+    fixture: 'catalog-offering-development-quote',
+    revision: 2,
+  }),
+  declaredAccessPathRef: 'catalog-access-path:development-quote',
+  accessPathSourceHash: canonicalDigest({
+    fixture: 'catalog-access-path-development-quote',
+  }),
+}
+const catalogAccessPath: GraphCatalogAccessPath = {
+  accessPathRef: catalogOrigin.declaredAccessPathRef,
+  businessId: candidate.businessId,
+  offeringRef: catalogOrigin.offeringRef,
+  offeringRevision: catalogOrigin.offeringRevision,
+  offeringSourceHash: catalogOrigin.offeringSourceHash,
+  status: 'published',
+  sourceHash: catalogOrigin.accessPathSourceHash,
+  descriptor: {
+    kind: 'external_operation',
+    name: 'Development quote',
+    summary: 'Fixture-only quote endpoint.',
+    url: 'https://development.invalid/quote',
+    method: 'POST',
+    provenance: 'business_declared',
+  },
+}
+const pricingConfig = {
+  version: 'pricing:v2' as const,
+  unit: 'call' as const,
+  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+}
+const priceDigest = pricingConfigDigest(pricingConfig)
 const providerConnectionCommand: CreateProviderConnectionCommand = {
   commandId: 'command:create:development-quote',
   connectionRef: 'connection:development',
@@ -132,10 +171,11 @@ const offeringRegistration = defineCapabilityOfferingRegistration({
   businessId: candidate.businessId,
   networkId: 'ae:public',
   contractRef: contract.ref,
+  origin: catalogOrigin,
   presentation: {
     label: 'Development quote provider',
     summary: 'Labelled fixture supply for quote collection evaluation.',
-    price: { kind: 'on_request' },
+    price: { kind: 'fixed', amount: pricingConfig.paidAmount },
     materialTerms: [],
     commercialRelationship: {
       kind: 'none',
@@ -161,7 +201,11 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   adapter: { adapterId: 'http-json:v1', config: null },
   registrationEvidenceRefs: ['dev:binding-registration'],
 })
-const admittedTransport = { configJson: 'null', configDigest: canonicalDigest(null) }
+const admittedTransportConfig = { method: 'POST' as const, requestTimeoutMs: 5_000 }
+const admittedTransport = {
+  configJson: JSON.stringify(admittedTransportConfig),
+  configDigest: canonicalDigest(admittedTransportConfig),
+}
 const origins: readonly ActionInvocationOrigin[] = [
   { kind: 'request_owned', requestRef: 'dev:request', revision: 4 },
   { kind: 'standalone', ...actor },
@@ -238,6 +282,8 @@ function publication(overrides: Partial<GraphPublicationRow> = {}): GraphPublica
     connectionAuthority,
     sourceKind: 'openapi_http',
     sourceDigest: canonicalDigest({ fixture: 'published quote capability' }),
+    pricingConfig,
+    priceDigest,
     disposition: 'current',
     credentialState: 'ready',
     healthState: 'healthy',
@@ -264,6 +310,17 @@ function qualificationPorts(overrides: Partial<CapabilityGraphPorts> = {}): Capa
       currentlyPublished: true,
     }),
     loadProviderConnection: async () => developmentProviderConnection(),
+    catalogOriginIsCurrent: async (origin, businessId) => (
+      businessId === candidate.businessId
+      && origin.offeringRef === catalogOrigin.offeringRef
+      && origin.offeringRevision === catalogOrigin.offeringRevision
+      && origin.offeringSourceHash === catalogOrigin.offeringSourceHash
+      && origin.declaredAccessPathRef === catalogOrigin.declaredAccessPathRef
+      && origin.accessPathSourceHash === catalogOrigin.accessPathSourceHash
+    ),
+    loadCatalogAccessPath: async (accessPathRef) => (
+      accessPathRef === catalogAccessPath.accessPathRef ? catalogAccessPath : null
+    ),
     getActiveExactCapabilityContract: async () => ({
       kind: 'found',
       ref: contract.ref,

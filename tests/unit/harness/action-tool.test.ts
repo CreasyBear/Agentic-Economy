@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { SOURCE_WRITE_NO_BODY_DIGEST } from '@/modules/security/source-write-admission'
+
 import { defineAction } from '@/modules/common/action'
 import {
   actionToHarnessTool,
@@ -128,9 +130,11 @@ describe('harness action tool adapter', () => {
       context: {
         sourceWriteRequest: {
           method: 'POST',
-          origin: 'https://example.test',
-          pathname: '/internal/answer-thread',
-          bodyDigest: 'none',
+          initiatorOrigin: 'https://example.test',
+          targetOrigin: 'https://example.test',
+          targetPath: '/internal/answer-thread',
+          targetQuery: '',
+          bodyDigest: SOURCE_WRITE_NO_BODY_DIGEST,
         },
       },
     })

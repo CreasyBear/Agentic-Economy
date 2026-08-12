@@ -10,13 +10,17 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import type { ActionAgentIdentity, ActionSourceWriteRequest } from '@/modules/common/action'
+import type { ActionAgentIdentity } from '@/modules/common/action'
 import { isRecord } from '@/modules/common/is-record'
 import { normalizeSlug } from '@/modules/common/normalize-slug'
-import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
+  SourceWriteAdmissionError,
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 import { resolvePublicRegistryInquiryTarget } from '@/modules/registry/registry.functions'
 import {
   type InquiryCustomerRecordReadback,
@@ -31,10 +35,6 @@ import {
   type PublicInquiryContactInput,
   type R1TargetAdmission,
 } from '@/modules/inquiries/public'
-import {
-  createLocalE2eInquiryServerBackend,
-  type LocalE2eInquiryServerBackend,
-} from './internal/local-e2e-adapter'
 import {
   buildSubmittedInquiryReceipt,
   type SubmittedInquiryReceipt,
@@ -117,6 +117,7 @@ type PublicInquirySubmitArgs = {
   }
   origin?: string
   sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
 }
 
 export type PublicTargetAdmissionReadResult =
@@ -220,6 +221,7 @@ type OwnerMutationArgs = {
   correlationId: string
   origin?: string
   sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
 }
 
 type OwnerReplyArgs = OwnerMutationArgs & {
@@ -340,8 +342,6 @@ export const closeCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
   .handler(async ({ data, context }) => closeCurrentOwnerInquiryThroughSource(data, context))
 
-export type InquiryServerBackendKind = 'source' | 'local-e2e'
-
 export type InquiryServerBackend = Readonly<{
   submitPublicInquiry: (
     data: z.infer<typeof publicInquirySubmitSchema>,
@@ -375,54 +375,22 @@ export type InquiryServerBackend = Readonly<{
   ) => Promise<OwnerInquiryMutationServerResult>
 }>
 
+let inquiryServerBackendForTests: InquiryServerBackend | undefined
+
+export function setInquiryServerBackendForTests(port: InquiryServerBackend | undefined): () => void {
+  const previous = inquiryServerBackendForTests
+  inquiryServerBackendForTests = port
+  return () => {
+    inquiryServerBackendForTests = previous
+  }
+}
+
 export function resolveInquiryServerBackend(): InquiryServerBackend {
-  return createInquiryServerBackend(isLocalE2EAuthBypassEnabled() ? 'local-e2e' : 'source')
+  return inquiryServerBackendForTests ?? createSourceInquiryServerBackend()
 }
 
-export function createInquiryServerBackend(kind: InquiryServerBackendKind): InquiryServerBackend {
-  if (kind === 'local-e2e') {
-    return wrapLocalE2eInquiryServerBackend(createLocalE2eInquiryServerBackend())
-  }
+export function createInquiryServerBackend(): InquiryServerBackend {
   return createSourceInquiryServerBackend()
-}
-
-function wrapLocalE2eInquiryServerBackend(local: LocalE2eInquiryServerBackend): InquiryServerBackend {
-  return {
-    submitPublicInquiry: async (data, _context) => {
-      try {
-        const resolved = await resolvePublicInquiryTarget(data.target)
-        if (resolved.kind === 'error') {
-          return resolved
-        }
-        return local.submitPublicInquiry({
-          target: data.target,
-          body: data.body,
-          contact: compactContact(data.contact),
-          expectedDigest: data.expectedDigest,
-          ...(data.operationKey === undefined ? {} : { operationKey: data.operationKey }),
-          ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
-        }, resolved.target) as PublicInquirySubmitServerResult
-      } catch (error) {
-        return inquirySourceError(error)
-      }
-    },
-    readCustomerRecord: async (data) => local.readCustomerRecord(data) as CustomerInquiryRecordServerResult,
-    readCurrentOwnerInbox: async () => local.readCurrentOwnerInbox() as OwnerInboxServerResult,
-    readInquiryOperatorReconstruction: async (filter = {}) =>
-      local.readInquiryOperatorReconstruction(filter) as InquiryOperatorReconstructionServerResult,
-    readCurrentOwnerInquiryThread: async (threadId) =>
-      local.readCurrentOwnerInquiryThread(threadId) as OwnerInquiryThreadServerResult,
-    readPublicTargetAdmission: async (target) =>
-      local.readPublicTargetAdmission(target) as PublicTargetAdmissionReadResult,
-    readCurrentOwnerTargetAdmission: async (target) =>
-      local.readCurrentOwnerTargetAdmission(target) as OwnerTargetAdmissionReadResult,
-    markCurrentOwnerInquiryRead: async (data) =>
-      local.markCurrentOwnerInquiryRead(data) as OwnerInquiryMutationServerResult,
-    replyCurrentOwnerInquiry: async (data) =>
-      local.replyCurrentOwnerInquiry(data) as OwnerInquiryMutationServerResult,
-    closeCurrentOwnerInquiry: async (data) =>
-      local.closeCurrentOwnerInquiry(data) as OwnerInquiryMutationServerResult,
-  }
 }
 
 function createSourceInquiryServerBackend(): InquiryServerBackend {
@@ -437,14 +405,20 @@ function createSourceInquiryServerBackend(): InquiryServerBackend {
         const operationSuffix = data.operationKey ?? resolvePublicInquiryOperationSuffix(target, context)
         const operationKey = data.operationKey ?? `inquiry:${operationSuffix}`
         const correlationId = `correlation:${normalizeOperationPart(operationSuffix)}`
-        const result = await callPublicSourceMutation(submitPublicInquiryMutation, {
+        const command = {
           target,
           body: data.body,
           contact: compactContact(data.contact),
           expectedDigest: data.expectedDigest,
           ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
           pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
-          ...(await browserMutationAdmission(context, 'public_inquiry', operationKey, correlationId)),
+          origin: resolveCanonicalBaseUrl().baseUrl,
+          operationKey,
+          correlationId,
+        }
+        const result = await callPublicSourceMutation(submitPublicInquiryMutation, {
+          ...command,
+          ...(await browserMutationAdmission(context, 'public_inquiry', operationKey, correlationId, command)),
         })
 
         if (result.kind === 'error') {
@@ -551,10 +525,16 @@ function createSourceInquiryServerBackend(): InquiryServerBackend {
         const operationSuffix = `${normalizeOperationPart(data.threadId)}:${crypto.randomUUID()}`
         const operationKey = `inquiry:${operationSuffix}:read`
         const correlationId = `correlation:${operationSuffix}:read`
-        return await callSourceMutation(markReadOwnerInquiryMutation, {
+        const command = {
           threadId: data.threadId,
           expectedVersion: data.expectedVersion,
-          ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId)),
+          origin: resolveCanonicalBaseUrl().baseUrl,
+          operationKey,
+          correlationId,
+        }
+        return await callSourceMutation(markReadOwnerInquiryMutation, {
+          ...command,
+          ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId, command)),
         })
       } catch (error) {
         return ownerSourceError(error)
@@ -565,11 +545,17 @@ function createSourceInquiryServerBackend(): InquiryServerBackend {
         const operationSuffix = `${normalizeOperationPart(data.threadId)}:${crypto.randomUUID()}`
         const operationKey = `inquiry:${operationSuffix}:reply`
         const correlationId = `correlation:${operationSuffix}:reply`
-        return await callSourceMutation(replyOwnerInquiryMutation, {
+        const command = {
           threadId: data.threadId,
           expectedVersion: data.expectedVersion,
           body: data.body,
-          ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId)),
+          origin: resolveCanonicalBaseUrl().baseUrl,
+          operationKey,
+          correlationId,
+        }
+        return await callSourceMutation(replyOwnerInquiryMutation, {
+          ...command,
+          ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId, command)),
         })
       } catch (error) {
         return ownerSourceError(error)
@@ -580,10 +566,16 @@ function createSourceInquiryServerBackend(): InquiryServerBackend {
         const operationSuffix = `${normalizeOperationPart(data.threadId)}:${crypto.randomUUID()}`
         const operationKey = `inquiry:${operationSuffix}:close`
         const correlationId = `correlation:${operationSuffix}:close`
-        return await callSourceMutation(closeOwnerInquiryMutation, {
+        const command = {
           threadId: data.threadId,
           expectedVersion: data.expectedVersion,
-          ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId)),
+          origin: resolveCanonicalBaseUrl().baseUrl,
+          operationKey,
+          correlationId,
+        }
+        return await callSourceMutation(closeOwnerInquiryMutation, {
+          ...command,
+          ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId, command)),
         })
       } catch (error) {
         return ownerSourceError(error)
@@ -801,8 +793,8 @@ function resolvePublicInquiryOperationSuffix(
   context: unknown,
 ): string {
   const agentIdentity = actionAgentIdentityFromContext(context)
-  const sourceWriteRequest = actionSourceWriteRequestFromContext(context)
-  if (agentIdentity === undefined || sourceWriteRequest === undefined) {
+  const sourceWriteBodyDigest = actionSourceWriteBodyDigestFromContext(context)
+  if (agentIdentity === undefined || sourceWriteBodyDigest === undefined) {
     return `${normalizeOperationPart(target.businessId)}:${crypto.randomUUID()}`
   }
 
@@ -812,7 +804,7 @@ function resolvePublicInquiryOperationSuffix(
     'agent',
     normalizeOperationPart(agentIdentity.signatureAgent),
     normalizeOperationPart(agentIdentity.keyid),
-    normalizeOperationPart(sourceWriteRequest.bodyDigest),
+    normalizeOperationPart(sourceWriteBodyDigest),
   ].join(':')
 }
 
@@ -834,21 +826,18 @@ function actionAgentIdentityFromContext(context: unknown): ActionAgentIdentity |
     : undefined
 }
 
-function actionSourceWriteRequestFromContext(context: unknown): ActionSourceWriteRequest | undefined {
+function actionSourceWriteBodyDigestFromContext(context: unknown): string | undefined {
   if (!isRecord(context) || !isRecord(context.sourceWriteRequest)) {
     return undefined
   }
   const request = context.sourceWriteRequest
   return typeof request.method === 'string' &&
-    typeof request.origin === 'string' &&
-    typeof request.pathname === 'string' &&
+    typeof request.initiatorOrigin === 'string' &&
+    typeof request.targetOrigin === 'string' &&
+    typeof request.targetPath === 'string' &&
+    typeof request.targetQuery === 'string' &&
     typeof request.bodyDigest === 'string'
-    ? {
-        method: request.method,
-        origin: request.origin,
-        pathname: request.pathname,
-        bodyDigest: request.bodyDigest,
-      }
+    ? request.bodyDigest
     : undefined
 }
 
@@ -871,18 +860,19 @@ async function browserMutationAdmission(
   context: unknown,
   scope: 'public_inquiry' | 'owner_inquiry',
   operationKey: string,
-  correlationId: string
+  correlationId: string,
+  command: Readonly<Record<string, unknown>>,
 ) {
-  return {
-    origin: resolveCanonicalBaseUrl().baseUrl,
-    sourceWrite: await sourceWriteAdmissionFromContext({
-      context,
-      scope,
-      operationKey,
-      correlationId,
-    }),
+  const sourceWrite = await sourceWriteAdmissionFromContext({
+    context,
+    command,
+    scope,
     operationKey,
     correlationId,
+  })
+  return {
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
   }
 }
 

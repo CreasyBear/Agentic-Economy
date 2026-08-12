@@ -12,7 +12,7 @@ const validStart = {
   projectId: 'project:action',
   studyNodeId: 'study-node:one',
   targetDecisionNodeId: 'decision-node:one',
-  studyBrief: 'Compare labelled development supply.',
+  studyBrief: 'Compare published business options.',
   criteriaFromCharter: ['price'],
   charter,
   operationKey: 'study:start:one',
@@ -23,49 +23,29 @@ const validStart = {
 }
 
 describe('Study registered action seams', () => {
-  it('registers start, inspect, and complete as distinct public actions', () => {
+  it('registers start and inspect as distinct public actions', () => {
     const ids = listActions().map((action) => action.id)
-    expect(ids).toEqual(expect.arrayContaining(['study.start', 'study.inspect', 'study.complete']))
+    expect(ids).toEqual(expect.arrayContaining(['study.start', 'study.inspect']))
 
     const start = findAction('study.start')
     const inspect = findAction('study.inspect')
-    const complete = findAction('study.complete')
     expect(start?.readOnly).toBe(false)
     expect(inspect?.readOnly).toBe(true)
-    expect(complete?.readOnly).toBe(false)
     expect(inspect?.outputSchema.safeParse({ kind: 'not_found' }).success).toBe(true)
     expect(start?.parameters.map(({ name }) => name)).toEqual(expect.arrayContaining([
       'studyNodeId', 'targetDecisionNodeId', 'expectedGeneration', 'expectedRevision', 'proposalDigest',
     ]))
-    expect(complete?.parameters.map(({ name }) => name)).toEqual(expect.arrayContaining([
-      'studyNodeId', 'targetDecisionNodeId', 'generation', 'treeRevision', 'expectedStudyRevision',
-    ]))
   })
 
-  it('keeps the Study API generic and makes recommendation a decision-inbox proposal', () => {
+  it('keeps the Study API generic and leaves completion out of the registry', () => {
     const start = findAction('study.start')
-    const complete = findAction('study.complete')
+    const inspect = findAction('study.inspect')
     expect(start).toBeDefined()
-    expect(complete).toBeDefined()
-    if (start === undefined || complete === undefined) return
+    expect(inspect).toBeDefined()
+    if (start === undefined || inspect === undefined) return
 
     expect(start.schema.safeParse(validStart).success).toBe(true)
     expect(start.schema.safeParse({ ...validStart, categoryQuote: { provider: 'fixture' } }).success).toBe(false)
-    expect(complete.schema.safeParse({
-      studyId: 'study:action:one',
-      projectId: 'project:action',
-      studyNodeId: 'study-node:one',
-      targetDecisionNodeId: 'decision-node:one',
-      generation: 1,
-      treeRevision: 2,
-      expectedStudyRevision: 1,
-      operationKey: 'study:complete:one',
-      correlationId: 'study:complete:one',
-      charter,
-      requestedAt: 10_000,
-      photographerQuote: { provider: 'fixture' },
-    }).success).toBe(false)
-    expect(complete.boundaries.join(' ')).toMatch(/propos|never auto-lock|does not.*lock/i)
-    expect(complete.invocationContract?.safeContinuations.join(' ')).toMatch(/inbox|lock/i)
+    expect(findAction('study.complete')).toBeUndefined()
   })
 })

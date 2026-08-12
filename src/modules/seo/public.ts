@@ -26,7 +26,7 @@ export type PublicBusinessSeoOffering = Pick<
 
 export type PublicBusinessSeoCatalog = Pick<
   PublicBusinessCatalogApiV2Dto,
-  'slug' | 'name' | 'category' | 'suburb' | 'stateTerritory'
+  'slug' | 'name' | 'category' | 'businessContext'
 > & {
   offerings: readonly PublicBusinessSeoOffering[]
 }

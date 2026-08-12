@@ -2,13 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
-import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
-import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
+import { handleUcpManifestRequest, handleLlmsTxtRequest, handleSitemapXmlRequest } from '../helpers/discovery-fixture-routes'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
-import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
-import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 
 describe('canonical base URL resolution', () => {
   it('prefers configured canonical base URL over an allowlisted request origin', async () => {
@@ -33,6 +31,33 @@ describe('canonical base URL resolution', () => {
     })
   })
 
+  it('uses a localhost request origin on a dynamic port outside production', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'development' }, () => {
+      expect(resolveCanonicalBaseUrl(new Request('http://localhost:5173/llms.txt'))).toEqual({
+        kind: 'loopback-origin',
+        baseUrl: 'http://localhost:5173',
+      })
+    })
+  })
+
+  it('uses a 127.0.0.1 request origin on a dynamic port outside production', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'development' }, () => {
+      expect(resolveCanonicalBaseUrl(new Request('http://127.0.0.1:4173/sitemap.xml'))).toEqual({
+        kind: 'loopback-origin',
+        baseUrl: 'http://127.0.0.1:4173',
+      })
+    })
+  })
+
+  it('uses the IPv6 loopback request origin on a dynamic port outside production', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'development' }, () => {
+      expect(resolveCanonicalBaseUrl(new Request('http://[::1]:5174/robots.txt'))).toEqual({
+        kind: 'loopback-origin',
+        baseUrl: 'http://[::1]:5174',
+      })
+    })
+  })
+
   it('rejects unlisted request hosts and falls back without using the placeholder domain', async () => {
     await withCanonicalEnv({}, () => {
       const result = resolveCanonicalBaseUrl(new Request('https://spoofed.example/robots.txt'))
@@ -52,6 +77,22 @@ describe('canonical base URL resolution', () => {
   it('fails closed in production when no canonical config or allowlisted request exists', async () => {
     await withCanonicalEnv({ NODE_ENV: 'production' }, () => {
       expect(() => resolveCanonicalBaseUrl()).toThrow('canonical_base_url_configuration_required')
+    })
+  })
+
+  it('fails closed in production even for a loopback request origin', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'production' }, () => {
+      expect(() => resolveCanonicalBaseUrl(new Request('http://localhost:5173/llms.txt'))).toThrow(
+        'canonical_base_url_configuration_required'
+      )
+    })
+  })
+
+  it('fails closed in production for an unlisted request host', async () => {
+    await withCanonicalEnv({ NODE_ENV: 'production' }, () => {
+      expect(() => resolveCanonicalBaseUrl(new Request('https://spoofed.example/robots.txt'))).toThrow(
+        'canonical_base_url_configuration_required'
+      )
     })
   })
 })
@@ -102,13 +143,13 @@ describe('canonical base URL route outputs', () => {
 })
 
 async function readSerializedPublicOutputs(origin: string): Promise<string> {
-  const state = createDefaultDiscoverySourceState()
+  const state = createFixtureDiscoverySourceState()
   const catalog = getDefaultPublicOwnerStatusReadback().catalog
 
   const llms = handleLlmsTxtRequest(new Request(`${origin}/llms.txt`))
   const sitemap = handleSitemapXmlRequest(new Request(`${origin}/sitemap.xml`))
   const robots = handleRobotsTxtRequest(new Request(`${origin}/robots.txt`))
-  const ucp = handleUcpManifestRequest(new Request(`${origin}/${catalog.slug}/ucp`), catalog.slug)
+  const ucp = handleUcpManifestRequest(new Request(`${origin}/${catalog.slug}/ucp`), catalog.slug, state)
   const schema = await handleDeveloperDiscoverySchemaRequest(new Request(`${origin}/api/discovery/schema`), state, {
     now: 0,
   })

@@ -7,6 +7,7 @@ import {
   handleAgentCustomerRequestMessagePost,
   handleAgentCustomerRequestPost,
 } from '@/lib/server/customer-request-agent-api'
+import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { customerRequestAgentResultSchema } from '@/modules/customer-request/agent-contract'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
@@ -15,14 +16,14 @@ const authenticate = async () => ({
   isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_agent_1', subject: 'user_1',
   userId: 'user_1', orgId: null, scopes: ['customer_requests:create'],
 })
-
+const resolvePrincipal = async (principal: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => principal
 describe('agent-native customer Request API', () => {
   it('returns the shared sensitive-input refusal without calling the application', async () => {
     const callAction = vi.fn()
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
       idempotencyKey: 'submit:sensitive', requestRef: 'request:agent:sensitive', agentRef: 'agent:test',
       request: 'Find the cheapest option. Card: 4242 4242 4242 4242; password is synthetic-password.',
-    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
     expect(response.status).toBe(422)
     expect(callAction).not.toHaveBeenCalled()
@@ -44,7 +45,7 @@ describe('agent-native customer Request API', () => {
     })
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
       idempotencyKey: 'submit:1', requestRef: 'request:agent:1', agentRef: 'caller-controlled', request: 'Find an option',
-    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
     expect(response.status).toBe(200)
     const called = calls[0]
     expect(called?.name).toBe('customerRequestApplication:submit')
@@ -72,8 +73,8 @@ describe('agent-native customer Request API', () => {
           : undefined,
       }
     }
-    const resumedResponse = await handleAgentCustomerRequestGet('request:agent:1', {
-      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
+    const resumedResponse = await handleAgentCustomerRequestGet(getRequest('/api/v1/requests/request:agent:1'), 'request:agent:1', {
+      authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })
     expect(resumedResponse.status).toBe(200)
     await expect(resumedResponse.json()).resolves.toMatchObject({
@@ -82,7 +83,7 @@ describe('agent-native customer Request API', () => {
     expect((await handleAgentCustomerOptionsPost(request('/options', {
       revision: 1, idempotencyKey: 'prepare:1',
     }), 'request:agent:1', {
-      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
+      authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })).status).toBe(200)
     expect(calls.map(({ name }) => name)).toEqual(['customerRequestApplication:resume', 'customerRequestApplication:compare'])
     const { serviceAuth, ...command } = calls[1]?.args ?? {}
@@ -105,7 +106,7 @@ describe('agent-native customer Request API', () => {
       expectedRevision: 1,
       message: 'Arrival before 09:00 is now immovable.',
       replacesPriorStatement: 'Arrival before 08:00 is immovable.',
-    }), 'request:1', { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    }), 'request:1', { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
     expect(response.status).toBe(200)
     const [name, calledArgs] = callAction.mock.calls[0] ?? []
     expect(name).toBe('customerRequestApplication:refine')
@@ -127,7 +128,7 @@ describe('agent-native customer Request API', () => {
     const response = await handleAgentCustomerRequestFactsPost(request('/api/v1/requests/request:1/facts', {
       idempotencyKey: 'facts:1', expectedRevision: 1,
       requirementKey: 'requirement:opaque', value: { destination: '6000' },
-    }), 'request:1', { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    }), 'request:1', { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -170,7 +171,7 @@ describe('agent-native customer Request API', () => {
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
       idempotencyKey: 'submit:cold', requestRef: 'request:agent:cold', agentRef: 'cold-agent',
       request: 'Find the cheapest sandbox option.',
-    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
     expect(response.status).toBe(200)
     const body = await response.json()
@@ -202,7 +203,7 @@ describe('agent-native customer Request API', () => {
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
       idempotencyKey: 'submit:retry', requestRef: 'request:agent:retry', agentRef: 'cold-agent',
       request: 'Find a labelled sandbox option.',
-    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
     expect(response.status).toBe(200)
     const body = await response.json() as { navigation: { actions: unknown[] } }
@@ -242,8 +243,8 @@ describe('agent-native customer Request API', () => {
       },
     }))
 
-    const response = await handleAgentCustomerRequestGet('request:agent:partial', {
-      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
+    const response = await handleAgentCustomerRequestGet(getRequest('/api/v1/requests/request:agent:partial'), 'request:agent:partial', {
+      authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })
     expect(response.status).toBe(200)
     expect(customerRequestAgentResultSchema.parse(await response.json())).toMatchObject({
@@ -267,22 +268,51 @@ describe('agent-native customer Request API', () => {
     })
   })
 
+  it.each(['missing', 'revoked', 'stale_generation'] as const)(
+    'refuses a live Clerk key when the durable grant is %s before application dispatch',
+    async (grantState) => {
+      const callAction = vi.fn()
+      const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
+        idempotencyKey: `submit:grant:${grantState}`,
+        requestRef: `request:grant:${grantState}`,
+        agentRef: 'agent:test',
+        request: 'Find an option',
+      }), {
+        authenticate,
+        resolvePrincipal: async () => null,
+        callAction,
+      })
+
+      expect(response.status).toBe(403)
+      await expect(response.json()).resolves.toMatchObject({ code: 'scope_required' })
+      expect(callAction).not.toHaveBeenCalled()
+    },
+  )
+
   it('returns 401 for missing keys and 403 for unscoped keys before Convex', async () => {
     const callAction = vi.fn()
-    const missing = await handleAgentCustomerRequestGet('request:1', {
-      authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }), callAction,
+    const missing = await handleAgentCustomerRequestGet(getRequest('/api/v1/requests/request:1'), 'request:1', {
+      authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
+      resolvePrincipal, callAction,
     })
-    const unscoped = await handleAgentCustomerRequestGet('request:1', {
-      authenticate: async () => ({ isAuthenticated: true, tokenType: 'api_key', id: 'ak_1', subject: 'user_1', scopes: [] }), callAction,
+    const unscoped = await handleAgentCustomerRequestGet(getRequest('/api/v1/requests/request:1'), 'request:1', {
+      authenticate: async () => ({ isAuthenticated: true, tokenType: 'api_key', id: 'ak_1', subject: 'user_1', scopes: [] }),
+      resolvePrincipal, callAction,
     })
     expect(missing.status).toBe(401)
     expect(unscoped.status).toBe(403)
     expect(callAction).not.toHaveBeenCalled()
   })
+
 })
 
 function request(path: string, body: unknown): Request {
   return new Request(`https://ae.test${path}`, {
     method: 'POST', headers: { Authorization: 'Bearer ak_test_secret', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+}
+function getRequest(path: string): Request {
+  return new Request(`https://ae.test${path}`, {
+    headers: { Authorization: 'Bearer ak_test_secret' },
   })
 }

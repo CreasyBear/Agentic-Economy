@@ -1,3 +1,4 @@
+import type { BusinessContext } from '@/modules/business/public'
 import type { SourceHash } from '@/modules/common/ids'
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import type { FunnelEventType, OperatorControlReadback } from '@/modules/observability/public'
@@ -18,7 +19,6 @@ import type {
   DiscoveryStatus,
 } from '@/modules/discovery/public'
 import { readDiscoveryHealth as readDiscoveryHealthImpl } from './internal/manifest-attempts'
-import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 
 export const DeveloperDiscoverySchemaVersion = 'developer-discovery:v1' as const
 export type DeveloperDiscoverySchemaVersion = typeof DeveloperDiscoverySchemaVersion
@@ -103,7 +103,6 @@ export type DiscoveryProjectionGateResult =
 export const DeveloperDiscoveryArtifactKindValues = [
   'public_catalog_schema',
   'public_catalog_examples',
-  'public_catalog_fixture_bundle',
 ] as const
 export type DeveloperDiscoveryArtifactKind = (typeof DeveloperDiscoveryArtifactKindValues)[number]
 
@@ -127,7 +126,7 @@ export const DeveloperDiscoveryFetchStatusValues = [
 ] as const
 export type DeveloperDiscoveryFetchStatus = (typeof DeveloperDiscoveryFetchStatusValues)[number]
 
-export const DeveloperDiscoveryFetchKindValues = ['docs', 'schema', 'examples', 'fixtures', 'health'] as const
+export const DeveloperDiscoveryFetchKindValues = ['docs', 'schema', 'examples', 'health'] as const
 export type DeveloperDiscoveryFetchKind = (typeof DeveloperDiscoveryFetchKindValues)[number]
 
 export const DeveloperDiscoveryBotClassValues = ['human', 'known_bot', 'unknown_bot', 'internal_probe'] as const
@@ -137,13 +136,11 @@ export type DeveloperDiscoveryCanonicalFunnelEvent = Extract<
   FunnelEventType,
   'developer_docs_viewed' | 'schema_downloaded' | 'example_fixture_downloaded' | 'discovery_health_viewed'
 >
-
 export type DeveloperDiscoveryPublicCatalogFact = {
   slug: string
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
+  businessContext: BusinessContext
   publicUrl: string
   schemaVersion: PublicBusinessCatalogApiV2Dto['schemaVersion']
   disposition: PublicBusinessCatalogApiV2Dto['disposition']
@@ -274,21 +271,10 @@ export type DeveloperDiscoveryExamplesArtifact = DeveloperDiscoveryArtifactBase 
   emptyExample: PublicBusinessCatalogApiV2Page
 }
 
-export type DeveloperDiscoveryFixtureBundleArtifact = DeveloperDiscoveryArtifactBase & {
-  kind: 'public_catalog_fixture_bundle'
-  schema: DeveloperDiscoverySchemaArtifact
-  examples: readonly PublicBusinessCatalogApiV2Dto[]
-  supportMatrix: readonly DiscoverySupportMatrixRow[]
-  gatedExclusions: readonly DiscoveryGatedExclusion[]
-  routeHealth: readonly DeveloperDiscoveryRouteHealth[]
-  p2InquiryAvailability: P2InquiryAvailabilityPublicStatus
-  unsupportedCapabilities: readonly DeveloperDiscoveryUnsupportedCapability[]
-}
 
 export type DeveloperDiscoveryArtifact =
   | DeveloperDiscoverySchemaArtifact
   | DeveloperDiscoveryExamplesArtifact
-  | DeveloperDiscoveryFixtureBundleArtifact
 
 export type DeveloperDiscoveryFetchEvent = {
   route: string
@@ -409,10 +395,13 @@ const developerDiscoverySchemaFields = [
   'slug',
   'name',
   'category',
-  'suburb',
-  'stateTerritory',
-  'publishedPhone',
-  'postcode',
+  'businessContext.kind',
+  'businessContext.suburb',
+  'businessContext.stateTerritory',
+  'businessContext.postcode',
+  'businessContext.publishedPhone',
+  'businessContext.website',
+  'businessContext.providerIdentifier',
   'publicUrl',
   'trustTier',
   'responseTimeMinutes',
@@ -458,12 +447,6 @@ export const DeveloperDiscoveryArtifacts = [
     downloadLabel: 'Download examples JSON',
     route: '/api/discovery/examples',
   },
-  {
-    kind: 'public_catalog_fixture_bundle',
-    label: 'Public catalog fixture bundle',
-    downloadLabel: 'Download fixture bundle',
-    route: '/api/discovery/fixtures',
-  },
 ] as const
 
 export const DeveloperDiscoveryUnsupportedCapabilities = [
@@ -495,17 +478,18 @@ export const DeveloperDiscoveryUnsupportedCapabilities = [
 ] as const satisfies readonly DeveloperDiscoveryUnsupportedCapability[]
 
 const developerDiscoveryCacheVersion = 'public-catalog-readonly-cache:v1' as const
-const developerDiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const satisfies readonly DiscoveryStatus[]
-
 const developerDiscoverySchemaFieldDefinitions: readonly DeveloperDiscoverySchemaField[] = [
   { path: 'businessId', required: true, nullable: false },
   { path: 'slug', required: true, nullable: false },
   { path: 'name', required: true, nullable: false },
   { path: 'category', required: true, nullable: false },
-  { path: 'suburb', required: true, nullable: false },
-  { path: 'stateTerritory', required: true, nullable: false },
-  { path: 'publishedPhone', required: false, nullable: false },
-  { path: 'postcode', required: false, nullable: false },
+  { path: 'businessContext.kind', required: true, nullable: false, values: ['local_human', 'programmable_provider'] },
+  { path: 'businessContext.suburb', required: false, nullable: false },
+  { path: 'businessContext.stateTerritory', required: false, nullable: false },
+  { path: 'businessContext.postcode', required: false, nullable: false },
+  { path: 'businessContext.publishedPhone', required: false, nullable: false },
+  { path: 'businessContext.website', required: false, nullable: false },
+  { path: 'businessContext.providerIdentifier', required: false, nullable: false },
   { path: 'publicUrl', required: true, nullable: false },
   { path: 'trustTier', required: true, nullable: false, values: ['claimed', 'contact_confirmed', 'listed', 'registry_verified'] },
   { path: 'responseTimeMinutes', required: false, nullable: false },
@@ -575,8 +559,8 @@ export function createDeveloperDiscoverySupportRecord(
       },
       {
         channel: 'schema_examples',
-        trigger: 'Generated schema, examples, or fixtures drift from public catalog DTO parity.',
-        action: 'Withhold schema/examples/fixtures until route parity is repaired.',
+        trigger: 'Generated schema or examples drift from public catalog DTO parity.',
+        action: 'Withhold schema/examples until route parity is repaired.',
       },
       {
         channel: 'bot_abuse_response',
@@ -752,21 +736,32 @@ export function mapDeveloperDiscoveryRouteExecutions(
 }
 
 export function readDeveloperDiscoveryRoute(
-  state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl(),
+  state: DiscoverySourceState | undefined,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): DeveloperDiscoveryRouteReadback {
   const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl ?? 'https://ae.example')
   const publicationControls = readDeveloperDiscoveryPublicationControls(options.operatorControls)
-  const routeHealth =
-    options.routeSnapshot === undefined
-      ? fallbackDeveloperDiscoveryRouteHealth(canonicalBaseUrl, options.now ?? 0, readDeveloperDiscoveryFreshnessFromFacts(readDeveloperDiscoveryCatalogFacts(state)))
-      : mapDeveloperDiscoveryRouteExecutions(options.routeSnapshot.routeExecutions)
-  const publicFacts =
-    options.routeSnapshot === undefined
-      ? readDeveloperDiscoveryCatalogFacts(state)
-      : readDeveloperDiscoveryCatalogFactsFromSnapshot(options.routeSnapshot)
+  const routeSnapshot = options.routeSnapshot
+  let routeHealth: readonly DeveloperDiscoveryRouteHealth[]
+  let publicFacts: readonly DeveloperDiscoveryPublicCatalogFact[]
+
+  if (routeSnapshot !== undefined) {
+    routeHealth = mapDeveloperDiscoveryRouteExecutions(routeSnapshot.routeExecutions)
+    publicFacts = readDeveloperDiscoveryCatalogFactsFromSnapshot(routeSnapshot)
+  } else {
+    if (state === undefined) {
+      throw new Error('Discovery source state or route snapshot is required.')
+    }
+    publicFacts = readDeveloperDiscoveryCatalogFacts(state)
+    routeHealth = fallbackDeveloperDiscoveryRouteHealth(
+      canonicalBaseUrl,
+      options.now ?? 0,
+      readDeveloperDiscoveryFreshnessFromFacts(publicFacts),
+    )
+  }
+
   const sourceFreshness =
-    options.routeSnapshot === undefined
+    routeSnapshot === undefined
       ? readDeveloperDiscoveryFreshnessFromFacts(publicFacts)
       : readDeveloperDiscoveryFreshnessFromRouteReadback(publicFacts, routeHealth)
   const freshness = publicationControls.developerDiscoveryPublishEnabled
@@ -820,21 +815,19 @@ export function readDeveloperDiscoveryRoute(
   }
 }
 
-export function readDeveloperDiscoveryFreshness(
-  state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl()
-): DeveloperDiscoveryFreshnessReadback {
+export function readDeveloperDiscoveryFreshness(state: DiscoverySourceState): DeveloperDiscoveryFreshnessReadback {
   return readDeveloperDiscoveryFreshnessFromFacts(readDeveloperDiscoveryCatalogFacts(state))
 }
 
 export function readDeveloperDiscoveryRouteHealth(
-  state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl(),
+  state: DiscoverySourceState,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): readonly DeveloperDiscoveryRouteHealth[] {
   return readDeveloperDiscoveryRoute(state, options).routeHealth
 }
 
 export function generateDeveloperDiscoverySchema(
-  state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl(),
+  state: DiscoverySourceState | undefined,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): DeveloperDiscoverySchemaArtifact {
   const readback = readDeveloperDiscoveryRoute(state, options)
@@ -861,19 +854,22 @@ export function generateDeveloperDiscoverySchema(
 }
 
 export function generateDeveloperDiscoveryExamples(
-  state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl(),
+  state: DiscoverySourceState | undefined,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): DeveloperDiscoveryExamplesArtifact {
   const readback = readDeveloperDiscoveryRoute(state, options)
   const base = artifactBase('public_catalog_examples', readback, '/api/discovery/examples')
+  const examples =
+    base.state === 'unavailable'
+      ? []
+      : options.routeSnapshot !== undefined
+        ? readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(options.routeSnapshot)
+        : state === undefined
+          ? []
+          : readDeveloperDiscoveryPublicRouteCatalogs(state)
   const artifact: DeveloperDiscoveryExamplesArtifact = {
     ...base,
-    examples:
-      base.state !== 'unavailable'
-        ? options.routeSnapshot === undefined
-          ? readDeveloperDiscoveryPublicRouteCatalogs(state)
-          : readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(options.routeSnapshot)
-        : [],
+    examples,
     emptyExample: {
       kind: 'ok',
       schemaVersion: 'public-business-catalog-api:v2',
@@ -888,29 +884,7 @@ export function generateDeveloperDiscoveryExamples(
     : withholdDeveloperDiscoveryArtifact(artifact, readback.freshness.reason)
 }
 
-export function generateDeveloperDiscoveryFixtureBundle(
-  state: DiscoverySourceState = createDefaultDiscoverySourceStateImpl(),
-  options: ReadDeveloperDiscoveryRouteOptions = {}
-): DeveloperDiscoveryFixtureBundleArtifact {
-  const readback = readDeveloperDiscoveryRoute(state, options)
-  const base = artifactBase('public_catalog_fixture_bundle', readback, '/api/discovery/fixtures')
-  const schema = generateDeveloperDiscoverySchema(state, options)
-  const examplesArtifact = generateDeveloperDiscoveryExamples(state, options)
-  const artifact: DeveloperDiscoveryFixtureBundleArtifact = {
-    ...base,
-    schema,
-    examples: examplesArtifact.examples,
-    supportMatrix: readback.supportMatrix,
-    gatedExclusions: readback.gatedExclusions,
-    routeHealth: readback.routeHealth,
-    p2InquiryAvailability: readback.p2InquiryAvailability,
-    unsupportedCapabilities: readback.unsupportedCapabilities,
-  }
 
-  return readback.publicationControls.developerDiscoveryPublishEnabled
-    ? artifact
-    : withholdDeveloperDiscoveryArtifact(artifact, readback.freshness.reason)
-}
 
 export function withholdDeveloperDiscoveryArtifact(
   artifact: DeveloperDiscoverySchemaArtifact,
@@ -920,10 +894,6 @@ export function withholdDeveloperDiscoveryArtifact(
   artifact: DeveloperDiscoveryExamplesArtifact,
   reason: string
 ): DeveloperDiscoveryExamplesArtifact
-export function withholdDeveloperDiscoveryArtifact(
-  artifact: DeveloperDiscoveryFixtureBundleArtifact,
-  reason: string
-): DeveloperDiscoveryFixtureBundleArtifact
 export function withholdDeveloperDiscoveryArtifact(
   artifact: DeveloperDiscoveryArtifact,
   reason: string
@@ -952,18 +922,6 @@ export function withholdDeveloperDiscoveryArtifact(
       }
     case 'public_catalog_examples':
       return { ...artifact, ...sharedBase, examples: [], emptyExample: artifact.emptyExample }
-    case 'public_catalog_fixture_bundle':
-      return {
-        ...artifact,
-        ...sharedBase,
-        schema: withholdDeveloperDiscoveryArtifact(artifact.schema, freshness.reason),
-        examples: [],
-        supportMatrix: artifact.supportMatrix,
-        gatedExclusions: artifact.gatedExclusions,
-        routeHealth: artifact.routeHealth,
-        p2InquiryAvailability: artifact.p2InquiryAvailability,
-        unsupportedCapabilities: artifact.unsupportedCapabilities,
-      }
   }
 }
 
@@ -1004,6 +962,9 @@ export function recordDeveloperDiscoveryFetch(input: {
 }
 
 export function renderDeveloperDiscoveryRouteCopy(readback: DeveloperDiscoveryRouteReadback): string {
+  const formatContext = (context: BusinessContext): string => context.kind === 'local_human'
+    ? `${context.suburb}, ${context.stateTerritory}`
+    : `${context.providerIdentifier} (${context.website})`
   return [
     readback.copy.eyebrow,
     readback.copy.title,
@@ -1025,7 +986,7 @@ export function renderDeveloperDiscoveryRouteCopy(readback: DeveloperDiscoveryRo
     ),
     ...readback.publicFacts.map(
       (fact) =>
-        `${fact.name} (${fact.slug}) — ${fact.category} in ${fact.suburb}, ${fact.stateTerritory}; disposition=${fact.disposition}; offerings=${fact.offeringCount}`
+        `${fact.name} (${fact.slug}) — ${fact.category} in ${formatContext(fact.businessContext)}; disposition=${fact.disposition}; offerings=${fact.offeringCount}`
     ),
     ...readback.artifacts.map(
       (artifact) =>
@@ -1314,8 +1275,7 @@ function toDeveloperDiscoveryFactFromApi(
     slug: catalog.slug,
     name: catalog.name,
     category: catalog.category,
-    suburb: catalog.suburb,
-    stateTerritory: catalog.stateTerritory,
+    businessContext: catalog.businessContext,
     publicUrl: catalog.publicUrl,
     schemaVersion: catalog.schemaVersion,
     disposition: catalog.disposition,
@@ -1357,7 +1317,7 @@ function readDeveloperDiscoveryFreshnessFromFacts(
   return {
     state: 'current',
     label: 'Discovery current',
-    reason: 'Public catalog, read path status, schema, examples, and fixture labels match current source state.',
+    reason: 'Public catalog, read path status, schema, and examples match current source state.',
   }
 }
 
@@ -1419,7 +1379,7 @@ function readDeveloperDiscoveryFreshnessFromRouteReadback(
   return {
     state: 'current',
     label: 'Discovery current',
-    reason: 'Public routes, schema versions, examples, and fixture labels match current route readback.',
+    reason: 'Public routes, schema versions, and examples match current route readback.',
   }
 }
 
@@ -1473,7 +1433,6 @@ function funnelEventForFetchKind(kind: DeveloperDiscoveryFetchKind): DeveloperDi
     case 'schema':
       return 'schema_downloaded'
     case 'examples':
-    case 'fixtures':
       return 'example_fixture_downloaded'
     case 'health':
       return 'discovery_health_viewed'

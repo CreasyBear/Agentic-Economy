@@ -17,11 +17,14 @@ import {
   PublicStatusValues,
   TrustTierValues,
   VisibilityTargetTypeValues,
+  canonicalProviderIdentifier,
+  canonicalProviderWebsite,
   suppressBusiness as suppressBusinessModule,
   unsuppressBusiness as unsuppressBusinessModule,
   validateOwnerPublishedPhone,
 } from '../src/modules/business/public'
-import type { BusinessMutationActor, BusinessRecord, BusinessSuppressionState } from '../src/modules/business/public'
+import type { BusinessContext, BusinessMutationActor, BusinessRecord, BusinessSuppressionState } from '../src/modules/business/public'
+import { businessContext as businessContextArg } from '../src/modules/business/public'
 import {
   ActorKindValues,
   AuditEventTypeValues,
@@ -51,6 +54,20 @@ const sourceRefResult = v.object({
   evidenceRef: v.string(),
   sourceHash: v.string(),
 })
+const businessContextResult = v.union(
+  v.object({
+    kind: v.literal('local_human'),
+    suburb: v.string(),
+    stateTerritory: v.string(),
+    postcode: v.optional(v.string()),
+    publishedPhone: v.optional(v.string()),
+  }),
+  v.object({
+    kind: v.literal('programmable_provider'),
+    website: v.string(),
+    providerIdentifier: v.string(),
+  }),
+)
 
 const ownerResult = v.object({
   ownerId: v.string(),
@@ -68,9 +85,7 @@ const businessResult = v.object({
   name: v.string(),
   normalizedName: v.string(),
   category: v.string(),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  publishedPhone: v.optional(v.string()),
+  businessContext: businessContextResult,
   publicStatus: v.union(v.literal('unpublished'), v.literal('published'), v.literal('suppressed')),
   trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
   claimStatus: v.union(
@@ -108,9 +123,7 @@ const claimResult = v.object({
 const contextResult = v.object({
   businessId: v.string(),
   category: v.string(),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  postcode: v.optional(v.string()),
+  businessContext: businessContextResult,
   ownerMessage: v.optional(v.string()),
   sourceRefs: v.array(sourceRefResult),
   sourceHash: v.string(),
@@ -196,10 +209,8 @@ export const claimBusiness = mutationGeneric({
   args: {
     name: v.string(),
     category: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
+    businessContext: businessContextArg,
     requestedSlug: v.string(),
-    publishedPhone: v.optional(v.string()),
     ownerMessage: v.optional(v.string()),
     sourceRefs: v.array(sourceRefArg),
     csrfToken: v.optional(v.string()),
@@ -497,7 +508,6 @@ function businessRecordFromSource(
   row: BusinessVisibilitySourceState['businesses'][number],
   db: GenericDatabaseWriter<DataModel>,
 ): BusinessRecord {
-  const publishedPhone = readOptionalString(row.publishedPhone)
   const suppressedAt = readOptionalNumber(row.suppressedAt)
   return {
     businessId: businessIdFromValue(db, row.businessId),
@@ -506,9 +516,7 @@ function businessRecordFromSource(
     name: readString(row.name, 'business name'),
     normalizedName: readString(row.normalizedName, 'business normalized name'),
     category: readString(row.category, 'business category'),
-    suburb: readString(row.suburb, 'business suburb'),
-    stateTerritory: readString(row.stateTerritory, 'business state/territory'),
-    ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    businessContext: readBusinessContext(row.businessContext),
     publicStatus: readEnum(row.publicStatus, PublicStatusValues, 'business public status'),
     trustTier: readEnum(row.trustTier, TrustTierValues, 'business trust tier'),
     claimStatus: readEnum(row.claimStatus, ClaimStatusValues, 'business claim status'),
@@ -682,9 +690,34 @@ function readString(value: unknown, label: string): string {
   }
   return value
 }
-
 function readOptionalString(value: unknown): string | undefined {
   return value === undefined ? undefined : readString(value, 'optional string')
+}
+
+
+function readBusinessContext(value: unknown): BusinessContext {
+  if (value === null || typeof value !== 'object') throw new Error('Invalid business context.')
+  const record = value as Record<string, unknown>
+  const kind = record.kind
+  if (kind === 'local_human') {
+    const postcode = readOptionalString(record.postcode)
+    const publishedPhone = readOptionalString(record.publishedPhone)
+    return {
+      kind,
+      suburb: readString(record.suburb, 'business suburb'),
+      stateTerritory: readString(record.stateTerritory, 'business state/territory'),
+      ...(postcode === undefined ? {} : { postcode }),
+      ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    }
+  }
+  if (kind === 'programmable_provider') {
+    return {
+      kind,
+      website: readString(record.website, 'provider website'),
+      providerIdentifier: readString(record.providerIdentifier, 'provider identifier'),
+    }
+  }
+  throw new Error('Invalid business context.')
 }
 
 function readNumber(value: unknown, label: string): number {
@@ -766,10 +799,8 @@ function summarizeSuppressionAudit(event: AuditEventContract) {
 type ClaimBusinessArgs = {
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
+  businessContext: BusinessContext
   requestedSlug: string
-  publishedPhone?: string
   ownerMessage?: string
   photos?: readonly { url: string; alt: string }[]
   responseTimeMinutes?: number
@@ -781,9 +812,7 @@ type NormalizedClaimFacts =
       kind: 'valid'
       name: string
       category: string
-      suburb: string
-      stateTerritory: string
-      publishedPhone?: string
+      businessContext: BusinessContext
       slug: string
       ownerMessage?: string
       photos?: readonly { url: string; alt: string }[]
@@ -822,13 +851,11 @@ export async function claimBusinessCommand(
     return claimError('claim_invalid_facts', normalized.reason)
   }
   const sourceHash = canonicalDigest({
+    businessContext: normalized.businessContext,
     category: normalized.category,
     name: normalized.name,
     slug: normalized.slug,
     sourceRefs: normalized.sourceRefs,
-    stateTerritory: normalized.stateTerritory,
-    publishedPhone: normalized.publishedPhone ?? null,
-    suburb: normalized.suburb,
   })
 
   const existingOwner = await db
@@ -895,8 +922,7 @@ export async function claimBusinessCommand(
   const fingerprint = normalizeClaimFingerprint({
     name: normalized.name,
     category: normalized.category,
-    suburb: normalized.suburb,
-    stateTerritory: normalized.stateTerritory,
+    businessContext: normalized.businessContext,
   })
   const duplicate = await db
     .query('claimFingerprints')
@@ -909,12 +935,11 @@ export async function claimBusinessCommand(
     }
 
     const contestedHash = canonicalDigest({
+      businessContext: normalized.businessContext,
       category: normalized.category,
       duplicate: 'duplicate_or_impersonation_review',
       name: normalized.name,
       slug: normalized.slug,
-      stateTerritory: normalized.stateTerritory,
-      suburb: normalized.suburb,
     })
     const claimId = await db.insert('claims', {
       ownerId: owner.ownerId,
@@ -970,9 +995,7 @@ export async function claimBusinessCommand(
     name: normalized.name,
     normalizedName: normalized.name.toLowerCase(),
     category: normalized.category,
-    suburb: normalized.suburb,
-    stateTerritory: normalized.stateTerritory,
-    ...(normalized.publishedPhone === undefined ? {} : { publishedPhone: normalized.publishedPhone }),
+    businessContext: normalized.businessContext,
     publicStatus: 'unpublished',
     trustTier: 'claimed',
     claimStatus: 'authenticated',
@@ -984,8 +1007,7 @@ export async function claimBusinessCommand(
   const contextDocument: ContextDocument = {
     businessId,
     category: normalized.category,
-    suburb: normalized.suburb,
-    stateTerritory: normalized.stateTerritory,
+    businessContext: normalized.businessContext,
     ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
     ...(normalized.photos === undefined || normalized.photos.length === 0
       ? {}
@@ -1034,7 +1056,6 @@ function claimCommandResult(
   claim: ClaimDocument,
   context: ContextDocument,
 ) {
-  const publishedPhone = optionalNonEmptyString(business.publishedPhone)
   const ownerMessage = optionalNonEmptyString(context.ownerMessage)
   return {
     kind: 'ok' as const,
@@ -1047,9 +1068,7 @@ function claimCommandResult(
       name: business.name,
       normalizedName: business.normalizedName,
       category: business.category,
-      suburb: business.suburb,
-      stateTerritory: business.stateTerritory,
-      ...(publishedPhone === undefined ? {} : { publishedPhone }),
+      businessContext: business.businessContext,
       publicStatus: business.publicStatus,
       trustTier: business.trustTier,
       claimStatus: business.claimStatus,
@@ -1070,8 +1089,7 @@ function claimCommandResult(
     context: {
       businessId,
       category: context.category,
-      suburb: context.suburb,
-      stateTerritory: context.stateTerritory,
+      businessContext: context.businessContext,
       ...(ownerMessage === undefined ? {} : { ownerMessage }),
       sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
       sourceHash: context.sourceHash,
@@ -1095,9 +1113,7 @@ function claimReceiptHash(
       name: business.name,
       normalizedName: business.normalizedName,
       category: business.category,
-      suburb: business.suburb,
-      stateTerritory: business.stateTerritory,
-      publishedPhone: optionalNonEmptyString(business.publishedPhone) ?? '',
+      businessContext: business.businessContext,
       sourceHash: business.sourceHash,
       createdAt: business.createdAt,
     },
@@ -1112,8 +1128,7 @@ function claimReceiptHash(
     context: {
       businessId: context.businessId,
       category: context.category,
-      suburb: context.suburb,
-      stateTerritory: context.stateTerritory,
+      businessContext: context.businessContext,
       ownerMessage: optionalNonEmptyString(context.ownerMessage) ?? '',
       sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
       sourceHash: context.sourceHash,
@@ -1156,14 +1171,10 @@ function claimError(
 ) {
   return { kind: 'error' as const, code, retryable, reason }
 }
-
 function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
   const name = normalizePublicText(args.name)
   const category = normalizePublicText(args.category)
-  const suburb = normalizePublicText(args.suburb)
-  const stateTerritory = normalizePublicText(args.stateTerritory)
   const slug = normalizeSlug(args.requestedSlug)
-  const publishedPhoneValidation = validateOwnerPublishedPhone(args.publishedPhone)
   const ownerMessage = normalizeOptionalText(args.ownerMessage)
   const sourceRefs = args.sourceRefs.map((sourceRef) => {
     const label = normalizePublicText(sourceRef.label)
@@ -1175,8 +1186,8 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
     }
   })
 
-  if (name.length === 0 || category.length === 0 || suburb.length === 0 || stateTerritory.length === 0) {
-    return { kind: 'invalid', reason: 'Name, category, suburb, and state/territory are required.' }
+  if (name.length === 0 || category.length === 0) {
+    return { kind: 'invalid', reason: 'Name and category are required.' }
   }
 
   if (slug.length === 0) {
@@ -1187,19 +1198,41 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
     return { kind: 'invalid', reason: 'At least one source reference is required.' }
   }
 
-  if (publishedPhoneValidation.kind === 'invalid') {
-    return { kind: 'invalid', reason: 'Published phone must be a valid Australian phone number.' }
+  let businessContext: BusinessContext
+  if (args.businessContext.kind === 'local_human') {
+    const suburb = normalizePublicText(args.businessContext.suburb)
+    const stateTerritory = normalizePublicText(args.businessContext.stateTerritory)
+    const postcode = normalizeOptionalText(args.businessContext.postcode)
+    const publishedPhoneValidation = validateOwnerPublishedPhone(args.businessContext.publishedPhone)
+    if (suburb.length === 0 || stateTerritory.length === 0) {
+      return { kind: 'invalid', reason: 'Name, category, suburb, and state/territory are required.' }
+    }
+    if (publishedPhoneValidation.kind === 'invalid') {
+      return { kind: 'invalid', reason: 'Published phone must be a valid Australian phone number.' }
+    }
+    businessContext = {
+      kind: 'local_human',
+      suburb,
+      stateTerritory,
+      ...(postcode === undefined ? {} : { postcode }),
+      ...(publishedPhoneValidation.kind === 'valid' ? { publishedPhone: publishedPhoneValidation.value } : {}),
+    }
+  } else {
+    const website = canonicalProviderWebsite(args.businessContext.website)
+    const providerIdentifier = canonicalProviderIdentifier(args.businessContext.providerIdentifier)
+    if (website === undefined || providerIdentifier === undefined) {
+      return { kind: 'invalid', reason: 'Provider website and identifier are required.' }
+    }
+    businessContext = { kind: 'programmable_provider', website, providerIdentifier }
   }
 
   const base = {
     kind: 'valid' as const,
     name,
     category,
-    suburb,
-    stateTerritory,
+    businessContext,
     slug,
     sourceRefs,
-    ...(publishedPhoneValidation.kind === 'valid' ? { publishedPhone: publishedPhoneValidation.value } : {}),
     ...(args.photos === undefined || args.photos.length === 0 ? {} : { photos: args.photos }),
     ...(args.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: args.responseTimeMinutes }),
   }

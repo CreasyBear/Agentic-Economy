@@ -39,9 +39,8 @@ describe('PR03 claim publish suppress flow', () => {
     expect(claim).toMatchObject({
       kind: 'ok',
       code: 'claim_created',
-      business: { publicStatus: 'unpublished', trustTier: 'claimed', publishedPhone: '0412 345 678' },
+      business: { publicStatus: 'unpublished', trustTier: 'claimed', businessContext: { publishedPhone: '0412 345 678' } },
     })
-
     if (claim.kind !== 'ok') {
       throw new Error('Expected claim to succeed.')
     }
@@ -88,7 +87,7 @@ describe('PR03 claim publish suppress flow', () => {
       kind: 'ok',
       code: 'catalog_published',
       catalog: {
-        publishedPhone: '0412 345 678',
+        businessContext: { publishedPhone: '0412 345 678' },
         offerings: [
           {
             name: 'Emergency pipe repair',
@@ -214,10 +213,13 @@ function claimFacts(name: string, requestedSlug: string) {
   return {
     name,
     category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
+    businessContext: {
+      kind: 'local_human' as const,
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+      publishedPhone: '0412 345 678',
+    },
     requestedSlug,
-    publishedPhone: '0412 345 678',
     sourceRefs: [
       {
         label: 'Owner supplied',

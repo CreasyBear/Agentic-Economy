@@ -1,70 +1,47 @@
 import { z } from 'zod'
 import { exactAmountSchema } from '@/modules/money/public'
+import {
+  AGENT_ACCESS_AUTHORITY_MODE_VALUES,
+  CUSTOMER_REQUEST_AGENT_SCOPE,
+  CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
+  CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE,
+  CUSTOMER_REQUEST_FULL_YOLO_SCOPE,
+  CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE,
+  CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE,
+  MARKET_OPERATIONS_INVOKE_SCOPE,
+  WORK_TREE_AGENT_SCOPE_VALUES,
+  agentAuthorityModeAllows,
+  agentAuthorityModeForScopes,
+  agentAuthorityScopeForMode,
+  isWorkTreeAgentScope,
+  workTreeScopeAllowedForMode,
+  type AgentAccessAuthorityMode,
+  type WorkTreeAgentScope,
+} from '@/modules/agent-access/contract'
 
-export const CUSTOMER_REQUEST_AGENT_SCOPE = 'customer_requests:create' as const
-export const CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE = 'customer_requests:inspect_only' as const
-export const CUSTOMER_REQUEST_APPROVE_EACH_SCOPE = 'customer_requests:approve_each' as const
-export const CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE = 'customer_requests:bounded_mandate' as const
-export const CUSTOMER_REQUEST_FULL_YOLO_SCOPE = 'customer_requests:full_yolo' as const
-export const CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES = ['inspect_only', 'approve_each', 'bounded_mandate', 'full_yolo'] as const
-export type CustomerRequestAuthorityMode = typeof CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES[number]
-export const CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE = 'customer_requests:standing_authority' as const
+export {
+  CUSTOMER_REQUEST_AGENT_SCOPE,
+  CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
+  CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE,
+  CUSTOMER_REQUEST_FULL_YOLO_SCOPE,
+  CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE,
+  CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE,
+  MARKET_OPERATIONS_INVOKE_SCOPE,
+  WORK_TREE_AGENT_SCOPE_VALUES,
+  isWorkTreeAgentScope,
+  workTreeScopeAllowedForMode,
+}
+export type { WorkTreeAgentScope }
+export type { AgentAccessAuthorityMode as CustomerRequestAuthorityMode }
 
-export const WORK_TREE_AGENT_SCOPE_VALUES = [
-  'work_trees:create',
-  'work_trees:inspect',
-  'work_trees:apply',
-  'work_trees:decide',
-  'work_trees:repeat_reserve',
-  'work_trees:repeat_finalize',
-  'work_trees:repeat_reconcile',
-  'work_trees:repeat_inspect',
-] as const
-export type WorkTreeAgentScope = typeof WORK_TREE_AGENT_SCOPE_VALUES[number]
+export const CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES = AGENT_ACCESS_AUTHORITY_MODE_VALUES
 
-export function isWorkTreeAgentScope(value: string): value is WorkTreeAgentScope {
-  return WORK_TREE_AGENT_SCOPE_VALUES.includes(value as WorkTreeAgentScope)
+export function customerRequestAuthorityModeForScopes(scopes: readonly string[]): AgentAccessAuthorityMode | undefined {
+  return agentAuthorityModeForScopes(scopes, { allowMarketOnly: false, allowCustomerDefault: true })
 }
 
-export function workTreeScopeAllowedForMode(scope: string, mode: CustomerRequestAuthorityMode): boolean {
-  if (!isWorkTreeAgentScope(scope)) return false
-  return mode !== 'inspect_only' || scope === 'work_trees:inspect' || scope === 'work_trees:repeat_inspect'
-}
-
-const CUSTOMER_REQUEST_AUTHORITY_MODE_RANK: Readonly<Record<CustomerRequestAuthorityMode, number>> = {
-  inspect_only: 0,
-  approve_each: 1,
-  bounded_mandate: 2,
-  full_yolo: 3,
-}
-
-const CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES: Readonly<Record<CustomerRequestAuthorityMode, string>> = {
-  inspect_only: CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE,
-  approve_each: CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
-  bounded_mandate: CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE,
-  full_yolo: CUSTOMER_REQUEST_FULL_YOLO_SCOPE,
-}
-
-export function customerRequestAuthorityModeForScopes(scopes: readonly string[]): CustomerRequestAuthorityMode | undefined {
-  const modes = CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.filter((mode) => scopes.includes(CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES[mode]))
-  const unknownModeScope = scopes.some((scope) => scope.startsWith('customer_requests:')
-    && scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE
-    && !CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.some((mode) => scope === CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES[mode]))
-  if (unknownModeScope || modes.length > 1) return undefined
-  return modes[0] ?? (scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE) ? 'inspect_only' : undefined)
-}
-
-export function customerRequestScopeForMode(mode: CustomerRequestAuthorityMode): string {
-  const scope = CUSTOMER_REQUEST_AUTHORITY_MODE_SCOPES[mode]
-  if (scope === undefined) throw new Error('customer_request_authority_mode_invalid')
-  return scope
-}
-
-export function customerRequestModeAllows(granted: CustomerRequestAuthorityMode, required: CustomerRequestAuthorityMode): boolean {
-  const grantedRank = CUSTOMER_REQUEST_AUTHORITY_MODE_RANK[granted]
-  const requiredRank = CUSTOMER_REQUEST_AUTHORITY_MODE_RANK[required]
-  return grantedRank !== undefined && requiredRank !== undefined && grantedRank >= requiredRank
-}
+export const customerRequestScopeForMode = agentAuthorityScopeForMode
+export const customerRequestModeAllows = agentAuthorityModeAllows
 export const CUSTOMER_REQUEST_CONTRACT_SCHEMA_PATH = '/api/v1/requests/schema' as const
 export const CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES = [
   'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',

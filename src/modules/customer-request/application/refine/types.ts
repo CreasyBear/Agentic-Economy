@@ -56,6 +56,7 @@ export type RefineRouteGeneration = Readonly<{
       contractRef: CapabilityContractRef
       offeringRegistrationHash: string
       bindingRegistrationHash: string
+      priceDigest: string
     }>[]
   }>[]
 }>

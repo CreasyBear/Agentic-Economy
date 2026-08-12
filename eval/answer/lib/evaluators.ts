@@ -1,5 +1,4 @@
 import {
-  assembleAnswerEvidence,
   buildArtifactsFromSnapshot,
   runAnswerGate,
 } from '../../../src/modules/answer/public'
@@ -7,15 +6,18 @@ import {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
 } from '../../../src/modules/answer/public'
-import { runAnswerToolUseAgent } from '../../../src/modules/answer/server'
+import { assembleAnswerEvidence, runAnswerToolUseAgent } from '../../../src/modules/answer/server'
 import {
   seedKeylessExecutableSource,
-  type KeylessExecutableSourcePort,
-  type OperationExecuteDeps,
+} from '../../../tests/helpers/keyless-seed-source'
+import type {
+  KeylessExecutableSourcePort,
+  OperationExecuteDeps,
 } from '../../../src/modules/capability-execution/public'
 import { validateFollowUpChip } from '../../../src/modules/answer-thread/public'
 import { streamAnswerTurn } from '../../../src/modules/answer-thread/server'
 import {
+  finalizeReservedAnswerTurnFromSource,
   setAnswerHarnessFinalizerForTests,
   setAnswerThreadPortForTests,
 } from '../../../src/modules/answer-thread/testing'
@@ -42,6 +44,7 @@ import {
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../../../tests/helpers/answer-thread-test-port'
+import { createLocalE2eRegistrySourcePort } from '../../../tests/helpers/registry-local-e2e'
 import { readAnswerTurnStream, type AnswerTurnFrame } from '../../../tests/helpers/answer-turn-stream'
 import {
   SEED_ONLY_CAPABILITY_OUTPUT,
@@ -611,7 +614,9 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
 }
 
 function installEvalRegistrySeed(seed: AnswerTurnEvalCase['registrySeed']): () => void {
-  if (seed !== 'broad') return () => {}
+  if (seed !== 'broad') {
+    return setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
+  }
 
   const state = buildDevSeedCatalogState(BROAD_ANSWER_EVAL_BUSINESS_FIXTURES).state
   return setPublicRegistrySourcePortForTests({
@@ -686,22 +691,8 @@ async function runAnswerTurnInStore(input: {
   let persistedHarnessRun: EvalHarnessRun | undefined
   const restoreHarnessFinalizer = setAnswerHarnessFinalizerForTests(async (write) => {
     persistedHarnessRun = readHarnessRunFromJournal(write.entries)
-    const turn = input.store.turns.get(write.turnId)
-    if (turn !== undefined) {
-      input.store.turns.set(write.turnId, {
-        ...turn,
-        evidenceJson: write.evidenceJson,
-      })
-    }
-    const activeLeafEntryId = write.entries.at(-1)?.entryId
-    return {
-      status: 'accepted',
-      turnId: write.turnId,
-      finalizationHash: write.finalizationHash,
-      entriesAccepted: write.entries.length,
-      entriesReplayed: 0,
-      ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
-    }
+    const { request, ...args } = write
+    return finalizeReservedAnswerTurnFromSource(request, args)
   })
   try {
     const requestStartedAt = performance.now()
@@ -957,9 +948,7 @@ function evaluateAnswerTurnExpectations(input: {
     problems.push('model tool run count must be a finite non-negative integer')
   }
   if (expected.toolStatuses !== undefined && !sameStringList(toolStatuses, expected.toolStatuses)) {
-    problems.push(
-      `tool status expectation failed (${expected.toolStatuses.length} expected, ${toolStatuses.length} observed)`,
-    )
+    problems.push(`tool status expectation failed (${expected.toolStatuses.length} expected, ${toolStatuses.length} observed)`)
   }
   if (estimatedUsd !== undefined && (!Number.isFinite(estimatedUsd) || estimatedUsd < 0)) {
     problems.push('estimated cost must be finite and non-negative')
@@ -978,9 +967,7 @@ function evaluateAnswerTurnExpectations(input: {
     problems.push(`expected slugs [${expected.slugs.join(', ')}], got [${slugs.join(', ')}]`)
   }
   if (expected.toolIds !== undefined && !sameStringList(toolIds, expected.toolIds)) {
-    problems.push(
-      `tool identity expectation failed (${expected.toolIds.length} expected, ${toolIds.length} observed)`,
-    )
+    problems.push(`tool identity expectation failed (${expected.toolIds.length} expected, ${toolIds.length} observed)`)
   }
   if (expected.toolQueries !== undefined && !sameStringList(toolQueries, expected.toolQueries)) {
     problems.push(`expected tool queries [${expected.toolQueries.join(', ')}], got [${toolQueries.join(', ')}]`)

@@ -70,8 +70,11 @@ describe('registry search documents', () => {
       catalog({
         slug: 'perth-emergency-plumbing',
         name: 'Perth Emergency Plumbing',
-        suburb: 'Perth',
-        stateTerritory: 'WA',
+        businessContext: {
+          kind: 'local_human',
+          suburb: 'Perth',
+          stateTerritory: 'WA',
+        },
         serviceAreaSummary: 'Perth metro',
       }),
     )
@@ -116,8 +119,11 @@ function catalog(
     slug: 'parramatta-emergency-plumbing',
     name: 'Parramatta Emergency Plumbing',
     category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
+    businessContext: {
+      kind: 'local_human',
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+    },
     publicUrl: '/parramatta-emergency-plumbing',
     trustTier: 'claimed',
     observedAt: 1_000,

@@ -18,7 +18,13 @@ import { openCapabilityDecisionModel } from '@/modules/capability-contract/publi
 import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { convexTestWithWorkers, type ConvexFixtureBackend } from '../helpers/convex-fixtures'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  convexTestWithWorkers,
+  prepareCapabilityPublicationMutation,
+  type ConvexFixtureBackend,
+} from '../helpers/convex-fixtures'
+import { withSourceWrite } from '../helpers/source-write-admission'
 
 const FRANKFURTER_CAPABILITY = 'frankfurter.single-rate'
 type Backend = ConvexFixtureBackend
@@ -359,6 +365,63 @@ async function createSubstitutionProviderConnection(
   if (result.kind !== 'applied') throw new Error(`provider_connection_fixture_${result.kind}`)
 }
 
+async function declareSubstitutionAccessPath(
+  backend: Backend,
+  businessId: Id<'businesses'>,
+  spec: SubstitutionBusinessSpec,
+) {
+  return await backend.run(async (ctx) => {
+    const offerings = await ctx.db.query('businessOfferings')
+      .withIndex('by_businessId_and_status', (query) => (
+        query.eq('businessId', businessId).eq('status', 'published')
+      ))
+      .collect()
+    const offering = offerings[0]
+    if (offering === undefined) throw new Error(`substitution offering missing: ${spec.slug}`)
+    const revision = await ctx.db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => (
+        query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
+      ))
+      .unique()
+    if (revision === null) throw new Error(`substitution offering revision missing: ${spec.slug}`)
+    const accessPathRef = `access:${spec.slug}:external`
+    const descriptor = {
+      kind: 'external_operation' as const,
+      name: spec.name,
+      summary: `A deterministic ${FRANKFURTER_CAPABILITY} operation for registration-only substitution proof.`,
+      url: spec.endpointUrl,
+      method: 'POST' as const,
+      provenance: 'business_declared' as const,
+    }
+    const accessPathSourceHash = canonicalDigest({
+      accessPathRef,
+      offeringSourceHash: revision.sourceHash,
+      descriptor,
+    })
+    const now = Date.now()
+    await ctx.db.insert('offeringAccessPaths', {
+      accessPathRef,
+      businessId,
+      offeringRef: offering.offeringRef,
+      offeringRevision: revision.revision,
+      offeringSourceHash: revision.sourceHash,
+      status: 'published',
+      descriptor,
+      sourceHash: accessPathSourceHash,
+      createdAt: now,
+      updatedAt: now,
+    })
+    return {
+      kind: 'catalog_offering' as const,
+      offeringRef: offering.offeringRef,
+      offeringRevision: revision.revision,
+      offeringSourceHash: revision.sourceHash,
+      declaredAccessPathRef: accessPathRef,
+      accessPathSourceHash,
+    }
+  })
+}
+
 
 async function registerSubstitutionBusiness(
   backend: Backend,
@@ -377,8 +440,11 @@ async function registerSubstitutionBusiness(
       facts: {
         name: spec.name,
         category: 'AE verification capability provider',
-        suburb: 'Adelaide',
-        stateTerritory: 'SA',
+        businessContext: {
+          kind: 'programmable_provider',
+          website: 'https://provider.example',
+          providerIdentifier: `provider:${spec.slug}`,
+        },
         requestedSlug: spec.slug,
         ownerMessage: 'Clearly labelled verification business for registration-only substitution proof.',
         sourceRefs: [{
@@ -416,21 +482,22 @@ async function registerSubstitutionBusiness(
     return { businessId: business._id }
   })
   await createSubstitutionProviderConnection(backend, registration.businessId, spec)
+  const catalogOrigin = await declareSubstitutionAccessPath(backend, registration.businessId, spec)
 
   const owner = backend.withIdentity({
     subject: 'test-registration-owner', issuer: 'https://identity.test', tokenIdentifier: 'test-registration-owner',
   })
-  const published = await owner.mutation(api.capabilitySupply.publishCapability, {
+  const input = {
     businessId: registration.businessId,
-    source: { kind: 'ae_envelope', documentJson },
+    source: { kind: 'ae_envelope' as const, documentJson },
     offering: {
-      offeringId: spec.offeringId, networkId: 'ae:public',
+      offeringId: spec.offeringId, networkId: 'ae:public', origin: catalogOrigin,
       presentation: {
         label: spec.name, summary: `A deterministic ${FRANKFURTER_CAPABILITY} option for registration-only substitution proof.`,
-        price: { kind: 'fixed', amount: { currency: 'USD', units: String(spec.price), exponent: 2 } },
+        price: { kind: 'fixed' as const, amount: { currency: 'USD' as const, units: String(spec.price), exponent: 2 } },
         materialTerms: [{ termId: 'verification_only', label: 'Environment', value: 'Verification only; not a real trading quote.' }],
         commercialRelationship: {
-          kind: 'none', summary: 'AE verification has no commercial relationship.',
+          kind: 'none' as const, summary: 'AE verification has no commercial relationship.',
           influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
           evidenceRefs: ['test:substitution-commercial-neutrality'],
         },
@@ -441,17 +508,22 @@ async function registerSubstitutionBusiness(
     binding: {
       bindingId: spec.bindingId, endpointUrl: spec.endpointUrl,
       authority: spec.authority,
-      continuation: { kind: 'single_response', evidenceRefs: ['test:substitution-single-response'] },
-      cancellation: { kind: 'unsupported', evidenceRefs: ['test:substitution-no-cancellation'] },
-      adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+      continuation: { kind: 'single_response' as const, evidenceRefs: ['test:substitution-single-response'] },
+      cancellation: { kind: 'unsupported' as const, evidenceRefs: ['test:substitution-no-cancellation'] },
+      adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },
       registrationEvidenceRefs: ['test:substitution-binding-conformant'],
     },
     operationKey: `test:substitution:publication:${spec.slug}`,
     correlationId: `test:substitution:supply:${spec.slug}`,
     reasonCode: 'registration_only_substitution_proof',
     evidenceRefs: ['test:substitution-business-published'],
-  })
-  if (published.kind !== 'published') throw new Error(`substitution publication failed: ${published.reason}`)
+  }
+  const prepared = await prepareCapabilityPublicationMutation(backend, input)
+  const published = await owner.mutation(
+    api.capabilitySupply.publishPreparedCapability,
+    await withSourceWrite('catalog_publish', prepared),
+  )
+  if ('reason' in published) throw new Error(`substitution publication failed: ${published.reason}`)
 
   const hashes = await backend.run(async (ctx) => {
     const commandContext = {
@@ -541,8 +613,8 @@ async function compareCustomerChoice(backend: Backend, requestId: string, subjec
     now: Date.now(),
   })
   if (supply.kind !== 'available') throw new Error(`substitution supply unavailable: ${supply.reason}`)
-  const frankfurter = supply.supplies.find(({ binding, publication }) => (
-    publication !== undefined && binding.capabilityId === FRANKFURTER_CAPABILITY
+  const frankfurter = supply.supplies.find((entry: (typeof supply.supplies)[number]) => (
+    entry.publication !== undefined && entry.binding.capabilityId === FRANKFURTER_CAPABILITY
   ))
   const publication = frankfurter?.publication
   if (publication === undefined) throw new Error('frankfurter publication operationRef missing')

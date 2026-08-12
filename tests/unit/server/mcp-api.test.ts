@@ -2,7 +2,7 @@ import { parseJsonEventStream } from '@ai-sdk/provider-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { handleMcpRequest, createAeMcpServer } from '@/lib/server/mcp-api'
+import { handleMcpRequest } from '@/lib/server/mcp-api'
 import {
   defineAction,
   listActions,
@@ -13,7 +13,6 @@ import {
   registryDetailAction,
   registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
-import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
 
 const operationExecuteMocks = vi.hoisted(() => ({
   executeKeylessOperation: vi.fn(),
@@ -40,7 +39,10 @@ function pinEnv(): void {
 const currentOperationRef = `operation:v1:${'a'.repeat(64)}`
 
 
-async function postMcp(body: object, options: Parameters<typeof handleMcpRequest>[1] = {}): Promise<Response> {
+async function postMcp(
+  body: object,
+  options: Parameters<typeof handleMcpRequest>[1] = {},
+): Promise<Response> {
   const request = new Request('https://ae.example/mcp', {
     method: 'POST',
     headers: {
@@ -176,8 +178,9 @@ describe('MCP host adapter', () => {
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
     const tools = result.tools as Array<Record<string, unknown>>
-    const expectedToolNames = listMcpActions().map(mcpToolName)
-
+    const expectedToolNames = listMcpActions()
+      .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
+      .map(mcpToolName)
     expect(expectedToolNames).toEqual([
       'ae_registry_services_list',
       'ae_registry_services_search',
@@ -187,8 +190,9 @@ describe('MCP host adapter', () => {
       'ae_registry_operations_compare',
       'ae_registry_operations_inspectPlan',
       'ae_operation_execute',
-      'ae_sandbox_checkup_quote',
     ])
+    expect(expectedToolNames).not.toContain('ae_operation_invoke')
+    expect(expectedToolNames).not.toContain('ae_operation_status')
     expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)
 
     for (const tool of tools) {
@@ -203,14 +207,10 @@ describe('MCP host adapter', () => {
     }
 
     const detail = tools.find((tool) => tool.name === 'ae_registry_detail')
-    const quote = tools.find((tool) => tool.name === 'ae_sandbox_checkup_quote')
     const operations = tools.find((tool) => tool.name === 'ae_registry_operations_search')
     const search = tools.find((tool) => tool.name === 'ae_registry_services_search')
     const execute = tools.find((tool) => tool.name === 'ae_operation_execute')
     expect(detail?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ slug: expect.any(Object) }),
-    }))
-    expect(quote?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ slug: expect.any(Object) }),
     }))
     expect(search?.inputSchema).toEqual(expect.objectContaining({
@@ -218,11 +218,14 @@ describe('MCP host adapter', () => {
     }))
     expect(detail?.outputSchema).toEqual(expect.objectContaining({ oneOf: expect.any(Array) }))
     expect(operations?.outputSchema).toEqual(expect.objectContaining({ anyOf: expect.any(Array) }))
-    expect(quote?.outputSchema).toEqual(expect.objectContaining({ oneOf: expect.any(Array) }))
     expect(execute?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ operationRef: expect.any(Object), input: expect.any(Object) }),
     }))
     expect(execute?.outputSchema).toEqual(expect.objectContaining({ oneOf: expect.any(Array) }))
+    expect(execute?.description).toContain('keyless http-json:v1 GET or POST operations')
+    expect(execute?.description).toContain('financial_exposure')
+    expect(execute?.description).toContain('external_state_change')
+    expect(execute?.description).not.toMatch(/\bPOST\b[^.]*refused/i)
 
   })
 
@@ -360,33 +363,6 @@ describe('MCP host adapter', () => {
   })
 
 
-  it('calls a union-output sandbox quote tool with its declared schema retained', async () => {
-    const run = vi.spyOn(sandboxCheckupQuoteAction, 'run').mockResolvedValue({
-      kind: 'refused',
-      code: 'unknown_offering',
-      reason: 'No published fixed-price checkup offering exists for this slug.',
-    })
-
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 7,
-      method: 'tools/call',
-      params: {
-        name: 'ae_sandbox_checkup_quote',
-        arguments: { slug: 'made-up-nonexistent-biz' },
-      },
-    })
-
-    expect(response.status).toBe(200)
-    const body = await readMcpBody(response)
-    const result = body.result as Record<string, unknown>
-    expect(run).toHaveBeenCalledWith({
-      data: { slug: 'made-up-nonexistent-biz' },
-      context: expect.objectContaining({ caller: 'mcp' }),
-    })
-    expect(result.isError).not.toBe(true)
-    expect(result.structuredContent).toMatchObject({ kind: 'refused', code: 'unknown_offering' })
-  })
 
   it('sanitizes thrown MCP action errors', async () => {
     const secret = 'secret_internal_exception_detail'
@@ -493,7 +469,9 @@ describe('MCP host adapter', () => {
 
     expect(names).not.toContain('customerRequest_confirm')
     expect(names).not.toContain('customer.request.confirm')
-    expect(names).toEqual(listMcpActions().map(mcpToolName))
+    expect(names).toEqual(listMcpActions()
+      .filter((action) => action.readOnly && action.credentialAdmission === undefined)
+      .map(mcpToolName))
     const workTreeNames = listActions()
       .filter(({ id }) => id.startsWith('workTree.'))
       .map(mcpToolName)
@@ -598,7 +576,7 @@ describe('MCP host adapter', () => {
     })
   })
 
-  it('rejects a non-read-only MCP action for the anonymous tier', () => {
+  it('hides a non-read-only MCP action from the anonymous tier', async () => {
     const fakeAction = defineAction({
       id: 'fake.write',
       name: 'Fake write',
@@ -626,8 +604,62 @@ describe('MCP host adapter', () => {
       run: async () => ({ kind: 'ok' }),
     })
 
-    expect(() => createAeMcpServer(new Request('https://ae.example/mcp'), [fakeAction])).toThrow(
-      /read-only actions/,
-    )
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'tools/list',
+      params: {},
+    }, { actions: [registryDetailAction, fakeAction] })
+    const body = await readMcpBody(response)
+    expect(body.result).toMatchObject({
+      tools: [expect.objectContaining({ name: mcpToolName(registryDetailAction) })],
+    })
+  })
+  it('authenticates operation.invoke and delegates the same registered action', async () => {
+    const executor = {
+      invokeOperation: vi.fn().mockResolvedValue({
+        kind: 'completed',
+        invocationRef: 'invocation:test',
+        operationRef: currentOperationRef,
+        output: { value: 42 },
+        evidenceHash: 'evidence:test',
+        usage: {
+          usageRef: 'usage:test',
+          observedAt: 1_700_000_000_000,
+          chargeState: 'free_tier',
+          amount: { currency: 'USD', units: '0', exponent: 2 },
+          priceDigest: 'price:test',
+        },
+      }),
+      readInvocationStatus: vi.fn(),
+      cancelInvocation: vi.fn(),
+      reconcileInvocation: vi.fn(),
+    }
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'tools/call',
+      params: {
+        name: 'ae_operation_invoke',
+        arguments: {
+          operationRef: currentOperationRef,
+          input: {},
+          idempotencyKey: 'mcp-key-1',
+        },
+      },
+    }, {
+      authenticate: async () => ({
+        isAuthenticated: true,
+        tokenType: 'api_key',
+        id: 'key:test',
+        subject: 'owner:test',
+        scopes: ['market_operations:invoke'],
+      }),
+      operationInvokeService: executor,
+    })
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect(body.result?.structuredContent).toMatchObject({ kind: 'completed', operationRef: currentOperationRef })
+    expect(executor.invokeOperation).toHaveBeenCalledOnce()
   })
 })

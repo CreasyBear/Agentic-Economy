@@ -5,7 +5,13 @@ import { catalogTables } from '../src/modules/catalog/internal/schema'
 import { capabilityContractRegistryTables } from '../src/modules/capability-contract-registry/internal/convex-schema'
 import { capabilitySupplyTables } from '../src/modules/capability-supply/internal/convex-schema'
 import { customerRequestTables } from '../src/modules/customer-request/internal/convex-schema'
+import {
+  agentAccessOAuthTables,
+  agentAccessPolicyTables,
+  agentAccessPrincipalTables,
+} from '../src/modules/agent-access/public'
 import { actionInvocationTables } from '../src/modules/action-invocation/internal/convex-schema'
+import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/internal/convex-schema'
 import { demandTables } from '../src/modules/demand/internal/schema'
 import { discoveryTables } from '../src/modules/discovery/internal/schema'
 import { harnessTables } from '../src/modules/harness/internal/convex-schema'
@@ -25,12 +31,16 @@ import { externalRunTables } from '../src/modules/external-run/internal/convex-s
 
 export default defineSchema({
   ...actionInvocationTables,
+  ...capabilityOperationInvocationTables,
   ...answerThreadTables,
   ...businessTables,
   ...catalogTables,
   ...capabilityContractRegistryTables,
   ...capabilitySupplyTables,
   ...customerRequestTables,
+  ...agentAccessPrincipalTables,
+  ...agentAccessOAuthTables,
+  ...agentAccessPolicyTables,
   ...registryTables,
   ...routingKernelTables,
   ...demandTables,

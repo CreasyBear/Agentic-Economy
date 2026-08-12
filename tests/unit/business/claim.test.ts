@@ -30,7 +30,7 @@ describe('claimBusiness', () => {
 
     const result = claimBusiness(state, {
       actor: { kind: 'authenticated_owner', clerkUserId: 'user_123', displayName: 'Sam Owner' },
-      facts: { ...validFacts(), publishedPhone: '  0412 345 678  ' },
+      facts: { ...validFacts(), businessContext: { ...validFacts().businessContext, publishedPhone: '  0412 345 678  ' } },
       security: validSecurity('sam'),
       operationKey: brandNonEmpty('op:claim:sam', 'OperationKey'),
       correlationId: brandNonEmpty('corr:sam', 'CorrelationId'),
@@ -46,7 +46,7 @@ describe('claimBusiness', () => {
         publicStatus: 'unpublished',
         trustTier: 'claimed',
         claimStatus: 'authenticated',
-        publishedPhone: '0412 345 678',
+        businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW', publishedPhone: '0412 345 678' },
       },
       claim: { status: 'authenticated' },
     })
@@ -62,14 +62,14 @@ describe('claimBusiness', () => {
       const state = createEmptyBusinessSourceState()
       const result = claimBusiness(state, {
         actor: { kind: 'authenticated_owner', clerkUserId: `user_phone_${publishedPhone}` },
-        facts: { ...validFacts(), publishedPhone },
+        facts: { ...validFacts(), businessContext: { ...validFacts().businessContext, publishedPhone } },
         security: validSecurity(publishedPhone),
         operationKey: brandNonEmpty(`op:claim:${publishedPhone}`, 'OperationKey'),
         correlationId: brandNonEmpty(`corr:${publishedPhone}`, 'CorrelationId'),
         now: 10,
       })
 
-      expect(result).toMatchObject({ kind: 'ok', business: { publishedPhone } })
+      expect(result).toMatchObject({ kind: 'ok', business: { businessContext: { publishedPhone } } })
     },
   )
 
@@ -77,7 +77,7 @@ describe('claimBusiness', () => {
     const state = createEmptyBusinessSourceState()
     const result = claimBusiness(state, {
       actor: { kind: 'authenticated_owner', clerkUserId: 'user_phone' },
-      facts: { ...validFacts(), publishedPhone: '+1 415 555 0100' },
+      facts: { ...validFacts(), businessContext: { ...validFacts().businessContext, publishedPhone: '+1 415 555 0100' } },
       security: validSecurity('phone'),
       operationKey: brandNonEmpty('op:claim:phone', 'OperationKey'),
       correlationId: brandNonEmpty('corr:phone', 'CorrelationId'),
@@ -194,8 +194,11 @@ function validFacts() {
   return {
     name: 'Parramatta Emergency Plumbing',
     category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
+    businessContext: {
+      kind: 'local_human' as const,
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+    },
     requestedSlug: 'parramatta-emergency-plumbing',
     sourceRefs: [
       {

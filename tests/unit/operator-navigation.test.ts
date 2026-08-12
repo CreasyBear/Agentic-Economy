@@ -87,7 +87,7 @@ describe('operator navigation', () => {
     const labels = navGroupsForRole('owner', { advanced: false })
       .flatMap((group) => group.items.map((item) => item.label))
 
-    expect(labels).toEqual(['Business page', 'Offerings', 'Inquiries', 'Settings'])
+    expect(labels).toEqual(['Business page', 'Offerings', 'Supply', 'Inquiries', 'Settings'])
   })
 
   /** Admin carries the most surfaces, so it is the role where an untiered item

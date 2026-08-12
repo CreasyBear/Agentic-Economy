@@ -42,28 +42,6 @@ export {
   type ExternalRunReport,
 } from './internal/gate'
 
-export {
-  buildOperationMarketProofReport,
-  computeOperationMarketProofGate,
-  createOperationMarketProofAttempt,
-  createOperationMarketProofManifest,
-  operationMarketProofAttemptInputSchema,
-  operationMarketProofAttemptIntegrityValid,
-  operationMarketProofAttemptSchema,
-  operationMarketProofManifestInputSchema,
-  operationMarketProofManifestIntegrityValid,
-  operationMarketProofManifestSchema,
-  operationMarketProofObservationSchema,
-  operationMarketProofReportSchema,
-  type OperationMarketProofAttempt,
-  type OperationMarketProofAttemptInput,
-  type OperationMarketProofGateDecision,
-  type OperationMarketProofGateResult,
-  type OperationMarketProofManifest,
-  type OperationMarketProofManifestInput,
-  type OperationMarketProofObservation,
-  type OperationMarketProofReport,
-} from './internal/operation-market-proof'
 
 export {
   admitExternalRunStartThroughSource,

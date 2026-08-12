@@ -1,6 +1,7 @@
 import { Response as UndiciResponse } from 'undici'
 import { fetch as UndiciFetch } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { api, internal } from '../../convex/_generated/api'
 
 // The kernel performs provider HTTP (readiness probes and egress transport)
 // through undici, not the global fetch the OPENROUTER model call is stubbed
@@ -23,25 +24,31 @@ import { defaultDnsResolver } from '@/modules/network-guard/public'
 import type { ConvexFixtureBackend } from '../helpers/convex-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ExactAmount } from '@/modules/money/public'
+import { preparePublicationDraft } from '@/modules/capability-supply/public'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
 import {
+  publishCapabilityForSeed,
   registerCapabilityBindingCommand,
   registerCapabilityOfferingCommand,
   setCapabilitySupplyEligibility,
 } from '../../convex/capabilitySupply'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
-import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
-import { listRouteableCapabilitySupply } from '../../convex/capabilitySupply'
-import { registeredEvaluationBindingsFromRouteableSupply } from '../../convex/customerRequestEvaluationBindings'
-import { api, internal } from '../../convex/_generated/api'
-import { seedSandboxCapabilityPublication } from '../../convex/devSeed'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 import { readCuratedContract } from '../helpers/curated-supply'
 const identity = { subject: 'customer-v2', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
 const operationRefsBySelectionKey = new Map<string, string>()
+const readinessResponseBody = JSON.stringify({
+  kind: 'quoted',
+  expectedCost: { currency: 'USD', units: '0', exponent: 2 },
+  maximumCost: { currency: 'USD', units: '0', exponent: 2 },
+  expectedLatencyMs: 1,
+  dataFields: [],
+  disclosures: ['Readiness probe only.'],
+})
+
 
 function modelResponse(content: unknown): Response {
   const normalized = normalizeModelResponse(content)
@@ -82,6 +89,7 @@ function normalizeModelResponse(content: unknown): unknown {
 async function rememberModelOperationRef(
   backend: ConvexFixtureBackend,
   model: CapabilityDecisionModel,
+  offeringId?: string,
 ) {
   const supply = await backend.query(internal.capabilitySupply.listIntegrated, {
     networkId: 'ae:public',
@@ -89,10 +97,11 @@ async function rememberModelOperationRef(
     now: Date.now(),
   })
   if (supply.kind !== 'available') throw new Error(`model fixture supply unavailable: ${supply.reason}`)
-  const matching = supply.supplies.find(({ binding }) => (
+  const matching = supply.supplies.find(({ binding, offering }: (typeof supply.supplies)[number]) => (
     binding.capabilityId === model.contractRef.capabilityId
       && binding.version === model.contractRef.version
       && binding.contractDigest === model.contractRef.contractDigest
+      && (offeringId === undefined || offering.offeringId === offeringId)
   ))
   const operationRef = matching?.publication?.operationRef
   if (operationRef === undefined) throw new Error('model fixture publication operationRef missing')
@@ -110,14 +119,10 @@ describe('current V2 Customer Request application path', () => {
     vi.stubEnv('EXA_API_KEY', 'test-exa-api-key')
     vi.stubEnv('AE_SITE_URL', 'https://application-ae.example.test')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
-      kind: 'quoted',
-      expectedCost: { currency: 'USD', units: '0', exponent: 2 },
-      maximumCost: { currency: 'USD', units: '0', exponent: 2 },
-      expectedLatencyMs: 1,
-      dataFields: [],
-      disclosures: ['Readiness probe only.'],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    providerFetch.mockImplementation(async () => new UndiciResponse(
+      readinessResponseBody,
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ))
   })
 
   afterEach(() => {
@@ -207,9 +212,9 @@ describe('current V2 Customer Request application path', () => {
     if (current.kind !== 'current' || generation.kind !== 'found') {
       throw new Error('legacy route fixture missing')
     }
-    const legacyRoutes = generation.routeGeneration.routes.map((route) => ({
+    const legacyRoutes = generation.routeGeneration.routes.map((route: (typeof generation.routeGeneration.routes)[number]) => ({
       ...route,
-      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }) => step),
+      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }: (typeof route.steps)[number]) => step),
     }))
     const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = current.aggregate
     const legacyAggregateMaterial = {
@@ -274,11 +279,17 @@ describe('current V2 Customer Request application path', () => {
         currentAggregateDigest: legacyAggregate.aggregateDigest,
         principalId: delegatedPrincipalId,
       })
-      await ctx.db.insert('customerRequestAgentPrincipals', {
+      await ctx.db.insert('agentAccessPrincipals', {
         principalId: delegatedPrincipalId,
         ownerId: identity.subject,
         ownerTokenIdentifier: principalId,
         credentialId: 'credential:legacy-assistant',
+        applicationRef: 'agentic-economy',
+        environment: 'sandbox',
+        authorityMode: 'inspect_only',
+        grantGeneration: 1,
+        policyDigest: 'test-policy:legacy-assistant',
+        lifecycle: 'active',
         scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
         recordedAt: 1_000,
         lastSeenAt: 1_000,
@@ -411,13 +422,12 @@ describe('current V2 Customer Request application path', () => {
         facts: frankfurterFacts(model),
       }],
     }))
-    vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    vi.stubGlobal('fetch', generate)
     const customer = backend.withIdentity(identity)
-
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:1', requestId: 'request:v2:application',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest EUR to USD rate',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare preparation authority verification currency rates from EUR to USD.',
       routing: { networkId: 'ae:public' },
     })
     expect(submitted).toMatchObject({
@@ -433,7 +443,7 @@ describe('current V2 Customer Request application path', () => {
     vi.stubEnv('OPENROUTER_API_KEY', '')
     const replayedSubmit = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:1', requestId: 'request:v2:application',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest EUR to USD rate',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare preparation authority verification currency rates from EUR to USD.',
       routing: { networkId: 'ae:public' },
     })
     expect(replayedSubmit).toEqual(submitted)
@@ -633,9 +643,15 @@ describe('current V2 Customer Request application path', () => {
     if (replacement.kind !== 'request') throw new Error('reported-option replacement missing')
     expect(replacement.confirmation).toBeUndefined()
     expect(replacement.decision?.routes).toHaveLength(1)
-    expect(replacement.decision?.routes.map(({ routeRef }) => routeRef)).not.toContain(rejectedRoute.routeRef)
-    expect(replacement.decision?.routes[0]?.businesses.map(({ businessRef }) => businessRef))
-      .not.toEqual(rejectedRoute.businesses.map(({ businessRef }) => businessRef))
+    expect(replacement.decision?.routes.map(
+      ({ routeRef }: NonNullable<typeof replacement.decision>['routes'][number]) => routeRef,
+    )).not.toContain(rejectedRoute.routeRef)
+    expect(replacement.decision?.routes[0]?.businesses.map(
+      ({ businessRef }: NonNullable<typeof replacement.decision>['routes'][number]['businesses'][number]) => businessRef,
+    ))
+      .not.toEqual(rejectedRoute.businesses.map(
+        ({ businessRef }: typeof rejectedRoute.businesses[number]) => businessRef,
+      ))
     await expect(customer.action(api.customerRequestApplication.refine, {
       requestRef: replacement.requestRef,
       expectedRevision: replacement.revision,
@@ -981,17 +997,35 @@ describe('current V2 Customer Request application path', () => {
       },
       issuedAt: Date.now(),
     })
+    await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
+      principalId: serviceAuth.principalId,
+      ownerId: serviceAuth.ownerId,
+      ownerTokenIdentifier: `${identity.issuer}|${serviceAuth.ownerId}`,
+      credentialId: serviceAuth.credentialId,
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      scopes: [...serviceAuth.scopes],
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: canonicalDigest({
+        contract: 'test:customer-request-service-principal:v1',
+        principalId: serviceAuth.principalId,
+        ownerId: serviceAuth.ownerId,
+      }),
+      lifecycle: 'active',
+      seenAt: serviceAuth.issuedAt,
+    })
+
 
     const submitted = await backend.action(api.customerRequestApplication.submit, {
       ...command, serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
     })
-    expect(submitted).toMatchObject({ kind: 'request', requestRef: 'request:v2:external', revision: 1 })
+    expect(submitted).toMatchObject({
+      kind: 'request', requestRef: 'request:v2:external', revision: 1, state: 'ready_to_compare',
+    })
     if (submitted.kind !== 'request') throw new Error('external request missing')
-    if (submitted.state !== 'ready_to_compare') {
-      throw new Error(`external submitted request not ready: ${JSON.stringify(submitted)}`)
-    }
     await backend.run(async (ctx) => {
-      const agent = await ctx.db.query('customerRequestAgentPrincipals')
+      const agent = await ctx.db.query('agentAccessPrincipals')
         .withIndex('by_principalId', (query) => query.eq('principalId', 'principal:external')).unique()
       expect(agent?.ownerTokenIdentifier).toBe(`${identity.issuer}|owner:external`)
     })
@@ -1119,8 +1153,10 @@ describe('current V2 Customer Request application path', () => {
     const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
 
     await backend.run(async (ctx) => {
-      const binding = (await ctx.db.query('capabilityTransportBindings').collect())[0]
-      if (binding === undefined) throw new Error('binding missing')
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', 'binding:frankfurter-preparation:http-json'))
+        .unique()
+      if (binding === null) throw new Error('binding missing')
       const offering = await ctx.db.query('capabilityOfferings')
         .withIndex('by_offeringId', (query) => query.eq('offeringId', binding.offeringId)).unique()
       if (offering === null) throw new Error('offering missing')
@@ -1185,6 +1221,7 @@ describe('current V2 Customer Request application path', () => {
       requestRef: decision.requestRef, revision: decision.revision, principalId, suffix: 'v2:egress-state',
     })
     const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
+    const egressNow = Date.now()
 
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
       commandKey: 'egress:before-authority', commandDigest: 'sha256:' + '1'.repeat(64), principalId,
@@ -1200,15 +1237,15 @@ describe('current V2 Customer Request application path', () => {
       actionId: aggregate.aggregate.plan.actions[0].actionId, preparationRef: review.preparationRef,
       approvalActor: {
         kind: 'clerk_owner', requestPrincipalId: principalId, ownerId: identity.subject,
-        credentialId: principalId, authenticationEvidenceRef: 'clerk:test:egress-state', approvedAt: 2_010,
+        credentialId: principalId, authenticationEvidenceRef: 'clerk:test:egress-state', approvedAt: egressNow + 10,
       },
-      now: 2_010,
+      now: egressNow + 10,
     })
     if ((authorized.kind !== 'stored' && authorized.kind !== 'replayed')
       || authorized.preparation.kind !== 'ready_for_routing') throw new Error('authorization missing')
     const allocated = await backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
       commandKey: 'egress:authorized:one', commandDigest: 'sha256:' + '3'.repeat(64), principalId,
-      preparationRef: review.preparationRef, now: 2_020,
+      preparationRef: review.preparationRef, now: egressNow + 20,
     })
     expect(allocated).toMatchObject({ kind: 'allocated', operationRefs: expect.arrayContaining([expect.any(String)]) })
     if (allocated.kind !== 'allocated' || allocated.operationRefs[0] === undefined
@@ -1217,7 +1254,7 @@ describe('current V2 Customer Request application path', () => {
     const secondOperationRef = allocated.operationRefs[1]
     const replayed = await backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
       commandKey: 'egress:authorized:two', commandDigest: 'sha256:' + '4'.repeat(64), principalId,
-      preparationRef: review.preparationRef, now: 2_030,
+      preparationRef: review.preparationRef, now: egressNow + 30,
     })
     expect(replayed).toMatchObject({ kind: 'replayed', operationRefs: allocated.operationRefs })
     const durable = await backend.run(async (ctx) => ({
@@ -1237,7 +1274,7 @@ describe('current V2 Customer Request application path', () => {
       return { id: allocation._id, purpose: allocation.purpose }
     })
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-      operationRef: firstOperationRef, principalId, now: 2_035,
+      operationRef: firstOperationRef, principalId, now: egressNow + 35,
     })).rejects.toThrow('customer_request_v2_egress_allocation_integrity_failure')
     await backend.run(async (ctx) => await ctx.db.patch(originalPurpose.id, { purpose: originalPurpose.purpose }))
 
@@ -1251,19 +1288,19 @@ describe('current V2 Customer Request application path', () => {
       return { id: head._id, revision: head.currentRevision, aggregateDigest: head.currentAggregateDigest }
     })
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-      operationRef: secondOperationRef, principalId, now: 2_037,
+      operationRef: secondOperationRef, principalId, now: egressNow + 37,
     })).resolves.toEqual({ kind: 'terminal', state: 'not_released' })
     await backend.run(async (ctx) => await ctx.db.patch(originalHead.id, {
       currentRevision: originalHead.revision, currentAggregateDigest: originalHead.aggregateDigest,
     }))
 
     const dispatch = await backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-      operationRef: firstOperationRef, principalId, now: 2_040,
+      operationRef: firstOperationRef, principalId, now: egressNow + 40,
     })
     expect(dispatch).toMatchObject({ kind: 'dispatch', adapterId: 'http-json:v1' })
     if (dispatch.kind !== 'dispatch') throw new Error('dispatch missing')
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-      operationRef: firstOperationRef, principalId, now: 2_050,
+      operationRef: firstOperationRef, principalId, now: egressNow + 50,
     })).resolves.toEqual({ kind: 'in_flight' })
     await expect(customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:update-bypass', requestId: review.requestRef, expectedRevision: review.revision,
@@ -1274,7 +1311,7 @@ describe('current V2 Customer Request application path', () => {
       idempotencyKey: 'refine:blocked-by-egress', message: 'Change the request while it is being sent',
     })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention', nextAction: 'wait' })
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-      operationRef: firstOperationRef, principalId, now: 152_050,
+      operationRef: firstOperationRef, principalId, now: egressNow + 150_050,
     })).resolves.toEqual({ kind: 'terminal', state: 'uncertain' })
     await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
       commandKey: 'prepared-action:uncertain', commandDigest: 'sha256:' + '5'.repeat(64), principalId,
@@ -1283,17 +1320,17 @@ describe('current V2 Customer Request application path', () => {
         internal.customerRequestV2PreparedAction.preparationMaterialDigest,
         { preparationRef: review.preparationRef, principalId },
       ),
-      now: 152_060,
+      now: egressNow + 150_060,
     })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'disclosure_uncertain' })
     const reconciliationEvidence = {
       operationRef: firstOperationRef, disposition: 'not_released',
       providerEvidenceRef: 'provider-evidence:operation-observed', responseDigest: 'sha256:' + '9'.repeat(64),
     } as const
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.reconcileUncertain, {
-      ...reconciliationEvidence, evidenceDigest: canonicalDigest(reconciliationEvidence), observedAt: 2_070,
+      ...reconciliationEvidence, evidenceDigest: canonicalDigest(reconciliationEvidence), observedAt: egressNow + 150_070,
     })).resolves.toBe('not_released')
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-      operationRef: firstOperationRef, principalId, now: 2_080,
+      operationRef: firstOperationRef, principalId, now: egressNow + 150_080,
     })).resolves.toEqual({ kind: 'terminal', state: 'not_released' })
     await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
       commandKey: 'prepared-action:not-released', commandDigest: 'sha256:' + '6'.repeat(64), principalId,
@@ -1302,8 +1339,11 @@ describe('current V2 Customer Request application path', () => {
         internal.customerRequestV2PreparedAction.preparationMaterialDigest,
         { preparationRef: review.preparationRef, principalId },
       ),
-      now: 152_080,
-    })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'disclosure_not_released' })
+      now: egressNow + 150_080,
+    })).resolves.toMatchObject({
+      kind: 'not_prepared',
+      reason: 'disclosure_not_released',
+    })
     expect(await backend.run(async (ctx) => (
       ctx.db.query('customerRequestV2PreparationReconciliationObservations').collect()
     ))).toMatchObject([{
@@ -1435,31 +1475,32 @@ describe('current V2 Customer Request application path', () => {
     expect(aggregate.aggregate.evaluation.decisionPreference).toMatchObject({
       objective: 'lowest_maximum_price', basis: 'extracted_from_request',
     })
+    const egressNow = Date.now()
     const authorized = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
       commandKey: 'authorize:internal:prepared-action', commandDigest: 'sha256:' + '2'.repeat(64), principalId,
       requestId: review.requestRef, expectedRevision: review.revision,
       actionId: aggregate.aggregate.plan.actions[0].actionId, preparationRef: review.preparationRef,
       approvalActor: {
         kind: 'clerk_owner', requestPrincipalId: principalId, ownerId: identity.subject,
-        credentialId: principalId, authenticationEvidenceRef: 'clerk:test:prepared-action', approvedAt: 2_010,
+        credentialId: principalId, authenticationEvidenceRef: 'clerk:test:prepared-action', approvedAt: egressNow + 10,
       },
-      now: 2_010,
+      now: egressNow + 10,
     })
     if ((authorized.kind !== 'stored' && authorized.kind !== 'replayed')
       || authorized.preparation.kind !== 'ready_for_routing') throw new Error('authorization missing')
     const allocated = await backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
       commandKey: 'egress:prepared-action', commandDigest: 'sha256:' + '3'.repeat(64), principalId,
-      preparationRef: review.preparationRef, now: 2_020,
+      preparationRef: review.preparationRef, now: egressNow + 20,
     })
     if (allocated.kind !== 'allocated') throw new Error('allocation missing')
     const operations = await backend.run(async (ctx) => (
       ctx.db.query('customerRequestV2PreparationEgressOperations')
         .withIndex('by_preparationRef', (query) => query.eq('preparationRef', review.preparationRef!)).collect()
     ))
-    const providerNow = Date.now()
+    const providerNow = egressNow + 40
     for (const operation of operations) {
       const begun = await backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
-        operationRef: operation.operationRef, principalId, now: 2_030,
+        operationRef: operation.operationRef, principalId, now: egressNow + 30,
       })
       if (begun.kind !== 'dispatch') throw new Error('dispatch missing')
       const response = {
@@ -1767,14 +1808,10 @@ describe('durable Customer Request submission recovery', () => {
     vi.stubEnv('EXA_API_KEY', 'test-exa-api-key')
     vi.stubEnv('AE_SITE_URL', 'https://application-ae.example.test')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
-      kind: 'quoted',
-      expectedCost: { currency: 'USD', units: '0', exponent: 2 },
-      maximumCost: { currency: 'USD', units: '0', exponent: 2 },
-      expectedLatencyMs: 1,
-      dataFields: [],
-      disclosures: ['Readiness probe only.'],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    providerFetch.mockImplementation(async () => new UndiciResponse(
+      readinessResponseBody,
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ))
   })
 
   afterEach(() => {
@@ -1888,15 +1925,108 @@ async function registerVariantSupply(
   businessId: string,
   offeringId: string,
   bindingId: string,
-  options: Readonly<{ suffix?: string; businessSlug?: string; priceAmount?: ExactAmount; label?: string }> = {},
+  options: Readonly<{ suffix?: string; priceAmount?: ExactAmount; label?: string }> = {},
 ) {
   const suffix = options.suffix ?? 'disclosure'
-  const businessSlug = options.businessSlug ?? 'frankfurter-ecb-rates'
   const priceAmount = options.priceAmount ?? { currency: 'USD', units: '0', exponent: 2 }
   const label = options.label ?? 'Frankfurter Preparation Rate'
   await backend.run(async (ctx) => {
+    const catalogOfferings = (await ctx.db.query('businessOfferings').collect()).filter((candidate) => (
+      String(candidate.businessId) === businessId && candidate.status === 'published'
+    ))
+    if (catalogOfferings.length !== 1) throw new Error(`variant catalog offering missing: ${offeringId}`)
+    const catalogOffering = catalogOfferings[0]
+    if (catalogOffering === undefined) throw new Error(`variant catalog offering missing: ${offeringId}`)
+    const catalogRevision = await ctx.db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => (
+        query.eq('offeringRef', catalogOffering.offeringRef).eq('revision', catalogOffering.currentRevision)
+      ))
+      .unique()
+    if (catalogRevision === null) throw new Error(`variant catalog revision missing: ${offeringId}`)
+    const accessPathRef = `access:test:${offeringId}`
+    const descriptor = {
+      kind: 'external_operation' as const,
+      name: label,
+      summary: 'A deterministic Frankfurter operation for preparation authority verification.',
+      url: 'https://api.frankfurter.dev/v2/rates',
+      method: 'POST' as const,
+      provenance: 'business_declared' as const,
+    }
+    const accessPathSourceHash = canonicalDigest({
+      accessPathRef,
+      offeringSourceHash: catalogRevision.sourceHash,
+      descriptor,
+    })
+    await ctx.db.insert('offeringAccessPaths', {
+      accessPathRef,
+      businessId: catalogOffering.businessId,
+      offeringRef: catalogOffering.offeringRef,
+      offeringRevision: catalogRevision.revision,
+      offeringSourceHash: catalogRevision.sourceHash,
+      status: 'published',
+      descriptor,
+      sourceHash: accessPathSourceHash,
+      createdAt: 3_000,
+      updatedAt: 3_000,
+    })
+    const origin = {
+      kind: 'catalog_offering' as const,
+      offeringRef: catalogOffering.offeringRef,
+      offeringRevision: catalogRevision.revision,
+      offeringSourceHash: catalogRevision.sourceHash,
+      declaredAccessPathRef: accessPathRef,
+      accessPathSourceHash,
+    }
     const encoded = encodeCapabilityContractDocument(document)
-    const contract = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, 3_000)
+    const offeringDraft = {
+      offeringId,
+      networkId: 'ae:public' as const,
+      origin,
+      presentation: {
+        label,
+        summary: 'Curated Frankfurter supply for preparation authority verification only.',
+        price: { kind: 'fixed' as const, amount: priceAmount },
+        materialTerms: [{ termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS.' }],
+        commercialRelationship: {
+          kind: 'none' as const,
+          summary: 'No commercial relationship.',
+          influencesEligibility: false,
+          influencesInclusion: false,
+          influencesOrder: false,
+          evidenceRefs: ['test:commercial-neutrality'],
+        },
+      },
+      searchTerms: ['currency', 'rate', 'cheapest', 'EUR', 'USD', 'option', 'request', 'preparation', 'authority', 'verification'],
+      registrationEvidenceRefs: ['test:disclosure-contract'],
+    }
+    const bindingDraft = {
+      bindingId,
+      endpointUrl: 'https://api.frankfurter.dev/v2/rates',
+      authority: { kind: 'keyless' as const },
+      continuation: { kind: 'single_response' as const, evidenceRefs: ['test:single-response'] },
+      cancellation: { kind: 'unsupported' as const, evidenceRefs: ['test:no-cancellation'] },
+      adapter: { adapterId: 'http-json:v1', config: { method: 'POST' as const, requestTimeoutMs: 5_000 } },
+      registrationEvidenceRefs: ['test:disclosure-binding'],
+    }
+    const evidenceRefs = ['test:disclosure-contract', 'test:disclosure-binding']
+    const source = {
+      kind: 'ae_envelope' as const,
+      documentJson: encoded.documentJson,
+      offering: offeringDraft,
+      binding: bindingDraft,
+      evidenceRefs,
+    }
+    const preparedResult = await preparePublicationDraft({
+      source,
+      sourceRevision: `system:dev-seed:${offeringId}:v1`,
+      pricingConfig: { version: 'pricing:v2', unit: 'call', paidAmount: priceAmount },
+      evidenceRefs,
+    })
+    if (preparedResult.kind !== 'prepared') {
+      throw new Error(`variant publication preparation failed: ${preparedResult.reason}`)
+    }
+    const prepared = preparedResult.prepared
+    const contract = await registerCapabilityContractDocument(ctx.db, prepared.documentJson, 3_000)
     if (contract.kind !== 'registered') throw new Error(`variant contract registration failed: ${contract.reason}`)
     const actor = { kind: 'system' as const, ref: 'system:test' }
     const offering = await registerCapabilityOfferingCommand(ctx.db, {
@@ -1906,21 +2036,14 @@ async function registerVariantSupply(
         reasonCode: 'test_disclosure_replay', evidenceRefs: ['test:disclosure-contract'],
       },
       registration: {
-        offeringId, businessId,
-        networkId: 'ae:public', contractRef: contract.ref,
-        presentation: {
-          label,
-          summary: 'Curated Frankfurter supply for preparation authority verification only.',
-          price: { kind: 'fixed', amount: priceAmount },
-          materialTerms: [{ termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS.' }],
-          commercialRelationship: {
-            kind: 'none', summary: 'No commercial relationship.',
-            influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
-            evidenceRefs: ['test:commercial-neutrality'],
-          },
-        },
-        searchTerms: ['currency rate'],
-        registrationEvidenceRefs: ['test:disclosure-contract'],
+        offeringId: prepared.offering.offeringId,
+        businessId,
+        networkId: prepared.offering.networkId,
+        contractRef: contract.ref,
+        origin: prepared.offering.origin,
+        presentation: prepared.offering.presentation,
+        searchTerms: prepared.offering.searchTerms,
+        registrationEvidenceRefs: prepared.offering.registrationEvidenceRefs,
       },
     }, 3_001)
     if (offering.kind !== 'registered') throw new Error(`variant offering registration failed: ${offering.reason}`)
@@ -1931,14 +2054,10 @@ async function registerVariantSupply(
         reasonCode: 'test_disclosure_replay', evidenceRefs: ['test:disclosure-binding'],
       },
       registration: {
-        bindingId, offeringId,
-        networkId: 'ae:public', contractRef: contract.ref,
-        endpointUrl: 'https://api.frankfurter.dev/v2/rates',
-        authority: { kind: 'keyless' },
-        continuation: { kind: 'single_response', evidenceRefs: ['test:single-response'] },
-        cancellation: { kind: 'unsupported', evidenceRefs: ['test:no-cancellation'] },
-        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
-        registrationEvidenceRefs: ['test:disclosure-binding'],
+        offeringId: offering.offeringId,
+        networkId: prepared.offering.networkId,
+        contractRef: contract.ref,
+        ...prepared.binding,
       },
     }, 3_002)
     if (binding.kind !== 'registered') throw new Error(`variant binding registration failed: ${binding.reason}`)
@@ -1953,22 +2072,54 @@ async function registerVariantSupply(
       conformanceEvidenceRefs: ['test:disclosure-binding-reviewed'],
     }, 3_003)
     if (eligibility.kind !== 'eligible') throw new Error(`variant eligibility failed: ${eligibility.kind === 'refused' ? eligibility.reason : eligibility.kind}`)
-    await seedSandboxCapabilityPublication(ctx, {
-      slug: businessSlug,
-      offeringId: offering.offeringId,
-      bindingId: binding.bindingId,
-      contractRef: contract.ref,
-      offeringRegistrationHash: offering.registrationHash,
-      bindingRegistrationHash: binding.registrationHash,
-    }, 3_004)
+    const published = await publishCapabilityForSeed(ctx, {
+      businessId,
+      runtimeEnvironment: 'sandbox',
+      prepared,
+      origin,
+      operationKey: `test:${suffix}-publication`,
+      correlationId: `test:${suffix}-replay`,
+      reasonCode: 'test_disclosure_provider_publication',
+      evidenceRefs,
+      now: 3_004,
+    })
+    if (published.kind === 'refused') throw new Error(`variant publication failed: ${published.reason}`)
   })
   await observeSandboxPublications(backend)
+}
+
+async function retireCuratedFrankfurterRoute(backend: ConvexFixtureBackend) {
+  await backend.run(async (ctx) => {
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', 'offering:frankfurter-ecb-rates:single-rate:v1'))
+      .unique()
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', 'binding:frankfurter-ecb-rates:single-rate:v1'))
+      .unique()
+    if (offering === null || binding === null) throw new Error('curated Frankfurter route missing')
+    const result = await setCapabilitySupplyEligibility(ctx.db, {
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: {
+        capabilityId: offering.capabilityId,
+        version: offering.version,
+        contractDigest: offering.contractDigest,
+      },
+      decision: 'revoke',
+      expectedOfferingRegistrationHash: offering.registrationHash,
+      expectedBindingRegistrationHash: binding.registrationHash,
+      admissionEvidenceRefs: ['test:retire-curated-route'],
+      conformanceEvidenceRefs: ['test:retire-curated-route'],
+    }, Date.now())
+    if (result.kind === 'refused') throw new Error(`curated Frankfurter route retirement failed: ${result.reason}`)
+  })
 }
 
 async function registerFrankfurterPreparationSupply(
   backend: ConvexFixtureBackend,
 ): Promise<CapabilityDecisionModel> {
   await seedCuratedFrankfurterSupply(backend)
+  await retireCuratedFrankfurterRoute(backend)
   const business = await backend.run(async (ctx) => (
     await ctx.db.query('businesses').withIndex('by_slug', (query) => (
       query.eq('slug', 'frankfurter-ecb-rates')
@@ -2013,6 +2164,7 @@ async function registerDualPreparationSupply(
   backend: ConvexFixtureBackend,
 ): Promise<CapabilityDecisionModel> {
   await seedCuratedFrankfurterSupply(backend)
+  await retireCuratedFrankfurterRoute(backend)
   const frankfurterBusiness = await businessBySlug(backend, 'frankfurter-ecb-rates')
   const exaBusiness = await businessBySlug(backend, 'agentic-market-exa')
   const document = await readCuratedContractDocument(backend, 'frankfurter.single-rate')
@@ -2031,7 +2183,7 @@ async function registerDualPreparationSupply(
     frankfurterBusiness._id,
     'offering:frankfurter-preparation:rate',
     'binding:frankfurter-preparation:http-json',
-    { suffix: 'frankfurter-preparation', businessSlug: 'frankfurter-ecb-rates' },
+    { suffix: 'frankfurter-preparation' },
   )
   await registerVariantSupply(
     backend,
@@ -2039,13 +2191,13 @@ async function registerDualPreparationSupply(
     exaBusiness._id,
     'offering:exa-preparation:rate',
     'binding:exa-preparation:http-json',
-    { suffix: 'exa-preparation', businessSlug: 'agentic-market-exa', priceAmount: { currency: 'USD', units: '1', exponent: 2 }, label: 'Exa Preparation Rate' },
+    { suffix: 'exa-preparation', priceAmount: { currency: 'USD', units: '1', exponent: 2 }, label: 'Exa Preparation Rate' },
   )
   // Publishing/observing schedules readiness probes; drain them now so the
   // routeable supply is settled (and the registry snapshot stable) before the
   // request is submitted, instead of a probe landing mid-test.
   await backend.finishInProgressScheduledFunctions()
-  await rememberModelOperationRef(backend, model)
+  await rememberModelOperationRef(backend, model, 'offering:frankfurter-preparation:rate')
   return model
 }
 
@@ -2071,24 +2223,61 @@ async function seedCuratedFrankfurterSupply(
 }
 
 function frankfurterFacts(model: CapabilityDecisionModel) {
-  return model.inputs.map((input) => ({
-    inputKey: input.key,
-    value: input.label === 'Quote currency' ? 'USD' : 'EUR',
-  }))
+  return model.inputs.map((input) => {
+    const value = input.inputPointer === '/base'
+      ? 'EUR'
+      : input.inputPointer === '/quote'
+        ? 'USD'
+        : undefined
+    if (value === undefined) throw new Error(`unexpected Frankfurter input pointer: ${input.inputPointer}`)
+    return { inputKey: input.key, valueJson: JSON.stringify(value) }
+  })
 }
 
 async function observeSandboxPublications(backend: ConvexFixtureBackend, drainProbe = false) {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await backend.finishInProgressScheduledFunctions()
   const publications = await backend.run(async (ctx) => ctx.db.query('capabilityPublications').collect())
   const now = Date.now()
   for (const publication of publications) {
-    if (drainProbe) await backend.action(internal.capabilitySupplyReadiness.probe, {
-      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+    if (drainProbe) {
+      await backend.action(internal.capabilitySupplyReadiness.probe, {
+        publicationRef: publication.publicationRef,
+        expectedRevision: publication.revision,
+      })
+    }
+    const available = await backend.query(internal.capabilitySupply.readCapabilityProbeTarget, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: publication.revision,
     })
-    const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
-      credentialState: 'ready', healthState: 'healthy', validUntil: now + 3_600_000,
-      operationKey: `test:application-readiness:${publication.publicationRef}`,
-      correlationId: 'test:application-readiness', reasonCode: 'test_readiness', evidenceRefs: ['test:readiness'],
+    if (available.kind !== 'available') continue
+    const target = available.target
+    const requestDigest = canonicalDigest({
+      targetDigest: target.targetDigest,
+      endpointUrl: target.endpointUrl,
+      adapterId: target.adapterId,
+      probeKind: target.probeKind ?? null,
+      probeMethod: target.probeMethod ?? null,
+      probeQuery: target.probeQuery ?? [],
+      transportConfigJson: target.transportConfigJson ?? null,
+      probeInputJson: target.probeInputJson ?? null,
+      outputSchemaJson: target.outputSchemaJson ?? null,
+      expectedPaymentJson: target.expectedPaymentJson ?? null,
+    })
+    const observed = await backend.mutation(internal.capabilitySupply.recordCapabilityProbeResult, {
+      publicationRef: target.publicationRef,
+      expectedRevision: target.revision,
+      targetDigest: target.targetDigest,
+      requestDigest,
+      responseStatus: 200,
+      responseContentType: 'application/json',
+      responseDigest: canonicalDigest(readinessResponseBody),
+      outcome: 'healthy',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      observedAt: now,
+      validUntil: now + 3_600_000,
+      evidenceRefs: ['test:readiness-target', 'test:readiness-response'],
     })
     if (observed.kind !== 'observed') throw new Error(`sandbox readiness failed: ${observed.reason}`)
   }

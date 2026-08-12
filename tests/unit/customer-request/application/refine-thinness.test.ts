@@ -109,7 +109,7 @@ describe('customer-request refine thinness', () => {
     expect(convexHost).toContain('authorizePreparation as authorizePreparationApplication')
     expect(convexHost).toContain('authorizePreparationPorts')
     const capabilityHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
-    expect(capabilityHost).toMatch(/export const withdrawCapability\s*=/)
+    expect(capabilityHost).not.toMatch(/export const withdrawCapability\s*=/)
   })
 })
 

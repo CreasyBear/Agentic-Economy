@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ExactAmount } from '@/modules/money/public'
+import type { ExactAmount, PricingConfig } from '@/modules/money/public'
+import { pricingConfigDigest } from '@/modules/money/public'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -41,6 +42,10 @@ describe('V2 Prepared Action compilation', () => {
         releaseEvidenceRef: 'provider-response:one',
       },
       model,
+      pricingConfig: { version: 'pricing:v2', unit: 'call', paidAmount: exactAmount('AUD', 125) },
+      priceDigest: pricingConfigDigest({
+        version: 'pricing:v2', unit: 'call', paidAmount: exactAmount('AUD', 125),
+      }),
       business: { businessId: 'business:one', name: 'Business One' },
       offering: {
         offeringId: response.offeringId,
@@ -204,8 +209,16 @@ describe('V2 Prepared Action compilation', () => {
     const lineage = actionLineage(model)
     const first = optionCandidate({ model, lineage, suffix: 'one', priceAmount: exactAmount('AUD', 1_200) })
     const second = optionCandidate({ model, lineage, suffix: 'two', priceAmount: exactAmount('AUD', 900) })
+    const differentPricingConfig = {
+      version: 'pricing:v2' as const,
+      unit: 'call' as const,
+      paidAmount: exactAmount('USD', 900),
+    }
+    const differentPriceDigest = pricingConfigDigest(differentPricingConfig)
     const differentCurrency: PreparedActionOptionCandidate = {
       ...second,
+      pricingConfig: differentPricingConfig,
+      priceDigest: differentPriceDigest,
       offering: {
         ...second.offering,
         presentation: {
@@ -374,6 +387,16 @@ function optionCandidate(input: Readonly<{
       releaseEvidenceRef: `provider-response:${input.suffix}`,
     },
     model: input.model,
+    pricingConfig: {
+      version: 'pricing:v2',
+      unit: 'call',
+      paidAmount: input.priceAmount,
+    } satisfies PricingConfig,
+    priceDigest: pricingConfigDigest({
+      version: 'pricing:v2',
+      unit: 'call',
+      paidAmount: input.priceAmount,
+    }),
     business: { businessId: `business:${input.suffix}`, name: `Business ${title}` },
     offering: {
       offeringId: response.offeringId, registrationHash: 'sha256:' + (input.suffix === 'one' ? 'b' : 'e').repeat(64),

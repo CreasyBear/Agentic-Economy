@@ -141,8 +141,11 @@ function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteRead
       slug,
       name: 'Status Card Plumbing',
       category: 'Emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
+      businessContext: {
+        kind: 'local_human',
+        suburb: 'Parramatta',
+        stateTerritory: 'NSW',
+      },
       publicUrl: '/status-card-plumbing',
       trustTier: 'contact_confirmed',
       observedAt: 1,

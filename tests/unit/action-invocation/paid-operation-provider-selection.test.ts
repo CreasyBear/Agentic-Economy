@@ -23,12 +23,33 @@ describe('explicit paid-operation provider selection', () => {
       expect(semantics.operation.operationRevision)
         .toBe(String(selected.operation.identity.publicationRevision))
       expect(selected.prepared.prepared?.target).toMatchObject({
-        source: {
-          businessId: selected.operation.identity.businessId,
-          publicationRevision: selected.operation.identity.publicationRevision,
-          materialDigest: selected.operation.materialDigest,
-        },
+        businessId: selected.operation.identity.businessId,
+        publicationRef: selected.operation.identity.publicationRef,
+        publicationRevision: selected.operation.identity.publicationRevision,
+        publicationDigest: selected.operation.identity.publicationDigest,
+        contractId: selected.operation.identity.contractId,
+        contractVersion: selected.operation.identity.contractVersion,
+        contractDigest: selected.operation.identity.contractDigest,
+        offeringId: selected.operation.identity.offeringId,
+        offeringDigest: selected.operation.identity.offeringDigest,
+        bindingId: selected.operation.identity.bindingId,
+        bindingDigest: selected.operation.identity.bindingDigest,
+        adapterId: selected.operation.identity.adapterId,
+        transportConfigDigest: selected.operation.identity.transportConfigDigest,
+        priceDigest: selected.operation.identity.priceDigest,
+        price: selected.operation.identity.price,
+        pricingConfig: selected.operation.identity.pricingConfig,
       })
+      const connectionAuthority = selected.operation.identity.connectionAuthority
+      if (connectionAuthority !== undefined) {
+        expect(selected.prepared.prepared?.target).toMatchObject({
+          connectionAuthority: {
+            authorityDigest: connectionAuthority.authorityDigest,
+            authorityGeneration: connectionAuthority.authorityGeneration,
+            operationRef: connectionAuthority.operationRef,
+          },
+        })
+      }
       expect(selected.paymentAttempt?.providerEndpoint)
         .toMatch(new RegExp(`^${selected.operation.binding.endpointUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?`))
       expect(selected.operation.identity.payment.kind).toBe('x402')

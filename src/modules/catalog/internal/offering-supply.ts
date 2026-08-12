@@ -4,7 +4,7 @@ import type {
   OfferingRef,
   SourceHash,
 } from '@/modules/common/ids'
-import type { TrustTier } from '@/modules/business/public'
+import type { BusinessContext, TrustTier } from '@/modules/business/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sanitizeText } from '@/modules/common/sanitize-text'
 import type { OfferingPrice } from './offering-price'
@@ -137,10 +137,7 @@ export type PublicBusinessProfile = Readonly<{
   slug: string
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
-  postcode?: string
+  businessContext: BusinessContext
   publicUrl: string
   trustTier: TrustTier
   responseTimeMinutes?: number

@@ -72,6 +72,8 @@ describe('money append-only ledger', () => {
       kind: 'accepted',
       chargeState: 'paid',
       amount: amount('USD', '500', 2),
+      usageRef: 'inv-1:attempt-1:operation-1',
+      observedAt: 11,
       providerNet: amount('USD', '450', 2),
       rake: amount('USD', '50', 2),
     })
@@ -148,7 +150,8 @@ describe('money append-only ledger', () => {
     }
     const charge = authorizePaidCharge(chargeInput)
     const replay = authorizePaidCharge({ ...chargeInput, state: charge.state })
-    expect(replay.result).toMatchObject({ kind: 'accepted', transactionRef: 'charge-1', amount: amount('USD', '500', 2) })
+    expect(replay.result).toMatchObject({ kind: 'accepted', transactionRef: 'charge-1', amount: amount('USD', '500', 2), usageRef: 'inv-1:attempt-1:operation-1', observedAt: 11 })
+    expect(authorizePaidCharge({ ...chargeInput, state: { ...charge.state, usageEvents: [] } }).result).toMatchObject({ kind: 'refused', code: 'charge_reconciliation_required' })
     expect(replay.state.entries).toHaveLength(charge.state.entries.length)
     expect(replay.state.transactions).toHaveLength(charge.state.transactions.length)
     expect(replay.state.usageEvents).toHaveLength(charge.state.usageEvents.length)
@@ -211,7 +214,7 @@ describe('money append-only ledger', () => {
       observedAt: 11,
       freeTier: true,
     })
-    expect(result.result).toMatchObject({ kind: 'accepted', chargeState: 'free_tier', amount: amount('USD', '0', 2) })
+    expect(result.result).toMatchObject({ kind: 'accepted', chargeState: 'free_tier', amount: amount('USD', '0', 2), usageRef: 'inv-1:attempt-1:operation-1', observedAt: 11 })
     expect(result.state.entries).toHaveLength(0)
     expect(result.state.transactions).toHaveLength(0)
   })

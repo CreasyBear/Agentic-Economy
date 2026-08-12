@@ -6,7 +6,7 @@ import {
 } from '@/modules/answer-thread/public'
 import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import {
-  persistReservedAnswerTurn,
+  finalizeReservedAnswerTurnFromRequest,
   reserveAnswerTurn,
 } from '@/modules/answer-thread/answer-thread.functions'
 import { createAnswerThreadTestStore, installAnswerThreadTestPort } from '../helpers/answer-thread-test-port'
@@ -67,6 +67,7 @@ describe('answerToolCalls persistence', () => {
     const evidenceJson = JSON.stringify(currentEvidence({ toolCalls: buffered }))
     const proseJson = JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' })
     const answerDigest = answerTurnFinalizationDigest({
+      expectedGeneration: reservation.generation,
       turn: {
         turnId: reservation.turnId,
         threadId: reservation.threadId,
@@ -83,24 +84,28 @@ describe('answerToolCalls persistence', () => {
       toolCalls: toolCallInputs,
     })
 
-    const persisted = await persistReservedAnswerTurn({
+    const finalized = await finalizeReservedAnswerTurnFromRequest(new Request('https://example.test'), {
       reservationKey: reservation.reservationKey,
       requestDigest: 'digest-tool-1',
       sessionId: 'session-1',
       threadId: reservation.threadId,
       turnId: reservation.turnId,
       turnSeq: reservation.turnSeq,
+      expectedGeneration: reservation.generation,
       createdAt: 1_500,
       answerDigest,
       query: 'after hours plumber Preston',
       intent: 'refine_search',
+      finalStatus: 'complete',
       evidenceJson,
       snapshotHash: 'hash-1',
       proseJson,
       artifactKindsJson: '[]',
+      finalizationHash: answerDigest,
       toolCalls: toolCallInputs,
+      entries: [],
     })
-    expect(persisted.kind).toBe('persisted')
+    expect(finalized.status).toBe('accepted')
     expect(store.persisted).toHaveLength(1)
     expect(store.persisted[0]).toMatchObject({
       turnId: reservation.turnId,

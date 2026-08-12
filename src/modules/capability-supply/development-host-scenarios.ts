@@ -19,6 +19,7 @@ import {
   type RichInvocationTaskProjection,
   type StructuredInvocationTaskProjection,
 } from '@/modules/action-invocation'
+import { createDevelopmentScenarioX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   attachCompletedTaskReference,
@@ -28,6 +29,7 @@ import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
+  createDevelopmentProviderLeaseIssuer,
 } from './development-published-operation-evidence'
 import {
   developmentLostResponseRuntime,
@@ -373,8 +375,19 @@ async function timeoutScenario(
   const prepared = await context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
   const decided = await context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_timeout_decision:${decided.code}`)
+  const continuation = context.host.continue(prepared.invocationRef)
+  await new Promise<void>((resolve) => {
+    const waitForProviderStart = (): void => {
+      if (context.effects.provider > 0) {
+        resolve()
+        return
+      }
+      queueMicrotask(waitForProviderStart)
+    }
+    waitForProviderStart()
+  })
   timeout.fire()
-  const timedOut = await context.host.continue(prepared.invocationRef)
+  const timedOut = await continuation
   if (timedOut.kind !== 'completed') throw new Error(`host_timeout_execute:${continuationCode(timedOut)}`)
   const retry = await context.host.continue(prepared.invocationRef)
   const attempt = timedOut.view.attempts.at(-1)
@@ -445,7 +458,7 @@ async function successScenario(fixture: Fixture, hostKind: DevelopmentHostKind) 
   const completed = await context.host.continue(prepared.invocationRef)
   if (completed.kind !== 'completed') throw new Error(`host_success_execute:${continuationCode(completed)}`)
   const duplicate = await context.host.continue(prepared.invocationRef)
-  const cancellation = await context.host.requestCancellation(prepared.invocationRef)
+  const cancellation = await context.host.requestCancellation(prepared.invocationRef, `cancel:${prepared.invocationRef}:scenario`)
   return {
     context,
     outcome: outcome(prepared.invocationRef, requireAuthority(prepared).reference, completed.view, context),
@@ -558,6 +571,7 @@ async function coldResumeScenario(
     operation: fixture.operation,
     source,
     runtime: developmentSuccessRuntime(fixture.operation.binding.endpointUrl, context.effects),
+    issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, context.now + 1),
     now: () => context.now + 1,
     nextInvocationRef: () => 'cold:unused',
     nextAuthorityRef: () => 'cold:unused',
@@ -567,8 +581,10 @@ async function coldResumeScenario(
     developmentSnapshot: loaded.developmentSnapshot,
     inputWork: loaded.inputWork,
     inputHistory: loaded.inputHistory,
-    paymentAttempts: loaded.paymentAttempts,
-    paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+    paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort({
+      attempts: loaded.paymentAttempts,
+      authorizationEvents: loaded.paymentAuthorizationEvents,
+    }),
   })
   const coldHost = createHost(hostKind, adapter, context.actor, sourceCommands(
     fixture,
@@ -675,12 +691,14 @@ function createScenario(
     operation: fixture.operation,
     source,
     runtime: runtime(fixture.operation.binding.endpointUrl, effects),
+    issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, now),
     now: () => now,
     nextInvocationRef: () => `host:${hostKind}:${scenario}:invocation`,
     nextAuthorityRef: () => `host:${hostKind}:${scenario}:authority:${++authoritySequence}`,
     nextAttemptRef: () => `host:${hostKind}:${scenario}:attempt`,
     ...(developmentTimeoutSignal === undefined ? {} : { developmentTimeoutSignal }),
     durablePort,
+    paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort(),
     developmentSnapshot: durableState,
   })
   const commands = sourceCommands(fixture, hostKind, now, beforeExecute)

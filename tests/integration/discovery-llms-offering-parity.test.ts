@@ -14,7 +14,7 @@ describe('durable llms Offering parity', () => {
       })
       const offeringBusinessId = await ctx.db.insert('businesses', {
         ownerId, slug: 'offering-engineering', name: 'Offering Engineering', normalizedName: 'offering engineering',
-        category: 'Engineering', suburb: 'Perth', stateTerritory: 'WA',
+        category: 'Engineering', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
         publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
         sourceHash: 'business:offering-engineering', createdAt: 1, updatedAt: 1,
       })
@@ -24,7 +24,7 @@ describe('durable llms Offering parity', () => {
         projection: {
           business: {
             businessId: offeringBusinessId, slug: 'offering-engineering', name: 'Offering Engineering',
-            category: 'Engineering', suburb: 'Perth', stateTerritory: 'WA',
+            category: 'Engineering', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
             publicUrl: '/offering-engineering', trustTier: 'listed',
           },
           offerings: [{
@@ -51,7 +51,7 @@ describe('durable llms Offering parity', () => {
 
       const profileBusinessId = await ctx.db.insert('businesses', {
         ownerId, slug: 'profile-only-consulting', name: 'Profile Only Consulting', normalizedName: 'profile only consulting',
-        category: 'Consulting', suburb: 'Fremantle', stateTerritory: 'WA',
+        category: 'Consulting', businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
         publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
         sourceHash: 'business:profile-only', createdAt: 1, updatedAt: 1,
       })
@@ -61,7 +61,7 @@ describe('durable llms Offering parity', () => {
         projection: {
           business: {
             businessId: profileBusinessId, slug: 'profile-only-consulting', name: 'Profile Only Consulting',
-            category: 'Consulting', suburb: 'Fremantle', stateTerritory: 'WA',
+            category: 'Consulting', businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
             publicUrl: '/profile-only-consulting', trustTier: 'listed',
           },
           offerings: [], sourceRevision: 1, sourceDigest: 'projection:profile', observedAt: 2,
@@ -75,7 +75,7 @@ describe('durable llms Offering parity', () => {
     })
     expect(result.body).toContain('- slug=offering-engineering path=/offering-engineering')
     expect(result.body).toContain('- slug=profile-only-consulting path=/profile-only-consulting')
-    expect(result.body).toContain('- total=2; the lines above are a sample, not the catalog')
+    expect(result.body).toContain('- total=2; the lines above are a bounded sample')
     expect(result.body).not.toContain('Retired Legacy Drilling')
     expect(result.body).not.toContain('secret:must-not-leak')
     expect(result.body).not.toContain('credentialRef')

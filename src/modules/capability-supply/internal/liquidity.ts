@@ -4,6 +4,7 @@ const capabilityCallEventKinds = [
   'supply_liquidity_fill_observed',
   'supply_liquidity_first_success_observed',
   'supply_liquidity_depth_observed',
+  'supply_owner_test_observed',
 ] as const
 export type CapabilityCallEventKind = typeof capabilityCallEventKinds[number]
 const liquidityZeroReasons = [

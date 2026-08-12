@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildBusinessMarkdown,
   buildCatalogMarkdown,
+  buildForAgentsMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,
@@ -18,8 +19,7 @@ function business(overrides: Partial<PublicBusinessCatalogApiV2Dto> = {}): Publi
     slug: 'adelaide-emergency-plumbing',
     name: 'Adelaide Emergency Plumbing',
     category: 'Emergency plumbing',
-    suburb: 'Adelaide',
-    stateTerritory: 'SA',
+    businessContext: { kind: 'local_human', suburb: 'Adelaide', stateTerritory: 'SA' },
     publicUrl: '/adelaide-emergency-plumbing',
     trustTier: 'claimed',
     photos: [],
@@ -55,17 +55,28 @@ const pricedOffering: PublicBusinessCatalogApiV2Dto['offerings'][number] = {
 describe('site brief markdown', () => {
   const body = buildSiteBriefMarkdown(options)
 
-  it('leads with the keyless entry before any key-gated instruction', () => {
-    expect(body.indexOf('/api/answer/turn')).toBeGreaterThan(-1)
-    expect(body.indexOf('/api/answer/turn')).toBeLessThan(body.indexOf('customer_requests:create'))
-    expect(body).toContain('No credential.')
-    expect(body).toContain('fresh opaque `X-AE-Turn-Key` for every turn')
-    expect(body).toContain('X-AE-Turn-Key: <fresh opaque value>')
-    expect(body).toContain('not a credential')
+  it('starts with the no-install raw handshake and then uses the repo-local CLI', () => {
+    expect(body).toContain('curl -fsSL https://ae.example/.well-known/ucp')
+    expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))
+    expect(body).toContain('npm run -s ae -- inspect "$AE_OPERATION_REF" --json')
   })
 
-  it('names where a key comes from instead of assuming the caller has one', () => {
-    expect(body).toContain('https://ae.example/agent-access')
+  it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
+    expect(body).toContain('https://ae.example/agent-access/authorize?user_code=...')
+    expect(body).toContain('https://ae.example/oauth/device_authorization')
+    expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
+    expect(body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
+    expect(body).toContain('The request JSON body field `idempotencyKey` is required for invoke, cancel, and reconcile; choose it once for the intended invocation and retain it.')
+    expect(body).toContain('Authenticated: invoke, status, cancel, reconcile.')
+  })
+
+  it('builds a machine guide for non-HTML /for-agents requests', () => {
+    const guide = buildForAgentsMarkdown(options)
+    expect(guide).toContain('curl -fsSL https://ae.example/.well-known/ucp')
+    expect(guide).toContain('POST body example')
+    expect(guide).toContain('application/problem+json')
+    expect(guide).toContain('npm run -s ae -- advanced cancel')
+    expect(guide).not.toContain('npm run -s ae -- advanced reconcile')
   })
 
   it('trims the trailing slash off the canonical base', () => {

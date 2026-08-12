@@ -13,6 +13,7 @@ import {
   RegistryProjectionStatusValues,
 } from './schema-values'
 import { PublicStatusValues, TrustTierValues } from '@/modules/business/public'
+import { businessContext } from '@/modules/business/public'
 import { FirstRequestModeValues } from '@/modules/catalog/schema-values'
 
 
@@ -152,9 +153,7 @@ const currentRegistrySearchDocument = v.object({
   name: v.string(),
   category: v.string(),
   categoryKey: v.string(),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  postcode: v.optional(v.string()),
+  businessContext,
   publicStatus: v.literal('published'),
   trustTier: literalUnion(TrustTierValues),
   firstRequestMode: literalUnion(FirstRequestModeValues),

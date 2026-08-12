@@ -1,6 +1,6 @@
 import type { LookupAddress, LookupOptions } from 'node:dns'
 import { lookup as nodeDnsLookup } from 'node:dns/promises'
-import { BlockList, isIP, type LookupFunction } from 'node:net'
+import { BlockList, isIP, SocketAddress, type LookupFunction } from 'node:net'
 
 export type ResolvedAddress = {
   address: string
@@ -146,9 +146,29 @@ function isPublicIpAddress(value: string): boolean {
   }
 
   try {
+    const mappedIpv4 = family === 6 ? extractMappedIpv4Address(normalized) : undefined
+    if (mappedIpv4 !== undefined) {
+      return !blockedAddressRanges.check(mappedIpv4, 'ipv4')
+    }
     return !blockedAddressRanges.check(normalized, family === 6 ? 'ipv6' : 'ipv4')
   } catch {
     return false
   }
+}
+
+function extractMappedIpv4Address(value: string): string | undefined {
+  const zoneIndex = value.indexOf('%')
+  const withoutZone = zoneIndex === -1 ? value : value.slice(0, zoneIndex)
+  let parsed: SocketAddress | undefined
+  try {
+    parsed = SocketAddress.parse(`[${withoutZone}]:0`)
+  } catch {
+    return undefined
+  }
+  if (parsed === undefined || parsed.family !== 'ipv6' || !parsed.address.startsWith('::ffff:')) {
+    return undefined
+  }
+  const mappedIpv4 = parsed.address.slice('::ffff:'.length)
+  return isIP(mappedIpv4) === 4 ? mappedIpv4 : undefined
 }
 

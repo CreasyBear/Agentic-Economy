@@ -7,6 +7,7 @@ import {
   handleAgentCustomerRequestRepeatPermissionUsePost,
   handleAgentCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-agent-api'
+import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import {
   handleCustomerRequestConnectedAssistantsGet,
   handleCustomerRequestRepeatPermissionAllowPost,
@@ -30,6 +31,7 @@ const principal = {
   orgId: null,
   scopes: ['customer_requests:create', customerRequestScopeForMode('bounded_mandate')],
 }
+const resolvePrincipal = async (value: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => value
 
 describe('Customer Request repeat-permission HTTP surface', () => {
   it('returns customer-safe connected assistant choices without credential language', async () => {
@@ -98,6 +100,7 @@ describe('Customer Request repeat-permission HTTP surface', () => {
       {
         ...agentOptions(async () => repeatPermissionReceipt()),
         authenticate: async () => ({ ...principal, scopes: ['customer_requests:create'] }),
+        resolvePrincipal,
         callAction,
       },
     )
@@ -322,6 +325,7 @@ type TestAgentResult = ReturnType<typeof repeatPermissionReceipt> | (Omit<
 function agentOptions(callAction: (name: string, args: Record<string, unknown>) => Promise<TestAgentResult>) {
   return {
     authenticate: async () => principal,
+    resolvePrincipal,
     callAction,
     env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key },
     now: () => 1_000,

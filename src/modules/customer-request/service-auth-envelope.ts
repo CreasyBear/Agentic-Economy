@@ -31,7 +31,14 @@ export async function createCustomerRequestServiceAssertion(input: Readonly<{
 }>): Promise<CustomerRequestServiceAssertion> {
   const material = assertionMaterial(input.operation, input.command, input.principal, input.issuedAt)
   const signature = await crypto.subtle.sign('HMAC', await hmacKey(input.key, ['sign']), new TextEncoder().encode(material))
-  return Object.freeze({ ...input.principal, scopes: Object.freeze([...input.principal.scopes].sort()), issuedAt: input.issuedAt, signature: base64Codec.toBase64Url(new Uint8Array(signature)) })
+  return Object.freeze({
+    principalId: input.principal.principalId,
+    ownerId: input.principal.ownerId,
+    credentialId: input.principal.credentialId,
+    scopes: Object.freeze([...input.principal.scopes].sort()),
+    issuedAt: input.issuedAt,
+    signature: base64Codec.toBase64Url(new Uint8Array(signature)),
+  })
 }
 
 export async function verifyCustomerRequestServiceAssertion(input: Readonly<{

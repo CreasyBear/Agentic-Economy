@@ -1,4 +1,3 @@
-import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   capabilityOperationId,
@@ -11,7 +10,7 @@ import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registrat
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import { contractRefFromRow } from '../offering/registration'
-import { publicationLifecycle } from '../publication/lifecycle'
+import type { PricingConfig } from '@/modules/money/public'
 
 import { bindingEligibilityIsValid, offeringEligibilityIsValid } from './integrity'
 import {
@@ -46,11 +45,12 @@ export async function listIntegratedCapabilitySupply(
       revision: number
       readinessValidUntil: number
       operationRef: PublicOperationRef
+      pricingConfig: PricingConfig
+      priceDigest: string
       connectionAuthority?: CapabilityConnectionAuthoritySnapshot
       admittedOperation: AdmittedOperationRef
     }>
   }> = []
-  const now = input.now
   for (const binding of bindings) {
     if (!bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
       return { kind: 'unavailable' as const, reason: 'supply_integrity_failure' as const }
@@ -60,50 +60,68 @@ export async function listIntegratedCapabilitySupply(
     if (!offeringIntegrityIsValid(offering) || !offeringEligibilityIsValid(offering)) {
       return { kind: 'unavailable' as const, reason: 'supply_integrity_failure' as const }
     }
-    const contractRef = contractRefFromRow(binding)
     if (
-      offering.networkId !== binding.networkId
-      || !sameCapabilityContractRef(contractRefFromRow(offering), contractRef)
+      offering.networkId !== input.networkId
+      || offering.networkId !== binding.networkId
+      || contractRefFromRow(offering).capabilityId !== contractRefFromRow(binding).capabilityId
+      || contractRefFromRow(offering).version !== contractRefFromRow(binding).version
+      || contractRefFromRow(offering).contractDigest !== contractRefFromRow(binding).contractDigest
     ) continue
     if (await ports.loadPublishedBusiness(offering.businessId) === null) continue
-    const catalogOriginCurrent = offering.origin?.kind !== 'catalog_offering'
-      || await ports.catalogOriginIsCurrent(offering.origin, offering.businessId)
-    if (!catalogOriginCurrent) continue
-    const contract = await ports.getActiveExactCapabilityContract(contractRef)
-    if (contract.kind !== 'found') continue
-    const publication = await ports.loadCurrentPublicationByBindingId(binding.bindingId)
-    const currentConnection = binding.authority.kind === 'provider_connection'
-      ? await ports.loadProviderConnection(binding.authority.connectionRef)
-      : undefined
-    if (
-      publication === null
-      || publication.businessId !== offering.businessId
-      || publication.offeringId !== offering.offeringId
-      || publication.bindingId !== binding.bindingId
-      || publication.networkId !== input.networkId
-      || publication.capabilityId !== contractRef.capabilityId
-      || publication.version !== contractRef.version
-      || publication.contractDigest !== contractRef.contractDigest
-      || publication.readinessValidUntil === undefined
-      || publicationLifecycle(publication, offering, binding, now, currentConnection).state !== 'active'
-    ) continue
-    const admittedOperation = deriveAdmittedOperation(
-      publication, offering, binding, contract.registeredAt, contract.documentJson, now,
-    )
-    if (admittedOperation === undefined) continue
+
+    let publication: {
+      publicationRef: string
+      revision: number
+      readinessValidUntil: number
+      operationRef: PublicOperationRef
+      pricingConfig: PricingConfig
+      priceDigest: string
+      connectionAuthority?: CapabilityConnectionAuthoritySnapshot
+      admittedOperation: AdmittedOperationRef
+    } | undefined
+    const currentPublication = await ports.loadCurrentPublicationByBindingId(binding.bindingId)
+    if (currentPublication !== null) {
+      const contractRef = contractRefFromRow(binding)
+      const qualification = await ports.qualifySuppliedCandidate({
+        publicationRef: currentPublication.publicationRef,
+        revision: currentPublication.revision,
+        networkId: input.networkId,
+        businessId: offering.businessId,
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef,
+      }, input.now)
+      if (qualification.status === 'eligible') {
+        const pricingConfig = currentPublication.pricingConfig
+        const priceDigest = currentPublication.priceDigest
+        if (pricingConfig !== undefined && priceDigest !== undefined) {
+          const contract = await ports.getActiveExactCapabilityContract(contractRef)
+          if (contract.kind === 'found') {
+            const admittedOperation = deriveAdmittedOperation(
+              currentPublication, offering, binding, contract.registeredAt, contract.documentJson, input.now,
+            )
+            if (admittedOperation !== undefined) {
+              publication = {
+                publicationRef: currentPublication.publicationRef,
+                revision: currentPublication.revision,
+                readinessValidUntil: currentPublication.readinessValidUntil ?? 0,
+                operationRef: currentPublication.operationRef,
+                pricingConfig,
+                priceDigest,
+                ...(currentPublication.connectionAuthority === undefined
+                  ? {}
+                  : { connectionAuthority: currentPublication.connectionAuthority }),
+                admittedOperation,
+              }
+            }
+          }
+        }
+      }
+    }
     supplies.push({
       offering: eligibleOfferingProjection(offering),
       binding: eligibleBindingProjection(binding),
-      publication: {
-        publicationRef: publication.publicationRef,
-        revision: publication.revision,
-        readinessValidUntil: publication.readinessValidUntil,
-        operationRef: publication.operationRef,
-        ...(publication.connectionAuthority === undefined
-          ? {}
-          : { connectionAuthority: publication.connectionAuthority }),
-        admittedOperation,
-      },
+      ...(publication === undefined ? {} : { publication }),
     })
   }
   supplies.sort((left, right) => (

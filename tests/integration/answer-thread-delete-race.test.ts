@@ -6,17 +6,20 @@ import schema from '../../convex/schema'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 import {
   createSourceWriteAdmission,
-  sourceWriteBodyDigest,
+  sourceWriteCommandBodyDigest,
+  sourceWriteCommandDigest,
+  type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 
 const SOURCE_WRITE_SECRET = 'answer-thread-delete-race-source-write-secret'
 const SHARE_SECRET = 'answer-thread-delete-race-share-secret-32-characters'
 const SOURCE_REQUEST = {
   method: 'POST',
-  origin: 'http://127.0.0.1:3024',
-  pathname: '/api/answer/turn',
-  bodyDigest: sourceWriteBodyDigest(undefined),
-}
+  initiatorOrigin: 'http://127.0.0.1:3024',
+  targetOrigin: 'http://127.0.0.1:3024',
+  targetPath: '/api/answer/turn',
+  targetQuery: '',
+} as const
 
 describe('answer thread deletion authority transition', () => {
   const previousSourceSecret = process.env.AE_SOURCE_WRITE_SECRET
@@ -41,7 +44,7 @@ describe('answer thread deletion authority transition', () => {
     const requestDigest = 'digest-delete-race-owner'
     const threadScope = 'new'
     const reserveOperationKey = `answer_thread:reserve:${reservationKey}`
-    const first = await backend.mutation(api.answerThreads.reserveAnswerTurn, {
+    const first = await backend.mutation(api.answerThreads.reserveAnswerTurn, await admitted({
       sessionId,
       requestedThreadScope: threadScope,
       query: 'delete race query',
@@ -50,19 +53,17 @@ describe('answer thread deletion authority transition', () => {
       title: 'delete race query',
       operationKey: reserveOperationKey,
       correlationId: reserveOperationKey,
-      sourceWrite: admission(reserveOperationKey, 'nonce-delete-race-reserve'),
-    })
+    }, 'nonce-delete-race-reserve'))
     expect(first).toMatchObject({ kind: 'reserved', reservationKey })
     if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
 
     const shareOperationKey = `answer_thread:share:issue:${first.threadId}`
-    const issued = await backend.mutation(api.answerThreads.issueAnswerThreadShare, {
+    const issued = await backend.mutation(api.answerThreads.issueAnswerThreadShare, await admitted({
       threadId: first.threadId,
       pseudonymousSessionId: sessionId,
       operationKey: shareOperationKey,
       correlationId: shareOperationKey,
-      sourceWrite: admission(shareOperationKey, 'nonce-delete-race-share'),
-    })
+    }, 'nonce-delete-race-share'))
 
     await backend.run(async (ctx) => {
       for (let index = 0; index < 100; index += 1) {
@@ -76,6 +77,7 @@ describe('answer thread deletion authority transition', () => {
           seq: -(index + 1),
           query: `delete race child ${index}`,
           state: 'reserved',
+          generation: 0,
           createdAt: index + 1,
           updatedAt: index + 1,
         })
@@ -83,13 +85,12 @@ describe('answer thread deletion authority transition', () => {
     })
 
     const deleteOperationKey = `answer_thread:delete:${first.threadId}`
-    await expect(backend.mutation(api.answerThreads.deleteAnswerThread, {
+    await expect(backend.mutation(api.answerThreads.deleteAnswerThread, await admitted({
       threadId: first.threadId,
       pseudonymousSessionId: sessionId,
       operationKey: deleteOperationKey,
       correlationId: deleteOperationKey,
-      sourceWrite: admission(deleteOperationKey, 'nonce-delete-race-delete'),
-    })).resolves.toEqual({ threadId: first.threadId })
+    }, 'nonce-delete-race-delete'))).resolves.toEqual({ threadId: first.threadId })
 
     const afterDelete = await backend.run(async (ctx) => ({
       thread: await ctx.db
@@ -110,16 +111,15 @@ describe('answer thread deletion authority transition', () => {
     expect(afterDelete.reservations).toHaveLength(1)
 
     const issueAfterDeleteKey = `answer_thread:share:issue-after-delete:${first.threadId}`
-    await expect(backend.mutation(api.answerThreads.issueAnswerThreadShare, {
+    await expect(backend.mutation(api.answerThreads.issueAnswerThreadShare, await admitted({
       threadId: first.threadId,
       pseudonymousSessionId: sessionId,
       operationKey: issueAfterDeleteKey,
       correlationId: issueAfterDeleteKey,
-      sourceWrite: admission(issueAfterDeleteKey, 'nonce-delete-race-issue-after-delete'),
-    })).rejects.toThrow('thread_not_found')
+    }, 'nonce-delete-race-issue-after-delete'))).rejects.toThrow('thread_not_found')
 
     const replayAfterDeleteKey = `${reservationKey}:replay-after-delete`
-    await expect(backend.mutation(api.answerThreads.reserveAnswerTurn, {
+    await expect(backend.mutation(api.answerThreads.reserveAnswerTurn, await admitted({
       sessionId,
       requestedThreadScope: threadScope,
       query: 'delete race query',
@@ -128,18 +128,16 @@ describe('answer thread deletion authority transition', () => {
       title: 'delete race query',
       operationKey: replayAfterDeleteKey,
       correlationId: replayAfterDeleteKey,
-      sourceWrite: admission(replayAfterDeleteKey, 'nonce-delete-race-replay'),
-    })).resolves.toEqual({ kind: 'refused', reason: 'thread_not_found' })
+    }, 'nonce-delete-race-replay'))).resolves.toEqual({ kind: 'refused', reason: 'thread_not_found' })
 
     const stopOperationKey = `answer_thread:stop:${first.turnId}`
-    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, await admitted({
       sessionId,
       threadId: first.threadId,
       turnId: first.turnId,
       operationKey: stopOperationKey,
       correlationId: stopOperationKey,
-      sourceWrite: admission(stopOperationKey, 'nonce-delete-race-stop'),
-    })).resolves.toEqual({ kind: 'not_found' })
+    }, 'nonce-delete-race-stop'))).resolves.toEqual({ kind: 'not_found' })
 
     await expect(backend.query(api.answerThreads.getSharedThreadProjection, {
       shareToken: issued.shareToken,
@@ -168,13 +166,28 @@ describe('answer thread deletion authority transition', () => {
   })
 })
 
-function admission(operationKey: string, nonce: string) {
-  return createSourceWriteAdmission({
-    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
-    request: SOURCE_REQUEST,
-    scope: 'answer_thread',
-    operationKey,
-    correlationId: operationKey,
-    nonce,
-  })
+type SourceWriteCommand = {
+  operationKey: string
+  correlationId: string
+  [key: string]: unknown
+}
+
+async function admitted<T extends SourceWriteCommand>(command: T, nonce: string) {
+  const sourceWriteRequest: SourceWriteAdmissionRequest = {
+    ...SOURCE_REQUEST,
+    bodyDigest: sourceWriteCommandBodyDigest(command),
+  }
+  return {
+    ...command,
+    sourceWriteRequest,
+    sourceWrite: await createSourceWriteAdmission({
+      env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
+      request: sourceWriteRequest,
+      scope: 'answer_thread',
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
+      nonce,
+    }),
+  }
 }

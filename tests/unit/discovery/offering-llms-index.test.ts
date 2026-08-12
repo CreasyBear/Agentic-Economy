@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
-import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import {
   buildOfferingLlmsTxt,
   buildOfferingLlmsUrlsFromSlugs,
@@ -30,10 +28,8 @@ describe('Offering llms.txt index', () => {
     expect(result.body.split('\n').filter((line) => line.startsWith('- slug='))).toHaveLength(12)
     expect(new TextEncoder().encode(result.body).length).toBeLessThan(4096)
 
-    expect(result.body).toContain('- total=50; the lines above are a sample, not the catalog')
-    expect(result.body).toContain(
-      `- full list=${canonicalBaseUrl}/api/businesses search=${canonicalBaseUrl}/api/businesses/search?q=`
-    )
+    expect(result.body).toContain('- total=50; the lines above are a bounded sample')
+    expect(result.body).toContain(`- full list=${canonicalBaseUrl}/api/businesses`)
     expect(result.body).not.toContain('fremantle-heat-pump-repairs-42')
 
     // Bounding the body must not bound what the index advertises as resolvable.
@@ -41,19 +37,17 @@ describe('Offering llms.txt index', () => {
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}/ucp`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/api/businesses/${business.slug}`)
-      expect(result.urls).toContain(`${canonicalBaseUrl}/api/v1/services/${business.slug}`)
     }
-    // 11 shared surfaces include the Services list/search; each business has
-    // four resolvable routes: page, UCP, Services detail, and catalog detail.
+    // 10 shared surfaces; each business keeps page, UCP, and business detail.
     expect(result.urls).not.toContain(`${canonicalBaseUrl}/registry`)
-    expect(result.urls).toHaveLength(11 + 50 * 4)
+    expect(result.urls).toHaveLength(10 + 50 * 3)
   })
 
   it('deduplicates repeated slugs in the complete URL inventory', () => {
     const urls = buildOfferingLlmsUrlsFromSlugs(['same-business', 'same-business'], { canonicalBaseUrl })
 
     expect(urls).toEqual([...new Set(urls)])
-    expect(urls).toHaveLength(11 + 4)
+    expect(urls).toHaveLength(10 + 3)
   })
 
   /** Pathological slugs, not just large catalogs, are what push an index past a
@@ -69,95 +63,68 @@ describe('Offering llms.txt index', () => {
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.length).toBeLessThanOrEqual(12)
     expect(result.body).toContain('- total=50;')
-    expect(result.urls).toHaveLength(11 + 50 * 4)
+    expect(result.urls).toHaveLength(10 + 50 * 3)
   })
 
-  /** The index points at the full procedure rather than restating it. */
-  it('delegates the request recipe to SKILL.md and keeps the journey framing to three statements', () => {
+  it('teaches the ordered Operation path before the secondary business directory', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
-    const section = (name: string) =>
-      body.slice(body.indexOf(`${name}\n`) + name.length + 1).split('\n\n')[0]?.split('\n') ?? []
-
-    expect(section('Request recipe:')).toEqual([
-      `- ${canonicalBaseUrl}/SKILL.md carries the full procedure: relation-following, stop rules, and confirmation.`,
-    ])
-    expect(section('Customer journey:')).toEqual([
-      `- ${CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES[0]}`,
-      `- ${CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES[1]}`,
-      `- ${CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES[3]}`,
-      `- Human entry=${canonicalBaseUrl}/`,
-    ])
-    // The sandbox qualifier must survive the trim: it is what keeps
-    // "carries the work through" from reading as a fulfilment claim.
-    expect(body).toContain('do not prove independent supply, booking, payment, dispatch, or fulfilment')
+    const markers = [
+      '1. No-install Step 1:',
+      '2. Search a job anonymously',
+      '3. Inspect one exact result',
+      '4. Optional anonymous reads',
+      '5. Run `npm run -s ae -- connect --json`',
+      '6. Invoke with `npm run -s ae -- invoke',
+      '7. Read `npm run -s ae -- status',
+      '8. Cancel with `npm run -s ae -- advanced cancel',
+      '9. Reconcile uncertain work with `npm run -s ae -- recover',
+      'Published businesses (secondary directory):',
+    ]
+    let previous = -1
+    for (const marker of markers) {
+      const current = body.indexOf(marker)
+      expect(current).toBeGreaterThan(previous)
+      previous = current
+    }
+    expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/search`)
+    expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/detail`)
+    expect(body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
   })
 
-  it('publishes the keyless Services API with honest sandbox boundaries', () => {
-    const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
-    const servicesSection = body.slice(body.indexOf('## Services API'), body.indexOf('Assistant setup:'))
-
-    expect(servicesSection).toContain('GET /api/v1/services')
-    expect(servicesSection).toContain('GET /api/v1/services/search?q={query}')
-    expect(servicesSection).toContain('`summary`, `pricingSummary`, `price`')
-    expect(servicesSection).toContain('ONE PAGE')
-    expect(servicesSection).toContain('pagination.nextCursor')
-    expect(servicesSection).toContain('pagination.hasMore')
-    expect(servicesSection).toContain('business_declared')
-    expect(servicesSection).toContain('publicly_observed')
-    expect(servicesSection).toContain('quote response carries provenance `ae_sandbox_provider`')
-    expect(servicesSection).toContain('open sandbox')
-    expect(servicesSection).toContain('POST /api/sandbox/adelaide-dental-clinic/checkup-quote')
-    expect(servicesSection).toContain('priced, time-bounded quote JSON')
-    expect(servicesSection).not.toContain('description')
-    expect(servicesSection).not.toMatch(/payment|x402|booked/iu)
-  })
-
-
-  it('leads with the keyless entry before the key-gated Customer Request path', () => {
+  it('makes anonymous and authenticated boundaries explicit', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
 
-    expect(body).toContain(`- POST ${canonicalBaseUrl}/api/answer/turn`)
-    expect(body).toContain('no key and no credential are required')
-    expect(body).toContain(`- MCP: ${canonicalBaseUrl}/mcp`)
-    expect(body).toContain('- response=text/event-stream')
-    expect(body).toContain(ANSWER_THREAD_AGENT_ENTRYPOINT.boundary)
-    expect(body).toContain('"query"')
-    expect(body).toContain('header=X-AE-Turn-Key: fresh opaque value for every turn')
-    expect(body.indexOf('Start here (no key needed):')).toBeLessThan(body.indexOf('Customer Request API:'))
+    expect(body).toContain('Anonymous: search, detail, compare, inspect-plan. Authenticated: invoke, status, cancel, reconcile.')
+    expect(body).toContain('The AE key identifies the caller.')
+    expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
+    expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
+    expect(body).not.toMatch(/\bae (?:feeds|run|study)\b|Services API|Customer Request API|\/api\/answer\/turn/u)
   })
 
-  it('names where the Customer Request key comes from and when to escalate to it', () => {
-    const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
-
-    expect(body).toContain(
-      `- auth=Authorization: Bearer <Clerk API key>; issued through OAuth after signed-in owner approval at ${canonicalBaseUrl}/agent-access/authorize?user_code=...; scopes=customer_requests:create plus exactly one mode: customer_requests:inspect_only, customer_requests:approve_each, customer_requests:bounded_mandate, customer_requests:full_yolo`
-    )
-    expect(body).toContain('- escalate=take this path only when the customer wants to confirm and start an option')
-  })
-
-  it('keeps the exact catalog total separate from the bounded DTO sample', () => {
+  it('keeps the exact business total separate from the bounded DTO sample', () => {
     const result = buildOfferingLlmsTxt(catalogOf(12, (index) => `business-${index}`), {
       canonicalBaseUrl,
       totalBusinesses: 50,
     })
 
-    expect(result.body).toContain('- total=50; the lines above are a sample, not the catalog')
+    expect(result.body).toContain('- total=50; the lines above are a bounded sample')
     expect(buildOfferingLlmsUrlsFromSlugs(
       Array.from({ length: 50 }, (_unused, index) => `business-${index}`),
       { canonicalBaseUrl },
-    )).toHaveLength(11 + 50 * 4)
+    )).toHaveLength(10 + 50 * 3)
   })
 
-  it('keeps the boundary and correction sections and says none for an empty catalog', () => {
+  it('keeps the boundary and correction sections and says none for an empty directory', () => {
     const body = buildOfferingLlmsTxt([], { canonicalBaseUrl }).body
 
-    expect(body).toContain('Business entries:\n- none')
+    expect(body).toContain('Published businesses (secondary directory):\n- none')
     expect(body).toContain('- total=0;')
-    expect(body).toContain('Listing boundary:')
+    expect(body).toContain('Boundary:')
     expect(body).toContain('Privacy and correction:')
     expect(body).toContain(`- ${canonicalBaseUrl}/privacy/remove-business`)
   })
 })
+
 
 function catalogOf(count: number, slug: (index: number) => string): readonly PublicBusinessCatalogApiV2Dto[] {
   return Array.from({ length: count }, (_unused, index): PublicBusinessCatalogApiV2Dto => ({
@@ -166,8 +133,7 @@ function catalogOf(count: number, slug: (index: number) => string): readonly Pub
     slug: slug(index),
     name: `Fremantle Heat Pump Repairs ${index}`,
     category: 'Trades',
-    suburb: 'Fremantle',
-    stateTerritory: 'WA',
+    businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
     publicUrl: `/${slug(index)}`,
     trustTier: 'listed',
     photos: [],

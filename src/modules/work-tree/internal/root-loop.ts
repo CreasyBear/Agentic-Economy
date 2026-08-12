@@ -54,25 +54,20 @@ export type WorkTreeStepUp = Readonly<{
   authority?: WorkTreeApprovalAuthority | undefined
 }>
 
-export type WorkTreeRefusalCode = 'authentication_required' | 'stale_fence' | 'forbidden' | 'not_found' | 'digest_mismatch' | 'step_up_required' | 'live_money_gate_open' | 'stripe_setup_required' | WorkTreeApprovalRefusalCode
+export type WorkTreeRefusalCode = 'stale_fence' | 'forbidden' | 'not_found' | 'digest_mismatch' | 'step_up_required' | 'live_money_gate_open' | 'stripe_setup_required' | WorkTreeApprovalRefusalCode
 
 export type WorkTreeActor = Readonly<{
   source: 'human_source' | 'browser_guest' | 'customer_request_agent'
 }>
 
 /**
- * Structural mirror of the receipt `work-tree-agent.functions.ts` returns. The
- * host renders receipts and never mints them; typecheck catches any drift when
- * the real function is bound in `human-root.functions.ts`.
+ * Structural mirror of the decision receipt/result returned by the source.
+ * The host renders receipts and never mints them; typecheck catches any drift
+ * when the real function is bound in `human-root.functions.ts`.
  */
 export type WorkTreeDecisionReceipt =
   | Readonly<{
-      kind: 'refused'
-      code: 'authentication_required'
-      replayed: false
-    }>
-  | Readonly<{
-      kind: 'accepted' | 'replayed' | 'refused' | 'unknown'
+      kind: 'accepted' | 'replayed'
       decision: WorkTreeDecisionKind
       projectId: string
       nodeId: string
@@ -82,10 +77,32 @@ export type WorkTreeDecisionReceipt =
       disposition: 'locked' | 'queued' | 'adjusted' | 'unchanged'
       permissionRef?: string | undefined
       actor?: WorkTreeActor | undefined
-      refusalCode?: WorkTreeRefusalCode | undefined
       occurredAt: number
       readback: Readonly<{ projectId: string; revision: number }>
     }>
+  | Readonly<{
+      kind: 'refused'
+      decision: WorkTreeDecisionKind
+      projectId: string
+      nodeId: string
+      receiptId: string
+      generation: number
+      revision: number
+      disposition: 'locked' | 'queued' | 'adjusted' | 'unchanged'
+      actor?: WorkTreeActor | undefined
+      refusalCode: WorkTreeRefusalCode
+      occurredAt: number
+      readback: Readonly<{ projectId: string; revision: number }>
+    }>
+
+export type WorkTreeDecisionResult =
+  | WorkTreeDecisionReceipt
+  | Readonly<{
+      kind: 'refused'
+      code: 'authentication_required'
+      replayed: false
+    }>
+  | Readonly<{ kind: 'unknown' }>
 
 export type WorkTreeAcceptedReadback = Readonly<{
   kind: 'accepted'
@@ -155,7 +172,7 @@ export type WorkTreeSourcePort = Readonly<{
     stepUp?: WorkTreeStepUp
     /** Opaque signed browser-guest token; transport authority, never a principal. */
     guestAssertion?: string
-  }>): Promise<WorkTreeDecisionReceipt>
+  }>): Promise<WorkTreeDecisionResult>
 }>
 
 // ---------------------------------------------------------------------------
@@ -231,7 +248,7 @@ export async function decideRootWorkTree(
     guestAssertion?: string
   }>,
   port: WorkTreeSourcePort,
-): Promise<Readonly<{ receipt: WorkTreeDecisionReceipt; readback: RootWorkTreeReadback }>> {
+): Promise<Readonly<{ receipt: WorkTreeDecisionResult; readback: RootWorkTreeReadback }>> {
   // The fenced proposal excludes approval metadata. Step-up is source-bound
   // authority for this exact proposal and is included in the idempotency/command
   // digest, while a re-issued guest session never changes decision identity.

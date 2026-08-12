@@ -114,8 +114,9 @@ async function seedRepresentativeHistory(backend: ReturnType<typeof convexTest>)
     const ownerId = await ctx.db.insert('owners', { clerkUserId: 'owner:history', createdAt: 1, updatedAt: 1 })
     const businessId = await ctx.db.insert('businesses', {
       ownerId, slug: 'history-business', name: 'History Business', normalizedName: 'history business',
-      category: 'history', suburb: 'Perth', stateTerritory: 'WA', publicStatus: 'suppressed', trustTier: 'listed',
-      claimStatus: 'suppressed', sourceHash: 'source:history', createdAt: 1, updatedAt: 1,
+      category: 'history', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
+      publicStatus: 'suppressed', trustTier: 'listed', claimStatus: 'suppressed',
+      sourceHash: 'source:history', createdAt: 1, updatedAt: 1,
     })
     await ctx.db.insert('routingKernelBindings', {
       bindingId: 'binding:history', businessId, nodeId: 'node:history', networkId: 'network:history',

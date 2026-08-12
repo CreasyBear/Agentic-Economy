@@ -11,25 +11,39 @@ import {
 } from '@/modules/answer-thread/internal/share-token'
 import {
   createSourceWriteAdmission,
-  sourceWriteBodyDigest,
+  sourceWriteCommandBodyDigest,
+  sourceWriteCommandDigest,
+  type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
+import {
+  parsePublicThreadProjection,
+  type PublicThreadProjection,
+} from '@/modules/answer-thread/public'
+import type { AnswerTurnCheckpoint } from '@/modules/answer-thread/answer-thread.schema'
+import { serializeAnswerTurnCheckpoint } from '@/modules/answer-thread/internal/answer-turn-checkpoint'
 import { answerTurnFinalizationDigest } from '@/modules/answer-thread/internal/turn-digests'
 import type { AppendHarnessSessionEntrySourceInput } from '@/modules/harness/harness.functions'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 
-const SOURCE_WRITE_SECRET = 'answer-thread-local-source-write-secret'
 const SOURCE_REQUEST = {
   method: 'POST',
-  origin: 'http://127.0.0.1:3024',
-  pathname: '/api/answer/turn',
-  bodyDigest: sourceWriteBodyDigest(undefined),
-}
-type OwnedThreadProjection = NonNullable<
-  FunctionReturnType<typeof api.answerThreads.getOwnedThreadProjection>
->
+  initiatorOrigin: 'http://127.0.0.1:3024',
+  targetOrigin: 'http://127.0.0.1:3024',
+  targetPath: '/api/answer/turn',
+  targetQuery: '',
+} as const
+const SOURCE_WRITE_SECRET = 'source-write-test-secret-32-byte-key-material'
+type OwnedThreadProjection = PublicThreadProjection
 type OwnedThreadTurn = OwnedThreadProjection['turns'][number]
+
+function decodeThreadProjection(encoded: string | null): PublicThreadProjection | null {
+  if (encoded === null) return null
+  const projection = parsePublicThreadProjection(JSON.parse(encoded))
+  if (projection === null) throw new Error('answer_thread_projection_invalid')
+  return projection
+}
 type ReserveAnswerTurnResult = FunctionReturnType<typeof api.answerThreads.reserveAnswerTurn>
 
 function currentEvidenceJson(snapshotHash: string): string {
@@ -217,6 +231,7 @@ describe('answer thread source-write admission', () => {
         seq: 1,
         query: 'reload this pending question',
         state: 'reserved',
+        generation: 0,
         createdAt: 2,
         updatedAt: 2,
       })
@@ -231,11 +246,13 @@ describe('answer thread source-write admission', () => {
       })
     })
 
-    const owner = await backend.query(api.answerThreads.getOwnedThreadProjection, {
+    const owner = decodeThreadProjection(await backend.query(api.answerThreads.getOwnedThreadProjection, {
       threadId,
       pseudonymousSessionId: sessionId,
-    })
-    const shared = await backend.query(api.answerThreads.getSharedThreadProjection, { shareToken })
+    }))
+    const shared = decodeThreadProjection(
+      await backend.query(api.answerThreads.getSharedThreadProjection, { shareToken }),
+    )
     expect(owner).toMatchObject({
       threadId,
       turns: [{
@@ -291,8 +308,9 @@ describe('answer thread source-write admission', () => {
         seq: 1,
         query: 'question stopped before persistence',
         state: 'stopped',
+        generation: 0,
         createdAt: 2,
-        updatedAt: 3,
+        updatedAt: 2,
       })
       await ctx.db.insert('answerThreadShares', {
         threadId,
@@ -305,11 +323,13 @@ describe('answer thread source-write admission', () => {
       })
     })
 
-    const owner = await backend.query(api.answerThreads.getOwnedThreadProjection, {
+    const owner = decodeThreadProjection(await backend.query(api.answerThreads.getOwnedThreadProjection, {
       threadId,
       pseudonymousSessionId: sessionId,
-    })
-    const shared = await backend.query(api.answerThreads.getSharedThreadProjection, { shareToken })
+    }))
+    const shared = decodeThreadProjection(
+      await backend.query(api.answerThreads.getSharedThreadProjection, { shareToken }),
+    )
     expect(owner).toMatchObject({
       threadId,
       turns: [{
@@ -367,6 +387,7 @@ describe('answer thread source-write admission', () => {
         seq: 1,
         query: 'duplicate reservation query',
         state: 'stopped',
+        generation: 0,
         createdAt: 3,
         updatedAt: 3,
       })
@@ -380,6 +401,7 @@ describe('answer thread source-write admission', () => {
         seq: 2,
         query: 'pending lifecycle query',
         state: 'reserved',
+        generation: 0,
         createdAt: 4,
         updatedAt: 4,
       })
@@ -393,15 +415,16 @@ describe('answer thread source-write admission', () => {
         seq: 3,
         query: 'stopped lifecycle query',
         state: 'stopped',
+        generation: 0,
         createdAt: 5,
         updatedAt: 5,
       })
     })
 
-    const projection = await backend.query(api.answerThreads.getOwnedThreadProjection, {
+    const projection = decodeThreadProjection(await backend.query(api.answerThreads.getOwnedThreadProjection, {
       threadId,
       pseudonymousSessionId: sessionId,
-    })
+    }))
     expect(projection?.turns.map((turn: OwnedThreadTurn) => ({
       turnId: turn.turnId,
       seq: turn.seq,
@@ -462,7 +485,7 @@ describe('answer thread source-write admission', () => {
       operationKey: 'answer_thread:reserve:seq-first:replay',
       nonce: 'nonce-seq-first-replay',
     })).resolves.toMatchObject({
-      kind: 'replayed',
+      kind: 'in_progress',
       turnId: first.turnId,
       turnSeq: first.turnSeq,
     })
@@ -493,6 +516,124 @@ describe('answer thread source-write admission', () => {
       nonce: 'nonce-seq-over-limit',
     })).resolves.toEqual({ kind: 'refused', reason: 'thread_turn_limit' })
   })
+  it('renews a fenced lease and rewrites its checkpoint generation on takeover', async () => {
+    const backend = convexTest(schema, modules)
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const sessionId = 'session-lease-generation'
+    const reservationKey = 'reservation-lease-generation'
+    const requestDigest = 'digest-lease-generation'
+    const first = await reserveTurn(backend, {
+      sessionId,
+      reservationKey,
+      requestDigest,
+      operationKey: 'answer_thread:reserve:lease-generation',
+      nonce: 'nonce-lease-generation-reserve',
+    })
+    expect(first.kind).toBe('reserved')
+    if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
+
+    const checkpoint: AnswerTurnCheckpoint = {
+      schemaVersion: 1,
+      reservationKey,
+      requestDigest,
+      generation: first.generation,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      stepOrdinal: 1,
+      route: 'tool_search',
+      intent: 'refine_search',
+      query: `local source-write query ${reservationKey}`,
+      priorTurnCount: 0,
+      priorProviders: [],
+      priorAllowedSlugs: [],
+      toolCalls: [],
+      toolCallDigests: [],
+      modelRequests: [],
+      replayMessagesJson: '[]',
+    }
+    const serialized = serializeAnswerTurnCheckpoint(checkpoint)
+    if (serialized === null) throw new Error('expected valid checkpoint fixture')
+    await expect(backend.mutation(api.answerThreads.persistAnswerTurnCheckpoint, await admitted({
+      reservationKey,
+      requestDigest,
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      generation: first.generation,
+      checkpointStep: checkpoint.stepOrdinal,
+      checkpointJson: serialized.checkpointJson,
+      checkpointDigest: serialized.checkpointDigest,
+      operationKey: 'answer_thread:checkpoint:lease-generation',
+      correlationId: 'answer_thread:checkpoint:lease-generation',
+    }, 'nonce-lease-generation-checkpoint'))).resolves.toMatchObject({
+      kind: 'persisted',
+      generation: 0,
+    })
+
+    const renewed = await backend.mutation(api.answerThreads.renewAnswerTurnLease, await admitted({
+      reservationKey,
+      requestDigest,
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      generation: first.generation,
+      operationKey: 'answer_thread:lease:lease-generation:0',
+      correlationId: 'answer_thread:lease:lease-generation:0',
+    }, 'nonce-lease-generation-renew'))
+    expect(renewed).toMatchObject({ kind: 'renewed', generation: 0 })
+
+    await backend.run(async (ctx) => {
+      const reservation = await ctx.db
+        .query('answerTurnReservations')
+        .withIndex('by_reservationKey', (query) => query.eq('reservationKey', reservationKey))
+        .unique()
+      if (reservation === null) throw new Error('expected reservation')
+      await ctx.db.patch(reservation._id, { updatedAt: 0 })
+    })
+    const takeover = await reserveTurn(backend, {
+      sessionId,
+      reservationKey,
+      requestDigest,
+      operationKey: 'answer_thread:reserve:lease-generation:takeover',
+      nonce: 'nonce-lease-generation-takeover',
+    })
+    expect(takeover).toMatchObject({
+      kind: 'reserved',
+      generation: 1,
+      threadId: first.threadId,
+      turnId: first.turnId,
+    })
+
+    const row = await backend.run(async (ctx) => ctx.db
+      .query('answerTurnReservations')
+      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', reservationKey))
+      .unique())
+    expect(row).toMatchObject({
+      generation: 1,
+      checkpointGeneration: 1,
+      checkpointStep: 1,
+    })
+    expect(JSON.parse(row?.checkpointJson ?? '{}')).toMatchObject({ generation: 1 })
+
+    await expect(backend.mutation(api.answerThreads.renewAnswerTurnLease, await admitted({
+      reservationKey,
+      requestDigest,
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      generation: 0,
+      operationKey: 'answer_thread:lease:lease-generation:stale',
+      correlationId: 'answer_thread:lease:lease-generation:stale',
+    }, 'nonce-lease-generation-stale'))).resolves.toEqual({
+      kind: 'conflict',
+      reason: 'generation_mismatch',
+    })
+  })
+
   it('conceals a foreign-owner Stop without changing the pending reservation', async () => {
     const backend = convexTest(schema, modules)
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
@@ -508,14 +649,13 @@ describe('answer thread source-write admission', () => {
     if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
 
     const stopOperationKey = `answer_thread:stop:${first.turnId}:foreign`
-    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, await admitted({
       sessionId: 'session-stop-foreign',
       threadId: first.threadId,
       turnId: first.turnId,
       operationKey: stopOperationKey,
       correlationId: stopOperationKey,
-      sourceWrite: createAdmission(stopOperationKey, stopOperationKey, 'nonce-stop-foreign-owner'),
-    })).resolves.toEqual({ kind: 'not_found' })
+    }, 'nonce-stop-foreign-owner'))).resolves.toEqual({ kind: 'not_found' })
 
     const rows = await backend.run(async (ctx) => ({
       turn: await ctx.db
@@ -536,56 +676,41 @@ describe('answer thread source-write admission', () => {
     })
   })
 
-  it('transitions an answer-persisted turn to stopped and keeps that terminal state', async () => {
+  it('transitions a reserved turn to stopped and keeps that terminal state', async () => {
     const backend = convexTest(schema, modules)
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const sessionId = 'session-stop-persisted-owner'
-    const reservationKey = 'reservation-stop-persisted'
-    const requestDigest = 'digest-stop-persisted'
+    const sessionId = 'session-stop-reserved-owner'
+    const reservationKey = 'reservation-stop-reserved'
+    const requestDigest = 'digest-stop-reserved'
     const first = await reserveTurn(backend, {
       sessionId,
       reservationKey,
       requestDigest,
       operationKey: `answer_thread:reserve:${reservationKey}`,
-      nonce: 'nonce-stop-persisted-reserve',
+      nonce: 'nonce-stop-reserved-reserve',
     })
     expect(first.kind).toBe('reserved')
     if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
 
-    await persistTurn(backend, {
-      reservationKey,
-      requestDigest,
-      sessionId,
-      threadId: first.threadId,
-      turnId: first.turnId,
-      turnSeq: first.turnSeq,
-      seq: first.turnSeq,
-      operationKey: `answer_thread:persist:${first.turnId}`,
-      nonce: 'nonce-stop-persisted-persist',
-      finalize: false,
-    })
-
-    const stopOperationKey = `answer_thread:stop:${first.turnId}:persisted`
-    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+    const stopOperationKey = `answer_thread:stop:${first.turnId}:reserved`
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, await admitted({
       sessionId,
       threadId: first.threadId,
       turnId: first.turnId,
       operationKey: stopOperationKey,
       correlationId: stopOperationKey,
-      sourceWrite: createAdmission(stopOperationKey, stopOperationKey, 'nonce-stop-persisted-stop'),
-    })).resolves.toEqual({
+    }, 'nonce-stop-reserved-stop'))).resolves.toEqual({
       kind: 'stopped',
       threadId: first.threadId,
       turnId: first.turnId,
     })
-    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, await admitted({
       sessionId,
       threadId: first.threadId,
       turnId: first.turnId,
       operationKey: `${stopOperationKey}:replay`,
       correlationId: `${stopOperationKey}:replay`,
-      sourceWrite: createAdmission(`${stopOperationKey}:replay`, `${stopOperationKey}:replay`, 'nonce-stop-persisted-replay'),
-    })).resolves.toEqual({
+    }, 'nonce-stop-reserved-replay'))).resolves.toEqual({
       kind: 'already_settled',
       threadId: first.threadId,
       turnId: first.turnId,
@@ -602,8 +727,7 @@ describe('answer thread source-write admission', () => {
         .withIndex('by_reservationKey', (query) => query.eq('reservationKey', reservationKey))
         .unique(),
     }))
-    expect(rows.turn).toMatchObject({ status: 'stopped', threadId: first.threadId, seq: first.turnSeq })
-    expect(rows.reservation).toMatchObject({ state: 'stopped', threadId: first.threadId, seq: first.turnSeq })
+    expect(rows.turn).toBeNull()
   })
 
   it('lets exactly one durable terminal winner commit in a real Stop-versus-finalize race', async () => {
@@ -622,29 +746,15 @@ describe('answer thread source-write admission', () => {
     expect(first.kind).toBe('reserved')
     if (first.kind !== 'reserved') throw new Error('expected reserved answer turn')
 
-    await persistTurn(backend, {
-      reservationKey,
-      requestDigest,
-      sessionId,
-      threadId: first.threadId,
-      turnId: first.turnId,
-      turnSeq: first.turnSeq,
-      seq: first.turnSeq,
-      operationKey: `answer_thread:persist:${first.turnId}`,
-      nonce: 'nonce-stop-finalize-race-persist',
-      finalize: false,
-    })
-
     const stopOperationKey = `answer_thread:stop:${first.turnId}:race`
     const [stopResult, finalizationResult] = await Promise.all([
-      backend.mutation(api.answerThreads.stopAnswerTurn, {
+      backend.mutation(api.answerThreads.stopAnswerTurn, await admitted({
         sessionId,
         threadId: first.threadId,
         turnId: first.turnId,
         operationKey: stopOperationKey,
         correlationId: stopOperationKey,
-        sourceWrite: createAdmission(stopOperationKey, stopOperationKey, 'nonce-stop-finalize-race-stop'),
-      }),
+      }, 'nonce-stop-finalize-race-stop')),
       finalizeHarnessRun(backend, {
         reservationKey,
         requestDigest,
@@ -681,7 +791,7 @@ describe('answer thread source-write admission', () => {
     if (terminalWinners[0] === 'stop') {
       expect(stopResult).toMatchObject({ kind: 'stopped' })
       expect(finalizationResult).toMatchObject({ status: 'conflict', reason: 'stopped' })
-      expect(rows.turn).toMatchObject({ status: 'stopped' })
+      expect(rows.turn).toBeNull()
       expect(rows.reservation).toMatchObject({ state: 'stopped' })
     } else {
       expect(stopResult).toMatchObject({ kind: 'already_settled', status: 'complete' })
@@ -767,11 +877,8 @@ describe('answer thread source-write admission', () => {
       sessions: await ctx.db.query('harnessSessions').collect(),
     }))
     expect(rows.thread).toBeNull()
-    expect(rows.turn).toMatchObject({
-      status: 'pending',
-      evidenceJson: currentEvidenceJson(`snapshot-${first.turnSeq}`),
-    })
-    expect(rows.reservation).toMatchObject({ state: 'answer_persisted' })
+    expect(rows.turn).toBeNull()
+    expect(rows.reservation).toMatchObject({ state: 'reserved' })
     expect(rows.reservation?.harnessFinalizationDigest).toBeUndefined()
     expect(rows.journal).toEqual([])
     expect(rows.sessions).toEqual([])
@@ -844,11 +951,8 @@ describe('answer thread source-write admission', () => {
         journal: await ctx.db.query('harnessSessionEntries').collect(),
         sessions: await ctx.db.query('harnessSessions').collect(),
       }))
-      expect(rows.turn).toMatchObject({
-        status: 'pending',
-        evidenceJson: currentEvidenceJson(`snapshot-${first.turnSeq}`),
-      })
-      expect(rows.reservation).toMatchObject({ state: 'answer_persisted' })
+      expect(rows.turn).toBeNull()
+      expect(rows.reservation).toMatchObject({ state: 'reserved' })
       expect(rows.reservation?.harnessFinalizationDigest).toBeUndefined()
       expect(rows.journal).toEqual([])
       expect(rows.sessions).toEqual([])
@@ -1109,7 +1213,7 @@ async function reserveTurn(
     nonce: string
   },
 ): Promise<ReserveAnswerTurnResult> {
-  return backend.mutation(api.answerThreads.reserveAnswerTurn, {
+  return backend.mutation(api.answerThreads.reserveAnswerTurn, await admitted({
     sessionId: input.sessionId,
     requestedThreadScope: input.threadId ?? 'new',
     query: `local source-write query ${input.reservationKey}`,
@@ -1118,8 +1222,7 @@ async function reserveTurn(
     title: 'local source-write repro',
     operationKey: input.operationKey,
     correlationId: input.operationKey,
-    sourceWrite: createAdmission(input.operationKey, input.operationKey, input.nonce),
-  })
+  }, input.nonce))
 }
 
 async function persistTurn(
@@ -1156,6 +1259,7 @@ async function persistTurn(
   const createdAt = 1
   const toolCalls = input.toolCalls?.map((call) => ({ ...call, createdAt: call.createdAt ?? createdAt })) ?? []
   const answerDigest = answerTurnFinalizationDigest({
+    expectedGeneration: 0,
     turn: {
       turnId: input.turnId,
       threadId: input.threadId,
@@ -1171,56 +1275,32 @@ async function persistTurn(
     },
     toolCalls,
   })
-  await expect(backend.mutation(api.answerThreads.persistReservedAnswerTurn, {
-    reservationKey: input.reservationKey,
-    requestDigest: input.requestDigest,
-    sessionId: input.sessionId,
-    threadId: input.threadId,
-    turnId: input.turnId,
-    turnSeq: input.turnSeq,
-    createdAt,
-    answerDigest,
-    intent: 'refine_search',
-    evidenceJson,
-    snapshotHash,
-    proseJson,
-    artifactKindsJson,
-    toolCalls,
-    operationKey: input.operationKey,
-    correlationId: input.operationKey,
-    sourceWrite: createAdmission(input.operationKey, input.operationKey, input.nonce),
-  })).resolves.toMatchObject({
-    kind: 'persisted',
-    reservationKey: input.reservationKey,
-    threadId: input.threadId,
-    turnId: input.turnId,
-    turnSeq: input.turnSeq,
-  })
-
   if (input.finalize === false) return
 
   const finalizationOperationKey = `harness_session:finalize:${input.turnId}`
-  await expect(backend.mutation(api.harnessSessions.finalizeAnswerTurnHarnessRun, {
+  await expect(backend.mutation(api.harnessSessions.finalizeReservedAnswerTurn, await admitted({
     reservationKey: input.reservationKey,
     requestDigest: input.requestDigest,
     sessionId: input.sessionId,
     threadId: input.threadId,
     turnId: input.turnId,
     turnSeq: input.turnSeq,
+    expectedGeneration: 0,
+    createdAt,
+    answerDigest,
+    query,
+    intent: 'refine_search',
     finalStatus: 'complete',
     snapshotHash,
     evidenceJson,
+    proseJson,
+    artifactKindsJson,
     finalizationHash: `finalization-${input.turnId}`,
+    toolCalls,
     operationKey: finalizationOperationKey,
     correlationId: finalizationOperationKey,
-    sourceWrite: createAdmission(
-      finalizationOperationKey,
-      finalizationOperationKey,
-      `${input.nonce}-finalize`,
-      'harness_session',
-    ),
     entries: [],
-  })).resolves.toMatchObject({
+  }, `${input.nonce}-finalize`, 'harness_session'))).resolves.toMatchObject({
     status: 'accepted',
     turnId: input.turnId,
   })
@@ -1259,41 +1339,79 @@ async function finalizeHarnessRun(
   nonce = `${input.turnId}-finalize`,
 ) {
   const operationKey = `harness_session:finalize:${input.turnId}`
-  return backend.mutation(api.harnessSessions.finalizeAnswerTurnHarnessRun, {
+  const query = `local source-write query ${input.reservationKey}`
+  const snapshotHash = `snapshot-${input.seq}`
+  const evidenceJson = currentEvidenceJson(snapshotHash)
+  const proseJson = '{}'
+  const artifactKindsJson = '[]'
+  const answerDigest = answerTurnFinalizationDigest({
+    expectedGeneration: 0,
+    turn: {
+      turnId: input.turnId,
+      threadId: input.threadId,
+      seq: input.turnSeq,
+      query,
+      intent: 'refine_search',
+      evidenceJson,
+      snapshotHash,
+      proseJson,
+      artifactKindsJson,
+      status: 'complete',
+      createdAt: 1,
+    },
+    toolCalls: [],
+  })
+  return backend.mutation(api.harnessSessions.finalizeReservedAnswerTurn, await admitted({
     reservationKey: input.reservationKey,
     requestDigest: input.requestDigest,
     sessionId: input.sessionId,
     threadId: input.threadId,
     turnId: input.turnId,
     turnSeq: input.turnSeq,
+    expectedGeneration: 0,
+    createdAt: 1,
+    answerDigest,
+    query,
+    intent: 'refine_search',
     finalStatus: 'complete',
-    snapshotHash: `snapshot-${input.seq}`,
-    evidenceJson: currentEvidenceJson(`snapshot-${input.seq}`),
+    snapshotHash,
+    evidenceJson,
+    proseJson,
+    artifactKindsJson,
     finalizationHash: `finalization-${input.turnId}`,
+    toolCalls: [],
     operationKey,
     correlationId: operationKey,
-    sourceWrite: createAdmission(
-      operationKey,
-      operationKey,
-      nonce,
-      'harness_session',
-    ),
     entries: [...input.entries],
-  })
+  }, nonce, 'harness_session'))
 }
 
-function createAdmission(
-  operationKey: string,
-  correlationId: string,
+type SourceWriteCommand = {
+  operationKey: string
+  correlationId: string
+  [key: string]: unknown
+}
+
+async function admitted<T extends SourceWriteCommand>(
+  command: T,
   nonce: string,
   scope: 'answer_thread' | 'harness_session' = 'answer_thread',
 ) {
-  return createSourceWriteAdmission({
-    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
-    request: SOURCE_REQUEST,
-    scope,
-    operationKey,
-    correlationId,
-    nonce,
-  })
+  const sourceWriteRequest: SourceWriteAdmissionRequest = {
+    ...SOURCE_REQUEST,
+    bodyDigest: sourceWriteCommandBodyDigest(command),
+  }
+  return {
+    ...command,
+    sourceWriteRequest,
+    sourceWrite: await createSourceWriteAdmission({
+      env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
+      request: sourceWriteRequest,
+      scope,
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
+      nonce,
+    }),
+  }
 }

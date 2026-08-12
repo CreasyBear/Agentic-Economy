@@ -107,6 +107,10 @@ describe('operation-bound capability tools', () => {
       throw new Error('expected JSON Schema-backed operation tool')
     }
     expect(operationSchema.jsonSchema).toEqual(descriptor.inputSchema)
+    expect(operationSchema.validate?.({ from: 'EUR', to: 'USD' })).toEqual({
+      success: true,
+      value: { from: 'EUR', to: 'USD' },
+    })
   })
 
   it('fails closed when a capability name collides after provider normalization', () => {

@@ -33,7 +33,9 @@ export type DynamicPublishedSourceRow = Readonly<{
   observedResolution: ActionInvocationView<DynamicPublishedInvocationResult>['observedResolution']
   resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
   moneyCharge?: Readonly<{
-    transactionRef: string
+    transactionRef?: string
+    usageRef: string
+    observedAt: number
     principalId: string
     chargeState: 'free_tier' | 'paid'
     amount: ExactAmount

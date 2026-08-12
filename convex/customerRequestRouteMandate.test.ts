@@ -9,7 +9,7 @@ import { decodeDurableCapabilityContract } from '@/modules/capability-contract-r
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
 import {
-  normalizeCapabilityPublication,
+  preparePublicationDraft,
   frankfurterSingleRatePublicationImport,
 } from '@/modules/capability-supply/public'
 import {
@@ -83,10 +83,16 @@ describe('durable RouteMandate lifecycle', () => {
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
       for (let index = 0; index < 70; index += 1) {
-        await ctx.db.insert('customerRequestAgentPrincipals', {
+        await ctx.db.insert('agentAccessPrincipals', {
           principalId: `agent:history:${index}`,
           ownerId: 'owner:history',
           credentialId: `credential:history:${index}`,
+          applicationRef: 'agentic-economy',
+          environment: 'sandbox',
+          authorityMode: index % 2 === 0 ? 'bounded_mandate' : 'inspect_only',
+          grantGeneration: 1,
+          policyDigest: 'test-policy:route-mandate',
+          lifecycle: 'active',
           scopes: index % 2 === 0
             ? ['customer_requests:create', 'customer_requests:standing_authority']
             : ['customer_requests:create'],
@@ -97,7 +103,7 @@ describe('durable RouteMandate lifecycle', () => {
     })
 
     const credentials = await backend.query(
-      internal.customerRequestPrincipals.listStandingCredentials,
+      internal.agentAccessPrincipals.listStandingCredentials,
       { ownerId: 'owner:history' },
     )
 
@@ -114,12 +120,18 @@ describe('durable RouteMandate lifecycle', () => {
     if (route === undefined || route.maximumTotalCost.kind !== 'known') {
       throw new Error('exact route fixture missing')
     }
-    await expect(backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+    await expect(backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
       principalId: 'agent:assistant:standing',
       ownerId: identity.subject,
       ownerTokenIdentifier: identity.tokenIdentifier,
       credentialId: 'credential:assistant:standing',
       scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'bounded_mandate',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:route-mandate',
+      lifecycle: 'active',
       seenAt: 900,
     })).resolves.toEqual({ kind: 'recorded' })
     const command = {
@@ -289,12 +301,18 @@ describe('durable RouteMandate lifecycle', () => {
       }
       const dataAllocations = route.steps.reduce((total, step) => total + step.dataUse.length, 0)
       const credentialId = `credential:assistant:competing-${limit.name}`
-      await backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+      await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
         principalId: `agent:assistant:competing-${limit.name}`,
         ownerId: identity.subject,
         ownerTokenIdentifier: identity.tokenIdentifier,
         credentialId,
         scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+        applicationRef: 'agentic-economy',
+        environment: 'sandbox',
+        authorityMode: 'bounded_mandate',
+        grantGeneration: 1,
+        policyDigest: 'test-policy:route-mandate',
+        lifecycle: 'active',
         seenAt: 900,
       })
       const customer = backend.withIdentity(identity)
@@ -357,12 +375,18 @@ describe('durable RouteMandate lifecycle', () => {
     }
     const dataAllocations = route.steps.reduce((total, step) => total + step.dataUse.length, 0)
     const credentialId = 'credential:assistant:withdrawal-race'
-    await backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+    await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
       principalId: 'agent:assistant:withdrawal-race',
       ownerId: identity.subject,
       ownerTokenIdentifier: identity.tokenIdentifier,
       credentialId,
       scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'bounded_mandate',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:route-mandate',
+      lifecycle: 'active',
       seenAt: 900,
     })
     const customer = backend.withIdentity(identity)
@@ -500,11 +524,17 @@ describe('durable RouteMandate lifecycle', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const backend = convexTest(schema, modules)
     const delegatedPrincipalId = 'agent:delegated-route-mandate'
-    await expect(backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+    await expect(backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
       principalId: delegatedPrincipalId,
       ownerId: identity.subject,
       credentialId: 'credential:delegated-route-mandate',
       scopes: ['customer_requests:create'],
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:route-mandate',
+      lifecycle: 'active',
       seenAt: 900,
     })).resolves.toEqual({ kind: 'recorded' })
     const current = await committedRequest(backend, delegatedPrincipalId)
@@ -524,12 +554,18 @@ describe('durable RouteMandate lifecycle', () => {
     }
     await expect(customer.mutation(internal.customerRequestRouteMandate.issue, command))
       .resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
-    await expect(backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+    await expect(backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
       principalId: delegatedPrincipalId,
       ownerId: identity.subject,
       ownerTokenIdentifier: identity.tokenIdentifier,
       credentialId: 'credential:delegated-route-mandate',
       scopes: ['customer_requests:create'],
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:route-mandate',
+      lifecycle: 'active',
       seenAt: 950,
     })).resolves.toEqual({ kind: 'recorded' })
     const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, command)
@@ -539,7 +575,7 @@ describe('durable RouteMandate lifecycle', () => {
       requestId: current.aggregate.snapshot.requestId,
     })).resolves.toEqual({ kind: 'active', mandate: issued.mandate })
     await backend.run(async (ctx) => {
-      const delegated = await ctx.db.query('customerRequestAgentPrincipals')
+      const delegated = await ctx.db.query('agentAccessPrincipals')
         .withIndex('by_principalId', (query) => query.eq('principalId', delegatedPrincipalId)).unique()
       expect(delegated?.ownerTokenIdentifier).toBe(identity.tokenIdentifier)
     })
@@ -1646,8 +1682,11 @@ async function seedRouteMandateTestCatalog(backend: RouteMandateBackend): Promis
         facts: {
           name: `Route mandate test ${variant.suffix}`,
           category: 'Data capability provider',
-          suburb: 'Perth',
-          stateTerritory: 'WA',
+          businessContext: {
+            kind: 'local_human',
+            suburb: 'Perth',
+            stateTerritory: 'WA',
+          },
           requestedSlug: variant.slug,
           ownerMessage: 'Test-only business for RouteMandate lifecycle coverage.',
           sourceRefs: [{
@@ -1681,23 +1720,16 @@ async function seedRouteMandateTestCatalog(backend: RouteMandateBackend): Promis
         }],
       }, 2_020 + index)
       if (published.kind !== 'ok') {
-        throw new Error(`route_mandate_test_catalog_${published.code}`)
+        throw new Error(`route_mandate_test_catalog_${published.code}:${published.reason}`)
       }
     }
   })
 }
 
 async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise<void> {
-  const normalized = await normalizeCapabilityPublication(frankfurterSingleRatePublicationImport)
-  if (normalized.kind !== 'normalized') {
-    throw new Error(`route_mandate_test_curated_publication_${normalized.reason}`)
-  }
-  const curatedDraft = normalized.draft
+  const basePublication = frankfurterSingleRatePublicationImport
+  if (basePublication.kind !== 'openapi_http') throw new Error('route_mandate_test_publication_kind_invalid')
   await backend.run(async (ctx) => {
-    const registered = await registerCapabilityContractDocument(ctx.db, curatedDraft.documentJson, 2_090)
-    if (registered.kind !== 'registered') {
-      throw new Error(`route_mandate_test_contract_registration_${registered.reason}`)
-    }
     const actor = { kind: 'system' as const, ref: 'system:test-route-mandate' }
     for (const [index, variant] of TEST_ROUTE_VARIANTS.entries()) {
       const business = await ctx.db.query('businesses')
@@ -1725,12 +1757,6 @@ async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise
       if (catalogRevision === null) {
         throw new Error(`route_mandate_test_catalog_revision_missing:${variant.slug}`)
       }
-      const origin = {
-        kind: 'catalog_offering' as const,
-        offeringRef: catalogOffering.offeringRef,
-        offeringRevision: catalogOffering.currentRevision,
-        offeringSourceHash: catalogRevision.sourceHash,
-      }
       const correlationId = `test:route-mandate:${variant.suffix}`
       const evidenceRefs = ['test:route-mandate-provider-supply']
       const context = {
@@ -1757,13 +1783,81 @@ async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise
           evidenceRefs,
         },
       }
+      const source = {
+        ...basePublication,
+        commercial: {
+          ...basePublication.commercial,
+          offering: {
+            ...basePublication.commercial.offering,
+            offeringId: variant.offeringId,
+            presentation,
+            searchTerms: ['route mandate test', 'frankfurter reference rate'],
+            registrationEvidenceRefs: evidenceRefs,
+          },
+          bindingId: variant.bindingId,
+          registrationEvidenceRefs: evidenceRefs,
+        },
+        evidenceRefs,
+      }
+      const preparedResult = await preparePublicationDraft({
+        source,
+        sourceRevision: `system:dev-seed:${variant.offeringId}:v1`,
+        pricingConfig: {
+          version: 'pricing:v2',
+          unit: 'call',
+          paidAmount: variant.price,
+        },
+        evidenceRefs,
+      })
+      if (preparedResult.kind !== 'prepared') {
+        throw new Error(`route_mandate_test_curated_publication_${preparedResult.reason}`)
+      }
+      const prepared = preparedResult.prepared
+      const accessPathRef = `access:route-mandate:${variant.suffix}:external`
+      const accessPathDescriptor = {
+        kind: 'external_operation' as const,
+        name: `Route mandate test option ${variant.suffix}`,
+        summary: 'Test-labelled keyless provider option for RouteMandate lifecycle coverage.',
+        url: prepared.binding.endpointUrl,
+        method: 'GET' as const,
+        provenance: 'business_declared' as const,
+      }
+      const accessPathSourceHash = canonicalDigest({
+        accessPathRef,
+        offeringSourceHash: catalogRevision.sourceHash,
+        descriptor: accessPathDescriptor,
+      })
+      const origin = {
+        kind: 'catalog_offering' as const,
+        offeringRef: catalogOffering.offeringRef,
+        offeringRevision: catalogOffering.currentRevision,
+        offeringSourceHash: catalogRevision.sourceHash,
+        declaredAccessPathRef: accessPathRef,
+        accessPathSourceHash,
+      }
+      await ctx.db.insert('offeringAccessPaths', {
+        accessPathRef,
+        businessId: business._id,
+        offeringRef: catalogOffering.offeringRef,
+        offeringRevision: catalogOffering.currentRevision,
+        offeringSourceHash: catalogRevision.sourceHash,
+        status: 'published',
+        descriptor: accessPathDescriptor,
+        sourceHash: accessPathSourceHash,
+        createdAt: 2_000 + index,
+        updatedAt: 2_000 + index,
+      })
+      const registered = await registerCapabilityContractDocument(ctx.db, prepared.documentJson, 2_090)
+      if (registered.kind !== 'registered') {
+        throw new Error(`route_mandate_test_contract_registration_${registered.reason}`)
+      }
       const offering = await registerCapabilityOfferingCommand(ctx.db, {
         actor,
         context,
         registration: {
           offeringId: variant.offeringId,
           businessId: business._id,
-          networkId: curatedDraft.offering.networkId,
+          networkId: prepared.offering.networkId,
           contractRef: registered.ref,
           origin,
           presentation,
@@ -1783,13 +1877,13 @@ async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise
         registration: {
           bindingId: variant.bindingId,
           offeringId: offering.offeringId,
-          networkId: curatedDraft.offering.networkId,
+          networkId: prepared.offering.networkId,
           contractRef: registered.ref,
-          endpointUrl: curatedDraft.binding.endpointUrl,
-          authority: curatedDraft.binding.authority,
-          continuation: curatedDraft.binding.continuation,
-          cancellation: curatedDraft.binding.cancellation,
-          adapter: curatedDraft.binding.adapter,
+          endpointUrl: prepared.binding.endpointUrl,
+          authority: prepared.binding.authority,
+          continuation: prepared.binding.continuation,
+          cancellation: prepared.binding.cancellation,
+          adapter: prepared.binding.adapter,
           registrationEvidenceRefs: evidenceRefs,
         },
       }, 2_110 + index)
@@ -1817,24 +1911,8 @@ async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise
       }
       const published = await publishCapabilityForSeed(ctx, {
         businessId: String(business._id),
-        source: { kind: 'ae_envelope', documentJson: curatedDraft.documentJson },
-        offering: {
-          offeringId: offering.offeringId,
-          networkId: curatedDraft.offering.networkId,
-          origin,
-          presentation,
-          searchTerms: ['route mandate test', 'frankfurter reference rate'],
-          registrationEvidenceRefs: evidenceRefs,
-        },
-        binding: {
-          bindingId: persistedBinding.bindingId,
-          endpointUrl: persistedBinding.endpointUrl,
-          authority: persistedBinding.authority,
-          continuation: persistedBinding.continuation,
-          cancellation: persistedBinding.cancellation,
-          adapter: { adapterId: persistedBinding.adapterId, config: JSON.parse(persistedBinding.configJson) },
-          registrationEvidenceRefs: persistedBinding.registrationEvidenceRefs,
-        },
+        runtimeEnvironment: 'sandbox',
+        prepared,
         operationKey: `test:route-mandate:publication:${variant.suffix}`,
         correlationId,
         reasonCode: 'test_route_mandate_provider_publication',
@@ -1842,7 +1920,7 @@ async function seedRouteMandateTestSupply(backend: RouteMandateBackend): Promise
         origin,
         now: 2_130 + index,
       })
-      if (published.kind !== 'published') {
+      if (published.kind === 'refused') {
         throw new Error(`route_mandate_test_publication_${published.reason}`)
       }
     }
@@ -1917,7 +1995,7 @@ async function observeAllReady(backend: RouteMandateBackend, phase: string) {
       expectedRevision: publication.revision,
       credentialState: 'ready',
       healthState: 'healthy',
-      validUntil: Date.now() + 300_000,
+      validUntil: 300_000,
       operationKey: `test:route-mandate-readiness:${phase}:${publication.publicationRef}`,
       correlationId: 'test:route-mandate-readiness',
       reasonCode: 'test_readiness',
@@ -1945,33 +2023,59 @@ async function compileFixture(
     })
   ))
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
+  const selectedSupply = supply.supplies.find(({ offering, publication }) => (
+    offering.offeringId === TEST_ROUTE_VARIANTS[0].offeringId && publication !== undefined
+  ))
+  if (selectedSupply === undefined || selectedSupply.publication === undefined) {
+    throw new Error('route mandate publication lineage missing')
+  }
+  const publication = selectedSupply.publication
+  const contractRef = {
+    capabilityId: selectedSupply.binding.capabilityId,
+    version: selectedSupply.binding.version,
+    contractDigest: selectedSupply.binding.contractDigest,
+  }
+  const admittedContractRef = publication.admittedOperation.contractRef
+  if (
+    admittedContractRef.capabilityId !== contractRef.capabilityId
+    || admittedContractRef.version !== contractRef.version
+    || admittedContractRef.contractDigest !== contractRef.contractDigest
+    || publication.admittedOperation.publicationRef !== publication.publicationRef
+    || publication.admittedOperation.publicationRevision !== publication.revision
+    || publication.admittedOperation.offeringId !== selectedSupply.offering.offeringId
+    || publication.admittedOperation.bindingId !== selectedSupply.binding.bindingId
+  ) {
+    throw new Error('route mandate publication lineage mismatch')
+  }
   const contractRow = await backend.run(async (ctx) => {
     const row = await ctx.db.query('capabilityContractDocuments')
       .withIndex('by_status_and_capabilityId_and_version', (query) => (
-        query.eq('status', 'active').eq('capabilityId', 'frankfurter.single-rate')
+        query.eq('status', 'active')
+          .eq('capabilityId', contractRef.capabilityId)
+          .eq('version', contractRef.version)
       ))
-      .order('desc')
-      .first()
-    if (row === null) throw new Error('route_mandate_curated_contract_missing')
+      .unique()
+    if (row === null || row.contractDigest !== contractRef.contractDigest) {
+      throw new Error('route_mandate_curated_contract_lineage_missing')
+    }
     const { _id: _rowId, _creationTime: _rowCreationTime, ...result } = row
     return result
   })
   const decoded = decodeDurableCapabilityContract({
-    ref: {
-      capabilityId: contractRow.capabilityId,
-      version: contractRow.version,
-      contractDigest: contractRow.contractDigest,
-    },
+    ref: contractRef,
     documentJson: contractRow.documentJson,
     status: contractRow.status,
     registeredAt: contractRow.registeredAt,
   })
   if (decoded.kind !== 'found') throw new Error('route_mandate_curated_contract_unavailable')
   const model = openCapabilityDecisionModel(decoded.contract)
-  const publication = supply.supplies.find(({ binding }) => (
-    binding.capabilityId === model.contractRef.capabilityId
-  ))?.publication
-  if (publication === undefined) throw new Error('route mandate publication lineage missing')
+  if (
+    model.contractRef.capabilityId !== contractRef.capabilityId
+    || model.contractRef.version !== contractRef.version
+    || model.contractRef.contractDigest !== contractRef.contractDigest
+  ) {
+    throw new Error('route mandate model lineage mismatch')
+  }
   const result = compileCustomerRequest({
     requestId: 'request:route-mandate',
     expectedRevision: input.expectedRevision,
@@ -2014,6 +2118,7 @@ async function compileFixture(
         offeringRegistrationHash: offering.registrationHash,
         bindingRegistrationHash: binding.registrationHash,
         price: offering.presentation.price,
+        priceDigest: livePublication.priceDigest,
         commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
         publicationRef: livePublication.publicationRef,

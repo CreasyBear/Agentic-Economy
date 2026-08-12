@@ -28,3 +28,8 @@ export {
   type AnswerThreadShareGrant,
   type AnswerThreadShareKeyring,
 } from './internal/share-token'
+export {
+  MAX_ANSWER_TURN_CHECKPOINT_BYTES,
+  parseAnswerTurnCheckpoint,
+  serializeAnswerTurnCheckpoint,
+} from './internal/answer-turn-checkpoint'

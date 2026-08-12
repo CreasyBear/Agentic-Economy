@@ -8,7 +8,7 @@ import { clearBrowserGuestSession, readBrowserGuestSession, resolveBrowserGuestS
 import type {
   RootWorkTreeReadback,
   RootWorkTreeStart,
-  WorkTreeDecisionReceipt,
+  WorkTreeDecisionResult,
   WorkTreeSourcePort,
 } from './internal/root-loop'
 
@@ -38,6 +38,7 @@ export type {
   WorkTreeActor,
   WorkTreeDecisionKind,
   WorkTreeDecisionReceipt,
+  WorkTreeDecisionResult,
   WorkTreeRefusalCode,
   WorkTreeSourceEvent,
   WorkTreeSourcePort,
@@ -85,7 +86,7 @@ const approvalIssueSchema = z.strictObject({
 })
 
 export type RootWorkTreeDecisionResult = Readonly<{
-  receipt: WorkTreeDecisionReceipt
+  receipt: WorkTreeDecisionResult
   readback: RootWorkTreeReadback
 }>
 
@@ -275,31 +276,7 @@ async function convexWorkTreeSourcePort(): Promise<WorkTreeSourcePort> {
           payloadJson: '{}',
         })),
         hasMoreEvents: result.readback.hasMoreEvents,
-        receipts: result.readback.receipts.map((receipt): WorkTreeDecisionReceipt => {
-          if ('code' in receipt) return receipt
-          const common = {
-            decision: receipt.decision,
-            projectId: receipt.projectId,
-            nodeId: receipt.nodeId,
-            receiptId: receipt.receiptId,
-            generation: receipt.generation,
-            revision: receipt.revision,
-            disposition: receipt.disposition,
-            ...(receipt.actor === undefined ? {} : { actor: receipt.actor }),
-            ...(!('permissionRef' in receipt) || receipt.permissionRef === undefined ? {} : { permissionRef: receipt.permissionRef }),
-            occurredAt: receipt.occurredAt,
-            readback: receipt.readback,
-          }
-          if (receipt.kind === 'refused') {
-            return { kind: 'refused', ...common, refusalCode: receipt.refusalCode }
-          }
-          if (receipt.kind === 'unknown') {
-            return receipt.refusalCode === undefined
-              ? { kind: 'unknown', ...common }
-              : { kind: 'unknown', ...common, refusalCode: receipt.refusalCode }
-          }
-          return { kind: receipt.kind, ...common }
-        }),
+        receipts: result.readback.receipts,
       }
     },
     apply: async (input) => {
@@ -313,31 +290,9 @@ async function convexWorkTreeSourcePort(): Promise<WorkTreeSourcePort> {
       }
       return { kind: result.kind, reason: result.reason }
     },
-    decide: async (input) => {
+    decide: async (input): Promise<WorkTreeDecisionResult> => {
       const result = await decideWorkTreeThroughSource(input)
-      if ('code' in result) return result
-      const common = {
-        decision: result.decision,
-        projectId: result.projectId,
-        nodeId: result.nodeId,
-        receiptId: result.receiptId,
-        generation: result.generation,
-        revision: result.revision,
-        disposition: result.disposition,
-        ...(result.actor === undefined ? {} : { actor: result.actor }),
-        ...(!('permissionRef' in result) || result.permissionRef === undefined ? {} : { permissionRef: result.permissionRef }),
-        occurredAt: result.occurredAt,
-        readback: result.readback,
-      }
-      if (result.kind === 'refused') {
-        return { kind: 'refused', ...common, refusalCode: result.refusalCode }
-      }
-      if (result.kind === 'unknown') {
-        return result.refusalCode === undefined
-          ? { kind: 'unknown', ...common }
-          : { kind: 'unknown', ...common, refusalCode: result.refusalCode }
-      }
-      return { kind: result.kind, ...common }
+      return result
     },
   }
 }

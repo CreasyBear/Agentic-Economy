@@ -200,6 +200,24 @@ describe('schema-conformant readiness', () => {
     }),
     probeInputJson: JSON.stringify({ from: 'EUR', to: 'USD' }),
     outputSchemaJson: JSON.stringify(outputSchema),
+    targetDigest: canonicalDigest({
+      publicationRef: 'publication:frankfurter:single-rate',
+      revision: 1,
+      bindingId: 'binding:frankfurter',
+      capabilityId: 'frankfurter.single-rate',
+      endpointUrl: 'https://api.frankfurter.app/latest',
+      authority: { kind: 'keyless' },
+      adapterId: 'http-json:v1',
+      configDigest: canonicalDigest({
+        method: 'GET',
+        query: [
+          { inputPointer: '/from', parameter: 'from' },
+          { inputPointer: '/to', parameter: 'to' },
+        ],
+        requestTimeoutMs: 5_000,
+        credential: { kind: 'none' },
+      }),
+    }),
   }
 
   it('keeps a 200 wrong-shape Frankfurter response unhealthy', async () => {

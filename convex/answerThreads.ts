@@ -8,30 +8,30 @@ import { literalUnion } from '../src/modules/common/convex-literals'
 import { resolveAdminAuthority } from './authz'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import {
+  ANSWER_TURN_EXECUTION_LEASE_MS,
   AnswerTurnReservationStateValues,
   AnswerTurnStatusValues,
-  AnswerToolCallStatusValues,
-  AnswerToolIdValues,
   FollowUpIntentValues,
 } from '../src/modules/answer-thread/answer-thread.schema'
-import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   adminHarnessTurnMatchesFilters,
   buildPublicThreadProjectionWithReservations,
   countAnswerThreadTurns,
+  MAX_ANSWER_TURN_CHECKPOINT_BYTES,
   mintAnswerThreadShareToken,
   normalizeAdminFilter,
   normalizeAdminRunViewerLimit,
   normalizeSessionThreadLimit,
+  parseAnswerTurnCheckpoint,
   planAnswerThreadTurnDeletion,
   resolveAnswerThreadShareKeyring,
   answerThreadShareAccessId,
   answerThreadShareVerifier,
+  serializeAnswerTurnCheckpoint,
   toReservationRecord,
   toThreadRecord,
   toToolCallRecord,
   toTurnRecord,
-  toolCallsMatch,
   verifyAnswerThreadShare,
   type AnswerThreadShareGrant,
   type AnswerThreadShareKeyring,
@@ -39,10 +39,18 @@ import {
 } from '../src/modules/answer-thread/convex'
 import type { AnswerTurnRecord } from '../src/modules/answer-thread/answer-thread.schema'
 
+const ANSWER_TURN_CHECKPOINT_MAX_STEP = 16
 const ANSWER_THREAD_MAX_TURNS = 25
 const ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT = ANSWER_THREAD_MAX_TURNS + 1
 const ANSWER_THREAD_PUBLIC_TURN_SNAPSHOT_LIMIT = ANSWER_THREAD_MAX_TURNS
 const ANSWER_THREAD_DELETE_BATCH_SIZE = 100
+
+
+function reservationGeneration(row: { generation?: number }): number {
+  return typeof row.generation === 'number' && Number.isInteger(row.generation) && row.generation >= 0
+    ? row.generation
+    : 0
+}
 
 const now = () => Date.now()
 
@@ -93,17 +101,6 @@ const adminHarnessRunTurnsResult = v.union(
   }),
 )
 
-const answerToolCallInput = v.object({
-  toolCallId: v.string(),
-  seq: v.number(),
-  toolId: literalUnion(AnswerToolIdValues),
-  inputJson: v.string(),
-  resultSummaryJson: v.string(),
-  resultJson: v.string(),
-  resultHash: v.string(),
-  status: literalUnion(AnswerToolCallStatusValues),
-  createdAt: v.number(),
-})
 const answerTurnReservationResult = v.union(
   v.object({
     kind: v.literal('reserved'),
@@ -111,7 +108,16 @@ const answerTurnReservationResult = v.union(
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
+    generation: v.number(),
     isNewThread: v.boolean(),
+  }),
+  v.object({
+    kind: v.literal('in_progress'),
+    reservationKey: v.string(),
+    threadId: v.string(),
+    turnId: v.string(),
+    turnSeq: v.number(),
+    generation: v.number(),
   }),
   v.object({
     kind: v.literal('replayed'),
@@ -119,27 +125,55 @@ const answerTurnReservationResult = v.union(
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
+    generation: v.number(),
     state: literalUnion(AnswerTurnReservationStateValues),
     finalStatus: v.optional(v.union(v.literal('complete'), v.literal('error'))),
   }),
   v.object({
     kind: v.literal('conflict'),
-    reason: v.union(v.literal('request_digest_mismatch'), v.literal('identity_mismatch')),
+    reason: v.union(
+      v.literal('request_digest_mismatch'),
+      v.literal('identity_mismatch'),
+      v.literal('checkpoint_conflict'),
+    ),
   }),
   v.object({
     kind: v.literal('refused'),
     reason: v.union(v.literal('thread_not_found'), v.literal('thread_forbidden'), v.literal('thread_turn_limit')),
   }),
 )
+const renewAnswerTurnLeaseResult = v.union(
+  v.object({
+    kind: v.literal('renewed'),
+    reservationKey: v.string(),
+    threadId: v.string(),
+    turnId: v.string(),
+    turnSeq: v.number(),
+    generation: v.number(),
+  }),
+  v.object({
+    kind: v.literal('conflict'),
+    reason: v.union(
+      v.literal('reservation_not_found'),
+      v.literal('reservation_identity_mismatch'),
+      v.literal('request_digest_mismatch'),
+      v.literal('generation_mismatch'),
+      v.literal('stopped'),
+      v.literal('settled'),
+    ),
+  }),
+)
 
 
-const persistReservedAnswerTurnResult = v.union(
+const persistAnswerTurnCheckpointResult = v.union(
   v.object({
     kind: v.union(v.literal('persisted'), v.literal('replayed')),
     reservationKey: v.string(),
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
+    generation: v.number(),
+    checkpointDigest: v.string(),
   }),
   v.object({
     kind: v.literal('conflict'),
@@ -147,46 +181,33 @@ const persistReservedAnswerTurnResult = v.union(
       v.literal('reservation_not_found'),
       v.literal('reservation_identity_mismatch'),
       v.literal('request_digest_mismatch'),
-      v.literal('answer_digest_conflict'),
-      v.literal('turn_conflict'),
-      v.literal('tool_call_conflict'),
+      v.literal('generation_mismatch'),
+      v.literal('checkpoint_invalid'),
+      v.literal('checkpoint_conflict'),
       v.literal('stopped'),
+      v.literal('settled'),
     ),
   }),
 )
-
-const failPersistedAnswerTurnResult = v.union(
+const readAnswerTurnCheckpointResult = v.union(
   v.object({
-    kind: v.literal('failed'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
+    kind: v.literal('checkpoint'),
+    checkpointJson: v.string(),
+    checkpointDigest: v.string(),
+    generation: v.number(),
+    checkpointStep: v.number(),
   }),
-  v.object({
-    kind: v.literal('replayed'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
-    status: v.union(v.literal('complete'), v.literal('error')),
-  }),
-  v.object({
-    kind: v.literal('stopped'),
-    reservationKey: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
-  }),
+  v.object({ kind: v.literal('missing') }),
   v.object({
     kind: v.literal('conflict'),
     reason: v.union(
       v.literal('reservation_not_found'),
       v.literal('reservation_identity_mismatch'),
       v.literal('request_digest_mismatch'),
-      v.literal('answer_digest_conflict'),
-      v.literal('turn_not_found'),
-      v.literal('not_persisted'),
+      v.literal('generation_mismatch'),
+      v.literal('checkpoint_invalid'),
+      v.literal('stopped'),
+      v.literal('settled'),
     ),
   }),
 )
@@ -221,7 +242,6 @@ export const reserveAnswerTurn = mutationGeneric({
       .query('answerTurnReservations')
       .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
       .unique()
-
     if (existing !== null) {
       if (existing.sessionId !== args.sessionId || existing.requestedThreadScope !== args.requestedThreadScope) {
         return { kind: 'conflict' as const, reason: 'identity_mismatch' as const }
@@ -233,11 +253,85 @@ export const reserveAnswerTurn = mutationGeneric({
         .query('answerThreads')
         .withIndex('by_threadId', (query) => query.eq('threadId', existing.threadId))
         .unique()
-      if (existingThread === null) {
-        return { kind: 'refused' as const, reason: 'thread_not_found' as const }
-      }
+      if (existingThread === null) return { kind: 'refused' as const, reason: 'thread_not_found' as const }
       if (existingThread.pseudonymousSessionId !== existing.sessionId) {
         return { kind: 'refused' as const, reason: 'thread_forbidden' as const }
+      }
+      const timestamp = now()
+      const generation = reservationGeneration(existing)
+      if (existing.state === 'reserved') {
+        if (timestamp - existing.updatedAt < ANSWER_TURN_EXECUTION_LEASE_MS) {
+          return {
+            kind: 'in_progress' as const,
+            reservationKey: existing.reservationKey,
+            threadId: existing.threadId,
+            turnId: existing.turnId,
+            turnSeq: existing.seq,
+            generation,
+          }
+        }
+        const nextGeneration = generation + 1
+        const checkpointFieldsPresent = existing.checkpointJson !== undefined
+          || existing.checkpointDigest !== undefined
+          || existing.checkpointGeneration !== undefined
+          || existing.checkpointStep !== undefined
+        let checkpointPatch: {
+          checkpointGeneration: number
+          checkpointStep: number
+          checkpointDigest: string
+          checkpointJson: string
+        } | undefined
+        if (checkpointFieldsPresent) {
+          if (
+            existing.checkpointJson === undefined
+            || existing.checkpointDigest === undefined
+            || existing.checkpointGeneration === undefined
+            || existing.checkpointStep === undefined
+          ) {
+            return { kind: 'conflict' as const, reason: 'checkpoint_conflict' as const }
+          }
+          const checkpoint = parseAnswerTurnCheckpoint(existing.checkpointJson, existing.checkpointDigest)
+          if (
+            checkpoint === null
+            || existing.checkpointGeneration !== generation
+            || existing.checkpointStep !== checkpoint.stepOrdinal
+            || checkpoint.reservationKey !== existing.reservationKey
+            || checkpoint.requestDigest !== existing.requestDigest
+            || checkpoint.generation !== generation
+            || checkpoint.threadId !== existing.threadId
+            || checkpoint.turnId !== existing.turnId
+            || checkpoint.turnSeq !== existing.seq
+          ) {
+            return { kind: 'conflict' as const, reason: 'checkpoint_conflict' as const }
+          }
+          const serialized = serializeAnswerTurnCheckpoint({
+            ...checkpoint,
+            generation: nextGeneration,
+          })
+          if (serialized === null) {
+            return { kind: 'conflict' as const, reason: 'checkpoint_conflict' as const }
+          }
+          checkpointPatch = {
+            checkpointGeneration: nextGeneration,
+            checkpointStep: checkpoint.stepOrdinal,
+            checkpointDigest: serialized.checkpointDigest,
+            checkpointJson: serialized.checkpointJson,
+          }
+        }
+        await ctx.db.patch(existing._id, {
+          generation: nextGeneration,
+          updatedAt: timestamp,
+          ...(checkpointPatch ?? {}),
+        })
+        return {
+          kind: 'reserved' as const,
+          reservationKey: existing.reservationKey,
+          threadId: existing.threadId,
+          turnId: existing.turnId,
+          turnSeq: existing.seq,
+          generation: nextGeneration,
+          isNewThread: false,
+        }
       }
       return {
         kind: 'replayed' as const,
@@ -245,6 +339,7 @@ export const reserveAnswerTurn = mutationGeneric({
         threadId: existing.threadId,
         turnId: existing.turnId,
         turnSeq: existing.seq,
+        generation,
         state: existing.state,
         ...(existing.finalStatus === undefined ? {} : { finalStatus: existing.finalStatus }),
       }
@@ -256,7 +351,6 @@ export const reserveAnswerTurn = mutationGeneric({
         .query('answerThreads')
         .withIndex('by_threadId', (query) => query.eq('threadId', args.requestedThreadScope))
         .unique()
-
     if (args.requestedThreadScope !== 'new' && existingThread === null) {
       return { kind: 'refused' as const, reason: 'thread_not_found' as const }
     }
@@ -275,7 +369,6 @@ export const reserveAnswerTurn = mutationGeneric({
         updatedAt: timestamp,
       })
     }
-
     const [turnRows, reservationRows] = await Promise.all([
       ctx.db
         .query('answerTurns')
@@ -305,28 +398,25 @@ export const reserveAnswerTurn = mutationGeneric({
       seq: turnSeq,
       query: args.query,
       ...(args.searchContextJson === undefined ? {} : { searchContextJson: args.searchContextJson }),
+      generation: 0,
       state: 'reserved' as const,
       createdAt: timestamp,
       updatedAt: timestamp,
     }
     await ctx.db.insert('answerTurnReservations', reservation)
-    if (existingThread !== null) {
-      await ctx.db.patch(existingThread._id, { updatedAt: timestamp })
-    }
+    if (existingThread !== null) await ctx.db.patch(existingThread._id, { updatedAt: timestamp })
     return {
       kind: 'reserved' as const,
       reservationKey: reservation.reservationKey,
       threadId: reservation.threadId,
       turnId: reservation.turnId,
       turnSeq: reservation.seq,
+      generation: reservation.generation,
       isNewThread: args.requestedThreadScope === 'new',
     }
   },
 })
-
-
-
-export const persistReservedAnswerTurn = mutationGeneric({
+export const renewAnswerTurnLease = mutationGeneric({
   args: {
     reservationKey: v.string(),
     requestDigest: v.string(),
@@ -334,22 +424,12 @@ export const persistReservedAnswerTurn = mutationGeneric({
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
-    createdAt: v.number(),
-    answerDigest: v.string(),
-    intent: literalUnion(FollowUpIntentValues),
-    evidenceJson: v.string(),
-    snapshotHash: v.string(),
-    proseJson: v.string(),
-    artifactKindsJson: v.string(),
-    finalStatus: v.optional(v.union(v.literal('complete'), v.literal('error'))),
-    errorCopyId: v.optional(v.string()),
-    errorProblemJson: v.optional(v.string()),
-    toolCalls: v.array(answerToolCallInput),
+    generation: v.number(),
     operationKey: v.optional(v.string()),
     correlationId: v.optional(v.string()),
     ...sourceWriteArgs,
   },
-  returns: persistReservedAnswerTurnResult,
+  returns: renewAnswerTurnLeaseResult,
   handler: async (ctx, args) => {
     await requireAnswerThreadSourceWrite(ctx, args)
     const reservation = await ctx.db
@@ -358,169 +438,10 @@ export const persistReservedAnswerTurn = mutationGeneric({
       .unique()
     if (reservation === null) return { kind: 'conflict' as const, reason: 'reservation_not_found' as const }
     if (
-      reservation.sessionId !== args.sessionId ||
-      reservation.threadId !== args.threadId ||
-      reservation.turnId !== args.turnId ||
-      reservation.seq !== args.turnSeq
-    ) {
-      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-    }
-    if (reservation.requestDigest !== args.requestDigest) {
-      return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
-    }
-    if (reservation.state === 'stopped') return { kind: 'conflict' as const, reason: 'stopped' as const }
-    const terminalState = reservation.state === 'answer_persisted' || reservation.state === 'finalized'
-    if (terminalState && reservation.answerDigest !== args.answerDigest) {
-      return { kind: 'conflict' as const, reason: 'answer_digest_conflict' as const }
-    }
-    const thread = await ctx.db
-      .query('answerThreads')
-      .withIndex('by_threadId', (query) => query.eq('threadId', args.threadId))
-      .unique()
-    if (thread === null || thread.pseudonymousSessionId !== args.sessionId) {
-      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-    }
-
-
-    const existingTurn = await ctx.db
-      .query('answerTurns')
-      .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
-      .unique()
-    if (reservation.state === 'answer_persisted' || reservation.state === 'finalized') {
-      if (
-        existingTurn === null
-        || existingTurn.snapshotHash !== args.snapshotHash
-        || existingTurn.createdAt !== args.createdAt
-      ) {
-        return { kind: 'conflict' as const, reason: 'turn_conflict' as const }
-      }
-      const existingTools = await ctx.db
-        .query('answerToolCalls')
-        .withIndex('by_turn_seq', (query) => query.eq('turnId', args.turnId))
-        .order('asc')
-        .take(ANSWER_THREAD_MAX_TURNS + 1)
-      const existingToolsWithRequiredFields = existingTools.map((call) => {
-        if (call.toolId === undefined || call.status === undefined) {
-          throw new Error('answer_tool_call_fields_missing')
-        }
-        return {
-          toolCallId: call.toolCallId,
-          seq: call.seq,
-          toolId: call.toolId,
-          inputJson: call.inputJson,
-          resultSummaryJson: call.resultSummaryJson,
-          resultJson: call.resultJson,
-          resultHash: call.resultHash,
-          status: call.status,
-          createdAt: call.createdAt,
-        }
-      })
-      const incomingToolsWithRequiredFields = args.toolCalls.map((call) => {
-        if (call.toolId === undefined || call.status === undefined) {
-          throw new Error('answer_tool_call_fields_missing')
-        }
-        return {
-          toolCallId: call.toolCallId,
-          seq: call.seq,
-          toolId: call.toolId,
-          inputJson: call.inputJson,
-          resultSummaryJson: call.resultSummaryJson,
-          resultJson: call.resultJson,
-          resultHash: call.resultHash,
-          status: call.status,
-          createdAt: call.createdAt,
-        }
-      })
-      if (!toolCallsMatch(existingToolsWithRequiredFields, incomingToolsWithRequiredFields)) {
-        return { kind: 'conflict' as const, reason: 'tool_call_conflict' as const }
-      }
-      return {
-        kind: 'replayed' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-      }
-    }
-    if (existingTurn !== null) return { kind: 'conflict' as const, reason: 'turn_conflict' as const }
-
-    const timestamp = now()
-    await ctx.db.insert('answerTurns', {
-      turnId: args.turnId,
-      threadId: args.threadId,
-      seq: args.turnSeq,
-      query: reservation.query,
-      intent: args.intent,
-      evidenceJson: args.evidenceJson,
-      snapshotHash: args.snapshotHash,
-      proseJson: args.proseJson,
-      artifactKindsJson: args.artifactKindsJson,
-      status: 'pending',
-      ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
-      ...(args.errorProblemJson === undefined ? {} : { errorProblemJson: args.errorProblemJson }),
-      createdAt: args.createdAt,
-    })
-    for (const call of args.toolCalls) {
-      if (call.toolId === undefined || call.status === undefined) {
-        throw new Error('answer_tool_call_fields_missing')
-      }
-      await ctx.db.insert('answerToolCalls', {
-        toolCallId: call.toolCallId,
-        turnId: args.turnId,
-        seq: call.seq,
-        toolId: call.toolId,
-        inputJson: call.inputJson,
-        resultSummaryJson: call.resultSummaryJson,
-        resultJson: call.resultJson,
-        resultHash: call.resultHash,
-        status: call.status,
-        createdAt: call.createdAt,
-      })
-    }
-    await ctx.db.patch(reservation._id, {
-      state: 'answer_persisted',
-      finalStatus: args.finalStatus ?? (args.errorProblemJson === undefined ? 'complete' : 'error'),
-      answerDigest: args.answerDigest,
-      updatedAt: timestamp,
-    })
-    await ctx.db.patch(thread._id, { updatedAt: timestamp })
-    return {
-      kind: 'persisted' as const,
-      reservationKey: reservation.reservationKey,
-      threadId: reservation.threadId,
-      turnId: reservation.turnId,
-      turnSeq: reservation.seq,
-    }
-  },
-})
-
-export const failPersistedAnswerTurn = mutationGeneric({
-  args: {
-    reservationKey: v.string(),
-    requestDigest: v.string(),
-    sessionId: v.string(),
-    threadId: v.string(),
-    turnId: v.string(),
-    turnSeq: v.number(),
-    answerDigest: v.string(),
-    errorCopyId: v.optional(v.string()),
-    errorProblemJson: v.string(),
-    operationKey: v.optional(v.string()),
-    correlationId: v.optional(v.string()),
-    ...sourceWriteArgs,
-  },
-  handler: async (ctx, args) => {
-    await requireAnswerThreadSourceWrite(ctx, args)
-    const reservation = await ctx.db
-      .query('answerTurnReservations')
-      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
-      .unique()
-    if (reservation === null) return { kind: 'conflict' as const, reason: 'reservation_not_found' as const }
-    if (
-      reservation.sessionId !== args.sessionId ||
-      reservation.threadId !== args.threadId ||
-      reservation.turnId !== args.turnId ||
-      reservation.seq !== args.turnSeq
+      reservation.sessionId !== args.sessionId
+      || reservation.threadId !== args.threadId
+      || reservation.turnId !== args.turnId
+      || reservation.seq !== args.turnSeq
     ) {
       return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
     }
@@ -528,101 +449,230 @@ export const failPersistedAnswerTurn = mutationGeneric({
       return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
     }
     if (reservation.state === 'stopped') {
-      return {
-        kind: 'stopped' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-      }
+      return { kind: 'conflict' as const, reason: 'stopped' as const }
     }
     if (reservation.state === 'finalized') {
-      if (reservation.answerDigest !== args.answerDigest) {
-        return { kind: 'conflict' as const, reason: 'answer_digest_conflict' as const }
-      }
-      return {
-        kind: 'replayed' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-        status: settledAnswerTurnStatus(reservation.finalStatus),
-      }
+      return { kind: 'conflict' as const, reason: 'settled' as const }
     }
-    if (reservation.state === 'reserved') {
-      return { kind: 'conflict' as const, reason: 'not_persisted' as const }
+    const generation = reservationGeneration(reservation)
+    if (generation !== args.generation) {
+      return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
     }
-    if (reservation.answerDigest !== args.answerDigest) {
-      return { kind: 'conflict' as const, reason: 'answer_digest_conflict' as const }
-    }
-
-    const thread = await ctx.db
-      .query('answerThreads')
-      .withIndex('by_threadId', (query) => query.eq('threadId', args.threadId))
-      .unique()
-    if (thread === null || thread.pseudonymousSessionId !== args.sessionId) {
-      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
-    }
-
-    const turn = await ctx.db
-      .query('answerTurns')
-      .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
-      .unique()
-    if (turn === null || turn.threadId !== args.threadId || turn.seq !== args.turnSeq) {
-      return { kind: 'conflict' as const, reason: 'turn_not_found' as const }
-    }
-    if (turn.status === 'stopped') {
-      return {
-        kind: 'stopped' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-      }
-    }
-    if (turn.status === 'complete' || turn.status === 'error') {
-      const timestamp = now()
-      await ctx.db.patch(reservation._id, {
-        state: 'finalized',
-        finalStatus: turn.status,
-        answerDigest: args.answerDigest,
-        updatedAt: timestamp,
-      })
-      return {
-        kind: 'replayed' as const,
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-        status: turn.status,
-      }
-    }
-
-    const timestamp = now()
-    await ctx.db.patch(turn._id, {
-      evidenceJson: '{}',
-      proseJson: '{}',
-      artifactKindsJson: '[]',
-      status: 'error',
-      ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
-      errorProblemJson: args.errorProblemJson,
-    })
-    await ctx.db.patch(reservation._id, {
-      state: 'finalized',
-      finalStatus: 'error',
-      answerDigest: args.answerDigest,
-      updatedAt: timestamp,
-    })
-    await ctx.db.patch(thread._id, { updatedAt: timestamp })
+    await ctx.db.patch(reservation._id, { updatedAt: now() })
     return {
-      kind: 'failed' as const,
+      kind: 'renewed' as const,
       reservationKey: reservation.reservationKey,
       threadId: reservation.threadId,
       turnId: reservation.turnId,
       turnSeq: reservation.seq,
+      generation,
     }
   },
 })
+
+
+export const persistAnswerTurnCheckpoint = mutationGeneric({
+  args: {
+    reservationKey: v.string(),
+    requestDigest: v.string(),
+    sessionId: v.string(),
+    threadId: v.string(),
+    turnId: v.string(),
+    turnSeq: v.number(),
+    generation: v.number(),
+    checkpointStep: v.number(),
+    checkpointJson: v.string(),
+    checkpointDigest: v.string(),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
+  },
+  returns: persistAnswerTurnCheckpointResult,
+  handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
+    if (
+      new TextEncoder().encode(args.checkpointJson).byteLength > MAX_ANSWER_TURN_CHECKPOINT_BYTES
+      || args.checkpointStep < 1
+      || args.checkpointStep > ANSWER_TURN_CHECKPOINT_MAX_STEP
+    ) {
+      return { kind: 'conflict' as const, reason: 'checkpoint_invalid' as const }
+    }
+    const reservation = await ctx.db
+      .query('answerTurnReservations')
+      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
+      .unique()
+    if (reservation === null) return { kind: 'conflict' as const, reason: 'reservation_not_found' as const }
+    if (
+      reservation.sessionId !== args.sessionId
+      || reservation.threadId !== args.threadId
+      || reservation.turnId !== args.turnId
+      || reservation.seq !== args.turnSeq
+    ) {
+      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
+    }
+    if (reservation.requestDigest !== args.requestDigest) {
+      return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
+    }
+    if (reservation.state === 'stopped') {
+      return { kind: 'conflict' as const, reason: 'stopped' as const }
+    }
+    if (reservation.state === 'finalized') {
+      return { kind: 'conflict' as const, reason: 'settled' as const }
+    }
+    const generation = reservationGeneration(reservation)
+    if (generation !== args.generation) {
+      return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
+    }
+    const checkpoint = parseAnswerTurnCheckpoint(args.checkpointJson, args.checkpointDigest)
+    if (
+      checkpoint === null
+      || checkpoint.reservationKey !== args.reservationKey
+      || checkpoint.requestDigest !== args.requestDigest
+      || checkpoint.generation !== generation
+      || checkpoint.threadId !== args.threadId
+      || checkpoint.turnId !== args.turnId
+      || checkpoint.turnSeq !== args.turnSeq
+      || checkpoint.stepOrdinal !== args.checkpointStep
+    ) {
+      return { kind: 'conflict' as const, reason: 'checkpoint_invalid' as const }
+    }
+
+    const existingCheckpoint =
+      reservation.checkpointJson === undefined
+        || reservation.checkpointDigest === undefined
+        || reservation.checkpointGeneration === undefined
+        || reservation.checkpointStep === undefined
+        ? undefined
+        : parseAnswerTurnCheckpoint(reservation.checkpointJson, reservation.checkpointDigest)
+    if (
+      reservation.checkpointJson !== undefined
+      || reservation.checkpointDigest !== undefined
+      || reservation.checkpointGeneration !== undefined
+      || reservation.checkpointStep !== undefined
+    ) {
+      if (
+        existingCheckpoint === null
+        || existingCheckpoint === undefined
+        || reservation.checkpointGeneration !== generation
+        || reservation.checkpointDigest === undefined
+        || reservation.checkpointStep === undefined
+      ) {
+        return { kind: 'conflict' as const, reason: 'checkpoint_invalid' as const }
+      }
+      if (
+        reservation.checkpointDigest === args.checkpointDigest
+        && reservation.checkpointStep === args.checkpointStep
+      ) {
+        await ctx.db.patch(reservation._id, { updatedAt: now() })
+        return {
+          kind: 'replayed' as const,
+          reservationKey: reservation.reservationKey,
+          threadId: reservation.threadId,
+          turnId: reservation.turnId,
+          turnSeq: reservation.seq,
+          generation,
+          checkpointDigest: args.checkpointDigest,
+        }
+      }
+      if (
+        args.checkpointStep !== reservation.checkpointStep + 1
+        || checkpoint.parentCheckpointDigest !== reservation.checkpointDigest
+      ) {
+        return { kind: 'conflict' as const, reason: 'checkpoint_conflict' as const }
+      }
+    } else if (args.checkpointStep !== 1 || checkpoint.parentCheckpointDigest !== undefined) {
+      return { kind: 'conflict' as const, reason: 'checkpoint_conflict' as const }
+    }
+
+    await ctx.db.patch(reservation._id, {
+      checkpointGeneration: generation,
+      checkpointStep: args.checkpointStep,
+      checkpointDigest: args.checkpointDigest,
+      checkpointJson: args.checkpointJson,
+      updatedAt: now(),
+    })
+    return {
+      kind: 'persisted' as const,
+      reservationKey: reservation.reservationKey,
+      threadId: reservation.threadId,
+      turnId: reservation.turnId,
+      turnSeq: reservation.seq,
+      generation,
+      checkpointDigest: args.checkpointDigest,
+    }
+  },
+})
+
+export const readAnswerTurnCheckpoint = queryGeneric({
+  args: {
+    reservationKey: v.string(),
+    requestDigest: v.string(),
+    sessionId: v.string(),
+    threadId: v.string(),
+    turnId: v.string(),
+    turnSeq: v.number(),
+    generation: v.number(),
+    ...sourceWriteArgs,
+  },
+  returns: readAnswerTurnCheckpointResult,
+  handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
+    const reservation = await ctx.db
+      .query('answerTurnReservations')
+      .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
+      .unique()
+    if (reservation === null) return { kind: 'missing' as const }
+    if (
+      reservation.sessionId !== args.sessionId
+      || reservation.threadId !== args.threadId
+      || reservation.turnId !== args.turnId
+      || reservation.seq !== args.turnSeq
+    ) {
+      return { kind: 'conflict' as const, reason: 'reservation_identity_mismatch' as const }
+    }
+    if (reservation.requestDigest !== args.requestDigest) {
+      return { kind: 'conflict' as const, reason: 'request_digest_mismatch' as const }
+    }
+    const generation = reservationGeneration(reservation)
+    if (reservation.state === 'stopped') return { kind: 'conflict' as const, reason: 'stopped' as const }
+    if (generation !== args.generation) {
+      return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
+    }
+    if (
+      reservation.checkpointJson === undefined
+      || reservation.checkpointDigest === undefined
+      || reservation.checkpointGeneration === undefined
+      || reservation.checkpointStep === undefined
+    ) {
+      return { kind: 'missing' as const }
+    }
+    const checkpoint = parseAnswerTurnCheckpoint(
+      reservation.checkpointJson,
+      reservation.checkpointDigest,
+    )
+    if (
+      checkpoint === null
+      || checkpoint.reservationKey !== args.reservationKey
+      || checkpoint.requestDigest !== args.requestDigest
+      || checkpoint.generation !== generation
+      || checkpoint.threadId !== args.threadId
+      || checkpoint.turnId !== args.turnId
+      || checkpoint.turnSeq !== args.turnSeq
+      || checkpoint.stepOrdinal !== reservation.checkpointStep
+    ) {
+      return { kind: 'conflict' as const, reason: 'checkpoint_invalid' as const }
+    }
+    return {
+      kind: 'checkpoint' as const,
+      checkpointJson: reservation.checkpointJson,
+      checkpointDigest: reservation.checkpointDigest,
+      generation,
+      checkpointStep: reservation.checkpointStep,
+    }
+  },
+})
+
+
 
 export const stopAnswerTurn = mutationGeneric({
   args: {
@@ -669,6 +719,7 @@ export const stopAnswerTurn = mutationGeneric({
     const timestamp = now()
     await ctx.db.patch(reservation._id, {
       state: 'stopped',
+      generation: reservationGeneration(reservation) + 1,
       updatedAt: timestamp,
     })
     const turn = await ctx.db
@@ -891,6 +942,9 @@ export const getAnswerThreadWithTurns = queryGeneric({
   },
 })
 
+// Operation artifacts may contain JSON Schema keys such as `$schema` and `$ref`,
+// which Convex cannot serialize as object fields. The server adapter decodes this
+// bounded projection string before exposing the typed route contract.
 export const getOwnedThreadProjection = queryGeneric({
   args: { threadId: v.string(), pseudonymousSessionId: v.string() },
   handler: async (ctx, args) => {
@@ -909,11 +963,11 @@ export const getOwnedThreadProjection = queryGeneric({
       ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT,
     )
 
-    return buildPublicThreadProjectionWithReservations(
+    return JSON.stringify(buildPublicThreadProjectionWithReservations(
       toThreadRecord(threadRow),
       turnRows,
       ANSWER_THREAD_PUBLIC_TURN_SNAPSHOT_LIMIT,
-    )
+    ))
   },
 })
 
@@ -973,11 +1027,11 @@ export const getSharedThreadProjection = queryGeneric({
       ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT,
     )
 
-    return buildPublicThreadProjectionWithReservations(
+    return JSON.stringify(buildPublicThreadProjectionWithReservations(
       toThreadRecord(threadRow),
       turnRows,
       ANSWER_THREAD_PUBLIC_TURN_SNAPSHOT_LIMIT,
-    )
+    ))
   },
 
 })

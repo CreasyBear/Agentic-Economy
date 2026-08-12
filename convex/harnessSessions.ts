@@ -7,6 +7,15 @@ import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 
 import {
+  AnswerToolCallStatusValues,
+  AnswerToolIdValues,
+  AnswerTurnStatusValues,
+  FollowUpIntentValues,
+} from '../src/modules/answer-thread/answer-thread.schema'
+import {
+  toolCallsMatch,
+} from '../src/modules/answer-thread/convex'
+import {
   HarnessRunStatusValues,
   HarnessSessionEntryKindValues,
 } from '../src/modules/harness/harness.schema'
@@ -19,6 +28,7 @@ import { createHarnessSessionEntry } from '../src/modules/harness/session-journa
 
 const harnessRunStatus = literalUnion(HarnessRunStatusValues)
 const harnessSessionEntryKind = literalUnion(HarnessSessionEntryKindValues)
+const ANSWER_FINALIZATION_TOOL_LIMIT = 100
 
 const appendConflictReason = v.union(
   v.literal('entry_id_conflict'),
@@ -113,7 +123,7 @@ const appendHarnessSessionEntryResult = v.union(
   }),
 )
 
-const finalizeAnswerTurnHarnessRunResult = v.union(
+const finalizeReservedAnswerTurnResult = v.union(
   v.object({
     status: v.literal('accepted'),
     turnId: v.string(),
@@ -136,9 +146,13 @@ const finalizeAnswerTurnHarnessRunResult = v.union(
       v.literal('reservation_not_found'),
       v.literal('reservation_identity_mismatch'),
       v.literal('request_digest_mismatch'),
+      v.literal('generation_mismatch'),
       v.literal('turn_not_found'),
+      v.literal('turn_conflict'),
       v.literal('snapshot_mismatch'),
       v.literal('evidence_conflict'),
+      v.literal('answer_digest_conflict'),
+      v.literal('tool_call_conflict'),
       v.literal('entry_identity_mismatch'),
       v.literal('entry_id_conflict'),
       v.literal('idempotency_conflict'),
@@ -154,6 +168,17 @@ const finalizeAnswerTurnHarnessRunResult = v.union(
     message: v.string(),
   }),
 )
+const answerTurnToolCallInput = v.object({
+  toolCallId: v.string(),
+  seq: v.number(),
+  toolId: literalUnion(AnswerToolIdValues),
+  inputJson: v.string(),
+  resultSummaryJson: v.string(),
+  resultJson: v.string(),
+  resultHash: v.string(),
+  status: literalUnion(AnswerToolCallStatusValues),
+  createdAt: v.number(),
+})
 
 const listHarnessSessionEntriesResult = v.object({
   kind: v.literal('ok'),
@@ -340,7 +365,7 @@ export const appendHarnessSessionEntry = mutation({
   },
 })
 
-export const finalizeAnswerTurnHarnessRun = mutation({
+export const finalizeReservedAnswerTurn = mutation({
   args: {
     reservationKey: v.string(),
     requestDigest: v.string(),
@@ -348,10 +373,20 @@ export const finalizeAnswerTurnHarnessRun = mutation({
     threadId: v.string(),
     turnId: v.string(),
     turnSeq: v.number(),
+    expectedGeneration: v.number(),
+    createdAt: v.number(),
+    answerDigest: v.string(),
+    query: v.string(),
+    intent: literalUnion(FollowUpIntentValues),
     finalStatus: v.union(v.literal('complete'), v.literal('error')),
     snapshotHash: v.string(),
     evidenceJson: v.string(),
+    proseJson: v.string(),
+    artifactKindsJson: v.string(),
+    errorCopyId: v.optional(v.string()),
+    errorProblemJson: v.optional(v.string()),
     finalizationHash: v.string(),
+    toolCalls: v.array(answerTurnToolCallInput),
     operationKey: v.string(),
     correlationId: v.string(),
     ...sourceWriteArgs,
@@ -378,14 +413,14 @@ export const finalizeAnswerTurnHarnessRun = mutation({
       }),
     ),
   },
-  returns: finalizeAnswerTurnHarnessRunResult,
+  returns: finalizeReservedAnswerTurnResult,
   handler: async (ctx, args) => {
     const sourceWrite = await requireSourceWrite(ctx, args, 'harness_session')
     if (sourceWrite.kind === 'rejected') {
       return {
         status: 'denied' as const,
         reason: sourceWrite.reason,
-        message: 'Answer harness finalization requires server source-write admission.',
+        message: 'Answer finalization requires server source-write admission.',
       }
     }
 
@@ -401,10 +436,10 @@ export const finalizeAnswerTurnHarnessRun = mutation({
       }
     }
     if (
-      reservation.sessionId !== args.sessionId ||
-      reservation.threadId !== args.threadId ||
-      reservation.turnId !== args.turnId ||
-      reservation.seq !== args.turnSeq
+      reservation.sessionId !== args.sessionId
+      || reservation.threadId !== args.threadId
+      || reservation.turnId !== args.turnId
+      || reservation.seq !== args.turnSeq
     ) {
       return {
         status: 'conflict' as const,
@@ -412,11 +447,25 @@ export const finalizeAnswerTurnHarnessRun = mutation({
         message: 'Answer turn reservation identity does not match finalization.',
       }
     }
-    if (reservation.requestDigest !== args.requestDigest) {
+    if (reservation.requestDigest !== args.requestDigest || reservation.query !== args.query) {
       return {
         status: 'conflict' as const,
         reason: 'request_digest_mismatch' as const,
-        message: 'Answer turn request digest does not match reservation.',
+        message: 'Answer turn request identity does not match finalization.',
+      }
+    }
+    if (reservation.state === 'stopped') {
+      return {
+        status: 'conflict' as const,
+        reason: 'stopped' as const,
+        message: 'Answer turn was stopped before finalization.',
+      }
+    }
+    if (reservation.generation !== args.expectedGeneration) {
+      return {
+        status: 'conflict' as const,
+        reason: 'generation_mismatch' as const,
+        message: 'Answer turn generation does not match finalization.',
       }
     }
     const thread = await ctx.db
@@ -430,123 +479,178 @@ export const finalizeAnswerTurnHarnessRun = mutation({
         message: 'Answer thread parent is not available for finalization.',
       }
     }
-    if (reservation.state === 'stopped') {
-      return {
-        status: 'conflict' as const,
-        reason: 'stopped' as const,
-        message: 'Answer turn was stopped before finalization.',
-      }
-    }
-    if (reservation.state === 'reserved') {
-      return {
-        status: 'conflict' as const,
-        reason: 'turn_not_found' as const,
-        message: 'Answer turn has not been durably persisted.',
-      }
-    }
-    if (
-      reservation.state === 'finalized' &&
-      reservation.harnessFinalizationDigest !== args.finalizationHash
-    ) {
-      return {
-        status: 'conflict' as const,
-        reason: 'evidence_conflict' as const,
-        message: 'Answer turn was already finalized with different harness evidence.',
-      }
-    }
 
     const turn = await ctx.db
       .query('answerTurns')
       .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
       .unique()
-    if (turn === null || turn.threadId !== args.threadId || turn.seq !== args.turnSeq) {
+    const existingTools = await ctx.db
+      .query('answerToolCalls')
+      .withIndex('by_turn_seq', (query) => query.eq('turnId', args.turnId))
+      .order('asc')
+      .take(ANSWER_FINALIZATION_TOOL_LIMIT)
+    const incomingTools = args.toolCalls.map((call) => ({
+      toolCallId: call.toolCallId,
+      seq: call.seq,
+      toolId: call.toolId,
+      inputJson: call.inputJson,
+      resultSummaryJson: call.resultSummaryJson,
+      resultJson: call.resultJson,
+      resultHash: call.resultHash,
+      status: call.status,
+      createdAt: call.createdAt,
+    }))
+    const storedTools = existingTools.map((call) => ({
+      toolCallId: call.toolCallId,
+      seq: call.seq,
+      toolId: call.toolId,
+      inputJson: call.inputJson,
+      resultSummaryJson: call.resultSummaryJson,
+      resultJson: call.resultJson,
+      resultHash: call.resultHash,
+      status: call.status,
+      createdAt: call.createdAt,
+    }))
+    const turnMatches =
+      turn !== null
+      && turn.threadId === args.threadId
+      && turn.seq === args.turnSeq
+      && turn.query === args.query
+      && turn.intent === args.intent
+      && turn.evidenceJson === args.evidenceJson
+      && turn.snapshotHash === args.snapshotHash
+      && turn.proseJson === args.proseJson
+      && turn.artifactKindsJson === args.artifactKindsJson
+      && turn.status === args.finalStatus
+      && turn.createdAt === args.createdAt
+      && turn.errorCopyId === args.errorCopyId
+      && turn.errorProblemJson === args.errorProblemJson
+    if (reservation.state === 'finalized') {
+      if (reservation.answerDigest !== args.answerDigest) {
+        return {
+          status: 'conflict' as const,
+          reason: 'answer_digest_conflict' as const,
+          message: 'Answer turn was finalized with a different answer digest.',
+        }
+      }
+      if (reservation.harnessFinalizationDigest !== args.finalizationHash) {
+        return {
+          status: 'conflict' as const,
+          reason: 'evidence_conflict' as const,
+          message: 'Answer turn was finalized with different harness evidence.',
+        }
+      }
+      if (!turnMatches) {
+        return {
+          status: 'conflict' as const,
+          reason: 'turn_conflict' as const,
+          message: 'Answer turn replay does not match the finalized row.',
+        }
+      }
+      if (!toolCallsMatch(storedTools, incomingTools)) {
+        return {
+          status: 'conflict' as const,
+          reason: 'tool_call_conflict' as const,
+          message: 'Answer tool-call replay does not match the finalized rows.',
+        }
+      }
+      const replayValidation = await validateHarnessSessionEntryBatch(
+        ctx.db,
+        args.entries.map(coerceFinalizationEntryInput),
+        { sessionId: args.sessionId, runId: args.turnId, turnId: args.turnId },
+      )
+      if (replayValidation.status === 'conflict') return replayValidation
+      const activeLeafEntryId = replayValidation.activeLeafEntryId
       return {
-        status: 'conflict' as const,
-        reason: 'turn_not_found' as const,
-        message: `Answer turn ${args.turnId} does not exist for this reservation.`,
+        status: 'replayed' as const,
+        turnId: args.turnId,
+        finalizationHash: args.finalizationHash,
+        entriesAccepted: 0 as const,
+        entriesReplayed: replayValidation.entriesReplayed,
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
       }
     }
-    if (turn.status === 'stopped') {
+    if (turn !== null && !turnMatches) {
       return {
         status: 'conflict' as const,
-        reason: 'stopped' as const,
-        message: 'Answer turn was stopped before finalization.',
+        reason: 'turn_conflict' as const,
+        message: 'Answer turn already exists with different finalization material.',
       }
     }
-    if (turn.snapshotHash !== args.snapshotHash) {
+    if (turn !== null && !toolCallsMatch(storedTools, incomingTools)) {
       return {
         status: 'conflict' as const,
-        reason: 'snapshot_mismatch' as const,
-        message: `Answer turn ${args.turnId} snapshot hash does not match final harness evidence.`,
-      }
-    }
-
-    const currentEvidenceJson = turn.evidenceJson
-    const currentFinalizationHash = readHarnessFinalizationHash(currentEvidenceJson)
-    if (currentFinalizationHash !== undefined && currentFinalizationHash !== args.finalizationHash) {
-      return {
-        status: 'conflict' as const,
-        reason: 'evidence_conflict' as const,
-        message: `Answer turn ${args.turnId} was already finalized with different harness evidence.`,
+        reason: 'tool_call_conflict' as const,
+        message: 'Answer tool-call rows already exist with different finalization material.',
       }
     }
 
     const validation = await validateHarnessSessionEntryBatch(
       ctx.db,
       args.entries.map(coerceFinalizationEntryInput),
-      {
-        sessionId: args.sessionId,
-        runId: args.turnId,
-        turnId: args.turnId,
-      },
+      { sessionId: args.sessionId, runId: args.turnId, turnId: args.turnId },
     )
-    if (validation.status === 'conflict') {
-      return validation
-    }
+    if (validation.status === 'conflict') return validation
 
-    const evidenceAlreadyFinal =
-      reservation.state === 'finalized' &&
-      reservation.harnessFinalizationDigest === args.finalizationHash &&
-      (currentFinalizationHash === args.finalizationHash || currentEvidenceJson === args.evidenceJson)
-    if (!evidenceAlreadyFinal) {
-      await ctx.db.patch(turn._id, {
+    const timestamp = Date.now()
+    if (turn === null) {
+      await ctx.db.insert('answerTurns', {
+        turnId: args.turnId,
+        threadId: args.threadId,
+        seq: args.turnSeq,
+        query: args.query,
+        intent: args.intent,
         evidenceJson: args.evidenceJson,
+        snapshotHash: args.snapshotHash,
+        proseJson: args.proseJson,
+        artifactKindsJson: args.artifactKindsJson,
         status: args.finalStatus,
+        ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
+        ...(args.errorProblemJson === undefined ? {} : { errorProblemJson: args.errorProblemJson }),
+        createdAt: args.createdAt,
       })
+      for (const call of args.toolCalls) {
+        await ctx.db.insert('answerToolCalls', {
+          toolCallId: call.toolCallId,
+          turnId: args.turnId,
+          seq: call.seq,
+          toolId: call.toolId,
+          inputJson: call.inputJson,
+          resultSummaryJson: call.resultSummaryJson,
+          resultJson: call.resultJson,
+          resultHash: call.resultHash,
+          status: call.status,
+          createdAt: call.createdAt,
+        })
+      }
     }
-
     for (const entry of validation.entriesToInsert) {
       await ctx.db.insert('harnessSessionEntries', entry)
     }
-
     if (validation.entriesToInsert.length > 0) {
       const lastEntry = validation.entriesToInsert.at(-1)
       if (lastEntry !== undefined) {
         await upsertHarnessSessionForFinalization(ctx.db, validation.session, lastEntry)
       }
     }
-
-    if (reservation.state !== 'finalized') {
-      await ctx.db.patch(reservation._id, {
-        state: 'finalized',
-        finalStatus: args.finalStatus,
-        harnessFinalizationDigest: args.finalizationHash,
-        updatedAt: Date.now(),
-      })
-    }
+    await ctx.db.patch(reservation._id, {
+      state: 'finalized',
+      finalStatus: args.finalStatus,
+      answerDigest: args.answerDigest,
+      harnessFinalizationDigest: args.finalizationHash,
+      updatedAt: timestamp,
+    })
+    await ctx.db.patch(thread._id, { updatedAt: timestamp })
 
     const activeLeafEntryId = validation.entriesToInsert.at(-1)?.entryId ?? validation.activeLeafEntryId
-    const common = {
+    return {
+      status: 'accepted' as const,
       turnId: args.turnId,
       finalizationHash: args.finalizationHash,
       entriesAccepted: validation.entriesToInsert.length,
       entriesReplayed: validation.entriesReplayed,
       ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
     }
-
-    return common.entriesAccepted === 0 && evidenceAlreadyFinal
-      ? { status: 'replayed' as const, ...common, entriesAccepted: 0 as const }
-      : { status: 'accepted' as const, ...common }
   },
 })
 
@@ -918,15 +1022,6 @@ async function upsertHarnessSessionForFinalization(
   await db.patch(session._id, patch)
 }
 
-function readHarnessFinalizationHash(evidenceJson: string): string | undefined {
-  try {
-    const evidence = JSON.parse(evidenceJson) as { harnessFinalization?: { finalizationHash?: unknown } }
-    const value = evidence.harnessFinalization?.finalizationHash
-    return typeof value === 'string' && value.length > 0 ? value : undefined
-  } catch {
-    return undefined
-  }
-}
 
 function normalizeEntryForStorage(
   input: {

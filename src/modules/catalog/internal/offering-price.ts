@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { compareExactAmounts, exactAmountSchema, formatExactAmount, rescaleExactAmount } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 
@@ -12,10 +13,19 @@ import type { ExactAmount } from '@/modules/money/public'
  */
 
 export const OfferingPriceKindValues = ['fixed', 'from', 'range', 'quote_only'] as const
+
+/** Currencies currently supported by owner-entered offering prices. */
+export const SUPPORTED_OFFERING_CURRENCIES = ['AUD', 'USD'] as const
+export type SupportedOfferingCurrency = (typeof SUPPORTED_OFFERING_CURRENCIES)[number]
+export const supportedOfferingCurrencySchema = z.enum(SUPPORTED_OFFERING_CURRENCIES)
+
+export function isSupportedOfferingCurrency(value: unknown): value is SupportedOfferingCurrency {
+  return supportedOfferingCurrencySchema.safeParse(value).success
+}
 export type OfferingPriceKind = (typeof OfferingPriceKindValues)[number]
 
 /** What one unit of the amount buys. Bounded so two prices stay comparable. */
-export const OfferingPriceUnitValues = ['job', 'hour', 'visit', 'item', 'day', 'week', 'month'] as const
+export const OfferingPriceUnitValues = ['call', 'job', 'hour', 'visit', 'item', 'day', 'week', 'month'] as const
 export type OfferingPriceUnit = (typeof OfferingPriceUnitValues)[number]
 
 /** Australian supply publishes tax-inclusive prices; say which, never assume. */

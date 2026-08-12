@@ -1,4 +1,5 @@
 export {
+  acceptedAuthorityValue,
   actionInvocationOriginValue,
   attemptReleaseValue,
   attemptTransitionValue,

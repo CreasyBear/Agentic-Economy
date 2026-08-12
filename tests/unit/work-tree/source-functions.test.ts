@@ -7,6 +7,9 @@ import {
   createWorkTreeThroughSource,
   decideWorkTreeThroughSource,
   inspectWorkTreeThroughSource,
+  workTreeDecisionReceiptSchema,
+  workTreeReadbackSchema,
+  workTreeDecisionResultSchema,
 } from '@/modules/work-tree/work-tree.functions'
 import type { WorkTree } from '@/modules/work-tree/public'
 
@@ -239,6 +242,29 @@ describe('WorkTree source transport selection', () => {
       code: 'authentication_required',
       replayed: false,
     })
+  })
+  it('rejects legacy unknown receipt fields and returns the exact unknown result on source failure', async () => {
+    const legacyUnknown = {
+      kind: 'unknown',
+      decision: 'lock',
+      projectId,
+      nodeId: decideInput.nodeId,
+      receiptId: 'unknown:legacy',
+      generation: 1,
+      revision: 1,
+      disposition: 'unchanged',
+      occurredAt: 1,
+      readback: { projectId, revision: 1 },
+    }
+
+    expect(workTreeDecisionReceiptSchema.safeParse(legacyUnknown).success).toBe(false)
+    expect(workTreeReadbackSchema.safeParse({ ...readback(), receipts: [legacyUnknown] }).success).toBe(false)
+    expect(workTreeDecisionResultSchema.safeParse(legacyUnknown).success).toBe(false)
+    sourceMocks.callSourceMutation.mockResolvedValueOnce(legacyUnknown)
+    await expect(decideWorkTreeThroughSource(decideInput)).resolves.toEqual({ kind: 'unknown' })
+
+    sourceMocks.callSourceMutation.mockRejectedValueOnce(new Error('transport_down'))
+    await expect(decideWorkTreeThroughSource(decideInput)).resolves.toEqual({ kind: 'unknown' })
   })
   it('parses real Convex-shaped replay receipts with occurredAt', async () => {
     sourceMocks.callSourceMutation.mockResolvedValue({

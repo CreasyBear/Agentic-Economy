@@ -1,3 +1,4 @@
+import type { BusinessContext } from '@/modules/business/public'
 import type { OfferingPrice } from '@/modules/catalog/public'
 import type {
   PublicBusinessCatalogApiV2Dto,
@@ -21,11 +22,7 @@ export type ManifestCatalogProjection<TOffering> = Readonly<{
   slug: string
   businessName: string
   category: string
-  location: Readonly<{
-    suburb: string
-    stateTerritory: string
-    postcode?: string
-  }>
+  businessContext: BusinessContext
   offerings: readonly TOffering[]
 }>
 
@@ -38,16 +35,25 @@ export function projectManifestCatalog<TOffering>(
   catalog: PublicBusinessCatalogApiV2Dto,
   projectOffering: ManifestOfferingProjector<TOffering>,
 ): ManifestCatalogProjection<TOffering> {
+  const businessContext = catalog.businessContext.kind === 'local_human'
+    ? {
+        kind: 'local_human' as const,
+        suburb: safePublicText(catalog.businessContext.suburb),
+        stateTerritory: safePublicText(catalog.businessContext.stateTerritory),
+        ...(catalog.businessContext.postcode === undefined ? {} : { postcode: safePublicText(catalog.businessContext.postcode) }),
+        ...(catalog.businessContext.publishedPhone === undefined ? {} : { publishedPhone: safePublicText(catalog.businessContext.publishedPhone) }),
+      }
+    : {
+        kind: 'programmable_provider' as const,
+        website: safePublicText(catalog.businessContext.website),
+        providerIdentifier: safePublicText(catalog.businessContext.providerIdentifier),
+      }
   return {
     businessId: catalog.businessId,
     slug: catalog.slug,
     businessName: safePublicText(catalog.name),
     category: safePublicText(catalog.category),
-    location: {
-      suburb: safePublicText(catalog.suburb),
-      stateTerritory: safePublicText(catalog.stateTerritory),
-      ...(catalog.postcode === undefined ? {} : { postcode: safePublicText(catalog.postcode) }),
-    },
+    businessContext,
     offerings: catalog.offerings.map((offering) => projectOffering(offering, {
       offeringRef: offering.offeringRef,
       revision: offering.revision,

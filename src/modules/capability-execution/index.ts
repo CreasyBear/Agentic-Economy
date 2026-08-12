@@ -1,5 +1,6 @@
 export {
   executeOperation,
+  operationExecutionBindingDigest,
   operationExecuteInputSchema,
   type OperationExecuteDeps,
   type OperationExecuteInput,
@@ -9,8 +10,6 @@ export {
 
 export {
   convexKeylessExecutableSource,
-  defaultKeylessExecutableSource,
-  seedKeylessExecutableSource,
   type KeylessExecutableSourcePort,
   type KeylessExecutableToolDescriptor,
 } from './operation-execute.actions'

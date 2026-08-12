@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type {
-  KeylessExecutableSourcePort,
-  KeylessExecutableToolDescriptor,
-  OperationExecutableDescriptor,
+import {
+  operationExecutionBindingDigest,
+  type KeylessExecutableSourcePort,
+  type KeylessExecutableToolDescriptor,
+  type OperationExecutableDescriptor,
 } from '@/modules/capability-execution'
+import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import type * as AnswerThreadTooling from '@/modules/answer-thread/tooling'
 import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
-import { runAnswerToolUseAgent } from '@/modules/answer/internal/answer-tool-use-agent'
+import {
+  runAnswerToolUseAgent,
+  type AnswerToolUseAgentCheckpoint,
+} from '@/modules/answer/internal/answer-tool-use-agent'
+import type { AnswerTurnCheckpoint } from '@/modules/answer-thread/answer-thread.schema'
 import { sanitizePromptDataString } from '@/modules/answer/internal/answer-llm-prompts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -48,11 +54,35 @@ const selectedDescriptor: KeylessExecutableToolDescriptor = {
   },
 }
 
+// The resolver's descriptor-only candidate projection is the real identity
+// required by structured operation selections.
+const selectedCandidateSetDigest = canonicalDigest([{
+  rank: 1,
+  operationRef: selectedDescriptor.operationRef,
+  descriptorDigest: canonicalDigest({
+    operationRef: selectedDescriptor.operationRef,
+    capabilityId: selectedDescriptor.capabilityId,
+    name: selectedDescriptor.name,
+    summary: selectedDescriptor.summary,
+    inputSchema: selectedDescriptor.inputSchema,
+    availability: { posture: 'routeable' },
+    commercial: {
+      price: { kind: 'on_request' },
+      materialTerms: [],
+      relationship: { kind: 'none', summary: 'No published commercial relationship.' },
+    },
+    provenance: { publisher: 'ae_curated_external', sourceKind: 'openapi_http' },
+  }).toString(),
+  inputSchemaDigest: canonicalDigest(selectedDescriptor.inputSchema).toString(),
+  availability: { posture: 'routeable' },
+}]).toString()
+
 const selectedResolution = {
   kind: 'resolved' as const,
   descriptors: [selectedDescriptor],
   candidates: [selectedDescriptor],
   selected: selectedDescriptor,
+  candidateSetDigest: selectedCandidateSetDigest,
 }
 
 const selectedSource: KeylessExecutableSourcePort = {
@@ -69,6 +99,8 @@ const recoveredExecutable: OperationExecutableDescriptor = {
   endpointUrl: 'https://api.example.test/current',
   authority: { kind: 'keyless' },
   adapterId: 'http-json:v1',
+  price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
+  effects: [],
   method: 'GET',
   query: [{ inputPointer: '/city', parameter: 'city' }],
   requestTimeoutMs: 5_000,
@@ -100,10 +132,16 @@ const cryptoDescriptor: KeylessExecutableToolDescriptor = {
   name: 'CoinGecko simple price',
   summary: 'Fetch current cryptocurrency prices in requested currencies.',
   searchTerms: ['ethereum price', 'bitcoin price', 'crypto price', 'cryptocurrency'],
-  inputExamples: [{
-    label: 'ethereum price in USD',
-    input: { ids: 'ethereum', vs_currencies: 'usd' },
-  }],
+  inputExamples: [
+    {
+      label: 'ethereum price in USD',
+      input: { ids: 'ethereum', vs_currencies: 'usd' },
+    },
+    {
+      label: 'bitcoin price in USD',
+      input: { ids: 'bitcoin', vs_currencies: 'usd' },
+    },
+  ],
   inputSchema: {
     type: 'object',
     properties: {
@@ -137,7 +175,11 @@ const fxDescriptor: KeylessExecutableToolDescriptor = {
   capabilityId: 'frankfurter.single-rate',
   name: 'Frankfurter ECB single rate',
   summary: 'Return a current European Central Bank reference exchange rate.',
-  searchTerms: ['currency conversion', 'exchange rate', 'fx'],
+  searchTerms: ['currency conversion', 'exchange rate', 'convert money', 'fx'],
+  inputExamples: [
+    { label: 'EUR to USD', input: { from: 'EUR', to: 'USD' } },
+    { label: 'AUD to GBP', input: { from: 'AUD', to: 'GBP' } },
+  ],
   inputSchema: {
     type: 'object',
     properties: {
@@ -245,6 +287,8 @@ describe('selected keyless operation answer loop recovery', () => {
       evidenceHash: 'sha256:recovered',
     }
     executionMocks.executeKeylessOperation.mockResolvedValue(executionResult)
+    const checkpointOrdinals: number[] = []
+    const checkpointToolCounts: number[] = []
     const server = await startOpenRouterContractServer((_request, index) => {
       if (index === 0) {
         return openRouterToolResponse([{
@@ -278,6 +322,16 @@ describe('selected keyless operation answer loop recovery', () => {
         },
         keylessExecutableSource: recoveredSource,
         maxToolCalls: 2,
+        onToolCheckpoint: async (checkpoint) => {
+          const expectedOrdinal = checkpointOrdinals.length + 1
+          if (checkpoint.stepOrdinal !== expectedOrdinal) {
+            throw new Error(
+              `answer_turn_checkpoint_checkpoint_conflict: expected ${expectedOrdinal}, got ${checkpoint.stepOrdinal}`,
+            )
+          }
+          checkpointOrdinals.push(checkpoint.stepOrdinal)
+          checkpointToolCounts.push(checkpoint.toolCalls.length)
+        },
       })
 
       expect(result.gate.ok).toBe(true)
@@ -294,9 +348,17 @@ describe('selected keyless operation answer loop recovery', () => {
       expect(executionMocks.executeKeylessOperation).toHaveBeenCalledWith(
         { operationRef: recoveredRef, input: { city: 'Sydney' } },
         recoveredSource,
+        undefined,
+        operationExecutionBindingDigest(recoveredExecutable),
       )
+      expect(result.snapshot.operationSelection).toMatchObject({
+        operationRef: recoveredRef,
+        executionBindingDigest: operationExecutionBindingDigest(recoveredExecutable),
+      })
       expect(recoveredSource.read).toHaveBeenCalledWith(recoveredRef)
       expect(server.requests[1]?.tools?.map((tool) => tool.function.name)).toEqual([recoveredToolName()])
+      expect(checkpointOrdinals).toEqual([1, 2])
+      expect(checkpointToolCounts).toEqual([1, 2])
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -443,6 +505,411 @@ describe('selected keyless operation answer loop', () => {
       restoreOpenRouter()
       await server.close()
     }
+  })
+  it('executes exact selected JSON without letting the model rewrite provider input', async () => {
+    executionMocks.executeKeylessOperation.mockResolvedValue({
+      kind: 'ok',
+      operationRef: selectedDescriptor.operationRef,
+      capabilityId: selectedDescriptor.capabilityId,
+      name: selectedDescriptor.name,
+      output: { value: 'server-authoritative' },
+      evidenceHash: 'sha256:server-authoritative',
+    })
+    const server = await startOpenRouterContractServer(() => openRouterStructuredProseResponse({
+      oneLine: 'The exact input returned server-authoritative.',
+      summary: 'The selected operation completed.',
+      whatToDoNow: 'Use the returned value.',
+    }))
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const query = JSON.stringify({
+        operationRef: selectedDescriptor.operationRef,
+        input: { value: 'exact-user-input' },
+        candidateSetDigest: selectedCandidateSetDigest,
+      })
+      const result = await runAnswerToolUseAgent({
+        query,
+        keylessDataAsk: selectedResolution,
+        keylessExecutableSource: selectedSource,
+        maxToolCalls: 1,
+      })
+
+      expect(executionMocks.executeKeylessOperation).toHaveBeenCalledOnce()
+      expect(executionMocks.executeKeylessOperation).toHaveBeenCalledWith({
+        operationRef: selectedDescriptor.operationRef,
+        input: { value: 'exact-user-input' },
+      }, selectedSource)
+      expect(result.toolCalls).toHaveLength(1)
+      expect(JSON.parse(result.toolCalls[0]!.inputJson)).toMatchObject({
+        operationRef: selectedDescriptor.operationRef,
+        input: { value: 'exact-user-input' },
+      })
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.tools ?? []).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('refuses schema-invalid exact JSON before provider execution', async () => {
+    const server = await startOpenRouterContractServer(() => openRouterStructuredProseResponse({
+      oneLine: 'This response must not be requested.',
+      summary: 'This response must not be requested.',
+      whatToDoNow: 'This response must not be requested.',
+    }))
+    const restoreOpenRouter = server.installEnv()
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: JSON.stringify({
+          operationRef: selectedDescriptor.operationRef,
+          input: {},
+          candidateSetDigest: selectedCandidateSetDigest,
+        }),
+        keylessDataAsk: selectedResolution,
+        keylessExecutableSource: selectedSource,
+        maxToolCalls: 1,
+      })
+
+      expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
+      expect(result.toolCalls).toHaveLength(0)
+      expect(result.prose.oneLine).toContain('does not match')
+      expect(result.prose.summary).toContain('Nothing was executed')
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('routes an authenticated selected capability through the canonical invocation service', async () => {
+    const principal = {
+      principalId: 'clerk_api_key:key:answer',
+      ownerId: 'owner:answer',
+      credentialId: 'key:answer',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox' as const,
+      scopes: ['market_operations:invoke'],
+      authorityMode: 'approve_each' as const,
+    }
+    const completed = {
+      kind: 'completed' as const,
+      invocationRef: 'invocation:answer',
+      operationRef: selectedDescriptor.operationRef,
+      output: { value: 'gateway-result' },
+      evidenceHash: 'sha256:gateway-result',
+      usage: {
+        chargeState: 'free_tier' as const,
+        amount: { currency: 'USD', units: '0', exponent: 0 },
+      },
+    }
+    const invokeOperation = vi.fn().mockResolvedValue(completed)
+    const unavailable = async (): Promise<never> => {
+      throw new Error('recovery method should not run')
+    }
+    const service = {
+      invokeOperation,
+      readInvocationStatus: vi.fn(unavailable),
+      cancelInvocation: vi.fn(unavailable),
+      reconcileInvocation: vi.fn(unavailable),
+    }
+    const server = await startOpenRouterContractServer((request) => {
+      if ((request.tools?.length ?? 0) > 0) {
+        return openRouterToolResponse([
+          { id: 'call-gateway', toolId: selectedToolName(), input: { value: 'gateway-result' } },
+        ])
+      }
+      return openRouterStructuredProseResponse({
+        oneLine: 'The authenticated operation returned gateway-result.',
+        summary: 'The gateway completed the operation.',
+        whatToDoNow: 'Use the returned value.',
+      })
+    })
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        turnId: 'turn:gateway',
+        query: 'what is the authenticated live value?',
+        keylessDataAsk: selectedResolution,
+        keylessExecutableSource: selectedSource,
+        maxToolCalls: 1,
+        operationInvokeContext: {
+          principal,
+          correlationId: 'corr:answer',
+          reservationKey: 'reservation:answer',
+          generation: 3,
+          service,
+        },
+      })
+
+      expect(result.toolCalls).toHaveLength(1)
+      expect(result.toolCalls[0]).toMatchObject({
+        toolCallId: 'call-gateway',
+        toolId: 'operation.invoke',
+        status: 'complete',
+      })
+      expect(JSON.parse(result.toolCalls[0]!.resultJson)).toEqual(completed)
+      expect(invokeOperation).toHaveBeenCalledWith({
+        input: {
+          operationRef: selectedDescriptor.operationRef,
+          input: { value: 'gateway-result' },
+          idempotencyKey: expect.any(String),
+        },
+        principal,
+        correlationId: 'corr:answer',
+      })
+      expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
+      const pending = {
+        kind: 'pending' as const,
+        invocationRef: 'invocation:pending',
+        operationRef: selectedDescriptor.operationRef,
+        retryAfterMs: 1_000,
+      }
+      invokeOperation.mockResolvedValueOnce(pending)
+      const pendingResult = await runAnswerToolUseAgent({
+        turnId: 'turn:gateway-pending',
+        query: 'run the authenticated live operation',
+        keylessDataAsk: selectedResolution,
+        keylessExecutableSource: selectedSource,
+        maxToolCalls: 1,
+        operationInvokeContext: {
+          principal,
+          correlationId: 'corr:answer-pending',
+          reservationKey: 'reservation:answer-pending',
+          generation: 0,
+          service,
+        },
+      })
+
+      expect(pendingResult.toolCalls[0]).toMatchObject({
+        toolId: 'operation.invoke',
+        status: 'complete',
+      })
+      expect(JSON.parse(pendingResult.toolCalls[0]!.resultJson)).toEqual(pending)
+      expect(pendingResult.prose).toEqual({
+        oneLine: 'The operation was accepted and is still running.',
+        summary: 'No terminal result is available yet.',
+        whatToDoNow: 'Check the invocation status before taking any result-dependent action.',
+      })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+  it('binds authenticated operation effects to the reservation generation and stable ordinal', async () => {
+    const principal = {
+      principalId: 'clerk_api_key:key:pra004',
+      ownerId: 'owner:pra004',
+      credentialId: 'key:pra004',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox' as const,
+      scopes: ['market_operations:invoke'],
+      authorityMode: 'approve_each' as const,
+    }
+    const completedFor = (value: string) => ({
+      kind: 'completed' as const,
+      invocationRef: `invocation:${value}`,
+      operationRef: selectedDescriptor.operationRef,
+      output: { value },
+      evidenceHash: `sha256:${value}`,
+      usage: {
+        usageRef: `usage:${value}`,
+        observedAt: 1,
+        chargeState: 'free_tier' as const,
+        amount: { currency: 'USD', units: '0', exponent: 0 },
+        priceDigest: 'sha256:price',
+      },
+    })
+    const makeService = (failAfterEffect = false) => {
+      const materialByKey = new Map<string, string>()
+      let effectCount = 0
+      let shouldFailAfterEffect = failAfterEffect
+      const invokeOperation = vi.fn(async (request: {
+        input: {
+          operationRef: string
+          input: Record<string, unknown>
+          idempotencyKey: string
+        }
+      }) => {
+        const material = JSON.stringify({
+          operationRef: request.input.operationRef,
+          input: request.input.input,
+        })
+        const previous = materialByKey.get(request.input.idempotencyKey)
+        if (previous !== undefined && previous !== material) {
+          return {
+            kind: 'refused' as const,
+            operationRef: request.input.operationRef,
+            code: 'idempotency_conflict' as const,
+            retryable: false,
+          }
+        }
+        if (previous === undefined) {
+          materialByKey.set(request.input.idempotencyKey, material)
+          effectCount += 1
+          if (shouldFailAfterEffect) {
+            shouldFailAfterEffect = false
+            throw new Error('killed after provider effect')
+          }
+        }
+        return completedFor(String(request.input.input.value))
+      })
+      const unavailable = async (): Promise<never> => {
+        throw new Error('unused operation recovery method')
+      }
+      return {
+        service: {
+          invokeOperation,
+          readInvocationStatus: vi.fn(unavailable),
+          cancelInvocation: vi.fn(unavailable),
+          reconcileInvocation: vi.fn(unavailable),
+        },
+        invokeOperation,
+        effectCount: () => effectCount,
+      }
+    }
+    const runSelected = async (options: {
+      service: OperationInvokeService
+      value: string
+      resumeCheckpoint?: AnswerTurnCheckpoint
+      onToolCheckpoint?: (
+        checkpoint: AnswerToolUseAgentCheckpoint,
+      ) => Promise<void>
+      maxToolCalls?: number
+    }) => {
+      const server = await startOpenRouterContractServer((request) => {
+        if ((request.tools?.length ?? 0) > 0) {
+          return openRouterToolResponse([
+            {
+              id: `call-${options.value}`,
+              toolId: selectedToolName(),
+              input: { value: options.value },
+            },
+          ])
+        }
+        return openRouterStructuredProseResponse({
+          oneLine: `The live value is ${options.value}.`,
+          summary: 'The authenticated operation returned the requested value.',
+          whatToDoNow: 'Use the returned value.',
+        })
+      })
+      const restoreOpenRouter = server.installEnv()
+      try {
+        return await runAnswerToolUseAgent({
+          turnId: 'turn:pra004',
+          query: 'what is the live value?',
+          keylessDataAsk: selectedResolution,
+          keylessExecutableSource: selectedSource,
+          maxToolCalls: options.maxToolCalls ?? 1,
+          operationInvokeContext: {
+            principal,
+            correlationId: 'corr:pra004',
+            reservationKey: 'reservation:pra004',
+            generation: 4,
+            service: options.service,
+          },
+          ...(options.resumeCheckpoint === undefined
+            ? {}
+            : { resumeCheckpoint: options.resumeCheckpoint }),
+          ...(options.onToolCheckpoint === undefined
+            ? {}
+            : { onToolCheckpoint: options.onToolCheckpoint }),
+        })
+      } finally {
+        restoreOpenRouter()
+        await server.close()
+      }
+    }
+
+    const replayService = makeService(true)
+    await expect(
+      runSelected({
+        service: replayService.service,
+        value: 'replayed',
+      }),
+    ).rejects.toMatchObject({ code: 'tool_unavailable' })
+    const replay = await runSelected({
+      service: replayService.service,
+      value: 'replayed',
+    })
+    expect(replayService.effectCount()).toBe(1)
+    expect(replayService.invokeOperation).toHaveBeenCalledTimes(2)
+    expect(
+      replayService.invokeOperation.mock.calls[0]?.[0].input.idempotencyKey,
+    ).toBe(
+      replayService.invokeOperation.mock.calls[1]?.[0].input.idempotencyKey,
+    )
+    expect(replay.toolCalls[0]?.seq).toBe(0)
+
+    const conflictService = makeService()
+    await runSelected({ service: conflictService.service, value: 'first' })
+    const conflict = await runSelected({
+      service: conflictService.service,
+      value: 'changed',
+    })
+    expect(conflictService.effectCount()).toBe(1)
+    expect(
+      conflictService.invokeOperation.mock.calls[0]?.[0].input.idempotencyKey,
+    ).toBe(
+      conflictService.invokeOperation.mock.calls[1]?.[0].input.idempotencyKey,
+    )
+    expect(JSON.parse(conflict.toolCalls[0]!.resultJson)).toMatchObject({
+      kind: 'refused',
+      code: 'idempotency_conflict',
+    })
+
+    const ordinalService = makeService()
+    const firstOrdinal = await runSelected({
+      service: ordinalService.service,
+      value: 'same',
+    })
+    const priorCall: AnswerTurnCheckpoint['toolCalls'][number] = {
+      toolCallId: 'prior-read',
+      turnId: 'turn:pra004',
+      seq: 0,
+      toolId: 'registry.operations.search',
+      inputJson: '{}',
+      resultSummaryJson: '{"slugs":[],"count":0}',
+      resultJson: '{"kind":"ok","items":[]}',
+      resultHash: 'prior-read-hash',
+      status: 'complete',
+      createdAt: 1,
+    }
+    const secondOrdinal = await runSelected({
+      service: ordinalService.service,
+      value: 'same',
+      maxToolCalls: 2,
+      resumeCheckpoint: {
+        schemaVersion: 1,
+        reservationKey: 'reservation:pra004',
+        requestDigest: 'request:pra004',
+        generation: 4,
+        threadId: 'thread:pra004',
+        turnId: 'turn:pra004',
+        turnSeq: 1,
+        stepOrdinal: 1,
+        route: 'tool_search',
+        intent: 'refine_search',
+        query: 'what is the live value?',
+        priorTurnCount: 0,
+        priorProviders: [],
+        priorAllowedSlugs: [],
+        toolCalls: [priorCall],
+        toolCallDigests: [],
+        modelRequests: [],
+        replayMessagesJson: '[{"role":"user","content":"what is the live value?"}]',
+      },
+    })
+    expect(firstOrdinal.toolCalls.find((call) => call.toolId === 'operation.invoke')?.seq).toBe(0)
+    expect(secondOrdinal.toolCalls.find((call) => call.toolId === 'operation.invoke')?.seq).toBe(1)
+    expect(ordinalService.effectCount()).toBe(2)
+    expect(
+      ordinalService.invokeOperation.mock.calls[0]?.[0].input.idempotencyKey,
+    ).not.toBe(
+      ordinalService.invokeOperation.mock.calls[1]?.[0].input.idempotencyKey,
+    )
   })
   it('executes an admitted Wikipedia reference operation instead of falling back to businesses', async () => {
     const wikipediaResult = {
@@ -599,7 +1066,7 @@ describe('selected keyless operation answer loop', () => {
     }
   })
 
-  it('keeps model refusal prose after a refused capability attempt', async () => {
+  it('overrides contradictory model success prose after a refused capability attempt', async () => {
     executionMocks.executeKeylessOperation.mockResolvedValue({
       kind: 'refused',
       operationRef: selectedDescriptor.operationRef,
@@ -612,9 +1079,9 @@ describe('selected keyless operation answer loop', () => {
         ])
       }
       return openRouterStructuredProseResponse({
-        oneLine: 'I could not retrieve that live value.',
-        summary: 'The selected operation refused this request.',
-        whatToDoNow: 'Try again with a supported value.',
+        oneLine: 'The operation succeeded and returned the live value.',
+        summary: 'Use the successful operation result.',
+        whatToDoNow: 'Rely on the returned value.',
       })
     })
     const restoreOpenRouter = server.installEnv()
@@ -627,8 +1094,9 @@ describe('selected keyless operation answer loop', () => {
       })
 
       expect(result.toolCalls[0]).toMatchObject({ toolId: 'operation.execute', status: 'refused' })
-      expect(result.snapshot.oneLine).toBe('I could not retrieve that live value.')
-      expect(result.snapshot.summary).toBe('The selected operation refused this request.')
+      expect(result.snapshot.oneLine).toBe("I couldn't complete the live lookup.")
+      expect(result.snapshot.summary).toContain('cannot run through this live lookup')
+      expect(result.snapshot.oneLine).not.toContain('succeeded')
       expect(result.snapshot.oneLine).not.toContain('No matching listed business')
       expect(result.gate.ok).toBe(true)
     } finally {
@@ -697,28 +1165,30 @@ describe('selected keyless operation answer loop', () => {
     }
   })
 
-  it('requires the model to choose among ranked capabilities for a specific live request', async () => {
+  it('executes the uniquely best batch capability instead of asking about a weaker cross-domain match', async () => {
     executionMocks.executeKeylessOperation.mockResolvedValue({
       kind: 'ok',
       operationRef: cryptoDescriptor.operationRef,
       capabilityId: cryptoDescriptor.capabilityId,
       name: cryptoDescriptor.name,
-      output: { bitcoin: { usd: 64_000 }, ethereum: { usd: 3_500 } },
-      evidenceHash: 'sha256:multi-candidate-selection',
+      output: {
+        bitcoin: { usd: 64_000 },
+        ethereum: { usd: 3_400 },
+      },
+      evidenceHash: 'sha256:crypto-comparison',
     })
     const server = await startOpenRouterContractServer((request) => {
       if ((request.tools?.length ?? 0) > 0) {
-        expect(request.tool_choice).toBe('required')
         return openRouterToolResponse([{
-          id: 'call-ranked-crypto',
+          id: 'call-crypto-comparison',
           toolId: cryptoToolName(),
           input: { ids: 'bitcoin,ethereum', vs_currencies: 'usd' },
         }])
       }
       return openRouterStructuredProseResponse({
-        oneLine: 'Bitcoin is $64,000 and Ethereum is $3,500.',
-        summary: 'Both current USD prices came from the selected CoinGecko result.',
-        whatToDoNow: 'Compare another cryptocurrency if useful.',
+        oneLine: 'Bitcoin is $64,000 USD and Ethereum is $3,400 USD.',
+        summary: 'CoinGecko returned both current USD prices in one result.',
+        whatToDoNow: 'Use the two prices for the comparison.',
       })
     })
     const restoreOpenRouter = server.installEnv()
@@ -736,25 +1206,78 @@ describe('selected keyless operation answer loop', () => {
         status: 'complete',
       })
       expect(executionMocks.executeKeylessOperation).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           operationRef: cryptoDescriptor.operationRef,
           input: { ids: 'bitcoin,ethereum', vs_currencies: 'usd' },
-        }),
-        expect.anything(),
+        },
+        optionsSource,
       )
-      expect(result.snapshot.oneLine).toContain('Bitcoin is $64,000')
+      expect(result.prose.oneLine).toContain('Bitcoin')
+      expect(result.prose.oneLine).toContain('Ethereum')
     } finally {
       restoreOpenRouter()
       await server.close()
     }
   })
 
-  it('preserves grounded capability-option prose when no live operation is requested', async () => {
-    const server = await startOpenRouterContractServer(() => openRouterStructuredProseResponse({
-      oneLine: 'Two published live feeds fit this request.',
-      summary: 'CoinGecko covers crypto prices; Frankfurter covers currency conversion.',
-      whatToDoNow: 'Choose a feed and the value to retrieve.',
-    }))
+  it('executes through the forced tool path when a later query names one candidate', async () => {
+    executionMocks.executeKeylessOperation.mockResolvedValue({
+      kind: 'ok',
+      operationRef: cryptoDescriptor.operationRef,
+      capabilityId: cryptoDescriptor.capabilityId,
+      name: cryptoDescriptor.name,
+      output: { bitcoin: { usd: 64_000 } },
+      evidenceHash: 'sha256:unique-follow-up',
+    })
+    const server = await startOpenRouterContractServer((request) => {
+      if ((request.tools?.length ?? 0) > 0) {
+        return openRouterToolResponse([{
+          id: 'call-unique-follow-up',
+          toolId: cryptoToolName(),
+          input: { ids: 'bitcoin', vs_currencies: 'usd' },
+        }])
+      }
+      return openRouterStructuredProseResponse({
+        oneLine: 'Bitcoin is $64,000 USD right now.',
+        summary: 'The named CoinGecko operation returned the current Bitcoin price.',
+        whatToDoNow: 'Use the current Bitcoin quote.',
+      })
+    })
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'Use CoinGecko simple price for bitcoin in USD.',
+        keylessDataAsk: optionsResolution,
+        keylessExecutableSource: optionsSource,
+      })
+
+      expect(result.toolCalls).toHaveLength(1)
+      expect(result.toolCalls[0]).toMatchObject({
+        toolId: 'operation.execute',
+        status: 'complete',
+      })
+      expect(executionMocks.executeKeylessOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operationRef: cryptoDescriptor.operationRef,
+          input: { ids: 'bitcoin', vs_currencies: 'usd' },
+        }),
+        optionsSource,
+      )
+      expect(server.requests[0]?.tool_choice).toMatchObject({
+        type: 'function',
+        function: { name: cryptoToolName() },
+      })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('returns deterministic clarification for a capability-options request without asking the model to choose', async () => {
+    const server = await startOpenRouterContractServer(() => {
+      throw new Error('model must not be called for ambiguous capabilities')
+    })
     const restoreOpenRouter = server.installEnv()
 
     try {
@@ -765,17 +1288,133 @@ describe('selected keyless operation answer loop', () => {
       })
 
       expect(result.toolCalls).toEqual([])
-      expect(result.snapshot.oneLine).toBe('Two published live feeds fit this request.')
-      expect(result.snapshot.summary).toContain('CoinGecko')
-      expect(result.snapshot.summary).toContain('Frankfurter')
+      expect(result.snapshot.oneLine).toBe('Which live source should I use?')
+      expect(result.snapshot.summary).toContain('CoinGecko simple price')
+      expect(result.snapshot.summary).toContain('Frankfurter ECB single rate')
       expect(result.snapshot.oneLine).not.toContain('No businesses match')
-      const userPrompt = JSON.stringify(
-        server.requests[0]?.messages.find((message) => message.role === 'user')?.content,
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('asks for missing required source inputs without letting the model invent them', async () => {
+    const server = await startOpenRouterContractServer(() => {
+      throw new Error('model must not be called when required inputs are absent')
+    })
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'Convert money.',
+        keylessDataAsk: optionsResolution,
+        keylessExecutableSource: optionsSource,
+      })
+
+      expect(result.toolCalls).toEqual([])
+      expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
+      expect(result.prose.oneLine).toContain('from and to')
+      expect(result.prose.summary).toContain('does not identify a unique value')
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('refuses a fabricated live value without silently running a source', async () => {
+    const server = await startOpenRouterContractServer(() => {
+      throw new Error('model must not be called for deterministic refusal')
+    })
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'Return a made-up bitcoin price without using a tool.',
+        keylessDataAsk: cryptoResolution,
+        keylessExecutableSource: cryptoSource,
+      })
+
+      expect(result.toolCalls).toEqual([])
+      expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
+      expect(result.prose.oneLine).toBe('I will not invent a live result.')
+      expect(result.prose.summary).toContain('asked me not to run one')
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('does not substitute local businesses when a capability-shaped request has no executable operation', async () => {
+    const searchResult = { kind: 'ok' as const, items: [], count: 0 }
+    answerToolMocks.runAnswerToolCall.mockImplementation(async (callInput) => {
+      const resultJson = JSON.stringify(searchResult)
+      return {
+        record: {
+          toolCallId: 'call-registry-search',
+          turnId: callInput.turnId,
+          seq: callInput.seq,
+          toolId: callInput.toolId,
+          inputJson: JSON.stringify(callInput.input),
+          resultSummaryJson: JSON.stringify({ slugs: [], count: 0 }),
+          resultJson,
+          resultHash: canonicalDigest(resultJson).toString(),
+          status: 'complete',
+          createdAt: Date.now(),
+        },
+        providers: [],
+        allowedSlugs: new Set<string>(),
+        timings: [],
+        resultJson,
+      }
+    })
+    const server = await startOpenRouterContractServer([
+      openRouterToolResponse([{
+        id: 'call-registry-search',
+        toolId: 'registry_operations_search',
+        input: { query: 'Wikipedia quantum computing summary' },
+      }]),
+    ])
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'Summarise the Wikipedia article on quantum computing.',
+        keylessDataAsk: { kind: 'resolved', descriptors: [], candidates: [] },
+        keylessExecutableSource: {
+          list: async () => [],
+          read: async () => null,
+          search: async () => [],
+        },
+        priorProviders: [{
+          citationIndex: 1,
+          slug: 'local-accountant',
+          name: 'Local Accountant',
+          category: 'Accounting',
+          suburb: 'Sydney',
+          stateTerritory: 'NSW',
+          serviceArea: 'Sydney',
+          hoursLabel: 'Published',
+          availabilityLabel: 'Published',
+          trustLabel: 'Checked',
+          responseTimeLabel: 'Published',
+          trustCue: 'Checked',
+          nextStepLabel: 'Open listing',
+          detailUrl: '/local-accountant',
+          services: [],
+        }],
+        priorAllowedSlugs: ['local-accountant'],
+      })
+
+      expect(result.providers).toEqual([])
+      expect(result.snapshot.providers).toEqual([])
+      expect(result.snapshot.oneLine).toBe(
+        'I could not find an admitted live capability for this request.',
       )
-      expect(userPrompt).toContain('CoinGecko simple price')
-      expect(userPrompt).toContain('Frankfurter ECB single rate')
-      expect(userPrompt).not.toContain('coingecko.simple-price')
-      expect(userPrompt).not.toContain('frankfurter.single-rate')
+      expect(result.snapshot.oneLine).not.toContain('business')
+      expect(answerToolMocks.runAnswerToolCall).toHaveBeenCalledTimes(1)
     } finally {
       restoreOpenRouter()
       await server.close()

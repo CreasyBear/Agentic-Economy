@@ -1,4 +1,4 @@
-export { allocateEgress } from './allocate'
+export { allocateEgress, preparationEgressTargetDigest } from './allocate'
 export { beginDispatch } from './begin-dispatch'
 export {
   aggregateIntegrityValid,

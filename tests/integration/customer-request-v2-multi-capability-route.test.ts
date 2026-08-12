@@ -1,7 +1,7 @@
 import type { WorkId } from '@convex-dev/workpool'
 import type { TestConvex } from 'convex-test'
 import { components } from '../../convex/_generated/api'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeProviderFetch = vi.hoisted(() => vi.fn<typeof import('undici').fetch>())
 vi.mock('undici', async (importOriginal) => ({
@@ -13,8 +13,26 @@ import { Response as UndiciResponse } from 'undici'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
-import { convexTestWithWorkers, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
-import { listRouteableCapabilitySupply } from '../../convex/capabilitySupply'
+import {
+  convexTestWithWorkers,
+  isAdapterConfig,
+  ownerAdmin,
+  prepareCapabilityPublicationMutation,
+  publishedBusinessOwner,
+  type ConvexFixtureAdmin,
+} from '../helpers/convex-fixtures'
+import { installTestSourceWriteSecret, withSourceWrite } from '../helpers/source-write-admission'
+import {
+  listRouteableCapabilitySupply,
+  publicationPorts,
+  rebuildCapabilityOriginSupplyProjection,
+  registerCuratedMapping,
+  setCapabilitySupplyEligibilityCommand,
+} from '../../convex/capabilitySupply'
+import type {
+  EligibilityInput,
+  RegistrationContext,
+} from '@/modules/capability-supply/public'
 import { registeredEvaluationBindingsFromRouteableSupply } from '../../convex/customerRequestEvaluationBindings'
 import { objectSchema } from '../fixtures/capability-contract-v2'
 import { readCuratedContract } from '../helpers/curated-supply'
@@ -25,15 +43,21 @@ import {
 } from '@/modules/capability-contract/public'
 import {
   createRegisteredOperationMappingRef,
+  refreshCapabilityCommand,
   type CapabilityPublicationBindingDraft,
+  type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
   type RegisteredOperationMapping,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
-import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import {
+  compileCustomerRequest,
+  writableCustomerRequestV2Aggregate,
+} from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import type { CustomerRoutePlan as PublicCustomerRoutePlan, CustomerRoutePlanDecision } from '@/modules/customer-request/agent-contract'
 import {
   aggregateIsInternallyConsistent,
   currentRoutePlanGenerationGraphStatus,
@@ -44,6 +68,45 @@ async function pauseWorkpool(backend: RouteTestBackend) {
   await backend.run(async (ctx) => {
     await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 })
   })
+}
+
+type EligibilityCommandArgs = EligibilityInput & RegistrationContext
+
+async function runEligibility(
+  backend: RouteTestBackend,
+  args: EligibilityCommandArgs,
+  actorRef = 'user_route_admin',
+) {
+  return await backend.run(async (ctx) => {
+    const now = Date.now()
+    const result = await setCapabilitySupplyEligibilityCommand(ctx.db, {
+      actor: { kind: 'admin', ref: actorRef },
+      eligibility: args,
+      context: args,
+    }, now)
+    if (result.kind === 'eligible' || result.kind === 'ineligible') {
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (index) => index.eq('offeringId', args.offeringId)).unique()
+      if (offering !== null) await rebuildCapabilityOriginSupplyProjection(ctx, offering.businessId, now)
+    }
+    return result
+  })
+}
+
+async function runMapping(
+  backend: RouteTestBackend,
+  args: Readonly<{
+    networkId: string
+    mapping: RegisteredOperationMapping
+    authorityMode?: string
+    registrationEvidenceRefs: readonly string[]
+  }>,
+) {
+  return await backend.run(async (ctx) => registerCuratedMapping(ctx, {
+    networkId: args.networkId,
+    mapping: args.mapping,
+    registrationEvidenceRefs: args.registrationEvidenceRefs,
+  }))
 }
 
 const upstreamDocument = {
@@ -146,6 +209,9 @@ type RouteCapabilityDocument =
   | (Omit<typeof upstreamDocument, 'version'> & Readonly<{ version: number }>)
 
 describe('Customer Request V2 multi-capability RoutePlan production path', () => {
+  beforeEach(() => {
+    installTestSourceWriteSecret()
+  })
   afterEach(() => {
     routeProviderFetch.mockReset()
     vi.restoreAllMocks()
@@ -517,6 +583,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         'customer_requests:standing_authority',
       ],
     }
+    const recorded = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
+      ...servicePrincipal,
+      ownerTokenIdentifier: 'token_route_admin',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'bounded_mandate',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:repeat-permission',
+      lifecycle: 'active',
+      seenAt: 1_000,
+    })
+    if (recorded.kind !== 'recorded') throw new Error(`repeat permission principal recording failed: ${recorded.kind}`)
     const maximumTotalSpend = displayedRoute.maximumTotalCost.kind === 'known'
       ? displayedRoute.maximumTotalCost.amount
       : { currency: 'AUD', units: '0', exponent: 2 }
@@ -1074,7 +1152,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       })
       .mockImplementationOnce(async (_input, init) => {
         expect(init?.headers).toMatchObject({ Authorization: 'Bearer quoter-secret' })
-        expect(JSON.parse(String(init?.body))).toEqual({ serviceReference: 'service:worker' })
+        if (typeof init?.body !== 'string') throw new Error('expected_json_request_body')
+        expect(JSON.parse(init.body)).toEqual({ serviceReference: 'service:worker' })
         return new UndiciResponse(JSON.stringify({ quoteReference: 'quote:worker' }), {
           status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'provider:second' },
         })
@@ -1200,11 +1279,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     }
     const displayed = compared.decision.routes[0]
     if (displayed.steps === undefined) throw new Error('curated displayed route steps missing')
-    expect(displayed.businesses.map(({ name }) => name).sort()).toEqual([
+    expect(displayed.businesses.map(({ name }: PublicCustomerRoutePlan['businesses'][number]) => name).sort()).toEqual([
       'Exa — web search and contents',
       'Frankfurter — ECB rates',
     ].sort())
-    expect(displayed.steps.map(({ business }) => business.name).sort()).toEqual([
+    expect(displayed.steps.map(({ business }: NonNullable<PublicCustomerRoutePlan['steps']>[number]) => business.name).sort()).toEqual([
       'Exa — web search and contents',
       'Exa — web search and contents',
       'Frankfurter — ECB rates',
@@ -1310,7 +1389,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (completed.kind !== 'request' || completed.businesses === undefined) {
       throw new Error('curated completed business projection missing')
     }
-    expect(completed.businesses.map(({ name }) => name).sort()).toEqual([
+    expect(completed.businesses.map(({ name }: PublicCustomerRoutePlan['businesses'][number]) => name).sort()).toEqual([
       'Exa — web search and contents',
       'Frankfurter — ECB rates',
     ].sort())
@@ -1608,7 +1687,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       if (offering === null || binding === null) throw new Error('binding recheck supply missing')
       return { attempt, offering, binding }
     })
-    await expect(admin.mutation(api.capabilitySupply.setEligibility, {
+    await expect(runEligibility(backend, {
       offeringId: supply.offering.offeringId,
       bindingId: supply.binding.bindingId,
       contractRef: supply.attempt.grant.step.contractRef,
@@ -2897,6 +2976,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       // Confirm and run are approve_each operations; create alone is inspect_only.
       scopes: ['customer_requests:create', 'customer_requests:approve_each'],
     }
+    const recorded = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
+      ...principal,
+      ownerTokenIdentifier: `https://identity.example|${principal.ownerId}`,
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'approve_each',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:external-confirmation',
+      lifecycle: 'active',
+      seenAt: Date.now(),
+    })
+    if (recorded.kind !== 'recorded') throw new Error(`external principal recording failed: ${recorded.kind}`)
     const key = 'external-confirmation-key-that-is-long-enough'
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', key)
     vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://identity.example')
@@ -3091,7 +3182,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await observeReady(backend, second, 'public-quoter')
     const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
     const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
-    await expect(admin.mutation(api.capabilitySupply.registerMapping, {
+    await expect(runMapping(backend, {
       networkId: 'ae:public',
       mapping: routeServiceReferenceMapping(upstreamModel, downstreamModel),
       authorityMode: 'ae_curated_external',
@@ -3267,6 +3358,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       revision: submitted.revision,
       idempotencyKey: 'compare:multi-capability:price-only',
     })
+
     expect(priceRefresh).toMatchObject({
       kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: expect.any(String),
@@ -3291,7 +3383,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       },
     })
     if (priceRefresh.decision?.changes.kind !== 'changed') throw new Error('price-only delta missing')
-    expect(priceRefresh.decision.changes.items.map(({ kind }) => kind)).not.toContain('businesses')
+    expect(priceRefresh.decision.changes.items.map((item: Extract<CustomerRoutePlanDecision['changes'], { kind: 'changed' }>['items'][number]) => item.kind)).not.toContain('businesses')
     const priceGeneration = await backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
       requestId: submitted.requestRef, generationRef: priceRefresh.routeGenerationRef,
     })
@@ -3355,7 +3447,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const upstreamV3RequestInput = upstreamV3Model.inputs.find((input) => input.inputPointer === '/request')
     if (upstreamV3RequestInput === undefined) throw new Error('v3 upstream request input missing')
     const upstreamV3Operation = await publishedOperationForModel(backend, upstreamV3Model)
-    await expect(admin.mutation(api.capabilitySupply.registerMapping, {
+    await expect(runMapping(backend, {
       networkId: 'ae:public',
       mapping: routeServiceReferenceMapping(upstreamV3Model, downstreamModel),
       authorityMode: 'ae_curated_external',
@@ -3413,7 +3505,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       [routeServiceReferenceMapping(upstreamV3Model, validationModel), 'test:public-route-validation-mapping'],
       [routeServiceReferenceMapping(validationModel, validatedQuoteModel), 'test:public-route-validated-quote-mapping'],
     ] as const) {
-      await expect(admin.mutation(api.capabilitySupply.registerMapping, {
+      await expect(runMapping(backend, {
         networkId: 'ae:public', mapping, authorityMode: 'ae_curated_external',
         registrationEvidenceRefs: [evidenceRef],
       })).resolves.toMatchObject({ kind: 'registered' })
@@ -3584,6 +3676,54 @@ async function publishAndActivate(
     suffix,
     { slugPrefix: 'route-', identityPrefix: 'route_' },
   )
+  const catalogOfferingRef = `catalog-offering:route:${suffix}`
+  const catalogSourceHash = `catalog-source:route:${suffix}`
+  const catalogAccessPathRef = `access:${catalogOfferingRef}:external`
+  const endpointUrl = `https://${suffix}.example.test/capability`
+  const catalogAccessPathDescriptor = {
+    kind: 'external_operation' as const,
+    name: document.name,
+    summary: document.description,
+    url: endpointUrl,
+    method: 'POST' as const,
+    provenance: 'business_declared' as const,
+  }
+  const catalogAccessPathSourceHash = canonicalDigest({
+    accessPathRef: catalogAccessPathRef,
+    offeringSourceHash: catalogSourceHash,
+    descriptor: catalogAccessPathDescriptor,
+  })
+  const catalogOrigin = {
+    kind: 'catalog_offering' as const,
+    offeringRef: catalogOfferingRef,
+    offeringRevision: 1,
+    offeringSourceHash: catalogSourceHash,
+    declaredAccessPathRef: catalogAccessPathRef,
+    accessPathSourceHash: catalogAccessPathSourceHash,
+  }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('businessOfferings', {
+      offeringRef: catalogOfferingRef, businessId, currentRevision: 1,
+      status: 'published', createdAt: 1, updatedAt: 1,
+    })
+    await ctx.db.insert('businessOfferingRevisions', {
+      offeringRef: catalogOfferingRef, businessId, revision: 1,
+      name: document.name, category: 'Data', summary: document.description,
+      sourceHash: catalogSourceHash, createdAt: 1,
+    })
+    await ctx.db.insert('offeringAccessPaths', {
+      accessPathRef: catalogAccessPathRef,
+      businessId,
+      offeringRef: catalogOfferingRef,
+      offeringRevision: 1,
+      offeringSourceHash: catalogSourceHash,
+      status: 'published',
+      descriptor: catalogAccessPathDescriptor,
+      sourceHash: catalogAccessPathSourceHash,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  })
   const connectionRef = `connection:route:${suffix}`
   const providerRef = `provider:route:${suffix}`
   const credentialRef = document.capabilityId.includes('quote')
@@ -3597,16 +3737,16 @@ async function publishAndActivate(
     providerAccountRef: `account:route:${suffix}`,
     adapterId: 'http-json:v1',
     credentialRef,
-    requestedScopes: [],
-    grantedScopes: [],
-    requestedResources: [],
-    grantedResources: [],
+    requestedScopes: [`capability:${document.capabilityId}`],
+    grantedScopes: [`capability:${document.capabilityId}`],
+    requestedResources: [`endpoint:${endpointUrl}`],
+    grantedResources: [`endpoint:${endpointUrl}`],
     evidenceRefs: [`test:connection:${suffix}`],
     now: 1,
   })
   if (connection.kind !== 'applied') throw new Error(`provider connection refused: ${connection.kind}`)
   const offering = {
-    offeringId: `offering:route:${suffix}`, networkId: 'ae:public',
+    offeringId: `offering:route:${suffix}`, networkId: 'ae:public', origin: catalogOrigin,
     presentation: {
       label: document.name, summary: document.description,
       price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: String(priceUnits), exponent: 2 } }, materialTerms: [],
@@ -3615,7 +3755,7 @@ async function publishAndActivate(
     searchTerms: ['service', 'quote'], registrationEvidenceRefs: [`test:publication:${suffix}`],
   } satisfies CapabilityPublicationOfferingDraft
   const binding = {
-    bindingId: `binding:route:${suffix}`, endpointUrl: `https://${suffix}.example.test/capability`,
+    bindingId: `binding:route:${suffix}`, endpointUrl,
     authority: {
       kind: 'provider_connection',
       connectionRef,
@@ -3628,7 +3768,7 @@ async function publishAndActivate(
     adapter: {
       adapterId: 'http-json:v1',
       config: {
-        method: 'POST' as const, requestTimeoutMs: 5_000,
+        method: 'POST' as const, requestTimeoutMs: 5_000, requestContentType: 'application/json',
         credential: { kind: 'bearer' as const },
         ...(options.adapterCancellation
           ? { cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 } }
@@ -3636,12 +3776,30 @@ async function publishAndActivate(
       },
     }, registrationEvidenceRefs: [`test:binding:${suffix}`],
   } satisfies CapabilityPublicationBindingDraft
-  const published = await owner.mutation(api.capabilitySupply.publishCapability, {
-    businessId, source: { kind: 'ae_envelope', documentJson: JSON.stringify(document) },
-    offering, binding,
+  const prepared = await prepareCapabilityPublicationMutation(backend, {
+    businessId,
+    source: { kind: 'ae_envelope' as const, documentJson: JSON.stringify(document) },
+    offering,
+    binding,
     ...operationContext(`publish:${suffix}`),
   })
-  if (published.kind !== 'published') throw new Error(`publication refused: ${published.reason}`)
+  const adapterConfig = prepared.prepared.binding.adapter.config
+  if (!isAdapterConfig(adapterConfig)) throw new Error('route adapter config invalid')
+  const published = await owner.mutation(
+    api.capabilitySupply.publishPreparedCapability,
+    await withSourceWrite('catalog_publish', {
+      ...prepared,
+      prepared: {
+        ...prepared.prepared,
+        offering: { ...prepared.prepared.offering, origin: catalogOrigin },
+        binding: {
+          ...prepared.prepared.binding,
+          adapter: { ...prepared.prepared.binding.adapter, config: adapterConfig },
+        },
+      },
+    })
+  )
+  if ('reason' in published) throw new Error(`publication refused: ${published.reason}`)
   const hashes = await backend.run(async (ctx) => {
     const offering = (await ctx.db.query('capabilityOfferings').take(10))
       .find((row) => row.offeringId === published.offeringId)
@@ -3650,7 +3808,7 @@ async function publishAndActivate(
     if (offering === undefined || binding === undefined) throw new Error('published supply missing')
     return { offering: offering.registrationHash, binding: binding.registrationHash }
   })
-  const eligible = await admin.mutation(api.capabilitySupply.setEligibility, {
+  const eligible = await runEligibility(backend, {
     offeringId: published.offeringId, bindingId: published.bindingId, contractRef: published.contractRef, decision: 'admit',
     expectedOfferingRegistrationHash: hashes.offering, expectedBindingRegistrationHash: hashes.binding,
     admissionEvidenceRefs: ['test:admission-reviewed'], conformanceEvidenceRefs: ['test:adapter-reviewed'],
@@ -3687,9 +3845,45 @@ async function refreshAndActivate(
   priceUnits: number,
   suffix: string,
 ) {
+  const currentOrigin = current.offering.origin
+  if (currentOrigin?.kind !== 'catalog_offering') throw new Error('refreshed catalog origin missing')
+  const endpointUrl = `https://${suffix}.example.test/capability`
+  const accessPathRef = `${currentOrigin.declaredAccessPathRef}:${suffix}`
+  const descriptor = {
+    kind: 'external_operation' as const,
+    name: document.name,
+    summary: document.description,
+    url: endpointUrl,
+    method: 'POST' as const,
+    provenance: 'business_declared' as const,
+  }
+  const accessPathSourceHash = canonicalDigest({
+    accessPathRef,
+    offeringSourceHash: currentOrigin.offeringSourceHash,
+    descriptor,
+  })
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('offeringAccessPaths', {
+      accessPathRef,
+      businessId: current.businessId,
+      offeringRef: currentOrigin.offeringRef,
+      offeringRevision: currentOrigin.offeringRevision,
+      offeringSourceHash: currentOrigin.offeringSourceHash,
+      status: 'published',
+      descriptor,
+      sourceHash: accessPathSourceHash,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  })
   const offering = {
     ...current.offering,
     offeringId: `offering:route:${suffix}`,
+    origin: {
+      ...currentOrigin,
+      declaredAccessPathRef: accessPathRef,
+      accessPathSourceHash,
+    },
     presentation: {
       ...current.offering.presentation,
       label: document.name,
@@ -3701,19 +3895,37 @@ async function refreshAndActivate(
   const binding = {
     ...current.binding,
     bindingId: `binding:route:${suffix}`,
-    endpointUrl: `https://${suffix}.example.test/capability`,
+    endpointUrl,
     registrationEvidenceRefs: [`test:binding:${suffix}`],
   } satisfies CapabilityPublicationBindingDraft
-  const refreshed = await current.owner.mutation(api.capabilitySupply.refreshCapability, {
-    publicationRef: current.publicationRef,
-    expectedRevision: current.revision,
-    source: { kind: 'ae_envelope', documentJson: JSON.stringify(document) },
+  const refreshContext = operationContext(`refresh:${suffix}`)
+  const source: CapabilityPublicationImport = {
+    kind: 'ae_envelope',
+    documentJson: JSON.stringify(document),
     offering,
     binding,
-    ...operationContext(`refresh:${suffix}`),
+    evidenceRefs: refreshContext.evidenceRefs,
+  }
+  const refreshed = await backend.run(async (ctx) => {
+    const ports = publicationPorts(ctx)
+    const publication = await ports.loadPublicationAtRevision(current.publicationRef, current.revision)
+    if (publication === null) throw new Error('refreshed publication missing')
+    const result = await refreshCapabilityCommand({
+      publication,
+      source,
+      offering,
+      binding,
+      ...refreshContext,
+      now: Date.now(),
+    }, ports)
+    if (result.kind === 'refreshed') {
+      await rebuildCapabilityOriginSupplyProjection(ctx, current.businessId, Date.now())
+    }
+    return result
   })
   if (refreshed.kind !== 'refreshed' || refreshed.disposition !== 'current') {
-    throw new Error(`capability refresh failed: ${refreshed.kind}`)
+    const reason = 'reason' in refreshed ? `:${refreshed.reason}` : ''
+    throw new Error(`capability refresh failed: ${refreshed.kind}${reason}`)
   }
   const contractRef = defineCapabilityContract(document).ref
   const hashes = await backend.run(async (ctx) => {
@@ -3724,7 +3936,7 @@ async function refreshAndActivate(
     if (storedOffering === undefined || storedBinding === undefined) throw new Error('refreshed supply missing')
     return { offering: storedOffering.registrationHash, binding: storedBinding.registrationHash }
   })
-  const eligible = await admin.mutation(api.capabilitySupply.setEligibility, {
+  const eligible = await runEligibility(backend, {
     offeringId: offering.offeringId, bindingId: binding.bindingId, contractRef, decision: 'admit',
     expectedOfferingRegistrationHash: hashes.offering, expectedBindingRegistrationHash: hashes.binding,
     admissionEvidenceRefs: ['test:admission-reviewed'], conformanceEvidenceRefs: ['test:adapter-reviewed'],
@@ -3963,6 +4175,7 @@ async function committedOneStepAdmissionRoute(
         publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
         price: offering.presentation.price,
+        priceDigest: publication.priceDigest,
         commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
       }]

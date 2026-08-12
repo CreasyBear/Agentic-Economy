@@ -125,8 +125,11 @@ function claimedState(): PublishBusinessCatalogState {
     facts: {
       name: 'Parramatta Emergency Plumbing',
       category: 'Emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
+      businessContext: {
+        kind: 'local_human',
+        suburb: 'Parramatta',
+        stateTerritory: 'NSW',
+      },
       requestedSlug: 'parramatta-emergency-plumbing',
       sourceRefs: [
         {

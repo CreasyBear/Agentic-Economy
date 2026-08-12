@@ -15,7 +15,7 @@ import {
 import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { customerRequestViewSchema } from '@/modules/customer-request/agent-contract'
 import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
-import type { ExactAmount } from '@/modules/money/public'
+import { pricingConfigDigest, type ExactAmount } from '@/modules/money/public'
 
 describe('RoutePlan customer projection', () => {
   it('gives every repeat-permission refusal a specific safe customer recovery', () => {
@@ -833,6 +833,11 @@ function route(input: Readonly<{
       resolvedInputs: [],
       deferredInputs: [],
       price: { kind: 'fixed', amount: input.amount },
+      priceDigest: pricingConfigDigest({
+        version: 'pricing:v2',
+        unit: 'call',
+        paidAmount: input.amount,
+      }),
       dataUse: [{
         effectId: 'share_request', inputPointer: '/request', classification: 'public', phase: 'preparation',
         recipient: { kind: 'candidate_binding' }, purposes: ['prepare_result'],

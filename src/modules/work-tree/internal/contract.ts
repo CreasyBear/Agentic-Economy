@@ -112,13 +112,18 @@ export const workNodeScopeSchema = z.strictObject({
   })).max(16).optional(),
 })
 
-/** Quote freshness — evidence-class rule: stale quotes never roll up as current. */
+/** Historical quote evidence — snapshots may retain retired sandbox-provider records. */
 export const workNodeQuoteSchema = z.strictObject({
   quoteRef: z.string().min(1),
   observedAt: z.number().int(),
   expiresAt: z.number().int(),
   revision: z.number().int().min(1),
   evidenceClass: z.enum(['ae_sandbox_provider', 'published_price', 'business_quote']),
+})
+
+/** Production gardener writes exclude retired sandbox-provider evidence. */
+export const workNodeWriteQuoteSchema = workNodeQuoteSchema.extend({
+  evidenceClass: z.enum(['published_price', 'business_quote']),
 })
 
 export const workNodeSchema = z.strictObject({

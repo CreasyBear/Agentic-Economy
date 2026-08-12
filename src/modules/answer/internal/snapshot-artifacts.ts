@@ -1,4 +1,7 @@
-import type { AnswerArtifact } from '../answer-schema'
+import {
+  ANSWER_OPERATION_CANDIDATE_LIMIT,
+  type AnswerArtifact,
+} from '../answer-schema'
 import type { AnswerSource } from '../answer-synthesizer'
 import { buildAgentJsonUrl, type AnswerSnapshot } from '../answer-synthesizer'
 import { isCompactLayoutProfile, resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
@@ -13,12 +16,15 @@ export type AnswerArtifactBudget = {
 
 const ANSWER_PROVIDER_CARD_LIMIT = 3
 const COMPARE_PROVIDER_LIMIT = 2
+const OPERATION_CANDIDATE_LIMIT = ANSWER_OPERATION_CANDIDATE_LIMIT
 
 const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
-const DATA_ANSWER_ARTIFACTS = TEXT_ONLY_ARTIFACTS
+const DATA_ANSWER_ARTIFACTS = [...TEXT_ONLY_ARTIFACTS, 'operation-candidates', 'operation-outcome'] as const
 const ANSWER_ARTIFACTS = [
   'one-line',
   'provider-cards',
+  'operation-candidates',
+  'operation-outcome',
   'location-map',
   'prose',
   'imported-claims',
@@ -49,6 +55,17 @@ export function buildArtifactsFromSnapshot(
   const artifacts: AnswerArtifact[] = [
     { kind: 'one-line', text: snapshot.oneLine },
   ]
+  if (snapshot.operationCandidates !== undefined && snapshot.operationCandidates.length > 0) {
+    artifacts.push({
+      kind: 'operation-candidates',
+      candidates: [...snapshot.operationCandidates].slice(0, OPERATION_CANDIDATE_LIMIT),
+      ...(snapshot.operationCandidatesDigest === undefined ? {} : { operationCandidatesDigest: snapshot.operationCandidatesDigest }),
+      ...(snapshot.operationSelection === undefined ? {} : { selection: snapshot.operationSelection }),
+    })
+  }
+  if (snapshot.operationOutcome !== undefined) {
+    artifacts.push({ kind: 'operation-outcome', outcome: snapshot.operationOutcome })
+  }
 
   if (selectedProvider !== undefined) {
     artifacts.push({ kind: 'selected-provider', provider: selectedProvider })
@@ -141,8 +158,8 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
     case 'clarification':
       return {
         layoutProfile: profile,
-        allowedKinds: TEXT_ONLY_ARTIFACTS,
-        maxArtifactCount: 3,
+        allowedKinds: DATA_ANSWER_ARTIFACTS,
+        maxArtifactCount: 5,
         maxProviderCards: 0,
       }
     case 'boundary_explain':
@@ -157,7 +174,7 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
       return {
         layoutProfile: profile,
         allowedKinds: DATA_ANSWER_ARTIFACTS,
-        maxArtifactCount: 3,
+        maxArtifactCount: 5,
         maxProviderCards: 0,
       }
     case 'empty_state':
@@ -264,6 +281,19 @@ function capArtifactForBudget(
         kind: 'imported-claims',
         claims: artifact.claims.slice(0, 5),
       }
+    case 'operation-candidates': {
+      const candidates = artifact.candidates.slice(0, OPERATION_CANDIDATE_LIMIT)
+      return candidates.length === 0
+        ? undefined
+        : {
+            kind: 'operation-candidates',
+            candidates,
+            ...(artifact.operationCandidatesDigest === undefined ? {} : { operationCandidatesDigest: artifact.operationCandidatesDigest }),
+            ...(artifact.selection === undefined ? {} : { selection: artifact.selection }),
+          }
+    }
+    case 'operation-outcome':
+      return artifact
     case 'one-line':
     case 'selected-provider':
     case 'recovery-prompts':

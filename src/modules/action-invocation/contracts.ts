@@ -264,6 +264,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
   }>): Promise<InvocationDecision<Result>>
   cancel(input: Readonly<{
     invocationRef: string
+    idempotencyKey: string
     expectedInvocationVersion: number
     actor: InvocationActor
     origin: ActionInvocationOrigin

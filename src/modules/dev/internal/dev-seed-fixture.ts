@@ -106,10 +106,19 @@ function seedBusinessFixture(
     facts: {
       name: fixture.businessName,
       category: fixture.category,
-      suburb: fixture.suburb,
-      stateTerritory: fixture.stateTerritory,
+      businessContext: fixture.stateTerritory === 'External'
+        ? {
+          kind: 'programmable_provider',
+          website: sourceWebsite(fixture.sourceLabel),
+          providerIdentifier: fixture.businessName,
+        }
+        : {
+          kind: 'local_human',
+          suburb: fixture.suburb,
+          stateTerritory: fixture.stateTerritory,
+          ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+        },
       requestedSlug: fixture.requestedSlug,
-      ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
       ownerMessage: fixture.ownerMessage,
       sourceRefs: [
         {
@@ -150,6 +159,15 @@ function seedBusinessFixture(
   }
 
   return state
+}
+
+function sourceWebsite(sourceLabel: string): string {
+  const matched = sourceLabel.match(/https:\/\/\S+/u)?.[0]
+  if (matched === undefined) throw new Error('Dev seed programmable provider source URL is required.')
+  const website = new URL(matched)
+  website.search = ''
+  website.hash = ''
+  return website.href
 }
 
 function createHumanInquirySupportRecord(input: {

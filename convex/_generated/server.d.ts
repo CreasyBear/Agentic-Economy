@@ -27,6 +27,7 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
   readonly AE_CUSTOMER_REQUEST_MODEL: string | undefined;
+  readonly AE_RELEASE_SOURCE_REVISION: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SITE_URL: string | undefined;

@@ -263,6 +263,7 @@ describe('ADR-009 gate 3 imported commitment attribution', () => {
       loadPublicationAtRevision: async () => null,
     } as unknown as CapabilityGraphPorts, {
       candidate: {
+        networkId: 'network:development',
         publicationRef: input().claimRef,
         revision: 1,
         businessId: input().issuer.ref,

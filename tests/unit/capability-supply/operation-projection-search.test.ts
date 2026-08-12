@@ -1,6 +1,69 @@
 import { describe, expect, it } from 'vitest'
 
-import { rankOperationSearchText } from '@/modules/capability-supply/operation-projection'
+import {
+  deserializeOperationDescriptor,
+  operationDetailOutputSchema,
+  projectCapabilityOperation,
+  rankOperationSearchText,
+  searchCapabilityOperations,
+  serializeOperationDescriptor,
+  type CapabilityOperationSourceRecord,
+} from '@/modules/capability-supply/public'
+const sourceRecord = (operationId: string, summary: string, searchTerms: readonly string[], inputExamples?: CapabilityOperationSourceRecord['contract']['inputExamples']): CapabilityOperationSourceRecord => ({
+  operationId,
+  publicationRef: `publication:${operationId}`,
+  publicationRevision: 3,
+  networkId: 'ae:public',
+  contract: {
+    ref: { capabilityId: operationId, version: 1, contractDigest: `digest:${operationId}` },
+    description: summary,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        asset: { type: 'string', description: 'Asset identifier', examples: ['bitcoin'] },
+      },
+      required: ['asset'],
+    },
+    outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+    customerAnnotations: [],
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+    ...(inputExamples === undefined ? {} : { inputExamples }),
+  },
+  business: { businessId: 'business:reference', slug: 'reference', name: 'Reference' },
+  offering: { offeringRef: 'offering:reference', revision: 1, label: summary, summary },
+  price: { kind: 'fixed', amount: { currency: 'USD', units: '125', exponent: 2 } },
+  priceEvidence: {
+    priceDigest: 'digest:publication-price',
+    sourceRef: 'pricing:publication@3',
+    evidenceRefs: ['evidence:price'],
+    observedAt: 1_000,
+    validUntil: 10_000,
+  },
+  materialTerms: [{ label: 'provider-cost', value: '0' }],
+  commercialRelationship: { kind: 'none', summary: 'No commercial relationship.' },
+  cancellation: { kind: 'unsupported' },
+  authentication: { kind: 'platform_credential', scheme: 'api_key', in: 'header', name: 'X-API-Key' },
+  transport: { method: 'GET', pathTemplate: '/quote/{asset}', requestTimeoutMs: 5_000 },
+  parameterMappings: [{ inputPointer: '/asset', group: 'path', name: 'asset', required: true, style: 'simple', explode: false }],
+  provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+  integrated: true,
+  routeable: true,
+  readiness: { observedAt: 1_000, validUntil: 10_000 },
+  searchTerms,
+  snapshotKey: 'publication:search:3',
+  endpointUrl: 'https://provider.example/quote/{asset}?fixedQuery=secret-token',
+} as unknown as CapabilityOperationSourceRecord)
+
+const sourcePort = (
+  operations: readonly CapabilityOperationSourceRecord[],
+  snapshotKey = 'snapshot:search',
+) => ({
+  listCurrent: async () => ({ operations, snapshotKey }),
+  loadCurrent: async () => null,
+})
 
 describe('capability operation search ranking', () => {
   it('does not select geocoding or cat operations from generic web-search words', () => {
@@ -35,5 +98,186 @@ describe('capability operation search ranking', () => {
     ])
 
     expect(ranked).toEqual(['bitcoin'])
+  })
+  it('requires every normalized query token instead of matching any token', () => {
+    const ranked = rankOperationSearchText('bitcoin price', [
+      { value: 'bitcoin-only', operationRef: 'operation:v1:' + 'a'.repeat(64), searchText: ['bitcoin'] },
+      { value: 'price-only', operationRef: 'operation:v1:' + 'b'.repeat(64), searchText: ['price'] },
+      { value: 'both', operationRef: 'operation:v1:' + 'c'.repeat(64), searchText: ['bitcoin price'] },
+    ])
+
+    expect(ranked).toEqual(['both'])
+  })
+
+  it('falls back to partial matches for conversational queries with runtime values', async () => {
+    const result = await searchCapabilityOperations(sourcePort([
+      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
+      sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
+    ]), { query: 'What is the current Bitcoin price in US dollars?' }, 2_000)
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items.map(({ operationId }) => operationId)).toEqual(['capability:bitcoin.price'])
+  })
+
+  it('returns no candidates when no capability token overlaps', () => {
+    expect(rankOperationSearchText('tell me a joke', [
+      { value: 'bitcoin', operationRef: 'operation:v1:' + 'a'.repeat(64), searchText: ['CoinGecko bitcoin price'] },
+      { value: 'weather', operationRef: 'operation:v1:' + 'b'.repeat(64), searchText: ['Open-Meteo weather forecast'] },
+    ])).toEqual([])
+  })
+
+  it('makes empty query behavior explicit and carries stable bounded ranks/counts across pages', async () => {
+    const records = [
+      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
+      sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
+    ]
+    const first = await searchCapabilityOperations(sourcePort(records), { query: '', limit: 1 }, 2_000)
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') return
+    expect(first.query).toBe('')
+    expect(first.matchedCount).toBe(2)
+    expect(first.ranking).toEqual([{ operationRef: first.items[0]?.operationRef, rank: 1, score: 0 }])
+    expect(first.pagination.hasMore).toBe(true)
+    const nextCursor = first.pagination.nextCursor
+    expect(nextCursor).toBeTypeOf('string')
+    if (nextCursor === undefined) return
+
+    const second = await searchCapabilityOperations(sourcePort(records), {
+      query: '', limit: 1, cursor: nextCursor,
+    }, 2_000)
+    expect(second.kind).toBe('ok')
+    if (second.kind !== 'ok') return
+    expect(second.matchedCount).toBe(2)
+    expect(second.ranking[0]?.rank).toBe(2)
+    expect(second.ranking[0]?.operationRef).toBe(second.items[0]?.operationRef)
+  })
+  it('rejects a cursor when the bounded current source changes within the same minute', async () => {
+    const records = [
+      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
+      sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
+    ]
+    const first = await searchCapabilityOperations(sourcePort(records, 'snapshot:current:a'), { query: '', limit: 1 }, 120_000)
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') return
+    const nextCursor = first.pagination.nextCursor
+    expect(nextCursor).toBeTypeOf('string')
+    if (nextCursor === undefined) return
+
+    await expect(searchCapabilityOperations(sourcePort(records, 'snapshot:current:b'), {
+      query: '',
+      limit: 1,
+      cursor: nextCursor,
+    }, 120_001)).resolves.toMatchObject({
+      kind: 'unavailable',
+      reason: 'query_invalid',
+    })
+  })
+
+  it('serializes public auth, transport, parameter and price evidence without endpoint secrets', () => {
+    const operation = projectCapabilityOperation(
+      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
+      2_000,
+    )
+    expect(operation.authentication).toEqual({
+      kind: 'platform_credential', scheme: 'api_key', in: 'header', name: 'X-API-Key',
+    })
+    expect(operation.transport).toEqual({ method: 'GET', pathTemplate: '/quote/{asset}', requestTimeoutMs: 5_000 })
+    expect(operation.parameters).toEqual([{
+      group: 'path', name: 'asset', type: 'string', description: 'Asset identifier',
+      example: 'bitcoin', required: true, style: 'simple', explode: false,
+    }])
+    expect(operation.commercial.priceEvidence).toEqual({
+      priceDigest: 'digest:publication-price',
+      sourceRef: 'pricing:publication@3',
+      evidenceRefs: ['evidence:price'],
+      observedAt: 1_000,
+      validUntil: 10_000,
+    })
+
+    const wire = serializeOperationDescriptor(operation)
+    expect(wire.authentication).toEqual(operation.authentication)
+    expect(wire.transport).toEqual(operation.transport)
+    expect(wire.commercial.priceEvidence).toEqual(operation.commercial.priceEvidence)
+    expect(wire).not.toHaveProperty('endpointUrl')
+    expect(JSON.stringify(wire)).not.toContain('provider.example')
+    expect(JSON.stringify(wire)).not.toContain('fixedQuery')
+    expect(JSON.stringify(wire)).not.toContain('secret-token')
+  })
+  it('projects, wire-round-trips, and strictly validates canonical input examples while omitting absent examples', () => {
+    const examples: NonNullable<CapabilityOperationSourceRecord['contract']['inputExamples']> = [
+      { label: 'Bitcoin in USD', input: { asset: 'bitcoin', currency: 'usd' } },
+      { input: { asset: 'ethereum', currency: 'usd' } },
+    ]
+    const operation = projectCapabilityOperation(
+      sourceRecord('capability:bitcoin.example', 'Bitcoin price', ['bitcoin', 'price'], examples),
+      2_000,
+    )
+    expect(operation.contract.inputExamples).toEqual(examples)
+
+    const result = { kind: 'found' as const, schemaVersion: 'registry-operations:v1' as const, operation }
+    expect(operationDetailOutputSchema.safeParse(result).success).toBe(true)
+
+    const wire = serializeOperationDescriptor(operation)
+    expect(wire.contract.inputExamples).toEqual(examples)
+    expect(deserializeOperationDescriptor(wire).contract.inputExamples).toEqual(examples)
+
+    expect(operationDetailOutputSchema.safeParse({
+      ...result,
+      operation: { ...operation, contract: { ...operation.contract, inputExamples: [{ label: '', input: {} }] } },
+    }).success).toBe(false)
+    expect(operationDetailOutputSchema.safeParse({
+      ...result,
+      operation: { ...operation, contract: { ...operation.contract, inputExamples: [{ input: {}, extra: true }] } },
+    }).success).toBe(false)
+    expect(operationDetailOutputSchema.safeParse({
+      ...result,
+      operation: { ...operation, contract: { ...operation.contract, inputExamples: Array.from({ length: 33 }, () => ({ input: {} })) } },
+    }).success).toBe(false)
+
+    const withoutExamples = projectCapabilityOperation(
+      sourceRecord('capability:bitcoin.no-example', 'Bitcoin price', ['bitcoin', 'price']),
+      2_000,
+    )
+    expect(withoutExamples.contract).not.toHaveProperty('inputExamples')
+    const withoutExamplesWire = serializeOperationDescriptor(withoutExamples)
+    expect(withoutExamplesWire.contract).not.toHaveProperty('inputExamples')
+    expect(deserializeOperationDescriptor(withoutExamplesWire).contract).not.toHaveProperty('inputExamples')
+  })
+  it('keeps contract input names when transport mappings rename query fields', () => {
+    const record = sourceRecord('capability:frankfurter.single-rate', 'Frankfurter rate', ['fx', 'rate'])
+    const operation = projectCapabilityOperation({
+      ...record,
+      contract: {
+        ...record.contract,
+        inputSchema: {
+          type: 'object',
+          properties: { quote: { type: 'string', description: 'Quote currency' } },
+          required: ['quote'],
+        },
+      },
+      parameterMappings: [{
+        inputPointer: '/quote',
+        group: 'query',
+        name: 'quotes',
+        required: true,
+        style: 'form',
+        explode: true,
+      }],
+    }, 2_000)
+
+    expect(operation.contract.inputJsonSchema).toMatchObject({
+      properties: { quote: { type: 'string', description: 'Quote currency' } },
+      required: ['quote'],
+    })
+    expect(operation.parameters).toEqual([{
+      group: 'query',
+      name: 'quote',
+      type: 'string',
+      description: 'Quote currency',
+      required: true,
+      style: 'form',
+      explode: true,
+    }])
   })
 })

@@ -9,7 +9,12 @@ import {
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { exactAmountSchema } from '@/modules/money/public'
+import {
+  compareExactAmounts,
+  exactAmountSchema,
+  pricingConfigDigest,
+  pricingConfigSchema,
+} from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
@@ -23,7 +28,6 @@ import {
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
-  type X402PaymentAuthorizationEvent,
 } from './x402-payment-attempt'
 import { recordCapabilityCallObservation, type CapabilityLiquidityWritePort, type LiquidityEnvironment, type LiquidityZeroReason } from '@/modules/capability-supply/public'
 
@@ -35,6 +39,15 @@ export type DynamicPublishedExecutionToken = Readonly<{
   mandateDigest: string
   grantDigest: string
   expiresAt: number
+  providerLease?: Readonly<{
+    leaseRef: string
+    invocationRef: string
+    operationRef: string
+    grantedScopes: readonly string[]
+    grantedResources: readonly string[]
+    readinessValidUntil: number
+    readinessDigest?: string
+  }>
 }>
 export type DynamicPublishedPreparedTransport = Readonly<{
   invocationRef: string
@@ -44,6 +57,24 @@ export type DynamicPublishedPreparedTransport = Readonly<{
   effectGeneration: number
   plan: PreparedRouteTransportInvocation
 }>
+
+function paymentAuthorityInvalid(operation: PublishedOperation): boolean {
+  const operationPricing = pricingConfigSchema.safeParse(operation.pricingConfig)
+  const identityPricing = pricingConfigSchema.safeParse(operation.identity.pricingConfig)
+  if (!operationPricing.success || !identityPricing.success) return true
+  if (
+    pricingConfigDigest(operationPricing.data) !== operation.priceDigest
+    || pricingConfigDigest(identityPricing.data) !== operation.identity.priceDigest
+    || operation.identity.priceDigest !== operation.priceDigest
+    || pricingConfigDigest(identityPricing.data) !== pricingConfigDigest(operationPricing.data)
+  ) return true
+  const displayedPrice = operation.identity.price
+  if (displayedPrice.kind !== 'fixed' || !exactAmountSchema.safeParse(displayedPrice.amount).success) {
+    return true
+  }
+  return compareExactAmounts(displayedPrice.amount, operationPricing.data.paidAmount) !== 0
+}
+
 export async function prepareDynamicPublishedTransport(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
@@ -64,6 +95,19 @@ export async function prepareDynamicPublishedTransport(input: Readonly<{
     return {
       kind: 'refused',
       result: observationResult(input.operation, input.descriptor, preparation.observation),
+    }
+  }
+  if (paymentAuthorityInvalid(input.operation)) {
+    return {
+      kind: 'refused',
+      result: {
+        kind: 'published_operation_refused',
+        sourceDisposition: 'refused',
+        operationId: input.operation.operationId,
+        operationVersion: input.descriptor.version,
+        requestDigest: preparation.prepared.requestDigest,
+        failureCode: 'payment_authority_invalid',
+      },
     }
   }
   if (transportInvocation.binding.authority.kind === 'provider_connection') {
@@ -99,32 +143,25 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   descriptor: RuntimePublishedOperationDescriptor
   prepared: DynamicPublishedPreparedTransport
   runtime: RouteTransportRuntime
-  paymentAttempts?: Map<string, X402PaymentAttempt>
-  paymentAttemptPort?: X402PaymentAttemptPort
-  paymentAuthorizationEvents?: Map<string, X402PaymentAuthorizationEvent>
+  paymentAttemptPort: X402PaymentAttemptPort
   now?: () => number
   liquidityPort?: CapabilityLiquidityWritePort
   taskStartedAt?: number
   environment?: LiquidityEnvironment
 }>): Promise<DynamicPublishedInvocationResult> {
-  const runtime = input.paymentAttempts === undefined && input.paymentAttemptPort === undefined
-    ? input.runtime
-    : createPaymentAttemptRuntime(
-        input.runtime,
-        input.prepared,
-        input.paymentAttempts,
-        input.paymentAuthorizationEvents,
-        input.now ?? Date.now,
-        input.paymentAttemptPort,
-      )
+  const isX402 = input.operation.binding.adapter.adapterId === 'x402-fetch:v2'
+  const runtime = createPaymentAttemptRuntime(
+    input.runtime,
+    input.prepared,
+    input.paymentAttemptPort,
+    input.now ?? Date.now,
+  )
   const eventKey = x402PaymentAttemptKey(input.prepared)
   let observation: Awaited<ReturnType<typeof invokePreparedRouteTransport>>
   try {
     observation = await invokePreparedRouteTransport(input.prepared.plan, runtime)
   } catch (error) {
-    if ((input.paymentAuthorizationEvents !== undefined || input.paymentAttemptPort !== undefined)
-      && input.paymentAttemptPort?.loadAuthorizationEvent(eventKey) === undefined
-      && !input.paymentAuthorizationEvents?.has(eventKey)) {
+    if (isX402 && input.paymentAttemptPort.loadAuthorizationEvent(eventKey) === undefined) {
       const event = {
         invocationRef: input.prepared.invocationRef,
         attemptRef: input.prepared.attemptRef,
@@ -134,14 +171,12 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
         authorization: 'unknown',
         recordedAt: (input.now ?? Date.now)(),
       } as const
-      await input.paymentAttemptPort?.persist({ authorizationEvent: event })
-      input.paymentAuthorizationEvents?.set(eventKey, event)
+      await input.paymentAttemptPort.persist({ authorizationEvent: event })
     }
     throw error
   }
-  if ((input.paymentAuthorizationEvents !== undefined || input.paymentAttemptPort !== undefined)
-    && input.paymentAttemptPort?.loadAuthorizationEvent(eventKey) === undefined
-    && !input.paymentAuthorizationEvents?.has(eventKey)
+  if (isX402
+    && input.paymentAttemptPort.loadAuthorizationEvent(eventKey) === undefined
     && observation.releaseStarted) {
     const event = {
       invocationRef: input.prepared.invocationRef,
@@ -155,8 +190,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
         ? {}
         : { challengeDigest: observation.paymentChallengeDigest }),
     } as const
-    await input.paymentAttemptPort?.persist({ authorizationEvent: event })
-    input.paymentAuthorizationEvents?.set(eventKey, event)
+    await input.paymentAttemptPort.persist({ authorizationEvent: event })
   }
   const result = observationResult(input.operation, input.descriptor, observation)
   const observedAt = (input.now ?? Date.now)()
@@ -187,27 +221,25 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   ) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
   }
-  if (observation.paymentAuthorizationStatus === 'created'
+  if (isX402
+    && observation.paymentAuthorizationStatus === 'created'
     && result.kind !== 'published_operation_succeeded') {
-    if (input.paymentAttempts !== undefined || input.paymentAttemptPort !== undefined) {
-      const key = x402PaymentAttemptKey({
-        invocationRef: input.prepared.invocationRef,
-        attemptRef: input.prepared.attemptRef,
-        effectGeneration: input.prepared.effectGeneration,
-      })
-      const current = input.paymentAttemptPort?.load(key) ?? input.paymentAttempts?.get(key)
-      if (current !== undefined) {
-        const updated = {
-          ...current,
-          state: 'reconciliation_required',
-        } as const
-        const authorizationEvent = input.paymentAttemptPort?.loadAuthorizationEvent(key)
-          ?? input.paymentAuthorizationEvents?.get(key)
-        if (authorizationEvent !== undefined) {
-          await input.paymentAttemptPort?.persist({ attempt: updated, authorizationEvent })
-        }
-        input.paymentAttempts?.set(key, updated)
+    const key = x402PaymentAttemptKey({
+      invocationRef: input.prepared.invocationRef,
+      attemptRef: input.prepared.attemptRef,
+      effectGeneration: input.prepared.effectGeneration,
+    })
+    const current = input.paymentAttemptPort.load(key)
+    if (current !== undefined) {
+      const updated = {
+        ...current,
+        state: 'reconciliation_required',
+      } as const
+      const authorizationEvent = input.paymentAttemptPort.loadAuthorizationEvent(key)
+      if (authorizationEvent === undefined) {
+        throw new Error('x402_payment_authorization_event_missing')
       }
+      await input.paymentAttemptPort.persist({ attempt: updated, authorizationEvent })
     }
     throw new Error(
       `published_operation_payment_reconciliation_required:${result.failureCode ?? result.kind}`,
@@ -231,10 +263,8 @@ function liquidityZeroReason(failureCode: string | undefined): LiquidityZeroReas
 export function createPaymentAttemptRuntime(
   runtime: RouteTransportRuntime,
   prepared: DynamicPublishedPreparedTransport,
-  attempts: Map<string, X402PaymentAttempt> | undefined,
-  authorizationEvents: Map<string, X402PaymentAuthorizationEvent> | undefined,
+  attemptPort: X402PaymentAttemptPort,
   now: () => number,
-  attemptPort?: X402PaymentAttemptPort,
 ): X402RouteTransportRuntime {
   const key = x402PaymentAttemptKey({
     invocationRef: prepared.invocationRef,
@@ -246,7 +276,7 @@ export function createPaymentAttemptRuntime(
   return {
     ...runtime,
     async prepareX402PaymentAuthorization(request) {
-      const current = attemptPort?.load(key) ?? attempts?.get(key)
+      const current = attemptPort.load(key)
       if (current !== undefined) {
         if (current.paymentIdentifier !== request.paymentIdentifier
           || current.challengeDigest !== request.challengeDigest
@@ -308,13 +338,11 @@ export function createPaymentAttemptRuntime(
         challengeDigest: paymentAttempt.challengeDigest,
         authorizationDigest: authorization.authorizationDigest,
       } as const
-      await attemptPort?.persist({ attempt: paymentAttempt, authorizationEvent })
-      attempts?.set(key, paymentAttempt)
-      authorizationEvents?.set(key, authorizationEvent)
+      await attemptPort.persist({ attempt: paymentAttempt, authorizationEvent })
       return authorization
     },
     async readX402PaymentAuthorization(authorization) {
-      const current = attemptPort?.load(key) ?? attempts?.get(key)
+      const current = attemptPort.load(key)
       if (current === undefined
         || current.state !== 'prepared'
         || !custodyReferenceMatches(current.custodyRef, authorization.custodyRef)
@@ -334,7 +362,7 @@ export function createPaymentAttemptRuntime(
       })
     },
     async readX402PaymentAuthorizationByDigest(authorization) {
-      const current = attemptPort?.load(key) ?? attempts?.get(key)
+      const current = attemptPort.load(key)
       if (current === undefined
         || current.state !== 'prepared'
         || !custodyReferenceMatches(current.custodyRef, authorization.custodyRef)
@@ -347,7 +375,7 @@ export function createPaymentAttemptRuntime(
       return custodyRuntime.readX402PaymentAuthorizationByDigest(authorization)
     },
     async markX402PaymentPossiblySubmitted(event) {
-      const current = attemptPort?.load(key) ?? attempts?.get(key)
+      const current = attemptPort.load(key)
       if (current === undefined
         || !custodyReferenceMatches(current.custodyRef, event.custodyRef)
         || current.challengeDigest !== event.challengeDigest) {
@@ -358,14 +386,12 @@ export function createPaymentAttemptRuntime(
         state: 'possibly_submitted',
         submissionStartedAt: now(),
       } as const
-      const authorizationEvent = attemptPort?.loadAuthorizationEvent(key)
-        ?? authorizationEvents?.get(key)
+      const authorizationEvent = attemptPort.loadAuthorizationEvent(key)
       if (authorizationEvent === undefined) throw new Error('x402_payment_authorization_event_missing')
-      await attemptPort?.persist({ attempt: updated, authorizationEvent })
-      attempts?.set(key, updated)
+      await attemptPort.persist({ attempt: updated, authorizationEvent })
     },
     async observeX402PaymentAttempt(event) {
-      const current = attemptPort?.load(key) ?? attempts?.get(key)
+      const current = attemptPort.load(key)
       if (current === undefined
         || !custodyReferenceMatches(current.custodyRef, event.custodyRef)) {
         throw new Error('x402_payment_attempt_attribution_invalid')
@@ -376,11 +402,9 @@ export function createPaymentAttemptRuntime(
         observedAt: now(),
         evidenceRefs: event.evidenceRefs,
       } as const
-      const authorizationEvent = attemptPort?.loadAuthorizationEvent(key)
-        ?? authorizationEvents?.get(key)
+      const authorizationEvent = attemptPort.loadAuthorizationEvent(key)
       if (authorizationEvent === undefined) throw new Error('x402_payment_authorization_event_missing')
-      await attemptPort?.persist({ attempt: updated, authorizationEvent })
-      attempts?.set(key, updated)
+      await attemptPort.persist({ attempt: updated, authorizationEvent })
     },
   }
 }
@@ -443,6 +467,17 @@ function dynamicTransportInvocation(input: Readonly<{
       ...authorityBase,
       authorityGeneration: connectionAuthority.authorityGeneration,
       authorityDigest: connectionAuthority.authorityDigest,
+      ...(input.token.providerLease === undefined ? {} : {
+        leaseRef: input.token.providerLease.leaseRef,
+        invocationRef: input.token.providerLease.invocationRef,
+        operationRef: input.token.providerLease.operationRef,
+        grantedScopes: input.token.providerLease.grantedScopes,
+        grantedResources: input.token.providerLease.grantedResources,
+        readinessValidUntil: input.token.providerLease.readinessValidUntil,
+        ...(input.token.providerLease.readinessDigest === undefined
+          ? {}
+          : { readinessDigest: input.token.providerLease.readinessDigest }),
+      }),
     },
     inputJson,
   }

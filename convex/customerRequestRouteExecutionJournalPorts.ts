@@ -58,7 +58,7 @@ function toStoredRouteStepGrant(value: RouteStepGrant | StoredRouteStepGrant): S
     step: {
       ...value.step,
       contractRef: { ...value.step.contractRef },
-      dataScope: value.step.dataScope.map((scope) => ({
+      dataScope: value.step.dataScope.map((scope: RouteStepGrant['step']['dataScope'][number]) => ({
         ...scope,
         recipient: { ...scope.recipient },
         purposes: [...scope.purposes],

@@ -4,12 +4,10 @@ import {
   buildLlmsTxt,
   buildRobotsTxt,
   buildSitemapXml,
-  createDefaultDiscoverySourceState,
 } from '@/modules/discovery/public'
-import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
-import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
+import { handleLlmsTxtRequest, handleSitemapXmlRequest } from '../helpers/discovery-fixture-routes'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
-import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
 
 describe('discovery files', () => {
@@ -36,7 +34,7 @@ describe('discovery files', () => {
   })
 
   it('builds llms.txt from canonical links and source-owned Offering disposition only', () => {
-    const state = createDefaultDiscoverySourceState()
+    const state = createFixtureDiscoverySourceState()
     const revision = state.revisions.at(0)
 
     if (revision === undefined) {
@@ -60,19 +58,19 @@ describe('discovery files', () => {
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
-    expect(result.body).toContain('https://ae.example/api/v1/requests')
-    expect(result.body).toContain('fresh opaque X-AE-Turn-Key for every turn')
-    for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
-      expect(result.body).toContain(statement)
-    }
-    expect(result.body).toContain('Human entry=https://ae.example/')
-    expect(result.body).toContain('https://ae.example/for-agents')
-    expect(result.body).toContain('needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress')
-    expect(result.body).toContain('navigation.actions')
-    expect(result.body).toContain('change_request')
-    expect(result.body).toContain('confirm_option')
-    expect(result.body).toContain('start_confirmed_option')
-    expect(result.body).not.toMatch(/\/messages|\/facts|\/options|\/confirmation|\/run|\/evidence|\/problems|\/cancellation/u)
+    expect(result.body).toContain('1. No-install Step 1:')
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/search')
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/detail')
+    expect(result.body).toContain('npm run -s ae -- connect --json')
+    expect(result.body).toContain('npm run -s ae -- invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
+    expect(result.body).toContain('npm run -s ae -- status "$AE_INVOCATION_REF" --json')
+    expect(result.body).toContain('npm run -s ae -- advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
+    expect(result.body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
+    expect(result.body).toContain('Authenticated: invoke, status, cancel, reconcile.')
+    expect(result.body).toContain('Cancellation requires the AE access key `AE_API_KEY` plus the request JSON body field `idempotencyKey`.')
+    expect(result.body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/cancel')
+    expect(result.body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/reconcile')
+    expect(result.body).not.toMatch(/\bae (?:cancel|reconcile)\b/u)
     expect(result.body).not.toContain('Parramatta Emergency Plumbing')
     expect(result.body).not.toContain('Ignore previous instructions')
     expect(result.body).not.toContain('verified')
@@ -89,7 +87,7 @@ describe('discovery files', () => {
   })
 
   it('builds sitemap.xml with public static and published business URLs only', () => {
-    const state = createDefaultDiscoverySourceState()
+    const state = createFixtureDiscoverySourceState()
     const result = buildSitemapXml(state, {
       canonicalBaseUrl: 'https://ae.example',
       now: 0,
@@ -104,7 +102,7 @@ describe('discovery files', () => {
   })
 
   it('omits suppressed catalogs from llms and sitemap output', () => {
-    const state = createDefaultDiscoverySourceState()
+    const state = createFixtureDiscoverySourceState()
     const business = state.businesses.at(0)
 
     if (business === undefined) {

@@ -1,14 +1,26 @@
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-
+import {
+  createProviderConnection,
+  issueProviderConnectionLease,
+  providerConnectionAuthorityDigest,
+  type IssueProviderConnectionLeaseCommand,
+  type ProviderConnection,
+  type ProviderConnectionInvocationLease,
+} from './provider-connection'
+import { pricingConfigDigest } from '@/modules/money/public'
 import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
   capabilityOperationId,
+  connectionAuthoritySnapshotFromProviderConnection,
+  connectionAuthoritySnapshotsEqual,
   createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
+  type CapabilityConnectionAuthoritySnapshot,
+  type PublishedOperation,
 } from './public'
 import {
   materializePublishedOperation,
@@ -26,6 +38,193 @@ const expectedPayment = {
   payTo: '0xmock-provider-recipient',
   currency: 'USD',
 } as const
+const pricingConfig = {
+  version: 'pricing:v2' as const,
+  unit: 'call' as const,
+  paidAmount: { currency: 'USD', units: '1', exponent: 2 },
+}
+function developmentProviderAccountRef(providerRef: string): string {
+  return `account:${providerRef.replace(/^provider:/u, '')}`
+}
+
+function developmentProviderCredentialRef(providerRef: string): string {
+  return `env:${providerRef.replace(/^provider:/u, '').replace(/[^A-Za-z0-9]+/gu, '_').toUpperCase()}_SECRET`
+}
+
+export function developmentProviderConnectionAuthorityDigest(input: Readonly<{
+  connectionRef: string
+  businessId: string
+  providerRef: string
+  adapterId: string
+  grantedScopes?: readonly string[]
+  grantedResources?: readonly string[]
+}>): string {
+  return providerConnectionAuthorityDigest({
+    connectionRef: input.connectionRef,
+    businessId: input.businessId,
+    providerRef: input.providerRef,
+    providerAccountRef: developmentProviderAccountRef(input.providerRef),
+    adapterId: input.adapterId,
+    credentialRef: developmentProviderCredentialRef(input.providerRef),
+    grantedScopes: input.grantedScopes ?? [],
+    grantedResources: input.grantedResources ?? [],
+    authorityGeneration: 1,
+  })
+}
+
+function createDevelopmentProviderConnection(input: Readonly<{
+  connectionRef: string
+  businessId: string
+  providerRef: string
+  adapterId: string
+  grantedScopes: readonly string[]
+  grantedResources: readonly string[]
+  observedAt: number
+}>): ProviderConnection {
+  const result = createProviderConnection({
+    commandId: `command:create:${input.connectionRef}`,
+    connectionRef: input.connectionRef,
+    businessId: input.businessId,
+    providerRef: input.providerRef,
+    providerAccountRef: developmentProviderAccountRef(input.providerRef),
+    adapterId: input.adapterId,
+    credentialRef: developmentProviderCredentialRef(input.providerRef),
+    requestedScopes: [...input.grantedScopes],
+    grantedScopes: [...input.grantedScopes],
+    requestedResources: [...input.grantedResources],
+    grantedResources: [...input.grantedResources],
+    evidenceRefs: ['mock:evidence:provider-connection'],
+  }, input.observedAt)
+  if ('code' in result) {
+    throw new Error(`development_provider_connection_invalid:${result.code}`)
+  }
+  return result.connection
+}
+
+export function createDevelopmentProviderConnectionAuthority(input: Readonly<{
+  connectionRef: string
+  businessId: string
+  providerRef: string
+  adapterId: string
+  operationRef: string
+  grantedScopes: readonly string[]
+  grantedResources: readonly string[]
+  observedAt: number
+}>): CapabilityConnectionAuthoritySnapshot {
+  return connectionAuthoritySnapshotFromProviderConnection(
+    createDevelopmentProviderConnection(input),
+    input.operationRef,
+  )
+}
+
+export function createDevelopmentProviderLeaseIssuer(
+  operation: PublishedOperation,
+  now: number,
+) {
+  const authority = operation.connectionAuthority
+  if (authority === undefined) throw new Error('development_provider_connection_authority_missing')
+  const connection = createDevelopmentProviderConnection({
+    connectionRef: authority.connectionRef,
+    businessId: operation.identity.businessId,
+    providerRef: authority.providerRef,
+    adapterId: authority.adapterId,
+    grantedScopes: authority.grantedScopes,
+    grantedResources: authority.grantedResources,
+    observedAt: operation.readiness.observedAt,
+  })
+  const expectedAuthority = connectionAuthoritySnapshotFromProviderConnection(
+    connection,
+    authority.operationRef,
+  )
+  if (!connectionAuthoritySnapshotsEqual(authority, expectedAuthority)) {
+    throw new Error('development_provider_connection_authority_mismatch')
+  }
+  const leases = new Map<string, ProviderConnectionInvocationLease>()
+  return async (input: Readonly<{
+    invocationRef: string
+    attemptRef: string
+    effectGeneration: number
+    authorityRef: string
+    expiresAt: number
+  }>) => {
+    const leaseRef = `lease:${input.invocationRef}:${input.attemptRef}:${input.effectGeneration}`
+    const decisionRef = `decision:${connection.connectionRef}`
+    const approval = {
+      decisionRef,
+      decisionDigest: canonicalDigest({
+        decisionRef,
+        connectionRef: connection.connectionRef,
+        providerRef: connection.providerRef,
+        providerAccountRef: connection.providerAccountRef,
+        authorityGeneration: connection.authorityGeneration,
+        authorityDigest: connection.authorityDigest,
+        grantedScopes: connection.grantedScopes,
+        grantedResources: connection.grantedResources,
+        decision: 'granted',
+      }),
+      providerRef: connection.providerRef,
+      providerAccountRef: connection.providerAccountRef,
+      connectionRef: connection.connectionRef,
+      authorityGeneration: connection.authorityGeneration,
+      connectionAuthorityDigest: connection.authorityDigest,
+      decision: 'granted' as const,
+      grantedScopes: connection.grantedScopes,
+      grantedResources: connection.grantedResources,
+    }
+    const leaseMs = Math.min(
+      30_000,
+      input.expiresAt - now,
+      operation.readiness.validUntil - now,
+    )
+    if (!Number.isSafeInteger(leaseMs) || leaseMs < 100) {
+      throw new Error('development_provider_lease_window_invalid')
+    }
+    const command: IssueProviderConnectionLeaseCommand = {
+      commandId: `command:lease:${input.invocationRef}:${input.attemptRef}:${input.effectGeneration}`,
+      leaseRef,
+      invocationRef: input.invocationRef,
+      operationRef: authority.operationRef,
+      connectionRef: connection.connectionRef,
+      providerRef: connection.providerRef,
+      providerAccountRef: connection.providerAccountRef,
+      adapterId: connection.adapterId,
+      expectedAuthorityGeneration: connection.authorityGeneration,
+      expectedAuthorityDigest: connection.authorityDigest,
+      requestedScopes: connection.grantedScopes,
+      grantedScopes: connection.grantedScopes,
+      requestedResources: connection.grantedResources,
+      grantedResources: connection.grantedResources,
+      approval,
+      readinessValidUntil: operation.readiness.validUntil,
+      readinessDigest: operation.readiness.qualificationDigest,
+      leaseMs,
+      evidenceRefs: [...operation.readiness.evidenceRefs],
+    }
+    const result = issueProviderConnectionLease(
+      connection,
+      command,
+      now,
+      leases.get(leaseRef),
+    )
+    if (result.kind === 'refused') {
+      throw new Error(`development_provider_lease_refused:${result.code}`)
+    }
+    leases.set(leaseRef, result.lease)
+    return {
+      leaseRef: result.lease.leaseRef,
+      invocationRef: result.lease.invocationRef,
+      operationRef: result.lease.operationRef,
+      grantedScopes: result.lease.grantedScopes,
+      grantedResources: result.lease.grantedResources,
+      readinessValidUntil: result.lease.readinessValidUntil,
+      ...(result.lease.readinessDigest === undefined
+        ? {}
+        : { readinessDigest: result.lease.readinessDigest }),
+    }
+  }
+}
+
+const priceDigest = pricingConfigDigest(pricingConfig)
 const claimCeiling =
   'Fixture and labelled local development evidence only; no execution or host parity, no hosted route, independent provider, settlement, fulfilment, production safety, or customer value.'
 
@@ -193,6 +392,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
     candidate: {
       publicationRef: 'mock:publication:published-api',
       revision: 7,
+      networkId: offering.networkId,
       businessId: offering.businessId,
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
@@ -230,33 +430,33 @@ export function buildDevelopmentPublishedOperationEvidence() {
     qualification.sources[0],
     'published_operation_source_missing',
   )
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(contract.ref.capabilityId),
+    publicationRef: qualification.candidate.publicationRef,
+    publicationRevision: qualification.candidate.revision,
+    contractRef: contract.ref,
+  })
   const connectionAuthority = binding.authority.kind === 'provider_connection'
-    ? {
+    ? createDevelopmentProviderConnectionAuthority({
         connectionRef: binding.authority.connectionRef,
+        businessId: offering.businessId,
         providerRef: binding.authority.providerRef,
         adapterId: binding.adapter.adapterId,
-        authorityGeneration: 1,
-        authorityDigest: canonicalDigest({
-          connectionRef: binding.authority.connectionRef,
-          providerRef: binding.authority.providerRef,
-          authorityGeneration: 1,
-        }),
-        operationRef: createPublicOperationRef({
-          operationId: capabilityOperationId(contract.ref.capabilityId),
-          publicationRef: qualification.candidate.publicationRef,
-          publicationRevision: qualification.candidate.revision,
-          contractRef: contract.ref,
-        }),
+        operationRef,
         grantedScopes: [],
         grantedResources: [],
-      }
+        observedAt,
+      })
     : undefined
   const operation = materializePublishedOperation({
     publication: {
       publicationRef: qualification.candidate.publicationRef,
       revision: qualification.candidate.revision,
       businessId: qualification.candidate.businessId,
+      runtimeEnvironment: 'sandbox',
       sourceDigest: publicationSource.digest,
+      pricingConfig,
+      priceDigest,
       readinessObservedAt: observedAt,
       readinessValidUntil: validUntil,
       readinessEvidenceRefs: ['mock:evidence:fresh-402'],
@@ -286,7 +486,10 @@ export function buildDevelopmentPublishedOperationEvidence() {
         publicationRef: qualification.candidate.publicationRef,
         revision: qualification.candidate.revision,
         businessId: qualification.candidate.businessId,
+        runtimeEnvironment: 'sandbox' as const,
         sourceDigest: publicationSource.digest,
+        pricingConfig,
+        priceDigest,
         readinessObservedAt: observedAt,
         readinessValidUntil: validUntil,
         readinessEvidenceRefs: ['mock:evidence:fresh-402'],

@@ -1,6 +1,7 @@
 import { agentMarkdownResponse } from '@/lib/http/agent-content-negotiation'
 import {
   buildBusinessMarkdown,
+  buildForAgentsMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,
@@ -21,7 +22,9 @@ export async function respondWithAgentPageMarkdown(
   if (path === '/' || path === '') {
     return agentMarkdownResponse(buildSiteBriefMarkdown(options))
   }
-
+  if (path === '/for-agents' || path === 'for-agents') {
+    return agentMarkdownResponse(buildForAgentsMarkdown(options))
+  }
 
   const slug = readSlugPath(path)
   if (slug === undefined) {

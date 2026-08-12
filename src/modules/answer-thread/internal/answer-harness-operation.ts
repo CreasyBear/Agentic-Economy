@@ -361,6 +361,8 @@ function answerToolCallStatusToHarnessStatus(status: AnswerToolCallStatus): Harn
       return 'refused'
     case 'error':
       return 'error'
+    default:
+      throw new Error(`answer_tool_status_invalid:${status}`)
   }
 }
 

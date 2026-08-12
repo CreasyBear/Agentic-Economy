@@ -1,14 +1,17 @@
 import {
   capabilityOperationId,
   createPublicOperationRef,
+  qualifySuppliedCandidate,
   type EligiblePublicationRow,
   type EligiblePublishedBusiness,
   type EligibleSupplyPorts,
 } from '@/modules/capability-supply/public'
 import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
+import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
+import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
@@ -87,6 +90,10 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         && path.sourceHash === origin.accessPathSourceHash
     },
     getActiveExactCapabilityContract: (ref) => getActiveExactCapabilityContract(db, ref),
+    qualifySuppliedCandidate: (candidate, now) => qualifySuppliedCandidate(
+      capabilitySupplyGraphPorts(db),
+      { candidate, now },
+    ),
     loadCurrentPublicationByBindingId: async (bindingId) => {
       const publication = await db.query('capabilityPublications')
         .withIndex('by_bindingId_and_disposition', (query) => (
@@ -112,7 +119,17 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
       contractDigest: doc.contractDigest,
     },
   })
-  if (operationRef !== doc.operationRef) return null
+  if (operationRef !== doc.operationRef
+    || doc.pricingConfigJson === undefined
+    || doc.priceDigest === undefined) return null
+  let pricingConfig
+  try {
+    const parsed = normalizePricingConfig(JSON.parse(doc.pricingConfigJson))
+    if (parsed.kind !== 'valid' || pricingConfigDigest(parsed.config) !== doc.priceDigest) return null
+    pricingConfig = parsed.config
+  } catch {
+    return null
+  }
   return {
     publicationRef: doc.publicationRef,
     operationRef,
@@ -133,6 +150,8 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,
+    pricingConfig,
+    priceDigest: doc.priceDigest,
     ...(doc.connectionAuthority === undefined ? {} : { connectionAuthority: doc.connectionAuthority }),
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),

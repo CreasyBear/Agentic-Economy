@@ -23,6 +23,7 @@ export const dereferenceOpenApiSchema: SchemaDereferencer = async (schema, root)
     ? { ...root, [DEREFERENCED_SCHEMA_SLOT]: schema }
     : { [DEREFERENCED_SCHEMA_SLOT]: schema }
   const dereferenced = await $RefParser.dereference(document, {
+    mutateInputSchema: false,
     dereference: { circular: 'ignore' },
     // Never reach across process/network boundaries: local `#/...` pointers only.
     resolve: { external: false, file: false, http: false },

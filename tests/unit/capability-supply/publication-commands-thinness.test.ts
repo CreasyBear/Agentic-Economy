@@ -9,18 +9,18 @@ const portsSource = readFileSync('convex/capabilitySupplyPublicationPorts.ts', '
 const moduleRoot = 'src/modules/capability-supply/internal/publication'
 
 describe('capability-supply publication-commands thinness', () => {
-  it('does not keep publish/refresh/withdraw orchestration bodies in the Convex host', () => {
-    const publishStart = convexHost.indexOf('export const publishCapability = mutation({')
-    const refreshStart = convexHost.indexOf('export const refreshCapability = mutation({')
-    const withdrawStart = convexHost.indexOf('export const withdrawCapability = mutation({')
+  it('does not keep retired owner bypass mutations in the Convex host', () => {
+    const publishStart = convexHost.indexOf('export const publishPreparedCapability = mutation({')
+    const readStart = convexHost.indexOf('export const readCapabilityPublication = query({')
+    const graphStart = convexHost.indexOf('export const queryCapabilityGraph = query({')
     expect(publishStart).toBeGreaterThanOrEqual(0)
-    expect(refreshStart).toBeGreaterThanOrEqual(0)
-    expect(withdrawStart).toBeGreaterThanOrEqual(0)
-    const publishBody = convexHost.slice(publishStart, publishStart + 1_200)
-    const refreshBody = convexHost.slice(refreshStart, refreshStart + 2_000)
-    const withdrawBody = convexHost.slice(withdrawStart, withdrawStart + 1_200)
+    expect(readStart).toBeGreaterThan(publishStart)
+    expect(graphStart).toBeGreaterThan(readStart)
 
-    expect(publishBody).toContain('publishCapabilityCommand')
+    const publishBody = convexHost.slice(publishStart, readStart)
+    expect(publishBody).toContain('publishPreparedCapabilityCommand')
+    expect(publishBody).not.toContain(['publishCapability', 'Command'].join(''))
+    expect(publishBody).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
     expect(publishBody).toContain('publicationPorts')
     expect(publishBody).toContain('ownsPublishedBusiness')
     expect(publishBody).not.toContain('normalizeCapabilityPublication')
@@ -31,25 +31,12 @@ describe('capability-supply publication-commands thinness', () => {
     expect(publishBody).not.toContain('scheduleReadinessProbe')
     expect(publishBody).not.toContain('capabilitySupplyReadiness.probe')
 
-    expect(refreshBody).toContain('refreshCapabilityCommand')
-    expect(refreshBody).toContain('publicationPorts')
-    expect(refreshBody).toContain('ownsPublishedBusiness')
-    expect(refreshBody).not.toContain('normalizeCapabilityPublication')
-    expect(refreshBody).not.toContain('canonicalDigest')
-    expect(refreshBody).not.toContain('setCapabilitySupplyEligibility(')
-    expect(refreshBody).not.toContain('disposition: \'superseded\'')
-    expect(refreshBody).not.toContain('capabilitySupplyReadiness.probe')
-
-    expect(withdrawBody).toContain('withdrawCapabilityCommand')
-    expect(withdrawBody).toContain('publicationPorts')
-    expect(withdrawBody).toContain('ownsPublishedBusiness')
-    expect(withdrawBody).not.toContain('setCapabilitySupplyEligibility(')
-    expect(withdrawBody).not.toContain('disposition: \'withdrawn\'')
-    expect(withdrawBody).not.toContain('capability_publication_supply_integrity_failure')
+    expect(convexHost).not.toMatch(/export const refreshCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
   })
 
   it('wires capabilitySupplyPublicationPorts adapter for writers, ledger, and readiness probe', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
     expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     expect(portsSource).toContain('capabilitySupplyPublicationPorts')
     expect(portsSource).toContain('scheduleReadinessProbe')
@@ -57,11 +44,14 @@ describe('capability-supply publication-commands thinness', () => {
     expect(portsSource).toContain('insertPublication')
     expect(portsSource).toContain('patchPublicationWithdrawn')
     expect(portsSource).not.toMatch(/normalizeCapabilityPublication/)
-    expect(portsSource).not.toMatch(/publishCapabilityCommand/)
+    expect(portsSource).not.toContain(['publishCapability', 'Command'].join(''))
+    expect(portsSource).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
   })
 
   it('leaves raw writers and ownership in the host', () => {
-    expect(convexHost).toMatch(/export const withdrawCapability\s*=/)
+    expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const publishCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
     expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
     expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
     expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)

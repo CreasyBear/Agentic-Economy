@@ -11,27 +11,28 @@ describe('capability-supply eligible-supply thinness', () => {
   it('does not keep list/exact inventory bodies in the Convex host', () => {
     expect(convexHost).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
     expect(convexHost).not.toMatch(/reason: 'supply_integrity_failure' as const/)
-    expect(convexHost).not.toMatch(/reason: 'contract_integrity_failure' as const/)
+    expect(convexHost).not.toMatch(/reason:\s*['"]contract_integrity_failure['"]\s+as const/)
     expect(convexHost).not.toMatch(/MAX_ELIGIBLE_SUPPLY\s*=/)
     expect(convexHost).not.toMatch(/listAdmittedConformantBindingsByNetwork/)
     expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
   })
 
   it('keeps thin (db, input) wrappers via eligibleSupplyPorts', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
     expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     expect(convexHost).toContain('eligibleSupplyPorts')
     expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule')
     expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule')
     expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
     expect(convexHost).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
-    expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule(eligibleSupplyPorts(db)')
-    expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule(eligibleSupplyPorts(db)')
+    expect(convexHost).toMatch(/listIntegratedCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
+    expect(convexHost).toMatch(/getEligibleExactCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
   })
 
-  it('leaves listIntegrated internalQuery wire and publish writers in the host', () => {
+  it('leaves listIntegrated internalQuery wire and canonical publish writers in the host', () => {
     expect(convexHost).toMatch(/export const listIntegrated\s*=/)
-    expect(convexHost).toMatch(/export const publishCapability\s*=/)
+    expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const publishCapability\s*=/)
     expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
     expect(convexHost).toMatch(/async function ownsPublishedBusiness\s*\(/)
   })

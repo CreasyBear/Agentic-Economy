@@ -14,6 +14,24 @@ describe('readBoundedRequestText', () => {
     })
   })
 
+  it('cancels a declared oversized body before reading it', async () => {
+    let canceled = false
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        cancel() {
+          canceled = true
+        },
+      }),
+      { headers: { 'Content-Length': '9' } },
+    )
+
+    await expect(readBoundedRequestText(response, 8)).resolves.toEqual({
+      ok: false,
+      code: 'payload_too_large',
+    })
+    expect(canceled).toBe(true)
+  })
+
   it('rejects an oversized stream without content-length or Request.text()', async () => {
     const encoder = new TextEncoder()
     const maxBytes = 8

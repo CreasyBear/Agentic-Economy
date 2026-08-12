@@ -1,12 +1,11 @@
-import { validateOfferingAccessPath } from '@/modules/catalog/public'
+import { validateOfferingAccessPath } from '@/modules/catalog/convex'
 import type {
   BusinessSupplyProjection,
   OfferingAccessPathValidation,
   OfferingPrice,
   PublicAccessPath,
 } from '@/modules/catalog/public'
-
-import { normalizeTrustTier } from '@/modules/business/public'
+import { normalizeTrustTier, type BusinessContext } from '@/modules/business/public'
 
 // Stays v2 across the `price` addition: an optional field a consumer can ignore
 // is not worth forcing every pinned reader to re-pin for.
@@ -62,10 +61,7 @@ export type PublicBusinessCatalogApiV2Dto = Readonly<{
   slug: string
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
-  postcode?: string
+  businessContext: BusinessContext
   publicUrl: string
   trustTier: BusinessSupplyProjection['business']['trustTier']
   responseTimeMinutes?: number
@@ -117,7 +113,7 @@ export type PublicBusinessCatalogV2DetailResult =
  */
 export function projectBusinessSupplyToPublicApi(
   projection: BusinessSupplyProjection,
-  now = projection.observedAt,
+  now = Date.now(),
 ): PublicBusinessCatalogApiV2Dto {
   /**
    * The legacy expansion cannot see the business profile, so it derives a
@@ -126,7 +122,8 @@ export function projectBusinessSupplyToPublicApi(
    * "Call" affordance is a way to get started that does not exist. The v1
    * adapter below already applies this rule; both projections owe the same one.
    */
-  const dialable = (projection.business.publishedPhone ?? '').trim().length > 0
+  const dialable = projection.business.businessContext.kind === 'local_human'
+    && (projection.business.businessContext.publishedPhone ?? '').trim().length > 0
   const offerings = projection.offerings.map((item): PublicOfferingDto => {
     const accessPaths = sanitizeAccessPaths(item.accessPaths)
     return {
@@ -161,10 +158,7 @@ export function projectBusinessSupplyToPublicApi(
     slug: projection.business.slug,
     name: projection.business.name,
     category: projection.business.category,
-    suburb: projection.business.suburb,
-    stateTerritory: projection.business.stateTerritory,
-    ...(projection.business.publishedPhone === undefined ? {} : { publishedPhone: projection.business.publishedPhone }),
-    ...(projection.business.postcode === undefined ? {} : { postcode: projection.business.postcode }),
+    businessContext: projection.business.businessContext,
     publicUrl: projection.business.publicUrl,
     trustTier: normalizeTrustTier(projection.business.trustTier),
     ...(projection.business.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: projection.business.responseTimeMinutes }),

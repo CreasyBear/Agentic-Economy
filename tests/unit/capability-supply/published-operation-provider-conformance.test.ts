@@ -18,8 +18,10 @@ import {
   projectDevelopmentBtcUsdQuoteResult,
   type BtcUsdQuoteProjectionDecision,
   type BtcUsdQuoteResult,
-  type CapabilityOfferingRegistration,
-  type PublishedOperation,
+} from '@/modules/capability-supply/btc-usd-quote-result'
+import type {
+  CapabilityOfferingRegistration,
+  PublishedOperation,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 

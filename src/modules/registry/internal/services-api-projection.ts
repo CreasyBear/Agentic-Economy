@@ -11,7 +11,6 @@ import {
   type PublicOperationCatalogPrice,
 } from '@/modules/capability-supply/public'
 
-import { isOpenSandboxEndpoint, sandboxCheckupQuotePathForSlug } from '@/modules/sandbox-supply/public'
 
 import type {
   ServiceDto,
@@ -115,19 +114,27 @@ function projectServiceFromBusinessDto(
         path.kind === 'external_operation' && isValidEndpointUrl(path.url),
     )
     return externalPaths.map((path) =>
-      projectEndpoint(path, business.slug, business.name, offering.offeringRef, offering.revision, operationMap))
+      projectEndpoint(
+        path,
+        business.name,
+        offering.offeringRef,
+        offering.revision,
+        offering.category,
+        operationMap,
+      ))
   })
-  const source: ServiceDto['ae']['source'] = endpoints.some((endpoint) => endpoint.ae.access === 'open')
-    ? 'ae_sandbox'
-    : 'business_published'
   const priceSummary = priceSummaryOf(endpoints, business.offerings)
   const networks = sortedEndpointNetworks(endpoints)
-  const domain = domainFromPublicUrl(business.publicUrl)
   const iconUrl = business.photos.find((photo) => optionalText(photo.url) !== undefined)?.url
-  const suburb = optionalText(business.suburb ?? '')
-  const stateTerritory = optionalText(business.stateTerritory ?? '')
-  const postcode = optionalText(business.postcode ?? '')
-  const providerOwned = endpoints.some((endpoint) => endpoint.ae.authorityMode === 'provider_owned')
+  const provider = business.businessContext.kind === 'programmable_provider'
+    ? business.businessContext.providerIdentifier
+    : undefined
+  const providerUrl = business.businessContext.kind === 'programmable_provider'
+    ? business.businessContext.website
+    : undefined
+  const domain = domainFromPublicUrl(providerUrl ?? business.publicUrl)
+  const description = descriptionFromOfferings(business.offerings)
+  const tags = uniqueSorted(business.offerings.map((offering) => offering.category))
   const integrationType: ServiceDto['integrationType'] = endpoints.length > 0
     && endpoints.every((endpoint) => endpoint.ae.authorityMode === 'provider_owned')
     ? '1P'
@@ -136,28 +143,28 @@ function projectServiceFromBusinessDto(
   return {
     id: business.slug,
     name: business.name,
+    ...(description === undefined ? {} : { description }),
     category: business.category,
     networks,
     enriched: endpoints.some((endpoint) => endpoint.ae.operationRef !== undefined),
     integrationType,
     serviceName: business.name,
-    tags: [],
-    ...(providerOwned ? { provider: business.name, providerUrl: business.publicUrl } : {}),
+    tags,
+    ...(provider === undefined ? {} : { provider }),
+    ...(providerUrl === undefined ? {} : { providerUrl }),
     ...(domain === undefined ? {} : { domain }),
     ...(iconUrl === undefined ? {} : { iconUrl }),
     ...(priceSummary === undefined ? {} : { priceSummary }),
     endpoints,
     ae: {
       trustTier: business.trustTier,
-      ...(suburb === undefined ? {} : { suburb }),
-      ...(stateTerritory === undefined ? {} : { stateTerritory }),
-      ...(postcode === undefined ? {} : { postcode }),
+      businessContext: business.businessContext,
       publicUrl: business.publicUrl,
       ...(business.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: business.responseTimeMinutes }),
       photos: business.photos,
       observedAt: business.observedAt,
       disposition: business.disposition,
-      source,
+      source: 'business_published',
       offerings,
       links: {
         business: `/api/businesses/${business.slug}`,
@@ -169,13 +176,12 @@ function projectServiceFromBusinessDto(
 
 function projectEndpoint(
   path: Extract<PublicOfferingAccessPathDto, { kind: 'external_operation' }>,
-  businessSlug: string,
   businessName: string,
   offeringRef: string,
   offeringRevision: number,
+  offeringCategory: string,
   operationMap?: ServiceOperationMap,
 ): ServiceEndpointDto {
-  const open = isOpenSandboxEndpoint(path.url, businessSlug, path.method)
   // W1 origin seam: enrich only when exactly one map entry matches the
   // offering revision, declared access path, endpoint URL and HTTP method.
   // A missing or ambiguous exact match stays catalog-only/unenriched.
@@ -195,15 +201,13 @@ function projectEndpoint(
       ))
   const linked = linkedCandidates.length === 1 ? linkedCandidates[0] : undefined
   const authentication: ServiceEndpointDto['ae']['authentication'] =
-    linked?.authentication ?? (open ? { kind: 'keyless' } : { kind: 'unknown' })
+    linked?.authentication ?? { kind: 'unknown' }
   const execution: ServiceEndpointDto['ae']['execution'] =
-    open
-      ? 'request_route'
-      : linked === undefined || !linked.routeable
-        ? 'catalog_only'
-        : linked.answerExecutable && linked.authentication.kind === 'keyless'
-          ? 'answer_tool'
-          : 'request_route'
+    linked === undefined || !linked.routeable
+      ? 'catalog_only'
+      : linked.answerExecutable && linked.authentication.kind === 'keyless'
+        ? 'answer_tool'
+        : 'request_route'
   const pricing = projectEndpointPricing(linked?.catalogPrice, linked?.payment)
   const paymentCurrencyMismatch = hasPaymentCurrencyMismatch(linked?.catalogPrice, linked?.payment)
   const authenticationSummary = optionalText(path.authenticationSummary ?? '')
@@ -215,14 +219,12 @@ function projectEndpoint(
         : 'executable'
 
   return {
-    // Open endpoints are served by AE itself; emit the origin-relative URL so
-    // the callable path is correct on every deployment of this catalog.
-    url: open ? sandboxCheckupQuotePathForSlug(businessSlug) : path.url,
+    url: path.url,
     description: path.summary,
-    ...(open ? { method: 'POST' as const } : path.method === undefined ? {} : { method: path.method }),
+    ...(path.method === undefined ? {} : { method: path.method }),
     ...(linked?.authorityMode === 'provider_owned' ? { providerName: businessName } : {}),
     serviceName: businessName,
-    tags: [],
+    tags: [offeringCategory],
     parameters: linked?.parameters ?? [],
     quality: null,
     ...(pricing === undefined ? {} : { pricing }),
@@ -230,7 +232,7 @@ function projectEndpoint(
       ...(linked === undefined ? {} : { operationRef: linked.operationRef }),
       offeringRef,
       provenance: path.provenance,
-      access: open ? 'open' : 'external',
+      access: 'external',
       authentication,
       execution,
       ...(linked === undefined ? {} : {
@@ -510,6 +512,17 @@ function isValidEndpointUrl(value: string): boolean {
   } catch {
     return false
   }
+}
+
+function descriptionFromOfferings(
+  offerings: readonly { summary: string }[],
+): string | undefined {
+  const summaries = uniqueSorted(offerings.map((offering) => offering.summary))
+  return summaries.length === 0 ? undefined : summaries.join(' ')
+}
+
+function uniqueSorted(values: readonly string[]): readonly string[] {
+  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))].sort()
 }
 
 function domainFromPublicUrl(publicUrl: string): string | undefined {

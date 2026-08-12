@@ -97,7 +97,11 @@ export function customerRequestV2PreparationEgressPorts(
         now: input.now,
       })
       if (live.kind !== 'available') return null
-      return live.supplies.map(toEligibleSupply)
+      return live.supplies.flatMap((supply) => (
+        supply.publication === undefined
+          ? []
+          : [toEligibleSupply({ ...supply, publication: supply.publication })]
+      ))
     },
 
     loadAuthorityReservation: async (reservationRef) => {

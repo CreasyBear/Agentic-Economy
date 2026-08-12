@@ -120,7 +120,7 @@ async function issueApproval(ctx: ApprovalContext, args: ApprovalIssueArgs): Pro
   const ownerId = identity.subject
   const credentialId = args.credentialId.trim()
   if (credentialId.length === 0) return { kind: 'refused', code: 'approval_credential_mismatch' }
-  const credential = await ctx.db.query('customerRequestAgentPrincipals')
+  const credential = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_credentialId', (query) => query.eq('credentialId', credentialId))
     .unique()
   if (credential === null || credential.ownerId !== ownerId) {

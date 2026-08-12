@@ -5,7 +5,7 @@ import {
   recordCapabilityCallObservation,
   recordCapabilityDepthObservation,
   type LiquidityZeroReason,
-} from '@/modules/capability-supply/public'
+} from '@/modules/capability-supply/internal/liquidity'
 
 const base = {
   businessId: 'business:one', offeringRef: 'offering:one', publicationRef: 'publication:one', taskDigest: 'sha256:task', observedAt: 1_000, evidenceRefs: ['test:observation'], environment: 'development' as const,

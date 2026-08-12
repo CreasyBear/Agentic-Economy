@@ -16,9 +16,12 @@ const business = {
   name: 'Parramatta Emergency Plumbing',
   normalizedName: 'parramatta emergency plumbing',
   category: 'Emergency plumbing',
-  suburb: 'Parramatta',
-  stateTerritory: 'NSW',
-  publishedPhone: '0412 345 678',
+  businessContext: {
+    kind: 'local_human' as const,
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    publishedPhone: '0412 345 678',
+  },
   publicStatus: 'published' as const,
   trustTier: 'claimed' as const,
   claimStatus: 'published' as const,
@@ -30,8 +33,12 @@ const business = {
 const context = {
   businessId,
   category: 'Emergency plumbing',
-  suburb: 'Parramatta',
-  stateTerritory: 'NSW',
+  businessContext: {
+    kind: 'local_human' as const,
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    publishedPhone: '0412 345 678',
+  },
   sourceRefs: [],
   sourceHash: canonicalDigest('business-context'),
   approvedAt: 2,
@@ -111,9 +118,11 @@ describe('public catalog DTO', () => {
       catalog: {
         schemaVersion: 'public-business-catalog-api:v2',
         slug: 'parramatta-emergency-plumbing',
-        stateTerritory: 'NSW',
-        publishedPhone: '0412 345 678',
-        photos: [],
+        businessContext: {
+          kind: 'local_human',
+          stateTerritory: 'NSW',
+          publishedPhone: '0412 345 678',
+        },
         disposition: 'partial',
         offerings: [
           {

@@ -323,9 +323,17 @@ export type CustomerRequestV2PreparedActionPorts = Readonly<{
   ) => Promise<readonly DisclosureAllocationRow[]>
 
   loadSupplyGraphForOperation: (input: Readonly<{
+    expectedTargetDigest: string
+    operationMaterial: Readonly<{
+      adapterId: string
+      adapterConfigDigest: string
+      adapterConfigJson: string
+      endpointUrl: string
+    }>
     offeringId: string
     bindingId: string
     businessId: string
+    now: number
   }>) => Promise<SupplyGraphRow | null>
 
   loadApprovalEvidence: (

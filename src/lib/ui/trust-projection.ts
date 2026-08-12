@@ -49,7 +49,10 @@ export function buildListingTrustProjection(
   inquiryAvailable = true,
 ): ListingTrustProjection {
   const primaryOffering = catalog.offerings.at(0)
-  const phone = publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.observedAt)
+  const publishedPhone = catalog.businessContext.kind === 'local_human'
+    ? catalog.businessContext.publishedPhone
+    : undefined
+  const phone = publishedFact(publishedPhone, 'Phone not published here', catalog.observedAt)
 
   return {
     phone,

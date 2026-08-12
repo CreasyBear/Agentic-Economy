@@ -4,24 +4,18 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import {
-  getDefaultPublicOwnerStatusReadback,
-  getPublicOwnerStatusReadbackBySlug,
-} from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import { brandNonEmpty } from '@/modules/common/ids'
 import { normalizeSlug } from '@/modules/common/normalize-slug'
-import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import {
-  createEmptyDisputeSourceState,
-  openRemovalDispute as openRemovalDisputeModule,
-} from '@/modules/security/public'
+  SourceWriteAdmissionError,
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 import type { DisputeOpenResult, RemovalDisputeReasonCode } from '@/modules/security/public'
 
-type Env = Record<string, string | undefined>
 
 export type RemovalDisputeInput = {
   slug: string
@@ -48,10 +42,13 @@ type OpenRemovalDisputeArgs = {
   }[]
   publicMessage?: string
   origin?: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
   operationKey: string
   correlationId: string
 }
+
+type OpenRemovalDisputeCommand = Omit<OpenRemovalDisputeArgs, 'sourceWrite' | 'sourceWriteRequest'>
 
 const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogReadResult>(
   'catalog:getPublicBusinessCatalogBySlug'
@@ -61,9 +58,6 @@ const openRemovalDisputeMutation = sourceMutation<OpenRemovalDisputeArgs, Disput
 )
 
 export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput, context?: unknown): Promise<DisputeOpenResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return openRemovalDisputeLocal(data)
-  }
 
   try {
     const slug = data.slug.trim()
@@ -80,7 +74,7 @@ export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput,
     const operationSuffix = `${normalizeOperationPart(slug)}:${crypto.randomUUID()}`
     const operationKey = `op:removal:${operationSuffix}`
     const correlationId = `corr:removal:${operationSuffix}`
-    return await callPublicSourceMutation(openRemovalDisputeMutation, {
+    const command: OpenRemovalDisputeCommand = {
       businessId: catalog.businessId,
       targetType: 'business',
       targetRef: catalog.businessId,
@@ -96,14 +90,20 @@ export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput,
       ],
       publicMessage: slug,
       origin: resolveCanonicalBaseUrl().baseUrl,
-      sourceWrite: await sourceWriteAdmissionFromContext({
-        context,
-        scope: 'removal_dispute',
-        operationKey,
-        correlationId,
-      }),
       operationKey,
       correlationId,
+    }
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: 'removal_dispute',
+      operationKey,
+      correlationId,
+    })
+    return await callPublicSourceMutation(openRemovalDisputeMutation, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
     })
   } catch (error) {
     if (error instanceof SourceWriteAdmissionError) {
@@ -119,41 +119,6 @@ export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput,
   }
 }
 
-function openRemovalDisputeLocal(data: RemovalDisputeInput): DisputeOpenResult {
-  const slug = data.slug.trim()
-  const defaultReadback = getDefaultPublicOwnerStatusReadback()
-  const readback = slug === defaultReadback.catalog.slug ? defaultReadback : getPublicOwnerStatusReadbackBySlug(slug)
-  if (readback === undefined) {
-    return invalidRemovalTarget(false)
-  }
-
-  const state = createEmptyDisputeSourceState()
-  return openRemovalDisputeModule(state, {
-    businessId: brandNonEmpty(readback.catalog.businessId, 'BusinessId'),
-    targetType: 'business',
-    targetRef: readback.catalog.businessId,
-    reasonCode: data.reasonCode,
-    contact: { email: data.contactEmail },
-    evidence: [
-      {
-        label: data.evidenceSummary,
-        mediaType: 'text/plain',
-        byteLength: Math.max(data.evidenceSummary.length, 1),
-        privateRef: `private:evidence:removal:${readback.catalog.slug}`,
-      },
-    ],
-    publicMessage: slug,
-    security: {
-      csrf: {
-        origin: 'https://ae.example',
-        allowedOrigins: ['https://ae.example'],
-      },
-    },
-    operationKey: brandNonEmpty(`op:removal:${normalizeOperationPart(slug)}`, 'OperationKey'),
-    correlationId: brandNonEmpty(`corr:removal:${normalizeOperationPart(slug)}`, 'CorrelationId'),
-    now: 1_000,
-  })
-}
 
 function invalidRemovalTarget(retryable: boolean): DisputeOpenResult {
   return {

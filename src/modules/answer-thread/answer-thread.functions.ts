@@ -6,30 +6,45 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
+import { isRecord } from '@/modules/common/is-record'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 import type { AppendHarnessSessionEntrySourceInput } from '@/modules/harness/harness.functions'
 
-import type {
-  AnswerThreadRecord,
-  AnswerTurnRecord,
-  AnswerTurnReservationRecord,
-  AnswerTurnStatus,
-  FollowUpIntent,
-  PublicThreadProjection,
+import {
+  ANSWER_TURN_EXECUTION_LEASE_MS,
+  parsePublicThreadProjection,
+  type AnswerThreadRecord,
+  type AnswerTurnCheckpoint,
+  type AnswerTurnRecord,
+  type AnswerTurnReservationRecord,
+  type AnswerTurnStatus,
+  type FollowUpIntent,
+  type PublicThreadProjection,
 } from './answer-thread.schema'
 import type { AnswerToolCallInputRow } from './internal/commands'
+import {
+  parseAnswerTurnCheckpoint,
+  serializeAnswerTurnCheckpoint,
+} from './internal/answer-turn-checkpoint'
 import { mintAnswerThreadShareToken } from './internal/share-token'
+import { isValidFrozenAnswerOperationArtifacts } from '@/modules/answer/answer-event-schema'
 import { buildPublicThreadProjection } from './internal/public-projection'
 
 type AnswerThreadSourceWriteRequestArgs = {
   sourceWriteRequest?: Request
+  sourceWriteBody?: string | Uint8Array
 }
 
 type AnswerThreadSourceWriteMutationArgs = {
-  operationKey?: string
-  correlationId?: string
-  sourceWrite?: SourceWriteAdmission
+  operationKey: string
+  correlationId: string
+  sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
 }
 
 export type ReserveAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
@@ -41,9 +56,10 @@ export type ReserveAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
   reservationKey: string
   title: string
 }
-
-type ReserveAnswerTurnMutationArgs = Omit<ReserveAnswerTurnArgs, 'sourceWriteRequest' | 'threadId'> &
-  AnswerThreadSourceWriteMutationArgs & {
+type ReserveAnswerTurnMutationArgs =
+  Omit<ReserveAnswerTurnArgs, 'sourceWriteRequest' | 'sourceWriteBody' | 'threadId'>
+  & AnswerThreadSourceWriteMutationArgs
+  & {
     requestedThreadScope: string
   }
 
@@ -54,7 +70,16 @@ export type AnswerTurnReservationResult =
       threadId: string
       turnId: string
       turnSeq: number
+      generation: number
       isNewThread: boolean
+    }
+  | {
+      kind: 'in_progress'
+      reservationKey: string
+      threadId: string
+      turnId: string
+      turnSeq: number
+      generation: number
     }
   | {
       kind: 'replayed'
@@ -62,50 +87,80 @@ export type AnswerTurnReservationResult =
       threadId: string
       turnId: string
       turnSeq: number
+      generation: number
       state: AnswerTurnReservationRecord['state']
       finalStatus?: AnswerTurnReservationRecord['finalStatus']
     }
   | {
       kind: 'conflict'
-      reason: 'request_digest_mismatch' | 'identity_mismatch'
+      reason: 'request_digest_mismatch'
+        | 'identity_mismatch'
+        | 'checkpoint_conflict'
     }
   | {
       kind: 'refused'
       reason: 'thread_not_found' | 'thread_forbidden' | 'thread_turn_limit'
     }
-
-
-export type PersistReservedAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
+export type RenewAnswerTurnLeaseArgs = AnswerThreadSourceWriteRequestArgs & {
   reservationKey: string
   requestDigest: string
   sessionId: string
   threadId: string
   turnId: string
   turnSeq: number
-  createdAt: number
-  answerDigest: string
-  query: string
-  intent: FollowUpIntent
-  evidenceJson: string
-  snapshotHash: string
-  proseJson: string
-  artifactKindsJson: string
-  finalStatus?: Extract<AnswerTurnStatus, 'complete' | 'error'>
-  errorCopyId?: string
-  errorProblemJson?: string
-  toolCalls: readonly AnswerToolCallInputRow[]
+  generation: number
 }
 
-type PersistReservedAnswerTurnMutationArgs = Omit<PersistReservedAnswerTurnArgs, 'sourceWriteRequest'> &
-  AnswerThreadSourceWriteMutationArgs
+export type RenewAnswerTurnLeaseResult =
+  | {
+      kind: 'renewed'
+      reservationKey: string
+      threadId: string
+      turnId: string
+      turnSeq: number
+      generation: number
+    }
+  | {
+      kind: 'conflict'
+      reason:
+        | 'reservation_not_found'
+        | 'reservation_identity_mismatch'
+        | 'request_digest_mismatch'
+        | 'generation_mismatch'
+        | 'stopped'
+        | 'settled'
+    }
 
-export type PersistReservedAnswerTurnResult =
+
+export type PersistAnswerTurnCheckpointArgs = AnswerThreadSourceWriteRequestArgs & {
+  reservationKey: string
+  requestDigest: string
+  sessionId: string
+  threadId: string
+  turnId: string
+  turnSeq: number
+  generation: number
+  checkpoint: AnswerTurnCheckpoint
+}
+
+type PersistAnswerTurnCheckpointMutationArgs =
+  Omit<PersistAnswerTurnCheckpointArgs, 'sourceWriteRequest' | 'sourceWriteBody' | 'checkpoint'>
+  & AnswerThreadSourceWriteMutationArgs
+  & {
+    checkpointStep: number
+    checkpointJson: string
+    checkpointDigest: string
+  }
+
+export type PersistAnswerTurnCheckpointResult =
   | {
       kind: 'persisted' | 'replayed'
       reservationKey: string
       threadId: string
       turnId: string
       turnSeq: number
+      generation: number
+      checkpointDigest: string
     }
   | {
       kind: 'conflict'
@@ -113,79 +168,76 @@ export type PersistReservedAnswerTurnResult =
         | 'reservation_not_found'
         | 'reservation_identity_mismatch'
         | 'request_digest_mismatch'
-        | 'answer_digest_conflict'
-        | 'turn_conflict'
-        | 'tool_call_conflict'
+        | 'generation_mismatch'
+        | 'checkpoint_invalid'
+        | 'checkpoint_conflict'
         | 'stopped'
+        | 'settled'
     }
 
-export type FailPersistedAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
+export type ReadAnswerTurnCheckpointArgs = AnswerThreadSourceWriteRequestArgs & {
   reservationKey: string
   requestDigest: string
   sessionId: string
   threadId: string
   turnId: string
   turnSeq: number
-  answerDigest: string
-  errorCopyId?: string
-  errorProblemJson: string
+  generation: number
 }
+type RenewAnswerTurnLeaseMutationArgs =
+  Omit<RenewAnswerTurnLeaseArgs, 'sourceWriteRequest' | 'sourceWriteBody'>
+  & AnswerThreadSourceWriteMutationArgs
 
-type FailPersistedAnswerTurnMutationArgs = Omit<FailPersistedAnswerTurnArgs, 'sourceWriteRequest'> &
-  AnswerThreadSourceWriteMutationArgs
+type ReadAnswerTurnCheckpointQueryArgs =
+  Omit<ReadAnswerTurnCheckpointArgs, 'sourceWriteRequest' | 'sourceWriteBody'>
+  & AnswerThreadSourceWriteMutationArgs
 
-export type FailPersistedAnswerTurnResult =
-  | {
-      kind: 'failed'
-      reservationKey: string
-      threadId: string
-      turnId: string
-      turnSeq: number
-    }
-  | {
-      kind: 'replayed'
-      reservationKey: string
-      threadId: string
-      turnId: string
-      turnSeq: number
-      status: Extract<AnswerTurnStatus, 'complete' | 'error'>
-    }
-  | {
-      kind: 'stopped'
-      reservationKey: string
-      threadId: string
-      turnId: string
-      turnSeq: number
-    }
+
+export type ReadAnswerTurnCheckpointResult =
+  | { kind: 'checkpoint'; checkpoint: AnswerTurnCheckpoint }
+  | { kind: 'missing' }
   | {
       kind: 'conflict'
       reason:
         | 'reservation_not_found'
         | 'reservation_identity_mismatch'
         | 'request_digest_mismatch'
-        | 'answer_digest_conflict'
-        | 'turn_not_found'
-        | 'not_persisted'
+        | 'generation_mismatch'
+        | 'checkpoint_invalid'
+        | 'stopped'
+        | 'settled'
     }
-export type FinalizeAnswerTurnHarnessRunArgs = {
+
+export type FinalizeReservedAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
   reservationKey: string
   requestDigest: string
   sessionId: string
   threadId: string
   turnId: string
   turnSeq: number
+  expectedGeneration: number
+  createdAt: number
+  answerDigest: string
+  query: string
+  intent: FollowUpIntent
   finalStatus: Extract<AnswerTurnStatus, 'complete' | 'error'>
   snapshotHash: string
   evidenceJson: string
+  proseJson: string
+  artifactKindsJson: string
+  errorCopyId?: string
+  errorProblemJson?: string
   finalizationHash: string
+  toolCalls: readonly AnswerToolCallInputRow[]
   entries: readonly AppendHarnessSessionEntrySourceInput[]
 }
 
-export type FinalizeAnswerTurnHarnessRunMutationArgs = FinalizeAnswerTurnHarnessRunArgs & {
-  operationKey: string
-  correlationId: string
-  sourceWrite?: SourceWriteAdmission
-}
+type FinalizeReservedAnswerTurnMutationArgs = Omit<
+  FinalizeReservedAnswerTurnArgs,
+  'sourceWriteRequest' | 'sourceWriteBody'
+> &
+  AnswerThreadSourceWriteMutationArgs
+
 export type AnswerHarnessFinalizationResult =
   | {
       status: 'accepted'
@@ -209,9 +261,13 @@ export type AnswerHarnessFinalizationResult =
         | 'reservation_not_found'
         | 'reservation_identity_mismatch'
         | 'request_digest_mismatch'
+        | 'generation_mismatch'
         | 'turn_not_found'
+        | 'turn_conflict'
         | 'snapshot_mismatch'
         | 'evidence_conflict'
+        | 'answer_digest_conflict'
+        | 'tool_call_conflict'
         | 'entry_identity_mismatch'
         | 'entry_id_conflict'
         | 'idempotency_conflict'
@@ -222,12 +278,7 @@ export type AnswerHarnessFinalizationResult =
     }
   | {
       status: 'denied'
-      reason: 'missing_csrf' | 'foreign_origin'
-      message: string
-    }
-  | {
-      status: 'error'
-      reason: 'source_write_failed'
+      reason: string
       message: string
     }
 
@@ -237,7 +288,7 @@ export type StopAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
   turnId: string
 }
 
-type StopAnswerTurnMutationArgs = Omit<StopAnswerTurnArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+type StopAnswerTurnMutationArgs = Omit<StopAnswerTurnArgs, 'sourceWriteRequest' | 'sourceWriteBody'> & AnswerThreadSourceWriteMutationArgs
 
 export type StopAnswerTurnResult =
   | { kind: 'stopped'; threadId: string; turnId: string }
@@ -249,7 +300,7 @@ export type DeleteAnswerThreadArgs = AnswerThreadSourceWriteRequestArgs & {
   pseudonymousSessionId: string
 }
 
-type DeleteAnswerThreadMutationArgs = Omit<DeleteAnswerThreadArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+type DeleteAnswerThreadMutationArgs = Omit<DeleteAnswerThreadArgs, 'sourceWriteRequest' | 'sourceWriteBody'> & AnswerThreadSourceWriteMutationArgs
 
 export type IssueAnswerThreadShareArgs = AnswerThreadSourceWriteRequestArgs & {
   threadId: string
@@ -257,7 +308,7 @@ export type IssueAnswerThreadShareArgs = AnswerThreadSourceWriteRequestArgs & {
 }
 
 type IssueAnswerThreadShareMutationArgs =
-  Omit<IssueAnswerThreadShareArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+  Omit<IssueAnswerThreadShareArgs, 'sourceWriteRequest' | 'sourceWriteBody'> & AnswerThreadSourceWriteMutationArgs
 
 export type IssueAnswerThreadShareResult = {
   threadId: string
@@ -266,7 +317,7 @@ export type IssueAnswerThreadShareResult = {
 
 export type RevokeAnswerThreadShareArgs = IssueAnswerThreadShareArgs
 type RevokeAnswerThreadShareMutationArgs =
-  Omit<RevokeAnswerThreadShareArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+  Omit<RevokeAnswerThreadShareArgs, 'sourceWriteRequest' | 'sourceWriteBody'> & AnswerThreadSourceWriteMutationArgs
 
 export type RevokeAnswerThreadShareResult = {
   threadId: string
@@ -291,26 +342,45 @@ export type ListSessionThreadsResult = {
 export const reserveAnswerTurnMutation = sourceMutation<ReserveAnswerTurnMutationArgs, AnswerTurnReservationResult>(
   'answerThreads:reserveAnswerTurn',
 )
+export const renewAnswerTurnLeaseMutation = sourceMutation<
+  RenewAnswerTurnLeaseMutationArgs,
+  RenewAnswerTurnLeaseResult
+>('answerThreads:renewAnswerTurnLease')
 
 
-export const persistReservedAnswerTurnMutation = sourceMutation<
-  PersistReservedAnswerTurnMutationArgs,
-  PersistReservedAnswerTurnResult
->('answerThreads:persistReservedAnswerTurn')
-export const failPersistedAnswerTurnMutation = sourceMutation<
-  FailPersistedAnswerTurnMutationArgs,
-  FailPersistedAnswerTurnResult
->('answerThreads:failPersistedAnswerTurn')
+export type ReadAnswerTurnCheckpointWireResult =
+  | {
+      kind: 'checkpoint'
+      checkpointJson: string
+      checkpointDigest: string
+      generation: number
+      checkpointStep: number
+    }
+  | { kind: 'missing' }
+  | {
+      kind: 'conflict'
+      reason: Extract<ReadAnswerTurnCheckpointResult, { kind: 'conflict' }>['reason']
+    }
+
+export const persistAnswerTurnCheckpointMutation = sourceMutation<
+  PersistAnswerTurnCheckpointMutationArgs,
+  PersistAnswerTurnCheckpointResult
+>('answerThreads:persistAnswerTurnCheckpoint')
+export const readAnswerTurnCheckpointQuery = sourceQuery<
+  ReadAnswerTurnCheckpointQueryArgs,
+  ReadAnswerTurnCheckpointWireResult
+>('answerThreads:readAnswerTurnCheckpoint')
+
 
 
 export const stopAnswerTurnMutation = sourceMutation<StopAnswerTurnMutationArgs, StopAnswerTurnResult>(
   'answerThreads:stopAnswerTurn',
 )
 
-export const finalizeAnswerTurnHarnessRunMutation = sourceMutation<
-  FinalizeAnswerTurnHarnessRunMutationArgs,
-  Exclude<AnswerHarnessFinalizationResult, { status: 'error' }>
->('harnessSessions:finalizeAnswerTurnHarnessRun')
+export const finalizeReservedAnswerTurnMutation = sourceMutation<
+  FinalizeReservedAnswerTurnMutationArgs,
+  AnswerHarnessFinalizationResult
+>('harnessSessions:finalizeReservedAnswerTurn')
 
 export const deleteAnswerThreadMutation = sourceMutation<DeleteAnswerThreadMutationArgs, { threadId: string }>(
   'answerThreads:deleteAnswerThread',
@@ -347,12 +417,12 @@ export const getAnswerThreadWithTurnsQuery = sourceQuery<
 
 export const getOwnedThreadProjectionQuery = sourceQuery<
   { threadId: string; pseudonymousSessionId: string },
-  PublicThreadProjection | null
+  string | null
 >('answerThreads:getOwnedThreadProjection')
 
 export const getSharedThreadProjectionQuery = sourceQuery<
   { shareToken: string },
-  PublicThreadProjection | null
+  string | null
 >('answerThreads:getSharedThreadProjection')
 
 export const getThreadTurnsQuery = sourceQuery<
@@ -366,8 +436,9 @@ export const getThreadTurnsQuery = sourceQuery<
 
 type AnswerThreadPort = {
   reserveAnswerTurn(args: ReserveAnswerTurnArgs): Promise<AnswerTurnReservationResult>
-  persistReservedAnswerTurn(args: PersistReservedAnswerTurnArgs): Promise<PersistReservedAnswerTurnResult>
-  failPersistedAnswerTurn(args: FailPersistedAnswerTurnArgs): Promise<FailPersistedAnswerTurnResult>
+  renewAnswerTurnLease(args: RenewAnswerTurnLeaseArgs): Promise<RenewAnswerTurnLeaseResult>
+  persistAnswerTurnCheckpoint(args: PersistAnswerTurnCheckpointArgs): Promise<PersistAnswerTurnCheckpointResult>
+  readAnswerTurnCheckpoint(args: ReadAnswerTurnCheckpointArgs): Promise<ReadAnswerTurnCheckpointWireResult>
   stopAnswerTurn(args: StopAnswerTurnArgs): Promise<StopAnswerTurnResult>
   listSessionThreads(pseudonymousSessionId: string, limit?: number): Promise<ListSessionThreadsResult>
   getOwnedThreadProjection(threadId: string, pseudonymousSessionId: string): Promise<PublicThreadProjection | null>
@@ -386,7 +457,7 @@ type AnswerThreadPort = {
     pseudonymousSessionId: string,
     paginationOpts: PaginationOptions,
   ): Promise<AnswerThreadWithTurns | null>
-  finalizeTurnHarnessRun(args: FinalizeAnswerTurnHarnessRunArgs): Promise<AnswerHarnessFinalizationResult>
+  finalizeReservedAnswerTurn(args: FinalizeReservedAnswerTurnArgs): Promise<AnswerHarnessFinalizationResult>
 }
 
 let testPort: AnswerThreadPort | undefined
@@ -405,88 +476,256 @@ export async function reserveAnswerTurn(args: ReserveAnswerTurnArgs): Promise<An
   if (port !== undefined) {
     return port.reserveAnswerTurn(args)
   }
-
-  const prepared = await withAnswerThreadSourceWrite(
-    args,
-    `answer_thread:reserve:${args.reservationKey}`,
-  )
-  const { threadId, ...mutationArgs } = prepared
-  return callPublicSourceMutation(reserveAnswerTurnMutation, {
-    ...mutationArgs,
-    requestedThreadScope: threadId ?? 'new',
-  })
-}
-
-export async function persistReservedAnswerTurn(
-  args: PersistReservedAnswerTurnArgs,
-): Promise<PersistReservedAnswerTurnResult> {
-  const port = activeAnswerThreadPort()
-  if (port !== undefined) {
-    return port.persistReservedAnswerTurn(args)
+  const operationKey = `answer_thread:reserve:${args.reservationKey}`
+  const correlationId = operationKey
+  const command: Omit<ReserveAnswerTurnMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    sessionId: args.sessionId,
+    requestedThreadScope: args.threadId ?? 'new',
+    query: args.query,
+    ...(args.searchContextJson === undefined ? {} : { searchContextJson: args.searchContextJson }),
+    requestDigest: args.requestDigest,
+    reservationKey: args.reservationKey,
+    title: args.title,
+    operationKey,
+    correlationId,
   }
   return callPublicSourceMutation(
-    persistReservedAnswerTurnMutation,
-    await withAnswerThreadSourceWrite(args, `answer_thread:persist:${args.reservationKey}:${args.turnId}`),
+    reserveAnswerTurnMutation,
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
   )
 }
-export async function failPersistedAnswerTurn(
-  args: FailPersistedAnswerTurnArgs,
-): Promise<FailPersistedAnswerTurnResult> {
+export async function renewAnswerTurnLease(
+  args: RenewAnswerTurnLeaseArgs,
+): Promise<RenewAnswerTurnLeaseResult> {
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
-    return port.failPersistedAnswerTurn(args)
+    return port.renewAnswerTurnLease(args)
+  }
+  const operationKey = `answer_thread:lease:${args.reservationKey}:${args.generation}`
+  const correlationId = operationKey
+  const command: Omit<RenewAnswerTurnLeaseMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    reservationKey: args.reservationKey,
+    requestDigest: args.requestDigest,
+    sessionId: args.sessionId,
+    threadId: args.threadId,
+    turnId: args.turnId,
+    turnSeq: args.turnSeq,
+    generation: args.generation,
+    operationKey,
+    correlationId,
   }
   return callPublicSourceMutation(
-    failPersistedAnswerTurnMutation,
-    await withAnswerThreadSourceWrite(args, `answer_thread:fail:${args.reservationKey}:${args.turnId}`),
+    renewAnswerTurnLeaseMutation,
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
   )
 }
 
+
+export async function persistAnswerTurnCheckpoint(
+  args: PersistAnswerTurnCheckpointArgs,
+): Promise<PersistAnswerTurnCheckpointResult> {
+  const serialized = serializeAnswerTurnCheckpoint(args.checkpoint)
+  if (serialized === null) {
+    return { kind: 'conflict', reason: 'checkpoint_invalid' }
+  }
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    return port.persistAnswerTurnCheckpoint(args)
+  }
+  const operationKey = `answer_thread:checkpoint:${args.reservationKey}:${args.turnId}:${args.checkpoint.stepOrdinal}`
+  const correlationId = operationKey
+  const command: Omit<PersistAnswerTurnCheckpointMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    reservationKey: args.reservationKey,
+    requestDigest: args.requestDigest,
+    sessionId: args.sessionId,
+    threadId: args.threadId,
+    turnId: args.turnId,
+    turnSeq: args.turnSeq,
+    generation: args.generation,
+    checkpointStep: args.checkpoint.stepOrdinal,
+    checkpointJson: serialized.checkpointJson,
+    checkpointDigest: serialized.checkpointDigest,
+    operationKey,
+    correlationId,
+  }
+  return callPublicSourceMutation(
+    persistAnswerTurnCheckpointMutation,
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
+  )
+}
+
+export async function readAnswerTurnCheckpoint(
+  args: ReadAnswerTurnCheckpointArgs,
+): Promise<ReadAnswerTurnCheckpointResult> {
+  const port = activeAnswerThreadPort()
+  const operationKey = `answer_thread:checkpoint:read:${args.reservationKey}:${args.turnId}`
+  const correlationId = operationKey
+  const command: Omit<ReadAnswerTurnCheckpointQueryArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    reservationKey: args.reservationKey,
+    requestDigest: args.requestDigest,
+    sessionId: args.sessionId,
+    threadId: args.threadId,
+    turnId: args.turnId,
+    turnSeq: args.turnSeq,
+    generation: args.generation,
+    operationKey,
+    correlationId,
+  }
+  const result = port === undefined
+    ? await callPublicSourceQuery(
+        readAnswerTurnCheckpointQuery,
+        await withAnswerThreadSourceWrite({
+          request: args.sourceWriteRequest,
+          body: args.sourceWriteBody,
+          command,
+          scope: 'answer_thread',
+          operationKey,
+          correlationId,
+        }),
+      )
+    : await port.readAnswerTurnCheckpoint(args)
+  if (result.kind !== 'checkpoint') return result
+  const checkpoint = parseAnswerTurnCheckpoint(result.checkpointJson, result.checkpointDigest)
+  if (
+    checkpoint === null
+    || checkpoint.generation !== result.generation
+    || checkpoint.stepOrdinal !== result.checkpointStep
+  ) {
+    return { kind: 'conflict', reason: 'checkpoint_invalid' }
+  }
+  return { kind: 'checkpoint', checkpoint }
+}
 
 export async function stopAnswerTurn(args: StopAnswerTurnArgs): Promise<StopAnswerTurnResult> {
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
     return port.stopAnswerTurn(args)
   }
+  const operationKey = `answer_thread:stop:${args.threadId}:${args.turnId}`
+  const correlationId = operationKey
+  const command: Omit<StopAnswerTurnMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    sessionId: args.sessionId,
+    threadId: args.threadId,
+    turnId: args.turnId,
+    operationKey,
+    correlationId,
+  }
   return callPublicSourceMutation(
     stopAnswerTurnMutation,
-    await withAnswerThreadSourceWrite(args, `answer_thread:stop:${args.threadId}:${args.turnId}`),
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
   )
 }
 
-export async function finalizeAnswerTurnHarnessRunFromRequest(
+export async function finalizeReservedAnswerTurnFromRequest(
   request: Request,
-  args: FinalizeAnswerTurnHarnessRunArgs,
+  args: FinalizeReservedAnswerTurnArgs,
 ): Promise<AnswerHarnessFinalizationResult> {
+  return finalizeReservedAnswerTurnFromSource(request, args)
+}
+
+/**
+ * Bypass the injectable harness finalizer and write directly to the active source.
+ * Recovery must use this path so a failed primary finalizer cannot suppress the
+ * durable error terminal row.
+ */
+export async function finalizeReservedAnswerTurnFromSource(
+  request: Request,
+  args: FinalizeReservedAnswerTurnArgs,
+): Promise<AnswerHarnessFinalizationResult> {
+  let evidence: unknown
+  try {
+    evidence = JSON.parse(args.evidenceJson)
+  } catch {
+    return {
+      status: 'conflict',
+      reason: 'evidence_conflict',
+      message: 'Answer turn evidence is not valid JSON.',
+    }
+  }
+  if (!isRecord(evidence) || !isValidFrozenAnswerOperationArtifacts({
+    candidates: evidence.operationCandidates,
+    candidateSetDigest: evidence.operationCandidatesDigest,
+    selection: evidence.operationSelection,
+    outcome: evidence.operationOutcome,
+    toolCalls: args.toolCalls,
+    requireToolEvidence: true,
+  })) {
+    return {
+      status: 'conflict',
+      reason: 'evidence_conflict',
+      message: 'Answer turn operation evidence is inconsistent with frozen tool records.',
+    }
+  }
+
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
-    return port.finalizeTurnHarnessRun(args)
+    return port.finalizeReservedAnswerTurn({
+      ...args,
+      sourceWriteRequest: request,
+    })
   }
 
   const operationKey = answerHarnessFinalizationOperationKey(args)
   const correlationId = args.turnId
+  const {
+    sourceWriteRequest: _sourceWriteRequest,
+    sourceWriteBody,
+    ...commandWithoutSourceWrite
+  } = args
+  const command: Omit<FinalizeReservedAnswerTurnMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    ...commandWithoutSourceWrite,
+    operationKey,
+    correlationId,
+  }
 
   try {
-    return await callPublicSourceMutation(finalizeAnswerTurnHarnessRunMutation, {
-      ...args,
-      operationKey,
-      correlationId,
-      sourceWrite: await sourceWriteAdmissionFromRequest({
+    return await callPublicSourceMutation(
+      finalizeReservedAnswerTurnMutation,
+      await withAnswerThreadSourceWrite({
         request,
+        body: sourceWriteBody,
+        command,
         scope: 'harness_session',
         operationKey,
         correlationId,
       }),
-    })
+    )
   } catch (error) {
     return {
-      status: 'error',
+      status: 'denied',
       reason: 'source_write_failed',
       message: error instanceof Error ? error.message : String(error),
     }
   }
 }
-
 
 export async function listSessionThreads(
   pseudonymousSessionId: string,
@@ -538,7 +777,9 @@ export async function getOwnedThreadProjection(
   if (port !== undefined) {
     return port.getOwnedThreadProjection(threadId, pseudonymousSessionId)
   }
-  return callPublicSourceQuery(getOwnedThreadProjectionQuery, { threadId, pseudonymousSessionId })
+  return decodePublicThreadProjection(
+    await callPublicSourceQuery(getOwnedThreadProjectionQuery, { threadId, pseudonymousSessionId }),
+  )
 }
 
 export async function issueAnswerThreadShare(
@@ -548,9 +789,24 @@ export async function issueAnswerThreadShare(
   if (port !== undefined) {
     return port.issueShare(args)
   }
+  const operationKey = `answer_thread:share:issue:${args.threadId}:${args.pseudonymousSessionId}`
+  const correlationId = operationKey
+  const command: Omit<IssueAnswerThreadShareMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    threadId: args.threadId,
+    pseudonymousSessionId: args.pseudonymousSessionId,
+    operationKey,
+    correlationId,
+  }
   return callPublicSourceMutation(
     issueAnswerThreadShareMutation,
-    await withAnswerThreadSourceWrite(args, `answer_thread:share:issue:${args.threadId}:${args.pseudonymousSessionId}`),
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
   )
 }
 
@@ -561,9 +817,24 @@ export async function revokeAnswerThreadShare(
   if (port !== undefined) {
     return port.revokeShare(args)
   }
+  const operationKey = `answer_thread:share:revoke:${args.threadId}:${args.pseudonymousSessionId}`
+  const correlationId = operationKey
+  const command: Omit<RevokeAnswerThreadShareMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    threadId: args.threadId,
+    pseudonymousSessionId: args.pseudonymousSessionId,
+    operationKey,
+    correlationId,
+  }
   return callPublicSourceMutation(
     revokeAnswerThreadShareMutation,
-    await withAnswerThreadSourceWrite(args, `answer_thread:share:revoke:${args.threadId}:${args.pseudonymousSessionId}`),
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
   )
 }
 
@@ -572,8 +843,18 @@ export async function getSharedThreadProjection(shareToken: string): Promise<Pub
   if (port !== undefined) {
     return port.getSharedThreadProjection(shareToken)
   }
-  return callPublicSourceQuery(getSharedThreadProjectionQuery, { shareToken })
+  return decodePublicThreadProjection(
+    await callPublicSourceQuery(getSharedThreadProjectionQuery, { shareToken }),
+  )
 }
+
+function decodePublicThreadProjection(encoded: string | null): PublicThreadProjection | null {
+  if (encoded === null) return null
+  const projection = parsePublicThreadProjection(JSON.parse(encoded))
+  if (projection === null) throw new Error('answer_thread_projection_invalid')
+  return projection
+}
+
 export async function getThreadTurns(
   threadId: string,
   pseudonymousSessionId: string,
@@ -591,32 +872,53 @@ export async function deleteAnswerThread(args: DeleteAnswerThreadArgs): Promise<
   if (port !== undefined) {
     return port.deleteThread(args)
   }
-  return callPublicSourceMutation(
-    deleteAnswerThreadMutation,
-    await withAnswerThreadSourceWrite(args, `answer_thread:delete:${args.threadId}:${args.pseudonymousSessionId}`),
-  )
-}
-
-async function withAnswerThreadSourceWrite<Args extends AnswerThreadSourceWriteRequestArgs>(
-  args: Args,
-  operationKey: string,
-): Promise<Omit<Args, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs> {
-  const { sourceWriteRequest, ...serializableArgs } = args
-  if (sourceWriteRequest === undefined) {
-    return serializableArgs as Omit<Args, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
-  }
+  const operationKey = `answer_thread:delete:${args.threadId}:${args.pseudonymousSessionId}`
   const correlationId = operationKey
-  return {
-    ...serializableArgs,
+  const command: Omit<DeleteAnswerThreadMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
+    threadId: args.threadId,
+    pseudonymousSessionId: args.pseudonymousSessionId,
     operationKey,
     correlationId,
-    sourceWrite: await sourceWriteAdmissionFromRequest({
-      request: sourceWriteRequest,
+  }
+  return callPublicSourceMutation(
+    deleteAnswerThreadMutation,
+    await withAnswerThreadSourceWrite({
+      request: args.sourceWriteRequest,
+      body: args.sourceWriteBody,
+      command,
       scope: 'answer_thread',
       operationKey,
       correlationId,
     }),
-  } as Omit<Args, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+  )
+}
+
+async function withAnswerThreadSourceWrite<Command extends Record<string, unknown>>(input: {
+  request: Request | undefined
+  body: string | Uint8Array | undefined
+  command: Command
+  scope: 'answer_thread' | 'harness_session'
+  operationKey: string
+  correlationId: string
+}): Promise<Command & AnswerThreadSourceWriteMutationArgs> {
+  if (input.request === undefined || input.body === undefined) {
+    throw new Error('source_write_request_missing')
+  }
+  const sourceWrite = await sourceWriteAdmissionFromRequest({
+    request: input.request,
+    body: input.body,
+    command: input.command,
+    scope: input.scope,
+    operationKey: input.operationKey,
+    correlationId: input.correlationId,
+  })
+  return {
+    ...input.command,
+    operationKey: input.operationKey,
+    correlationId: input.correlationId,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
+  }
 }
 
 function activeAnswerThreadPort(): AnswerThreadPort | undefined {
@@ -634,7 +936,10 @@ function activeAnswerThreadPort(): AnswerThreadPort | undefined {
 function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
   const threads = new Map<string, AnswerThreadRecord>()
   const turns = new Map<string, AnswerTurnRecord>()
+  const toolCallsByTurn = new Map<string, readonly AnswerToolCallInputRow[]>()
   const reservations = new Map<string, AnswerTurnReservationRecord>()
+  const checkpoints = new Map<string, AnswerTurnCheckpoint>()
+  const generations = new Map<string, number>()
   const shares = new Map<string, { threadId: string; generation: number; shareToken: string; revoked: boolean }>()
   const localShareKeyring = {
     keyId: 'answer-thread-share-local-e2e-v1',
@@ -704,12 +1009,59 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
         if (prior.requestDigest !== args.requestDigest) {
           return { kind: 'conflict', reason: 'request_digest_mismatch' }
         }
+        const timestamp = Date.now()
+        const generation = generations.get(prior.reservationKey) ?? 0
+        if (prior.state === 'reserved') {
+          if (timestamp - prior.updatedAt < ANSWER_TURN_EXECUTION_LEASE_MS) {
+            return {
+              kind: 'in_progress',
+              reservationKey: prior.reservationKey,
+              threadId: prior.threadId,
+              turnId: prior.turnId,
+              turnSeq: prior.seq,
+              generation,
+            }
+          }
+          const nextGeneration = generation + 1
+          const checkpoint = checkpoints.get(prior.reservationKey)
+          if (checkpoint !== undefined) {
+            const serialized = serializeAnswerTurnCheckpoint(checkpoint)
+            if (
+              serialized === null
+              || checkpoint.reservationKey !== prior.reservationKey
+              || checkpoint.requestDigest !== prior.requestDigest
+              || checkpoint.generation !== generation
+              || checkpoint.threadId !== prior.threadId
+              || checkpoint.turnId !== prior.turnId
+              || checkpoint.turnSeq !== prior.seq
+            ) {
+              return { kind: 'conflict', reason: 'checkpoint_conflict' }
+            }
+            const migrated = { ...checkpoint, generation: nextGeneration }
+            if (serializeAnswerTurnCheckpoint(migrated) === null) {
+              return { kind: 'conflict', reason: 'checkpoint_conflict' }
+            }
+            checkpoints.set(prior.reservationKey, migrated)
+          }
+          generations.set(prior.reservationKey, nextGeneration)
+          reservations.set(prior.reservationKey, { ...prior, updatedAt: timestamp })
+          return {
+            kind: 'reserved',
+            reservationKey: prior.reservationKey,
+            threadId: prior.threadId,
+            turnId: prior.turnId,
+            turnSeq: prior.seq,
+            generation: nextGeneration,
+            isNewThread: false,
+          }
+        }
         return {
           kind: 'replayed',
           reservationKey: prior.reservationKey,
           threadId: prior.threadId,
           turnId: prior.turnId,
           turnSeq: prior.seq,
+          generation,
           state: prior.state,
           ...(prior.finalStatus === undefined ? {} : { finalStatus: prior.finalStatus }),
         }
@@ -761,6 +1113,7 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
         createdAt: timestamp,
         updatedAt: timestamp,
       }
+      generations.set(reservation.reservationKey, 0)
       reservations.set(reservation.reservationKey, reservation)
       threads.set(thread.threadId, { ...thread, updatedAt: timestamp })
       return {
@@ -769,17 +1122,18 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
         threadId: reservation.threadId,
         turnId: reservation.turnId,
         turnSeq: reservation.seq,
+        generation: 0,
         isNewThread: requestedThreadScope === 'new',
       }
     },
-    persistReservedAnswerTurn: async (args) => {
+    renewAnswerTurnLease: async (args) => {
       const reservation = reservationFor(args.reservationKey)
       if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
       if (
-        reservation.sessionId !== args.sessionId ||
-        reservation.threadId !== args.threadId ||
-        reservation.turnId !== args.turnId ||
-        reservation.seq !== args.turnSeq
+        reservation.sessionId !== args.sessionId
+        || reservation.threadId !== args.threadId
+        || reservation.turnId !== args.turnId
+        || reservation.seq !== args.turnSeq
       ) {
         return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
       }
@@ -787,56 +1141,118 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
         return { kind: 'conflict', reason: 'request_digest_mismatch' }
       }
       if (reservation.state === 'stopped') return { kind: 'conflict', reason: 'stopped' }
-      if (
-        (reservation.state === 'answer_persisted' || reservation.state === 'finalized') &&
-        reservation.answerDigest !== args.answerDigest
-      ) {
-        return { kind: 'conflict', reason: 'answer_digest_conflict' }
-      }
-      if (reservation.state === 'answer_persisted' || reservation.state === 'finalized') {
-        return {
-          kind: 'replayed',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          turnSeq: reservation.seq,
-        }
-      }
-      const thread = threads.get(args.threadId)
-      if (thread === undefined || thread.pseudonymousSessionId !== args.sessionId) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-
-      turns.set(args.turnId, {
-        turnId: args.turnId,
-        threadId: args.threadId,
-        seq: args.turnSeq,
-        query: args.query,
-        intent: args.intent,
-        evidenceJson: args.evidenceJson,
-        snapshotHash: args.snapshotHash,
-        proseJson: args.proseJson,
-        artifactKindsJson: args.artifactKindsJson,
-        status: 'pending',
-        ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
-        ...(args.errorProblemJson === undefined ? {} : { errorProblemJson: args.errorProblemJson }),
-        createdAt: args.createdAt,
-      })
-      const timestamp = Date.now()
-      reservations.set(args.reservationKey, {
-        ...reservation,
-        state: 'answer_persisted',
-        finalStatus: args.finalStatus ?? (args.errorProblemJson === undefined ? 'complete' : 'error'),
-        answerDigest: args.answerDigest,
-        updatedAt: timestamp,
-      })
-      threads.set(args.threadId, { ...thread, updatedAt: timestamp })
+      if (reservation.state === 'finalized') return { kind: 'conflict', reason: 'settled' }
+      const generation = generations.get(args.reservationKey) ?? 0
+      if (generation !== args.generation) return { kind: 'conflict', reason: 'generation_mismatch' }
+      reservations.set(args.reservationKey, { ...reservation, updatedAt: Date.now() })
       return {
-        kind: 'persisted',
+        kind: 'renewed',
         reservationKey: reservation.reservationKey,
         threadId: reservation.threadId,
         turnId: reservation.turnId,
         turnSeq: reservation.seq,
+        generation,
+      }
+    },
+    persistAnswerTurnCheckpoint: async (args) => {
+      const serialized = serializeAnswerTurnCheckpoint(args.checkpoint)
+      if (serialized === null) return { kind: 'conflict', reason: 'checkpoint_invalid' }
+      const reservation = reservationFor(args.reservationKey)
+      if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
+      if (
+        reservation.sessionId !== args.sessionId
+        || reservation.threadId !== args.threadId
+        || reservation.turnId !== args.turnId
+        || reservation.seq !== args.turnSeq
+      ) {
+        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
+      }
+      if (reservation.requestDigest !== args.requestDigest) {
+        return { kind: 'conflict', reason: 'request_digest_mismatch' }
+      }
+      if (reservation.state === 'stopped') return { kind: 'conflict', reason: 'stopped' }
+      if (reservation.state === 'finalized') {
+        return { kind: 'conflict', reason: 'settled' }
+      }
+      const generation = generations.get(args.reservationKey) ?? 0
+      if (generation !== args.generation || args.checkpoint.generation !== generation) {
+        return { kind: 'conflict', reason: 'generation_mismatch' }
+      }
+      const existing = checkpoints.get(args.reservationKey)
+      if (existing !== undefined) {
+        const existingSerialized = serializeAnswerTurnCheckpoint(existing)
+        if (existingSerialized === null) return { kind: 'conflict', reason: 'checkpoint_invalid' }
+        if (existingSerialized.checkpointDigest === serialized.checkpointDigest) {
+          reservations.set(args.reservationKey, { ...reservation, updatedAt: Date.now() })
+          return {
+            kind: 'replayed',
+            reservationKey: args.reservationKey,
+            threadId: args.threadId,
+            turnId: args.turnId,
+            turnSeq: args.turnSeq,
+            generation,
+            checkpointDigest: serialized.checkpointDigest,
+          }
+        }
+        if (
+          args.checkpoint.stepOrdinal !== existing.stepOrdinal + 1
+          || args.checkpoint.parentCheckpointDigest !== existingSerialized.checkpointDigest
+        ) {
+          return { kind: 'conflict', reason: 'checkpoint_conflict' }
+        }
+      } else if (args.checkpoint.stepOrdinal !== 1 || args.checkpoint.parentCheckpointDigest !== undefined) {
+        return { kind: 'conflict', reason: 'checkpoint_conflict' }
+      }
+      reservations.set(args.reservationKey, { ...reservation, updatedAt: Date.now() })
+      checkpoints.set(args.reservationKey, args.checkpoint)
+      return {
+        kind: 'persisted',
+        reservationKey: args.reservationKey,
+        threadId: args.threadId,
+        turnId: args.turnId,
+        turnSeq: args.turnSeq,
+        generation,
+        checkpointDigest: serialized.checkpointDigest,
+      }
+    },
+    readAnswerTurnCheckpoint: async (args) => {
+      const reservation = reservationFor(args.reservationKey)
+      if (reservation === undefined) return { kind: 'missing' }
+      if (
+        reservation.sessionId !== args.sessionId
+        || reservation.threadId !== args.threadId
+        || reservation.turnId !== args.turnId
+        || reservation.seq !== args.turnSeq
+      ) {
+        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
+      }
+      if (reservation.requestDigest !== args.requestDigest) {
+        return { kind: 'conflict', reason: 'request_digest_mismatch' }
+      }
+      if (reservation.state === 'stopped') return { kind: 'conflict', reason: 'stopped' }
+      if (reservation.state === 'finalized') return { kind: 'conflict', reason: 'settled' }
+      const generation = generations.get(args.reservationKey) ?? 0
+      if (generation !== args.generation) return { kind: 'conflict', reason: 'generation_mismatch' }
+      const checkpoint = checkpoints.get(args.reservationKey)
+      if (checkpoint === undefined) return { kind: 'missing' }
+      if (
+        checkpoint.generation !== generation
+        || checkpoint.reservationKey !== args.reservationKey
+        || checkpoint.requestDigest !== args.requestDigest
+        || checkpoint.threadId !== args.threadId
+        || checkpoint.turnId !== args.turnId
+        || checkpoint.turnSeq !== args.turnSeq
+      ) {
+        return { kind: 'conflict', reason: 'checkpoint_invalid' }
+      }
+      const serialized = serializeAnswerTurnCheckpoint(checkpoint)
+      if (serialized === null) return { kind: 'conflict', reason: 'checkpoint_invalid' }
+      return {
+        kind: 'checkpoint',
+        checkpointJson: serialized.checkpointJson,
+        checkpointDigest: serialized.checkpointDigest,
+        generation,
+        checkpointStep: checkpoint.stepOrdinal,
       }
     },
     stopAnswerTurn: async (args) => {
@@ -860,108 +1276,12 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
         return { kind: 'already_settled', threadId: args.threadId, turnId: args.turnId, status: 'stopped' }
       }
       const timestamp = Date.now()
+      const generation = (generations.get(reservation.reservationKey) ?? 0) + 1
+      generations.set(reservation.reservationKey, generation)
       reservations.set(reservation.reservationKey, { ...reservation, state: 'stopped', updatedAt: timestamp })
       const turn = turns.get(args.turnId)
       if (turn !== undefined) turns.set(args.turnId, { ...turn, status: 'stopped' })
       return { kind: 'stopped', threadId: args.threadId, turnId: args.turnId }
-    },
-    failPersistedAnswerTurn: async (args) => {
-      const reservation = reservationFor(args.reservationKey)
-      if (reservation === undefined) return { kind: 'conflict', reason: 'reservation_not_found' }
-      if (
-        reservation.sessionId !== args.sessionId ||
-        reservation.threadId !== args.threadId ||
-        reservation.turnId !== args.turnId ||
-        reservation.seq !== args.turnSeq
-      ) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-      if (reservation.requestDigest !== args.requestDigest) {
-        return { kind: 'conflict', reason: 'request_digest_mismatch' }
-      }
-      if (reservation.state === 'stopped') {
-        return {
-          kind: 'stopped',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          turnSeq: reservation.seq,
-        }
-      }
-      if (reservation.state === 'finalized') {
-        if (reservation.answerDigest !== args.answerDigest) {
-          return { kind: 'conflict', reason: 'answer_digest_conflict' }
-        }
-        return {
-          kind: 'replayed',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          turnSeq: reservation.seq,
-          status: reservation.finalStatus ?? 'error',
-        }
-      }
-      if (reservation.state === 'reserved') return { kind: 'conflict', reason: 'not_persisted' }
-      if (reservation.answerDigest !== args.answerDigest) {
-        return { kind: 'conflict', reason: 'answer_digest_conflict' }
-      }
-      const thread = threads.get(args.threadId)
-      if (thread === undefined || thread.pseudonymousSessionId !== args.sessionId) {
-        return { kind: 'conflict', reason: 'reservation_identity_mismatch' }
-      }
-      const turn = turns.get(args.turnId)
-      if (turn === undefined) return { kind: 'conflict', reason: 'turn_not_found' }
-      if (turn.status === 'stopped') {
-        return {
-          kind: 'stopped',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          turnSeq: reservation.seq,
-        }
-      }
-      if (turn.status === 'complete' || turn.status === 'error') {
-        reservations.set(args.reservationKey, {
-          ...reservation,
-          state: 'finalized',
-          finalStatus: turn.status,
-          answerDigest: args.answerDigest,
-          updatedAt: Date.now(),
-        })
-        return {
-          kind: 'replayed',
-          reservationKey: reservation.reservationKey,
-          threadId: reservation.threadId,
-          turnId: reservation.turnId,
-          turnSeq: reservation.seq,
-          status: turn.status,
-        }
-      }
-      const timestamp = Date.now()
-      turns.set(args.turnId, {
-        ...turn,
-        evidenceJson: '{}',
-        proseJson: '{}',
-        artifactKindsJson: '[]',
-        status: 'error',
-        ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
-        errorProblemJson: args.errorProblemJson,
-      })
-      reservations.set(args.reservationKey, {
-        ...reservation,
-        state: 'finalized',
-        finalStatus: 'error',
-        answerDigest: args.answerDigest,
-        updatedAt: timestamp,
-      })
-      threads.set(args.threadId, { ...thread, updatedAt: timestamp })
-      return {
-        kind: 'failed',
-        reservationKey: reservation.reservationKey,
-        threadId: reservation.threadId,
-        turnId: reservation.turnId,
-        turnSeq: reservation.seq,
-      }
     },
     listSessionThreads: async (pseudonymousSessionId, limit = 20) => ({
       threads: [...threads.values()]
@@ -1050,43 +1370,117 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
       threads.delete(args.threadId)
       for (const turn of turnsForThread(args.threadId)) turns.delete(turn.turnId)
       for (const reservation of reservations.values()) {
-        if (reservation.threadId === args.threadId) reservations.delete(reservation.reservationKey)
+        if (reservation.threadId !== args.threadId) continue
+        reservations.delete(reservation.reservationKey)
+        checkpoints.delete(reservation.reservationKey)
+        generations.delete(reservation.reservationKey)
       }
       return { threadId: args.threadId }
     },
-    finalizeTurnHarnessRun: async (args) => {
+    finalizeReservedAnswerTurn: async (args) => {
       const reservation = reservationFor(args.reservationKey)
       if (reservation === undefined) {
-        return { status: 'conflict', reason: 'reservation_not_found', message: 'Answer turn reservation does not exist.' }
+        return {
+          status: 'conflict',
+          reason: 'reservation_not_found',
+          message: 'Answer turn reservation does not exist.',
+        }
       }
       if (
-        reservation.sessionId !== args.sessionId ||
-        reservation.threadId !== args.threadId ||
-        reservation.turnId !== args.turnId ||
-        reservation.seq !== args.turnSeq
+        reservation.sessionId !== args.sessionId
+        || reservation.threadId !== args.threadId
+        || reservation.turnId !== args.turnId
+        || reservation.seq !== args.turnSeq
       ) {
-        return { status: 'conflict', reason: 'reservation_identity_mismatch', message: 'Answer turn reservation identity mismatch.' }
+        return {
+          status: 'conflict',
+          reason: 'reservation_identity_mismatch',
+          message: 'Answer turn reservation identity mismatch.',
+        }
       }
       if (reservation.requestDigest !== args.requestDigest) {
-        return { status: 'conflict', reason: 'request_digest_mismatch', message: 'Answer turn request digest mismatch.' }
+        return {
+          status: 'conflict',
+          reason: 'request_digest_mismatch',
+          message: 'Answer turn request digest mismatch.',
+        }
+      }
+      if (reservation.state === 'stopped') {
+        return { status: 'conflict', reason: 'stopped', message: 'Answer turn was stopped.' }
+      }
+      const generation = generations.get(args.reservationKey) ?? 0
+      if (generation !== args.expectedGeneration) {
+        return {
+          status: 'conflict',
+          reason: 'generation_mismatch',
+          message: 'Answer turn generation mismatch.',
+        }
       }
       const thread = threads.get(args.threadId)
       if (thread === undefined || thread.pseudonymousSessionId !== args.sessionId) {
-        return { status: 'conflict', reason: 'parent_conflict', message: 'Answer thread parent is not available for finalization.' }
+        return {
+          status: 'conflict',
+          reason: 'parent_conflict',
+          message: 'Answer thread parent is not available for finalization.',
+        }
       }
       if (args.entries.some((entry) =>
         entry.sessionId !== args.sessionId
         || entry.runId !== args.turnId
         || entry.turnId !== args.turnId
       )) {
-        return { status: 'conflict', reason: 'entry_identity_mismatch', message: 'Finalization journal entries must match the answer turn identity.' }
+        return {
+          status: 'conflict',
+          reason: 'entry_identity_mismatch',
+          message: 'Finalization journal entries must match the answer turn identity.',
+        }
       }
-      if (reservation.state === 'stopped') {
-        return { status: 'conflict', reason: 'stopped', message: 'Answer turn was stopped.' }
-      }
+
+      const turn = turns.get(args.turnId)
+      const existingToolCalls = toolCallsByTurn.get(args.turnId) ?? []
+      const incomingToolCalls = [...args.toolCalls]
+      const turnMatches = turn !== undefined
+        && turn.threadId === args.threadId
+        && turn.seq === args.turnSeq
+        && turn.query === args.query
+        && turn.intent === args.intent
+        && turn.evidenceJson === args.evidenceJson
+        && turn.snapshotHash === args.snapshotHash
+        && turn.proseJson === args.proseJson
+        && turn.artifactKindsJson === args.artifactKindsJson
+        && turn.status === args.finalStatus
+        && turn.createdAt === args.createdAt
+        && turn.errorCopyId === args.errorCopyId
+        && turn.errorProblemJson === args.errorProblemJson
+      const sameToolCalls = JSON.stringify(existingToolCalls) === JSON.stringify(incomingToolCalls)
       if (reservation.state === 'finalized') {
+        if (reservation.answerDigest !== args.answerDigest) {
+          return {
+            status: 'conflict',
+            reason: 'answer_digest_conflict',
+            message: 'Answer turn answer digest mismatch.',
+          }
+        }
         if (reservation.harnessFinalizationDigest !== args.finalizationHash) {
-          return { status: 'conflict', reason: 'evidence_conflict', message: 'Answer turn finalization conflict.' }
+          return {
+            status: 'conflict',
+            reason: 'evidence_conflict',
+            message: 'Answer turn finalization conflict.',
+          }
+        }
+        if (!turnMatches) {
+          return {
+            status: 'conflict',
+            reason: 'turn_conflict',
+            message: 'Answer turn replay does not match finalized material.',
+          }
+        }
+        if (!sameToolCalls) {
+          return {
+            status: 'conflict',
+            reason: 'tool_call_conflict',
+            message: 'Answer tool-call replay does not match finalized material.',
+          }
         }
         return {
           status: 'replayed',
@@ -1096,21 +1490,49 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
           entriesReplayed: args.entries.length,
         }
       }
-      const turn = turns.get(args.turnId)
+      if (turn !== undefined && !turnMatches) {
+        return {
+          status: 'conflict',
+          reason: 'turn_conflict',
+          message: 'Answer turn already exists with different finalization material.',
+        }
+      }
+      if (turn !== undefined && !sameToolCalls) {
+        return {
+          status: 'conflict',
+          reason: 'tool_call_conflict',
+          message: 'Answer tool-call rows already exist with different finalization material.',
+        }
+      }
+
+      const timestamp = Date.now()
       if (turn === undefined) {
-        return { status: 'conflict', reason: 'turn_not_found', message: 'Answer turn does not exist.' }
+        turns.set(args.turnId, {
+          turnId: args.turnId,
+          threadId: args.threadId,
+          seq: args.turnSeq,
+          query: args.query,
+          intent: args.intent,
+          evidenceJson: args.evidenceJson,
+          snapshotHash: args.snapshotHash,
+          proseJson: args.proseJson,
+          artifactKindsJson: args.artifactKindsJson,
+          status: args.finalStatus,
+          ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
+          ...(args.errorProblemJson === undefined ? {} : { errorProblemJson: args.errorProblemJson }),
+          createdAt: args.createdAt,
+        })
+        toolCallsByTurn.set(args.turnId, incomingToolCalls)
       }
-      if (turn.snapshotHash !== args.snapshotHash) {
-        return { status: 'conflict', reason: 'snapshot_mismatch', message: 'Answer turn snapshot mismatch.' }
-      }
-      turns.set(args.turnId, { ...turn, evidenceJson: args.evidenceJson, status: args.finalStatus })
       reservations.set(args.reservationKey, {
         ...reservation,
         state: 'finalized',
         finalStatus: args.finalStatus,
+        answerDigest: args.answerDigest,
         harnessFinalizationDigest: args.finalizationHash,
-        updatedAt: Date.now(),
+        updatedAt: timestamp,
       })
+      threads.set(args.threadId, { ...thread, updatedAt: timestamp })
       const activeLeafEntryId = args.entries.at(-1)?.entryId
       return {
         status: 'accepted',
@@ -1134,7 +1556,7 @@ function normalizeSessionThreadLimit(limit: number | undefined): number {
 
 
 function answerHarnessFinalizationOperationKey(args: Pick<
-  FinalizeAnswerTurnHarnessRunArgs,
+  FinalizeReservedAnswerTurnArgs,
   'turnId' | 'finalizationHash'
 >): string {
   return `answer-turn-finalize:${args.turnId}:${args.finalizationHash}`

@@ -277,7 +277,7 @@ export const issue = internalMutation({
       return { kind: 'refused' as const, reason: 'route_generation_invalid' as const }
     }
     const route = current.generation.routes.find(({ routePlanId }) => routePlanId === args.selectedRoutePlanId)
-    const delegatedCredential = await ctx.db.query('customerRequestAgentPrincipals')
+    const delegatedCredential = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_credentialId', (query) => query.eq('credentialId', args.delegatedCredentialId)).unique()
     if (delegatedCredential === null
       || !credentialBelongsToAuthenticatedRequest(delegatedCredential, authenticated)
@@ -460,7 +460,7 @@ export const issueMandate = internalMutation({
       || issueRow.requestId !== args.requestId) {
       return { kind: 'refused' as const, reason: 'policy_integrity_invalid' as const }
     }
-    const delegatedCredential = await ctx.db.query('customerRequestAgentPrincipals')
+    const delegatedCredential = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_credentialId', (query) => query.eq('credentialId', args.delegatedCredentialId)).unique()
     if (delegatedCredential === null
       || !credentialBelongsToAuthenticatedRequest(delegatedCredential, authenticated)

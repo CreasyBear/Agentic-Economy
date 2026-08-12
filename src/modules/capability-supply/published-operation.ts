@@ -8,8 +8,10 @@ import type {
   ActionConsequenceClass,
   ActionRetryClass,
 } from '@/modules/common/action'
+import { compareExactAmounts, pricingConfigDigest, pricingConfigSchema, type PricingConfig } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { isRecord } from '@/modules/common/is-record'
 
 import {
   admitRegisteredTransport,
@@ -37,6 +39,7 @@ export type PublishedOperationUsageObservation = Readonly<{
 export type PublishedOperation = Readonly<{
   kind: 'published_operation'
   environment: 'SOURCE-OWNED DEVELOPMENT EVIDENCE'
+  runtimeEnvironment: 'sandbox' | 'production'
   operationId: string
   materialDigest: string
   identity: Readonly<{
@@ -64,12 +67,16 @@ export type PublishedOperation = Readonly<{
       assetAmountExponent: number
     }>
     paymentRecipient: string
+    pricingConfig: PricingConfig
+    priceDigest: string
     price: CapabilityOfferingRegistration['presentation']['price']
     materialTerms: CapabilityOfferingRegistration['presentation']['materialTerms']
     evidenceDigest: string
     connectionAuthority?: CapabilityConnectionAuthoritySnapshot
   }>
   contract: CapabilityContract
+  pricingConfig: PricingConfig
+  priceDigest: string
   offering: CapabilityOfferingRegistration
   binding: CapabilityTransportBindingRegistration
   connectionAuthority?: CapabilityConnectionAuthoritySnapshot
@@ -104,12 +111,53 @@ export type RuntimePublishedOperationDescriptor = Readonly<{
   validateOutput(value: unknown): boolean
 }>
 
+function isPublishedOperationSnapshot(value: unknown): value is PublishedOperation {
+  return isRecord(value)
+    && value.kind === 'published_operation'
+    && value.environment === 'SOURCE-OWNED DEVELOPMENT EVIDENCE'
+    && (value.runtimeEnvironment === 'sandbox' || value.runtimeEnvironment === 'production')
+    && typeof value.operationId === 'string'
+    && typeof value.materialDigest === 'string'
+    && isRecord(value.identity)
+    && value.identity.runtimeEnvironment === value.runtimeEnvironment
+    && isRecord(value.contract)
+    && isRecord(value.offering)
+    && isRecord(value.binding)
+    && isRecord(value.transport)
+    && isRecord(value.readiness)
+}
+
+export function parsePublishedOperationSnapshot(operationJson: string): PublishedOperation | undefined {
+  try {
+    const parsed: unknown = JSON.parse(operationJson)
+    if (!isPublishedOperationSnapshot(parsed)) return undefined
+    materializeRuntimePublishedOperation(parsed)
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+export function publishedOperationMaterialMatches(
+  reserved: PublishedOperation | undefined,
+  current: PublishedOperation | undefined,
+): boolean {
+  return reserved !== undefined
+    && current !== undefined
+    && reserved.operationId === current.operationId
+    && reserved.runtimeEnvironment === current.runtimeEnvironment
+    && reserved.materialDigest === current.materialDigest
+}
+
 export function materializePublishedOperation(input: Readonly<{
   publication: Readonly<{
     publicationRef: string
     revision: number
     businessId: string
+    runtimeEnvironment: 'sandbox' | 'production'
     sourceDigest: string
+    pricingConfig: PricingConfig
+    priceDigest: string
     readinessObservedAt?: number
     readinessValidUntil?: number
     readinessEvidenceRefs: readonly string[]
@@ -123,6 +171,9 @@ export function materializePublishedOperation(input: Readonly<{
   usageObservation?: PublishedOperationUsageObservation
 }>): PublishedOperation {
   const { publication, contract, offering, binding, connectionAuthority, qualification, admittedTransport } = input
+  if (publication.runtimeEnvironment !== 'sandbox' && publication.runtimeEnvironment !== 'production') {
+    throw new Error('published_operation_runtime_environment_invalid')
+  }
   const admittedConfig = parseAdmittedConfig(admittedTransport)
   const authoritativeAdmission = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
@@ -134,12 +185,20 @@ export function materializePublishedOperation(input: Readonly<{
   })
   const offeringDigest = capabilityOfferingRegistrationHash(offering)
   const bindingDigest = capabilityBindingRegistrationHash(binding, admittedTransport)
+  const operationId = capabilityOperationId(contract.ref.capabilityId)
   const expectedOperationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(contract.ref.capabilityId),
+    operationId,
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
     contractRef: contract.ref,
   })
+  const parsedPricingConfig = pricingConfigSchema.safeParse(publication.pricingConfig)
+  if (!parsedPricingConfig.success
+    || pricingConfigDigest(parsedPricingConfig.data) !== publication.priceDigest
+    || offering.presentation.price.kind !== 'fixed'
+    || compareExactAmounts(offering.presentation.price.amount, parsedPricingConfig.data.paidAmount) !== 0) {
+    throw new Error('published_operation_pricing_invalid')
+  }
   if (!connectionAuthorityIsExact({
     authority: binding.authority,
     adapterId: binding.adapter.adapterId,
@@ -188,6 +247,7 @@ export function materializePublishedOperation(input: Readonly<{
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
     publicationDigest: publication.sourceDigest,
+    runtimeEnvironment: publication.runtimeEnvironment,
     contractId: contract.ref.capabilityId,
     contractVersion: contract.ref.version,
     contractDigest: contract.ref.contractDigest,
@@ -200,6 +260,8 @@ export function materializePublishedOperation(input: Readonly<{
     endpoint: transport,
     payment: paymentIdentity(binding.adapter.adapterId, admittedConfig),
     paymentRecipient: paymentRecipient(binding.adapter.adapterId, admittedConfig),
+    pricingConfig: parsedPricingConfig.data,
+    priceDigest: publication.priceDigest,
     price: offering.presentation.price,
     materialTerms: offering.presentation.materialTerms,
     evidenceDigest,
@@ -209,10 +271,13 @@ export function materializePublishedOperation(input: Readonly<{
   return {
     kind: 'published_operation',
     environment: 'SOURCE-OWNED DEVELOPMENT EVIDENCE',
-    operationId: `published:${publication.businessId}:${contract.ref.capabilityId}:v${contract.ref.version}:${materialDigest.slice(-16)}`,
+    runtimeEnvironment: publication.runtimeEnvironment,
+    operationId,
     materialDigest,
     identity,
     contract,
+    pricingConfig: parsedPricingConfig.data,
+    priceDigest: publication.priceDigest,
     offering,
     binding,
     ...(connectionAuthority === undefined ? {} : { connectionAuthority }),

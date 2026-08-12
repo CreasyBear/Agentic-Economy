@@ -19,6 +19,8 @@ import type {
 } from '@/modules/action-invocation/internal/durable-contracts'
 import {
   createSourceWriteAdmission,
+  sourceWriteBodyDigest,
+  sourceWriteCommandDigest,
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 import type { ConvexSourceTransport } from '@/lib/server/convex-source'
@@ -26,9 +28,11 @@ import type { ConvexSourceTransport } from '@/lib/server/convex-source'
 const env = { AE_SOURCE_WRITE_SECRET: 'test-source-write-secret-that-is-long-enough' }
 const request: SourceWriteAdmissionRequest = {
   method: 'POST',
-  origin: 'https://app.example.test',
-  pathname: '/internal/action-invocation',
-  bodyDigest: 'sha256:' + '1'.repeat(64),
+  initiatorOrigin: 'https://app.example.test',
+  targetOrigin: 'https://app.example.test',
+  targetPath: '/internal/action-invocation',
+  targetQuery: '',
+  bodyDigest: sourceWriteBodyDigest('durable-port-request'),
 }
 const owner = { callerRef: 'caller:one', principalRef: 'principal:one' }
 
@@ -183,8 +187,10 @@ describe('Convex action invocation durable adapter', () => {
     expect(state.sourceWrites[0]).toMatchObject({
       scope: 'protected_action',
       method: request.method,
-      origin: request.origin,
-      pathname: request.pathname,
+      initiatorOrigin: request.initiatorOrigin,
+      targetOrigin: request.targetOrigin,
+      targetPath: request.targetPath,
+      targetQuery: request.targetQuery,
       bodyDigest: request.bodyDigest,
     })
     expect(state.sourceWrites[0]?.signature).toEqual(expect.any(String))
@@ -197,8 +203,10 @@ describe('Convex action invocation durable adapter', () => {
       expect(asRecord(input.sourceWrite, 'read_source_write')).toMatchObject({
         scope: 'protected_action',
         method: request.method,
-        origin: request.origin,
-        pathname: request.pathname,
+        initiatorOrigin: request.initiatorOrigin,
+        targetOrigin: request.targetOrigin,
+        targetPath: request.targetPath,
+        targetQuery: request.targetQuery,
         bodyDigest: request.bodyDigest,
       })
     }
@@ -237,16 +245,22 @@ describe('Convex action invocation source authority', () => {
 
   it('refuses source authority from the wrong scope before durable state access', async () => {
     const db = { query: vi.fn(), insert: vi.fn() }
-    const wrongScope = createSourceWriteAdmission({
+    const command = {
+      operationKey: 'action-invocation:transact:command:one',
+      correlationId: 'action-invocation:invocation:one',
+    }
+    const wrongScope = await createSourceWriteAdmission({
       env,
       request,
       scope: 'billing',
-      operationKey: 'action-invocation:transact:command:one',
-      correlationId: 'action-invocation:invocation:one',
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
     })
     await expect(handler({ db }, {
-      operationKey: 'action-invocation:transact:command:one',
-      correlationId: 'action-invocation:invocation:one',
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      sourceWriteRequest: request,
       sourceWrite: wrongScope,
     })).rejects.toThrow('action_invocation_source_write_rejected:source_write_scope_mismatch')
     expect(db.query).not.toHaveBeenCalled()

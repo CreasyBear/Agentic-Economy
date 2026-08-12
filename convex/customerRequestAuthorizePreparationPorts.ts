@@ -13,7 +13,7 @@ export function authorizePreparationPorts(ctx: ActionCtx): AuthorizePreparationP
   return {
     loadCurrent: compare.loadCurrent,
     getAgentPrincipal: async (principalId) => await ctx.runQuery(
-      internal.customerRequestPrincipals.getAgentPrincipal, { principalId },
+      internal.agentAccessPrincipals.getAgentPrincipal, { principalId },
     ),
     prepare: (input) => ctx.runMutation(internal.customerRequestV2Preparation.prepare, input),
     runEgress: egress.runEgress,

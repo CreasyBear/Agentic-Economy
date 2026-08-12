@@ -4,8 +4,7 @@ import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
 import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
-import { buildDetailUrl, toAnswerSource } from '@/modules/answer/public'
-import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
+import { toAnswerSource, type AnswerSource } from '@/modules/answer/public'
 import {
   actionToHarnessTool,
   runHarnessTool,
@@ -14,8 +13,6 @@ import {
   type RunHarnessToolOutcome,
 } from '@/modules/harness/public'
 import type {
-  OperationSearchWireResult,
-  OperationSurfaceWireDescriptor,
   PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
@@ -247,17 +244,6 @@ function extractProviders(
     }
   }
 
-  if (toolId === 'registry.operations.search') {
-    const search = result as OperationSearchWireResult
-    if (search.kind !== 'ok') {
-      return { providers: [], count: 0 }
-    }
-    return {
-      providers: search.items.map((dto, index) => operationDescriptorToAnswerSource(dto, index + 1)),
-      count: search.items.length,
-    }
-  }
-
   const detail = result as PublicBusinessCatalogV2DetailResult
   if (detail.kind === 'found') {
     return {
@@ -267,48 +253,6 @@ function extractProviders(
   }
 
   return { providers: [], count: 0 }
-}
-
-/**
- * Maps a surfaced executable-operation descriptor into an `AnswerSource` card so
- * capabilities discovered through `registry.operations.search` carry the same
- * slug/name/summary shape as catalog listings, keeping the answer gate's slug
- * grounding and the sanitizer working. Location and hours fields are empty
- * because operations are not local listings; availability and trust labels are
- * derived from the descriptor's own published posture/provenance.
- */
-function operationDescriptorToAnswerSource(
-  descriptor: OperationSurfaceWireDescriptor,
-  citationIndex: number,
-): AnswerSource {
-  const capabilityId = descriptor.contract.capabilityId
-  return {
-    citationIndex,
-    slug: descriptor.business.slug,
-    name: descriptor.business.name,
-    category: capabilityId,
-    suburb: '',
-    stateTerritory: '',
-    serviceArea: '',
-    hoursLabel: 'Check availability',
-    availabilityLabel: descriptor.availability.posture === 'integrated'
-      ? 'Ready to run'
-      : descriptor.availability.posture === 'routeable'
-        ? 'Can be routed'
-        : 'Unavailable',
-    trustLabel: descriptor.provenance.publisher === 'ae_curated_external' ? 'Curated by AE' : 'Published by provider',
-    responseTimeLabel: '',
-    trustCue: '',
-    nextStepLabel: 'View operation details',
-    detailUrl: buildDetailUrl(descriptor.business.slug),
-    services: [
-      {
-        name: descriptor.offering.label,
-        category: capabilityId,
-        summary: descriptor.offering.summary.length > 0 ? descriptor.offering.summary : descriptor.summary,
-      },
-    ],
-  }
 }
 
 function webDiscoveryFailure(

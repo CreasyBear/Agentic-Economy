@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { buildAnswerTurnProblem } from '@/lib/errors'
 
-import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { answerTurnSourceErrorResponse } from '@/lib/server/answer-source-error'
@@ -36,15 +36,21 @@ export async function handleStopAnswerTurnRequest(request: Request): Promise<Res
     return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
   }
 
-  const boundedBody = await readBoundedRequestJson(request, MAX_STOP_ANSWER_TURN_BODY_BYTES)
+  const boundedBody = await readBoundedRequestText(request, MAX_STOP_ANSWER_TURN_BODY_BYTES)
   if (!boundedBody.ok) {
     return problem({
-      status: boundedBody.code === 'payload_too_large' ? 413 : 400,
-      kind: boundedBody.code === 'payload_too_large' ? 'PAYLOAD_TOO_LARGE' : 'INVALID_ARGUMENT',
+      status: 413,
+      kind: 'PAYLOAD_TOO_LARGE',
       code: boundedBody.code,
     })
   }
-  const parsed = stopAnswerTurnRequestSchema.safeParse(boundedBody.value)
+  let rawBody: unknown
+  try {
+    rawBody = JSON.parse(boundedBody.text) as unknown
+  } catch {
+    return problem({ kind: 'INVALID_ARGUMENT', code: 'invalid_body' })
+  }
+  const parsed = stopAnswerTurnRequestSchema.safeParse(rawBody)
   if (!parsed.success) {
     return problem({ kind: 'INVALID_ARGUMENT', code: 'invalid_body' })
   }
@@ -62,6 +68,7 @@ export async function handleStopAnswerTurnRequest(request: Request): Promise<Res
       threadId: parsed.data.threadId,
       turnId: parsed.data.turnId,
       sourceWriteRequest: request,
+      sourceWriteBody: boundedBody.text,
     })
     return result.kind === 'not_found'
       ? problem({ kind: 'NOT_FOUND', code: 'thread_not_found' })

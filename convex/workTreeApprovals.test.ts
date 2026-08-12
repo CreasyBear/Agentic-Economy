@@ -11,7 +11,7 @@ import schema from './schema'
 const modules = import.meta.glob('./**/*.ts')
 const workTreesApi = anyApi.workTrees
 const approvalsApi = anyApi.workTreeApprovals
-const principalsApi = anyApi.customerRequestPrincipals
+const principalsApi = anyApi.agentAccessPrincipals
 if (workTreesApi === undefined || approvalsApi === undefined || principalsApi === undefined) throw new Error('work_tree_approval_api_missing')
 function requireApiBinding<T>(binding: T | undefined, errorMessage: string): T {
   if (binding === undefined) throw new Error(errorMessage)
@@ -69,11 +69,17 @@ async function seed(backend: Pick<TestConvex<typeof schema>, 'run'>, nodes = [ta
       createdAt: 1,
       updatedAt: 1,
     })
-    await ctx.db.insert('customerRequestAgentPrincipals', {
+    await ctx.db.insert('agentAccessPrincipals', {
       principalId: 'agent:approval',
       ownerId: 'owner:approval',
       ownerTokenIdentifier: 'https://identity.example|owner:approval',
       credentialId: 'credential:approval',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'approve_each',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:work-tree-approval',
+      lifecycle: 'active',
       scopes: ['work_trees:decide'],
       recordedAt: 1,
       lastSeenAt: 1,
@@ -175,6 +181,12 @@ describe('T49 WorkTree approval artifact Convex seam', () => {
     await expect(backend.mutation(registerAgentPrincipal, {
       principalId: 'clerk_api_key:key:fresh',
       credentialId: 'key:fresh',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:work-tree-approval',
+      lifecycle: 'active',
       scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
       seenAt: Date.now(),
     })).resolves.toEqual({ kind: 'recorded' })

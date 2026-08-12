@@ -7,6 +7,8 @@ import { convexModules as modules } from '../helpers/convex-fixtures'
 import type { BusinessSupplyProjection } from '../../src/modules/catalog/public'
 import { readBusinessSupplyProjectionSnapshot } from '../../convex/businessSupplyProjectionSnapshot'
 import { DEV_SEED_BUSINESS_COUNT, DEV_SEED_BUSINESS_FIXTURES } from '../../src/modules/dev/public'
+import { eligibleSupplyPorts } from '../../convex/capabilitySupplyEligiblePorts'
+import { listRouteableCapabilitySupply } from '../../src/modules/capability-supply/public'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -168,6 +170,60 @@ describe('dev-seeded public catalog decision facts', () => {
 
     const row = (await readEveryCatalogRow(backend)).find((item) => item.slug === slug)
     expect(row?.availabilitySummary).toBe('Tue–Thu 10am–2pm')
+  }, 300_000)
+  it('does not reseed retired sandbox quote supply or expose its routeable binding', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await runOfferingCutover(backend)
+
+    const retired = await backend.run(async (ctx) => {
+      const [businesses, bindings, publications] = await Promise.all([
+        ctx.db.query('businesses').collect(),
+        ctx.db.query('capabilityTransportBindings').collect(),
+        ctx.db.query('capabilityPublications').collect(),
+      ])
+      return {
+        sandboxBusinesses: businesses
+          .filter(({ slug }) => slug.startsWith('sandbox-') || slug === 'adelaide-dental-clinic')
+          .map(({ slug }) => slug)
+          .sort(),
+        sandboxBindings: bindings
+          .filter(({ capabilityId, endpointUrl }) => (
+            capabilityId === 'sandbox.checkup_quote' || endpointUrl.includes('/api/sandbox/')
+          ))
+          .map(({ bindingId }) => bindingId)
+          .sort(),
+        sandboxPublications: publications
+          .filter(({ capabilityId, sourceDescriptorJson }) => (
+            capabilityId === 'sandbox.checkup_quote' || sourceDescriptorJson?.includes('/api/sandbox/') === true
+          ))
+          .sort(),
+      }
+    })
+    expect(retired).toEqual({
+      sandboxBusinesses: [],
+      sandboxBindings: [],
+      sandboxPublications: [],
+    })
+
+    const routeable = await backend.run(async (ctx) => (
+      listRouteableCapabilitySupply(eligibleSupplyPorts(ctx.db), {
+        networkId: 'ae:public',
+        limit: 64,
+        now: Date.now(),
+      })
+    ))
+    expect(routeable.kind).toBe('available')
+    if (routeable.kind === 'available') {
+      expect(routeable.supplies.some(({ offering, binding }) => (
+        offering.capabilityId === 'sandbox.checkup_quote'
+        || binding.capabilityId === 'sandbox.checkup_quote'
+        || binding.endpointUrl.includes('/api/sandbox/')
+      ))).toBe(false)
+    }
+
+    expect(await backend.mutation(internal.devSeed.retireHistoricalSandboxSupply, {}))
+      .toEqual({ retired: [] })
   }, 300_000)
 })
 

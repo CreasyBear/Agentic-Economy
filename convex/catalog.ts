@@ -44,6 +44,7 @@ import {
   type BusinessOfferingStatus,
   validateServiceCatalogInput,
 } from '../src/modules/catalog/public'
+import { businessContext as businessContextArg } from '../src/modules/business/public'
 import type {
   BusinessOfferingRevisionRecord,
   OfferingAccessPathRecord,
@@ -160,10 +161,7 @@ const publicCatalogV2Result = v.object({
   slug: v.string(),
   name: v.string(),
   category: v.string(),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  publishedPhone: v.optional(v.string()),
-  postcode: v.optional(v.string()),
+  businessContext: businessContextArg,
   publicUrl: v.string(),
   trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
   responseTimeMinutes: v.optional(v.number()),
@@ -301,7 +299,7 @@ const catalogOwnerSupplyResult = v.union(
       name: v.string(),
       slug: v.string(),
       publicStatus: v.union(v.literal('unpublished'), v.literal('published'), v.literal('suppressed')),
-      publishedPhone: v.optional(v.string()),
+      businessContext: businessContextArg,
     }),
     offerings: v.array(v.object({
       offeringRef: v.string(),
@@ -380,9 +378,7 @@ const catalogOkResult = v.object({
     name: v.string(),
     normalizedName: v.string(),
     category: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    publishedPhone: v.optional(v.string()),
+    businessContext: businessContextArg,
     publicStatus: v.literal('published'),
     trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
     claimStatus: v.literal('published'),
@@ -518,7 +514,7 @@ export async function publishBusinessCatalogCommand(
     }
     const replayCatalog = await (async () => {
       try {
-        return await publicCatalogForBusiness(db, businessId)
+        return await publicCatalogForBusiness(db, businessId, now)
       } catch {
         return undefined
       }
@@ -616,7 +612,7 @@ export async function publishBusinessCatalogCommand(
   if (rebuilt.kind === 'error') {
     return catalogError('catalog_publish_invalid_services', `offering_projection_${rebuilt.code}`)
   }
-  const catalog = await publicCatalogForBusiness(db, businessId)
+  const catalog = await publicCatalogForBusiness(db, businessId, now)
   if (catalog === undefined) {
     return catalogError('catalog_publish_invalid_services', 'no_published_offerings')
   }
@@ -729,6 +725,28 @@ export async function upsertOfferingAccessPathCommand(
     now,
   }), now)
 }
+export async function withdrawOfferingAccessPathCommand(
+  db: GenericDatabaseWriter<DataModel>,
+  command: Readonly<{
+    actorRef: string
+    businessId: Id<'businesses'>
+    accessPathRef: string
+    expectedRevision: number
+    operationKey: string
+  }>,
+  now: number,
+) {
+  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'withdrawAccessPath' }, (state, authority) => (
+    withdrawAccessPathInState(state, {
+      authority,
+      operationKey: command.operationKey,
+      accessPathRef: brandNonEmpty(command.accessPathRef, 'AccessPathRef'),
+      expectedRevision: command.expectedRevision,
+      now,
+    })
+  ), now)
+}
+
 
 async function runOfferingSourceCore(
   db: GenericDatabaseWriter<DataModel>,
@@ -863,6 +881,7 @@ async function runOfferingSourceMutation(
   mutate: (state: OfferingSourceState, authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string }, now: number) => OfferingSourceResult<unknown>,
 ): Promise<{ kind: 'ok'; code: string; resultRef?: string; currentRevision?: number } | { kind: 'error'; code: string; reason: string }> {
   const admitted = await requireSourceWrite(ctx, args, 'catalog_publish')
+  if (admitted.kind === 'rejected') return { kind: 'error', code: 'operation_conflict', reason: admitted.reason }
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error', code: 'unauthenticated', reason: 'Authentication is required.' }
   const now = Date.now()
@@ -1151,6 +1170,9 @@ async function loadOfferingSourceState(
           operationKey: requiredCatalogString(operationRow, 'key'),
           requestHash: brandNonEmpty(requiredCatalogString(operationRow, 'requestHash'), 'SourceHash'),
           resultRef: operationRefs[0],
+          ...(operationRow.resultHash === undefined
+            ? {}
+            : { resultHash: brandNonEmpty(requiredCatalogString(operationRow, 'resultHash'), 'SourceHash') }),
         }],
   }
 }
@@ -1237,6 +1259,7 @@ export async function persistOfferingSourceState(
     requestHash: operation.requestHash,
     status: 'succeeded',
     effectRefs: [operation.resultRef],
+    ...(operation.resultHash === undefined ? {} : { resultHash: operation.resultHash }),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   })))
@@ -1249,6 +1272,7 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
   },
   returns: publicCatalogReadbackResult,
   handler: async (ctx, args) => {
+    const now = Date.now()
     const business = await ctx.db
       .query('businesses')
       .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug) || 'service'))
@@ -1257,7 +1281,7 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
       return catalogReadNotFound('no_such_business')
     }
 
-    const catalog = await publicCatalogForBusiness(ctx.db, business._id)
+    const catalog = await publicCatalogForBusiness(ctx.db, business._id, now)
     return catalog === undefined ? catalogReadNotFound() : { kind: 'available' as const, catalog }
   },
 })
@@ -1266,6 +1290,7 @@ export const getCurrentOwnerPublicCatalog = queryGeneric({
   args: {},
   returns: publicCatalogReadbackResult,
   handler: async (ctx) => {
+    const now = Date.now()
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner') {
       return catalogReadNotFound()
@@ -1288,7 +1313,7 @@ export const getCurrentOwnerPublicCatalog = queryGeneric({
     if (latestClaim === undefined || latestClaim.businessId === undefined) {
       return catalogReadNotFound()
     }
-    const catalog = await publicCatalogForBusiness(ctx.db, latestClaim.businessId)
+    const catalog = await publicCatalogForBusiness(ctx.db, latestClaim.businessId, now)
     return catalog === undefined ? catalogReadNotFound() : { kind: 'available' as const, catalog }
   },
 })
@@ -1355,7 +1380,7 @@ export const getCurrentOwnerOfferingSupply = queryGeneric({
         name: business.name,
         slug: business.slug,
         publicStatus: business.publicStatus,
-        ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
+        businessContext: business.businessContext,
       },
       offerings,
       projection,
@@ -1720,6 +1745,7 @@ async function persistPublishedOfferings(
 async function publicCatalogForBusiness(
   db: GenericDatabaseReader<DataModel>,
   businessId: Id<'businesses'>,
+  now: number,
 ) {
   const business = await db.get(businessId)
   if (business === null || business.publicStatus !== 'published') return undefined
@@ -1745,7 +1771,7 @@ async function publicCatalogForBusiness(
           ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
         },
       )
-      const projected = projectBusinessSupplyToPublicApi(projection)
+      const projected = projectBusinessSupplyToPublicApi(projection, now)
       return snapshot.status === 'projection_pending'
         ? { ...projected, disposition: 'stale' as const }
         : projected
@@ -2043,9 +2069,7 @@ function publishedBusinessContract(businessId: Id<'businesses'>, business: Doc<'
     name: business.name,
     normalizedName: business.normalizedName,
     category: business.category,
-    suburb: business.suburb,
-    stateTerritory: business.stateTerritory,
-    ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
+    businessContext: business.businessContext,
     publicStatus: 'published' as const,
     trustTier: business.trustTier,
     claimStatus: 'published' as const,

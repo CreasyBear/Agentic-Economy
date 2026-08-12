@@ -1,8 +1,9 @@
 import type { InvocationActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-invocation'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { pricingConfigDigest } from '@/modules/money/public'
 import type { CapabilityBindingRow } from './internal/binding'
-import type { CapabilityGraphPorts, GraphPublicationRow } from './internal/graph'
+import type { CapabilityGraphPorts, GraphCatalogAccessPath, GraphPublicationRow } from './internal/graph'
 import type { CapabilityOfferingRow } from './internal/offering'
 import {
   capabilityBindingEligibilityHash,
@@ -56,13 +57,53 @@ const contract = defineCapabilityContract({
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
 })
 
+const catalogOrigin = {
+  kind: 'catalog_offering' as const,
+  offeringRef: 'mock:catalog-offering:quote',
+  offeringRevision: 1,
+  offeringSourceHash: canonicalDigest({
+    fixture: 'mock-catalog-offering',
+    offeringRef: 'mock:catalog-offering:quote',
+    revision: 1,
+  }),
+  declaredAccessPathRef: 'mock:catalog-access-path:quote',
+  accessPathSourceHash: canonicalDigest({
+    fixture: 'mock-catalog-access-path',
+    accessPathRef: 'mock:catalog-access-path:quote',
+  }),
+}
+const pricingConfig = {
+  version: 'pricing:v2' as const,
+  unit: 'call' as const,
+  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+}
+const priceDigest = pricingConfigDigest(pricingConfig)
+
 export const developmentEvidenceCandidate = {
   publicationRef: 'mock:publication:quote',
   revision: 1,
+  networkId: 'mock:network',
   businessId: 'mock:business:quote',
   offeringId: 'mock:offering:quote',
   bindingId: 'mock:binding:quote',
   contractRef: contract.ref,
+}
+const catalogAccessPath: GraphCatalogAccessPath = {
+  accessPathRef: catalogOrigin.declaredAccessPathRef,
+  businessId: developmentEvidenceCandidate.businessId,
+  offeringRef: catalogOrigin.offeringRef,
+  offeringRevision: catalogOrigin.offeringRevision,
+  offeringSourceHash: catalogOrigin.offeringSourceHash,
+  status: 'published',
+  sourceHash: catalogOrigin.accessPathSourceHash,
+  descriptor: {
+    kind: 'external_operation',
+    name: 'Development quote',
+    summary: 'Fixture-only quote collection endpoint.',
+    url: 'https://development.invalid/quote',
+    method: 'POST',
+    provenance: 'business_declared',
+  },
 }
 const operationRef = createPublicOperationRef({
   operationId: capabilityOperationId(contract.capabilityId),
@@ -76,9 +117,10 @@ const offeringRegistration = defineCapabilityOfferingRegistration({
   businessId: developmentEvidenceCandidate.businessId,
   networkId: 'mock:network',
   contractRef: contract.ref,
+  origin: catalogOrigin,
   presentation: {
     label: 'Mock development provider', summary: 'MOCK/DEVELOPMENT ONLY',
-    price: { kind: 'on_request' }, materialTerms: [],
+    price: { kind: 'fixed', amount: pricingConfig.paidAmount }, materialTerms: [],
     commercialRelationship: {
       kind: 'none', summary: 'Fixture only.', influencesEligibility: false,
       influencesInclusion: false, influencesOrder: false, evidenceRefs: ['mock:commercial'],
@@ -101,7 +143,11 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
 })
 
 export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
-  const transport = { configJson: 'null', configDigest: canonicalDigest(null) }
+  const transportConfig = { method: 'POST' as const, requestTimeoutMs: 5_000 }
+  const transport = {
+    configJson: JSON.stringify(transportConfig),
+    configDigest: canonicalDigest(transportConfig),
+  }
   const offeringHash = capabilityOfferingRegistrationHash(offeringRegistration)
   const bindingHash = capabilityBindingRegistrationHash(bindingRegistration, transport)
   const offering: CapabilityOfferingRow = {
@@ -136,6 +182,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
   const publication: GraphPublicationRow = {
     id: 'mock:publication-row', ...developmentEvidenceCandidate, operationRef, ...contract.ref,
     sourceKind: 'openapi_http', sourceDigest: canonicalDigest({ fixture: true }),
+    pricingConfig, priceDigest,
     disposition: 'current', credentialState: 'ready', healthState: 'healthy',
     readinessObservedAt: developmentEvidenceNowMs - 1_000,
     readinessValidUntil: developmentEvidenceNowMs + 60_000,
@@ -153,6 +200,17 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
       suppressed: false, currentlyPublished: true,
     }),
     loadProviderConnection: async () => undefined,
+    catalogOriginIsCurrent: async (origin, businessId) => (
+      businessId === developmentEvidenceCandidate.businessId
+      && origin.offeringRef === catalogOrigin.offeringRef
+      && origin.offeringRevision === catalogOrigin.offeringRevision
+      && origin.offeringSourceHash === catalogOrigin.offeringSourceHash
+      && origin.declaredAccessPathRef === catalogOrigin.declaredAccessPathRef
+      && origin.accessPathSourceHash === catalogOrigin.accessPathSourceHash
+    ),
+    loadCatalogAccessPath: async (accessPathRef) => (
+      accessPathRef === catalogAccessPath.accessPathRef ? catalogAccessPath : null
+    ),
     getActiveExactCapabilityContract: async () => ({
       kind: 'found', ref: contract.ref, documentJson: JSON.stringify(contract),
       registeredAt: developmentEvidenceNowMs - 10_000,

@@ -11,8 +11,8 @@ import type {
   CapabilityOfferingRegistration,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
-import type { ExactAmount } from '@/modules/money/public'
+import { compareExactAmounts, exactAmountSchema, pricingConfigDigest, pricingConfigSchema } from '@/modules/money/public'
+import type { ExactAmount, PricingConfig } from '@/modules/money/public'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import { readJsonPointer } from '@/modules/common/json-pointer'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -54,6 +54,8 @@ export type PreparedActionOptionCandidate = Readonly<{
     releaseEvidenceRef?: string
   }>
   model: CapabilityDecisionModel
+  pricingConfig: PricingConfig
+  priceDigest: string
   business: Readonly<{ businessId: string; name: string }>
   offering: Readonly<{
     offeringId: string
@@ -129,6 +131,8 @@ export type PreparedActionV2 = Readonly<{
     output: JsonValue
     evidence: readonly PreparedActionEvidence[]
   }>
+  pricingConfig: PricingConfig
+  priceDigest: string
   price: PreparedActionPrice
   materialTerms: OfferingPresentation['materialTerms']
   commercialRelationship: OfferingPresentation['commercialRelationship']
@@ -162,6 +166,8 @@ export type PreparedActionV2 = Readonly<{
     bindingId: string
     bindingRegistrationHash: string
     bindingRegistrationEvidenceRefs: readonly string[]
+    pricingConfig: PricingConfig
+    priceDigest: string
     price: PreparedActionPrice
     materialTerms: OfferingPresentation['materialTerms']
     commercialRelationship: OfferingPresentation['commercialRelationship']
@@ -315,7 +321,11 @@ function compileSingleOption(
   if (validated.kind !== 'valid') return { kind: 'not_prepared', reason: 'provider_response_invalid' }
   const evidence = projectEvidence(candidate.model, validated.value)
   if (evidence === undefined) return { kind: 'not_prepared', reason: 'provider_evidence_invalid' }
-  const price = registeredPrice(candidate.offering)
+  const pricingConfigResult = pricingConfigSchema.safeParse(candidate.pricingConfig)
+  if (!pricingConfigResult.success || pricingConfigDigest(pricingConfigResult.data) !== candidate.priceDigest) {
+    return { kind: 'not_prepared', reason: 'commercial_terms_unavailable' }
+  }
+  const price = registeredPrice(candidate.offering, pricingConfigResult.data)
   if (price === undefined) return { kind: 'not_prepared', reason: 'commercial_terms_unavailable' }
 
   const preparedActionRef = `prepared-action:v2:${canonicalDigest({
@@ -351,6 +361,8 @@ function compileSingleOption(
       output: validated.value,
       evidence,
     },
+    pricingConfig: pricingConfigResult.data,
+    priceDigest: candidate.priceDigest,
     price,
     materialTerms: candidate.offering.presentation.materialTerms.map((term) => ({ ...term })),
     commercialRelationship: {
@@ -431,6 +443,9 @@ function compileLowestMaximumPrice(input: Readonly<{
     responseDigest: option.providerAssertion.responseDigest,
     outputDigest: option.providerAssertion.outputDigest,
     evidence: option.providerAssertion.evidence.map((evidence) => ({ ...evidence })),
+    pricingConfig: option.pricingConfig,
+    priceDigest: option.priceDigest,
+    price: option.price,
     business: { ...option.business },
     offeringId: option.offering.offeringId,
     offeringRegistrationHash: option.offering.registrationHash,
@@ -438,7 +453,6 @@ function compileLowestMaximumPrice(input: Readonly<{
     bindingId: option.binding.bindingId,
     bindingRegistrationHash: option.binding.registrationHash,
     bindingRegistrationEvidenceRefs: [...option.binding.registrationEvidenceRefs],
-    price: option.price,
     materialTerms: option.materialTerms.map((term) => ({ ...term })),
     commercialRelationship: {
       ...option.commercialRelationship,
@@ -544,13 +558,16 @@ function projectEvidence(
   return deepFreeze(projected.sort((left, right) => left.outputPointer.localeCompare(right.outputPointer)))
 }
 
-function registeredPrice(candidate: PreparedActionOptionCandidate['offering']): PreparedActionPrice | undefined {
+function registeredPrice(
+  candidate: PreparedActionOptionCandidate['offering'],
+  pricingConfig: PricingConfig,
+): PreparedActionPrice | undefined {
   const price = candidate.presentation.price
-  if (price.kind === 'on_request') return undefined
-  const minimum = price.kind === 'fixed' ? price.amount : price.minimum
-  const maximum = price.kind === 'fixed' ? price.amount : price.maximum
-  if (!exactAmountSchema.safeParse(minimum).success || !exactAmountSchema.safeParse(maximum).success
-    || compareExactAmounts(minimum, maximum) === undefined) return undefined
+  if (price.kind !== 'fixed'
+    || compareExactAmounts(price.amount, pricingConfig.paidAmount) !== 0
+    || !exactAmountSchema.safeParse(price.amount).success) return undefined
+  const minimum = price.amount
+  const maximum = price.amount
   return deepFreeze({
     minimum,
     maximum,

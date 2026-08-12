@@ -7,10 +7,11 @@ import {
   type CapabilityDecisionModel,
   type JsonValue,
 } from '@/modules/capability-contract/public'
-import type { OperationSearchResult, PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import type { OperationSearchResult, PublicOperationDescriptor, PublicOperationRef } from '@/modules/capability-supply/public'
 import { bindCustomerCapabilityDescriptor, type ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 import { requestRegistrySnapshotDigest, type RegisteredEvaluationBinding } from '@/modules/customer-request/evaluation'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
+import { pricingConfigDigest } from '@/modules/money/public'
 import {
   createDeterministicCustomerRequestInterpreter,
   previewCustomerRequest,
@@ -100,6 +101,9 @@ function makeCapability(
     bindingRegistrationHash: `sha256:${operationRef}`,
     readinessValidUntil: 999_999_999_999_999,
     price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '100', exponent: 2 } },
+    priceDigest: pricingConfigDigest({
+      version: 'pricing:v2', unit: 'call', paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+    }),
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${operationRef}`] },
   }
   return { model, descriptor, binding }
@@ -124,16 +128,48 @@ function graphWith(cap: HonestyCapability): RequestGraph {
   }
 }
 
-function searchOk(graph: RequestGraph, query: string, ...operationRefs: string[]): OperationSearchResult {
+function operationDescriptorFor(graph: RequestGraph, operationRef: PublicOperationRef): PublicOperationDescriptor {
+  const source = graph.descriptors.find((descriptor) => descriptor.operationRef === operationRef)
+  if (source === undefined) throw new Error('test_operation_descriptor_missing')
+  return {
+    operationRef,
+    operationId: `operation:${source.name}`,
+    contract: {
+      capabilityId: source.name,
+      version: 1,
+      inputJsonSchema: { type: 'object', properties: {}, additionalProperties: false },
+      outputJsonSchema: { type: 'object', properties: {}, additionalProperties: false },
+      customerAnnotations: [],
+    },
+    business: { businessId: `business:${operationRef}`, slug: source.name, name: source.name },
+    offering: { offeringRef: `offering:${operationRef}`, revision: 1, label: source.name, summary: source.description },
+    summary: source.description,
+    commercial: {
+      price: { kind: 'on_request' },
+      materialTerms: [],
+      relationship: { kind: 'none', summary: 'Test operation.' },
+    },
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    cancellation: { kind: 'unsupported' },
+    recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+    authentication: { kind: 'keyless' },
+    transport: { method: 'GET', requestTimeoutMs: 1_000 },
+    provenance: { publisher: 'ae_curated_external', sourceKind: 'openapi_http' },
+    availability: { posture: 'routeable' },
+    navigation: [],
+  }
+}
+
+function searchOk(graph: RequestGraph, query: string, ...operationRefs: PublicOperationRef[]): OperationSearchResult {
   return {
     kind: 'ok',
     schemaVersion: 'registry-operations:v1' as const,
     query,
-    items: operationRefs.map((operationRef) => ({
-      operationRef,
-      name: graph.descriptors.find((descriptor) => descriptor.operationRef === operationRef)?.name ?? 'unknown',
-      navigation: [],
-    }) as unknown as PublicOperationDescriptor),
+    items: operationRefs.map((operationRef) => operationDescriptorFor(graph, operationRef)),
+    matchedCount: operationRefs.length,
+    ranking: operationRefs.map((operationRef, index) => ({ operationRef, rank: index + 1, score: operationRefs.length - index })),
     pagination: { limit: 20, hasMore: false },
     navigation: [],
   }

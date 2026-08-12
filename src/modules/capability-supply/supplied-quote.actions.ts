@@ -16,6 +16,7 @@ const contractRefSchema = z.strictObject({
 const candidateSchema = z.strictObject({
   publicationRef: z.string().trim().min(1).max(240),
   revision: z.number().int().nonnegative(),
+  networkId: z.string().trim().min(1).max(240),
   businessId: z.string().trim().min(1).max(240),
   offeringId: z.string().trim().min(1).max(240),
   bindingId: z.string().trim().min(1).max(240),

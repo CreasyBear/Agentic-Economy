@@ -11,7 +11,8 @@
  * rely on module-eval side effects; production bundlers can tree-shake them.
  */
 
-import type { AnyAction } from '@/modules/common/action'
+import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from '@/modules/common/action'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/supplied-quote.actions'
 import {
   customerRequestCancelAction,
@@ -29,7 +30,6 @@ import {
 import { customerRequestPlanPreviewAction } from '@/modules/customer-request/plan-preview.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
 import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
-import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
 import {
   registryDetailAction,
   registryListAction,
@@ -45,9 +45,15 @@ import {
   registryOperationsSearchAction,
 } from '@/modules/registry/operations.actions'
 import { operationExecuteAction } from '@/modules/capability-execution/operation-execute-mcp.actions'
+import {
+  operationCancelAction,
+  operationReconcileAction,
+  operationStatusAction,
+} from '@/modules/capability-execution/operation-recovery.actions'
+import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
 import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
 import { storefrontEnrichDraftAction, storefrontImportDraftAction, webDiscoverAction } from '@/modules/storefront/storefront.actions'
-import { studyCompleteAction, studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
+import { studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
 import { workTreeCreateAction, workTreeInspectAction } from '@/modules/work-tree/work-tree.actions'
 import { workTreeApplyAction, workTreeDecideAction } from '@/modules/work-tree/work-tree-agent.actions'
 import {
@@ -84,12 +90,14 @@ const actions: readonly AnyAction[] = [
   registryOperationsCompareAction,
   registryOperationsInspectPlanAction,
   operationExecuteAction,
-  sandboxCheckupQuoteAction,
-  storefrontImportDraftAction,
+  operationInvokeAction,
+  operationStatusAction,
+  operationCancelAction,
+  operationReconcileAction,
   storefrontEnrichDraftAction,
   studyStartAction,
   studyInspectAction,
-  studyCompleteAction,
+
   webDiscoverAction,
   demandCaptureAction,
   workTreeCreateAction,
@@ -122,6 +130,46 @@ export function listMcpActions(): readonly AnyAction[] {
 export function mcpToolName(action: AnyAction): string {
   return `ae_${action.id.replace(/\./g, '_')}`
 }
+export type PublicMcpActionDescriptor = AgentToolDescriptor & Readonly<{
+  toolName: string
+}>
+
+export function listMcpActionDescriptors(): readonly PublicMcpActionDescriptor[] {
+  return listMcpActions().map((action) => ({
+    ...describeActionForAgent(action),
+    toolName: mcpToolName(action),
+  }))
+}
+
+const operationRouteContracts = [
+  OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
+  OPERATION_INVOKE_ROUTE_CONTRACT.status,
+  OPERATION_INVOKE_ROUTE_CONTRACT.cancel,
+  OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,
+] as const
+
+type OperationRouteContractEntry = (typeof operationRouteContracts)[number]
+
+export type PublicOperationRouteDescriptor = OperationRouteContractEntry & Readonly<{
+  inputJsonSchema?: AgentToolDescriptor['inputJsonSchema']
+  outputJsonSchema?: AgentToolDescriptor['outputJsonSchema']
+  mcpToolName?: string
+}>
+
+export function listOperationRouteDescriptors(): readonly PublicOperationRouteDescriptor[] {
+  return operationRouteContracts.map((route) => {
+    const action = findAction(route.actionId)
+    if (action === undefined) throw new Error(`Operation route action is not registered: ${route.actionId}`)
+    const descriptor = describeActionForAgent(action)
+    return {
+      ...route,
+      ...(descriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: descriptor.inputJsonSchema }),
+      ...(descriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: descriptor.outputJsonSchema }),
+      ...(action.surfaces.includes('mcp') ? { mcpToolName: mcpToolName(action) } : {}),
+    }
+  })
+}
+
 
 function assertUniqueActionIds(registry: readonly AnyAction[]): void {
   const knownIds = new Set<string>()
@@ -138,9 +186,11 @@ export {
   describeActionForAgent,
   resolveActionContract,
   type Action,
+  type ActionAgentAccessPrincipal,
   type ActionAuthorityRequirement,
   type ActionConsequenceClass,
   type ActionContext,
+  type ActionCredentialAdmission,
   type ActionInvocationContract,
   type ActionParameter,
   type ActionRetryClass,

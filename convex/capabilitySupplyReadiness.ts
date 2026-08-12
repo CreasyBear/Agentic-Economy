@@ -6,14 +6,12 @@ import type { RegisteredAction } from 'convex/server'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import {
-  runCapabilityReadinessProbe,
-  type CapabilityConnectionAuthoritySnapshot,
-  type CapabilityTransportAuthority,
+  type CapabilityProbeTargetUnavailableReason,
+  type ReadCapabilityProbeTargetResult,
 } from '@/modules/capability-supply/public'
-
+import { credentialFromEnvironment, runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
-
 type PublicationLifecycle = {
   state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
   reasons: Array<
@@ -32,23 +30,23 @@ type PublicationLifecycle = {
 type ProbeRecordResult =
   | { kind: 'observed'; publicationRef: string; revision: number; lifecycle: PublicationLifecycle }
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
-type ProbeResult = ProbeRecordResult | { kind: 'unavailable' }
 type ProbeArgs = { publicationRef: string; expectedRevision: number }
-type Target = {
-  publicationRef: string
-  revision: number
-  bindingId: string
-  capabilityId: string
-  endpointUrl: string
-  authority: CapabilityTransportAuthority
-  connectionAuthority?: CapabilityConnectionAuthoritySnapshot
-  adapterId: string
-  probeQuery: Array<{ parameter: string; value: string }>
-  probeInputJson?: string
-  outputSchemaJson?: string
-  targetDigest: string
+type ProbeTargetResult = ReadCapabilityProbeTargetResult
+type Target = Extract<ProbeTargetResult, { kind: 'available' }>['target']
+type ProbeResult = ProbeRecordResult | {
+  kind: 'unavailable'
+  reason: CapabilityProbeTargetUnavailableReason
+  evidenceRefs: string[]
 }
 
+const probeTargetUnavailableReasonValue = v.union(
+  v.literal('publication_missing'), v.literal('publication_stale'),
+  v.literal('offering_invalid'), v.literal('binding_invalid'),
+  v.literal('contract_missing'), v.literal('input_unrepresentable'),
+  v.literal('effectful_probe_unsupported'),
+  v.literal('mcp_tool_missing'), v.literal('authority_stale'),
+  v.literal('target_not_public'),
+)
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
   reasons: v.array(v.union(
@@ -65,7 +63,11 @@ const publicationLifecycleValue = v.object({
   )),
 })
 const probeResultValue = v.union(
-  v.object({ kind: v.literal('unavailable') }),
+  v.object({
+    kind: v.literal('unavailable'),
+    reason: probeTargetUnavailableReasonValue,
+    evidenceRefs: v.array(v.string()),
+  }),
   v.object({
     kind: v.literal('refused'),
     reason: v.union(v.literal('revision_changed'), v.literal('target_changed')),
@@ -77,23 +79,30 @@ const probeResultValue = v.union(
     lifecycle: publicationLifecycleValue,
   }),
 )
-
 export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = internalAction({
   args: { publicationRef: v.string(), expectedRevision: v.number() },
   returns: probeResultValue,
   handler: async (ctx, args): Promise<ProbeResult> => {
-    const result: { kind: 'available'; target: Target } | { kind: 'unavailable' } = await ctx.runQuery(
+    const result: ProbeTargetResult = await ctx.runQuery(
       internal.capabilitySupply.readCapabilityProbeTarget,
       args,
     )
-    if (result.kind !== 'available') return { kind: 'unavailable' as const }
+    if (result.kind !== 'available') {
+      return {
+        kind: 'unavailable' as const,
+        reason: result.reason,
+        evidenceRefs: [...result.evidenceRefs],
+      }
+    }
     const target: Target = result.target
     const observation = await runCapabilityReadinessProbe(target, {
       resolveProviderConnectionCredential: async (authority) => {
+        if (authority.kind !== 'provider_connection' || !('connectionAuthority' in target)) return undefined
         const expected = target.connectionAuthority
-        if (authority.kind !== 'provider_connection' || expected === undefined
-          || authority.connectionRef !== expected.connectionRef
-          || authority.providerRef !== expected.providerRef) return undefined
+        if (
+          authority.connectionRef !== expected.connectionRef
+          || authority.providerRef !== expected.providerRef
+        ) return undefined
         const row = await ctx.runQuery(internal.capabilityProviderConnections.read, {
           connectionRef: expected.connectionRef,
         })
@@ -110,7 +119,9 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
           expectedAuthorityDigest: expected.authorityDigest,
           now: Date.now(),
         })
-        return resolved.kind === 'resolved' ? resolved.credentialRef : undefined
+        return resolved.kind === 'resolved'
+          ? credentialFromEnvironment(resolved.credentialRef)
+          : undefined
       },
       validateTarget: async (url) => isPublicHttpTarget(url, defaultDnsResolver),
       send: sendGuarded,
@@ -118,8 +129,19 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
     const recorded: ProbeRecordResult = await ctx.runMutation(
       internal.capabilitySupply.recordCapabilityProbeResult,
       {
-      publicationRef: target.publicationRef, expectedRevision: target.revision,
-      targetDigest: target.targetDigest, outcome: observation.outcome,
+        publicationRef: target.publicationRef,
+        expectedRevision: target.revision,
+        targetDigest: observation.targetDigest,
+        requestDigest: observation.requestDigest,
+        ...(observation.responseStatus === undefined ? {} : { responseStatus: observation.responseStatus }),
+        ...(observation.responseContentType === undefined ? {} : { responseContentType: observation.responseContentType }),
+        ...(observation.responseDigest === undefined ? {} : { responseDigest: observation.responseDigest }),
+        outcome: observation.outcome,
+        credentialState: observation.credentialState,
+        healthState: observation.healthState,
+        observedAt: observation.observedAt,
+        validUntil: observation.validUntil,
+        evidenceRefs: [...observation.evidenceRefs],
       },
     )
     return recorded

@@ -37,6 +37,12 @@ const mocks = vi.hoisted(() => {
   const guardedFetch = vi.fn<RouteTransportFetch>()
   const signRouteTransportCall = vi.fn(() => ({ keyId: 'route-calls:test', signature: 'hmac-sha256:test' }))
   const createEvmX402PaymentSignature = vi.fn()
+  const credentialFromEnvironment = vi.fn((reference: string): string | undefined => {
+    const match = /^env:([A-Z][A-Z0-9_]{1,199})$/.exec(reference)
+    if (match?.[1] === undefined) return undefined
+    const value = process.env[match[1]]
+    return value === undefined || value.trim().length === 0 ? undefined : value.trim()
+  })
   const isPublicHttpTarget = vi.fn(async () => true)
   const createGuardedLookup = vi.fn(() => () => undefined)
   const agents: Array<{ close: () => Promise<undefined> }> = []
@@ -53,6 +59,7 @@ const mocks = vi.hoisted(() => {
     guardedFetch,
     signRouteTransportCall,
     createEvmX402PaymentSignature,
+    credentialFromEnvironment,
     isPublicHttpTarget,
     createGuardedLookup,
     FakeAgent,
@@ -64,7 +71,9 @@ vi.mock('@/modules/capability-supply/route-transport-runtime', () => ({
   prepareRegisteredRouteTransportInvocation: mocks.prepare,
   invokePreparedRouteTransport: mocks.invoke,
 }))
-vi.mock('@/modules/capability-supply/server', () => ({
+vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/modules/capability-supply/server')>(),
+  credentialFromEnvironment: mocks.credentialFromEnvironment,
   signRouteTransportCall: mocks.signRouteTransportCall,
   createEvmX402PaymentSignature: mocks.createEvmX402PaymentSignature,
 }))

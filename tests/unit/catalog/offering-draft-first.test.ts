@@ -63,17 +63,15 @@ describe('find-my-business hands facts to the claim form', () => {
         slug: 'joondalup-emergency-plumbing',
         name: 'Joondalup Emergency Plumbing',
         category: 'Emergency plumbing',
-        suburb: 'Joondalup',
-        stateTerritory: 'WA',
+        businessContext: { kind: 'local_human', suburb: 'Joondalup', stateTerritory: 'WA' },
       }),
     ).toEqual({
+      businessContext: { kind: 'local_human', suburb: 'Joondalup', stateTerritory: 'WA' },
       businessName: 'Joondalup Emergency Plumbing',
       category: 'Emergency plumbing',
-      suburb: 'Joondalup',
-      stateTerritory: 'WA',
       requestedSlug: 'joondalup-emergency-plumbing',
     })
-  })
+})
 })
 
 afterEach(() => {
@@ -84,8 +82,7 @@ const foundBusiness: FoundBusiness = {
   slug: 'joondalup-emergency-plumbing',
   name: 'Joondalup Emergency Plumbing',
   category: 'Emergency plumbing',
-  suburb: 'Joondalup',
-  stateTerritory: 'WA',
+  businessContext: { kind: 'local_human', suburb: 'Joondalup', stateTerritory: 'WA' },
 }
 
 function renderWithRouter(ui: ReactElement) {
@@ -126,4 +123,31 @@ describe('find-my-business claim doors', () => {
     expect(foundUrl.searchParams.get('businessName')).toBe(foundBusiness.name)
     expect(foundUrl.searchParams.get('source')).toBe(expectedSource)
   })
+  it('shows a lookup error and retries successfully with the same input', async () => {
+    const search = vi.fn(async () => [] as readonly FoundBusiness[])
+    search.mockRejectedValueOnce(new Error('lookup failed'))
+    search.mockResolvedValueOnce([foundBusiness])
+
+    renderWithRouter(createElement(AeFindMyBusiness, {
+      search,
+      onBuildFromWeb: vi.fn(),
+    }))
+
+    fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: foundBusiness.name } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my business' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('We couldn’t search right now. Try again.')
+    expect(screen.getByDisplayValue(foundBusiness.name)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find my business' })).toBeTruthy()
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(search).toHaveBeenNthCalledWith(1, foundBusiness.name)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Find my business' }))
+
+    expect(await screen.findByRole('link', { name: 'This is my business' })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(search).toHaveBeenCalledTimes(2)
+    expect(search).toHaveBeenNthCalledWith(2, foundBusiness.name)
+  })
+
 })

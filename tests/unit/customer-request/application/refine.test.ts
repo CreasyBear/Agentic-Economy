@@ -9,7 +9,14 @@ import type {
   CapabilitySelectionKey,
 } from '@/modules/capability-contract/public'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
+import { pricingConfigDigest } from '@/modules/money/public'
 
+const routePricingConfig = {
+  version: 'pricing:v2' as const,
+  unit: 'call' as const,
+  paidAmount: { currency: 'AUD' as const, units: '100', exponent: 2 },
+}
+const routePriceDigest = pricingConfigDigest(routePricingConfig)
 const NOW = Date.now()
 const contractRef = { capabilityId: 'cap:ride', version: 1, contractDigest: 'digest:1' }
 const routePlanId = 'route:1'
@@ -98,6 +105,7 @@ const routeGeneration = {
       contractRef,
       offeringRegistrationHash: 'off-hash',
       bindingRegistrationHash: 'bind-hash',
+      priceDigest: routePriceDigest,
     }],
   }],
 }

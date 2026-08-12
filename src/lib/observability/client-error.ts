@@ -41,9 +41,10 @@ export function normalizeClientError(input: ClientErrorPayload): NormalizedClien
   const normalizedMetadata = input.metadata === undefined
     ? undefined
     : Object.fromEntries(
-        Object.entries(input.metadata).flatMap(([key, value]) => (
-          typeof value === 'string' ? [[key, normalizeClientErrorText(value)] as const] : []
-        )),
+        Object.entries(input.metadata).map(([key, value]) => [
+          key,
+          sanitizeTelemetryValue(value, key) as string | number | boolean | null,
+        ]),
       )
   return {
     message,
@@ -55,15 +56,6 @@ export function normalizeClientError(input: ClientErrorPayload): NormalizedClien
   }
 }
 
-function normalizeClientErrorText(value: string): string {
-  const sanitized = String(sanitizeTelemetryValue(value))
-  if (!sanitized.startsWith('/') && !/^https?:\/\//iu.test(sanitized)) return sanitized
-  try {
-    return safeTelemetryPath({ pathname: new URL(sanitized, 'https://ae.invalid').pathname })
-  } catch {
-    return sanitized.split(/[?#]/u)[0] ?? '/[Filtered]'
-  }
-}
 function normalizeClientErrorUrl(value: string): string {
   try {
     return safeTelemetryPath({ pathname: new URL(value, 'https://ae.invalid').pathname })

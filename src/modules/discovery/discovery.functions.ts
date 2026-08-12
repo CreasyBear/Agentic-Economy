@@ -1,11 +1,7 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import {
   buildOfferingLlmsUrlsFromSlugs,
   buildSitemapXmlFromSlugs,
-  readFixtureCatalogDiscoveryManifest,
-  readFixtureLlmsTxt,
-  readFixtureSitemapXml,
 } from '@/modules/discovery/public'
 import type {
   BuildOfferingDiscoveryManifestResult,
@@ -26,6 +22,15 @@ export type PublicDiscoverySourcePort = {
   manifest: (input: ReadCatalogDiscoveryManifestInput) => Promise<ReadCatalogDiscoveryManifestResult>
   llms: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
   sitemap: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
+}
+let publicDiscoverySourcePortForTests: PublicDiscoverySourcePort | undefined
+
+export function setPublicDiscoverySourcePortForTests(port: PublicDiscoverySourcePort | undefined): () => void {
+  const previous = publicDiscoverySourcePortForTests
+  publicDiscoverySourcePortForTests = port
+  return () => {
+    publicDiscoverySourcePortForTests = previous
+  }
 }
 
 type DiscoveryBusinessSlugPageArgs = {
@@ -127,16 +132,11 @@ async function readAllDiscoveryBusinessSlugs(surface: DiscoveryBusinessSlugPageA
   }
 }
 
+
 function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
-
-  if (isLocalE2EAuthBypassEnabled()) {
-    return {
-      manifest: (input) => Promise.resolve(readFixtureCatalogDiscoveryManifest(input)),
-      llms: (options) => Promise.resolve(readFixtureLlmsTxt(options)),
-      sitemap: (options) => Promise.resolve(readFixtureSitemapXml(options)),
-    }
+  if (publicDiscoverySourcePortForTests !== undefined) {
+    return publicDiscoverySourcePortForTests
   }
-
   return {
     manifest: (input) => callPublicSourceQuery(readCatalogDiscoveryManifestQuery, input),
     llms: async (options) => {

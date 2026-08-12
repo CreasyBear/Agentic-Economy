@@ -4,8 +4,19 @@ import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { createSourceWriteAdmission, sourceWriteBodyDigest } from '../src/modules/security/source-write-admission'
-import { studyJournalEventSchema, type StudyJournalEvent } from '../src/modules/study/public'
+import {
+  createSourceWriteAdmission,
+  sourceWriteCommandBodyDigest,
+  sourceWriteCommandDigest,
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '../src/modules/security/source-write-admission'
+import {
+  studyArtifactSchema,
+  studyJournalEventSchema,
+  type StudyJournalEvent,
+} from '../src/modules/study/public'
 import schema from './schema'
 
 const modules = import.meta.glob('./**/*.ts')
@@ -25,19 +36,34 @@ const inspectStudy = requireApiBinding(studiesApi.getById, 'study_get_by_id_miss
 const SOURCE_WRITE_SECRET = 'study-journal-local-source-write-secret'
 const SOURCE_REQUEST = {
   method: 'POST',
-  origin: 'http://127.0.0.1:3024',
-  pathname: '/api/study',
-  bodyDigest: sourceWriteBodyDigest(undefined),
-}
+  initiatorOrigin: 'http://127.0.0.1:3024',
+  targetOrigin: 'http://127.0.0.1:3024',
+  targetPath: '/api/study',
+  targetQuery: '',
+} as const
 
-const sourceWrite = (operationKey: string, nonce = operationKey) => createSourceWriteAdmission({
-  env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
-  request: SOURCE_REQUEST,
-  scope: 'study',
-  operationKey,
-  correlationId: operationKey,
-  nonce,
-})
+async function signedStudyArgs<T extends { operationKey: string; correlationId: string }>(
+  command: T,
+  nonce = command.operationKey,
+): Promise<T & { sourceWriteRequest: SourceWriteAdmissionRequest; sourceWrite: SourceWriteAdmission }> {
+  const sourceWrite = await createSourceWriteAdmission({
+    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
+    request: {
+      ...SOURCE_REQUEST,
+      bodyDigest: sourceWriteCommandBodyDigest(command),
+    },
+    scope: 'study',
+    operationKey: command.operationKey,
+    correlationId: command.correlationId,
+    commandDigest: sourceWriteCommandDigest(command),
+    nonce,
+  })
+  return {
+    ...command,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
+  }
+}
 
 const studyIdentity = {
   studyId: 'study:convex:one',
@@ -108,7 +134,12 @@ function candidateObserved(operationKey: string, candidateRef: string) {
   })
 }
 
-function refusalAtRevision(revision: number, treeRevision: number, operationKey = 'study:refused') {
+function refusalAtRevision(
+  revision: number,
+  treeRevision: number,
+  operationKey = 'study:refused',
+  evidenceClass: StudyJournalEvent['evidenceClass'] = 'published_price',
+) {
   return journalEvent({
     type: 'refused',
     operationKey,
@@ -119,7 +150,7 @@ function refusalAtRevision(revision: number, treeRevision: number, operationKey 
     revision,
     treeRevision,
     timestamp: 10_200,
-    evidenceClass: 'ae_sandbox_provider',
+    evidenceClass,
     code: 'provider_unknown',
     reason: 'The labelled development provider did not return a quote.',
   })
@@ -127,7 +158,7 @@ function refusalAtRevision(revision: number, treeRevision: number, operationKey 
 
 async function createFixtureStudy(backend: TestConvex<typeof schema>) {
   const event = scanStarted()
-  return await backend.mutation(createStudy, {
+  return await backend.mutation(createStudy, await signedStudyArgs({
     ...studyIdentity,
     operationKey: 'study:create',
     correlationId: 'study:create',
@@ -135,8 +166,7 @@ async function createFixtureStudy(backend: TestConvex<typeof schema>) {
     journalEventJson: JSON.stringify(event),
     createdAt: 10_000,
     updatedAt: 10_000,
-    sourceWrite: sourceWrite('study:create'),
-  })
+  }))
 }
 
 describe('durable Study journal Convex seam', () => {
@@ -167,6 +197,76 @@ describe('durable Study journal Convex seam', () => {
     ]))
     expect(read?.truncated).toBe(false)
   })
+  it('reads a durable historical sandbox artifact while new writes reject it', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const historicalArtifact = {
+      ...scanArtifact,
+      studyId: 'study:convex:historical',
+      projectId: 'project:convex:historical',
+      treeId: 'tree:convex:historical',
+      nodeId: 'study-node:convex:historical',
+      evidenceClass: 'ae_sandbox_provider' as const,
+      environment: 'MOCK/DEVELOPMENT ONLY' as const,
+    }
+    const artifactJson = JSON.stringify(historicalArtifact)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('studies', {
+        studyId: historicalArtifact.studyId,
+        projectId: historicalArtifact.projectId,
+        treeId: historicalArtifact.treeId,
+        nodeId: historicalArtifact.nodeId,
+        ownerSessionId: 'owner-session:convex:historical',
+        generation: 1,
+        revision: historicalArtifact.revision,
+        treeRevision: 3,
+        status: historicalArtifact.status,
+        artifactJson,
+        artifactDigest: canonicalDigest(historicalArtifact),
+        createdAt: 10_000,
+        updatedAt: 10_000,
+      })
+    })
+
+    const read = await backend.query(inspectStudy, {
+      studyId: historicalArtifact.studyId,
+      ownerSessionId: 'owner-session:convex:historical',
+    })
+    const decoded = studyArtifactSchema.parse(JSON.parse(read?.study?.artifactJson ?? 'null'))
+    expect(decoded).toMatchObject({
+      studyId: historicalArtifact.studyId,
+      evidenceClass: 'ae_sandbox_provider',
+      environment: 'MOCK/DEVELOPMENT ONLY',
+    })
+  })
+
+  it('rejects sandbox evidence from new study artifact and journal writes', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const sandboxArtifact = {
+      ...scanArtifact,
+      studyId: 'study:convex:sandbox-write',
+      evidenceClass: 'ae_sandbox_provider' as const,
+    }
+    await expect(backend.mutation(createStudy, await signedStudyArgs({
+      ...studyIdentity,
+      studyId: sandboxArtifact.studyId,
+      operationKey: 'study:sandbox:create',
+      correlationId: 'study:sandbox:create',
+      artifactJson: JSON.stringify(sandboxArtifact),
+    }))).rejects.toThrow()
+
+    await createFixtureStudy(backend)
+    const sandboxEvent = refusalAtRevision(2, 4, 'study:sandbox:event', 'ae_sandbox_provider')
+    await expect(backend.mutation(recordStudyEvent, await signedStudyArgs({
+      ...studyIdentity,
+      expectedRevision: 1,
+      operationKey: sandboxEvent.operationKey,
+      correlationId: sandboxEvent.operationKey,
+      eventJson: JSON.stringify(sandboxEvent),
+    }))).rejects.toThrow('study_evidence_class_invalid')
+  })
+
   it('returns a typed not_found for an omitted or unmatched owner session', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
@@ -194,45 +294,39 @@ describe('durable Study journal Convex seam', () => {
     await createFixtureStudy(backend)
 
     const event = candidateObserved('study:candidate', 'service:alpha')
-    const args = {
+    const command = {
       ...studyIdentity,
       expectedRevision: 1,
       operationKey: event.operationKey,
       correlationId: event.operationKey,
       eventJson: JSON.stringify(event),
-      sourceWrite: sourceWrite(event.operationKey),
     }
+    const args = await signedStudyArgs(command)
     const applied = await backend.mutation(recordStudyEvent, args)
-    const replayed = await backend.mutation(recordStudyEvent, {
-      ...args,
-      sourceWrite: sourceWrite(event.operationKey, 'study:candidate:retry'),
-    })
+    const replayed = await backend.mutation(recordStudyEvent, await signedStudyArgs(command, 'study:candidate:retry'))
     expect(applied).toMatchObject({ kind: 'applied', replayed: false })
     expect(replayed).toEqual({ ...applied, kind: 'replayed', replayed: true, study: null })
 
     const conflicting = candidateObserved(event.operationKey, 'service:beta')
-    await expect(backend.mutation(recordStudyEvent, {
-      ...args,
+    await expect(backend.mutation(recordStudyEvent, await signedStudyArgs({
+      ...command,
       eventJson: JSON.stringify(conflicting),
-      sourceWrite: sourceWrite(event.operationKey, 'study:candidate:conflict'),
-    })).rejects.toThrow('study_operation_conflict')
+    }, 'study:candidate:conflict'))).rejects.toThrow('study_operation_conflict')
 
-    await expect(backend.mutation(recordStudyEvent, {
-      ...args,
+    await expect(backend.mutation(recordStudyEvent, await signedStudyArgs({
+      ...command,
       expectedRevision: 0,
       operationKey: 'study:stale',
       correlationId: 'study:stale',
       eventJson: JSON.stringify(candidateObserved('study:stale', 'service:gamma')),
-      sourceWrite: sourceWrite('study:stale'),
-    })).rejects.toThrow('study_revision_conflict')
-    await expect(backend.mutation(recordStudyEvent, {
-      ...args,
+    }))).rejects.toThrow('study_revision_conflict')
+    await expect(backend.mutation(recordStudyEvent, await signedStudyArgs({
+      ...command,
       generation: 2,
       operationKey: 'study:stale-generation',
       correlationId: 'study:stale-generation',
       eventJson: JSON.stringify(candidateObserved('study:stale-generation', 'service:gamma')),
-      sourceWrite: sourceWrite('study:stale-generation'),
-    })).rejects.toThrow('study_generation_conflict')
+    }))).rejects.toThrow('study_generation_conflict')
 
 
     const read = await backend.query(inspectStudy, { studyId: studyIdentity.studyId, ownerSessionId: studyIdentity.ownerSessionId })
@@ -252,7 +346,7 @@ describe('durable Study journal Convex seam', () => {
       treeRevision: undefined,
       rfxState: 'award' as const,
     }
-    const resultArgs = {
+    const resultCommand = {
       ...studyIdentity,
       treeRevision: 4,
       expectedRevision: 1,
@@ -261,14 +355,11 @@ describe('durable Study journal Convex seam', () => {
       artifactJson: JSON.stringify(resultArtifact),
       journalEventsJson: JSON.stringify([refusal]),
       at: 10_200,
-      sourceWrite: sourceWrite('study:result'),
     }
+    const resultArgs = await signedStudyArgs(resultCommand)
     const recorded = await backend.mutation(recordStudyResult, resultArgs)
     expect(recorded).toMatchObject({ kind: 'applied', replayed: false, study: { revision: 2, status: 'failed', treeRevision: 4 } })
-    const replayed = await backend.mutation(recordStudyResult, {
-      ...resultArgs,
-      sourceWrite: sourceWrite('study:result', 'study:result:retry'),
-    })
+    const replayed = await backend.mutation(recordStudyResult, await signedStudyArgs(resultCommand, 'study:result:retry'))
     expect(replayed).toMatchObject({ kind: 'replayed', replayed: true, study: null })
 
     const read = await backend.query(inspectStudy, { studyId: studyIdentity.studyId, ownerSessionId: studyIdentity.ownerSessionId })
@@ -276,7 +367,7 @@ describe('durable Study journal Convex seam', () => {
       expect.objectContaining({
         type: 'refused',
         code: 'provider_unknown',
-        evidenceClass: 'ae_sandbox_provider',
+        evidenceClass: 'published_price',
         generation: 1,
         revision: 2,
         treeRevision: 4,

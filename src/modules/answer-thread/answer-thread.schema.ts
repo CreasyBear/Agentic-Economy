@@ -1,5 +1,17 @@
 
 import { z } from 'zod'
+import {
+  AnswerToolCallStatusValues,
+  AnswerToolIdValues,
+  AnswerTurnCheckpointRouteValues,
+  AnswerTurnReservationStateValues,
+  AnswerTurnStatusValues,
+  FollowUpIntentValues,
+} from './answer-thread.values'
+import type {
+  AnswerToolCallStatus,
+  AnswerTurnCheckpointRoute,
+} from './answer-thread.values'
 
 import { parseAnswerTurnProblemStrict, type AnswerTurnProblem } from '@/lib/errors'
 
@@ -8,54 +20,51 @@ import {
   AnswerWorkStepSchema,
   type AnswerLayoutProfile,
 } from '@/modules/answer/answer-event-schema'
-import { AnswerArtifactSchema, type AnswerArtifact } from '@/modules/answer/answer-schema'
+import {
+  AnswerArtifactSchema,
+  type AnswerArtifact,
+  type AnswerOperationCandidate,
+  type AnswerOperationOutcome,
+  type AnswerOperationSelection,
+} from '@/modules/answer/answer-schema'
+import { parseAnswerOperationSelectionRecognition } from './internal/turn-digests'
+import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import type {
   AnswerSource,
   AnswerWorkStep,
 } from '@/modules/answer/answer-synthesizer'
-import type { HarnessRunReport } from '@/modules/harness/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
+import type { HarnessModelRequestRecord, HarnessRunReport } from '@/modules/harness/public'
 import {
   AeSearchContextSchema,
   NeedTimingValues,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
+export {
+  AnswerToolCallStatusValues,
+  AnswerToolIdValues,
+  AnswerTurnCheckpointRouteValues,
+  AnswerTurnReservationStateValues,
+  AnswerTurnStatusValues,
+  FollowUpIntentValues,
+}
+export type {
+  AnswerToolCallStatus,
+  AnswerTurnCheckpointRoute,
+}
 
-export const FollowUpIntentValues = [
-  'refine_search',
-  'filter_known',
-  'compare_known',
-  'inquiry_handoff',
-  'explain_boundary',
-  'unsupported',
-] as const
 
 export type FollowUpIntent = (typeof FollowUpIntentValues)[number]
 
-export const AnswerTurnStatusValues = ['pending', 'complete', 'stopped', 'error'] as const
 export type AnswerTurnStatus = (typeof AnswerTurnStatusValues)[number]
 
-export const AnswerTurnReservationStateValues = [
-  'reserved',
-  'answer_persisted',
-  'finalized',
-  'stopped',
-] as const
 
 export type AnswerTurnReservationState = (typeof AnswerTurnReservationStateValues)[number]
 
+/** Bounded ownership window for an active answer turn execution. */
+export const ANSWER_TURN_EXECUTION_LEASE_MS = 30_000
 
-export const AnswerToolCallStatusValues = ['complete', 'error', 'refused'] as const
-export type AnswerToolCallStatus = (typeof AnswerToolCallStatusValues)[number]
-export const AnswerToolIdValues = [
-  'registry.search',
-  'registry.detail',
-  'sandbox.checkup_quote',
-  'web.discover',
-  'registry.operations.search',
-  // Execute a DB-described (keyless) capability selected via registry navigation.
-  'operation.execute',
-] as const
 export type AnswerToolId = (typeof AnswerToolIdValues)[number]
 
 // Read-only model tools. `operation.execute` stays out: dynamic capability tools
@@ -63,7 +72,6 @@ export type AnswerToolId = (typeof AnswerToolIdValues)[number]
 export const ANSWER_READ_TOOL_IDS = [
   'registry.search',
   'registry.detail',
-  'sandbox.checkup_quote',
   'web.discover',
   'registry.operations.search',
 ] as const satisfies readonly AnswerToolId[]
@@ -112,7 +120,58 @@ export type AnswerTurnReservationRecord = {
   createdAt: number
   updatedAt: number
 }
+export type AnswerOperationInvokeContext = Readonly<{
+  service: OperationInvokeService
+  principal: AgentAccessPrincipal
+  correlationId: string
+  /** Filled from the authoritative Answer reservation before execution. */
+  reservationKey?: string
+  generation?: number
+}>
 
+export type AnswerTurnOperationArtifacts = Readonly<{
+  operationCandidates?: readonly AnswerOperationCandidate[]
+  operationCandidatesDigest?: string
+  operationOutcome?: AnswerOperationOutcome
+  operationSelection?: AnswerOperationSelection
+}>
+
+export type AnswerTurnCheckpointToolDigest = Readonly<{
+  toolCallId: string
+  inputDigest: string
+  resultDigest: string
+}>
+
+export type AnswerTurnCheckpoint = {
+  schemaVersion: 1
+  reservationKey: string
+  requestDigest: string
+  generation: number
+  threadId: string
+  turnId: string
+  turnSeq: number
+  stepOrdinal: number
+  parentCheckpointDigest?: string
+  route: AnswerTurnCheckpointRoute
+  intent: FollowUpIntent
+  query: string
+  priorTurnCount: number
+  searchContext?: AeSearchContext
+  priorProviders: readonly AnswerSource[]
+  priorAllowedSlugs: readonly string[]
+  toolCalls: readonly AnswerToolCallRecord[]
+  toolCallDigests: readonly AnswerTurnCheckpointToolDigest[]
+  operationCandidates?: readonly AnswerOperationCandidate[]
+  operationCandidatesDigest?: string
+  operationOutcome?: AnswerOperationOutcome
+  operationSelection?: AnswerOperationSelection
+  resultDigest?: string
+  modelRequests: readonly HarnessModelRequestRecord[]
+  replayMessagesJson: string
+  selectedOperationRef?: string
+  selectedToolId?: AnswerToolId
+  descriptorDigest?: string
+}
 export type AnswerToolCallResultSummary = {
   slugs: readonly string[]
   count: number
@@ -346,16 +405,25 @@ export type AnswerTurnRequest = {
   query: string
   searchContext?: AeSearchContext
 }
-
 export const answerTurnRequestSchema = z.object({
   threadId: z.string().trim().min(1).optional(),
-  query: z.string().trim().min(1).max(200),
+  query: z.string().trim().min(1).superRefine((query, context) => {
+    const normalQuery = query.length <= 200
+    const operationInput = parseAnswerOperationSelectionRecognition(query).kind === 'valid'
+    if (!normalQuery && !operationInput) {
+      context.addIssue({ code: 'custom', message: 'answer_turn_query_too_large' })
+    }
+  }),
   searchContext: AeSearchContextSchema.optional(),
 })
 
 export type FrozenTurnEvidence = {
   providers: readonly AnswerSource[]
   importedClaims?: readonly WebDiscoveryClaim[]
+  operationCandidates?: readonly AnswerOperationCandidate[]
+  operationCandidatesDigest?: string
+  operationOutcome?: AnswerOperationOutcome
+  operationSelection?: AnswerOperationSelection
   allowedSlugs: readonly string[]
   agentJsonUrl: string
   searchContext?: AeSearchContext

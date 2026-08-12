@@ -39,7 +39,9 @@ vi.mock('@/modules/capability-supply/route-transport-runtime', () => ({
 }))
 vi.mock('@/modules/capability-supply/server', () => ({
   signRouteTransportCall: mocks.signRouteTransportCall,
-  createEvmX402PaymentSignature: vi.fn(),
+  createEvmX402PaymentSignature: vi.fn(() => 'x402-payment-signature'),
+  credentialFromEnvironment: vi.fn(() => 'test-provider-credential'),
+  x402PaymentCredentialRefFromEnvironment: vi.fn(() => 'env:AE_TEST_PAYMENT_CREDENTIAL'),
 }))
 vi.mock('@/modules/network-guard/public', () => ({
   createGuardedLookup: mocks.createGuardedLookup,
@@ -60,8 +62,10 @@ const recordedAt = '2026-08-09T00:00:00.000Z'
 const dispatchRef = 'dispatch:route:one'
 const invocationRef = 'action-invocation:customer-request-route:one'
 const attemptRef = 'action-attempt:customer-request-route:one'
+const authorityExpiresAt = Date.now() + 60_000
 const providerRef = 'provider:one'
 const providerCredentialRef = 'env:AE_TEST_PROVIDER_CREDENTIAL'
+const paymentCredentialRef = 'env:AE_TEST_PAYMENT_CREDENTIAL'
 
 type ClaimMode = 'claimed' | 'active' | 'terminal_replay' | 'refused'
 type BindingKind = 'http-json:v1' | 'x402-fetch:v2'
@@ -106,7 +110,7 @@ function canonicalMaterial(effectGeneration = 7): CustomerRequestCanonicalClaimM
       targetDigest: digest('3'),
       consequence: 'customer_request_route:one',
       limits: { amount: { currency: 'USD', units: '700', exponent: 2 } },
-      expiresAt: '2026-08-10T00:00:00.000Z',
+      expiresAt: new Date(authorityExpiresAt).toISOString(),
       acceptedBasis: {
         kind: 'customer_request_mandate_use',
         mandateRef: 'mandate:one',
@@ -128,7 +132,7 @@ function canonicalMaterial(effectGeneration = 7): CustomerRequestCanonicalClaimM
       effectGeneration,
       operationKey: digest('7'),
       leaseOwner: 'customer-request-route:one',
-      leaseExpiresAt: '2026-08-09T00:00:30.000Z',
+      leaseExpiresAt: new Date(authorityExpiresAt + 30_000).toISOString(),
     },
     recordedAt,
   }
@@ -174,7 +178,7 @@ function openedDispatch(options: WorkerOptions): Record<string, unknown> {
         grantDigest: digest('6'),
         capabilityContractDigest: digest('b'),
         maximumSpend: { currency: 'USD', units: '700', exponent: 2 },
-        expiresAt: Date.parse('2026-08-10T00:00:00.000Z'),
+        expiresAt: authorityExpiresAt,
       },
       canonical: canonicalMaterial(),
     },
@@ -208,10 +212,10 @@ function x402Request(effectGeneration: number) {
     accepts: [selectedRequirement],
   }
   return {
-    challenge,
-    credential: 'provider-credential',
+    credential: paymentCredentialRef,
     paymentIdentifier: 'payment:one',
     selectedRequirement,
+    challenge,
     challengeDigest: digest('e'),
     attemptRef,
     effectGeneration,
@@ -372,6 +376,8 @@ describe('customer request route transport canonical worker seam', () => {
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
     vi.stubEnv('AE_TEST_PROVIDER_CREDENTIAL', 'provider-credential')
+    vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', paymentCredentialRef)
+    vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', 'payer-credential')
   })
 
   it('orders claim, release fence, route mark, DNS, provider, canonical terminal, and projection', async () => {

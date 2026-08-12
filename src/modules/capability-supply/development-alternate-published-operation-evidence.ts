@@ -1,5 +1,9 @@
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  createDevelopmentProviderConnectionAuthority,
+} from './development-published-operation-evidence'
+import { pricingConfigDigest } from '@/modules/money/public'
 
 import {
   admitRegisteredTransport,
@@ -25,6 +29,12 @@ const expectedPayment = {
   payTo: '0xmock-alternate-recipient',
   currency: 'USD',
 } as const
+const pricingConfig = {
+  version: 'pricing:v2' as const,
+  unit: 'call' as const,
+  paidAmount: { currency: 'USD', units: '1', exponent: 2 },
+}
+const priceDigest = pricingConfigDigest(pricingConfig)
 const claimCeiling =
   'Labelled local alternate-provider fixture only; no hosted route, real payment, independent provider, settlement, fulfilment, production safety, or customer value.'
 
@@ -105,7 +115,7 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     presentation: {
       label: 'BTC/USD spot quote',
       summary: 'MOCK/DEVELOPMENT ONLY alternate published endpoint.',
-      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
+      price: { kind: 'fixed', amount: pricingConfig.paidAmount },
       materialTerms: [
         { termId: 'mock:term:alternate-fixture', label: 'Environment', value: 'MOCK/DEVELOPMENT ONLY' },
       ],
@@ -177,6 +187,7 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     candidate: {
       publicationRef: 'mock:publication:alternate-quote-api',
       revision: 3,
+      networkId: offering.networkId,
       businessId: offering.businessId,
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
@@ -228,31 +239,31 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     publicationRef: qualification.candidate.publicationRef,
     revision: qualification.candidate.revision,
     businessId: qualification.candidate.businessId,
+    runtimeEnvironment: 'sandbox' as const,
     sourceDigest: publicationSource.digest,
+    pricingConfig,
+    priceDigest,
     readinessObservedAt: observedAt,
     readinessValidUntil: validUntil,
     readinessEvidenceRefs: ['mock:evidence:alternate-fresh-402'],
   }
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(contract.ref.capabilityId),
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+    contractRef: contract.ref,
+  })
   const connectionAuthority = binding.authority.kind === 'provider_connection'
-    ? {
+    ? createDevelopmentProviderConnectionAuthority({
         connectionRef: binding.authority.connectionRef,
+        businessId: offering.businessId,
         providerRef: binding.authority.providerRef,
         adapterId: binding.adapter.adapterId,
-        authorityGeneration: 1,
-        authorityDigest: canonicalDigest({
-          connectionRef: binding.authority.connectionRef,
-          providerRef: binding.authority.providerRef,
-          authorityGeneration: 1,
-        }),
-        operationRef: createPublicOperationRef({
-          operationId: capabilityOperationId(contract.ref.capabilityId),
-          publicationRef: publication.publicationRef,
-          publicationRevision: publication.revision,
-          contractRef: contract.ref,
-        }),
+        operationRef,
         grantedScopes: [],
         grantedResources: [],
-      }
+        observedAt,
+      })
     : undefined
   const sourceMaterial = {
     publication,

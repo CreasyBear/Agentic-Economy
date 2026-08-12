@@ -1,5 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { type StableHashValue } from '@/modules/common/stable-hash'
+import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   capabilityOperationId,
   createPublicOperationRef,
@@ -7,9 +8,10 @@ import {
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
 import { contractRefFromRow } from '../offering/registration'
+import type { CapabilityPublicationImport } from '../publication-importers'
 import type { RegistrationContext } from '../shared/command-envelope'
 
-import { preparePublicationDraft } from './draft'
+import { preparePublicationDraft, pricingConfigForOffering } from './draft'
 import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'
 import type { PublicationCommandPorts, PublicationCommandRow } from './ports'
 import {
@@ -20,7 +22,7 @@ import {
 
 export type RefreshCapabilityCommandInput = RegistrationContext & Readonly<{
   publication: PublicationCommandRow
-  source: unknown
+  source: CapabilityPublicationImport
   offering?: CapabilityPublicationOfferingDraft | undefined
   binding?: CapabilityPublicationBindingDraft | undefined
   now: number
@@ -35,9 +37,31 @@ export async function refreshCapabilityCommand(
   if (publication.disposition !== 'current') {
     return { kind: 'refused' as const, reason: 'revision_changed' as const }
   }
-
+  const pricingConfigJson = publication.pricingConfigJson
+  const priceDigest = publication.priceDigest
+  if (pricingConfigJson === undefined || priceDigest === undefined) {
+    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+  }
+  let pricingConfigValue: unknown
+  try {
+    pricingConfigValue = JSON.parse(pricingConfigJson)
+  } catch {
+    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+  }
+  const pricing = normalizePricingConfig(pricingConfigValue)
+  if (pricing.kind === 'invalid' || pricingConfigDigest(pricing.config) !== priceDigest) {
+    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+  }
+  const nextPricingConfig = input.offering === undefined
+    ? pricing.config
+    : pricingConfigForOffering(input.offering)
+  if (nextPricingConfig === undefined) {
+    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+  }
   const prepared = await preparePublicationDraft({
     source: input.source,
+    sourceRevision: publication.sourceRevision,
+    pricingConfig: nextPricingConfig,
     offering: input.offering,
     binding: input.binding,
     evidenceRefs: input.evidenceRefs,
@@ -45,7 +69,7 @@ export async function refreshCapabilityCommand(
   if (prepared.kind === 'refused') {
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
-  const { draft, encoded } = prepared
+  const { draft, encoded, prepared: material } = prepared
   const publicationMetadata: CapabilityPublicationProvenance = input.publicationMetadata === undefined
     ? {
       publisherRef: publication.publisherRef,
@@ -55,7 +79,7 @@ export async function refreshCapabilityCommand(
         publisherRef: publication.publisherRef,
         authorityMode: publication.authorityMode,
         sourceRevision: publication.sourceRevision,
-        sourceDigest: draft.source.descriptorDigest,
+        sourceDigest: material.sourceDigest,
       }),
     }
     : input.publicationMetadata
@@ -130,9 +154,14 @@ export async function refreshCapabilityCommand(
       revision,
       businessId: publication.businessId,
       networkId: draft.offering.networkId,
-      sourceKind: draft.source.kind,
-      sourceRevision: publicationMetadata.sourceRevision,
-      sourceDigest: draft.source.descriptorDigest,
+      runtimeEnvironment: publication.runtimeEnvironment,
+      sourceKind: material.sourceKind,
+      sourceSelector: material.sourceSelector,
+      sourceDescriptorJson: material.sourceDescriptorJson,
+      sourceRevision: material.sourceRevision,
+      sourceDigest: material.sourceDigest,
+      pricingConfigJson: material.pricingConfigJson,
+      priceDigest: material.priceDigest,
       publisherRef: publicationMetadata.publisherRef,
       authorityMode: publicationMetadata.authorityMode,
       provenanceDigest: publicationMetadata.provenanceDigest,
@@ -186,9 +215,14 @@ export async function refreshCapabilityCommand(
     revision,
     businessId: publication.businessId,
     networkId: draft.offering.networkId,
-    sourceKind: draft.source.kind,
-    sourceRevision: publicationMetadata.sourceRevision,
-    sourceDigest: draft.source.descriptorDigest,
+    runtimeEnvironment: publication.runtimeEnvironment,
+    sourceKind: material.sourceKind,
+    sourceSelector: material.sourceSelector,
+    sourceDescriptorJson: material.sourceDescriptorJson,
+    sourceRevision: material.sourceRevision,
+    sourceDigest: material.sourceDigest,
+    pricingConfigJson: material.pricingConfigJson,
+    priceDigest: material.priceDigest,
     publisherRef: publicationMetadata.publisherRef,
     authorityMode: publicationMetadata.authorityMode,
     provenanceDigest: publicationMetadata.provenanceDigest,

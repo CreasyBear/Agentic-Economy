@@ -69,7 +69,10 @@ export function selectDirectoryFallback(
   items: readonly PublicBusinessCatalogApiV2Dto[],
   query = '',
 ): DirectoryFallbackResult {
-  const contactable = items.map(toFallbackBusiness).filter((business) => business.publishedPhone !== undefined)
+  const contactable = items.flatMap((item) => {
+    const business = toFallbackBusiness(item)
+    return business === undefined || business.publishedPhone === undefined ? [] : [business]
+  })
   if (contactable.length === 0) {
     return { kind: 'none' }
   }
@@ -93,17 +96,17 @@ function isInRequestedArea(business: DirectoryFallbackBusiness, query: string): 
   }
   return words.has(business.stateTerritory.toLowerCase())
 }
-
-function toFallbackBusiness(item: PublicBusinessCatalogApiV2Dto): DirectoryFallbackBusiness {
+function toFallbackBusiness(item: PublicBusinessCatalogApiV2Dto): DirectoryFallbackBusiness | undefined {
+  if (item.businessContext.kind !== 'local_human') return undefined
   const offering = item.offerings[0]
   return {
     slug: item.slug,
     name: item.name,
-    suburb: item.suburb,
-    stateTerritory: item.stateTerritory,
+    suburb: item.businessContext.suburb,
+    stateTerritory: item.businessContext.stateTerritory,
     offeringName: offering?.name,
     pricingSummary: offering?.pricingSummary,
     availabilitySummary: offering?.availabilitySummary,
-    publishedPhone: item.publishedPhone,
+    publishedPhone: item.businessContext.publishedPhone,
   }
 }

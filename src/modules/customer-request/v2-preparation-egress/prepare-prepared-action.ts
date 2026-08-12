@@ -90,7 +90,7 @@ export async function preparePreparedAction(
 
   const candidates: PreparedActionOptionCandidate[] = []
   for (const operation of operations) {
-    const candidate = await openCandidate(ports, operation, preparation.lineage, model)
+    const candidate = await openCandidate(ports, operation, preparation.lineage, model, args.now)
     if (candidate.kind !== 'ready') {
       return await recordRecovery(
         ports,
@@ -312,12 +312,21 @@ async function openCandidate(
       { kind: 'found' }
     >['model']
   >,
+  now: number,
 ): Promise<CandidateResult> {
   const evidenceRefs = operation.evidenceRef === undefined ? [] : [operation.evidenceRef]
   const graph = await ports.loadSupplyGraphForOperation({
+    expectedTargetDigest: operation.canonicalClaimMaterial.authority.targetDigest,
+    operationMaterial: {
+      adapterId: operation.adapterId,
+      adapterConfigDigest: operation.adapterConfigDigest,
+      adapterConfigJson: operation.adapterConfigJson,
+      endpointUrl: operation.endpointUrl,
+    },
     offeringId: operation.offeringId,
     bindingId: operation.bindingId,
     businessId: operation.businessId,
+    now,
   })
   if (graph === null || graph.business === null
     || graph.business.publicStatus !== 'published'
@@ -370,6 +379,8 @@ async function openCandidate(
         ...(operation.evidenceRef === undefined ? {} : { releaseEvidenceRef: operation.evidenceRef }),
       },
       model,
+      pricingConfig: graph.publication.pricingConfig,
+      priceDigest: graph.publication.priceDigest,
       business: { businessId: String(operation.businessId), name: graph.business.name },
       offering: {
         offeringId: graph.offering.offeringId,

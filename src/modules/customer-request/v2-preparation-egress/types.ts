@@ -7,6 +7,7 @@ import type {
   CapabilityTransportAuthority,
   PublicOperationRef,
 } from '@/modules/capability-supply/public'
+import type { PricingConfig } from '@/modules/money/public'
 import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import type {
   ActionPreparationLineage,
@@ -44,6 +45,8 @@ export type EligibleSupply = Readonly<{
     operationRef: PublicOperationRef
     connectionAuthority?: CapabilityConnectionAuthoritySnapshot
     admittedOperation: AdmittedOperationRef
+    pricingConfig: PricingConfig
+    priceDigest: string
   }>
   offering: Readonly<{
     businessId: string
@@ -411,6 +414,7 @@ export type CapabilityContractLoad =
 export type SupplyGraphRow = Readonly<{
   offering: EligibleSupply['offering']
   binding: EligibleSupply['binding']
+  publication: EligibleSupply['publication']
   business: Readonly<{
     businessId: string
     name: string

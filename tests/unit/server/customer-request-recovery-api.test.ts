@@ -5,6 +5,7 @@ import {
   handleAgentCustomerRequestProblemPost,
   handleAgentCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-agent-api'
+import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import {
   handleCustomerRequestEvidenceGet,
   handleCustomerRequestProblemPost,
@@ -23,6 +24,7 @@ const authenticate = async () => ({
   isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_recovery', subject: 'user_recovery',
   userId: 'user_recovery', orgId: null, scopes: ['customer_requests:create'],
 })
+const resolvePrincipal = async (principal: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => principal
 
 describe('Customer Request recovery surface', () => {
   it('reports a customer-semantic problem through the same signed command', async () => {
@@ -236,5 +238,5 @@ function agentOptions(callAction: (
   name: string,
   args: Record<string, unknown>,
 ) => Promise<CustomerRequestProblemReceipt | CustomerRequestProblemStatusChange | CustomerRequestEvidenceExport>) {
-  return { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 }
+  return { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 }
 }

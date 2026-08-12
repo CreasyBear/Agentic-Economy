@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { jsonResponse } from './api.businesses'
 import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
@@ -10,6 +11,7 @@ import {
   readAnswerSessionId,
   resolveOrCreateSessionId,
 } from '@/modules/answer-thread/public'
+const MAX_ANSWER_THREAD_WRITE_BODY_BYTES = 4 * 1024
 
 export const Route = createFileRoute('/api/answer/threads/$threadId')({
   server: {
@@ -46,6 +48,11 @@ export async function handleGetAnswerThreadRequest(request: Request, threadId: s
 }
 
 export async function handleDeleteAnswerThreadRequest(request: Request, threadId: string): Promise<Response> {
+  const boundedBody = await readBoundedRequestText(request, MAX_ANSWER_THREAD_WRITE_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: boundedBody.code })
+  }
+
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
   try {
@@ -53,6 +60,7 @@ export async function handleDeleteAnswerThreadRequest(request: Request, threadId
       threadId,
       pseudonymousSessionId: sessionId,
       sourceWriteRequest: request,
+      sourceWriteBody: boundedBody.text,
     })
     const response = jsonResponse({ threadId, deleted: true })
     return appendSessionCookie(response, sessionId, setCookie, request)

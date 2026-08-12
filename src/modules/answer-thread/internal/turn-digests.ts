@@ -1,13 +1,57 @@
 import {
+  parseAnswerOperationSelectionInput,
+  type AnswerOperationSelectionInput,
+} from '@/modules/answer/operation-selection'
+import {
   stableAeSearchContextKey,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 
 import type { AnswerToolCallRecord, AnswerTurnRecord } from '../answer-thread.schema'
 
+export type AnswerOperationSelectionRecognition =
+  | { kind: 'absent' }
+  | { kind: 'valid'; selection: AnswerOperationSelectionInput }
+  | { kind: 'invalid' }
+
+function looksLikeStructuredOperationSelection(query: string): boolean {
+  const trimmed = query.trim()
+  return trimmed.startsWith('{')
+    && /(?:operationRef|candidateSetDigest|input)/.test(trimmed)
+}
+
+export function parseAnswerOperationSelectionRecognition(
+  query: string,
+): AnswerOperationSelectionRecognition {
+  const normalized = query.trim()
+  if (!looksLikeStructuredOperationSelection(normalized)) {
+    return { kind: 'absent' }
+  }
+  const selection = parseAnswerOperationSelectionInput(normalized)
+  return selection === undefined
+    ? { kind: 'invalid' }
+    : { kind: 'valid', selection }
+}
+
 export function normalizeAnswerTurnQuery(query: string): string {
-  return query.trim().slice(0, 200)
+  const normalized = query.trim()
+  const selection = parseAnswerOperationSelectionRecognition(normalized)
+  if (selection.kind === 'valid') {
+    return stableStringify({
+      operationRef: selection.selection.operationRef,
+      input: selection.selection.input,
+      candidateSetDigest: selection.selection.candidateSetDigest,
+    })
+  }
+  if (selection.kind === 'invalid') {
+    const bounded = normalized.slice(0, 200)
+    return looksLikeStructuredOperationSelection(bounded)
+      ? bounded
+      : `${bounded.slice(0, 180)},"operationRef":`
+  }
+  return normalized.slice(0, 200)
 }
 
 export function answerTurnRequestDigest(input: {
@@ -35,6 +79,7 @@ export function answerTurnReservationKey(input: {
 }
 
 export function answerTurnFinalizationDigest(input: {
+  expectedGeneration: number
   turn: Pick<
     AnswerTurnRecord,
     | 'turnId'
@@ -63,6 +108,7 @@ export function answerTurnFinalizationDigest(input: {
   >[]
 }): string {
   return canonicalDigest({
+    expectedGeneration: input.expectedGeneration,
     turn: {
       turnId: input.turn.turnId,
       threadId: input.turn.threadId,

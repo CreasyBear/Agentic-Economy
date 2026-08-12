@@ -173,7 +173,6 @@ export function scoreTopsis(input: TopsisInput): TopsisResult {
   }
 }
 
-
 function readAlternativeValue(
   alternative: TopsisAlternativeInput,
   criterionId: string,

@@ -24,6 +24,12 @@ export type X402PaymentAttempt = Readonly<{
   operationRevision: string
   authorizationDigest: string
   custodyRef: string
+  operationRef?: string
+  inputDigest?: string
+  transportObservationDigest?: string
+  transportRequestDigest?: string
+  paymentObservationDigest?: string
+  paymentResolution?: 'not_released' | 'released' | 'unknown'
   settledAmount?: ExactAmount
   reconciliationEvidenceRef?: string
   reconciliationEvidenceDigest?: string
@@ -56,30 +62,6 @@ export type X402PaymentAttemptPort = Readonly<{
   list(): readonly X402PaymentAttempt[]
   listAuthorizationEvents(): readonly X402PaymentAuthorizationEvent[]
 }>
-
-export function createInMemoryX402PaymentAttemptPort(
-  initial: readonly X402PaymentAttempt[] = [],
-  initialAuthorizationEvents: readonly X402PaymentAuthorizationEvent[] = [],
-): X402PaymentAttemptPort {
-  const attempts = new Map(initial.map((attempt) => [x402PaymentAttemptKey(attempt), attempt]))
-  const authorizationEvents = new Map(initialAuthorizationEvents.map(
-    (event) => [x402PaymentAttemptKey(event), event],
-  ))
-  return {
-    load: (key) => attempts.get(key),
-    loadAuthorizationEvent: (key) => authorizationEvents.get(key),
-    persist: ({ attempt, authorizationEvent }) => {
-      const key = x402PaymentAttemptKey(authorizationEvent)
-      if (attempt !== undefined && x402PaymentAttemptKey(attempt) !== key) {
-        throw new Error('x402_payment_record_attribution_invalid')
-      }
-      if (attempt !== undefined) attempts.set(key, attempt)
-      authorizationEvents.set(key, authorizationEvent)
-    },
-    list: () => [...attempts.values()],
-    listAuthorizationEvents: () => [...authorizationEvents.values()],
-  }
-}
 
 export function x402CustodyDigestReferenceValid(value: string): boolean {
   return /^sha256:[0-9a-f]{64}$/.test(value)

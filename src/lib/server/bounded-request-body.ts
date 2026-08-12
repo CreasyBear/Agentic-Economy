@@ -14,12 +14,19 @@ export type BoundedRequestJsonResult =
 
 const decoder = new TextDecoder()
 
+export async function cancelResponseBody(
+  response: BoundedRequestBody,
+): Promise<void> {
+  if (response.body !== null) await response.body.cancel().catch(() => undefined)
+}
+
 export async function readBoundedRequestText(
   request: BoundedRequestBody,
   maxBytes: number,
 ): Promise<BoundedRequestTextResult> {
   const declaredContentLength = Number(request.headers.get('content-length'))
   if (Number.isFinite(declaredContentLength) && declaredContentLength > maxBytes) {
+    await cancelResponseBody(request)
     return { ok: false, code: 'payload_too_large' }
   }
 

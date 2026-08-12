@@ -4,6 +4,7 @@ import { offeringComparisonEnvelope } from '@/modules/catalog/convex'
 
 import { literalUnion } from '@/modules/common/convex-literals'
 import { TrustTierValues } from '@/modules/business/public'
+import { businessContext } from '@/modules/business/public'
 import {
   BusinessOfferingStatusValues,
   ExternalOperationProvenanceValues,
@@ -107,10 +108,7 @@ const publicBusinessProfile = v.object({
   slug: v.string(),
   name: v.string(),
   category: v.string(),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  publishedPhone: v.optional(v.string()),
-  postcode: v.optional(v.string()),
+  businessContext,
   publicUrl: v.string(),
   trustTier: literalUnion(TrustTierValues),
   responseTimeMinutes: v.optional(v.number()),

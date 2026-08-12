@@ -2,7 +2,7 @@ import {
   isBoundedJsonValue,
   sameCapabilityContractRef,
 } from '@/modules/capability-contract/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
@@ -21,6 +21,17 @@ export function aggregateIsInternallyConsistent(
     : aggregate.evaluation.posture === 'needs_information'
       ? aggregate.outcome === 'needs_information'
       : aggregate.outcome === 'plan_ready' || aggregate.outcome === 'unsupported'
+  const candidatePricingIsConsistent = aggregate.evaluation.candidates.every((candidate) => (
+    candidate.publicationRef !== undefined
+      ? candidate.publicationRevision !== undefined
+        && candidate.price !== undefined
+        && candidate.priceDigest !== undefined
+        && isCanonicalDigest(candidate.priceDigest)
+      : candidate.publicationRevision === undefined
+        && candidate.readinessValidUntil === undefined
+        && candidate.price === undefined
+        && candidate.priceDigest === undefined
+  ))
   return aggregate.aggregateVersion === 2
     && aggregateByteLengthWithinLimit(aggregate)
     && aggregate.snapshot.revision === expectedRevision + 1
@@ -88,6 +99,7 @@ export function aggregateIsInternallyConsistent(
     && new Set((aggregate.importedCommitmentReferences ?? []).map(({ referenceRef }) => referenceRef)).size
       === (aggregate.importedCommitmentReferences?.length ?? 0)
     && aggregate.evaluation.candidates.length <= 256
+    && candidatePricingIsConsistent
     && aggregate.snapshot.facts.every(({ value }) => isBoundedJsonValue(value))
     && aggregate.evaluation.facts.every(({ value }) => isBoundedJsonValue(value))
     && aggregate.evaluation.criteria.every(({ value }) => isBoundedJsonValue(value))

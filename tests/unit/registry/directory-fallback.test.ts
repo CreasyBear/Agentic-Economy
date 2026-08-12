@@ -5,24 +5,21 @@ import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/internal/
 
 function business(
   slug: string,
-  publishedPhone: string | undefined,
+  businessContext: PublicBusinessCatalogApiV2Dto['businessContext'],
   pricingSummary?: string,
-  place: { suburb: string; stateTerritory: string } = { suburb: 'Adelaide', stateTerritory: 'SA' },
-) {
+): PublicBusinessCatalogApiV2Dto {
   return {
     schemaVersion: 'public-business-catalog-api:v2',
     businessId: `business:${slug}`,
     slug,
     name: slug,
     category: 'Emergency plumbing',
-    suburb: place.suburb,
-    stateTerritory: place.stateTerritory,
+    businessContext,
     publicUrl: `/${slug}`,
     trustTier: 'claimed',
     photos: [],
     observedAt: 1,
     disposition: 'current',
-    ...(publishedPhone === undefined ? {} : { publishedPhone }),
     offerings: [
       {
         offeringRef: `offering:${slug}:emergency`,
@@ -37,7 +34,7 @@ function business(
       },
     ],
     accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
-  } as unknown as PublicBusinessCatalogApiV2Dto
+  }
 }
 
 describe('directory fallback when AE cannot carry the Request', () => {
@@ -48,8 +45,13 @@ describe('directory fallback when AE cannot carry the Request', () => {
    */
   it('offers only businesses the customer can actually reach', () => {
     const result = selectDirectoryFallback([
-      business('unreachable-plumbing', undefined),
-      business('adelaide-emergency-plumbing', '(08) 5550 1060'),
+      business('unreachable-plumbing', { kind: 'local_human', suburb: 'Adelaide', stateTerritory: 'SA' }),
+      business('adelaide-emergency-plumbing', {
+        kind: 'local_human',
+        suburb: 'Adelaide',
+        stateTerritory: 'SA',
+        publishedPhone: '(08) 5550 1060',
+      }),
     ])
 
     expect(result.kind).toBe('available')
@@ -59,13 +61,18 @@ describe('directory fallback when AE cannot carry the Request', () => {
   })
 
   it('reports none rather than an empty panel when nothing is reachable', () => {
-    expect(selectDirectoryFallback([business('unreachable-plumbing', undefined)])).toEqual({ kind: 'none' })
+    expect(selectDirectoryFallback([business('unreachable-plumbing', { kind: 'local_human', suburb: 'Adelaide', stateTerritory: 'SA' })])).toEqual({ kind: 'none' })
     expect(selectDirectoryFallback([])).toEqual({ kind: 'none' })
   })
 
   it('carries the decision facts the customer needs to choose', () => {
     const result = selectDirectoryFallback([
-      business('adelaide-emergency-plumbing', '(08) 5550 1060', 'Demo price — $180 call-out'),
+      business('adelaide-emergency-plumbing', {
+        kind: 'local_human',
+        suburb: 'Adelaide',
+        stateTerritory: 'SA',
+        publishedPhone: '(08) 5550 1060',
+      }, 'Demo price — $180 call-out'),
     ])
 
     expect(result.kind).toBe('available')
@@ -79,7 +86,12 @@ describe('directory fallback when AE cannot carry the Request', () => {
   })
 
   it('stays short enough to read without scrolling past the point', () => {
-    const many = Array.from({ length: 12 }, (_, index) => business(`plumbing-${index}`, '(08) 5550 1060'))
+    const many = Array.from({ length: 12 }, (_, index) => business(`plumbing-${index}`, {
+      kind: 'local_human',
+      suburb: 'Adelaide',
+      stateTerritory: 'SA',
+      publishedPhone: '(08) 5550 1060',
+    }))
     const result = selectDirectoryFallback(many)
 
     expect(result.kind).toBe('available')
@@ -93,8 +105,18 @@ describe('directory fallback when AE cannot carry the Request', () => {
    */
   it('prefers businesses in the area the customer named', () => {
     const result = selectDirectoryFallback([
-      business('darwin-emergency-plumbing', '(08) 5550 1050', undefined, { suburb: 'Darwin', stateTerritory: 'NT' }),
-      business('fremantle-emergency-plumbing', '(08) 5550 1080', undefined, { suburb: 'Fremantle', stateTerritory: 'WA' }),
+      business('darwin-emergency-plumbing', {
+        kind: 'local_human',
+        suburb: 'Darwin',
+        stateTerritory: 'NT',
+        publishedPhone: '(08) 5550 1050',
+      }),
+      business('fremantle-emergency-plumbing', {
+        kind: 'local_human',
+        suburb: 'Fremantle',
+        stateTerritory: 'WA',
+        publishedPhone: '(08) 5550 1080',
+      }),
     ], 'burst pipe in Fremantle, someone today, under $500')
 
     expect(result).toMatchObject({
@@ -107,7 +129,12 @@ describe('directory fallback when AE cannot carry the Request', () => {
 
   it('admits when nothing reachable is in the named area', () => {
     const result = selectDirectoryFallback([
-      business('darwin-emergency-plumbing', '(08) 5550 1050', undefined, { suburb: 'Darwin', stateTerritory: 'NT' }),
+      business('darwin-emergency-plumbing', {
+        kind: 'local_human',
+        suburb: 'Darwin',
+        stateTerritory: 'NT',
+        publishedPhone: '(08) 5550 1050',
+      }),
     ], 'burst pipe in Fremantle, someone today, under $500')
 
     expect(result).toMatchObject({ kind: 'available', matchesRequestedArea: false })
@@ -120,8 +147,17 @@ describe('directory fallback when AE cannot carry the Request', () => {
    */
   it('does not lose reachable businesses behind phoneless ones', () => {
     const items = [
-      ...Array.from({ length: 6 }, (_, index) => business(`unreachable-${index}`, undefined)),
-      business('adelaide-emergency-plumbing', '(08) 5550 1060'),
+      ...Array.from({ length: 6 }, (_, index) => business(`unreachable-${index}`, {
+        kind: 'local_human',
+        suburb: 'Adelaide',
+        stateTerritory: 'SA',
+      })),
+      business('adelaide-emergency-plumbing', {
+        kind: 'local_human',
+        suburb: 'Adelaide',
+        stateTerritory: 'SA',
+        publishedPhone: '(08) 5550 1060',
+      }),
     ]
 
     const result = selectDirectoryFallback(items)

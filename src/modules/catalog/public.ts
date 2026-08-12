@@ -36,8 +36,11 @@ export {
   OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
+  SUPPORTED_OFFERING_CURRENCIES,
   formatOfferingPrice,
+  isSupportedOfferingCurrency,
   normalizeOfferingPrice,
+  supportedOfferingCurrencySchema,
 } from './internal/offering-price'
 export type {
   OfferingPrice,
@@ -45,6 +48,7 @@ export type {
   OfferingPriceKind,
   OfferingPriceTaxTreatment,
   OfferingPriceUnit,
+  SupportedOfferingCurrency,
 } from './internal/offering-price'
 
 export type {
@@ -131,6 +135,7 @@ export {
 
 export {
   publicOwnerDefaultClaimInput,
+  toBusinessContext,
   toServiceCatalogInput,
   validatePublicOwnerClaimFlowInput,
   submitPublicOwnerClaimFlow,
@@ -166,6 +171,7 @@ export type PublicOwnerStatusRouteReadbackResult =
 
 export type PublicOwnerClaimFlowRouteResult =
   | Extract<PublicOwnerClaimFlowResult, { kind: 'error' }>
+  | Extract<PublicOwnerClaimFlowResult, { kind: 'provider_claimed' }>
   | {
       kind: 'ok'
       code: 'claim_flow_published'
@@ -174,8 +180,8 @@ export type PublicOwnerClaimFlowRouteResult =
     }
 
 export type PublicBusinessPageRouteReadbackResult =
-  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
-  | Exclude<PublicBusinessPageReadbackResult, { kind: 'available' }>
+  | PublicBusinessPageReadbackResult
+  | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
 export function readPublicCatalogActivationRef(catalog: PublicBusinessCatalogApiV2Dto): string {
   return catalog.businessId

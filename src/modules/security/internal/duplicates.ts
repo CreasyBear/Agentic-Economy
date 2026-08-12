@@ -8,6 +8,7 @@ import type {
   CsrfDecision,
   DuplicateClaimDecision,
 } from '@/modules/security/public'
+import { canonicalProviderWebsite } from '@/modules/business/public'
 
 export function assertCsrf(input: CsrfCheckInput): CsrfDecision {
   if (
@@ -72,7 +73,17 @@ export function detectDuplicateClaim(
 }
 
 export function normalizeClaimFingerprint(input: ClaimFingerprintInput): string {
-  return [input.name, input.category, input.suburb, input.stateTerritory].map(normalizeFingerprintPart).join('|')
+  const context = input.businessContext
+  if (context.kind === 'local_human') {
+    return [input.name, input.category, context.suburb, context.stateTerritory].map(normalizeFingerprintPart).join('|')
+  }
+  return [
+    'programmable_provider',
+    input.name,
+    input.category,
+    canonicalProviderWebsite(context.website) ?? context.website,
+    context.providerIdentifier,
+  ].map(normalizeFingerprintPart).join('|')
 }
 
 function normalizeFingerprintPart(value: string): string {

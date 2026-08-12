@@ -59,6 +59,7 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     items: [
       { href: '/owner/status', label: 'Business page', icon: Activity, tier: 'core' },
       { href: '/owner/offerings', label: 'Offerings', icon: Store, tier: 'core' },
+      { href: '/owner/supply', label: 'Supply', icon: Wrench, tier: 'core' },
       { href: '/owner/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
     ],
   },

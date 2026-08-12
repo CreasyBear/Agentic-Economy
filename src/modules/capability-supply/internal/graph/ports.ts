@@ -1,15 +1,32 @@
-import type { ExactCapabilityContractResult } from '@/modules/capability-contract-registry/public'
-import type { CapabilityContractRef } from '@/modules/capability-contract/public'
+import type { CapabilityOfferingOrigin } from '@/modules/capability-supply/public'
+import type { OfferingAccessPathDescriptor } from '@/modules/catalog/public'
 
+import type { CapabilityContractRef } from '@/modules/capability-contract/public'
+import type { ExactCapabilityContractResult } from '@/modules/capability-contract-registry/public'
 import type { CapabilityBindingRow, CapabilityConnectionAuthoritySnapshot } from '../binding'
 import type { CapabilityOfferingRow } from '../offering'
-import type { CapabilityPublicationLifecycleRow } from '../publication'
+import type {
+  CapabilityPublicationLifecycleRow,
+  CapabilityReadinessOutcome,
+} from '../publication'
 import type { ProviderConnection } from '../../provider-connection'
+
+export type GraphCatalogAccessPath = Readonly<{
+  accessPathRef: string
+  businessId: string
+  offeringRef: string
+  offeringRevision: number
+  offeringSourceHash: string
+  status: 'draft' | 'published' | 'withdrawn'
+  sourceHash: string
+  descriptor: OfferingAccessPathDescriptor
+}>
 export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   id: string
   publicationRef: string
   operationRef: string
   revision: number
+  networkId: string
   businessId: string
   offeringId: string
   bindingId: string
@@ -35,6 +52,12 @@ export type ProbeReadinessPatch = Readonly<{
   credentialState: 'ready' | 'unavailable'
   healthState: 'healthy' | 'unhealthy'
   connectionAuthority?: CapabilityConnectionAuthoritySnapshot
+  readinessTargetDigest: string
+  readinessRequestDigest: string
+  readinessResponseStatus?: number
+  readinessResponseContentType?: string
+  readinessResponseDigest?: string
+  readinessOutcome: CapabilityReadinessOutcome
   readinessObservedAt: number
   readinessValidUntil: number
   readinessEvidenceRefs: readonly string[]
@@ -66,6 +89,11 @@ export type CapabilityGraphPorts = Readonly<{
   loadBindingByBindingId: (bindingId: string) => Promise<CapabilityBindingRow | null>
   loadPublishedBusiness: (businessId: string) => Promise<GraphPublishedBusiness | null>
   loadProviderConnection: (connectionRef: string) => Promise<ProviderConnection | undefined>
+  catalogOriginIsCurrent?: (
+    origin: Extract<CapabilityOfferingOrigin, { kind: 'catalog_offering' }>,
+    businessId: string,
+  ) => Promise<boolean>
+  loadCatalogAccessPath?: (accessPathRef: string) => Promise<GraphCatalogAccessPath | null>
   getActiveExactCapabilityContract: (
     ref: CapabilityContractRef,
   ) => Promise<GraphActiveExactCapabilityContractResult>

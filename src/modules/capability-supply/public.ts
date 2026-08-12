@@ -69,6 +69,35 @@ export function capabilityOperationId(capabilityId: string): string {
 export function isPublicOperationRef(value: unknown): value is PublicOperationRef {
   return typeof value === 'string' && /^operation:v1:[0-9a-f]{64}$/.test(value)
 }
+
+export type AnonymousKeylessOperationEffect = Readonly<{
+  class: 'data_release' | 'financial_exposure' | 'external_state_change'
+  authority: 'none' | 'explicit' | 'mandate_or_explicit'
+}>
+
+export function isAnonymousKeylessOperationEligible(input: Readonly<{
+  authority: Readonly<{ kind: string }>
+  adapterId: string
+  method: string
+  sourceKind: string
+  price: CapabilityOfferingRegistration['presentation']['price']
+  effects: readonly AnonymousKeylessOperationEffect[]
+}>): boolean {
+  if (!Array.isArray(input.effects)) return false
+  const hasExactZeroPrice = input.price.kind === 'fixed'
+    && exactAmountSchema.safeParse(input.price.amount).success
+    && input.price.amount.units === '0'
+  const hasNoConsequentialEffect = input.effects.every((effect) => (
+    effect.class !== 'financial_exposure' && effect.class !== 'external_state_change'
+  ))
+  return hasExactZeroPrice
+    && input.authority.kind === 'keyless'
+    && input.adapterId === 'http-json:v1'
+    && (input.method === 'GET' || input.method === 'POST')
+    && input.sourceKind !== 'x402'
+    && hasNoConsequentialEffect
+}
+
 export function isRegisteredOperationMappingRef(value: unknown): value is RegisteredOperationMappingRef {
   return typeof value === 'string' && /^mapping:v1:[0-9a-f]{64}$/.test(value)
 }
@@ -167,6 +196,16 @@ export function validateAdmittedOperationRef(input: unknown): input is AdmittedO
 
 export {
   PublicOperationRegistrySchemaVersion,
+  operationCompareInputSchema,
+  operationCompareOutputSchema,
+  operationDetailInputSchema,
+  operationDetailOutputSchema,
+  operationInspectPlanInputSchema,
+  operationInspectPlanOutputSchema,
+  operationSearchInputSchema,
+  operationSearchOutputSchema,
+  publicOperationAuthenticationSchema,
+  publicOperationParameterSchema,
   searchCapabilityOperations,
   detailCapabilityOperation,
   compareCapabilityOperations,
@@ -201,6 +240,7 @@ export type {
   OperationDetailWireResult,
   OperationSearchFilters,
   OperationSearchInput,
+  OperationSearchRanking,
   OperationSearchTextCandidate,
   OperationSearchResult,
   OperationSearchWireResult,
@@ -219,9 +259,12 @@ export type {
   PublicOperationDescriptor,
   PublicOperationOfferingRef,
   PublicOperationParameter,
+  PublicOperationParameterMapping,
   PublicOperationPrice,
+  PublicOperationPriceEvidence,
   PublicOperationReadiness,
   PublicOperationNavigationRelation,
+  PublicOperationTransport,
   PublicRecoveryPolicy,
 } from './operation-projection'
 export {
@@ -230,6 +273,8 @@ export {
   parseAdmittedTransportCatalogMetadata,
   parseAdmittedX402CatalogPayment,
   parseHttpJsonTransportConfiguration,
+  parseMcpJsonRpcTransportConfiguration,
+  parseX402FetchTransportConfiguration,
   readHttpJsonProbeConfiguration,
   validPublicHttpsEndpoint,
 } from './internal/transport-adapters'
@@ -237,12 +282,16 @@ export type {
   AdmittedTransportCatalogMetadata,
   HttpJsonCredential,
   HttpJsonFixedQueryParameter,
+  HttpJsonHeaderParameterMapping,
+  HttpJsonPathParameterMapping,
   HttpJsonProbeConfiguration,
   HttpJsonQueryParameterMapping,
   HttpJsonTransportConfiguration,
+  McpJsonRpcTransportConfiguration,
   TransportAdmissionInput,
   TransportAdmissionResult,
   X402CatalogPayment,
+  X402FetchTransportConfiguration,
 } from './internal/transport-adapters'
 export {
   importAgentPluginMcpCapability,
@@ -250,6 +299,7 @@ export {
   importOpenApiHttpCapability,
   importX402Capability,
   normalizeCapabilityPublication,
+  preflightOpenApiHttpDocument,
 } from './internal/publication-importers'
 export { admitProviderSchema } from './internal/admit-provider-schema'
 export type {
@@ -269,15 +319,27 @@ export type {
   CapabilityPublicationImportResult,
   CapabilityPublicationOfferingDraft,
   CapabilityPublicationSource,
+  CapabilityPublicationSourceSelector,
+  OpenApiDocumentPreflightResult,
+  OpenApiOperationPreflightOutcome,
 } from './internal/publication-importers'
-export { runCapabilityReadinessProbe } from './internal/readiness-probe'
-export type { CapabilityProbeOutcome } from './internal/readiness-probe'
+export {
+  capabilityPublicationSourceSelectorValue,
+  pricingConfigValue,
+  readinessOutcomeValue,
+} from './internal/convex-schema'
+export type {
+  CapabilityProbeObservation,
+  CapabilityProbeOutcome,
+  CapabilityProbeTarget,
+} from './internal/readiness-probe'
 export {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
+  parsePublishedOperationSnapshot,
+  publishedOperationMaterialMatches,
 } from './published-operation'
 export {
-  createMemoryCapabilityLiquidityPort,
   recordCapabilityCallObservation,
   recordCapabilityDepthObservation,
 } from './internal/liquidity'
@@ -296,15 +358,6 @@ export type {
   PublishedOperationUsageObservation,
   RuntimePublishedOperationDescriptor,
 } from './published-operation'
-export {
-  developmentBtcUsdQuoteSource,
-  presentDevelopmentBtcUsdQuoteResult,
-  projectDevelopmentBtcUsdQuoteResult,
-} from './btc-usd-quote-result'
-export type {
-  BtcUsdQuoteProjectionDecision,
-  BtcUsdQuoteResult,
-} from './btc-usd-quote-result'
 export {
   bindingObservedRowDigest,
 } from './internal/quarantine'
@@ -332,52 +385,84 @@ export {
   type EligibilityWritePorts,
 } from './internal/eligibility'
 export {
+  exactCurrentCatalogOperationIsRouteable,
+  qualifySuppliedCandidate,
   queryCapabilityGraph,
   readCapabilityProbeTarget,
   recordCapabilityProbeResult,
+  probeRequestDigest,
+  probeTargetDigest,
   type CapabilityGraphPorts,
+  type GraphCatalogAccessPath,
+  type CapabilityProbeTargetUnavailableReason,
   type GraphPublicationRow,
   type GraphPublishedBusiness,
+  type ReadCapabilityProbeTargetResult,
+  type SuppliedCandidateRef,
 } from './internal/graph'
 export {
   contractRefFromRow,
+  offeringRegistrationFromRow,
   registerCapabilityOffering,
   type CapabilityOfferingRow,
   type OfferingInsertRow,
   type OfferingWritePorts,
 } from './internal/offering'
 export {
+  beginOperation,
+  failOperation,
+  replayOperationResult,
+  succeedOperation,
   registerCapabilityBindingCommand,
   registerCapabilityOfferingCommand,
   quarantineCapabilityBindingCommand,
   setCapabilitySupplyEligibilityCommand,
   type OperationKeyRecord,
   type OperationLedgerPorts,
+  type OperationBeginResult,
 } from './internal/operation-ledger'
 export {
   decodeConvexPublicationSource,
   isDirectPublicationSource,
   publicationLifecycle,
+  publicationMaterialContainsCredential,
   publicationProjection,
-  publishCapabilityCommand,
+  publishPreparedCapabilityCommand,
+  republishPreparedCapabilityCommand,
   refreshCapabilityCommand,
   withdrawCapabilityCommand,
   type PublicationCommandPorts,
+  type PublicationCommandRow,
+  type PublicationLifecycle,
+  type PublishPreparedCapabilityCommandInput,
+  type PublishPreparedCapabilityCommandResult,
+  type PublishPreparedCapabilityRefusal,
+} from './internal/publication'
+export {
+  admitPublicationDraft,
+  preparePublicationDraft,
+  type AdmittedPublicationDraft,
+  type AdmitPublicationDraftRefusal,
+  type PreparePublicationDraftRefusal,
+  type PreparedPublicationDraft,
+  type PreparedPublicationMaterial,
 } from './internal/publication'
 export {
   CAPABILITY_PUBLICATION_AUTHORITY_MODES,
-  admitCapabilityPublicationCommand,
   capabilityPublicationProvenanceDigest,
   defineCapabilityPublicationProvenance,
   validCapabilityPublicationAuthority,
   validCapabilityPublicationSourceRevision,
+  type CapabilityPublicationAuthorityMode,
+  type CapabilityPublicationProvenance,
+  type CapabilityPublicationSourceIdentity,
+} from './internal/publication'
+export {
+  admitCapabilityPublicationCommand,
   type AdmitCapabilityPublicationInput,
   type AdmitCapabilityPublicationResult,
   type CapabilityPublicationAdmissionRefusal,
   type CapabilityPublicationAdmissionSource,
-  type CapabilityPublicationAuthorityMode,
-  type CapabilityPublicationProvenance,
-  type CapabilityPublicationSourceIdentity,
 } from './internal/publication'
 export {
   boundedTrimmed,

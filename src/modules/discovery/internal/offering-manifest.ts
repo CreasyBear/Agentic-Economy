@@ -1,3 +1,4 @@
+import type { BusinessContext } from '@/modules/business/public'
 import type { OfferingPrice } from '@/modules/catalog/public'
 import type { ExactAmount } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -23,7 +24,7 @@ export type OfferingDiscoveryManifestContract = Readonly<{
   slug: string
   businessName: string
   category: string
-  location: Readonly<{ suburb: string; stateTerritory: string; postcode?: string }>
+  businessContext: BusinessContext
   publicUrl: string
   manifestUrl: string
   disposition: 'current' | 'partial' | 'stale'
@@ -98,7 +99,7 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
     slug: projection.slug,
     businessName: projection.businessName,
     category: projection.category,
-    location: projection.location,
+    businessContext: projection.businessContext,
     publicUrl,
     manifestUrl: `${publicUrl}/ucp`,
     disposition: business.disposition,

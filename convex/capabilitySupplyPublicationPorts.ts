@@ -1,4 +1,9 @@
-import { isPublicOperationRef, type PublicationCommandPorts, type OperationLedgerPorts } from '@/modules/capability-supply/public'
+import {
+  isPublicOperationRef,
+  connectionAuthoritySnapshotsEqual,
+  type PublicationCommandPorts,
+  type OperationLedgerPorts,
+} from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
@@ -7,8 +12,8 @@ import {
   getExactRegisteredCapabilityContract,
   registerCapabilityContractDocument,
 } from './capabilityContractDocuments'
+import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
-
 export function capabilitySupplyPublicationPorts(
   ctx: MutationCtx,
   writers: Pick<OperationLedgerPorts, 'registerOffering' | 'registerBinding' | 'setEligibility'>,
@@ -16,6 +21,9 @@ export function capabilitySupplyPublicationPorts(
   const ledger = capabilitySupplyOperationPorts(ctx.db, writers)
   return {
     ...ledger,
+    catalogOriginIsCurrent: async (origin, businessId) => (
+      await eligibleSupplyPorts(ctx.db).catalogOriginIsCurrent(origin, businessId)
+    ),
     findContractDigest: async (capabilityId, version) => {
       const existing = await ctx.db.query('capabilityContractDocuments')
         .withIndex('by_capabilityId_and_version', (index) => (
@@ -23,6 +31,9 @@ export function capabilitySupplyPublicationPorts(
         )).unique()
       return existing === null ? null : existing.contractDigest
     },
+    loadProviderConnection: async (connectionRef) => (
+      await eligibleSupplyPorts(ctx.db).loadProviderConnection(connectionRef) ?? null
+    ),
     loadPublicationAtRevision: async (publicationRef, revision) => {
       const publication = await ctx.db.query('capabilityPublications')
         .withIndex('by_publicationRef_and_revision', (index) => (
@@ -39,29 +50,58 @@ export function capabilitySupplyPublicationPorts(
         revision: publication.revision,
         businessId: publication.businessId,
         networkId: publication.networkId,
+        runtimeEnvironment: publication.runtimeEnvironment,
         offeringId: publication.offeringId,
         bindingId: publication.bindingId,
         capabilityId: publication.capabilityId,
         version: publication.version,
         contractDigest: publication.contractDigest,
-        disposition: publication.disposition,
+        sourceKind: publication.sourceKind,
+        ...(publication.sourceSelector === undefined ? {} : { sourceSelector: publication.sourceSelector }),
+        ...(publication.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: publication.sourceDescriptorJson }),
         sourceRevision: publication.sourceRevision,
         sourceDigest: publication.sourceDigest,
+        ...(publication.pricingConfigJson === undefined ? {} : { pricingConfigJson: publication.pricingConfigJson }),
+        ...(publication.priceDigest === undefined ? {} : { priceDigest: publication.priceDigest }),
         publisherRef: publication.publisherRef,
         authorityMode: publication.authorityMode,
         provenanceDigest: publication.provenanceDigest,
+        ...(publication.connectionAuthority === undefined ? {} : { connectionAuthority: publication.connectionAuthority }),
+        ...(publication.supersedesRevision === undefined ? {} : { supersedesRevision: publication.supersedesRevision }),
+        disposition: publication.disposition,
+        credentialState: publication.credentialState,
+        healthState: publication.healthState,
+        ...(publication.readinessTargetDigest === undefined ? {} : { readinessTargetDigest: publication.readinessTargetDigest }),
+        ...(publication.readinessRequestDigest === undefined ? {} : { readinessRequestDigest: publication.readinessRequestDigest }),
+        ...(publication.readinessResponseStatus === undefined ? {} : { readinessResponseStatus: publication.readinessResponseStatus }),
+        ...(publication.readinessResponseContentType === undefined ? {} : { readinessResponseContentType: publication.readinessResponseContentType }),
+        ...(publication.readinessResponseDigest === undefined ? {} : { readinessResponseDigest: publication.readinessResponseDigest }),
+        ...(publication.readinessOutcome === undefined ? {} : { readinessOutcome: publication.readinessOutcome }),
+        ...(publication.readinessObservedAt === undefined ? {} : { readinessObservedAt: publication.readinessObservedAt }),
+        ...(publication.readinessValidUntil === undefined ? {} : { readinessValidUntil: publication.readinessValidUntil }),
+        readinessEvidenceRefs: publication.readinessEvidenceRefs,
+        registrationEvidenceRefs: publication.registrationEvidenceRefs,
       }
     },
     insertPublication: async (input) => {
       const binding = await ctx.db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
       if (binding === null) throw new Error('capability_publication_binding_missing')
+      if (input.connectionAuthority !== undefined
+        && !connectionAuthoritySnapshotsEqual(input.connectionAuthority, binding.connectionAuthority)) {
+        throw new Error('capability_publication_authority_snapshot_invalid')
+      }
       await ctx.db.insert('capabilityPublications', {
         operationRef: input.operationRef,
         publicationRef: input.publicationRef,
         revision: input.revision,
         businessId: input.businessId as Id<'businesses'>,
         networkId: input.networkId,
+        runtimeEnvironment: input.runtimeEnvironment,
+        sourceSelector: input.sourceSelector,
+        sourceDescriptorJson: input.sourceDescriptorJson,
+        pricingConfigJson: input.pricingConfigJson,
+        priceDigest: input.priceDigest,
         sourceKind: input.sourceKind,
         sourceRevision: input.sourceRevision,
         sourceDigest: input.sourceDigest,

@@ -53,7 +53,7 @@ describe('answer-thread turn-path thinness', () => {
   })
 
   it('imports TurnPath adapters from ./turns', () => {
-    expect(orchestratorSource).toContain("from './turns/")
+    expect(orchestratorSource).toMatch(/from\s+['"]\.\/turns\//)
     for (const symbol of turnPathExports) {
       expect(orchestratorSource).toContain(symbol)
     }

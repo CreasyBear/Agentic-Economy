@@ -112,19 +112,26 @@ export function buildRegistrySearchDocumentsForCatalog(
   return catalog.offerings.map((offering) => {
     const offeringRef = offering.offeringRef as RegistrySearchDocument['offeringRef']
     const keywords = offeringKeywordsFor(offering.name, offering.category, offering.summary)
+    const businessContext = catalog.businessContext
+    const providerTerms = businessContext.kind === 'programmable_provider'
+      ? [businessContext.website, businessContext.providerIdentifier]
+      : []
     const serviceAreaSummary = offering.serviceAreaSummary ?? ''
-    const placeKeys = placeKeysFor({
-      suburb: catalog.suburb,
-      stateTerritory: catalog.stateTerritory,
-      ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
-      serviceAreaSummary,
-    })
+    const placeKeys = businessContext.kind === 'local_human'
+      ? placeKeysFor({
+          suburb: businessContext.suburb,
+          stateTerritory: businessContext.stateTerritory,
+          serviceAreaSummary,
+          ...(businessContext.postcode === undefined ? {} : { postcode: businessContext.postcode }),
+        })
+      : []
     const searchText = normalizeSearchText([
       catalog.name,
       catalog.category,
-      catalog.suburb,
-      catalog.stateTerritory,
-      catalog.postcode ?? '',
+      ...providerTerms,
+      ...(businessContext.kind === 'local_human'
+        ? [businessContext.suburb, businessContext.stateTerritory, businessContext.postcode ?? '']
+        : []),
       offering.name,
       offering.category,
       offering.summary,
@@ -138,8 +145,7 @@ export function buildRegistrySearchDocumentsForCatalog(
       name: offering.name,
       category: offering.category,
       categoryKey: normalizeSearchText(offering.category),
-      suburb: catalog.suburb,
-      stateTerritory: catalog.stateTerritory,
+      businessContext,
       publicStatus: 'published' as const,
       trustTier: catalog.trustTier,
       firstRequestMode: offering.accessPaths.some((path) => path.kind === 'human_request' && path.channel === 'ae_inquiry')
@@ -156,7 +162,6 @@ export function buildRegistrySearchDocumentsForCatalog(
       documentId: buildRegistrySearchDocumentId(catalog.slug, offeringRef),
       schemaVersion: RegistrySearchDocumentSchemaVersion,
       ...documentCore,
-      ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
       generatedHash: canonicalDigest(documentCore),
     }
   })
@@ -196,7 +201,9 @@ export function documentMatchesRegistryQuery(
     return false
   }
 
-  const stateKey = normalizeSearchText(document.stateTerritory)
+  const stateKey = document.businessContext.kind === 'local_human'
+    ? normalizeSearchText(document.businessContext.stateTerritory)
+    : ''
   const queryNamesDocumentPlace = document.placeKeys.some((placeKey) =>
     placeKey !== stateKey && ` ${query} `.includes(` ${placeKey} `),
   )

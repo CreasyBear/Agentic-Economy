@@ -86,6 +86,8 @@ const x402PaymentPrepareArgs = {
   dispatchRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
+  operationRef: v.optional(v.string()),
+  inputDigest: v.optional(v.string()),
   paymentIdentifier: v.string(),
   operationKeyDigest: v.string(),
   challengeDigest: v.string(),
@@ -106,6 +108,8 @@ const x402PaymentAuthorizationMaterial = v.object({
   dispatchRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
+  operationRef: v.optional(v.string()),
+  inputDigest: v.optional(v.string()),
   paymentIdentifier: v.string(),
   challengeDigest: v.string(),
   challengeJson: v.string(),
@@ -120,6 +124,54 @@ const x402PaymentAuthorizationMaterial = v.object({
     v.literal('observed'),
     v.literal('reconciliation_required'),
   ),
+  transportObservationDigest: v.optional(v.string()),
+  transportRequestDigest: v.optional(v.string()),
+  paymentObservationDigest: v.optional(v.string()),
+  paymentResolution: v.optional(v.union(
+    v.literal('not_released'),
+    v.literal('released'),
+    v.literal('unknown'),
+  )),
+  reconciliationEvidenceRef: v.optional(v.string()),
+  reconciliationEvidenceDigest: v.optional(v.string()),
+})
+
+const x402PaymentAttemptReadValue = v.object({
+  dispatchRef: v.string(),
+  attemptRef: v.string(),
+  effectGeneration: v.number(),
+  operationRef: v.optional(v.string()),
+  inputDigest: v.optional(v.string()),
+  paymentIdentifier: v.string(),
+  operationKeyDigest: v.string(),
+  challengeDigest: v.string(),
+  providerEndpoint: v.string(),
+  scheme: v.string(),
+  network: v.string(),
+  asset: v.string(),
+  payTo: v.string(),
+  amountUnits: v.string(),
+  currency: v.string(),
+  exponent: v.number(),
+  state: v.union(
+    v.literal('prepared'),
+    v.literal('possibly_submitted'),
+    v.literal('observed'),
+    v.literal('reconciliation_required'),
+  ),
+  preparedAt: v.number(),
+  submissionStartedAt: v.optional(v.number()),
+  observedAt: v.optional(v.number()),
+  transportObservationDigest: v.optional(v.string()),
+  transportRequestDigest: v.optional(v.string()),
+  paymentObservationDigest: v.optional(v.string()),
+  paymentResolution: v.optional(v.union(
+    v.literal('not_released'),
+    v.literal('released'),
+    v.literal('unknown'),
+  )),
+  reconciliationEvidenceRef: v.optional(v.string()),
+  reconciliationEvidenceDigest: v.optional(v.string()),
 })
 const x402PaymentEventArgs = {
   dispatchRef: v.string(),
@@ -144,6 +196,29 @@ const x402PaymentObservationArgs = {
   state: v.union(v.literal('observed'), v.literal('reconciliation_required')),
   evidenceRefs: v.array(v.string()),
 }
+const x402PaymentObservationReconciliationArgs = {
+  dispatchRef: v.string(),
+  attemptRef: v.string(),
+  effectGeneration: v.number(),
+  operationRef: v.string(),
+  inputDigest: v.string(),
+  evidenceRef: v.string(),
+  evidenceDigest: v.string(),
+  resolution: v.union(v.literal('not_released'), v.literal('released')),
+  transportObservationDigest: v.string(),
+  transportRequestDigest: v.string(),
+  paymentObservationDigest: v.string(),
+  observedAt: v.number(),
+}
+
+const x402PaymentObservationReconciliationResult = v.union(
+  v.object({
+    kind: v.literal('settled'),
+    resolution: v.union(v.literal('not_released'), v.literal('released')),
+  }),
+  v.object({ kind: v.literal('reconciliation_required') }),
+  v.object({ kind: v.literal('not_found') }),
+)
 
 const runProjection = v.object({
   runRef: v.string(),
@@ -536,6 +611,8 @@ export const readX402PaymentAuthorization = internalQuery({
       dispatchRef: row.dispatchRef,
       attemptRef: row.attemptRef,
       effectGeneration: row.effectGeneration,
+      ...(row.operationRef === undefined ? {} : { operationRef: row.operationRef }),
+      ...(row.inputDigest === undefined ? {} : { inputDigest: row.inputDigest }),
       paymentIdentifier: row.paymentIdentifier,
       challengeDigest: row.challengeDigest,
       challengeJson: row.challengeJson,
@@ -545,6 +622,12 @@ export const readX402PaymentAuthorization = internalQuery({
       custodyRef: row.custodyRef,
       authorizationDigest: row.authorizationDigest,
       state: row.state,
+      ...(row.transportObservationDigest === undefined ? {} : { transportObservationDigest: row.transportObservationDigest }),
+      ...(row.transportRequestDigest === undefined ? {} : { transportRequestDigest: row.transportRequestDigest }),
+      ...(row.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: row.paymentObservationDigest }),
+      ...(row.paymentResolution === undefined ? {} : { paymentResolution: row.paymentResolution }),
+      ...(row.reconciliationEvidenceRef === undefined ? {} : { reconciliationEvidenceRef: row.reconciliationEvidenceRef }),
+      ...(row.reconciliationEvidenceDigest === undefined ? {} : { reconciliationEvidenceDigest: row.reconciliationEvidenceDigest }),
     }
   },
 })
@@ -563,6 +646,8 @@ export const readX402PaymentAuthorizationByDigest = internalQuery({
       dispatchRef: row.dispatchRef,
       attemptRef: row.attemptRef,
       effectGeneration: row.effectGeneration,
+      ...(row.operationRef === undefined ? {} : { operationRef: row.operationRef }),
+      ...(row.inputDigest === undefined ? {} : { inputDigest: row.inputDigest }),
       paymentIdentifier: row.paymentIdentifier,
       challengeDigest: row.challengeDigest,
       challengeJson: row.challengeJson,
@@ -572,6 +657,12 @@ export const readX402PaymentAuthorizationByDigest = internalQuery({
       custodyRef: row.custodyRef,
       authorizationDigest: row.authorizationDigest,
       state: row.state,
+      ...(row.transportObservationDigest === undefined ? {} : { transportObservationDigest: row.transportObservationDigest }),
+      ...(row.transportRequestDigest === undefined ? {} : { transportRequestDigest: row.transportRequestDigest }),
+      ...(row.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: row.paymentObservationDigest }),
+      ...(row.paymentResolution === undefined ? {} : { paymentResolution: row.paymentResolution }),
+      ...(row.reconciliationEvidenceRef === undefined ? {} : { reconciliationEvidenceRef: row.reconciliationEvidenceRef }),
+      ...(row.reconciliationEvidenceDigest === undefined ? {} : { reconciliationEvidenceDigest: row.reconciliationEvidenceDigest }),
     }
   },
 })
@@ -648,6 +739,125 @@ export const observeX402PaymentAttempt = internalMutation({
       evidenceRefs: args.evidenceRefs,
     })
     return null
+  },
+})
+export const readX402PaymentAttempt = internalQuery({
+  args: {
+    dispatchRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+  },
+  returns: v.union(x402PaymentAttemptReadValue, v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestX402PaymentAttempts')
+      .withIndex('by_attemptRef_and_effectGeneration', (query) =>
+        query.eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration))
+      .unique()
+    if (row === null || row.dispatchRef !== args.dispatchRef) return null
+    return {
+      dispatchRef: row.dispatchRef,
+      attemptRef: row.attemptRef,
+      effectGeneration: row.effectGeneration,
+      ...(row.operationRef === undefined ? {} : { operationRef: row.operationRef }),
+      ...(row.inputDigest === undefined ? {} : { inputDigest: row.inputDigest }),
+      paymentIdentifier: row.paymentIdentifier,
+      operationKeyDigest: row.operationKeyDigest,
+      challengeDigest: row.challengeDigest,
+      providerEndpoint: row.providerEndpoint,
+      scheme: row.scheme,
+      network: row.network,
+      asset: row.asset,
+      payTo: row.payTo,
+      amountUnits: row.amountUnits,
+      currency: row.currency,
+      exponent: row.exponent,
+      state: row.state,
+      preparedAt: row.preparedAt,
+      ...(row.submissionStartedAt === undefined ? {} : { submissionStartedAt: row.submissionStartedAt }),
+      ...(row.observedAt === undefined ? {} : { observedAt: row.observedAt }),
+      ...(row.transportObservationDigest === undefined ? {} : { transportObservationDigest: row.transportObservationDigest }),
+      ...(row.transportRequestDigest === undefined ? {} : { transportRequestDigest: row.transportRequestDigest }),
+      ...(row.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: row.paymentObservationDigest }),
+      ...(row.paymentResolution === undefined ? {} : { paymentResolution: row.paymentResolution }),
+      ...(row.reconciliationEvidenceRef === undefined ? {} : { reconciliationEvidenceRef: row.reconciliationEvidenceRef }),
+      ...(row.reconciliationEvidenceDigest === undefined ? {} : { reconciliationEvidenceDigest: row.reconciliationEvidenceDigest }),
+      evidenceRefs: row.evidenceRefs,
+    }
+  },
+})
+
+export const recordX402PaymentObservation = internalMutation({
+  args: {
+    dispatchRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    paymentIdentifier: v.string(),
+    operationRef: v.string(),
+    inputDigest: v.string(),
+    transportObservationDigest: v.string(),
+    transportRequestDigest: v.string(),
+    paymentObservationDigest: v.string(),
+    paymentResolution: v.union(v.literal('not_released'), v.literal('released'), v.literal('unknown')),
+    observedAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestX402PaymentAttempts')
+      .withIndex('by_attemptRef_and_effectGeneration', (query) =>
+        query.eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration))
+      .unique()
+    if (
+      row === null
+      || row.dispatchRef !== args.dispatchRef
+      || row.paymentIdentifier !== args.paymentIdentifier
+      || (row.operationRef !== undefined && row.operationRef !== args.operationRef)
+      || (row.inputDigest !== undefined && row.inputDigest !== args.inputDigest)
+      || (row.state !== 'prepared' && row.state !== 'possibly_submitted' && row.state !== 'observed' && row.state !== 'reconciliation_required')
+    ) throw new Error('x402_payment_observation_attribution_invalid')
+    await ctx.db.patch(row._id, {
+      state: args.paymentResolution === 'unknown' ? 'reconciliation_required' : 'observed',
+      operationRef: args.operationRef,
+      paymentObservationDigest: args.paymentObservationDigest,
+      inputDigest: args.inputDigest,
+      transportObservationDigest: args.transportObservationDigest,
+      transportRequestDigest: args.transportRequestDigest,
+      paymentResolution: args.paymentResolution,
+      observedAt: args.observedAt,
+    })
+    return null
+  },
+})
+export const reconcileX402PaymentAttempt = internalMutation({
+  args: x402PaymentObservationReconciliationArgs,
+  returns: x402PaymentObservationReconciliationResult,
+  handler: async (ctx, args): Promise<Infer<typeof x402PaymentObservationReconciliationResult>> => {
+    const row = await ctx.db.query('customerRequestX402PaymentAttempts')
+      .withIndex('by_attemptRef_and_effectGeneration', (query) =>
+        query.eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration))
+      .unique()
+    if (
+      row === null
+      || row.dispatchRef !== args.dispatchRef
+      || row.operationRef !== args.operationRef
+      || row.inputDigest !== args.inputDigest
+      || row.transportObservationDigest !== args.transportObservationDigest
+      || row.transportRequestDigest !== args.transportRequestDigest
+      || row.paymentObservationDigest !== args.paymentObservationDigest
+      || row.paymentResolution !== args.resolution
+      || (row.state !== 'observed' && row.state !== 'reconciliation_required')
+    ) return { kind: 'reconciliation_required' }
+    if (row.reconciliationEvidenceDigest !== undefined) {
+      return row.reconciliationEvidenceRef === args.evidenceRef
+        && row.reconciliationEvidenceDigest === args.evidenceDigest
+        ? { kind: 'settled', resolution: args.resolution }
+        : { kind: 'reconciliation_required' }
+    }
+    await ctx.db.patch(row._id, {
+      reconciliationEvidenceRef: args.evidenceRef,
+      reconciliationEvidenceDigest: args.evidenceDigest,
+      paymentObservationDigest: args.paymentObservationDigest,
+    })
+    return { kind: 'settled', resolution: args.resolution }
   },
 })
 

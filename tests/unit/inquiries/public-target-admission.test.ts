@@ -1,17 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import { readPublicTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
-
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
+import {
+  createInquiryServerBackend,
+  readPublicTargetAdmissionThroughSource,
+  setInquiryServerBackendForTests,
+} from '@/modules/inquiries/inquiry.functions'
+import { createLocalE2eInquiryServerBackend } from '../../helpers/inquiry-local-e2e-adapter'
 
 describe('public target admission source wrapper', () => {
   it('admits the Joondalup local fixture from claim and recipient facts', async () => {
-    vi.stubEnv('NODE_ENV', 'test')
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-
-    await expect(readPublicTargetAdmissionThroughSource({
+    await withLocalInquiryBackend(() => expect(readPublicTargetAdmissionThroughSource({
       businessId: 'business:joondalup-rapid-plumbing',
       offeringRef: 'offering:joondalup-rapid-plumbing:emergency-plumbing',
     })).resolves.toMatchObject({
@@ -21,14 +19,11 @@ describe('public target admission source wrapper', () => {
         admitted: true,
         proof: { kind: 'claimed_owner' },
       },
-    })
+    }))
   })
 
   it('keeps Demo Plumbing unadmitted instead of synthesizing a fallback', async () => {
-    vi.stubEnv('NODE_ENV', 'test')
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-
-    await expect(readPublicTargetAdmissionThroughSource({
+    await withLocalInquiryBackend(() => expect(readPublicTargetAdmissionThroughSource({
       businessId: 'business:plumbing-demo',
       offeringRef: 'offering:plumbing-demo:diagnostic-plumbing',
     })).resolves.toMatchObject({
@@ -41,6 +36,20 @@ describe('public target admission source wrapper', () => {
           expect.objectContaining({ kind: 'not_claimed' }),
         ]),
       },
-    })
+    }))
   })
 })
+
+async function withLocalInquiryBackend<T>(run: () => Promise<T>): Promise<T> {
+  const local = createLocalE2eInquiryServerBackend()
+  const restore = setInquiryServerBackendForTests({
+    ...createInquiryServerBackend(),
+    readPublicTargetAdmission: async (target) => local.readPublicTargetAdmission(target),
+  })
+  try {
+    return await run()
+  } finally {
+    restore()
+  }
+}
+

@@ -1,6 +1,4 @@
-import {
-  encodeCapabilityContractDocumentJson,
-} from '@/modules/capability-contract-registry/public'
+import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import type {
   ActionPreparationLineage,
@@ -10,9 +8,13 @@ import {
   preparedActionRecoveryReasonV2Value,
   preparedActionV2Value,
 } from '@/modules/customer-request/runtime'
-import type { CustomerRequestV2PreparedActionPorts } from '@/modules/customer-request/v2-preparation-egress'
-import type { Infer } from 'convex/values'
+import {
+  preparationEgressTargetDigest,
+  type CustomerRequestV2PreparedActionPorts,
+  type EligibleSupply,
+} from '@/modules/customer-request/v2-preparation-egress'
 
+import type { Infer } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
@@ -20,6 +22,7 @@ import {
   customerRequestV2PreparationEgressPorts,
   verifiedPreparationAuthority,
 } from './customerRequestV2PreparationEgressPorts'
+import { listRouteableCapabilitySupply } from './capabilitySupply'
 
 type DbCtx = MutationCtx | QueryCtx
 type MutationDb = MutationCtx['db']
@@ -162,22 +165,51 @@ export function customerRequestV2PreparedActionPorts(
     listAllocationsByOperation: egress.listAllocationsByOperation,
 
     loadSupplyGraphForOperation: async (input) => {
-      const [offering, binding, business] = await Promise.all([
-        db.query('capabilityOfferings')
-          .withIndex('by_offeringId', (query) => query.eq('offeringId', input.offeringId))
-          .unique(),
-        db.query('capabilityTransportBindings')
-          .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId))
-          .unique(),
+      const [business, publication] = await Promise.all([
         db.get(input.businessId as Id<'businesses'>),
+        db.query('capabilityPublications')
+          .withIndex('by_bindingId_and_disposition', (query) => (
+            query.eq('bindingId', input.bindingId).eq('disposition', 'current')
+          ))
+          .unique(),
       ])
-      if (offering === null || binding === null) return null
-      return {
+      if (publication === null) return null
+      const live = await listRouteableCapabilitySupply(db, {
+        networkId: publication.networkId,
+        limit: 64,
+        now: input.now,
+      })
+      if (live.kind !== 'available') return null
+      const supply = live.supplies.find((candidate) => (
+        candidate.offering.offeringId === input.offeringId
+        && candidate.binding.bindingId === input.bindingId
+        && String(candidate.offering.businessId) === input.businessId
+      ))
+      if (supply === undefined || supply.publication === undefined) return null
+      const { offering, binding, publication: eligiblePublication } = supply
+      const graph: EligibleSupply & Readonly<{
+        business: {
+          businessId: string
+          name: string
+          publicStatus: string
+          claimStatus: string
+        } | null
+      }> = {
+        publication: {
+          ...eligiblePublication,
+          admittedOperation: {
+            ...eligiblePublication.admittedOperation,
+            contractRef: { ...eligiblePublication.admittedOperation.contractRef },
+          },
+          ...(eligiblePublication.connectionAuthority === undefined
+            ? {}
+            : { connectionAuthority: structuredClone(eligiblePublication.connectionAuthority) }),
+        },
         offering: {
           businessId: String(offering.businessId),
           offeringId: offering.offeringId,
           registrationHash: offering.registrationHash,
-          registrationEvidenceRefs: [...offering.registrationEvidenceRefs],
+          registrationEvidenceRefs: [],
           presentation: structuredClone(offering.presentation),
           status: offering.status,
           capabilityId: offering.capabilityId,
@@ -188,12 +220,15 @@ export function customerRequestV2PreparedActionPorts(
           bindingId: binding.bindingId,
           offeringId: binding.offeringId,
           registrationHash: binding.registrationHash,
-          registrationEvidenceRefs: [...binding.registrationEvidenceRefs],
+          registrationEvidenceRefs: [],
           cancellation: structuredClone(binding.cancellation),
           adapterId: binding.adapterId,
           configDigest: binding.configDigest,
           configJson: binding.configJson,
           endpointUrl: binding.endpointUrl,
+          ...(binding.connectionAuthority === undefined
+            ? {}
+            : { connectionAuthority: structuredClone(binding.connectionAuthority) }),
           authority: binding.authority,
           admission: binding.admission,
           conformance: binding.conformance,
@@ -210,6 +245,11 @@ export function customerRequestV2PreparedActionPorts(
             claimStatus: business.claimStatus,
           },
       }
+      if (preparationEgressTargetDigest({
+        supply: graph,
+        operationMaterial: input.operationMaterial,
+      }) !== input.expectedTargetDigest) return null
+      return graph
     },
 
     loadApprovalEvidence: async (approvalRef) => {
@@ -233,6 +273,15 @@ export function customerRequestV2PreparedActionPorts(
   }
 }
 
+function writablePricingConfig(config: PreparedActionV2['pricingConfig']) {
+  return {
+    version: config.version,
+    unit: config.unit,
+    paidAmount: { ...config.paidAmount },
+    ...(config.freeTier === undefined ? {} : { freeTier: { ...config.freeTier } }),
+  }
+}
+
 function writablePreparedAction(action: PreparedActionV2): StoredPreparedAction {
   return {
     format: action.format,
@@ -252,6 +301,8 @@ function writablePreparedAction(action: PreparedActionV2): StoredPreparedAction 
       ...action.providerAssertion,
       evidence: action.providerAssertion.evidence.map((evidence) => ({ ...evidence })),
     },
+    pricingConfig: writablePricingConfig(action.pricingConfig),
+    priceDigest: action.priceDigest,
     price: {
       ...action.price,
       components: action.price.components.map((component) => ({
@@ -274,6 +325,7 @@ function writablePreparedAction(action: PreparedActionV2): StoredPreparedAction 
       business: { ...alternative.business },
       offeringRegistrationEvidenceRefs: [...alternative.offeringRegistrationEvidenceRefs],
       bindingRegistrationEvidenceRefs: [...alternative.bindingRegistrationEvidenceRefs],
+      pricingConfig: writablePricingConfig(alternative.pricingConfig),
       price: {
         ...alternative.price,
         components: alternative.price.components.map((component) => ({

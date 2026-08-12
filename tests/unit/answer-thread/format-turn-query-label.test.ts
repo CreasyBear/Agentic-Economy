@@ -36,4 +36,18 @@ describe('formatTurnQueryLabel', () => {
       role: 'need',
     })
   })
+
+  it('labels operation input without exposing the JSON envelope as chat copy', () => {
+    expect(formatTurnQueryLabel({
+      query: JSON.stringify({
+        operationRef: `operation:v1:${'a'.repeat(64)}`,
+        input: { city: 'Darwin' },
+      }),
+      intent: 'refine_search',
+      seq: 2,
+    })).toEqual({
+      text: '→ Run selected operation',
+      role: 'follow-up',
+    })
+  })
 })

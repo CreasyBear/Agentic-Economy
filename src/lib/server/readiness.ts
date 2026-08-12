@@ -1,5 +1,9 @@
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
-import { validateDeploymentManifest, type DeploymentEnvironment } from '@/lib/deployment/manifest'
+import {
+  DEPLOYMENT_MANIFEST,
+  validateDeploymentManifest,
+  type DeploymentEnvironment,
+} from '@/lib/deployment/manifest'
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 const MAX_PROBE_TIMEOUT_MS = 5_000
@@ -9,14 +13,104 @@ type ReadinessCheck = Readonly<{
   code?: string
 }>
 
+export type ReadinessConfigName = Readonly<{
+  name: string
+  configured: boolean
+}>
+
+export type ReadinessConfigFamily = Readonly<{
+  scope: string
+  code: string
+  required: boolean
+  status: 'ready' | 'missing' | 'invalid' | 'not_required'
+  names: readonly ReadinessConfigName[]
+}>
+
+export type ReadinessDiagnostics = Readonly<{
+  environment: DeploymentEnvironment
+  configuration: Readonly<{
+    required: readonly ReadinessConfigFamily[]
+    conditional: readonly ReadinessConfigFamily[]
+    optional: readonly ReadinessConfigName[]
+    forbiddenProduction: readonly ReadinessConfigName[]
+  }>
+  readinessProbes: readonly Readonly<{
+    id: string
+    method: readonly string[]
+    path: string
+    dependencies: readonly string[]
+  }>[]
+}>
+
+export function readNamesOnlyReadinessDiagnostics(
+  environment: StringEnvironment = process.env,
+  nodeMajor?: number,
+): ReadinessDiagnostics {
+  const mode = resolveDeploymentMode(environment)
+  let findings: readonly Readonly<{ kind: string; code: string; names: readonly string[]; scope: string }>[] = []
+  try {
+    findings = validateDeploymentManifest(environment, {
+      environment: mode,
+      ...(nodeMajor === undefined ? {} : { nodeMajor }),
+    }).findings
+  } catch {
+    findings = []
+  }
+  const configuration = DEPLOYMENT_MANIFEST.configuration
+  const family = (
+    group: Readonly<{ scope: string; code: string; names: readonly string[]; mode: 'all' | 'one-of'; trigger?: readonly string[] }>,
+  ): ReadinessConfigFamily => {
+    const active = group.trigger === undefined || group.trigger.some((name) => readTrimmedEnv(environment, name) !== undefined)
+    const scopedFindings = findings.filter((finding) => finding.scope === group.scope)
+    const status = !active
+      ? 'not_required'
+      : scopedFindings.some((finding) => finding.kind === 'missing')
+        ? 'missing'
+        : scopedFindings.length > 0
+          ? 'invalid'
+          : 'ready'
+    return {
+      scope: group.scope,
+      code: group.code,
+      required: active,
+      status,
+      names: group.names.map((name) => ({ name, configured: readTrimmedEnv(environment, name) !== undefined })),
+    }
+  }
+  return {
+    environment: mode,
+    configuration: {
+      required: configuration.requiredProduction.map((group) => family(group)),
+      conditional: configuration.conditional.map((group) => family(group)),
+      optional: configuration.optional.map((name) => ({
+        name,
+        configured: readTrimmedEnv(environment, name) !== undefined,
+      })),
+      forbiddenProduction: configuration.forbiddenProduction.map((name) => ({
+        name,
+        configured: readTrimmedEnv(environment, name) !== undefined,
+      })),
+    },
+    readinessProbes: DEPLOYMENT_MANIFEST.readinessProbes.map((probe) => ({
+      id: probe.id,
+      method: [...probe.method],
+      path: probe.path,
+      dependencies: [...probe.dependencies],
+    })),
+  }
+}
+
+
 export type ServerReadinessResult =
   | Readonly<{
       status: 'ready'
       checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
+      diagnostics: ReadinessDiagnostics
     }>
   | Readonly<{
       status: 'not_ready'
       checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
+      diagnostics: ReadinessDiagnostics
     }>
 
 export type ServerReadinessOptions = Readonly<{
@@ -30,6 +124,7 @@ export async function readServerReadiness(
   options: ServerReadinessOptions = {},
 ): Promise<ServerReadinessResult> {
   const env = options.env ?? process.env
+  const diagnostics = readNamesOnlyReadinessDiagnostics(env, options.nodeMajor)
   const config = readDeploymentConfig(env, options.nodeMajor)
   if (config.kind === 'failed') {
     return {
@@ -38,6 +133,7 @@ export async function readServerReadiness(
         config: { status: 'failed', code: config.code },
         convex: { status: 'failed', code: 'convex_probe_skipped' },
       },
+      diagnostics,
     }
   }
 
@@ -49,6 +145,7 @@ export async function readServerReadiness(
         config: { status: 'ready' },
         convex,
       },
+      diagnostics,
     }
   }
 
@@ -58,6 +155,7 @@ export async function readServerReadiness(
       config: { status: 'ready' },
       convex,
     },
+    diagnostics,
   }
 }
 

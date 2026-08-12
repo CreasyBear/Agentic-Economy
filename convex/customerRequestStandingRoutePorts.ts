@@ -11,7 +11,7 @@ export function standingRoutePorts(ctx: ActionCtx): StandingRoutePorts {
     projectCurrentRoutePlans: compare.projectCurrentRoutePlans,
     getCurrentRoutePlanGeneration: compare.getCurrentRoutePlanGeneration as StandingRoutePorts['getCurrentRoutePlanGeneration'],
     listStandingCredentials: (input) => ctx.runQuery(
-      internal.customerRequestPrincipals.listStandingCredentials, input,
+      internal.agentAccessPrincipals.listStandingCredentials, input,
     ),
     listPermissions: (input) => ctx.runQuery(
       internal.customerRequestStandingRoutePolicy.listPermissions, input,

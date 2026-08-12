@@ -63,7 +63,7 @@ export type InvocationHost = Readonly<{
     reconciliationEvidence: ReconciliationEvidence,
     paymentReconciliationEvidence: X402PaymentReconciliationEvidence,
   ): Promise<DevelopmentHostContinuation>
-  requestCancellation(invocationRef: string): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
+  requestCancellation(invocationRef: string, idempotencyKey: string): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
   projectRich(invocationRef: string, expectedInvocationVersion: number): RichInvocationTaskProjection
   projectStructured(
@@ -385,7 +385,7 @@ function bindHost(
       if (reconciled.kind === 'refused') return reconciled
       return { kind: 'reconciled', view: reconciled.view }
     },
-    requestCancellation: async (invocationRef) => {
+    requestCancellation: async (invocationRef, idempotencyKey) => {
       emit('before', 'request_cancellation', {}, invocationRef)
       const found = current(invocationRef)
       if (found.kind === 'refused') {
@@ -394,6 +394,7 @@ function bindHost(
       }
       const result = await adapter.cancel({
         invocationRef,
+        idempotencyKey,
         expectedInvocationVersion: found.view.invocationVersion,
         actor,
         origin,

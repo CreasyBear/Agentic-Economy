@@ -2,7 +2,13 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
-import { ClaimStatusValues, PublicStatusValues, TrustTierValues } from '@/modules/business/public'
+import {
+  ClaimStatusValues,
+  PublicStatusValues,
+  TrustTierValues,
+  businessContext,
+} from '@/modules/business/public'
+
 
 const sourceRef = v.object({
   label: v.string(),
@@ -25,9 +31,7 @@ export const businessTables = {
     name: v.string(),
     normalizedName: v.string(),
     category: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    publishedPhone: v.optional(v.string()),
+    businessContext,
     publicStatus: literalUnion(PublicStatusValues),
     trustTier: literalUnion(TrustTierValues),
     claimStatus: literalUnion(ClaimStatusValues),
@@ -43,9 +47,7 @@ export const businessTables = {
   businessContexts: defineTable({
     businessId: v.id('businesses'),
     category: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    postcode: v.optional(v.string()),
+    businessContext,
     ownerMessage: v.optional(v.string()),
     photos: v.optional(
       v.array(

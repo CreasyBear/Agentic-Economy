@@ -1,8 +1,12 @@
 import { ConvexError, v, type Infer, type ObjectType } from 'convex/values'
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
+  requireSourceWrite,
+  sourceWriteArgs,
+} from './sourceWriteAdmission'
+import {
+  sourceWriteCommandDigest,
   verifySourceWriteAdmission,
   type SourceWriteAdmission,
 } from '../src/modules/security/source-write-admission'
@@ -87,7 +91,7 @@ const persistControlResult = v.union(
     ),
   }),
 )
-const transactArgs = {
+export const actionInvocationTransactArgs = {
   commandId: v.string(),
   commandDigest: v.string(),
   expectedInvocationVersion: v.union(v.number(), v.null()),
@@ -95,7 +99,7 @@ const transactArgs = {
   row: controlRow,
   currentAttemptWrite: v.optional(attemptRow),
   history: historyInput,
-}
+} as const
 const lateObservationArgs = {
   invocationRef: v.string(),
   commandId: v.string(),
@@ -106,7 +110,7 @@ const lateObservationArgs = {
   evidenceDigest: v.string(),
   recordedAt: v.string(),
 }
-type TransactArgs = ObjectType<typeof transactArgs>
+type TransactArgs = ObjectType<typeof actionInvocationTransactArgs>
 type LateObservationArgs = ObjectType<typeof lateObservationArgs>
 async function transactHandler(ctx: MutationCtx, args: TransactArgs): Promise<Infer<typeof persistControlResult>> {
   const duplicate = await ctx.db.query('actionInvocationHistory')
@@ -184,7 +188,7 @@ async function transactHandler(ctx: MutationCtx, args: TransactArgs): Promise<In
 }
 
 export const transact = internalMutation({
-  args: transactArgs,
+  args: actionInvocationTransactArgs,
   returns: persistControlResult,
   handler: transactHandler,
 })
@@ -203,7 +207,7 @@ const ownerReadArgs = {
   ...sourceWriteArgs,
 }
 const transactSourceArgs = {
-  ...transactArgs,
+  ...actionInvocationTransactArgs,
   operationKey: v.string(),
   correlationId: v.string(),
   ...sourceWriteArgs,
@@ -320,7 +324,12 @@ async function recordLateObservationHandler(
 
 async function requireActionInvocationSourceWrite(
   ctx: { db: unknown },
-  args: { operationKey: string; correlationId: string; sourceWrite?: unknown },
+  args: {
+    operationKey: string
+    correlationId: string
+    sourceWrite?: unknown
+    sourceWriteRequest?: unknown
+  },
 ): Promise<void> {
   const result = await requireSourceWrite(ctx, args, 'protected_action')
   if (result.kind === 'rejected') {
@@ -328,14 +337,22 @@ async function requireActionInvocationSourceWrite(
   }
 }
 
-function requireActionInvocationSourceRead(args: OwnerReadArgs): void {
+async function requireActionInvocationSourceRead(args: OwnerReadArgs): Promise<void> {
   const admission = args.sourceWrite as SourceWriteAdmission | undefined
-  const verification = verifySourceWriteAdmission({
+  if (args.sourceWriteRequest === undefined) {
+    throw new ConvexError({
+      code: 'action_invocation_source_read_rejected',
+      reason: 'missing_source_write_request',
+    })
+  }
+  const verification = await verifySourceWriteAdmission({
     ...(admission === undefined ? {} : { admission }),
     expected: {
       scope: 'protected_action',
       operationKey: args.operationKey,
       correlationId: args.correlationId,
+      commandDigest: sourceWriteCommandDigest(args),
+      request: args.sourceWriteRequest,
     },
   })
   if (verification.kind === 'rejected') {
@@ -404,7 +421,7 @@ export const readControlSource = query({
   args: ownerReadArgs,
   returns: v.union(controlRow, v.null()),
   handler: async (ctx, args) => {
-    requireActionInvocationSourceRead(args)
+    await requireActionInvocationSourceRead(args)
     const row = await readOwnedControl(ctx, args)
     return row === null ? null : withoutSystemFields(row)
   },
@@ -414,7 +431,7 @@ export const readAttemptsSource = query({
   args: readAttemptsSourceArgs,
   returns: v.array(attemptRow),
   handler: async (ctx, args) => {
-    requireActionInvocationSourceRead(args)
+    await requireActionInvocationSourceRead(args)
     const control = await readOwnedControl(ctx, args)
     return control === null ? [] : readAttemptsHandler(ctx, args)
   },
@@ -424,7 +441,7 @@ export const readAttemptSource = query({
   args: readAttemptSourceArgs,
   returns: v.union(attemptRow, v.null()),
   handler: async (ctx, args) => {
-    requireActionInvocationSourceRead(args)
+    await requireActionInvocationSourceRead(args)
     const control = await readOwnedControl(ctx, args)
     return control === null ? null : readAttemptHandler(ctx, args)
   },
@@ -434,7 +451,7 @@ export const readHistorySource = query({
   args: readHistorySourceArgs,
   returns: v.array(historyRow),
   handler: async (ctx, args) => {
-    requireActionInvocationSourceRead(args)
+    await requireActionInvocationSourceRead(args)
     const control = await readOwnedControl(ctx, args)
     return control === null ? [] : readHistoryHandler(ctx, args)
   },
@@ -444,7 +461,7 @@ export const readHistoryCommandSource = query({
   args: readHistoryCommandSourceArgs,
   returns: v.union(historyRow, v.null()),
   handler: async (ctx, args) => {
-    requireActionInvocationSourceRead(args)
+    await requireActionInvocationSourceRead(args)
     const control = await readOwnedControl(ctx, args)
     return control === null ? null : readHistoryCommandHandler(ctx, args)
   },

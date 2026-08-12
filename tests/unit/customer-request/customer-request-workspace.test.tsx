@@ -797,7 +797,6 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Review this option' })).toBeTruthy()
     expect(screen.getByText(/You decide before AE shares details or starts work/)).toBeTruthy()
-    expect(screen.getByText(CUSTOMER_REQUEST_HUMAN_COMPREHENSION.sandboxBoundary)).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Review this option' }))

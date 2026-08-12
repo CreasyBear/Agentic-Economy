@@ -1,6 +1,6 @@
 import type { AuditEventId, BusinessId, CorrelationId, OperationKey } from '@/modules/common/ids'
 import type { ClaimId, OwnerId, Slug } from '@/modules/common/ids'
-import type { VisibilityTargetType } from '@/modules/business/public'
+import type { BusinessContext, VisibilityTargetType } from '@/modules/business/public'
 import {
   allocateDeterministicSlug as allocateDeterministicSlugImpl,
   assertCsrf as assertCsrfImpl,
@@ -163,8 +163,7 @@ export type CsrfDecision =
 export type ClaimFingerprintInput = {
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
+  businessContext: BusinessContext
 }
 
 export type DuplicateClaimDecision =

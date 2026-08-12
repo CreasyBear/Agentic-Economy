@@ -69,6 +69,7 @@ export async function openReadyPreparation(
     offeringRegistrationHash: offering.registrationHash,
     bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    priceDigest: publication.priceDigest,
     commercialRelationship: {
       ...offering.presentation.commercialRelationship,
       evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],

@@ -72,7 +72,7 @@ describe('business tool calling over HTTP', () => {
    * The scope exists to be distinct from the Customer Request scope. A key
    * minted for one plane must not silently authorize the other.
    */
-  it('accepts the business tool scope as distinct from the Customer Request scope', async () => {
+  it('accepts the business tool scope before tool lookup', async () => {
     const refusedByWrongTool = await handleBusinessToolPrepare(
       post(`${SLUG}/tools/nope.doThing/prepare`, { body: 'hello', contact: {} }),
       SLUG,

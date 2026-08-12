@@ -19,8 +19,11 @@ describe('durable public owner claim route readbacks', () => {
       ...publicOwnerDefaultClaimInput,
       businessName: 'Fremantle Priority Electrical',
       category: 'Emergency electrical',
-      suburb: 'Fremantle',
-      stateTerritory: 'WA',
+      businessContext: {
+        kind: 'local_human' as const,
+        suburb: 'Fremantle',
+        stateTerritory: 'WA',
+      },
       requestedSlug: 'fremantle-priority-electrical',
       ownerMessage: 'Owner supplied switchboard repair facts for the public service page.',
       sourceLabel: 'Owner supplied electrical service facts',
@@ -41,8 +44,11 @@ describe('durable public owner claim route readbacks', () => {
         slug: 'fremantle-priority-electrical',
         name: 'Fremantle Priority Electrical',
         category: 'Emergency electrical',
-        suburb: 'Fremantle',
-        stateTerritory: 'WA',
+        businessContext: {
+          kind: 'local_human',
+          suburb: 'Fremantle',
+          stateTerritory: 'WA',
+        },
         offerings: [
           {
             name: 'After-hours switchboard repair',

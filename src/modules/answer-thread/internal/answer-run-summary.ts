@@ -224,9 +224,9 @@ function buildCoverage(
   summary: AnswerRunSummary,
   workLog: FrozenTurnEvidenceDraft['workLog'],
 ): AnswerRunCoverage {
-  // Coverage is over the DIRECT model toolset. `operation.execute` is a record
-  // seam behind the dynamic per-op capability tools, not itself a callable tool,
-  // so it is deliberately not listed as available.
+  // Coverage is over the DIRECT model toolset. `operation.execute` and
+  // `operation.invoke` are record seams behind dynamic per-op tools, not
+  // themselves callable tools, so neither is listed as available.
   const toolsAvailable = [...ANSWER_READ_TOOL_IDS]
   const toolsInvoked = uniq(Object.keys(summary.tools.byName)).sort((a, b) => a.localeCompare(b)).filter(isAnswerToolId)
   const invoked = new Set(toolsInvoked)
@@ -270,6 +270,8 @@ function answerToolStatusToHarnessStatus(status: AnswerToolCallStatus): HarnessT
       return 'error'
     case 'refused':
       return 'refused'
+    default:
+      throw new Error(`answer_tool_status_invalid:${status}`)
   }
 }
 

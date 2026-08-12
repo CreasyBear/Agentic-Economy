@@ -3,19 +3,22 @@ export {
   publicationLifecycle,
   publicationProjection,
   type CapabilityPublicationLifecycleRow,
+  type CapabilityReadinessOutcome,
   type PublicationContractRef,
   type PublicationLifecycle,
   type PublicationLifecycleReason,
 } from './lifecycle'
 
-export { decodeConvexPublicationSource, isDirectPublicationSource } from './source'
+export { decodeConvexPublicationSource, isDirectPublicationSource, publicationMaterialContainsCredential } from './source'
 
 export type {
   PublicationCommandPorts,
   PublicationCommandRow,
   PublicationInsertInput,
+  PublicationReadinessOutcome,
   RegisterContractDocumentResult,
 } from './ports'
+
 export {
   CAPABILITY_PUBLICATION_AUTHORITY_MODES,
   capabilityPublicationProvenanceDigest,
@@ -26,7 +29,6 @@ export {
   type CapabilityPublicationProvenance,
   type CapabilityPublicationSourceIdentity,
 } from './provenance'
-
 export {
   admitCapabilityPublicationCommand,
   type AdmitCapabilityPublicationInput,
@@ -34,6 +36,7 @@ export {
   type CapabilityPublicationAdmissionRefusal,
   type CapabilityPublicationAdmissionSource,
 } from './admit'
+
 
 export {
   publicationValidationFix,
@@ -48,11 +51,18 @@ export {
   type AdmittedPublicationDraft,
   type PreparePublicationDraftRefusal,
   type PreparedPublicationDraft,
+  type PreparedPublicationMaterial,
 } from './draft'
 
 export {
-  publishCapabilityCommand,
-  type PublishCapabilityCommandInput,
+  publishPreparedCapabilityCommand,
+  republishPreparedCapabilityCommand,
+  type PublishPreparedCapabilityCommandInput,
+  type PublishPreparedCapabilityCommandResult,
+  type PublishPreparedCapabilityRefusal,
+  type RepublishPreparedCapabilityCommandInput,
+  type RepublishPreparedCapabilityCommandResult,
+  type RepublishPreparedCapabilityRefusal,
 } from './publish'
 
 export {

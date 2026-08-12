@@ -38,7 +38,7 @@ export function buildCatalogDiscoveryManifest(
     slug,
     businessName: catalogProjection.businessName,
     category: catalogProjection.category,
-    location: catalogProjection.location,
+    businessContext: catalogProjection.businessContext,
     publicUrl,
     manifestUrl,
     ucpVersion: 'v1',

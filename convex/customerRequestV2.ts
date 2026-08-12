@@ -558,6 +558,8 @@ export async function currentRoutePlanGenerationGraphStatus(
       && binding.readinessValidUntil >= route.expiresAt
       && binding.price !== undefined
       && canonicalDigest(binding.price) === canonicalDigest(step.price)
+      && binding.priceDigest !== undefined
+      && binding.priceDigest === step.priceDigest
       && step.commercialRelationship !== undefined
       && binding.commercialRelationship !== undefined
       && canonicalDigest(binding.commercialRelationship) === canonicalDigest(step.commercialRelationship)
@@ -593,6 +595,7 @@ function registeredEvaluationBindingsFromEligibleSupply(
           offeringRegistrationHash: offering.registrationHash,
           bindingRegistrationHash: binding.registrationHash,
           price: offering.presentation.price,
+          priceDigest: publication.priceDigest,
           commercialRelationship: {
             ...offering.presentation.commercialRelationship,
             evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],

@@ -1,11 +1,13 @@
 import {
   createSourceWriteAdmission,
-  sourceWriteBodyDigest,
+  sourceWriteCommandBodyDigest,
+  sourceWriteCommandDigest,
   type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
   type SourceWriteAdmissionScope,
 } from '@/modules/security/source-write-admission'
 
-export const testSourceWriteSecret = 'test-source-write-secret'
+export const testSourceWriteSecret = 'test-source-write-secret-material-32'
 
 export function installTestSourceWriteSecret(): void {
   for (const name of [
@@ -43,39 +45,68 @@ export function installTestSourceWriteSecret(): void {
   process.env.AE_SOURCE_WRITE_SECRET = testSourceWriteSecret
 }
 
-export function sourceWriteAdmission(
+export async function sourceWriteAdmission(
   scope: SourceWriteAdmissionScope,
   operationKey: string,
   correlationId: string = operationKey,
   options: { nonce?: string } = {}
-): SourceWriteAdmission {
+): Promise<SourceWriteAdmission> {
   installTestSourceWriteSecret()
+  const command = { operationKey, correlationId }
+  const request = sourceWriteRequestFor(command)
 
-  return createSourceWriteAdmission({
+  return await createSourceWriteAdmission({
     scope,
     operationKey,
     correlationId,
+    commandDigest: sourceWriteCommandDigest(command),
     ...(options.nonce === undefined ? {} : { nonce: options.nonce }),
-    request: {
-      method: 'POST',
-      origin: 'https://ae.example',
-      pathname: '/__test/source-write',
-      bodyDigest: sourceWriteBodyDigest(undefined),
-    },
+    request,
+    now: new Date().getTime(),
+    env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
   })
 }
 
-export function withSourceWrite<T extends { operationKey: string; correlationId: string }>(
+export async function withSourceWrite<T extends { operationKey: string; correlationId: string }>(
   scope: SourceWriteAdmissionScope,
   args: T
-): T & { sourceWrite: SourceWriteAdmission } {
+): Promise<T & { sourceWriteRequest: SourceWriteAdmissionRequest; sourceWrite: SourceWriteAdmission }> {
+  installTestSourceWriteSecret()
+  const sourceWriteRequest = sourceWriteRequestFor(args)
   return {
     ...args,
-    sourceWrite: sourceWriteAdmission(scope, args.operationKey, args.correlationId),
+    sourceWriteRequest,
+    sourceWrite: await createSourceWriteAdmission({
+      scope,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      commandDigest: sourceWriteCommandDigest(args),
+      request: sourceWriteRequest,
+      now: new Date().getTime(),
+      env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
+    }),
   }
 }
 
-export function withoutSourceWrite<T extends { sourceWrite?: SourceWriteAdmission }>(args: T): Omit<T, 'sourceWrite'> {
-  const { sourceWrite: _sourceWrite, ...rest } = args
+export function withoutSourceWrite<T extends {
+  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
+}>(args: T): Omit<T, 'sourceWrite' | 'sourceWriteRequest'> {
+  const { sourceWrite: _sourceWrite, sourceWriteRequest: _sourceWriteRequest, ...rest } = args
   return rest
+}
+
+const TEST_SOURCE_WRITE_REQUEST = {
+  method: 'POST',
+  initiatorOrigin: 'https://ae.example',
+  targetOrigin: 'https://ae.example',
+  targetPath: '/__test/source-write',
+  targetQuery: '',
+} as const
+
+function sourceWriteRequestFor(command: object): SourceWriteAdmissionRequest {
+  return {
+    ...TEST_SOURCE_WRITE_REQUEST,
+    bodyDigest: sourceWriteCommandBodyDigest(command),
+  }
 }

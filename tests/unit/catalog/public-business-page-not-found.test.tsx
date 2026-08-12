@@ -17,7 +17,7 @@ vi.mock('@/modules/catalog/public-route.functions', () => ({
   readPublicBusinessRouteServer: readPublicBusinessRouteMock,
 }))
 
-import { PublicBusinessNotFound, PublicBusinessUnavailable, Route } from '@/routes/$slug'
+import { PublicBusinessNotFound, Route } from '@/routes/$slug'
 
 
 afterEach(() => {
@@ -75,25 +75,6 @@ describe('/$slug not-found reason', () => {
     expect(thrown).toMatchObject({ data: { reason: 'not_public' } })
   })
 
-  it('keeps source outages out of the not-found boundary and exposes unavailable metadata', async () => {
-    readPublicBusinessRouteMock.mockResolvedValue({
-      kind: 'unavailable',
-      reason: 'source_unavailable',
-      retryable: true,
-    })
-
-    await expect(loadSlug('business-source-down')).resolves.toEqual({
-      kind: 'unavailable',
-      reason: 'source_unavailable',
-      retryable: true,
-    })
-
-    const head = await Route.options.head?.({
-      loaderData: { kind: 'unavailable', reason: 'source_unavailable', retryable: true },
-    } as never)
-    expect(head?.meta).toContainEqual({ title: 'Business page unavailable | Agentic Economy' })
-    expect(head?.meta).not.toContainEqual({ title: 'Page not found | Agentic Economy' })
-  })
   it('marks the not-found response noindex because there is no page to index', async () => {
     const head = await Route.options.head?.({ loaderData: undefined } as never)
 
@@ -127,16 +108,6 @@ describe('PublicBusinessNotFound copy', () => {
 
     expect(screen.getByText('No business page at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
-  })
-})
-describe('PublicBusinessUnavailable copy', () => {
-  it('does not render not-found or browse-businesses language', () => {
-    renderWithRouter(<PublicBusinessUnavailable />)
-
-    expect(screen.getByText('Business page temporarily unavailable')).toBeTruthy()
-    expect(screen.getByText(/public business source is unavailable/i)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
-    expect(screen.queryByText(/Page not found/i)).toBeNull()
   })
 })
 

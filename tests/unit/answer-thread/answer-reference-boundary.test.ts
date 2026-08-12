@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
-import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
+import type { KeylessExecutableSourcePort, KeylessExecutableToolDescriptor } from '@/modules/capability-execution'
 import { answerTurnRequestDigest, streamAnswerTurn } from '@/modules/answer-thread/server'
 import { reserveAnswerTurn } from '@/modules/answer-thread/answer-thread.functions'
 import {
@@ -50,6 +50,11 @@ async function runTurn(query: string, keylessExecutableSource = emptyKeylessSour
         query,
         requestDigest,
         admission,
+        sourceWriteRequest: new Request('https://ae.test/api/answer/turn', {
+          method: 'POST',
+          headers: { 'X-AE-Turn-Key': 'harness:reference-boundary' },
+        }),
+        sourceWriteBody: '',
         keylessExecutableSource,
       },
       ({ event }) => events.push(event),
@@ -94,7 +99,66 @@ describe('answer reference boundary', () => {
     }
   })
 
-  it('still runs registry search for a general local-business request', async () => {
+  it('keeps ambiguous live operations out of business retrieval and model selection', async () => {
+    const descriptors: readonly KeylessExecutableToolDescriptor[] = [
+      {
+        operationRef: `operation:v1:${'a'.repeat(64)}`,
+        capabilityId: 'alpha.current-measurement',
+        name: 'Alpha current measurement',
+        summary: 'Returns a current measurement for a city.',
+        searchTerms: ['current measurement', 'measurement'],
+        inputSchema: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+          additionalProperties: false,
+        },
+      },
+      {
+        operationRef: `operation:v1:${'b'.repeat(64)}`,
+        capabilityId: 'beta.current-measurement',
+        name: 'Beta current measurement',
+        summary: 'Returns a current measurement for a city.',
+        searchTerms: ['current measurement', 'measurement'],
+        inputSchema: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+          additionalProperties: false,
+        },
+      },
+    ]
+    const keylessSource: KeylessExecutableSourcePort = {
+      list: async () => descriptors,
+      read: async () => null,
+      search: async () => descriptors.map(({ operationRef }) => operationRef),
+    }
+    const server = await startOpenRouterContractServer(() => {
+      throw new Error('model must not choose among ambiguous operations')
+    })
+    const restoreOpenRouter = server.installEnv()
+    try {
+      const result = await runTurn('Get the current measurement for Sydney', keylessSource)
+      const complete = result.events.at(-1)
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') throw new Error('expected a complete ambiguous answer')
+
+      expect(complete.answer.oneLine).toBe('Which live source should I use?')
+      expect(complete.answer.providers).toEqual([])
+      expect(server.requests).toHaveLength(1)
+      expect(server.requests[0]?.response_format?.json_schema?.name).toBe('answer_query_safety')
+      expect(server.requests[0]?.tools).toBeUndefined()
+      const evidence = JSON.parse(result.store.turns.get(result.turnId)?.evidenceJson ?? '{}') as {
+        toolCalls?: readonly unknown[]
+      }
+      expect(evidence.toolCalls ?? []).toEqual([])
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('still routes a general local-business request through business retrieval', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick', limit: 3 } }],
       prose: {
@@ -113,12 +177,16 @@ describe('answer reference boundary', () => {
 
     try {
       const result = await runTurn('Emergency plumber Brunswick')
-      const turn = result.store.turns.values().next().value
-      const evidence = JSON.parse(turn?.evidenceJson ?? '{}') as {
-        toolCalls?: readonly { toolId?: string }[]
-      }
+      const complete = result.events.at(-1)
       expect(server.requests.length).toBeGreaterThan(0)
-      expect(evidence.toolCalls?.some((call) => call.toolId === 'registry.search')).toBe(true)
+      expect(result.events.some(
+        (event) => event.type === 'work-step'
+          && event.step.phase === 'search'
+          && event.step.title === 'Searching for matches',
+      )).toBe(true)
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') throw new Error('expected a complete local-business answer')
+      expect(complete.answer.layoutProfile).toBe('empty_state')
     } finally {
       restoreOpenRouter()
       await server.close()

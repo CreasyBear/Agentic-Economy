@@ -11,7 +11,7 @@ vi.mock('@/lib/observability/sentry.server', () => mocks)
 import { handleHealthRequest } from '@/routes/api.health'
 import { handleReadyRequest, Route as ReadyRoute } from '@/routes/api.ready'
 import { handleClientErrorRequest, Route as ClientErrorRoute } from '@/routes/api.observability.client-error'
-import { readServerReadiness } from '@/lib/server/readiness'
+import { readNamesOnlyReadinessDiagnostics, readServerReadiness } from '@/lib/server/readiness'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { SOURCE_WRITE_FAMILIES } from '@/lib/deployment/manifest'
 
@@ -38,9 +38,14 @@ function productionReadinessEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
     OPENROUTER_API_KEY: 'openrouter-example',
+    AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+    AE_X402_PAYMENT_PRIVATE_KEY: 'test-only-x402-payer-placeholder',
+    STRIPE_SECRET_KEY: 'test-only-stripe-secret',
+    STRIPE_WEBHOOK_SECRET: 'test-only-stripe-webhook-secret',
+    VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
-      `${family}:source-write-secret`,
+      `${family}:0123456789abcdef0123456789abcdef`,
     ])),
   }
 }
@@ -84,7 +89,41 @@ describe('operational diagnostics routes', () => {
     })
 
     expect(result).toMatchObject({ status: 'ready', checks: { config: { status: 'ready' }, convex: { status: 'ready' } } })
+    expect(result.diagnostics.configuration.required).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        scope: 'convex',
+        status: 'ready',
+        names: expect.arrayContaining([{ name: 'CONVEX_URL', configured: true }]),
+      }),
+    ]))
+    expect(JSON.stringify(result.diagnostics)).not.toContain('convex.example')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('source-write-secret')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('test-only-x402-payer-placeholder')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('env:AE_X402_PAYMENT_PRIVATE_KEY')
     expect(fetchImpl).toHaveBeenCalledOnce()
+  })
+
+  it('projects config diagnostics as names and booleans only', () => {
+    const configuredSecret = 'openrouter-test-secret-value'
+    const diagnostics = readNamesOnlyReadinessDiagnostics({
+      NODE_ENV: 'production',
+      CONVEX_URL: 'https://convex.example',
+      OPENROUTER_API_KEY: configuredSecret,
+    }, 22)
+    expect(diagnostics.configuration.required).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        scope: 'convex',
+        names: expect.arrayContaining([
+          { name: 'CONVEX_URL', configured: true },
+          { name: 'VITE_CONVEX_URL', configured: false },
+        ]),
+      }),
+    ]))
+    const serialized = JSON.stringify(diagnostics)
+    expect(serialized).not.toContain('https://convex.example')
+    expect(serialized).not.toContain(configuredSecret)
+    expect(serialized).toContain('OPENROUTER_API_KEY')
+    expect(serialized).toContain('secret_key_id_without_secret')
   })
   it('fails closed for deployment mode conflicts and credential-bearing Convex URLs', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }))
@@ -136,10 +175,20 @@ describe('operational diagnostics routes', () => {
 
   it('dispatches a normalized client error without retaining secrets or URL query values', async () => {
     const response = await handleClientErrorRequest(clientRequest(JSON.stringify({
-      message: `request failed token=${secret}`,
+      message: [
+        `request failed token=${secret}`,
+        'OPENROUTER_API_KEY=sk_live_real',
+        'Authorization: Bearer bearer-real',
+        'Cookie: session=cookie-real',
+      ].join(' '),
       name: 'TypeError',
-      stack: `TypeError: token=${secret}`,
-      url: `https://ae.example/s/${'a'.repeat(64)}?access=${secret}&q=private`,
+      stack: [
+        'TypeError: Authorization: Basic basic-real',
+        '-----BEGIN PRIVATE KEY-----',
+        'private-key-body',
+        '-----END PRIVATE KEY-----',
+      ].join('\n'),
+      url: `https://user:password-real@ae.example/s/${'a'.repeat(64)}?access_token=url-token&q=private`,
       source: 'window.onerror',
       metadata: { component: 'chat', route: '/t/new?access=secret' },
     })))
@@ -150,7 +199,19 @@ describe('operational diagnostics routes', () => {
     const capturedCall = mocks.captureClientError.mock.calls[0]
     if (capturedCall === undefined) throw new Error('client error capture missing')
     const captured = JSON.stringify(capturedCall[0])
-    expect(captured).not.toContain(secret)
+    for (const secretValue of [
+      secret,
+      'sk_live_real',
+      'bearer-real',
+      'cookie-real',
+      'basic-real',
+      'private-key-body',
+      'password-real',
+      'url-token',
+    ]) {
+      expect(captured).not.toContain(secretValue)
+    }
+    expect(captured).toContain('chat')
     expect(captured).not.toContain('?access=')
     expect(captured).not.toContain('/s/' + 'a'.repeat(64))
   })

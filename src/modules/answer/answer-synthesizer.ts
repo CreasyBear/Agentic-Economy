@@ -1,9 +1,13 @@
 import type { AnswerTurnProblem } from '@/lib/errors'
+import type {
+  AnswerOperationCandidate,
+  AnswerOperationOutcome,
+  AnswerOperationSelection,
+  AnswerArtifact,
+} from './answer-schema'
 
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
-
-import type { AnswerArtifact } from './answer-schema'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
 
 export type AnswerSynthesizerFollowUpIntent =
@@ -127,6 +131,11 @@ export type AnswerSnapshot = {
   importedClaims?: readonly WebDiscoveryClaim[]
   /** Chosen provider for compact inquiry-path confirmations. */
   selectedProvider?: AnswerSource
+  /** Compact canonical Operation evidence, never projected into business sources. */
+  operationCandidates?: readonly AnswerOperationCandidate[]
+  operationCandidatesDigest?: string
+  operationOutcome?: AnswerOperationOutcome
+  operationSelection?: AnswerOperationSelection
   summary: string
   nextStep: string
   agentJsonUrl: string

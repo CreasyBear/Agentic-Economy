@@ -78,7 +78,7 @@ const quoteArg = v.object({
   observedAt: v.number(),
   expiresAt: v.number(),
   revision: v.number(),
-  evidenceClass: v.union(v.literal('ae_sandbox_provider'), v.literal('published_price'), v.literal('business_quote')),
+  evidenceClass: v.union(v.literal('published_price'), v.literal('business_quote')),
 })
 const nodeDraftArg = v.object({
   format: v.optional(v.literal('ae.work-node:v1')),
@@ -392,7 +392,7 @@ async function decideWorkTree(
   args: WorkTreeDecisionArgs,
 ): Promise<Record<string, unknown>> {
   if (!validRepeatGrant(args.repeatGrant)) {
-    return { kind: 'refused', refusalCode: 'forbidden', replayed: false }
+    return { kind: 'unknown' }
   }
   const caller = await resolveWorkTreeCaller(ctx, args.serviceAuth, args.guestAssertion, 'workTree.decide', {
     projectId: args.projectId,
@@ -577,7 +577,7 @@ async function decideWorkTree(
     readbackRevision: nextTree.revision,
   })
   const stored = await ctx.db.get(inserted)
-  if (stored === null) return decisionUnknown(args, nextTree, caller)
+  if (stored === null) return { kind: 'unknown' }
   return decisionReceipt(stored, 'accepted')
 }
 
@@ -661,19 +661,7 @@ async function decisionRefusal(
   const generation = current?.generation ?? args.expectedGeneration
   const revision = current?.revision ?? args.expectedRevision
   if (current === undefined || current === null || caller === undefined) {
-    return {
-      kind: 'refused',
-      decision: args.kind,
-      projectId: args.projectId,
-      nodeId: args.nodeId,
-      receiptId: `refused:${canonicalDigest({ ...args, serviceAuth: undefined, guestAssertion: undefined, refusalCode })}`,
-      generation,
-      revision,
-      disposition: 'unchanged',
-      refusalCode,
-      occurredAt: Date.now(),
-      readback: { projectId: args.projectId, revision },
-    }
+    return { kind: 'unknown' }
   }
   const digest = commandDigest ?? decisionCommandDigest(args)
   const receiptId = `refused:${canonicalDigest({
@@ -696,7 +684,7 @@ async function decisionRefusal(
     occurredAt: Date.now(),
     readback: { projectId: args.projectId, revision },
   }
-  if (!persist || refusalCode === 'forbidden') return refusal
+  if (!persist || refusalCode === 'forbidden') return { kind: 'unknown' }
   const inserted = await ctx.db.insert('workTreeDecisionReceipts', {
     projectId: args.projectId,
     treeId: current.treeId,
@@ -722,28 +710,9 @@ async function decisionRefusal(
     readbackRevision: revision,
   })
   const stored = await ctx.db.get(inserted)
-  return stored === null ? refusal : decisionRefusedReceipt(stored)
+  return stored === null ? { kind: 'unknown' } : decisionRefusedReceipt(stored)
 }
 
-function decisionUnknown(
-  args: WorkTreeDecisionArgs,
-  tree: WorkTree,
-  caller: WorkTreeCaller,
-): Record<string, unknown> {
-  return {
-    kind: 'unknown',
-    decision: args.kind,
-    projectId: args.projectId,
-    nodeId: args.nodeId,
-    receiptId: `unknown:${args.idempotencyKey}`,
-    generation: tree.generation,
-    revision: tree.revision,
-    disposition: 'unchanged',
-    actor: { source: caller.source },
-    occurredAt: Date.now(),
-    readback: { projectId: args.projectId, revision: tree.revision },
-  }
-}
 
 
 function parseVerb(value: unknown): GardenerVerb {
@@ -1119,7 +1088,7 @@ async function resolveWorkTreePrincipal(
   // only by their exact authenticated principal; no caller-supplied owner
   // identifier can widen that binding.
   const requestPrincipal = await ctx.db
-    .query('customerRequestAgentPrincipals')
+    .query('agentAccessPrincipals')
     .withIndex('by_principalId', (query) => query.eq('principalId', request.principalId))
     .unique()
   const requestOwnerId = requestPrincipal?.ownerId

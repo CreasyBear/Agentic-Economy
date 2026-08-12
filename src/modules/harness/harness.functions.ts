@@ -3,8 +3,14 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
+  sourceWriteAdmissionFromRequest,
+} from '@/lib/server/source-write-admission'
+import {
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 
 import type {
   HarnessRunStatus,
@@ -35,13 +41,15 @@ export type AppendHarnessSessionEntryArgs = {
 export type AppendHarnessSessionEntryMutationArgs = AppendHarnessSessionEntryArgs & {
   operationKey: string
   correlationId: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
 }
 
 export type AdmittedAppendHarnessSessionEntryArgs = AppendHarnessSessionEntryArgs & {
   operationKey: string
   correlationId: string
   sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
 }
 
 export type HarnessSessionEntryReceipt = {
@@ -180,23 +188,30 @@ async function appendHarnessSessionEntryToSource(
 
 export async function appendHarnessSessionEntryToSourceFromRequest(input: {
   request: Request
+  body: string | Uint8Array
   entry: AppendHarnessSessionEntrySourceInput
   operationKey?: string
   correlationId?: string
 }): Promise<AppendHarnessSessionEntryResult> {
   const operationKey = input.operationKey ?? harnessSessionAppendOperationKey(input.entry)
   const correlationId = input.correlationId ?? input.entry.runId
-
-  return appendHarnessSessionEntryToSource({
+  const command: Omit<AppendHarnessSessionEntryMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
     ...input.entry,
     operationKey,
     correlationId,
-    sourceWrite: await sourceWriteAdmissionFromRequest({
-      request: input.request,
-      scope: 'harness_session',
-      operationKey,
-      correlationId,
-    }),
+  }
+  const sourceWrite = await sourceWriteAdmissionFromRequest({
+    request: input.request,
+    body: input.body,
+    command,
+    scope: 'harness_session',
+    operationKey,
+    correlationId,
+  })
+  return appendHarnessSessionEntryToSource({
+    ...command,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
   })
 }
 

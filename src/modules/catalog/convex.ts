@@ -1,5 +1,16 @@
 import { v } from 'convex/values'
 import type { GenericValidator } from 'convex/values'
+export {
+  ExternalOperationProvenanceValues,
+  HumanRequestChannelValues,
+  PublicSupportReasonValues,
+  validateOfferingAccessPath,
+} from './internal/offering-supply'
+export {
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
+} from './internal/offering-price'
 
 const comparisonFactSource = v.union(
   v.object({ kind: v.literal('business_supplied') }),

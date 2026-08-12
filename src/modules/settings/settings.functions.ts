@@ -8,14 +8,6 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
-import {
-  createEmptyOwnerSettingsSourceState,
-  readOwnerNotificationPreferences,
-  setOwnerNotificationPreferences,
-  type OwnerSettingsSourceState,
-} from '@/modules/settings/public'
-import type { OwnerId } from '@/modules/common/ids'
 
 export const ownerNotificationPreferencesInputSchema = z.strictObject({
   newInquiryEmailEnabled: z.boolean(),
@@ -62,8 +54,6 @@ const updatePreferencesMutation = sourceMutation<OwnerNotificationPreferencesInp
   'settings:setCurrentOwnerNotificationPreferences',
 )
 
-let localOwnerSettingsState: OwnerSettingsSourceState = createEmptyOwnerSettingsSourceState()
-const localOwnerId = 'owner:local-e2e-settings' as OwnerId
 
 export const readOwnerNotificationPreferencesServer = createServerFn()
   .handler(() => readOwnerNotificationPreferencesThroughSource())
@@ -73,14 +63,6 @@ export const updateOwnerNotificationPreferencesServer = createServerFn({ method:
   .handler(async ({ data }) => updateOwnerNotificationPreferencesThroughSource(data))
 
 export async function readOwnerNotificationPreferencesThroughSource(): Promise<OwnerNotificationPreferencesReadResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return {
-      kind: 'ok',
-      code: 'owner_notification_preferences_read',
-      ownerId: localOwnerId,
-      preferences: readOwnerNotificationPreferences(localOwnerSettingsState, localOwnerId),
-    }
-  }
 
   try {
     return await callSourceQuery(readPreferencesQuery, {})
@@ -92,23 +74,6 @@ export async function readOwnerNotificationPreferencesThroughSource(): Promise<O
 export async function updateOwnerNotificationPreferencesThroughSource(
   input: OwnerNotificationPreferencesInput,
 ): Promise<OwnerNotificationPreferencesMutationResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    const result = setOwnerNotificationPreferences(localOwnerSettingsState, {
-      ownerId: localOwnerId,
-      newInquiryEmailEnabled: input.newInquiryEmailEnabled,
-      now: Date.now(),
-    })
-    localOwnerSettingsState = result.state
-    return {
-      kind: 'ok',
-      code: 'owner_notification_preferences_updated',
-      ownerId: localOwnerId,
-      preferences: {
-        newInquiryEmailEnabled: result.preferences.newInquiryEmailEnabled,
-        updatedAt: result.preferences.updatedAt,
-      },
-    }
-  }
 
   try {
     return await callSourceMutation(updatePreferencesMutation, input)

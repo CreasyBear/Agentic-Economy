@@ -273,6 +273,16 @@ describe('capability-supply supply writers', () => {
     expect(inserted[0]?.adapterId).toBe('http-json:v1')
   })
 
+  it('refuses a provider connection that expired before binding registration', async () => {
+    const created = createProviderConnection({ ...providerConnectionCommand, expiresAt: 10 }, 1)
+    if (created.kind !== 'applied') throw new Error(`provider connection fixture failed: ${created.kind}`)
+    await expect(registerCapabilityTransportBinding(
+      bindingPorts({ loadProviderConnection: async () => created.connection }),
+      bindingRegistration,
+      20,
+    )).resolves.toEqual({ kind: 'refused', reason: 'connection_inactive' })
+  })
+
   it('refuses binding when offering contract mismatches', async () => {
     const mismatched = defineCapabilityTransportBindingRegistration({
       ...bindingRegistration,

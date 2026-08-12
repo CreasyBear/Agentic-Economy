@@ -1,6 +1,7 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { ConvexHttpClient } from 'convex/browser'
 import { anyApi, makeFunctionReference } from 'convex/server'
 import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
@@ -38,6 +39,34 @@ export type CreatePublicConvexClientOptions = Pick<
   CreateAuthenticatedConvexClientOptions,
   'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'
 >
+export type ConvexServerFunctionAssertion = CustomerRequestServiceAssertion
+
+const CONVEX_SERVER_FUNCTION_PRINCIPAL = {
+  principalId: 'ae:server-function',
+  ownerId: 'ae:server-function',
+  credentialId: 'ae:server-function',
+} as const
+
+export async function createConvexServerFunctionAssertion(input: Readonly<{
+  operation: string
+  scope: string
+  command: unknown
+  env?: Readonly<Record<string, string | undefined>>
+  now?: number
+}>): Promise<ConvexServerFunctionAssertion> {
+  const key = readTrimmedEnv(input.env ?? process.env, 'AE_CONVEX_SERVER_FUNCTION_TOKEN')
+  if (key === undefined || key.length < 32 || input.scope.trim().length === 0) {
+    throw new ConvexSourceError('missing_auth', 'Server function credentials are unavailable.', 503)
+  }
+  return await createCustomerRequestServiceAssertion({
+    key,
+    operation: input.operation,
+    command: toStableHashValue(input.command),
+    principal: { ...CONVEX_SERVER_FUNCTION_PRINCIPAL, scopes: [input.scope] },
+    issuedAt: input.now ?? Date.now(),
+  })
+}
+
 
 // ponytail: intentional seam (server-seams.test.ts); do not inline.
 export type ConvexSourceTransport = {
@@ -54,6 +83,18 @@ export type ConvexSourceTransport = {
     args: FunctionArgs<Action>
   ): Promise<FunctionReturnType<Action>>
 }
+let publicSourceTransportForTests: ConvexSourceTransport | undefined
+
+export function setPublicSourceTransportForTests(
+  transport: ConvexSourceTransport | undefined,
+): () => void {
+  const previous = publicSourceTransportForTests
+  publicSourceTransportForTests = transport
+  return () => {
+    publicSourceTransportForTests = previous
+  }
+}
+
 
 export const sourceConvexApi = anyApi
 
@@ -172,22 +213,33 @@ export async function callPublicSourceQuery<Query extends FunctionReference<'que
   args: FunctionArgs<Query>,
   options?: CreatePublicConvexClientOptions
 ): Promise<FunctionReturnType<Query>> {
+  if (publicSourceTransportForTests !== undefined) {
+    return publicSourceTransportForTests.query(query, args)
+  }
   return createPublicSourceTransport(options).query(query, args)
 }
+
 
 export async function callPublicSourceMutation<Mutation extends FunctionReference<'mutation'>>(
   mutation: Mutation,
   args: FunctionArgs<Mutation>,
   options?: CreatePublicConvexClientOptions
 ): Promise<FunctionReturnType<Mutation>> {
+  if (publicSourceTransportForTests !== undefined) {
+    return publicSourceTransportForTests.mutation(mutation, args)
+  }
   return createPublicSourceTransport(options).mutation(mutation, args)
 }
+
 
 export async function callPublicSourceAction<Action extends FunctionReference<'action'>>(
   action: Action,
   args: FunctionArgs<Action>,
   options?: CreatePublicSourceActionOptions
 ): Promise<FunctionReturnType<Action>> {
+  if (publicSourceTransportForTests !== undefined) {
+    return publicSourceTransportForTests.action(action, args)
+  }
   return createPublicSourceTransport(options).action(action, args)
 }
 

@@ -34,9 +34,6 @@ export {
   readCompletedResultIdentity,
 } from './durable'
 export {
-  createConvexActionInvocationDurablePort,
-} from './convex-durable-port'
-export {
   buildCanonicalClaimCommand,
   buildCanonicalReleaseFenceCommand,
   buildCanonicalTerminalOutcomeCommand,
@@ -57,9 +54,6 @@ export type {
   CanonicalTerminalOutcomeInput,
   CustomerRequestCanonicalClaimMaterial,
 } from './canonical-claim'
-export type {
-  ConvexActionInvocationDurablePortOptions,
-} from './convex-durable-port'
 export {
   authorityUseIntegrityValid,
   issueStandingMandate,
@@ -114,6 +108,21 @@ export {
   createPaidOperationApplicationService,
 } from './paid-operation-application-service'
 export { inspectUserInputContract } from './input-work'
+export {
+  cancelPublicInvocation,
+  inspectPublicInvocation,
+  readAgentUsage,
+  readPublicInvocationStatus,
+  reconcilePublicInvocation,
+} from './operation-public'
+export type {
+  PublicInvocationAttempt,
+  PublicInvocationCommandResult,
+  PublicInvocationHistory,
+  PublicInvocationReadResult,
+  PublicInvocationRefusal,
+  PublicInvocationStatus,
+} from './operation-public'
 
 export type {
   ActionInvocationOrigin,

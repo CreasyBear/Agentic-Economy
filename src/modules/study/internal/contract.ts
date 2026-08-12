@@ -19,7 +19,11 @@ export const studyEvidenceClassSchema = z.enum([
 ])
 export type StudyEvidenceClass = z.infer<typeof studyEvidenceClassSchema>
 
-export const studyLearningSchema = z.strictObject({
+/** Production study inputs exclude retired sandbox-provider evidence. */
+export const studyWriteEvidenceClassSchema = z.enum(['published_price', 'business_quote', 'web_discovery'])
+export type StudyWriteEvidenceClass = z.infer<typeof studyWriteEvidenceClassSchema>
+
+const studyLearningSchemaBase = z.strictObject({
   insight: z.string().min(1),
   sourceUrl: z.url(),
   quoteOrLocator: z.string().min(1).optional(),
@@ -30,7 +34,13 @@ export const studyLearningSchema = z.strictObject({
   evidenceClass: studyEvidenceClassSchema,
   environment: z.literal('MOCK/DEVELOPMENT ONLY').optional(),
 })
+
+export const studyLearningSchema = studyLearningSchemaBase
+export const studyWriteLearningSchema = studyLearningSchemaBase.extend({
+  evidenceClass: studyWriteEvidenceClassSchema,
+})
 export type StudyLearning = z.infer<typeof studyLearningSchema>
+
 
 const studyQuotePriceSchema = z.strictObject({
   amount: exactAmountSchema,
@@ -59,6 +69,11 @@ export const studyQuoteSchema = z.strictObject({
   metrics: z.record(z.string(), z.number().finite()).optional(),
 })
 export type StudyQuote = z.infer<typeof studyQuoteSchema>
+/** Production study writes exclude retired sandbox-provider quote evidence. */
+export const studyWriteQuoteSchema = studyQuoteSchema.extend({
+  evidenceClass: studyWriteEvidenceClassSchema,
+})
+
 
 export const studyRecommendationSchema = z.strictObject({
   alternativeId: z.string().min(1),
@@ -68,6 +83,21 @@ export const studyRecommendationSchema = z.strictObject({
   environment: z.literal('MOCK/DEVELOPMENT ONLY').optional(),
 })
 export type StudyRecommendation = z.infer<typeof studyRecommendationSchema>
+export const studyWriteRecommendationSchema = studyRecommendationSchema.extend({
+  evidenceClass: studyWriteEvidenceClassSchema.optional(),
+})
+
+
+const studyExcludedQuoteSchema = z.strictObject({
+  quoteRef: z.string().min(1),
+  reason: z.enum(['expired_quote', 'unknown_evidence', 'mock_as_real', 'provider_refused']),
+  expiresAt: z.number().int().optional(),
+  evidenceClass: studyEvidenceClassSchema.optional(),
+})
+
+const studyWriteExcludedQuoteSchema = studyExcludedQuoteSchema.extend({
+  evidenceClass: studyWriteEvidenceClassSchema.optional(),
+})
 
 export const studyArtifactSchema = z.strictObject({
   format: z.literal('ae.study:v1'),
@@ -89,15 +119,20 @@ export const studyArtifactSchema = z.strictObject({
   quotes: z.array(studyQuoteSchema).max(32),
   topsis: z.unknown(),
   recommendation: studyRecommendationSchema.optional(),
-  excludedQuotes: z.array(z.strictObject({
-    quoteRef: z.string().min(1),
-    reason: z.enum(['expired_quote', 'unknown_evidence', 'mock_as_real', 'provider_refused']),
-    expiresAt: z.number().int().optional(),
-    evidenceClass: studyEvidenceClassSchema.optional(),
-  })).max(32),
+  excludedQuotes: z.array(studyExcludedQuoteSchema).max(32),
+
   rfxState: z.enum(['enquiry', 'tender', 'qualification', 'award']),
 })
 export type StudyArtifact = z.infer<typeof studyArtifactSchema>
+export const studyWriteArtifactSchema = studyArtifactSchema.extend({
+  learnings: z.array(studyWriteLearningSchema).max(64),
+  evidenceClass: studyWriteEvidenceClassSchema,
+  quotes: z.array(studyWriteQuoteSchema).max(32),
+  recommendation: studyWriteRecommendationSchema.optional(),
+  excludedQuotes: z.array(studyWriteExcludedQuoteSchema).max(32),
+})
+export type StudyWriteArtifact = z.infer<typeof studyWriteArtifactSchema>
+
 
 export type StudyArtifactWithTopsis = Omit<StudyArtifact, 'topsis'> & { topsis: TopsisResult }
 

@@ -10,6 +10,7 @@ const app = defineApp({
     OPENROUTER_API_KEY: v.optional(v.string()),
     AE_CUSTOMER_REQUEST_MODEL: v.optional(v.string()),
     AE_SITE_URL: v.optional(v.string()),
+    AE_RELEASE_SOURCE_REVISION: v.optional(v.string()),
     CLERK_JWT_ISSUER_DOMAIN: v.optional(v.string()),
     AE_CONVEX_SERVER_FUNCTION_TOKEN: v.optional(v.string()),
     AE_ROUTE_CALL_SIGNING_SECRET: v.optional(v.string()),

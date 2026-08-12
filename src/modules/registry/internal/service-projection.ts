@@ -1,9 +1,9 @@
 import type { OfferingPrice, BusinessSupplyProjection } from '@/modules/catalog/public'
+import type { BusinessContext } from '@/modules/business/public'
 import type {
   PublicOperationAuthentication,
   PublicOperationParameter,
 } from '@/modules/capability-supply/public'
-
 /**
  * Canonical agent-native Service model — ONE Service per business.
  *
@@ -55,7 +55,7 @@ export type ServiceEndpointDto = Readonly<{
     operationRef?: string
     offeringRef: string
     provenance: 'business_declared' | 'publicly_observed'
-    access: 'open' | 'external'
+    access: 'external'
     authentication: ServiceEndpointAuthenticationDto
     execution: ServiceEndpointExecutionDto
     authorityMode?: ServiceEndpointAuthorityModeDto
@@ -92,15 +92,13 @@ export type ServiceDto = Readonly<{
   iconUrl?: string
   ae: Readonly<{
     trustTier: BusinessSupplyProjection['business']['trustTier']
-    suburb?: string
-    stateTerritory?: string
-    postcode?: string
+    businessContext: BusinessContext
     publicUrl: string
     responseTimeMinutes?: number
     photos: readonly Readonly<{ url: string; alt: string }>[]
     observedAt: number
     disposition: BusinessSupplyProjection['disposition']
-    source: 'business_published' | 'ae_sandbox'
+    source: 'business_published'
     offerings: readonly ServiceOfferingDto[]
     links: Readonly<{ business: string; manifest: string }>
   }>

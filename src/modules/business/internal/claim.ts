@@ -1,10 +1,12 @@
 import { brandNonEmpty } from '@/modules/common/ids'
+import type { Slug } from '@/modules/common/ids'
 import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sanitizeText } from '@/modules/common/sanitize-text'
 import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim } from '@/modules/security/public'
 import { validateOwnerPublishedPhone } from './published-phone'
 import type {
+  BusinessContext,
   BusinessContextRecord,
   BusinessRecord,
   BusinessSourceState,
@@ -14,6 +16,10 @@ import type {
   ClaimRecord,
   BusinessOwnerRecord,
   PublicBusinessPhoto,
+} from '@/modules/business/public'
+import {
+  canonicalProviderIdentifier,
+  canonicalProviderWebsite,
 } from '@/modules/business/public'
 
 export function createEmptyBusinessSourceState(): BusinessSourceState {
@@ -63,10 +69,9 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     {
       name: normalizedFacts.name,
       category: normalizedFacts.category,
-      suburb: normalizedFacts.suburb,
-      stateTerritory: normalizedFacts.stateTerritory,
+      businessContext: normalizedFacts.businessContext,
     },
-    owner.ownerId
+    owner.ownerId,
   )
 
   if (duplicateDecision.kind === 'same_owner_conflict') {
@@ -91,12 +96,11 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
       slug: allocatedSlug,
       status: 'contested',
       submittedFactsHash: canonicalDigest({
+        businessContext: normalizedFacts.businessContext,
         category: normalizedFacts.category,
         duplicate: duplicateDecision.publicReason,
         name: normalizedFacts.name,
         slug: allocatedSlug,
-        stateTerritory: normalizedFacts.stateTerritory,
-        suburb: normalizedFacts.suburb,
       }),
       createdAt: command.now,
       updatedAt: command.now,
@@ -125,6 +129,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
 
   const businessId = brandNonEmpty(`business:${allocatedSlug}`, 'BusinessId')
   const sourceHash = canonicalDigest({
+    businessContext: normalizedFacts.businessContext,
     category: normalizedFacts.category,
     name: normalizedFacts.name,
     slug: allocatedSlug,
@@ -133,9 +138,6 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
       label: sourceRef.label,
       sourceHash: sourceRef.sourceHash,
     })),
-    stateTerritory: normalizedFacts.stateTerritory,
-    publishedPhone: normalizedFacts.publishedPhone ?? null,
-    suburb: normalizedFacts.suburb,
   })
 
   const business: BusinessRecord = {
@@ -145,9 +147,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     name: normalizedFacts.name,
     normalizedName: normalizeIdentityText(normalizedFacts.name),
     category: normalizedFacts.category,
-    suburb: normalizedFacts.suburb,
-    stateTerritory: normalizedFacts.stateTerritory,
-    ...(normalizedFacts.publishedPhone === undefined ? {} : { publishedPhone: normalizedFacts.publishedPhone }),
+    businessContext: normalizedFacts.businessContext,
     publicStatus: 'unpublished',
     trustTier: 'claimed',
     claimStatus: 'authenticated',
@@ -156,18 +156,13 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     updatedAt: command.now,
   }
 
-  const contextBase = {
+  const context: BusinessContextRecord = {
     businessId,
     category: normalizedFacts.category,
-    suburb: normalizedFacts.suburb,
-    stateTerritory: normalizedFacts.stateTerritory,
+    businessContext: normalizedFacts.businessContext,
     sourceRefs: normalizedFacts.sourceRefs,
     sourceHash,
     approvedAt: command.now,
-  }
-
-  const context: BusinessContextRecord = {
-    ...contextBase,
     ...(normalizedFacts.ownerMessage === undefined ? {} : { ownerMessage: normalizedFacts.ownerMessage }),
     ...(normalizedFacts.photos === undefined || normalizedFacts.photos.length === 0
       ? {}
@@ -216,10 +211,8 @@ type NormalizedClaimFacts =
       kind: 'valid'
       name: string
       category: string
-      suburb: string
-      stateTerritory: string
-      slug: ReturnType<typeof brandNonEmpty<string, 'Slug'>>
-      publishedPhone?: string
+      businessContext: BusinessContext
+      slug: Slug
       ownerMessage?: string
       photos?: readonly PublicBusinessPhoto[]
       responseTimeMinutes?: number
@@ -230,25 +223,48 @@ type NormalizedClaimFacts =
 function normalizeClaimFacts(facts: ClaimBusinessCommand['facts']): NormalizedClaimFacts {
   const name = normalizePublicText(facts.name)
   const category = normalizePublicText(facts.category)
-  const suburb = normalizePublicText(facts.suburb)
-  const stateTerritory = normalizePublicText(facts.stateTerritory)
-  const publishedPhoneValidation = validateOwnerPublishedPhone(facts.publishedPhone)
   const slugText = normalizeSlug(facts.requestedSlug)
+  const sourceRefs = facts.sourceRefs
 
-  if (name.length === 0 || category.length === 0 || suburb.length === 0 || stateTerritory.length === 0) {
-    return { kind: 'invalid', reason: 'Name, category, suburb, and state/territory are required.' }
+  if (name.length === 0 || category.length === 0) {
+    return { kind: 'invalid', reason: 'Name and category are required.' }
   }
 
   if (slugText.length === 0) {
     return { kind: 'invalid', reason: 'A public slug is required.' }
   }
 
-  if (facts.sourceRefs.length === 0) {
+  if (sourceRefs.length === 0) {
     return { kind: 'invalid', reason: 'At least one source reference is required.' }
   }
 
-  if (publishedPhoneValidation.kind === 'invalid') {
-    return { kind: 'invalid', reason: 'Published phone must be a valid Australian phone number.' }
+  const context = facts.businessContext
+  let businessContext: BusinessContext
+  if (context.kind === 'local_human') {
+    const suburb = normalizePublicText(context.suburb)
+    const stateTerritory = normalizePublicText(context.stateTerritory)
+    const postcode = normalizeOptionalText(context.postcode)
+    const publishedPhoneValidation = validateOwnerPublishedPhone(context.publishedPhone)
+    if (suburb.length === 0 || stateTerritory.length === 0) {
+      return { kind: 'invalid', reason: 'Name, category, suburb, and state/territory are required.' }
+    }
+    if (publishedPhoneValidation.kind === 'invalid') {
+      return { kind: 'invalid', reason: 'Published phone must be a valid Australian phone number.' }
+    }
+    businessContext = {
+      kind: 'local_human',
+      suburb,
+      stateTerritory,
+      ...(postcode === undefined ? {} : { postcode }),
+      ...(publishedPhoneValidation.kind === 'valid' ? { publishedPhone: publishedPhoneValidation.value } : {}),
+    }
+  } else {
+    const website = canonicalProviderWebsite(context.website)
+    const providerIdentifier = canonicalProviderIdentifier(context.providerIdentifier)
+    if (website === undefined || providerIdentifier === undefined) {
+      return { kind: 'invalid', reason: 'Provider website and identifier are required.' }
+    }
+    businessContext = { kind: 'programmable_provider', website, providerIdentifier }
   }
 
   const ownerMessage = normalizeOptionalText(facts.ownerMessage)
@@ -256,12 +272,10 @@ function normalizeClaimFacts(facts: ClaimBusinessCommand['facts']): NormalizedCl
     kind: 'valid' as const,
     name,
     category,
-    suburb,
-    stateTerritory,
+    businessContext,
     slug: brandNonEmpty(slugText, 'Slug'),
-    sourceRefs: facts.sourceRefs,
+    sourceRefs,
     ...(facts.photos === undefined || facts.photos.length === 0 ? {} : { photos: facts.photos }),
-    ...(publishedPhoneValidation.kind === 'valid' ? { publishedPhone: publishedPhoneValidation.value } : {}),
     ...(facts.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: facts.responseTimeMinutes }),
   }
 

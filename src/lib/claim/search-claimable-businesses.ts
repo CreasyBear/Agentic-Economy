@@ -13,7 +13,6 @@ export const searchClaimableBusinessesServer = createServerFn()
       slug: item.slug,
       name: item.name,
       category: item.category,
-      suburb: item.suburb,
-      stateTerritory: item.stateTerritory,
+      businessContext: item.businessContext,
     }))
   })

@@ -17,6 +17,18 @@ import {
 const NOOP_TURN_STREAM = async () => undefined
 const RETRY_AFTER_MS = 60_000
 
+function gatewayService() {
+  const unavailable = async (): Promise<never> => {
+    throw new Error('gateway service should not execute in route context tests')
+  }
+  return {
+    invokeOperation: vi.fn(unavailable),
+    readInvocationStatus: vi.fn(unavailable),
+    cancelInvocation: vi.fn(unavailable),
+    reconcileInvocation: vi.fn(unavailable),
+  }
+}
+
 describe('answer HTTP rate limits', () => {
   let resetPort: (() => void) | undefined
 
@@ -101,6 +113,113 @@ describe('answer HTTP rate limits', () => {
     }
 
     expect(admit).toHaveBeenCalledTimes(2)
+  })
+
+  it('injects the canonical gateway context only for an admitted bearer request', async () => {
+    const service = gatewayService()
+    const stream = vi.fn(async (input: { operationInvokeContext?: unknown }) => {
+      expect(input.operationInvokeContext).toMatchObject({
+        correlationId: expect.any(String),
+        principal: {
+          principalId: 'clerk_api_key:key:answer',
+          credentialId: 'key:answer',
+          ownerId: 'owner:answer',
+        },
+        service,
+      })
+      return undefined
+    })
+    const response = await handleAnswerTurnRequest(
+      new Request('https://ae.example/api/answer/turn', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer answer-key',
+          'Content-Type': 'application/json',
+          cookie: sessionCookieHeader('answer-gateway-session'),
+          'X-AE-Turn-Key': 'answer-gateway:authenticated',
+        },
+        body: JSON.stringify({ query: 'run the selected operation' }),
+      }),
+      {
+        admit: async () => ({ ok: true }),
+        authenticate: async () => ({
+          isAuthenticated: true,
+          tokenType: 'api_key',
+          id: 'key:answer',
+          subject: 'owner:answer',
+          scopes: ['market_operations:invoke'],
+        }),
+        operationInvokeService: service,
+        stream,
+      },
+    )
+
+    await response.text()
+    expect(response.status).toBe(200)
+    expect(stream).toHaveBeenCalledOnce()
+  })
+
+  it('refuses an invalid bearer after admission without reserving or streaming a turn', async () => {
+    const admit = vi.fn<RateLimitAdmission>().mockResolvedValue({ ok: true })
+    const stream = vi.fn(NOOP_TURN_STREAM)
+    const response = await handleAnswerTurnRequest(
+      new Request('https://ae.example/api/answer/turn', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer invalid',
+          'Content-Type': 'application/json',
+          'X-AE-Turn-Key': 'answer-gateway:invalid',
+        },
+        body: JSON.stringify({ query: 'run the selected operation' }),
+      }),
+      {
+        admit,
+        authenticate: async () => ({
+          isAuthenticated: false,
+          tokenType: null,
+          id: null,
+          subject: null,
+          scopes: null,
+        }),
+        operationInvokeService: gatewayService(),
+        stream,
+      },
+    )
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('www-authenticate')).toContain('market_operations:invoke')
+    expect(admit).toHaveBeenCalledOnce()
+    expect(stream).not.toHaveBeenCalled()
+  })
+
+  it('keeps an admitted request without Authorization on the keyless Answer path', async () => {
+    const authenticate = vi.fn()
+    const stream = vi.fn(async (input: { operationInvokeContext?: unknown }) => {
+      expect(input.operationInvokeContext).toBeUndefined()
+      return undefined
+    })
+    const response = await handleAnswerTurnRequest(
+      new Request('https://ae.example/api/answer/turn', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: sessionCookieHeader('answer-keyless-session'),
+          'X-AE-Turn-Key': 'answer-gateway:keyless',
+        },
+        body: JSON.stringify({ query: 'weather in Paris' }),
+      }),
+      {
+        admit: async () => ({ ok: true }),
+        authenticate,
+        operationInvokeService: gatewayService(),
+        stream,
+      },
+    )
+
+    await response.text()
+    expect(response.status).toBe(200)
+    expect(authenticate).not.toHaveBeenCalled()
+    expect(stream).toHaveBeenCalledOnce()
   })
 
   it('maps a refused turn admission to 429', async () => {

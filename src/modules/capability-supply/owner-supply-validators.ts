@@ -1,58 +1,18 @@
 import { v, type Infer } from 'convex/values'
 
 /**
- * Canonical owner-supply validator primitives + reading helpers.
+ * Owner readback validators and bounded parsing helpers.
  *
- * Single source of truth for the owner-supply value validation cluster. These
- * were previously duplicated byte-for-byte in `convex/capabilitySupply.ts` and
- * `convex/capabilitySupplyOwnerSupply.ts`; keep them here so the
- * money/authority-adjacent shapes (authority, paidAmount) cannot
- * drift between the two consumer files.
- *
- * Namespaced per-step OVERALL validators (completed / advance / action /
- * publish results, funnel input) intentionally stay in each consumer file:
- * they encode genuinely different step semantics (six-step funnel vs
- * readiness/test readiness probes) that must not be merged here.
+ * Admission source material is owned by the canonical capabilitySupply
+ * mutation; this module must not define a second source or pricing schema.
  */
 
-export const ownerSupplyAuthorityValue = v.union(
-  v.object({ kind: v.literal('keyless') }),
-  v.object({ kind: v.literal('provider_connection'), connectionRef: v.string(), providerRef: v.string() }),
-)
 
-export const ownerSupplyEndpointValue = v.object({
-  sourceKind: v.union(v.literal('openapi_http'), v.literal('mcp'), v.literal('agent_plugin_mcp'), v.literal('x402')),
-  descriptor: v.string(),
-  selector: v.string(),
-  endpointUrl: v.string(),
-  method: v.union(v.literal('GET'), v.literal('POST')),
-  queryMapping: v.string(),
-  protocolVersion: v.string(),
-  toolName: v.string(),
-  requestTimeoutMs: v.number(),
-  authority: ownerSupplyAuthorityValue,
-})
-
-const ownerSupplyExactAmountValue = v.object({
-  currency: v.string(),
-  units: v.string(),
-  exponent: v.number(),
-})
-
-export const ownerSupplyPricingValue = v.object({
-  version: v.literal('pricing:v2'),
-  unit: v.literal('call'),
-  paidAmount: ownerSupplyExactAmountValue,
-  freeTier: v.optional(v.object({ maxCalls: v.number(), window: v.union(v.literal('day'), v.literal('month')) })),
-})
 
 export function isOwnerSupplyRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function ownerSupplyValue(value: unknown): Record<string, unknown> {
-  return isOwnerSupplyRecord(value) ? value : {}
-}
 
 export const ownerSupplyAccessPathDescriptorValue = v.union(
   v.object({
@@ -146,39 +106,16 @@ export function ownerSupplyAccessPathDescriptor(value: unknown): OwnerSupplyAcce
 
 export const ownerSupplyStepValue = v.union(
   v.literal('describe'),
-  v.literal('endpoint'),
+  v.literal('admission'),
   v.literal('readiness'),
-  v.literal('pricing'),
   v.literal('test'),
-  v.literal('publish'),
 )
 export const ownerSupplyResultStepValue = v.union(ownerSupplyStepValue, v.literal('unknown'))
 export type OwnerSupplyStep = Infer<typeof ownerSupplyStepValue>
 export function isOwnerSupplyStep(value: unknown): value is OwnerSupplyStep {
   return value === 'describe'
-    || value === 'endpoint'
+    || value === 'admission'
     || value === 'readiness'
-    || value === 'pricing'
     || value === 'test'
-    || value === 'publish'
 }
 
-export const ownerSupplyValueValidator = v.object({
-  step: v.optional(ownerSupplyResultStepValue),
-  endpoint: v.optional(ownerSupplyEndpointValue),
-  pricing: v.optional(ownerSupplyPricingValue),
-  sourceKind: v.optional(v.union(v.literal('openapi_http'), v.literal('mcp'), v.literal('agent_plugin_mcp'), v.literal('x402'))),
-  descriptor: v.optional(v.string()),
-  selector: v.optional(v.string()),
-  endpointUrl: v.optional(v.string()),
-  method: v.optional(v.union(v.literal('GET'), v.literal('POST'))),
-  queryMapping: v.optional(v.string()),
-  protocolVersion: v.optional(v.string()),
-  toolName: v.optional(v.string()),
-  requestTimeoutMs: v.optional(v.number()),
-  authority: v.optional(ownerSupplyAuthorityValue),
-  version: v.optional(v.literal('pricing:v2')),
-  unit: v.optional(v.literal('call')),
-  paidAmount: v.optional(ownerSupplyExactAmountValue),
-  freeTier: v.optional(v.object({ maxCalls: v.number(), window: v.union(v.literal('day'), v.literal('month')) })),
-})

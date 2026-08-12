@@ -4,39 +4,59 @@ import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import {
+  isSourceWriteBodyDigest,
   SourceWriteAdmissionError,
   SourceWriteAdmissionScopeValues,
+  SOURCE_WRITE_MAX_AGE_MS,
+  sourceWriteCommandDigest,
   sourceWriteKeyFamilyForScope,
   verifySourceWriteAdmission,
   type SourceWriteAdmission,
   type SourceWriteAdmissionFailureReason,
+  type SourceWriteAdmissionRequest,
   type SourceWriteAdmissionScope,
 } from '../src/modules/security/source-write-admission'
 import type { CsrfCheckInput } from '../src/modules/security/public'
 
+export const sourceWriteRequestArg = v.object({
+  method: v.string(),
+  initiatorOrigin: v.string(),
+  targetOrigin: v.string(),
+  targetPath: v.string(),
+  targetQuery: v.string(),
+  bodyDigest: v.string(),
+})
+
 export const sourceWriteAdmissionArg = v.object({
-  version: v.literal('source-write:v1'),
+  version: v.literal('source-write:v2'),
   scope: literalUnion(SourceWriteAdmissionScopeValues),
   keyId: v.string(),
   operationKey: v.string(),
   correlationId: v.string(),
+  commandDigest: v.string(),
   issuedAt: v.number(),
   nonce: v.string(),
   method: v.string(),
-  origin: v.string(),
-  pathname: v.string(),
+  initiatorOrigin: v.string(),
+  targetOrigin: v.string(),
+  targetPath: v.string(),
+  targetQuery: v.string(),
   bodyDigest: v.string(),
   signature: v.string(),
+  signatureInput: v.string(),
 })
 
 export const sourceWriteArgs = {
   sourceWrite: v.optional(sourceWriteAdmissionArg),
+  sourceWriteRequest: v.optional(sourceWriteRequestArg),
 } as const
 
 export type SourceWriteArgs = {
   sourceWrite?: unknown
+  sourceWriteRequest?: unknown
   operationKey?: string
   correlationId?: string
+  [key: string]: unknown
 }
 
 export type SourceWriteCheck =
@@ -46,9 +66,10 @@ export type SourceWriteCheck =
 export async function requireSourceWrite(
   ctx: SourceWriteMutationCtx,
   args: SourceWriteArgs,
-  scope: SourceWriteAdmissionScope
+  scope: SourceWriteAdmissionScope,
 ): Promise<SourceWriteCheck> {
   const admission = isSourceWriteAdmission(args.sourceWrite) ? args.sourceWrite : undefined
+  if (admission === undefined) return { kind: 'rejected', reason: 'missing_source_write_admission' }
   if (args.operationKey === undefined || args.operationKey.trim().length === 0) {
     return { kind: 'rejected', reason: 'source_write_operation_mismatch' }
   }
@@ -56,92 +77,91 @@ export async function requireSourceWrite(
     return { kind: 'rejected', reason: 'source_write_correlation_mismatch' }
   }
 
-  const expected = {
-    scope,
-    operationKey: args.operationKey,
-    correlationId: args.correlationId,
-  }
-  const verification = admission === undefined
-    ? verifyAdmission({ expected })
-    : verifyAdmission({ admission, expected })
+  const expectedRequest = isSourceWriteRequest(args.sourceWriteRequest) ? args.sourceWriteRequest : undefined
+  if (expectedRequest === undefined) return { kind: 'rejected', reason: 'missing_source_write_request' }
 
-  if (verification.kind === 'rejected') {
-    return {
-      kind: 'rejected',
-      reason: verification.reason,
-    }
+  let commandDigest: string
+  try {
+    commandDigest = sourceWriteCommandDigest(args)
+  } catch (error) {
+    return { kind: 'rejected', reason: sourceWriteErrorReason(error) }
   }
+
+  const verification = await verifyAdmission({
+    admission,
+    expected: {
+      scope,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      commandDigest,
+      request: expectedRequest,
+    },
+  })
+  if (verification.kind === 'rejected') return verification
 
   const nonce = await consumeSourceWriteNonce(ctx, verification.admission)
-  if (nonce.kind === 'rejected') {
-    return nonce
-  }
+  if (nonce.kind === 'rejected') return nonce
 
   return {
     kind: 'accepted',
     csrf: {
-      origin: verification.admission.origin,
-      allowedOrigins: [verification.admission.origin],
+      origin: verification.admission.initiatorOrigin,
+      allowedOrigins: [verification.admission.initiatorOrigin],
     },
   }
 }
 
-type SourceWriteMutationCtx = {
-  db: unknown
-}
-
+type SourceWriteMutationCtx = { db: unknown }
 type SourceWriteNonceDb = {
   query: (tableName: string) => SourceWriteNonceQuery
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
 }
-
 type SourceWriteNonceQuery = {
   withIndex: (indexName: string, callback: (query: SourceWriteNonceIndexBuilder) => SourceWriteNonceIndexBuilder) => SourceWriteNonceQuery
   unique: () => Promise<Record<string, unknown> | null>
 }
+type SourceWriteNonceIndexBuilder = { eq: (field: string, value: unknown) => SourceWriteNonceIndexBuilder }
 
-type SourceWriteNonceIndexBuilder = {
-  eq: (field: string, value: unknown) => SourceWriteNonceIndexBuilder
+function isSourceWriteRequest(value: unknown): value is SourceWriteAdmissionRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return typeof record.method === 'string'
+    && typeof record.initiatorOrigin === 'string'
+    && typeof record.targetOrigin === 'string'
+    && typeof record.targetPath === 'string'
+    && typeof record.targetQuery === 'string'
+    && typeof record.bodyDigest === 'string'
 }
 
-function verifyAdmission(input: {
-  admission?: SourceWriteAdmission
+async function verifyAdmission(input: {
+  admission: SourceWriteAdmission
   expected: {
     scope: SourceWriteAdmissionScope
     operationKey: string
     correlationId: string
+    commandDigest: string
+    request: SourceWriteAdmissionRequest
   }
-}): { kind: 'accepted'; admission: SourceWriteAdmission } | { kind: 'rejected'; reason: SourceWriteAdmissionFailureReason } {
+}): Promise<{ kind: 'accepted'; admission: SourceWriteAdmission } | { kind: 'rejected'; reason: SourceWriteAdmissionFailureReason }> {
   try {
-    if (input.admission === undefined) {
-      return verifySourceWriteAdmission({ expected: input.expected })
-    }
-    return verifySourceWriteAdmission({
-      admission: input.admission,
-      expected: input.expected,
-    })
+    return await verifySourceWriteAdmission({ admission: input.admission, expected: input.expected })
   } catch (error) {
-    if (error instanceof SourceWriteAdmissionError) {
-      return { kind: 'rejected', reason: sourceWriteErrorReason(error) }
-    }
+    if (error instanceof SourceWriteAdmissionError) return { kind: 'rejected', reason: sourceWriteErrorReason(error) }
     throw error
   }
 }
 
 async function consumeSourceWriteNonce(
   ctx: SourceWriteMutationCtx,
-  admission: SourceWriteAdmission
+  admission: SourceWriteAdmission,
 ): Promise<{ kind: 'accepted' } | { kind: 'rejected'; reason: 'source_write_nonce_replayed' }> {
   const db = ctx.db as SourceWriteNonceDb
   const existing = await db
     .query('sourceWriteNonces')
     .withIndex('by_keyId_and_nonce', (query) => query.eq('keyId', admission.keyId).eq('nonce', admission.nonce))
     .unique()
-  if (existing !== null) {
-    return { kind: 'rejected', reason: 'source_write_nonce_replayed' }
-  }
+  if (existing !== null) return { kind: 'rejected', reason: 'source_write_nonce_replayed' }
 
-  const now = Date.now()
   await db.insert('sourceWriteNonces', {
     keyId: admission.keyId,
     nonce: admission.nonce,
@@ -149,20 +169,20 @@ async function consumeSourceWriteNonce(
     scope: admission.scope,
     operationKey: admission.operationKey,
     correlationId: admission.correlationId,
+    commandDigest: admission.commandDigest,
     bodyDigest: admission.bodyDigest,
     issuedAt: admission.issuedAt,
-    consumedAt: now,
-    expiresAt: admission.issuedAt + 5 * 60_000,
+    consumedAt: Date.now(),
+    expiresAt: admission.issuedAt + SOURCE_WRITE_MAX_AGE_MS,
   })
-
   return { kind: 'accepted' }
 }
 
-function sourceWriteErrorReason(error: SourceWriteAdmissionError): SourceWriteAdmissionFailureReason {
+function sourceWriteErrorReason(error: unknown): SourceWriteAdmissionFailureReason {
+  if (!(error instanceof SourceWriteAdmissionError)) return 'invalid_source_write_request'
   switch (error.code) {
     case 'client_exposed_source_write_secret':
     case 'source_write_provider_secret_reuse':
-    case 'missing_source_write_request':
       return 'missing_source_write_secret'
     default:
       return error.code
@@ -170,26 +190,26 @@ function sourceWriteErrorReason(error: SourceWriteAdmissionError): SourceWriteAd
 }
 
 function isSourceWriteAdmission(value: unknown): value is SourceWriteAdmission {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
-  return (
-    record.version === 'source-write:v1' &&
-    typeof record.scope === 'string' &&
-    SourceWriteAdmissionScopeValues.includes(record.scope as SourceWriteAdmissionScope) &&
-    typeof record.keyId === 'string' &&
-    typeof record.operationKey === 'string' &&
-    typeof record.correlationId === 'string' &&
-    typeof record.issuedAt === 'number' &&
-    typeof record.nonce === 'string' &&
-    typeof record.method === 'string' &&
-    typeof record.origin === 'string' &&
-    typeof record.pathname === 'string' &&
-    typeof record.bodyDigest === 'string' &&
-    typeof record.signature === 'string'
-  )
+  return record.version === 'source-write:v2'
+    && typeof record.scope === 'string'
+    && SourceWriteAdmissionScopeValues.includes(record.scope as SourceWriteAdmissionScope)
+    && typeof record.keyId === 'string'
+    && typeof record.operationKey === 'string'
+    && typeof record.correlationId === 'string'
+    && typeof record.commandDigest === 'string'
+    && typeof record.issuedAt === 'number'
+    && typeof record.nonce === 'string'
+    && typeof record.method === 'string'
+    && typeof record.initiatorOrigin === 'string'
+    && typeof record.targetOrigin === 'string'
+    && typeof record.targetPath === 'string'
+    && typeof record.targetQuery === 'string'
+    && typeof record.bodyDigest === 'string'
+    && isSourceWriteBodyDigest(record.bodyDigest, true)
+    && typeof record.signature === 'string'
+    && typeof record.signatureInput === 'string'
 }
 
 const sourceWriteNonceCleanupResult = v.object({
@@ -209,10 +229,9 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
   returns: sourceWriteNonceCleanupResult,
   handler: async (ctx, args) => {
     const cutoff = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
-    const batchSize =
-      args.batchSize !== undefined && Number.isFinite(args.batchSize)
-        ? Math.min(Math.max(Math.floor(args.batchSize), 1), SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE)
-        : SOURCE_WRITE_NONCE_CLEANUP_BATCH_SIZE
+    const batchSize = args.batchSize !== undefined && Number.isFinite(args.batchSize)
+      ? Math.min(Math.max(Math.floor(args.batchSize), 1), SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE)
+      : SOURCE_WRITE_NONCE_CLEANUP_BATCH_SIZE
 
     const expiredNonces = await ctx.db
       .query('sourceWriteNonces')

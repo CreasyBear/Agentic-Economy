@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { CapabilityBindingRow } from '../binding'
 import type { CapabilityOfferingRow } from '../offering'
@@ -28,6 +29,19 @@ export type ProbeDigestBinding = Pick<
   | 'admission'
   | 'conformance'
 >
+
+export type ProbeRequestDigestTarget = Readonly<{
+  targetDigest: string
+  endpointUrl: string
+  adapterId: string
+  probeKind?: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'
+  probeMethod?: 'GET' | 'POST'
+  probeQuery?: readonly Readonly<{ parameter: string; value: string }>[]
+  transportConfigJson?: string
+  probeInputJson?: string
+  outputSchemaJson?: string
+  expectedPaymentJson?: string
+}>
 
 export function probeTargetDigest(
   publication: ProbeDigestPublication,
@@ -61,4 +75,19 @@ export function probeTargetDigest(
     businessId: publication.businessId,
     contractDigest: publication.contractDigest,
   })
+}
+
+export function probeRequestDigest(target: ProbeRequestDigestTarget): string {
+  return canonicalDigest({
+    targetDigest: target.targetDigest,
+    endpointUrl: target.endpointUrl,
+    adapterId: target.adapterId,
+    probeKind: target.probeKind ?? null,
+    probeMethod: target.probeMethod ?? null,
+    probeQuery: target.probeQuery ?? [],
+    transportConfigJson: target.transportConfigJson ?? null,
+    probeInputJson: target.probeInputJson ?? null,
+    outputSchemaJson: target.outputSchemaJson ?? null,
+    expectedPaymentJson: target.expectedPaymentJson ?? null,
+  } as StableHashValue)
 }

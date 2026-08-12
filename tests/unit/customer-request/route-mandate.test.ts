@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createRegisteredOperationMappingRef } from '@/modules/capability-supply/public'
-import { addExactAmounts } from '@/modules/money/public'
+import { addExactAmounts, pricingConfigDigest } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 
 import { createTestOperationLineage } from '../../helpers/customer-request-lineage'
@@ -728,6 +728,11 @@ function step(input: Readonly<{
     resolvedInputs: [],
     deferredInputs: [],
     price: { kind: 'fixed', amount: input.amount },
+    priceDigest: pricingConfigDigest({
+      version: 'pricing:v2',
+      unit: 'call',
+      paidAmount: input.amount,
+    }),
     dataUse: [{
       effectId: `share:${suffix}`,
       inputPointer: '/request',

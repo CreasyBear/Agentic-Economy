@@ -36,7 +36,10 @@ export function captureClientFunnelEvent(input: FunnelCaptureInput): void {
       return
     }
 
-    posthogClient.capture(input.eventType, sanitizeTelemetryValue(buildFunnelEventProperties(input)) as Record<string, unknown>)
+    posthogClient.capture(
+      String(sanitizeTelemetryValue(input.eventType)),
+      sanitizeTelemetryValue(buildFunnelEventProperties(input)) as Record<string, unknown>,
+    )
   })
 }
 
@@ -47,7 +50,10 @@ export function captureClientProductEvent(event: string, properties?: Record<str
       return
     }
 
-    posthogClient.capture(event, sanitizeTelemetryValue(properties ?? {}) as Record<string, unknown>)
+    posthogClient.capture(
+      String(sanitizeTelemetryValue(event)),
+      sanitizeTelemetryValue(properties ?? {}) as Record<string, unknown>,
+    )
   })
 }
 

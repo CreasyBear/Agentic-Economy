@@ -55,6 +55,7 @@ export type RequestEvaluationCandidateInput = Readonly<{
   publicationRevision?: number
   readinessValidUntil?: number
   price?: RegisteredSupplyPrice
+  priceDigest?: string
   commercialRelationship?: RegisteredCommercialRelationship
   cancellation: CapabilityCancellation
 }>
@@ -72,9 +73,11 @@ export type RegisteredEvaluationBinding = Readonly<{
   publicationRevision?: number
   readinessValidUntil?: number
   price?: RegisteredSupplyPrice
+  priceDigest?: string
   commercialRelationship?: RegisteredCommercialRelationship
   cancellation: CapabilityCancellation
 }>
+
 
 export type RequestEvaluationCandidate = Readonly<{
   operationRef: PublicOperationRef
@@ -92,6 +95,7 @@ export type RequestEvaluationCandidate = Readonly<{
   publicationRevision?: number
   readinessValidUntil?: number
   price?: RegisteredSupplyPrice
+  priceDigest?: string
   commercialRelationship?: RegisteredCommercialRelationship
   cancellation: CapabilityCancellation
   viability:
@@ -286,6 +290,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
       ...(candidate.publicationRevision === undefined ? {} : { publicationRevision: candidate.publicationRevision }),
       ...(candidate.readinessValidUntil === undefined ? {} : { readinessValidUntil: candidate.readinessValidUntil }),
       ...(candidate.price === undefined ? {} : { price: candidate.price }),
+      ...(candidate.priceDigest === undefined ? {} : { priceDigest: candidate.priceDigest }),
       ...(candidate.commercialRelationship === undefined ? {} : {
         commercialRelationship: {
           ...candidate.commercialRelationship,
@@ -445,6 +450,7 @@ export function discoverRequestEvaluationCandidates(input: Readonly<{
       ...(binding.publicationRevision === undefined ? {} : { publicationRevision: binding.publicationRevision }),
       ...(binding.readinessValidUntil === undefined ? {} : { readinessValidUntil: binding.readinessValidUntil }),
       ...(binding.price === undefined ? {} : { price: binding.price }),
+      ...(binding.priceDigest === undefined ? {} : { priceDigest: binding.priceDigest }),
       ...(binding.commercialRelationship === undefined ? {} : {
         commercialRelationship: {
           ...binding.commercialRelationship,
@@ -476,6 +482,7 @@ export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvalu
       offeringRegistrationHash: binding.offeringRegistrationHash,
       bindingRegistrationHash: binding.bindingRegistrationHash,
       ...(binding.price === undefined ? {} : { price: binding.price }),
+      ...(binding.priceDigest === undefined ? {} : { priceDigest: binding.priceDigest }),
       ...(binding.commercialRelationship === undefined ? {} : {
         commercialRelationship: binding.commercialRelationship,
       }),

@@ -1,4 +1,6 @@
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
+  BusinessContext,
   BusinessContextRecord,
   BusinessMutationActor,
   BusinessRecord,
@@ -248,6 +250,7 @@ export function buildOfferingSupplyProjection(input: Readonly<{
   discoveryStatus: DiscoveryStatus
   observedAt?: number
 }>): BusinessSupplyProjection | undefined {
+  if (canonicalDigest(input.business.businessContext) !== canonicalDigest(input.context.businessContext)) return undefined
   if (input.business.publicStatus !== 'published') return undefined
   const publishedOfferings = input.offerings.filter((offering) => offering.status === 'published')
   if (publishedOfferings.length === 0) return undefined
@@ -273,10 +276,7 @@ export function buildOfferingSupplyProjection(input: Readonly<{
       slug: input.business.slug,
       name: input.business.name,
       category: input.context.category,
-      suburb: input.context.suburb,
-      stateTerritory: input.context.stateTerritory,
-      ...(input.business.publishedPhone === undefined ? {} : { publishedPhone: input.business.publishedPhone }),
-      ...(input.context.postcode === undefined ? {} : { postcode: input.context.postcode }),
+      businessContext: input.context.businessContext,
       publicUrl: `/${input.business.slug}`,
       trustTier: input.business.trustTier,
       ...(input.context.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: input.context.responseTimeMinutes }),

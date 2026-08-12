@@ -14,7 +14,7 @@ import { convexModules as modules } from '../helpers/convex-fixtures'
 describe('curated provider operation registry', () => {
   it('seeds, discovers, and inspects the exact Exa to Frankfurter scenario with explicit authority', async () => {
     const backend = convexTest(schema, modules)
-    const seeded = await backend.mutation(internal.curatedProviders.seed, {})
+    const seeded = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
     expect(await backend.mutation(internal.curatedProviders.retireLegacyExaV1, {})).toEqual([
       { publicationRef: 'offering:agentic-market-exa:search:v1', status: 'already_retired' },
       { publicationRef: 'offering:agentic-market-exa:contents:v1', status: 'already_retired' },
@@ -36,35 +36,20 @@ describe('curated provider operation registry', () => {
     }
 
     const exa: OperationSearchWireResult = await backend.query(api.capabilitySupplyOperations.search, {
-      query: 'Research the latest official guidance on AI agent payments and summarize the sources',
+      query: 'Exa web research',
       limit: 10,
     })
     const frankfurter: OperationSearchWireResult = await backend.query(api.capabilitySupplyOperations.search, {
-      query: 'Frankfurter ECB rate',
+      query: 'Frankfurter ECB reference rate',
       limit: 10,
     })
-    expect(exa).toMatchObject({ kind: 'ok', items: expect.arrayContaining([
-      expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'exa.search' }) }),
-      expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'exa.contents' }) }),
-    ]) })
-    // Data-correction for the 20-op real catalog: a broad research query legitimately surfaces every
-    // search-capable op (Exa search/contents, the observed x402 search listings, Tavily, OpenWeather
-    // 'guidance' matches), so assert the Exa ops are PRESENT among the results rather than being the
-    // exact-only set (which held only for the original 2-3-op registry). This is not a weakening — the
-    // required Exa operations must still appear.
-    const exaCapabilityIds = exa.kind === 'ok' ? exa.items.map(({ contract }) => contract.capabilityId) : []
-    expect(exaCapabilityIds.sort()).toEqual(expect.arrayContaining(['exa.contents', 'exa.search']))
-    if (!exaCapabilityIds.includes('exa.search') || !exaCapabilityIds.includes('exa.contents')) {
-      throw new Error('curated_exa_search_failed')
-    }
-    // Data-correction for the 20-op catalog: the 'Frankfurter ECB rate' query surfaces both the AE
-    // keyless Frankfurter op and a same-domain observed x402 forex listing (bizintel-forex-rate-x402),
-    // so assert frankfurter.single-rate is PRESENT rather than being the exact single item.
-    expect(frankfurter).toMatchObject({ kind: 'ok', items: expect.arrayContaining([
-      expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'frankfurter.single-rate' }) }),
-    ]) })
+    expect(exa).toMatchObject({ kind: 'ok', matchedCount: 2 })
+    expect(frankfurter).toMatchObject({ kind: 'ok', matchedCount: 1 })
 
     if (exa.kind !== 'ok' || frankfurter.kind !== 'ok') throw new Error('curated_operation_search_failed')
+    expect(exa.items.map(({ contract }) => contract.capabilityId).sort()).toEqual(['exa.contents', 'exa.search'])
+    expect(frankfurter.items.map(({ contract }) => contract.capabilityId)).toEqual(['frankfurter.single-rate'])
+
     const searchOperationRef = exa.items.find(({ contract }) => contract.capabilityId === 'exa.search')?.operationRef
     const contentsOperationRef = exa.items.find(({ contract }) => contract.capabilityId === 'exa.contents')?.operationRef
     const rateOperationRef = frankfurter.items.find(({ contract }) => contract.capabilityId === 'frankfurter.single-rate')?.operationRef
@@ -93,13 +78,13 @@ describe('curated provider operation registry', () => {
   })
   it('creates curated provider connections before publication and keeps reruns duplicate-safe', async () => {
     const backend = convexTest(schema, modules)
-    const firstSeed = await backend.mutation(internal.curatedProviders.seed, {})
+    const firstSeed = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
     const firstState = await backend.run(async (ctx) => ({
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
       bindings: await ctx.db.query('capabilityTransportBindings').collect(),
       publications: await ctx.db.query('capabilityPublications').collect(),
     }))
-    const secondSeed = await backend.mutation(internal.curatedProviders.seed, {})
+    const secondSeed = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
     const secondState = await backend.run(async (ctx) => ({
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
       bindings: await ctx.db.query('capabilityTransportBindings').collect(),
@@ -149,7 +134,7 @@ describe('curated provider operation registry', () => {
 
   it('persists one exact access-path origin for every curated publication', async () => {
     const backend = convexTest(schema, modules)
-    await backend.mutation(internal.curatedProviders.seed, {})
+    await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
     const readback = await backend.run(async (ctx) => {
       const publications = await ctx.db.query('capabilityPublications').collect()
@@ -211,7 +196,7 @@ describe('curated provider operation registry', () => {
 
   it('wires the W1 origin seam: a seed business catalog offering enriches Service.endpoints[] and sub-cent pricing stays a catalog representation', async () => {
     const backend = convexTest(schema, modules)
-    await backend.mutation(internal.curatedProviders.seed, {})
+    await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
     const page: PublicBusinessCatalogApiV2Page = await backend.query(api.registry.listPublicBusinessOfferingSupply, {
       paginationOpts: { cursor: null, numItems: 100 },
@@ -240,12 +225,12 @@ describe('curated provider operation registry', () => {
       ae: {
         operationRef: expect.stringMatching(/^operation:v1:[0-9a-f]{64}$/),
       },
-      parameters: expect.arrayContaining([
-        expect.objectContaining({ group: 'query', name: 'base', required: true }),
-        expect.objectContaining({ group: 'query', name: 'quote', required: true }),
-      ]),
       pricing: { scheme: 'exact', currency: 'USD' },
     })
+    expect(frankfurter!.endpoints[0]!.parameters).toMatchObject([
+      { group: 'query', name: 'base', type: 'string', required: true },
+      { group: 'query', name: 'quote', type: 'string', required: true },
+    ])
     expect(frankfurter!.endpoints[0]).not.toHaveProperty('catalogPrice')
 
     // agentic-market-exa has TWO curated operations on ONE catalog offering.
@@ -257,16 +242,20 @@ describe('curated provider operation registry', () => {
     const exaEndpoints = exa!.endpoints.filter(({ ae }) => ae.operationRef !== undefined)
     expect(exaEndpoints).toHaveLength(2)
     expect(new Set(exaEndpoints.map(({ ae }) => ae.operationRef)).size).toBe(2)
-    expect(exaEndpoints).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        ae: expect.objectContaining({ operationRef: expect.stringMatching(/^operation:v1:[0-9a-f]{64}$/) }),
-        parameters: expect.arrayContaining([expect.objectContaining({ name: 'query' })]),
-      }),
-      expect.objectContaining({
-        ae: expect.objectContaining({ operationRef: expect.stringMatching(/^operation:v1:[0-9a-f]{64}$/) }),
-        parameters: expect.arrayContaining([expect.objectContaining({ name: 'urls' })]),
-      }),
-    ]))
+    const exaSearchEndpoint = exaEndpoints.find(({ parameters }) => parameters.some(({ name }) => name === 'query'))
+    const exaContentsEndpoint = exaEndpoints.find(({ parameters }) => parameters.some(({ name }) => name === 'urls'))
+    expect(exaSearchEndpoint).toBeDefined()
+    expect(exaContentsEndpoint).toBeDefined()
+    expect(exaSearchEndpoint!.parameters).toEqual([
+      { group: 'body', name: 'numResults', type: 'integer', description: 'The maximum number of Exa results to return.', default: 10, required: false },
+      { group: 'body', name: 'query', type: 'string', description: 'The web search query.', required: true },
+      { group: 'body', name: 'type', type: 'string', description: 'The Exa search mode.', enumValues: ['auto', 'instant', 'fast', 'deep-lite', 'deep', 'deep-reasoning'], default: 'auto', required: false },
+    ])
+    expect(exaContentsEndpoint!.parameters).toEqual([
+      { group: 'body', name: 'text', type: 'boolean', description: 'Whether to return extracted page text.', default: true, required: false },
+      { group: 'body', name: 'urls', type: 'array', description: 'URLs selected from a preceding Exa search result.', required: true },
+    ])
+
     // Sub-cent: the observed x402 listing retains its decimal catalog
     // representation, while the integer-minor ledger is untouched (checked
     // below against the persisted offering price).
@@ -295,8 +284,8 @@ describe('curated provider operation registry', () => {
   })
   it('keeps curated access paths distinct and idempotent across repeated seeds', async () => {
     const backend = convexTest(schema, modules)
-    const first = await backend.mutation(internal.curatedProviders.seed, {})
-    const second = await backend.mutation(internal.curatedProviders.seed, {})
+    const first = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
+    const second = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
     expect(second.publications).toHaveLength(first.publications.length)
     const exaPaths = await backend.run(async (ctx) => {

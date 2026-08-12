@@ -14,7 +14,7 @@ import {
   setOperatorControl,
 } from '../../convex/observability'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -60,7 +60,8 @@ type AdminBootstrapArgs = {
   evidenceRefs: string[]
   operationKey: string
   correlationId: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+  sourceWrite: SourceWriteAdmission
 }
 
 type GrantArgs = {
@@ -71,7 +72,8 @@ type GrantArgs = {
   evidenceRefs: string[]
   operationKey: string
   correlationId: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+  sourceWrite: SourceWriteAdmission
 }
 
 type SetControlArgs = {
@@ -80,12 +82,10 @@ type SetControlArgs = {
   reasonCode: string
   evidenceRefs: string[]
   expiresAt?: number
-  csrfToken?: string
-  csrfCookie?: string
-  origin?: string
   operationKey: string
   correlationId: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+  sourceWrite: SourceWriteAdmission
 }
 
 describe('admin Convex runtime controls', () => {
@@ -120,11 +120,11 @@ describe('admin Convex runtime controls', () => {
     const db = new FakeDb()
     process.env.ADMIN_BOOTSTRAP_PRINCIPAL_IDS = 'user_owner'
 
-    const arbitrary = await bootstrapHandler(authCtx(db, support()), bootstrapArgs('random'))
+    const arbitrary = await bootstrapHandler(authCtx(db, support()), await bootstrapArgs('random'))
     expect(arbitrary).toMatchObject({ kind: 'error', code: 'admin_bootstrap_denied' })
     expect(db.dump('adminMemberships')).toHaveLength(0)
 
-    const bootstrapped = await bootstrapHandler(authCtx(db, ownerAdmin()), bootstrapArgs('owner'))
+    const bootstrapped = await bootstrapHandler(authCtx(db, ownerAdmin()), await bootstrapArgs('owner'))
     expect(bootstrapped).toMatchObject({
       kind: 'ok',
       code: 'admin_membership_bootstrapped',
@@ -145,7 +145,7 @@ describe('admin Convex runtime controls', () => {
 
     const grant = await grantHandler(
       authCtx(db, ownerAdmin()),
-      withSourceWrite('admin_operator', {
+      await withSourceWrite('admin_operator', {
         targetClerkUserId: 'user_new_support',
         targetTokenIdentifier: 'clerk|user_new_support',
         role: 'support',
@@ -157,7 +157,7 @@ describe('admin Convex runtime controls', () => {
     )
     expect(grant).toMatchObject({ kind: 'ok', code: 'admin_membership_granted' })
 
-    const supportDenied = await setControlHandler(authCtx(db, support()), operatorArgs('support-denied'))
+    const supportDenied = await setControlHandler(authCtx(db, support()), await operatorArgs('support-denied'))
     expect(supportDenied).toMatchObject({
       kind: 'error',
       code: 'operator_control_admin_denied',
@@ -167,7 +167,7 @@ describe('admin Convex runtime controls', () => {
       expect.arrayContaining([expect.objectContaining({ eventType: 'admin.action_denied', actorRef: 'user_support' })])
     )
 
-    const ownerChanged = await setControlHandler(authCtx(db, ownerAdmin()), operatorArgs('owner-changed'))
+    const ownerChanged = await setControlHandler(authCtx(db, ownerAdmin()), await operatorArgs('owner-changed'))
     expect(ownerChanged).toMatchObject({
       kind: 'ok',
       code: 'operator_control_changed',
@@ -200,7 +200,7 @@ describe('admin Convex runtime controls', () => {
       grantedBy: 'historical-bootstrap',
       grantedAt: 1,
     })
-    const args = withSourceWrite('admin_operator', {
+    const args = await withSourceWrite('admin_operator', {
       targetClerkUserId: 'legacy_support',
       targetTokenIdentifier: 'clerk|legacy_support',
       role: 'support' as const,
@@ -224,13 +224,15 @@ describe('admin Convex runtime controls', () => {
     })
     expect(db.dump('adminMemberships')).toHaveLength(3)
 
-    const replayArgs = {
-      ...args,
-      sourceWrite: withSourceWrite('admin_operator', {
-        operationKey: args.operationKey,
-        correlationId: args.correlationId,
-      }).sourceWrite,
-    }
+    const replayArgs = await withSourceWrite('admin_operator', {
+      targetClerkUserId: args.targetClerkUserId,
+      targetTokenIdentifier: args.targetTokenIdentifier,
+      role: args.role,
+      reasonCode: args.reasonCode,
+      evidenceRefs: args.evidenceRefs,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+    })
     const second = await grantHandler(authCtx(db, ownerAdmin()), replayArgs)
     expect(second).toMatchObject({ kind: 'ok', code: 'admin_membership_granted' })
     const replayTarget = db.dump('adminMemberships').find((row) => row.clerkUserId === 'legacy_support')
@@ -260,7 +262,7 @@ describe('admin Convex runtime controls', () => {
           tokenIdentifier: 'clerk|legacy_owner',
           issuer: 'https://clerk.example.test',
         }),
-        bootstrapArgs('legacy-owner-upgrade')
+        await bootstrapArgs('legacy-owner-upgrade')
       )
       expect(result).toMatchObject({
         kind: 'ok',
@@ -304,7 +306,7 @@ describe('admin Convex runtime controls', () => {
 
     const result = await grantHandler(
       authCtx(db, ownerAdmin()),
-      withSourceWrite('admin_operator', {
+      await withSourceWrite('admin_operator', {
         targetClerkUserId: 'legacy_support',
         targetTokenIdentifier: 'clerk|legacy_support',
         role: 'support',
@@ -340,7 +342,7 @@ describe('admin Convex runtime controls', () => {
 
     const result = await grantHandler(
       authCtx(db, ownerAdmin()),
-      withSourceWrite('admin_operator', {
+      await withSourceWrite('admin_operator', {
         targetClerkUserId: 'legacy_support',
         targetTokenIdentifier: 'clerk|legacy_support',
         role: 'support',
@@ -382,7 +384,7 @@ describe('admin Convex runtime controls', () => {
           tokenIdentifier: 'clerk|legacy_owner',
           issuer: 'https://clerk.example.test',
         }),
-        bootstrapArgs('legacy-owner-token-conflict')
+        await bootstrapArgs('legacy-owner-token-conflict')
       )
       expect(result).toEqual({
         kind: 'error',
@@ -402,7 +404,7 @@ describe('admin Convex runtime controls', () => {
 
     const result = await grantHandler(
       authCtx(db, ownerAdmin()),
-      withSourceWrite('admin_operator', {
+      await withSourceWrite('admin_operator', {
         targetClerkUserId: 'malformed_target',
         targetTokenIdentifier: '   ',
         role: 'support',
@@ -670,8 +672,8 @@ function support(): UserIdentity {
 }
 
 
-function bootstrapArgs(key: string): AdminBootstrapArgs {
-  return withSourceWrite('admin_operator', {
+async function bootstrapArgs(key: string): Promise<AdminBootstrapArgs> {
+  return await withSourceWrite('admin_operator', {
     reasonCode: 'source_owned_setup',
     evidenceRefs: ['private:evidence:bootstrap'],
     operationKey: `op:admin:bootstrap:${key}`,
@@ -679,15 +681,13 @@ function bootstrapArgs(key: string): AdminBootstrapArgs {
   })
 }
 
-function operatorArgs(key: string): SetControlArgs {
-  return withSourceWrite('admin_operator', {
+async function operatorArgs(key: string): Promise<SetControlArgs> {
+  return await withSourceWrite('admin_operator', {
     key: 'claims_enabled',
     enabled: false,
     reasonCode: 'abuse_spike',
     evidenceRefs: ['private:evidence:operator-control'],
     expiresAt: Date.now() + 60_000,
-    csrfToken: `csrf-${key}`,
-    csrfCookie: `csrf-${key}`,
     operationKey: `op:operator:${key}`,
     correlationId: `corr:operator:${key}`,
   })

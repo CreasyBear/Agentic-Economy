@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
-import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
-import { AGENT_KEY_ISSUANCE_PATH, ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/public'
-import { listMcpActions, mcpToolName } from '@/modules/actions'
+import { AGENT_KEY_ISSUANCE_PATH } from '@/modules/answer-thread/public'
+import { listMcpActions, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
 import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 const body = buildPublicAgentSkillMarkdown({
@@ -12,139 +11,73 @@ const body = buildPublicAgentSkillMarkdown({
 })
 
 describe('public agent skill', () => {
-  it('teaches the resumable customer Request path and listing boundaries', () => {
-    expect(body).toContain('https://ae.example/llms.txt')
-    expect(body).toContain('https://ae.example/api/v1/requests')
-    expect(body).toContain('customer_requests:create')
-    expect(body).toContain('navigation.actions')
-    expect(body).toContain('routes_ready')
-    for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
-      expect(body).toContain(statement)
-    }
-    expect(body).not.toMatch(/\/messages|\/facts|\/confirmation|\/run|\/evidence|\/problems|\/cancellation/u)
-    expect(body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
-    expect(body).toMatch(/listings are supply facts, not routing or execution authority/i)
+  it('teaches the exact Operation market loop in order', () => {
     expect(body).toMatch(/^---\nname: agentic-economy\ndescription: .+\n---\n/u)
-    expect(body).toContain('https://ae.example/mcp')
-    expect(body).toContain('claude mcp add --transport http agentic-economy https://ae.example/mcp')
-    expect(body).toContain('codex mcp add agentic-economy --url https://ae.example/mcp')
-    expect(body).toContain('`ae_registry_operations_search`')
-    expect(body).toContain('`ae_registry_operations_detail`')
-    expect(body).toContain('`ae_registry_operations_inspectPlan`')
-    expect(body).toContain('`ae_operation_execute`')
-    const mcpToolNames = listMcpActions().map(mcpToolName)
-    expect(mcpToolNames).toEqual(expect.arrayContaining([
-      'ae_registry_operations_search',
-      'ae_registry_operations_detail',
-      'ae_registry_operations_inspectPlan',
-      'ae_operation_execute',
-    ]))
+    const commands = [
+      'curl -fsSL https://ae.example/.well-known/ucp',
+      'npm run -s ae -- search "extract line items from a supplier invoice" --json',
+      'npm run -s ae -- inspect "$AE_OPERATION_REF" --json',
+      'npm run -s ae -- connect --json',
+      'npm run -s ae -- invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
+      'npm run -s ae -- status "$AE_INVOCATION_REF" --json',
+      'npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
+    ]
+    let previous = -1
+    for (const command of commands) {
+      const current = body.indexOf(command)
+      expect(current).toBeGreaterThan(previous)
+      previous = current
+    }
   })
-  it('teaches the bounded search-detail-execute protocol and hard authority boundaries', () => {
-    const search = body.indexOf('Call `ae_registry_operations_search`')
-    const detail = body.indexOf('Call `ae_registry_operations_detail`')
-    const execute = body.indexOf('Call `ae_operation_execute`')
-    const outcomes = body.indexOf('Interpret `ok | refused | error` literally')
-    const escalation = body.indexOf('Customer Request path')
 
-    expect(search).toBeGreaterThanOrEqual(0)
-    expect(detail).toBeGreaterThan(search)
-    expect(execute).toBeGreaterThan(detail)
-    expect(outcomes).toBeGreaterThan(execute)
-    expect(escalation).toBeGreaterThan(outcomes)
-    expect(body).toMatch(/Search results and operation refs are hints, never authority/u)
-    expect(body).toMatch(/caller-supplied URL, method, credential/u)
-    expect(body).toMatch(/paid or effectful/u)
-    expect(body).toContain('one static skill, not a per-capability skill')
-  })
-  it('advertises the complete authenticated WorkTree repeat surface and exact scopes', () => {
-    expect(body).toContain('/api/v1/work-tree/{create|inspect|apply|decide|reserveRepeatUse|finalizeRepeatUse|reconcileRepeatUse|inspectRepeatUse}')
-    for (const scope of [
-      'work_trees:create',
-      'work_trees:inspect',
-      'work_trees:apply',
-      'work_trees:decide',
-      'work_trees:repeat_reserve',
-      'work_trees:repeat_finalize',
-      'work_trees:repeat_reconcile',
-      'work_trees:repeat_inspect',
+  it('names the anonymous read and authenticated invoke/recovery routes', () => {
+    for (const path of [
+      '/api/v1/market-operations/search',
+      '/api/v1/market-operations/detail',
+      '/api/v1/market-operations/compare',
+      '/api/v1/market-operations/inspect-plan',
     ]) {
-      expect(body).toContain(`\`${scope}\``)
+      expect(body).toContain(`POST https://ae.example${path}`)
     }
-    expect(body).not.toContain('work_trees:*')
-    expect(body).toContain('(approve-each writes)')
-    expect(body).toContain('(inspect-only)')
+    expect(body).toContain('POST https://ae.example/api/v1/operations/execute')
+    expect(body).toContain('GET https://ae.example/api/v1/operations/{invocationRef}')
+    expect(body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/reconcile')
+    expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))
   })
 
-  it('leads with the keyless entry before any key-gated instruction', () => {
-    const keylessHeading = body.indexOf('## Start here (no key needed)')
-    const keylessCall = body.indexOf(`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} https://ae.example${ANSWER_THREAD_AGENT_ENTRYPOINT.path}`)
-    const firstScopeMention = body.indexOf('customer_requests:create')
-    expect(keylessHeading).toBeGreaterThanOrEqual(0)
-    expect(keylessCall).toBeGreaterThan(keylessHeading)
-    expect(keylessCall).toBeLessThan(firstScopeMention)
-    expect(body).toContain(ANSWER_THREAD_AGENT_ENTRYPOINT.boundary)
-    expect(body).toContain('Authentication: `none`')
-    expect(body).toContain('curl -N -X POST https://ae.example/api/answer/turn \\')
-    expect(body).toContain(ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType)
-    expect(body).toContain('X-AE-Turn-Key: $(uuidgen)')
-    expect(body).toMatch(/fresh opaque `X-AE-Turn-Key` for every turn/u)
-    expect(body).toContain('not a credential')
-    expect(body).toContain('https://ae.example/api/businesses')
-    expect(body).toContain('https://ae.example/api/businesses/search?q=')
+  it('keeps the single caller key boundary explicit', () => {
+    expect(body).toContain(`https://ae.example${AGENT_KEY_ISSUANCE_PATH}/authorize?user_code=...`)
+    expect(body).toContain('POST https://ae.example/oauth/register')
+    expect(body).toContain('POST https://ae.example/oauth/device_authorization')
+    expect(body).toContain('POST https://ae.example/oauth/token')
+    expect(body).toContain('The AE key identifies the caller.')
+    expect(body).toMatch(/never contains or grants a provider credential/u)
+    expect(body).toMatch(/silent consequential authority/u)
+    expect(body).toContain('The request JSON body field `idempotencyKey` is required')
+    expect(body).toMatch(/same key with identical material replays the original state/u)
   })
 
-  it('teaches the keyless Services API flow and sandbox boundary', () => {
-    const servicesStart = body.indexOf('## Services API')
-    const customerRequestStart = body.indexOf('## Confirming and starting an option')
-    const servicesSection = body.slice(servicesStart, body.indexOf('## MCP server'))
-
-    expect(servicesStart).toBeGreaterThanOrEqual(0)
-    expect(servicesStart).toBeLessThan(customerRequestStart)
-    expect(servicesSection).toContain('GET /api/v1/services')
-    expect(servicesSection).toContain('GET /api/v1/services/search?q={query}')
-    expect(servicesSection).toContain('ONE PAGE')
-    expect(servicesSection).toContain('continueCursor')
-    expect(servicesSection).toContain('isDone')
-    expect(servicesSection).toContain('pagination.nextCursor')
-    expect(servicesSection).toContain('pagination.hasMore')
-    expect(servicesSection).toContain('endpoints[]')
-    expect(servicesSection).toContain('priceSummary')
-    expect(servicesSection).toContain('ae.offerings[]')
-    expect(servicesSection).toContain('Discover services')
-    expect(servicesSection).toContain('Pick a Service')
-    expect(servicesSection).toContain("ae.access: 'open'")
-    expect(servicesSection).toContain('ae.provenance')
-    expect(servicesSection).toContain('business_declared')
-    expect(servicesSection).toContain('publicly_observed')
-    expect(servicesSection).toContain('QUOTE RESPONSE carries `provenance: ae_sandbox_provider`')
-    expect(servicesSection).toContain('priced, time-bounded quote JSON')
-    expect(servicesSection).not.toMatch(/payment|x402|booked/iu)
+  it('documents the MCP projection from the registered action graph', () => {
+    expect(body).toContain('https://ae.example/mcp')
+    const anonymousToolNames = listMcpActions()
+      .filter((action) => action.readOnly && action.credentialAdmission === undefined)
+      .map(mcpToolName)
+    const authenticatedToolNames = listOperationRouteDescriptors()
+      .map(({ mcpToolName }) => mcpToolName)
+      .filter((name): name is string => name !== undefined)
+    const projection = `Endpoint: \`https://ae.example/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ')}. Authenticated tools: ${authenticatedToolNames.map((name) => `\`${name}\``).join(', ')}.`
+    expect(body).toContain(projection)
+    expect(body).toContain('executionModes.directKeyless')
+    expect(body).toContain('not a guarantee for every Operation')
+    expect(body).toContain('relation: "execute"')
+    expect(body).toContain('anonymous MCP tool `ae_operation_execute`')
   })
 
-
-  it('says where a key is issued and what it costs to go without one', () => {
-    expect(body).toContain(`https://ae.example${AGENT_KEY_ISSUANCE_PATH}`)
-    expect(body).toContain('/agent-access')
-    expect(body).toMatch(/seven days/)
-    expect(body).toMatch(/revoke/i)
-    expect(body).toMatch(/cannot confirm or start anything/)
-  })
-
-  it('branches on host without asking the customer to choose', () => {
-    expect(body).toContain('## Choose your setup')
-    expect(body).toMatch(/Claude Code, Codex CLI, Gemini CLI/)
-    expect(body).toMatch(/Never ask the customer which one to use/)
-    expect(body).toMatch(/Do not say "endpoint", "SSE", or "Bearer token"/)
-  })
-
-  it('recovers from every advertised refusal through a symptom table', () => {
-    expect(body).toContain('| Symptom | Meaning | Do next |')
-    for (const symptom of ['401', '403', '429', '413', 'routes_ready', 'route_confirmed', 'in_progress', 'outcome_unknown', 'cancelled', 'needs_attention']) {
-      expect(body).toMatch(new RegExp(`^\\| \`${symptom}\` \\|.+\\|.+\\|$`, 'mu'))
-    }
-    expect(body).toMatch(/^\| No search results \|.+\|.+\|$/mu)
-    expect(body).toMatch(/200 characters/)
+  it('removes the old alternate entry vocabulary and unsupported claims', () => {
+    expect(body).not.toMatch(/\bae (?:feeds|run|study)\b/u)
+    expect(body).not.toMatch(/Services API|\/api\/v1\/services|\/api\/businesses/u)
+    expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
+    expect(body).not.toMatch(/\bae (?:cancel|reconcile)\b/u)
   })
 
   it('stays under the 8 KB budget for a cold fetch', () => {
@@ -164,9 +97,8 @@ describe('public agent skill', () => {
       const text = await response.text()
       canonicalText ??= text
       expect(text).toBe(canonicalText)
-      expect(text).toContain('Start here (no key needed)')
-      expect(text).toContain('Confirming and starting an option')
-      expect(text).toContain('X-AE-Turn-Key: $(uuidgen)')
+      expect(text).toContain('npm run -s ae -- manifest --json')
+      expect(text).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
     }
   })
 })

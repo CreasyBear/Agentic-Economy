@@ -6,7 +6,10 @@ vi.mock('@/lib/server/rate-limit', () => ({
 }))
 
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { streamAnswerTurn } from '@/modules/answer-thread/server'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
@@ -19,22 +22,41 @@ import {
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 const SESSION_COOKIE = sessionCookieHeader('session-boundary')
+const emptyKeylessExecutableSource: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
+
+const streamWithLocalSources: typeof streamAnswerTurn = (input, onEvent) =>
+  streamAnswerTurn({
+    ...input,
+    keylessExecutableSource: emptyKeylessExecutableSource,
+  }, onEvent)
+
+function handleLocalAnswerTurnRequest(request: Request): Promise<Response> {
+  return handleAnswerTurnRequest(request, { stream: streamWithLocalSources })
+}
 
 describe('POST /api/answer/turn boundary follow-up', () => {
   let previousConvexUrl: string | undefined
   let previousPublicConvexUrl: string | undefined
+  let restoreRegistrySource: (() => void) | undefined
 
   beforeEach(() => {
     previousConvexUrl = process.env.CONVEX_URL
     previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    restoreRegistrySource = installLocalE2eRegistrySourceForTests()
   })
 
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
+    restoreRegistrySource?.()
+    restoreRegistrySource = undefined
     if (previousConvexUrl === undefined) {
       delete process.env.CONVEX_URL
     } else {
@@ -78,7 +100,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(
+      const response = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -132,7 +154,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const first = await handleAnswerTurnRequest(
+      const first = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -150,7 +172,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       }
       threadId = threadEvent.threadId
 
-      const followUp = await handleAnswerTurnRequest(
+      const followUp = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -203,7 +225,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const first = await handleAnswerTurnRequest(
+      const first = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -227,7 +249,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       }
       threadId = threadEvent.threadId
 
-      const followUp = await handleAnswerTurnRequest(
+      const followUp = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -286,7 +308,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
 
     let threadId = ''
     try {
-      const first = await handleAnswerTurnRequest(
+      const first = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -294,7 +316,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
             cookie: SESSION_COOKIE,
             'X-AE-Turn-Key': 'boundary:adelaide-first',
           },
-          body: JSON.stringify({ query: 'My tooth hurts and I need a dentist near Adelaide this week' }),
+          body: JSON.stringify({ query: 'dentist Adelaide' }),
         }),
       )
       const firstFrames = await readAnswerTurnStream(first)
@@ -306,7 +328,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (threadEvent?.type !== 'thread') throw new Error('expected thread event')
       threadId = threadEvent.threadId
 
-      const followUp = await handleAnswerTurnRequest(
+      const followUp = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {

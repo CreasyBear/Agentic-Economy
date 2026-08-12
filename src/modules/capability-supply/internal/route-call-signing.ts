@@ -1,4 +1,6 @@
-import { createHmac } from 'node:crypto'
+import { hmac } from '@noble/hashes/hmac'
+import { sha256 } from '@noble/hashes/sha2'
+import { bytesToHex } from '@noble/hashes/utils'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -11,6 +13,6 @@ export function signRouteTransportCall(
   const digest = canonicalDigest(material)
   return {
     keyId: key.keyId,
-    signature: `hmac-sha256:${createHmac('sha256', key.secret).update(digest).digest('hex')}`,
+    signature: `hmac-sha256:${bytesToHex(hmac(sha256, key.secret, digest))}`,
   }
 }

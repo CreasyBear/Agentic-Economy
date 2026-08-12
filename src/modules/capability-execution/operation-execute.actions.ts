@@ -1,11 +1,22 @@
-
-import { sourceQuery, callPublicSourceQuery } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import {
+  callPublicSourceQuery,
+  createConvexServerFunctionAssertion,
+  sourceQuery,
+  type ConvexServerFunctionAssertion,
+} from '@/lib/server/convex-source'
 import { isRecord } from '@/modules/common/is-record'
-import { isPublicOperationRef, rankOperationSearchText } from '@/modules/capability-supply/public'
-import { readCapabilityOperationSearch } from '@/modules/capability-supply/operation-source'
+import {
+  isPublicOperationRef,
+  type PublicOperationDescriptor,
+} from '@/modules/capability-supply/public'
+import {
+  readCapabilityOperationDetail,
+  readCapabilityOperationSearch,
+} from '@/modules/capability-supply/operation-source'
+import type { AnswerOperationCandidate } from '@/modules/answer/answer-schema'
 import type { OperationExecutableDescriptor } from './operation-execute.functions'
-import { seededDescriptorFor, seededKeylessSeeds } from './seed-supply'
+
+export type { PublicOperationDescriptor }
 
 export type KeylessExecutableToolDescriptor = Readonly<{
   operationRef: string
@@ -18,10 +29,16 @@ export type KeylessExecutableToolDescriptor = Readonly<{
     input: Readonly<Record<string, unknown>>
   }>[]
   inputSchema: Record<string, unknown>
+  /** Public registry projection used only for candidate presentation/binding. */
+  publicOperation?: PublicOperationDescriptor
+  /** Canonical candidate projection frozen with this descriptor snapshot. */
+  operationCandidate?: AnswerOperationCandidate
+  /** Digest of the exact executable descriptor read during selection. */
+  executionBindingDigest?: string
 }>
 
 type KeylessExecutableListing = Readonly<
-  Omit<KeylessExecutableToolDescriptor, 'inputSchema' | 'inputExamples'> & {
+  Omit<KeylessExecutableToolDescriptor, 'inputSchema' | 'inputExamples' | 'publicOperation' | 'operationCandidate'> & {
     inputSchemaJson: string
     inputExamplesJson?: string
   }
@@ -37,6 +54,8 @@ type KeylessExecutableDescriptorWire = Readonly<
 export type KeylessExecutableSourcePort = Readonly<{
   list(): Promise<readonly KeylessExecutableToolDescriptor[]>
   read(operationRef: string): Promise<OperationExecutableDescriptor | null>
+  /** Optional current registry projection; absence is supported by fixtures. */
+  readPublic?: (operationRef: string) => Promise<PublicOperationDescriptor | null>
   search(
     query: string,
     descriptors: readonly KeylessExecutableToolDescriptor[],
@@ -44,7 +63,7 @@ export type KeylessExecutableSourcePort = Readonly<{
 }>
 
 const readKeylessExecutableQuery = sourceQuery<
-  { operationRef: string },
+  { operationRef: string; serviceAuth: ConvexServerFunctionAssertion },
   KeylessExecutableDescriptorWire | null
 >('capabilitySupplyOperations:readKeylessExecutable')
 
@@ -55,7 +74,12 @@ const listKeylessExecutableQuery = sourceQuery<
 
 async function readConvexDescriptor(operationRef: string): Promise<OperationExecutableDescriptor | null> {
   if (!isPublicOperationRef(operationRef)) return null
-  const db = await callPublicSourceQuery(readKeylessExecutableQuery, { operationRef })
+  const serviceAuth = await createConvexServerFunctionAssertion({
+    operation: 'capabilitySupplyOperations:readKeylessExecutable',
+    scope: 'capability_supply:read_executable',
+    command: { operationRef },
+  })
+  const db = await callPublicSourceQuery(readKeylessExecutableQuery, { operationRef, serviceAuth })
   if (db === null || !isPublicOperationRef(db.operationRef) || db.operationRef !== operationRef) {
     return null
   }
@@ -68,6 +92,12 @@ async function readConvexDescriptor(operationRef: string): Promise<OperationExec
     ...(outputSchema === undefined ? {} : { outputSchema }),
   }
 }
+async function readPublicOperation(operationRef: string): Promise<PublicOperationDescriptor | null> {
+  if (!isPublicOperationRef(operationRef)) return null
+  const result = await readCapabilityOperationDetail({ operationRef })
+  return result.kind === 'found' ? result.operation : null
+}
+
 
 function parseSchemaJson(value: string): Record<string, unknown> {
   const parsed: unknown = JSON.parse(value)
@@ -120,25 +150,7 @@ async function searchConvexDescriptors(
 export const convexKeylessExecutableSource: KeylessExecutableSourcePort = {
   list: listConvexDescriptors,
   read: readConvexDescriptor,
+  readPublic: readPublicOperation,
   search: searchConvexDescriptors,
 }
 
-export const seedKeylessExecutableSource: KeylessExecutableSourcePort = {
-  list: seededKeylessSeeds,
-  read: async (operationRef) => isPublicOperationRef(operationRef)
-    ? await seededDescriptorFor(operationRef) ?? null
-    : null,
-  search: async (query, descriptors) => rankOperationSearchText(
-    query,
-    descriptors.map((descriptor) => ({
-      value: descriptor.operationRef,
-      operationRef: descriptor.operationRef,
-      searchText: [descriptor.capabilityId, descriptor.name, descriptor.summary, ...descriptor.searchTerms],
-    })),
-  ),
-}
-
-export const defaultKeylessExecutableSource: KeylessExecutableSourcePort =
-  isLocalE2EAuthBypassEnabled()
-    ? seedKeylessExecutableSource
-    : convexKeylessExecutableSource

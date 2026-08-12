@@ -2,14 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import {
-  createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
-} from '@/modules/discovery/public'
+import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
+import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   generateDeveloperDiscoveryExamples,
-  generateDeveloperDiscoveryFixtureBundle,
   generateDeveloperDiscoverySchema,
   withholdDeveloperDiscoveryArtifact,
 } from '@/modules/discovery/developer-discovery'
@@ -19,13 +16,12 @@ const forbiddenPrivateOrAuthorityPattern =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|rawContact(?!Excluded)|private:evidence|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
 
 describe('developer discovery generated artifact parity', () => {
-  it('generates schema, examples, and fixtures from public route DTO fields only', () => {
+  it('generates schema and examples from public route DTO fields only', () => {
     const state = availableDiscoveryState()
     const options = { canonicalBaseUrl: 'https://ae.example', now: 5_000 }
     const schema = generateDeveloperDiscoverySchema(state, options)
     const examples = generateDeveloperDiscoveryExamples(state, options)
-    const fixtures = generateDeveloperDiscoveryFixtureBundle(state, options)
-    const serialized = [schema, examples, fixtures].map((artifact) => JSON.stringify(artifact)).join('\n')
+    const serialized = [schema, examples].map((artifact) => JSON.stringify(artifact)).join('\n')
 
     expect(schema).toMatchObject({
       kind: 'public_catalog_schema',
@@ -80,20 +76,8 @@ describe('developer discovery generated artifact parity', () => {
       offerings: [expect.objectContaining({ name: 'Emergency pipe repair' })],
     })
 
-    expect(fixtures).toMatchObject({
-      kind: 'public_catalog_fixture_bundle',
-      state: 'available',
-      schema: { kind: 'public_catalog_schema' },
-      supportMatrix: expect.arrayContaining([expect.objectContaining({ surface: 'public_json_routes' })]),
-      gatedExclusions: expect.arrayContaining([expect.objectContaining({ surface: 'api_keys', state: 'unavailable' })]),
-      p2InquiryAvailability: {
-        state: 'unavailable',
-        publicReason: expect.any(String),
-        source: 'phase2-public-status-contract',
-        lastVerifiedAt: 0,
-      },
-    })
     expect(serialized).not.toMatch(forbiddenPrivateOrAuthorityPattern)
+    expect(serialized).not.toContain('public_catalog_fixture_bundle')
   })
 
   it('generates route-derived examples from public list/search/detail snapshots', () => {
@@ -101,8 +85,7 @@ describe('developer discovery generated artifact parity', () => {
     const routeSnapshot = routeSnapshotWithNonDefaultBusiness()
     const options = { canonicalBaseUrl: 'https://ae.example', now: 6_000, routeSnapshot }
     const examples = generateDeveloperDiscoveryExamples(state, options)
-    const fixtures = generateDeveloperDiscoveryFixtureBundle(state, options)
-    const serialized = JSON.stringify({ examples, fixtures })
+    const serialized = JSON.stringify({ examples })
 
     expect(examples).toMatchObject({
       kind: 'public_catalog_examples',
@@ -117,16 +100,6 @@ describe('developer discovery generated artifact parity', () => {
       ],
     })
     expect(serialized).not.toContain('parramatta-emergency-plumbing')
-    expect(fixtures.routeHealth).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          route: 'https://ae.example/api/businesses',
-          status: 'available',
-          httpStatus: 200,
-          schemaVersion: 'public-business-catalog-api:v2',
-        }),
-      ])
-    )
     expect(serialized).not.toMatch(forbiddenPrivateOrAuthorityPattern)
   })
 
@@ -139,7 +112,6 @@ describe('developer discovery generated artifact parity', () => {
     } as const
     const schema = generateDeveloperDiscoverySchema(state, disabledOptions)
     const examples = generateDeveloperDiscoveryExamples(state, disabledOptions)
-    const fixtures = generateDeveloperDiscoveryFixtureBundle(state, disabledOptions)
     const withheld = withholdDeveloperDiscoveryArtifact(
       generateDeveloperDiscoverySchema(state, { canonicalBaseUrl: 'https://ae.example', now: 5_000 }),
       'Route parity failed for schema test.'
@@ -156,12 +128,6 @@ describe('developer discovery generated artifact parity', () => {
       examples: [],
       emptyExample: { kind: 'ok' },
     })
-    expect(fixtures).toMatchObject({
-      state: 'unavailable',
-      parityStatus: 'withheld',
-      examples: [],
-      schema: { state: 'unavailable', parityStatus: 'withheld' },
-    })
     expect(withheld).toMatchObject({
       state: 'unavailable',
       parityStatus: 'withheld',
@@ -171,7 +137,7 @@ describe('developer discovery generated artifact parity', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createDefaultDiscoverySourceState()
+  const state = createFixtureDiscoverySourceState()
   const business = state.businesses.at(0)
 
   if (business === undefined) {
@@ -192,8 +158,7 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
     slug: 'route-derived-solar-repair',
     name: 'Route Derived Solar Repair',
     category: 'Solar repair',
-    suburb: 'Fremantle',
-    stateTerritory: 'WA',
+    businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
     publicUrl: '/route-derived-solar-repair',
     trustTier: 'claimed',
     observedAt: 6_000,

@@ -361,7 +361,7 @@ async function assertDataReservationsIntegrity(
   reservation: Doc<'customerRequestRouteStepReservations'>,
   grant: RouteStepGrant,
 ): Promise<void> {
-  const expected = grant.step.dataScope.flatMap((scope) => scope.purposes.map((purpose) => ({
+  const expected = grant.step.dataScope.flatMap((scope: RouteStepGrant['step']['dataScope'][number]) => scope.purposes.map((purpose: RouteStepGrant['step']['dataScope'][number]['purposes'][number]) => ({
     reservationRef: reservation.reservationRef,
     mandateRef: grant.mandateRef,
     actionId: grant.step.actionId,
@@ -392,7 +392,7 @@ async function assertDataReservationsIntegrity(
     const digest = canonicalDigest(material)
     return row.allocationDigest !== digest
       || row.allocationRef !== `route-data-reservation:v1:${digest}`
-      || !expected.some((candidate) => canonicalDigest(candidate) === digest)
+      || !expected.some((candidate: (typeof expected)[number]) => canonicalDigest(candidate) === digest)
   })) {
     throw new Error('customer_request_route_data_reservation_integrity_failure')
   }
@@ -407,7 +407,7 @@ function writableGrant(value: RouteStepGrant) {
       ...value.step,
       contractRef: { ...value.step.contractRef },
       maximumSpend: { ...value.step.maximumSpend },
-      dataScope: value.step.dataScope.map((scope) => ({
+      dataScope: value.step.dataScope.map((scope: RouteStepGrant['step']['dataScope'][number]) => ({
         ...scope,
         recipient: { ...scope.recipient },
         purposes: [...scope.purposes],

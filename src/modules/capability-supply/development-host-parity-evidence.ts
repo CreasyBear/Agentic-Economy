@@ -432,7 +432,8 @@ export function evaluateHostMatrix(
     },
     {
       name: 'zero_effect_preflight_refusal',
-      passed: hosts.every((host) => host.preflightRefusal.execution.includes('pre_release_refused')
+      passed: hosts.every((host) => host.preflightRefusal.state === 'terminal'
+        && host.preflightRefusal.failureCode === 'payment_signature_unavailable'
         && host.preflightRefusal.effects.payment === 0
         && host.preflightRefusal.effects.provider === 0),
       evidence: hosts.map((host) => host.preflightRefusal),

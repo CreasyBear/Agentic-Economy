@@ -19,7 +19,11 @@ import {
 } from '@/modules/action-invocation'
 import { defineAction } from '@/modules/common/action'
 import { z } from 'zod'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import {
+  buildDevelopmentPublishedOperationEvidence,
+  createDevelopmentProviderLeaseIssuer,
+  developmentProviderConnectionAuthorityDigest,
+} from '@/modules/capability-supply/development-published-operation-evidence'
 import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
@@ -39,7 +43,7 @@ import type {
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import type { ExactAmount } from '@/modules/money/public'
+import { pricingConfigDigest, type ExactAmount } from '@/modules/money/public'
 import {
   attachCompletedTaskReference,
 } from '@/modules/customer-request/application/public'
@@ -54,8 +58,8 @@ import {
   createPaymentAttemptRuntime,
   type DynamicPublishedPreparedTransport,
 } from '@/modules/action-invocation/dynamic-published-execution'
+import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 import {
-  createInMemoryX402PaymentAttemptPort,
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
 } from '@/modules/action-invocation/x402-payment-attempt'
@@ -77,6 +81,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     let paidSends = 0
     const custodyRuntime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('direct_provider_send_must_not_run') },
+      readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
       resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'mock:credential' : undefined,
       prepareX402PaymentAuthorization: async () => {
         authorizations += 1
@@ -90,14 +95,14 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     }
 
     const first = createPaymentAttemptRuntime(
-      custodyRuntime, prepared, undefined, undefined, () => 1, durable,
+      custodyRuntime, prepared, durable, () => 1,
     )
     const authorization = await first.prepareX402PaymentAuthorization!(request)
     expect(authorizations).toBe(1)
     expect(durable.list()).toEqual([expect.objectContaining({ state: 'prepared' })])
 
     const restoredPrepared = createPaymentAttemptRuntime(
-      custodyRuntime, prepared, undefined, undefined, () => 2, durable,
+      custodyRuntime, prepared, durable, () => 2,
     )
     expect(await restoredPrepared.prepareX402PaymentAuthorization!(request)).toEqual({
       custodyRef: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
@@ -124,7 +129,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     paidSends += 1
 
     const restoredUncertain = createPaymentAttemptRuntime(
-      custodyRuntime, prepared, undefined, undefined, () => 3, durable,
+      custodyRuntime, prepared, durable, () => 3,
     )
     await expect(restoredUncertain.prepareX402PaymentAuthorization!(request))
       .rejects.toThrow('x402_payment_attempt_reconciliation_required')
@@ -142,6 +147,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     let signaturesCreated = 0
     const custodyRuntime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('provider_send_must_not_run') },
+      readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
       resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'mock:credential' : undefined,
       prepareX402PaymentAuthorization: async (request) => {
         const identity = canonicalDigest({
@@ -176,32 +182,32 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           && candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
     }
     const request = paymentAuthorizationRequest()
-    const crashCutAttempts = new Map<string, X402PaymentAttempt>()
-    crashCutAttempts.set = () => { throw new Error('crash_after_custody_prepare') }
+    const crashCutPort = {
+      ...createInMemoryX402PaymentAttemptPort(),
+      persist: () => { throw new Error('crash_after_custody_prepare') },
+    }
     await expect(
       createPaymentAttemptRuntime(
         custodyRuntime,
         prepared,
-        crashCutAttempts,
-        undefined,
+        crashCutPort,
         () => 1,
       ).prepareX402PaymentAuthorization!(request),
     ).rejects.toThrow('crash_after_custody_prepare')
     expect(signaturesCreated).toBe(1)
 
-    const restoredAttempts = new Map<string, X402PaymentAttempt>()
+    const restoredPort = createInMemoryX402PaymentAttemptPort()
     const restoredRuntime = createPaymentAttemptRuntime(
       custodyRuntime,
       prepared,
-      restoredAttempts,
-      undefined,
+      restoredPort,
       () => 2,
     )
     const restored = await restoredRuntime.prepareX402PaymentAuthorization!(request)
     expect(signaturesCreated).toBe(1)
     expect(await restoredRuntime.readX402PaymentAuthorization!(restored!))
       .toBe('raw:authorization:must-remain-in-custody')
-    expect(JSON.stringify([...restoredAttempts.values()])).not.toContain('raw:authorization')
+    expect(JSON.stringify(restoredPort.list())).not.toContain('raw:authorization')
   })
 
   it('restores prepared custody by reference and blocks uncertain custody before read or send', async () => {
@@ -212,6 +218,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     let reads = 0
     const runtime: X402RouteTransportRuntime = {
       send: async () => { throw new Error('provider_send_must_not_run') },
+      readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
       resolveCredential: (connectionRef) => connectionRef === 'test:connection:x402' ? 'mock:credential' : undefined,
       prepareX402PaymentAuthorization: async () => {
         prepares += 1
@@ -226,8 +233,18 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         return 'raw:authorization:from-custody'
       },
     }
-    const preparedAttempts = new Map([[x402PaymentAttemptKey(prepared), durable]])
-    const restored = createPaymentAttemptRuntime(runtime, prepared, preparedAttempts, undefined, () => 2)
+    const preparedPort = createInMemoryX402PaymentAttemptPort([durable], [{
+      invocationRef: prepared.invocationRef,
+      attemptRef: prepared.attemptRef,
+      effectGeneration: prepared.effectGeneration,
+      operationKey: prepared.operationKey,
+      queryRelease: 'released',
+      authorization: 'created',
+      recordedAt: durable.preparedAt,
+      challengeDigest: durable.challengeDigest,
+      authorizationDigest: durable.authorizationDigest,
+    }])
+    const restored = createPaymentAttemptRuntime(runtime, prepared, preparedPort, () => 2)
     expect(await restored.prepareX402PaymentAuthorization!(request)).toEqual({
       custodyRef: durable.custodyRef,
       authorizationDigest: durable.authorizationDigest,
@@ -239,11 +256,11 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     expect(prepares).toBe(0)
     expect(reads).toBe(1)
 
-    preparedAttempts.set(x402PaymentAttemptKey(prepared), {
-      ...durable,
-      state: 'possibly_submitted',
+    await preparedPort.persist({
+      attempt: { ...durable, state: 'possibly_submitted' },
+      authorizationEvent: preparedPort.loadAuthorizationEvent(x402PaymentAttemptKey(prepared))!,
     })
-    const uncertain = createPaymentAttemptRuntime(runtime, prepared, preparedAttempts, undefined, () => 3)
+    const uncertain = createPaymentAttemptRuntime(runtime, prepared, preparedPort, () => 3)
     await expect(uncertain.prepareX402PaymentAuthorization!(request))
       .rejects.toThrow('x402_payment_attempt_reconciliation_required')
     expect(prepares).toBe(0)
@@ -313,7 +330,6 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
   })
 
   it.each([
-    'credential_unavailable',
     'signing_unavailable',
   ] as const)('refuses %s before any transport effect', async (mode) => {
     const fixture = buildDevelopmentPublishedOperationEvidence()
@@ -378,7 +394,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     'challenge_mismatch',
     'payment_outside_authority',
     'endpoint_refusal',
-  ] as const)('treats first-send %s as possibly released', async (mode) => {
+  ] as const)('classifies first-send %s by whether an operation release could occur', async (mode) => {
     const fixture = buildDevelopmentPublishedOperationEvidence()
     const clock = fixture.operation.readiness.observedAt + 1_000
     vi.spyOn(Date, 'now').mockReturnValue(clock)
@@ -414,26 +430,24 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       leaseOwner: acquired.view.control.leaseOwner,
       effectGeneration: acquired.view.control.effectGeneration,
     })
-    const reconciliationRequired = mode === 'payment_outside_authority'
+    const possiblyReleased = mode === 'endpoint_refusal'
     expect(refused.kind === 'accepted' && refused.view).toMatchObject({
-      control: { state: reconciliationRequired ? 'reconciliation_required' : 'terminal' },
-      observedResolution: reconciliationRequired
-        ? { state: 'threw', execution: 'runner_threw' }
-        : { state: 'returned', execution: 'runner_returned' },
+      control: { state: 'terminal' },
+      observedResolution: { state: 'returned', execution: 'runner_returned' },
       attempts: [{
         release: { state: 'possibly_released' },
-        outcome: { state: reconciliationRequired ? 'uncertain' : 'returned' },
+        outcome: { state: 'returned' },
       }],
     })
     expect(source.list()[0]?.observedResolution).toEqual(
       refused.kind === 'accepted' ? refused.view.observedResolution : undefined,
     )
-    expect(adapter.exportDevelopmentSnapshot().paymentAuthorizationEvents).toEqual([
-      expect.objectContaining({
-        queryRelease: 'released',
-        authorization: 'not_created',
-      }),
-    ])
+    expect(adapter.exportDevelopmentSnapshot().paymentAuthorizationEvents).toEqual(possiblyReleased
+      ? [expect.objectContaining({
+          queryRelease: 'released',
+          authorization: 'not_created',
+        })]
+      : [])
     expect(adapter.exportDevelopmentSnapshot().paymentAttempts).toEqual([])
   })
 
@@ -441,6 +455,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     'refuses invalid %s during zero-effect transport preparation',
     async (kind) => {
       const fixture = buildDevelopmentPublishedOperationEvidence()
+      const invalidPaymentConfig = {
+        ...fixture.operation.pricingConfig,
+        paidAmount: { currency: 'EUR', units: '1', exponent: 2 },
+      }
       const operation = kind === 'config'
         ? {
             ...fixture.operation,
@@ -452,12 +470,13 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           }
         : {
             ...fixture.operation,
+            pricingConfig: invalidPaymentConfig,
+            priceDigest: pricingConfigDigest(invalidPaymentConfig),
             identity: {
               ...fixture.operation.identity,
-              price: {
-                kind: 'fixed' as const,
-                amount: { currency: 'EUR', units: '1', exponent: 2 },
-              },
+              pricingConfig: invalidPaymentConfig,
+              priceDigest: pricingConfigDigest(invalidPaymentConfig),
+              price: { kind: 'fixed' as const, amount: invalidPaymentConfig.paidAmount },
             },
           }
       const clock = operation.readiness.observedAt + 1_000
@@ -780,14 +799,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         developmentSnapshot: loaded.developmentSnapshot,
         initialSnapshot: loaded.initialSnapshot,
         sequenceBase: loaded.developmentSnapshot.controls.size,
-        paymentAttempts: loaded.paymentAttempts,
-        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+        paymentAttemptPort: createInMemoryX402PaymentAttemptPort(
+          loaded.paymentAttempts,
+          loaded.paymentAuthorizationEvents,
+        ),
         verifyPaymentReconciliationEvidence: () => true,
       },
     )
     expect(cold.inspect(prepared.invocationRef)?.control).toMatchObject({ state: 'reconciliation_required' })
     const cancelled = await cold.cancel({
       invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:possible-release`,
       expectedInvocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0,
       actor,
       origin,
@@ -921,8 +943,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         developmentSnapshot: cutLoaded.developmentSnapshot,
         initialSnapshot: cutLoaded.initialSnapshot,
         sequenceBase: cutLoaded.developmentSnapshot.controls.size,
-        paymentAttempts: cutLoaded.paymentAttempts,
-        paymentAuthorizationEvents: cutLoaded.paymentAuthorizationEvents,
+        paymentAttemptPort: createInMemoryX402PaymentAttemptPort(
+          cutLoaded.paymentAttempts,
+          cutLoaded.paymentAuthorizationEvents,
+        ),
         verifyPaymentReconciliationEvidence: () => true,
       },
     )
@@ -1097,7 +1121,9 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     if (decided.kind !== 'accepted') throw new Error(decided.code)
     const next = rematerializeRevision(fixture, 8)
-    expect(next.operationId).not.toBe(fixture.operation.operationId)
+    expect(next.operationId).toBe(fixture.operation.operationId)
+    expect(next.connectionAuthority?.operationRef)
+      .not.toBe(fixture.operation.connectionAuthority?.operationRef)
     source.setCurrent(next)
     const acquired = await adapter.acquire({
       invocationRef: prepared.invocationRef,
@@ -1514,8 +1540,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         developmentSnapshot: loaded.developmentSnapshot,
         initialSnapshot: loaded.initialSnapshot,
         sequenceBase: loaded.developmentSnapshot.controls.size,
-        paymentAttempts: loaded.paymentAttempts,
-        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+        paymentAttemptPort: createInMemoryX402PaymentAttemptPort(
+          loaded.paymentAttempts,
+          loaded.paymentAuthorizationEvents,
+        ),
       },
     )
     const second = await cold.prepare({
@@ -1605,8 +1633,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         developmentSnapshot: loaded.developmentSnapshot,
         initialSnapshot: loaded.initialSnapshot,
         sequenceBase: loaded.developmentSnapshot.controls.size,
-        paymentAttempts: loaded.paymentAttempts,
-        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+        paymentAttemptPort: createInMemoryX402PaymentAttemptPort(
+          loaded.paymentAttempts,
+          loaded.paymentAuthorizationEvents,
+        ),
       },
     )
     const completed = await cold.executeAcquired({
@@ -1864,8 +1894,7 @@ function createAdapter(
     developmentSnapshot?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['developmentSnapshot']
     initialSnapshot?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['initialSnapshot']
     sequenceBase?: number
-    paymentAttempts?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAttempts']
-    paymentAuthorizationEvents?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAuthorizationEvents']
+    paymentAttemptPort?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAttemptPort']
     verifyPaymentReconciliationEvidence?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['verifyPaymentReconciliationEvidence']
   }> = {},
 ) {
@@ -1879,7 +1908,9 @@ function createAdapter(
   let invocation = options.sequenceBase ?? 0
   let authority = options.sequenceBase ?? 0
   let attempt = options.sequenceBase ?? 0
+  const paymentAttemptPort = options.paymentAttemptPort ?? createInMemoryX402PaymentAttemptPort()
   return createDynamicPublishedActionInvocationAdapter({
+    issueProviderLease: createDevelopmentProviderLeaseIssuer(operation, now),
     operation,
     source,
     runtime,
@@ -1888,12 +1919,9 @@ function createAdapter(
     nextAuthorityRef: () => `authority:${++authority}`,
     nextAttemptRef: () => `attempt:${++attempt}`,
     durablePort,
+    paymentAttemptPort,
     ...(developmentSnapshot === undefined ? {} : { developmentSnapshot }),
     ...(options.initialSnapshot === undefined ? {} : { initialSnapshot: options.initialSnapshot }),
-    ...(options.paymentAttempts === undefined ? {} : { paymentAttempts: options.paymentAttempts }),
-    ...(options.paymentAuthorizationEvents === undefined
-      ? {}
-      : { paymentAuthorizationEvents: options.paymentAuthorizationEvents }),
     ...(options.verifyPaymentReconciliationEvidence === undefined
       ? {}
       : { verifyPaymentReconciliationEvidence: options.verifyPaymentReconciliationEvidence }),
@@ -1970,7 +1998,7 @@ function paymentAuthorizationRequest():
   return {
     challenge,
     challengeDigest: canonicalDigest(challenge),
-    credential: 'mock:credential',
+    credential: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     paymentIdentifier: 'operation:paid',
     selectedRequirement: challenge.accepts[0]!,
     paymentAmount: { currency: 'USD', units: '1', exponent: 2 },
@@ -2074,7 +2102,9 @@ function runtime(
   return {
     send,
     resolveCredential: (connectionRef) => connectionRef.length > 0 ? 'mock:credential' : undefined,
+    readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     readProviderConnectionCredentialRef: readDevelopmentProviderCredential,
+    validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
@@ -2119,10 +2149,11 @@ function readDevelopmentProviderCredential(input: ProviderConnectionAuthorityLoo
   if (input.authorityGeneration !== 1) {
     return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
   }
-  if (input.authorityDigest !== canonicalDigest({
+  if (input.authorityDigest !== developmentProviderConnectionAuthorityDigest({
     connectionRef: 'connection:mock-provider',
+    businessId: 'mock:business:published-api',
     providerRef: 'provider:mock-provider',
-    authorityGeneration: 1,
+    adapterId: 'x402-fetch:v2',
   })) {
     return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
   }
@@ -2154,6 +2185,7 @@ function preReleaseRuntime(
     readProviderConnectionCredentialRef: (input) => mode === 'credential_unavailable'
       ? { kind: 'unavailable' as const, reason: 'credential_unavailable' as const }
       : readDevelopmentProviderCredential(input),
+    validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
     x402PaymentSigningAvailable: () => mode !== 'signing_unavailable',
     send: async () => mode === 'endpoint_refusal'
       ? response(503, JSON.stringify({ reason: 'unavailable' }), {})
@@ -2213,11 +2245,16 @@ function rematerializeFixedPrice(
   fixture: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>,
   amount: ExactAmount,
 ) {
+  const pricingConfig = {
+    version: 'pricing:v2' as const,
+    unit: 'call' as const,
+    paidAmount: amount,
+  }
   const offering = {
     ...fixture.sourceMaterial.offering,
     presentation: {
       ...fixture.sourceMaterial.offering.presentation,
-      price: { kind: 'fixed' as const, amount },
+      price: { kind: 'fixed' as const, amount: pricingConfig.paidAmount },
     },
   }
   const originalConfig = fixture.sourceMaterial.binding.adapter.config
@@ -2253,6 +2290,11 @@ function rematerializeFixedPrice(
   }
   return materializePublishedOperation({
     ...fixture.sourceMaterial,
+    publication: {
+      ...fixture.sourceMaterial.publication,
+      pricingConfig,
+      priceDigest: pricingConfigDigest(pricingConfig),
+    },
     offering,
     binding,
     admittedTransport: admitted.transport,

@@ -5,12 +5,16 @@ import { internalMutation, type DatabaseReader, type DatabaseWriter, type Mutati
 import type { Doc, Id } from './_generated/dataModel'
 import {
   buildCatalogDiscoveryManifest,
-  type DiscoveryManifestContract,
-  type DiscoveryManifestReadback,
+  buildOfferingLlmsTxt,
+} from '../src/modules/discovery/convex'
+import type {
+  DiscoveryManifestContract,
+  DiscoveryManifestReadback,
 } from '../src/modules/discovery/public'
-import type { PublicBusinessCatalogApiV2Dto } from '../src/modules/registry/public'
-import { projectBusinessSupplyToPublicApi } from '../src/modules/registry/public'
-import { buildOfferingLlmsTxt } from '../src/modules/discovery/public'
+import {
+  projectBusinessSupplyToPublicApi,
+  type PublicBusinessCatalogApiV2Dto,
+} from '../src/modules/registry/public'
 import { internal } from './_generated/api'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
@@ -23,6 +27,8 @@ import { hasActiveBusinessSuppression } from './catalogRuntimeQueries'
 import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
 import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 import type { BusinessMutationActor } from '../src/modules/business/public'
+import { businessContext as businessContextResult } from '../src/modules/business/public'
+
 
 const routeResult = v.object({
   kind: v.union(v.literal('business_page'), v.literal('ucp_manifest'), v.literal('api_detail')),
@@ -40,20 +46,20 @@ const manifestPriceResult = v.union(
   v.object({
     kind: v.literal('quote_only'),
     currency: v.string(),
-    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    unit: v.optional(v.union(v.literal('call'), v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
     taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
   }),
   v.object({
     kind: v.union(v.literal('fixed'), v.literal('from')),
     amount: exactAmountResult,
-    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    unit: v.optional(v.union(v.literal('call'), v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
     taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
   }),
   v.object({
     kind: v.literal('range'),
     minimum: exactAmountResult,
     maximum: exactAmountResult,
-    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    unit: v.optional(v.union(v.literal('call'), v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
     taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
   }),
 )
@@ -109,11 +115,7 @@ const currentManifestResult = v.object({
   slug: v.string(),
   businessName: v.string(),
   category: v.string(),
-  location: v.object({
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    postcode: v.optional(v.string()),
-  }),
+  businessContext: businessContextResult,
   publicUrl: v.string(),
   manifestUrl: v.string(),
   ucpVersion: v.string(),
@@ -131,6 +133,7 @@ const currentManifestResult = v.object({
   degradedReason: v.optional(v.string()),
   suppressedAt: v.optional(v.number()),
 })
+
 
 const legacyManifestCapabilityResult = v.object({
   kind: v.union(
@@ -331,9 +334,6 @@ const DISCOVERY_LLMS_SAMPLE_SIZE = 12
 const DISCOVERY_INVALIDATION_BATCH_SIZE = 50
 
 const discoveryMutationAuthArgs = {
-  csrfToken: v.optional(v.string()),
-  csrfCookie: v.optional(v.string()),
-  origin: v.optional(v.string()),
   operationKey: v.string(),
   correlationId: v.string(),
 }
@@ -563,16 +563,10 @@ export const readSitemapXml = queryGeneric({
   handler: async (ctx, args) => readDiscoveryBusinessSlugPageFromDb(ctx.db, 'sitemap', args.paginationOpts),
 })
 
-type OwnerMutationArgs = {
+type OwnerMutationArgs = SourceWriteArgs & Readonly<{
   businessId?: Id<'businesses'>
   slug?: string
-  csrfToken?: string
-  csrfCookie?: string
-  origin?: string
-  sourceWrite?: SourceWriteArgs['sourceWrite']
-  operationKey?: string
-  correlationId?: string
-}
+}>
 
 type OwnerMutationAuth =
   | { kind: 'ok'; actor: Extract<BusinessMutationActor, { kind: 'authenticated_owner' }>; business: Doc<'businesses'> }
@@ -845,11 +839,7 @@ function manifestForReturn(manifest: DiscoveryManifestRead): ManifestReturn {
     slug: manifest.slug,
     businessName: manifest.businessName,
     category: manifest.category,
-    location: {
-      suburb: manifest.location.suburb,
-      stateTerritory: manifest.location.stateTerritory,
-      ...(manifest.location.postcode === undefined ? {} : { postcode: manifest.location.postcode }),
-    },
+    businessContext: manifest.businessContext,
     publicUrl: manifest.publicUrl,
     manifestUrl: manifest.manifestUrl,
     ucpVersion: manifest.ucpVersion,
@@ -871,6 +861,7 @@ function manifestForReturn(manifest: DiscoveryManifestRead): ManifestReturn {
     ...(manifest.degradedReason === undefined ? {} : { degradedReason: manifest.degradedReason }),
     ...(manifest.suppressedAt === undefined ? {} : { suppressedAt: manifest.suppressedAt }),
   }
+
 }
 
 function readbackForReturn(readback: DiscoveryReadback): ReadbackReturn {
@@ -1323,9 +1314,7 @@ function manifestPatch(manifest: DiscoveryManifest, businessId: Id<'businesses'>
     slug: manifest.slug,
     businessName: manifest.businessName,
     category: manifest.category,
-    suburb: manifest.location.suburb,
-    stateTerritory: manifest.location.stateTerritory,
-    ...(manifest.location.postcode === undefined ? {} : { postcode: manifest.location.postcode }),
+    businessContext: manifest.businessContext,
     publicUrl: manifest.publicUrl,
     manifestUrl: manifest.manifestUrl,
     ucpVersion: manifest.ucpVersion,
@@ -1348,6 +1337,7 @@ function manifestPatch(manifest: DiscoveryManifest, businessId: Id<'businesses'>
     ...(manifest.suppressedAt === undefined ? {} : { suppressedAt: manifest.suppressedAt }),
   }
 }
+
 
 function attemptPatch(attempt: DiscoveryAttempt) {
   return {
@@ -1784,11 +1774,7 @@ function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifest
     slug: brandNonEmpty(document.slug, 'Slug'),
     businessName: document.businessName,
     category: document.category,
-    location: {
-      suburb: document.suburb,
-      stateTerritory: document.stateTerritory,
-      ...(document.postcode === undefined ? {} : { postcode: document.postcode }),
-    },
+    businessContext: document.businessContext,
     publicUrl: document.publicUrl,
     manifestUrl: document.manifestUrl,
     ucpVersion: document.ucpVersion,

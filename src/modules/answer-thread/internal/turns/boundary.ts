@@ -1,4 +1,5 @@
 import {
+  answerOperationCandidateSetDigest,
   buildAgentJsonUrl,
   buildBoundaryNextStep,
   buildBoundaryOneLine,
@@ -83,6 +84,12 @@ async function streamBoundaryTurn(
       completedAtMs: Date.now(),
     })
   }
+  const operationEvidence = ctx.operationCandidates.length === 0
+    ? {}
+    : {
+        operationCandidates: [...ctx.operationCandidates],
+        operationCandidatesDigest: answerOperationCandidateSetDigest(ctx.operationCandidates),
+      }
 
   const snapshot = isWebSearchUnavailable
     ? {
@@ -93,6 +100,7 @@ async function streamBoundaryTurn(
         nextStep,
         agentJsonUrl: '',
         layoutProfile: 'data_answer' as const,
+        ...operationEvidence,
       }
     : isSafetyRefusal
       ? {
@@ -103,6 +111,7 @@ async function streamBoundaryTurn(
           nextStep,
           agentJsonUrl: '',
           layoutProfile: 'safety_refusal' as const,
+          ...operationEvidence,
         }
       : withFollowUpLayout(
           {
@@ -112,6 +121,7 @@ async function streamBoundaryTurn(
             summary,
             nextStep,
             agentJsonUrl: buildAgentJsonUrl(ctx.query, DEFAULT_TURN_PROVIDER_LIMIT),
+            ...operationEvidence,
           },
           ctx.priorTurnsCount,
           ctx.intent,

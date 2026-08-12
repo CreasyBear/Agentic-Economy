@@ -4,11 +4,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { buildAnswerRunReport, type FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
+import { parsePublicThreadProjection } from '@/modules/answer-thread/public'
 import {
   answerThreadShareAccessId,
   answerThreadShareVerifier,
 } from '@/modules/answer-thread/internal/share-token'
-import { createSourceWriteAdmission, sourceWriteBodyDigest } from '@/modules/security/source-write-admission'
+import {
+  createSourceWriteAdmission,
+  sourceWriteCommandBodyDigest,
+  sourceWriteCommandDigest,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 import { writeStoredThreadRecords } from '@/components/ae/chat/thread-records-store'
 import { buildSharedThreadSeo } from '@/modules/seo/public'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
@@ -31,10 +37,11 @@ const SHARE_SECRET = 'answer-thread-share-keyring-secret-32-characters'
 const SHARE_KEY_ID = 'answer-thread-share-test-v1'
 const SHARE_SOURCE_REQUEST = {
   method: 'POST',
-  origin: 'http://127.0.0.1:3024',
-  pathname: '/api/answer/turn',
-  bodyDigest: sourceWriteBodyDigest(undefined),
-}
+  initiatorOrigin: 'http://127.0.0.1:3024',
+  targetOrigin: 'http://127.0.0.1:3024',
+  targetPath: '/api/answer/turn',
+  targetQuery: '',
+} as const
 const previousSourceWriteSecret = process.env.AE_SOURCE_WRITE_SECRET
 const previousShareSecret = process.env.AE_ANSWER_THREAD_SHARE_SECRET
 const previousShareKeyId = process.env.AE_ANSWER_THREAD_SHARE_KEY_ID
@@ -265,7 +272,7 @@ describe('public thread share route', () => {
       threadId,
       pseudonymousSessionId: issued.shareToken,
     })).resolves.toBeNull()
-    await expect(backend.mutation(api.answerThreads.reserveAnswerTurn, {
+    await expect(backend.mutation(api.answerThreads.reserveAnswerTurn, await shareAdmission({
       sessionId: issued.shareToken,
       requestedThreadScope: threadId,
       query: 'credential follow-up must fail',
@@ -274,33 +281,29 @@ describe('public thread share route', () => {
       title: 'credential follow-up must fail',
       operationKey: 'share:authority:credential:follow-up',
       correlationId: 'share:authority:credential:follow-up',
-      sourceWrite: shareAdmission('share:authority:credential:follow-up'),
-    })).resolves.toEqual({ kind: 'refused', reason: 'thread_forbidden' })
-    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, {
+    }))).resolves.toEqual({ kind: 'refused', reason: 'thread_forbidden' })
+    await expect(backend.mutation(api.answerThreads.stopAnswerTurn, await shareAdmission({
       sessionId: issued.shareToken,
       threadId,
       turnId: 'share-credential-turn',
       operationKey: 'share:authority:credential:stop',
       correlationId: 'share:authority:credential:stop',
-      sourceWrite: shareAdmission('share:authority:credential:stop'),
-    })).resolves.toEqual({ kind: 'not_found' })
+    }))).resolves.toEqual({ kind: 'not_found' })
     await expect(revokeShare(backend, threadId, issued.shareToken, 'share:authority:credential:revoke')).rejects.toThrow('thread_forbidden')
     await expect(issueShare(backend, threadId, issued.shareToken, 'share:authority:credential:issue')).rejects.toThrow('thread_forbidden')
-    await expect(backend.mutation(api.answerThreads.deleteAnswerThread, {
+    await expect(backend.mutation(api.answerThreads.deleteAnswerThread, await shareAdmission({
       threadId,
       pseudonymousSessionId: issued.shareToken,
       operationKey: 'share:authority:credential:delete',
       correlationId: 'share:authority:credential:delete',
-      sourceWrite: shareAdmission('share:authority:credential:delete'),
-    })).rejects.toThrow('thread_forbidden')
+    }))).rejects.toThrow('thread_forbidden')
 
-    await expect(backend.mutation(api.answerThreads.deleteAnswerThread, {
+    await expect(backend.mutation(api.answerThreads.deleteAnswerThread, await shareAdmission({
       threadId,
       pseudonymousSessionId: ownerSessionId,
       operationKey: 'share:authority:owner:delete',
       correlationId: 'share:authority:owner:delete',
-      sourceWrite: shareAdmission('share:authority:owner:delete'),
-    })).resolves.toEqual({ threadId })
+    }))).resolves.toEqual({ threadId })
     await expect(backend.query(api.answerThreads.getSharedThreadProjection, {
       shareToken: issued.shareToken,
     })).resolves.toBeNull()
@@ -375,9 +378,12 @@ describe('public thread share route', () => {
       })
     })
     const issued = await issueShare(backend, threadId, sessionId, 'share:sanitized:issue')
-    const shared = await backend.query(api.answerThreads.getSharedThreadProjection, {
+    const encodedShared = await backend.query(api.answerThreads.getSharedThreadProjection, {
       shareToken: issued.shareToken,
     })
+    const shared = encodedShared === null
+      ? null
+      : parsePublicThreadProjection(JSON.parse(encodedShared))
     expect(shared).toMatchObject({
       threadId,
       title: 'Share sanitized',
@@ -443,15 +449,30 @@ function restoreEnvironment(name: string, value: string | undefined): void {
   }
 }
 
-function shareAdmission(operationKey: string, nonce = operationKey) {
-  return createSourceWriteAdmission({
-    env: { AE_SOURCE_WRITE_SECRET: SHARE_SOURCE_WRITE_SECRET },
-    request: SHARE_SOURCE_REQUEST,
-    scope: 'answer_thread',
-    operationKey,
-    correlationId: operationKey,
-    nonce,
-  })
+type SourceWriteCommand = {
+  operationKey: string
+  correlationId: string
+  [key: string]: unknown
+}
+
+async function shareAdmission<T extends SourceWriteCommand>(command: T, nonce = command.operationKey) {
+  const sourceWriteRequest: SourceWriteAdmissionRequest = {
+    ...SHARE_SOURCE_REQUEST,
+    bodyDigest: sourceWriteCommandBodyDigest(command),
+  }
+  return {
+    ...command,
+    sourceWriteRequest,
+    sourceWrite: await createSourceWriteAdmission({
+      env: { AE_SOURCE_WRITE_SECRET: SHARE_SOURCE_WRITE_SECRET },
+      request: sourceWriteRequest,
+      scope: 'answer_thread',
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
+      nonce,
+    }),
+  }
 }
 
 async function insertThread(
@@ -477,13 +498,12 @@ async function issueShare(
   pseudonymousSessionId: string,
   operationKey: string,
 ) {
-  return backend.mutation(api.answerThreads.issueAnswerThreadShare, {
+  return backend.mutation(api.answerThreads.issueAnswerThreadShare, await shareAdmission({
     threadId,
     pseudonymousSessionId,
     operationKey,
     correlationId: operationKey,
-    sourceWrite: shareAdmission(operationKey),
-  })
+  }))
 }
 
 async function revokeShare(
@@ -492,13 +512,12 @@ async function revokeShare(
   pseudonymousSessionId: string,
   operationKey: string,
 ) {
-  return backend.mutation(api.answerThreads.revokeAnswerThreadShare, {
+  return backend.mutation(api.answerThreads.revokeAnswerThreadShare, await shareAdmission({
     threadId,
     pseudonymousSessionId,
     operationKey,
     correlationId: operationKey,
-    sourceWrite: shareAdmission(operationKey),
-  })
+  }))
 }
 
 async function readShareRows(backend: TestConvex<typeof schema>, threadId: string) {

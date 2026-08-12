@@ -1,7 +1,7 @@
 import { DirectedGraph } from 'graphology'
 import { hasCycle } from 'graphology-dag'
 
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -246,6 +246,7 @@ function routesAreInternallyConsistent(generation: CustomerRequestRoutePlanGener
       && route.maximumTotalCost.kind === 'known'
       && exactAmountSchema.safeParse(route.maximumTotalCost.amount).success
       && actionRefs.size === route.steps.length
+      && route.steps.every((step) => isCanonicalDigest(step.priceDigest))
       && routePlanGraphIsValid(route)
       && Number.isSafeInteger(route.expiresAt)
       && route.expiresAt > generation.createdAt

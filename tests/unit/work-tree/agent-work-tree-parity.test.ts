@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { handleWorkTreeAgentAction, type WorkTreeAgentOperation } from '@/lib/server/work-tree-agent-api'
+import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import {
   decideRootWorkTree,
   readRootWorkTree,
@@ -41,7 +42,8 @@ const sourceMocks = vi.hoisted(() => {
   }
 
   return {
-    authenticateCustomerRequestAgent: vi.fn(),
+    authenticateAgentAccess: vi.fn(),
+    resolveAgentAccessPrincipal: vi.fn(),
     callSourceMutation: vi.fn(),
     callSourceQuery: vi.fn(),
     callPublicSourceMutation: vi.fn(),
@@ -52,8 +54,9 @@ const sourceMocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/lib/server/customer-request-agent-auth', () => ({
-  authenticateCustomerRequestAgent: sourceMocks.authenticateCustomerRequestAgent,
+vi.mock('@/lib/server/agent-access-auth', () => ({
+  authenticateAgentAccess: sourceMocks.authenticateAgentAccess,
+  resolveAgentAccessPrincipal: sourceMocks.resolveAgentAccessPrincipal,
 }))
 vi.mock('@/lib/server/convex-source', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/convex-source')>()
@@ -99,6 +102,8 @@ let sourceDecisionReceipts: Map<string, RootWorkTreeDecisionReceipt>
 let authScopes: Set<string>
 let authenticatedPrincipal: AuthenticatedPrincipal
 
+const resolvePrincipal = async (principal: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => principal
+
 beforeEach(() => {
   source = createFakeWorkTreeSource()
   sourceApplyPayloads = new Map()
@@ -120,12 +125,21 @@ beforeEach(() => {
     await dispatchQuery(descriptor.name, input))
   sourceMocks.callPublicSourceMutation.mockReset()
   sourceMocks.callPublicSourceQuery.mockReset()
-  sourceMocks.authenticateCustomerRequestAgent.mockReset()
-  sourceMocks.authenticateCustomerRequestAgent.mockImplementation(async (options?: Readonly<{ requiredScope?: string }>) => {
+  sourceMocks.resolveAgentAccessPrincipal.mockReset()
+  sourceMocks.resolveAgentAccessPrincipal.mockImplementation(() => async (principal: unknown) => principal)
+  sourceMocks.authenticateAgentAccess.mockReset()
+  sourceMocks.authenticateAgentAccess.mockImplementation(async (options?: Readonly<{
+    requiredScope?: string
+    resolvePrincipal?: (principal: unknown) => Promise<unknown>
+  }>) => {
     if (options?.requiredScope !== undefined && !authScopes.has(options.requiredScope)) {
       return { kind: 'refused' as const, status: 403 as const, reason: 'scope_required' as const }
     }
-    return { kind: 'authenticated' as const, principal: authenticatedPrincipal }
+    const stored = options?.resolvePrincipal === undefined
+      ? authenticatedPrincipal
+      : await options.resolvePrincipal(authenticatedPrincipal)
+    if (stored === null) return { kind: 'refused' as const, status: 403 as const, reason: 'scope_required' as const }
+    return { kind: 'authenticated' as const, principal: stored as AuthenticatedPrincipal }
   })
 })
 
@@ -213,6 +227,19 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       expectedGeneration: 1, expectedRevision: 1,
       proposalDigest: 'digest:decision', idempotencyKey: 'decision:invalid',
     }).success).toBe(false)
+    expect(decide.outputSchema.safeParse({
+      kind: 'unknown',
+      decision: 'lock',
+      projectId: 'project:parity',
+      nodeId: 'decision:project',
+      receiptId: 'unknown:legacy',
+      generation: 1,
+      revision: 1,
+      disposition: 'unchanged',
+      occurredAt: 1,
+      readback: { projectId: 'project:parity', revision: 1 },
+    }).success).toBe(false)
+    expect(decide.outputSchema.safeParse({ kind: 'unknown' }).success).toBe(true)
   })
   it('rejects agent guest assertions before creating a service assertion or calling source', async () => {
     const response = await handleWorkTreeAgentAction(
@@ -231,7 +258,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
         }),
       }),
       'decide',
-      { env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: 's'.repeat(32) } },
+      { resolvePrincipal, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: 's'.repeat(32) } },
     )
 
     expect(response.status).toBe(400)
@@ -248,6 +275,22 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
     expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled()
   })
+  it('refuses a live Clerk key without a current durable grant before operation dispatch', async () => {
+    const callOperation = vi.fn()
+    const response = await handleWorkTreeAgentAction(
+      new Request('https://ae.test/api/v1/work-tree/inspect', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ak_parity', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: 'project:grant-refused' }),
+      }),
+      'inspect',
+      { resolvePrincipal: async () => null, callOperation },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ code: 'scope_required' })
+    expect(callOperation).not.toHaveBeenCalled()
+  })
   it('projects typed source refusals and keeps malformed or transport outcomes unknown', async () => {
     const request = () => new Request('https://ae.test/api/v1/work-tree/inspect', {
       method: 'POST',
@@ -256,6 +299,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     })
     const invoke = async (callOperation: () => Promise<Record<string, unknown>>): Promise<Response> =>
       await handleWorkTreeAgentAction(request(), 'inspect', {
+        resolvePrincipal,
         callOperation: async () => await callOperation(),
       })
 
@@ -292,6 +336,36 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     const transport = await invoke(async () => { throw new Error('transport_down') })
     expect(transport.status).toBe(200)
     await expect(transport.json()).resolves.toEqual({ kind: 'unknown', reason: 'transport_down' })
+    const decideUnknown = await handleWorkTreeAgentAction(
+      new Request('https://ae.test/api/v1/work-tree/decide', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ak_parity', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: 'project:typed-decision',
+          nodeId: 'node:typed-decision',
+          kind: 'lock',
+          expectedGeneration: 1,
+          expectedRevision: 1,
+          proposalDigest: 'digest:typed-decision',
+          idempotencyKey: 'decision:typed-unknown',
+        }),
+      }),
+      'decide',
+      { resolvePrincipal, callOperation: async () => ({
+        kind: 'unknown',
+        decision: 'lock',
+        projectId: 'project:typed-decision',
+        nodeId: 'node:typed-decision',
+        receiptId: 'unknown:legacy',
+        generation: 1,
+        revision: 1,
+        disposition: 'unchanged',
+        occurredAt: 1,
+        readback: { projectId: 'project:typed-decision', revision: 1 },
+      }) },
+    )
+    expect(decideUnknown.status).toBe(200)
+    await expect(decideUnknown.json()).resolves.toEqual({ kind: 'unknown' })
 
     authScopes.add('work_trees:repeat_reconcile')
     const repeatInvalidRequest = await handleWorkTreeAgentAction(
@@ -306,7 +380,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
         }),
       }),
       'reconcileRepeatUse',
-      { callOperation: async () => ({ kind: 'refused', reason: 'invalid_request', useRef: 'repeat-use:typed' }) },
+      { resolvePrincipal, callOperation: async () => ({ kind: 'refused', reason: 'invalid_request', useRef: 'repeat-use:typed' }) },
     )
     expect(repeatInvalidRequest.status).toBe(400)
     await expect(repeatInvalidRequest.json()).resolves.toMatchObject({
@@ -617,7 +691,7 @@ async function handleAgentWorkTree(operation: 'create' | 'inspect' | 'apply' | '
       body: JSON.stringify(body),
     }),
     operation,
-    { callOperation },
+    { resolvePrincipal, callOperation },
   )
 }
 
@@ -696,6 +770,7 @@ async function dispatchMutation(name: string, input: unknown): Promise<unknown> 
       return sourceDecisionReceipts.get(key)
     }
     const result = await source.decide(command as never)
+    if (!('decision' in result)) return result
     sourceDecisionPayloads.set(key, payload)
     sourceDecisionReceipts.set(key, result)
     return result

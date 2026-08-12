@@ -7,7 +7,9 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { exactAmountSchema } from '@/modules/money/public'
 
 import {
@@ -37,9 +39,19 @@ const EMPTY: DevelopmentPaymentState = {
  */
 export function createDevelopmentFileX402PaymentAttemptPort(
   filePath: string,
+  initialState: Readonly<{
+    attempts?: readonly X402PaymentAttempt[]
+    authorizationEvents?: readonly X402PaymentAuthorizationEvent[]
+  }> = {},
 ): X402PaymentAttemptPort {
+  const seeded: DevelopmentPaymentState = {
+    format: EMPTY.format,
+    attempts: initialState.attempts ?? EMPTY.attempts,
+    authorizationEvents: initialState.authorizationEvents ?? EMPTY.authorizationEvents,
+  }
+  assertState(seeded)
   const read = (): DevelopmentPaymentState => {
-    if (!existsSync(filePath)) return EMPTY
+    if (!existsSync(filePath)) return seeded
     const value = JSON.parse(readFileSync(filePath, 'utf8')) as unknown
     assertState(value)
     return value
@@ -87,6 +99,18 @@ export function createDevelopmentFileX402PaymentAttemptPort(
     listAuthorizationEvents: () => read().authorizationEvents,
   }
 }
+export function createDevelopmentScenarioX402PaymentAttemptPort(
+  initialState: Readonly<{
+    attempts?: readonly X402PaymentAttempt[]
+    authorizationEvents?: readonly X402PaymentAuthorizationEvent[]
+  }> = {},
+): X402PaymentAttemptPort {
+  return createDevelopmentFileX402PaymentAttemptPort(
+    join(tmpdir(), `ae-x402-development-${process.pid}-${randomUUID()}.json`),
+    initialState,
+  )
+}
+
 
 function replaceByKey<T extends X402PaymentAttempt | X402PaymentAuthorizationEvent>(
   rows: readonly T[],

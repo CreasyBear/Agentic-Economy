@@ -1,0 +1,164 @@
+import { describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  enqueueAction: vi.fn(async (..._args: unknown[]) => 'workpool:cleanup:first'),
+}))
+
+vi.mock('../../../convex/customerRequestRouteWorkpool', () => ({
+  customerRequestRouteWorkpool: { enqueueAction: mocks.enqueueAction },
+}))
+
+import { revokeOwner } from '../../../convex/capabilityProviderConnections'
+import { createProviderConnection } from '@/modules/capability-supply/provider-connection'
+
+type Row = Record<string, unknown> & { _id: string }
+type QueryBuilder = { eq: (field: string, value: unknown) => QueryBuilder }
+type Query = {
+  withIndex: (name: string, build: (query: QueryBuilder) => QueryBuilder) => Query
+  unique: () => Promise<Row | null>
+  take: (limit: number) => Promise<Row[]>
+}
+
+class MemoryDb {
+  private readonly tables = new Map<string, Row[]>()
+
+  seed(table: string, row: Row): void {
+    this.tables.set(table, [...(this.tables.get(table) ?? []), row])
+  }
+
+  row(table: string, id: string): Row | undefined {
+    return this.tables.get(table)?.find((candidate) => candidate._id === id)
+  }
+
+  query(table: string): Query {
+    const filters: Array<(row: Row) => boolean> = []
+    const query: Query = {
+      withIndex: (_name, build) => {
+        const builder: QueryBuilder = {
+          eq: (field, value) => {
+            filters.push((row) => row[field] === value)
+            return builder
+          },
+        }
+        build(builder)
+        return query
+      },
+      unique: async () => {
+        const matches = this.rows(table).filter((row) => filters.every((filter) => filter(row)))
+        if (matches.length > 1) throw new Error('expected_unique')
+        return matches[0] ?? null
+      },
+      take: async (limit) => this.rows(table).filter((row) => filters.every((filter) => filter(row))).slice(0, limit),
+    }
+    return query
+  }
+
+  async get(id: string): Promise<Row | null> {
+    for (const rows of this.tables.values()) {
+      const row = rows.find((candidate) => candidate._id === id)
+      if (row !== undefined) return row
+    }
+    return null
+  }
+
+  async replace(id: string, replacement: Row): Promise<void> {
+    for (const [table, rows] of this.tables.entries()) {
+      const index = rows.findIndex((row) => row._id === id)
+      if (index !== -1) {
+        rows[index] = { ...replacement, _id: id }
+        this.tables.set(table, rows)
+        return
+      }
+    }
+    throw new Error('row_not_found')
+  }
+
+  async patch(id: string, changes: Record<string, unknown>): Promise<void> {
+    for (const [table, rows] of this.tables.entries()) {
+      const index = rows.findIndex((row) => row._id === id)
+      if (index !== -1) {
+      const row = rows[index]
+      if (row === undefined) continue
+      rows[index] = { ...row, ...changes, _id: row._id }
+        this.tables.set(table, rows)
+        return
+      }
+    }
+    throw new Error('row_not_found')
+  }
+
+  private rows(table: string): Row[] {
+    return [...(this.tables.get(table) ?? [])]
+  }
+}
+
+type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+const handler = (revokeOwner as unknown as { _handler: Handler })._handler
+
+const createCommand = {
+  commandId: 'command:create:cleanup-binding',
+  connectionRef: 'connection:cleanup-binding',
+  businessId: 'business:cleanup-binding',
+  providerRef: 'provider:cleanup-binding',
+  providerAccountRef: 'account:cleanup-binding',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:PROVIDER_SECRET',
+  requestedScopes: ['profile:read'],
+  grantedScopes: ['profile:read'],
+  requestedResources: ['account:cleanup-binding'],
+  grantedResources: ['account:cleanup-binding'],
+  evidenceRefs: ['evidence:create'],
+}
+
+describe('provider cleanup enqueue binding', () => {
+  it('persists attempt one with the returned Workpool identity in the revocation transaction', async () => {
+    mocks.enqueueAction.mockClear()
+    const created = createProviderConnection(createCommand, 1_000)
+    if (created.kind !== 'applied') throw new Error('provider connection create failed')
+    const connection = {
+      ...created.connection,
+      _id: 'connection:cleanup-binding:row',
+      _creationTime: 1_000,
+    }
+    const db = new MemoryDb()
+    db.seed('owners', { _id: 'owner:cleanup-binding', clerkUserId: 'user:cleanup-binding' })
+    db.seed('businesses', { _id: createCommand.businessId, ownerId: 'owner:cleanup-binding' })
+    db.seed('capabilityProviderConnections', connection)
+    const now = vi.spyOn(Date, 'now').mockReturnValue(2_000)
+
+    try {
+      const result = await handler({
+        auth: { getUserIdentity: async () => ({ subject: 'user:cleanup-binding' }) },
+        db,
+      }, {
+        connectionRef: connection.connectionRef,
+        commandId: 'command:revoke:cleanup-binding',
+        expectedAuthorityGeneration: connection.authorityGeneration,
+        expectedAuthorityDigest: connection.authorityDigest,
+        evidenceRefs: ['evidence:revoke'],
+      })
+
+      expect(result).toMatchObject({ kind: 'applied', connection: { lifecycle: 'revocation_pending' } })
+      expect(mocks.enqueueAction).toHaveBeenCalledTimes(1)
+      const enqueue = mocks.enqueueAction.mock.calls[0]
+      if (enqueue === undefined) throw new Error('cleanup enqueue missing')
+      expect(enqueue[2]).toMatchObject({ cleanupAttempt: 1, workKind: 'cleanup' })
+      expect(enqueue[3]).toMatchObject({ retry: false, context: { cleanupAttempt: 1, workKind: 'cleanup' } })
+
+      const persisted = db.row('capabilityProviderConnections', connection._id)
+      expect(persisted).toMatchObject({
+        lifecycle: 'revocation_pending',
+        cleanupAttempt: 1,
+        cleanupWorkId: 'workpool:cleanup:first',
+        cleanupWorkKind: 'cleanup',
+        cleanupCommandId: enqueue[2] && typeof enqueue[2] === 'object' ? (enqueue[2] as Record<string, unknown>).commandId : undefined,
+        cleanupCallbackGraceUntil: 12_000,
+        authorityGeneration: connection.authorityGeneration,
+        authorityDigest: connection.authorityDigest,
+      })
+      expect(persisted?.cleanupRequestDigest).toEqual((enqueue[2] as Record<string, unknown>).requestDigest)
+    } finally {
+      now.mockRestore()
+    }
+  })
+})

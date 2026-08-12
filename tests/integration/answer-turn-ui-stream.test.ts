@@ -1,12 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildAnswerTurnProblem } from '@/lib/errors'
 
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import { streamAnswerTurn } from '@/modules/answer-thread/server'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../helpers/answer-thread-test-port'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { handleStopAnswerTurnRequest } from '@/routes/api.answer.turn.stop'
 
@@ -15,6 +18,22 @@ import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
+const emptyKeylessExecutableSource: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
+
+const streamWithLocalSources: typeof streamAnswerTurn = (input, onEvent) =>
+  streamAnswerTurn({
+    ...input,
+    keylessExecutableSource: emptyKeylessExecutableSource,
+  }, onEvent)
+
+function handleLocalAnswerTurnRequest(request: Request): Promise<Response> {
+  return handleAnswerTurnRequest(request, { stream: streamWithLocalSources })
+}
+
 
 /**
  * The rate-limit seam calls a live Convex deployment, which no source-level
@@ -28,20 +47,44 @@ vi.mock('@/lib/server/rate-limit', () => ({
 }))
 
 describe('POST /api/answer/turn UI message stream', () => {
+  let previousConvexUrl: string | undefined
+  let previousViteConvexUrl: string | undefined
+  let restoreRegistrySource: (() => void) | undefined
+
+  beforeEach(() => {
+    previousConvexUrl = process.env.CONVEX_URL
+    previousViteConvexUrl = process.env.VITE_CONVEX_URL
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+    restoreRegistrySource = installLocalE2eRegistrySourceForTests()
+  })
+
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
+    restoreRegistrySource?.()
+    restoreRegistrySource = undefined
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousViteConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousViteConvexUrl
+    }
     vi.restoreAllMocks()
   })
 
   it('streams a full turn the browser reader can consume without any hand-rolled parsing', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'plumber Parramatta' } }],
       prose: {
-        oneLine: 'Three studios are open this week.',
-        summary: 'All three publish same-week availability.',
-        whatToDoNow: 'Send one a first message.',
+        oneLine: 'A listed plumber may fit this request.',
+        summary: 'The listing publishes plumbing details; timing and price still need confirmation.',
+        whatToDoNow: 'Contact the business and confirm the scope, price, and timing.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -53,11 +96,11 @@ describe('POST /api/answer/turn UI message stream', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(
+      const response = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'ui-stream:wedding-photographer' },
-          body: JSON.stringify({ query: 'wedding photographer in parramatta' }),
+          headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'ui-stream:parramatta-plumber' },
+          body: JSON.stringify({ query: 'plumber in Parramatta' }),
         }),
       )
 

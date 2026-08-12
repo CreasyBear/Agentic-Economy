@@ -1,9 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
+import { listMcpActionDescriptors } from '@/modules/actions'
 import { findFiles } from '@/lib/ui/contract-scans'
-import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/public'
 import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
+import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 
 const productionAuthority = {
   publicContract: 'src/modules/customer-request/agent-contract.ts',
@@ -21,7 +23,7 @@ const productionAuthority = {
   submitHttp: 'src/lib/server/customer-request-api.ts',
   inspectHttp: 'src/lib/server/customer-request-inspect-api.ts',
   factsHttp: 'src/lib/server/customer-request-facts-api.ts',
-  agentAuth: 'src/lib/server/customer-request-agent-auth.ts',
+  agentAuth: 'src/lib/server/agent-access-auth.ts',
   agentHttp: 'src/lib/server/customer-request-agent-api.ts',
   releaseReadback: 'src/modules/customer-request/release-readback.ts',
   releaseHttp: 'src/lib/server/customer-request-release-readback-api.ts',
@@ -105,10 +107,29 @@ describe('CustomerRequest source completeness', () => {
 
     const devSeed = readFileSync('convex/devSeed.ts', 'utf8')
     expect(devSeed).not.toMatch(
-      /registerSandboxSupply|from ['"]\.\/customerRequestCapabilityContracts['"]|from ['"]\.\/routingKernelBindings['"]|\bsandboxBindings\b/,
+      /registerSandboxSupply|registerSandboxV2Supply|sandboxV2Bindings|seedSandboxCapabilityPublication|from ['"]\.\/customerRequestCapabilityContracts['"]|from ['"]\.\/routingKernelBindings['"]|\bsandboxBindings\b/,
     )
-    expect(devSeed).toMatch(/registerSandboxV2Supply|sandboxV2Bindings/)
+    expect(devSeed).toMatch(/retireHistoricalSandboxSupply/)
   })
+  it('keeps sandbox history retirement explicit and production-route-free', () => {
+    const devSeed = readFileSync('convex/devSeed.ts', 'utf8')
+    const seedStart = devSeed.indexOf('export const seedDevCatalog')
+    const seedEnd = devSeed.indexOf('export const seedOfferingSupply', seedStart)
+    expect(seedStart).toBeGreaterThanOrEqual(0)
+    expect(seedEnd).toBeGreaterThan(seedStart)
+    expect(devSeed.slice(seedStart, seedEnd)).not.toContain('retireHistoricalSandboxSupply')
+    expect(devSeed).toMatch(/export const retireHistoricalSandboxSupply = internalMutation/)
+    expect(devSeed).toContain('retireHistoricalSandboxSupplyNow')
+
+    expect(readFileSync('src/routeTree.gen.ts', 'utf8')).not.toMatch(/api\/sandbox/)
+    expect(readFileSync('convex/http.ts', 'utf8')).not.toMatch(/api\/sandbox/)
+    const runtimeRouteFiles = findFiles([
+      { root: 'src/routes', includeExtensions: ['.ts', '.tsx'] },
+      { root: 'src/lib/server', includeExtensions: ['.ts', '.tsx'] },
+    ])
+    expect(runtimeRouteFiles.filter((file) => /api\/sandbox/.test(readFileSync(file, 'utf8')))).toEqual([])
+  })
+
 
   it('keeps retired V2 approval and execution authority out of production while preserving history', () => {
     const retiredProductionFiles = [
@@ -252,28 +273,45 @@ describe('CustomerRequest source completeness', () => {
 
   it('keeps fixture and durable discovery aligned on the agent request contract', () => {
     const discoveryFiles = readFileSync('src/modules/discovery/internal/discovery-files.ts', 'utf8')
+    const offeringDiscoveryFile = readFileSync('src/modules/discovery/internal/offering-discovery-file.ts', 'utf8')
     const durableDiscovery = readFileSync('convex/discovery.ts', 'utf8')
-    const publicContract = source('publicContract')
     const publicComprehension = readFileSync('src/modules/customer-request/public-comprehension.ts', 'utf8')
     const requestSchema = readFileSync('src/modules/customer-request/public-contract-schema.ts', 'utf8')
-    const requiredMarkers = [
-      'schema=',
-    ]
+    const marketEntrySource = readFileSync('src/modules/registry/operation-entry.ts', 'utf8')
 
-    for (const marker of requiredMarkers) {
-      expect(discoveryFiles, `shared discovery owner missing ${marker}`).toContain(marker)
-    }
-    expect(publicContract).toContain('export const CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
     for (const marker of [
-      'ANSWER_THREAD_AGENT_ENTRYPOINT',
-      'CUSTOMER_REQUEST_AGENT_ENTRYPOINT',
-      'CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES',
-      'CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES',
-      'CUSTOMER_REQUEST_STATE_VALUES',
+      'export const OPERATION_MARKET_ACTION_ENTRIES',
+      'inputSchema: z.toJSONSchema(schema)',
     ]) {
-      expect(discoveryFiles, `shared discovery owner missing ${marker}`).toContain(marker)
+      expect(marketEntrySource, `canonical operation schema owner missing ${marker}`).toContain(marker)
     }
-    expect(discoveryFiles).not.toContain('CUSTOMER_REQUEST_AGENT_SCOPE')
+    const mcpDescriptors = listMcpActionDescriptors()
+    expect(OPERATION_MARKET_ACTION_ENTRIES).not.toHaveLength(0)
+    for (const entry of OPERATION_MARKET_ACTION_ENTRIES) {
+      const descriptor = mcpDescriptors.find((candidate) => candidate.id === entry.actionId)
+      expect(descriptor, `Market action ${entry.actionId} is not an MCP descriptor`).toBeDefined()
+      expect(entry.inputSchema, `Market action ${entry.actionId} missing public input schema`).toMatchObject({
+        type: 'object',
+      })
+      expect(descriptor?.inputJsonSchema, `MCP descriptor ${entry.actionId} missing input schema`).toMatchObject({
+        type: 'object',
+      })
+    }
+
+    for (const marker of [
+      'DiscoveryPublicSurfacePaths',
+      'operationMarketLines',
+      'OperationMarketAnonymousBoundaryLine',
+      'OperationMarketIdempotencyLine',
+      'OperationMarketInvokeScopeLine',
+      'OPERATION_MARKET_SEARCH_PATH',
+      'OPERATION_MARKET_DETAIL_PATH',
+      'OPERATION_MARKET_COMPARE_PATH',
+      'OPERATION_MARKET_INSPECT_PLAN_PATH',
+      'OPERATION_INVOKE_ROUTE_CONTRACT',
+    ]) {
+      expect(offeringDiscoveryFile, `offering discovery owner missing ${marker}`).toContain(marker)
+    }
     expect(durableDiscovery).toMatch(
       /buildOfferingLlmsTxt\(await publicOfferingSupplyForDiscovery\(ctx\.db\)/
     )
@@ -281,7 +319,8 @@ describe('CustomerRequest source completeness', () => {
     for (const marker of ['/confirmation', '/run', '/evidence', '/problems', '/cancellation']) {
       expect(requestSchema, `Request schema missing ${marker}`).toContain(marker)
     }
-    expect(publicComprehension).toContain('labelled AE sandbox businesses')
+    expect(publicComprehension).toContain('registered_businesses')
+    expect(publicComprehension).not.toContain('sandbox')
     expect(publicComprehension).toContain('separateApprovalBeforeStart')
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
     expect(`${discoveryFiles}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route/)
@@ -292,20 +331,20 @@ describe('CustomerRequest source completeness', () => {
     expect(releaseReadback).toContain('VERCEL_GIT_COMMIT_SHA')
     expect(releaseReadback).toContain('VERCEL_DEPLOYMENT_ID')
     expect(releaseReadback).not.toMatch(/AE_RELEASE_SOURCE_REVISION|AE_KERNEL_PROOF_MANIFEST/)
-    expect(source('releaseHttp')).toContain('authenticateCustomerRequestAgent')
+    expect(source('releaseHttp')).toContain('authenticateAgentAccess')
     expect(readFileSync('src/routes/api.v1.release.ts', 'utf8')).toContain('handleAgentCustomerRequestReleaseGet')
     expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8'))
       .toContain(`createFileRoute('${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}')`)
     expect(releaseReadback).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
 
     const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
-    expect(workflow.match(/npm install --global npm@11\.5\.1/g)).toHaveLength(2)
+    expect(workflow.match(/npm install --global npm@11\.5\.1/g)).toHaveLength(3)
     expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
     expect(workflow).toContain('CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}')
     expect(workflow).toContain('npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"')
-    expect(workflow).toContain("npx convex run curatedProviders:seed '{}' --prod")
+    expect(workflow).toContain("npx convex run curatedProviders:seed '{\"runtimeEnvironment\":\"production\"}' --prod")
     expect(workflow).toContain('npx convex run capabilitySupplyReadiness:probe')
-    expect(workflow).toContain('Frankfurter capability publication did not become route-ready.')
+    expect(workflow).toContain('Curated Frankfurter readiness fixture did not become route-ready.')
     expect(workflow).toContain('needs: source-proof')
     expect(workflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
     expect(workflow).toContain('merge_group:')
@@ -318,14 +357,37 @@ describe('CustomerRequest source completeness', () => {
     const checkoutGuard = workflow.indexOf('Refuse a checkout other than the triggering revision')
     const endpointDeploy = workflow.indexOf('Deploy the dual-compatible exact clean source revision')
     const convexDeploy = workflow.indexOf('Deploy the exact-revision Convex schema and functions')
-    const supplyMigration = workflow.indexOf('Register real curated supply and verify live readiness')
-    const hostedReadback = workflow.indexOf('Verify exact deployed human and agent Request lifecycle')
+    const supplyMigration = workflow.indexOf('Seed curated supply and verify the Frankfurter readiness fixture')
+    const hostedReadback = workflow.indexOf('Verify exact deployed Request lifecycle against the Frankfurter fixture')
     expect(sourceGate).toBeLessThan(endpointDeploy)
     expect(checkoutGuard).toBeLessThan(endpointDeploy)
     expect(endpointDeploy).toBeLessThan(convexDeploy)
     expect(convexDeploy).toBeLessThan(supplyMigration)
     expect(supplyMigration).toBeLessThan(hostedReadback)
-    expect(workflow).toContain('npm run test:release:hosted')
+    expect(workflow).toContain('Record limitation: hosted supply checks cover curated fixtures only')
+    expect(workflow).toContain('it does not runtime-select arbitrary provider operations or establish generic provider readiness.')
+    expect(workflow).toContain('npm run test:release:hosted:request')
+    expect(workflow).not.toContain('npm run test:release:hosted\n')
+    expect(workflow).toContain('npm run smoke:gateway:production -- --receipt output/release/operation-gateway-smoke.json')
+    expect(workflow).toContain('live_gateway_stage')
+    expect(workflow).toContain('live_gateway_prepare_workflow_run_id')
+    expect(workflow).toContain('actions/download-artifact@v4')
+    expect(workflow).not.toContain('AE_GATEWAY_SMOKE_TOPUP_WEBHOOK_RAW_BODY')
+    expect(workflow).not.toContain('AE_GATEWAY_SMOKE_TOPUP_WEBHOOK_SIGNATURE')
+    expect(workflow).not.toContain('AE_GATEWAY_SMOKE_TOPUP_EXTERNAL_REF')
+    expect(workflow).toContain('AE_X402_PAYMENT_CREDENTIAL_REF: ${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}')
+    expect(workflow).toContain('AE_X402_PAYMENT_PRIVATE_KEY: ${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}')
+    const commandEnv = { ...process.env }
+    delete commandEnv.AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND
+    const command = spawnSync('npm', ['run', 'smoke:gateway:production', '--', '--receipt', 'output/release/command-seam.json'], {
+      cwd: process.cwd(),
+      env: commandEnv,
+      encoding: 'utf8',
+    })
+    const commandOutput = `${command.stdout ?? ''}\n${command.stderr ?? ''}`
+    expect(command.status).not.toBe(0)
+    expect(commandOutput).not.toContain('gateway_smoke_receipt_argument_required')
+    expect(commandOutput).toContain('AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND')
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(endpointDeploy)
 
     const packageJson = readFileSync('package.json', 'utf8')

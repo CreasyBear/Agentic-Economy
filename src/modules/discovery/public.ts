@@ -1,3 +1,4 @@
+import type { BusinessContext } from '@/modules/business/public'
 import type { BusinessId, Slug, SourceHash } from '@/modules/common/ids'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type {
@@ -5,9 +6,6 @@ import type {
   InvalidationIntent,
 } from '@/modules/observability/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
-import { regenerateDiscoveryManifest } from './internal/manifest-attempts'
-import { buildLlmsTxt, buildSitemapXml } from './internal/discovery-files'
-import { createFixtureDiscoverySourceState } from './internal/source-state'
 import {
   DiscoveryAttemptStatusValues,
   DiscoveryManifestRouteKindValues,
@@ -45,14 +43,24 @@ export type {
   SiteDiscoveryManifestContract,
 } from './internal/site-manifest'
 export {
+  PUBLIC_INVOCATION_REF_EXAMPLE,
+  PUBLIC_IDEMPOTENCY_KEY_EXAMPLE,
+  PUBLIC_OPERATION_REF_EXAMPLE,
+  PUBLIC_RECONCILIATION_EVIDENCE_EXAMPLE,
+  operationRouteExamples,
+  operationRoutesMarkdown,
+  publicMcpToolDocs,
+} from './internal/operation-contract'
+export type { PublicMcpToolDoc } from './internal/operation-contract'
+export {
   AgentCatalogMarkdownLimit,
   buildBusinessMarkdown,
   buildCatalogMarkdown,
+  buildForAgentsMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,
 } from './internal/page-markdown'
-export type { AgentPageMarkdownOptions } from './internal/page-markdown'
 
 export {
   DiscoveryAttemptStatusValues,
@@ -90,11 +98,7 @@ export type DiscoveryManifestContract = {
   slug: Slug
   businessName: string
   category: string
-  location: {
-    suburb: string
-    stateTerritory: string
-    postcode?: string
-  }
+  businessContext: BusinessContext
   publicUrl: string
   manifestUrl: string
   ucpVersion: string
@@ -243,33 +247,6 @@ export type ReadCatalogDiscoveryManifestInput = {
 
 export type ReadCatalogDiscoveryManifestResult = BuildCatalogDiscoveryManifestResult
 
-export function readFixtureCatalogDiscoveryManifest(
-  input: ReadCatalogDiscoveryManifestInput
-): ReadCatalogDiscoveryManifestResult {
-  const state = createFixtureDiscoverySourceState()
-  const result = regenerateDiscoveryManifest(
-    state,
-    { slug: input.slug },
-    {
-      canonicalBaseUrl: input.canonicalBaseUrl,
-      now: input.now,
-    }
-  )
-
-  if (result.kind === 'ok') {
-    return { kind: 'available', manifest: result.manifest }
-  }
-
-  return { kind: 'hidden', reason: 'not_public' }
-}
-
-export function readFixtureLlmsTxt(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
-  return buildLlmsTxt(createFixtureDiscoverySourceState(), options)
-}
-
-export function readFixtureSitemapXml(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
-  return buildSitemapXml(createFixtureDiscoverySourceState(), options)
-}
 
 export { buildCatalogDiscoveryManifest } from './internal/ucp-manifest'
 export { safePublicText } from './internal/ucp-manifest'
@@ -291,8 +268,5 @@ export {
 
 export { buildPublicAgentSkillMarkdown } from './internal/agent-skill'
 
-export {
-  createFixtureDiscoverySourceState as createDefaultDiscoverySourceState,
-} from './internal/source-state'
 
 export * from './developer-discovery'

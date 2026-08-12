@@ -15,23 +15,30 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import { ZodObject, z } from 'zod'
 
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
-import { kindForStatus, type ProblemKind } from '@/lib/errors'
+import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
-import { authenticateCustomerRequestAgent } from '@/lib/server/customer-request-agent-auth'
+import { authenticateAgentAccess, resolveAgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
-
+import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
+import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
+import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
+import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 const MAX_MCP_REQUEST_BODY_BYTES = 64 * 1024
-
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: CustomerRequestAuthorityMode
   principalId?: string
-}> 
+  principal?: ActionAgentAccessPrincipal
+  correlationId?: string
+  timing?: ActionTimingSink
+  operationInvokeService?: OperationInvokeService
+}>
 
 type SdkServerHandler = (
   request: unknown,
@@ -92,29 +99,25 @@ class SafeMcpSdkServer extends Server {
   }
 }
 
-type McpToolFailure = Readonly<{
-  kind: ProblemKind
-  code: string
-  retryable: boolean
-  detail: string
-}>
+type McpToolFailure = ProblemDetails
 
-function mcpToolFailure(error: unknown): McpToolFailure {
-  if (error instanceof ConvexSourceError) {
-    const kind = kindForStatus(error.status)
-    return {
-      kind,
-      code: error.code,
-      retryable: kind === 'UNAVAILABLE' || kind === 'RESOURCE_EXHAUSTED',
-      detail: safeMcpFailureDetail(kind),
+function mcpToolFailure(error: unknown, correlationId?: string): McpToolFailure {
+  const failure = error instanceof ConvexSourceError
+    ? gatewayFailureToProblem({
+      code: error.code === 'missing_auth' ? 'authentication_required' : 'source_unavailable',
+      retryable: error.status >= 500 || error.status === 429,
+      kind: 'error',
+    })
+    : {
+      kind: 'INTERNAL' as const,
+      code: 'action_execution_failed',
+      retryable: false,
     }
-  }
-  return {
-    kind: 'INTERNAL',
-    code: 'action_execution_failed',
-    retryable: false,
-    detail: 'Action execution failed.',
-  }
+  return buildProblem({
+    ...failure,
+    detail: safeMcpFailureDetail(failure.kind),
+    ...(correlationId === undefined ? {} : { extras: { correlationId } }),
+  })
 }
 
 function safeMcpFailureDetail(kind: ProblemKind): string {
@@ -140,7 +143,7 @@ function mcpToolError(failure: McpToolFailure): {
     isError: true,
     content: [{
       type: 'text',
-      text: `${failure.detail} (code=${failure.code}; kind=${failure.kind}; retryable=${String(failure.retryable)}).`,
+      text: JSON.stringify(failure),
     }],
   }
 }
@@ -173,19 +176,113 @@ function projectMcpToolsList(
   } as ServerResult
 }
 
+function mcpGatewayEvent(
+  actionId: string,
+  data: unknown,
+  result: unknown,
+): Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'> | undefined {
+  if (!actionId.startsWith('operation.')) return undefined
+  const input = isRecord(data) ? data : {}
+  const output = isRecord(result) ? result : {}
+  const invocationRef = typeof output.invocationRef === 'string'
+    ? output.invocationRef
+    : typeof input.invocationRef === 'string' ? input.invocationRef : undefined
+  const operationRef = typeof output.operationRef === 'string'
+    ? output.operationRef
+    : typeof input.operationRef === 'string' ? input.operationRef : undefined
+  if (output.kind === 'refused') {
+    return {
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(operationRef === undefined ? {} : { operationRef }),
+      outcome: 'refused',
+      refusalCode: typeof output.code === 'string' ? output.code : 'action_execution_failed',
+      ...(typeof output.retryable === 'boolean' ? { retryable: output.retryable } : {}),
+    }
+  }
+  if (output.kind === 'reconciliation_required') {
+    return {
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(operationRef === undefined ? {} : { operationRef }),
+      outcome: 'reconciliation_required',
+      unknown: true,
+    }
+  }
+  if (output.kind === 'needs_authority') {
+    return {
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(operationRef === undefined ? {} : { operationRef }),
+      outcome: 'needs_authority',
+      approval: 'required',
+    }
+  }
+  if (output.kind === 'pending') {
+    return {
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(operationRef === undefined ? {} : { operationRef }),
+      outcome: 'pending',
+    }
+  }
+  if (output.kind === 'found') {
+    const state = output.state
+    return {
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(operationRef === undefined ? {} : { operationRef }),
+      outcome: state === 'cancelled'
+        ? 'cancelled'
+        : state === 'reconciliation_required'
+          ? 'reconciliation_required'
+          : state === 'terminal'
+            ? actionId === 'operation.reconcile' ? 'reconciled' : 'completed'
+            : 'pending',
+    }
+  }
+  if (output.kind === 'completed' || output.kind === 'ok') {
+    return {
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(operationRef === undefined ? {} : { operationRef }),
+      outcome: 'completed',
+    }
+  }
+  return {
+    ...(invocationRef === undefined ? {} : { invocationRef }),
+    ...(operationRef === undefined ? {} : { operationRef }),
+    outcome: 'failed',
+    refusalCode: 'action_execution_failed',
+  }
+}
+function recordMcpGatewayTelemetry(
+  actionId: string,
+  data: unknown,
+  result: unknown,
+  access: McpAccessTier,
+  startedAt: number,
+): void {
+  if (access.timing === undefined || access.principal === undefined) return
+  const event = mcpGatewayEvent(actionId, data, result)
+  if (event === undefined) return
+  recordGatewayTelemetry(access.timing, {
+    ...event,
+    credentialId: access.principal.credentialId,
+    principalId: access.principal.principalId,
+    applicationRef: access.principal.applicationRef,
+    ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
+    durationMs: Date.now() - startedAt,
+  })
+}
+
+
 export function createAeMcpServer(
   request: Request,
   actions: readonly AnyAction[] = listMcpActions(),
   access: McpAccessTier = { tier: 'anonymous' },
 ): McpServer {
   const admittedActions = access.tier === 'anonymous'
-    ? actions
-    : actions.filter((action) => action.surfaces.includes('mcp') && (action.readOnly || (access.authorityMode !== undefined && customerRequestModeAllows(access.authorityMode, requiredModeForAction(action)))))
-  if (access.tier === 'anonymous') {
-    for (const action of admittedActions) {
-      if (!action.readOnly) throw new Error(`MCP anonymous tier admits only read-only actions: ${action.id}`)
-    }
-  }
+    ? actions.filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
+    : actions.filter((action) => action.surfaces.includes('mcp') && (
+      action.readOnly
+      || action.credentialAdmission !== undefined
+      || (access.authorityMode !== undefined && customerRequestModeAllows(access.authorityMode, requiredModeForAction(action)))
+    ))
 
   let toolsListHandler: SdkServerHandler | undefined
   const server = new McpServer({ name: 'agentic-economy', version: '1.0.0' })
@@ -210,23 +307,37 @@ export function createAeMcpServer(
         },
       },
       async (data: unknown) => {
+        const startedAt = Date.now()
         try {
-          const result = await action.run({ data, context: { caller: 'mcp', request } })
+          const result = await action.run({
+            data,
+            context: {
+              caller: 'mcp',
+              request,
+              ...(access.principal === undefined ? {} : { agentAccessPrincipal: access.principal }),
+              ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
+              ...(access.timing === undefined ? {} : { timing: access.timing }),
+              ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
+            },
+          })
           const outputValidation = await safeParseAsync(action.outputSchema, result)
           if (!outputValidation.success) {
-            return mcpToolError({
+            recordMcpGatewayTelemetry(action.id, data, { kind: 'error' }, access, startedAt)
+            return mcpToolError(buildProblem({
               kind: 'INTERNAL',
               code: 'action_output_invalid',
-              retryable: false,
               detail: 'Action returned an invalid result.',
-            })
+              ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
+            }))
           }
+          recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(result) }],
             structuredContent: result,
           }
         } catch (error) {
-          return mcpToolError(mcpToolFailure(error))
+          recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
+          return mcpToolError(mcpToolFailure(error, access.correlationId))
         }
       },
     )
@@ -243,62 +354,78 @@ export function createAeMcpServer(
 
 type McpRequestOptions = Readonly<{
   actions?: readonly AnyAction[]
-  authenticate?: NonNullable<Parameters<typeof authenticateCustomerRequestAgent>[0]>['authenticate']
+  authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  timing?: ActionTimingSink
+  operationInvokeService?: OperationInvokeService
 }>
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
-  const actions = options.actions ?? listMcpActions()
-  const bounded = await boundedMcpRequest(request)
-  if (!bounded.ok) {
-    return problem({
-      status: 413,
-      kind: 'PAYLOAD_TOO_LARGE',
-      code: bounded.code,
-      detail: 'The MCP request body is too large.',
-    })
-  }
-  const boundedRequest = bounded.request
-  const protectedAction = await protectedActionForRequest(boundedRequest, actions)
-  if (protectedAction !== undefined) {
-    const requiredMode = requiredModeForAction(protectedAction)
-    const admitted = await authenticateCustomerRequestAgent({
-      ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-      requiredMode,
-    })
-    if (admitted.kind === 'refused') {
-      const base = resolveCanonicalBaseUrl(request).baseUrl
-      const challenge = requiredMode === 'inspect_only'
-        ? bearerChallenge(base)
-        : bearerModeChallenge(base, requiredMode)
-      return problem(
-        {
-          status: admitted.status,
-          kind: kindForStatus(admitted.status),
-          code: admitted.reason,
-          detail: admitted.reason === 'authentication_required'
-            ? 'Authentication required.'
-            : 'The provided API key does not carry the required scope.',
-        },
-        { Vary: 'Authorization', 'WWW-Authenticate': challenge },
-      )
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const actions = options.actions ?? listMcpActions()
+    const bounded = await boundedMcpRequest(request)
+    if (!bounded.ok) {
+      return withRequestCorrelationHeader(problem({
+        status: 413,
+        kind: 'PAYLOAD_TOO_LARGE',
+        code: bounded.code,
+        detail: 'The MCP request body is too large.',
+      }), correlationId)
     }
-    const server = createAeMcpServer(boundedRequest, actions, {
-      tier: 'authenticated',
-      authorityMode: admitted.principal.authorityMode,
-      principalId: admitted.principal.principalId,
-    })
-    return await serveMcp(server, boundedRequest)
-  }
-  const server = createAeMcpServer(boundedRequest, actions, { tier: 'anonymous' })
-  return await serveMcp(server, boundedRequest)
+    const boundedRequest = bounded.request
+    const protectedAction = await actionRequiringAuthenticationForRequest(boundedRequest, actions)
+    if (protectedAction !== undefined) {
+      const requiredMode = requiredModeForAction(protectedAction)
+      const requiredScope = protectedAction.credentialAdmission?.scope
+      const admitted = await authenticateAgentAccess({
+        ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+        ...(options.authenticate === undefined
+          ? { resolvePrincipal: resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId) }
+          : {}),
+        ...(requiredScope === undefined ? {} : { requiredScope }),
+        requiredMode,
+      })
+      if (admitted.kind === 'refused') {
+        const base = resolveCanonicalBaseUrl(request).baseUrl
+        const challenge = requiredScope !== undefined
+          ? bearerChallenge(base, requiredScope)
+          : requiredMode === 'inspect_only'
+            ? bearerChallenge(base)
+            : bearerModeChallenge(base, requiredMode)
+        const failure = gatewayFailureToProblem({ kind: 'refused', code: admitted.reason, retryable: false })
+        return withRequestCorrelationHeader(problem(
+          {
+            ...failure,
+            status: admitted.status,
+            detail: admitted.reason === 'authentication_required'
+              ? 'Authentication required.'
+              : 'The provided API key does not carry the required scope.',
+          },
+          { Vary: 'Authorization', 'WWW-Authenticate': challenge },
+        ), correlationId)
+      }
+      const server = createAeMcpServer(boundedRequest, actions, {
+        tier: 'authenticated',
+        authorityMode: admitted.principal.authorityMode,
+        principalId: admitted.principal.principalId,
+        principal: admitted.principal,
+        correlationId,
+        ...(options.timing === undefined ? {} : { timing: options.timing }),
+        operationInvokeService: options.operationInvokeService
+          ?? createOperationInvokeService(boundedRequest, bounded.bodyText),
+      })
+      return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
+    }
+    const server = createAeMcpServer(boundedRequest, actions, { tier: 'anonymous', correlationId })
+    return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
+  })
 }
 
 type BoundedMcpRequest =
-  | Readonly<{ ok: true; request: Request }>
+  | Readonly<{ ok: true; request: Request; bodyText: string }>
   | Extract<BoundedRequestTextResult, { ok: false }>
 
 async function boundedMcpRequest(request: Request): Promise<BoundedMcpRequest> {
-  if (request.method !== 'POST') return { ok: true, request }
+  if (request.method !== 'POST') return { ok: true, request, bodyText: '' }
   const init = {
     method: request.method,
     headers: request.headers,
@@ -307,10 +434,10 @@ async function boundedMcpRequest(request: Request): Promise<BoundedMcpRequest> {
   if (!boundedBody.ok) return boundedBody
   return {
     ok: true,
+    bodyText: boundedBody.text,
     request: new Request(request.url, { ...init, body: boundedBody.text }),
   }
 }
-
 
 async function serveMcp(server: McpServer, request: Request): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true })
@@ -318,24 +445,34 @@ async function serveMcp(server: McpServer, request: Request): Promise<Response> 
   return await transport.handleRequest(request)
 }
 
-async function protectedActionForRequest(request: Request, actions: readonly AnyAction[]): Promise<AnyAction | undefined> {
+async function actionRequiringAuthenticationForRequest(
+  request: Request,
+  actions: readonly AnyAction[],
+): Promise<AnyAction | undefined> {
   if (request.method !== 'POST') return undefined
   try {
     const boundedBody = await readBoundedRequestJson(request.clone(), MAX_MCP_REQUEST_BODY_BYTES)
-    if (!boundedBody.ok) return undefined
+    if (!boundedBody.ok || !isRecord(boundedBody.value)) return undefined
     const body = boundedBody.value
-    if (typeof body !== 'object' || body === null || !('params' in body)) return undefined
-    const params = body.params
-    if (typeof params !== 'object' || params === null || !('name' in params) || typeof params.name !== 'string') return undefined
-    const action = actions.find((candidate) => mcpToolName(candidate) === params.name)
-    return action !== undefined && !action.readOnly ? action : undefined
+    const params = isRecord(body.params) ? body.params : undefined
+    if (typeof params?.name === 'string') {
+      const action = actions.find((candidate) => mcpToolName(candidate) === params.name)
+      if (action !== undefined && (action.credentialAdmission !== undefined || !action.readOnly)) return action
+    }
+    if (
+      body.method === 'tools/list'
+      && (request.headers.get('authorization')?.trim().length ?? 0) > 0
+    ) {
+      return actions.find((candidate) => candidate.credentialAdmission !== undefined)
+    }
+    return undefined
   } catch {
     return undefined
   }
 }
 
 function requiredModeForAction(action: AnyAction): CustomerRequestAuthorityMode {
-  if (action.readOnly) return 'inspect_only'
+  if (action.credentialAdmission?.authority === 'descriptor_classified' || action.readOnly) return 'inspect_only'
   const requirement = action.invocationContract?.authorityRequirement
   if (requirement === 'principal' || requirement === 'caller') return 'approve_each'
   if (requirement === 'owner' || requirement === 'admin') return 'bounded_mandate'

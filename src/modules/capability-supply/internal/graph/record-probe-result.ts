@@ -1,23 +1,22 @@
+import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { bindingIntegrityIsValid } from '../binding/integrity'
-import { contractRefFromRow } from '../offering/registration'
+import {
+  connectionAuthoritySnapshotMatches,
+  connectionAuthoritySnapshotsEqual,
+} from '../binding'
 import { offeringIntegrityIsValid } from '../offering/integrity'
-import { publicationLifecycle, type PublicationLifecycle } from '../publication/lifecycle'
+import { contractRefFromRow } from '../offering/registration'
+import {
+  publicationLifecycle,
+  type CapabilityReadinessOutcome,
+  type PublicationLifecycle,
+} from '../publication/lifecycle'
+import { validEvidenceRefs } from '../shared/command-envelope'
 
 import type { CapabilityGraphPorts } from './ports'
 import { probeTargetDigest } from './probe-digest'
 
-export type ProbeOutcome =
-  | 'healthy'
-  | 'credential_unavailable'
-  | 'credential_rejected'
-  | 'target_not_public'
-  | 'transport_unreachable'
-  | 'http_redirect'
-  | 'http_4xx'
-  | 'http_5xx'
-  | 'response_content_type_invalid'
-  | 'response_too_large'
-  | 'response_invalid'
+export type ProbeOutcome = CapabilityReadinessOutcome
 
 export type RecordCapabilityProbeResult =
   | Readonly<{
@@ -37,16 +36,22 @@ export async function recordCapabilityProbeResult(
     publicationRef: string
     expectedRevision: number
     targetDigest: string
+    requestDigest: string
+    responseStatus?: number
+    responseContentType?: string
+    responseDigest?: string
     outcome: ProbeOutcome
+    credentialState: 'ready' | 'unavailable'
+    healthState: 'healthy' | 'unhealthy'
+    observedAt: number
+    validUntil: number
+    evidenceRefs: readonly string[]
     now?: number
   }>,
 ): Promise<RecordCapabilityProbeResult> {
-  const publication = await ports.loadPublicationAtRevision(
-    args.publicationRef,
-    args.expectedRevision,
-  )
+  const publication = await ports.loadPublicationAtRevision(args.publicationRef, args.expectedRevision)
   if (publication === null || publication.disposition !== 'current') {
-    return { kind: 'refused' as const, reason: 'revision_changed' as const }
+    return { kind: 'refused', reason: 'revision_changed' }
   }
   const [binding, offering, business, contract] = await Promise.all([
     ports.loadBindingByBindingId(publication.bindingId),
@@ -57,6 +62,9 @@ export async function recordCapabilityProbeResult(
   const currentConnection = binding?.authority.kind === 'provider_connection'
     ? await ports.loadProviderConnection(binding.authority.connectionRef)
     : undefined
+  const now = args.now ?? Date.now()
+  const expectedHealthState = args.outcome === 'healthy' ? 'healthy' : 'unhealthy'
+  const expectedCredentialState = args.outcome === 'credential_unavailable' || args.outcome === 'credential_rejected' ? 'unavailable' : 'ready'
   if (
     binding === null
     || offering === null
@@ -67,40 +75,67 @@ export async function recordCapabilityProbeResult(
     || binding.conformance !== 'conformant'
     || !offeringIntegrityIsValid(offering)
     || !bindingIntegrityIsValid(binding)
-    || publicationLifecycle(publication, offering, binding, args.now ?? Date.now(), currentConnection).state !== 'active'
+    || args.healthState !== expectedHealthState
+    || args.credentialState !== expectedCredentialState
+    || !validEvidenceRefs(args.evidenceRefs)
+    || (binding.authority.kind === 'provider_connection' && (
+      !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
+        businessId: String(offering.businessId),
+        operationRef: publication.operationRef,
+        adapterId: binding.adapterId,
+        now,
+      })
+      || !connectionAuthoritySnapshotsEqual(publication.connectionAuthority, binding.connectionAuthority)
+    ))
     || probeTargetDigest(publication, offering, binding) !== args.targetDigest
+    || !isCanonicalDigest(args.targetDigest)
+    || !isCanonicalDigest(args.requestDigest)
+    || !Number.isSafeInteger(args.observedAt)
+    || args.observedAt > now + 60_000
+    || !Number.isSafeInteger(args.validUntil)
+    || args.validUntil <= args.observedAt
+    || args.validUntil > args.observedAt + 24 * 60 * 60_000
+    || (args.responseStatus !== undefined
+      && (!Number.isSafeInteger(args.responseStatus) || args.responseStatus < 100 || args.responseStatus > 599))
+    || (args.responseContentType !== undefined && args.responseContentType.length > 200)
+    || (args.responseDigest !== undefined && !isCanonicalDigest(args.responseDigest))
   ) {
-    return { kind: 'refused' as const, reason: 'target_changed' as const }
+    return { kind: 'refused', reason: 'target_changed' }
   }
-  const now = args.now ?? Date.now()
-  const healthy = args.outcome === 'healthy'
-  const credentialState = args.outcome === 'credential_unavailable'
-    || args.outcome === 'credential_rejected'
-    ? 'unavailable' as const
-    : 'ready' as const
-  const healthState = healthy ? 'healthy' as const : 'unhealthy' as const
-  const validUntil = now + (healthy ? 5 * 60_000 : 60_000)
   await ports.patchProbeReadiness(publication.id, {
-    credentialState,
-    healthState,
+    credentialState: args.credentialState,
+    healthState: args.healthState,
     ...(binding.connectionAuthority === undefined
       ? {}
       : { connectionAuthority: binding.connectionAuthority }),
-    readinessObservedAt: now,
-    readinessValidUntil: validUntil,
-    readinessEvidenceRefs: [`probe:${args.outcome}`],
+    readinessTargetDigest: args.targetDigest,
+    readinessRequestDigest: args.requestDigest,
+    ...(args.responseStatus === undefined ? {} : { readinessResponseStatus: args.responseStatus }),
+    ...(args.responseContentType === undefined ? {} : { readinessResponseContentType: args.responseContentType }),
+    ...(args.responseDigest === undefined ? {} : { readinessResponseDigest: args.responseDigest }),
+    readinessOutcome: args.outcome,
+    readinessObservedAt: args.observedAt,
+    readinessValidUntil: args.validUntil,
+    readinessEvidenceRefs: [...args.evidenceRefs],
     updatedAt: now,
   })
+  const updated = {
+    ...publication,
+    credentialState: args.credentialState,
+    healthState: args.healthState,
+    readinessTargetDigest: args.targetDigest,
+    readinessRequestDigest: args.requestDigest,
+    ...(args.responseStatus === undefined ? {} : { readinessResponseStatus: args.responseStatus }),
+    ...(args.responseContentType === undefined ? {} : { readinessResponseContentType: args.responseContentType }),
+    ...(args.responseDigest === undefined ? {} : { readinessResponseDigest: args.responseDigest }),
+    readinessOutcome: args.outcome,
+    readinessObservedAt: args.observedAt,
+    readinessValidUntil: args.validUntil,
+  }
   return {
-    kind: 'observed' as const,
+    kind: 'observed',
     publicationRef: publication.publicationRef,
     revision: publication.revision,
-    lifecycle: publicationLifecycle({
-      ...publication,
-      credentialState,
-      healthState,
-      readinessObservedAt: now,
-      readinessValidUntil: validUntil,
-    }, offering, binding, now, currentConnection),
+    lifecycle: publicationLifecycle(updated, offering, binding, now, currentConnection),
   }
 }

@@ -28,7 +28,7 @@ crons.interval(
 crons.interval(
   'cleanup expired OAuth grants',
   { hours: 1 },
-  internal.customerRequestAgentOAuth.cleanupExpiredOAuthGrants,
+  internal.agentAccessOAuth.cleanupExpiredOAuthGrants,
   {}
 )
 

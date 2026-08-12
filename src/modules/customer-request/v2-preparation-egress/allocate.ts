@@ -317,24 +317,10 @@ function buildCanonicalClaimMaterial(input: Readonly<{
     ?? supply.publication.publicationRef
   const decisionDigest = authorityReservation?.reservationDigest
     ?? canonicalDigest(acceptedBasis)
-  const targetDigest = canonicalDigest({
-    publication: {
-      publicationRef: supply.publication.publicationRef,
-      revision: supply.publication.revision,
-      operationRef: supply.publication.operationRef,
-      admittedOperation: supply.publication.admittedOperation,
-    },
-    binding: {
-      bindingId: supply.binding.bindingId,
-      registrationHash: supply.binding.registrationHash,
-      ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
-      configDigest: input.operationMaterial.adapterConfigDigest,
-    },
-    adapter: {
-      adapterId: input.operationMaterial.adapterId,
-      configJson: input.operationMaterial.adapterConfigJson,
-      endpointUrl: input.operationMaterial.endpointUrl,
-    },
+  const targetDigest = targetDigestForSupply({
+    supply,
+    operationMaterial: input.operationMaterial,
+    connectionAuthority,
   })
   const lineage = preparation.lineage
   const recordedAt = new Date(input.now).toISOString()
@@ -381,6 +367,53 @@ function buildCanonicalClaimMaterial(input: Readonly<{
     },
     recordedAt,
   } satisfies CustomerRequestCanonicalClaimMaterial
+}
+
+export function preparationEgressTargetDigest(input: Readonly<{
+  supply: EligibleSupply
+  operationMaterial: Readonly<{
+    adapterId: string
+    adapterConfigDigest: string
+    adapterConfigJson: string
+    endpointUrl: string
+  }>
+}>): string {
+  return targetDigestForSupply({
+    ...input,
+    connectionAuthority: connectionAuthorityForSupply(input.supply),
+  })
+}
+
+function targetDigestForSupply(input: Readonly<{
+  supply: EligibleSupply
+  operationMaterial: Readonly<{
+    adapterId: string
+    adapterConfigDigest: string
+    adapterConfigJson: string
+    endpointUrl: string
+  }>
+  connectionAuthority: EligibleSupply['binding']['connectionAuthority']
+}>): string {
+  const { supply, operationMaterial, connectionAuthority } = input
+  return canonicalDigest({
+    publication: {
+      publicationRef: supply.publication.publicationRef,
+      revision: supply.publication.revision,
+      operationRef: supply.publication.operationRef,
+      admittedOperation: supply.publication.admittedOperation,
+    },
+    binding: {
+      bindingId: supply.binding.bindingId,
+      registrationHash: supply.binding.registrationHash,
+      ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
+      configDigest: operationMaterial.adapterConfigDigest,
+    },
+    adapter: {
+      adapterId: operationMaterial.adapterId,
+      configJson: operationMaterial.adapterConfigJson,
+      endpointUrl: operationMaterial.endpointUrl,
+    },
+  })
 }
 
 function connectionAuthorityForSupply(

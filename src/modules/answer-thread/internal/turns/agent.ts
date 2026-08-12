@@ -2,16 +2,28 @@ import {
   buildAnswerTurnProblem,
   collectAllowedSlugsFromToolResults,
   filterKeylessDataAskCandidates,
+  type AnswerSnapshot,
+  type AnswerToolUseAgentCheckpoint,
   type AnswerWorkStep,
 } from '@/modules/answer/public'
+import {
+  operationInvokeResultSchema,
+  type OperationInvokeResult,
+} from '@/modules/capability-execution/operation-invoke'
 import {
   isAnswerToolUseAgentError,
   runAnswerToolUseAgent,
 } from '@/modules/answer/server'
 
-import type { AnswerToolCallRecord } from '../../answer-thread.schema'
+import type {
+  AnswerToolCallRecord,
+  AnswerTurnOperationArtifacts,
+} from '../../answer-thread.schema'
 import type { AnswerToolPolicy } from '../answer-response-planner'
-import { answerRunGateFromAnswerGate, finalizeAnswerTurnSnapshot } from '../answer-turn-safety'
+import {
+  answerRunGateFromAnswerGate,
+  finalizeAnswerTurnSnapshot,
+} from '../answer-turn-safety'
 import { toolCallRecordsToGateInput } from '../tool-runner'
 import { safeWorkLogUserText } from '../public-worklog'
 import {
@@ -28,12 +40,14 @@ import {
 
 type AgentInput = Parameters<typeof runAnswerToolUseAgent>[0]
 
-export const agentTurnPath: TurnPath<[
-  AgentInput,
-  readonly AnswerToolCallRecord[],
-  StreamPlanMode | undefined,
-  AnswerToolPolicy | undefined,
-]> = {
+export const agentTurnPath: TurnPath<
+  [
+    AgentInput,
+    readonly AnswerToolCallRecord[],
+    StreamPlanMode | undefined,
+    AnswerToolPolicy | undefined,
+  ]
+> = {
   id: 'agent',
   async run(ctx, agentInput, seedToolCalls = [], planMode, toolPolicy) {
     return streamAgentTurn(
@@ -42,9 +56,11 @@ export const agentTurnPath: TurnPath<[
         ? agentInput
         : {
             ...agentInput,
-            maxToolCalls: toolPolicy.kind === 'registry.search' || toolPolicy.kind === 'registry.detail'
-              ? toolPolicy.maxCalls
-              : 0,
+            maxToolCalls:
+              toolPolicy.kind === 'registry.search' ||
+              toolPolicy.kind === 'registry.detail'
+                ? toolPolicy.maxCalls
+                : 0,
           },
       seedToolCalls,
       planMode,
@@ -62,12 +78,10 @@ async function streamAgentTurn(
     agentInput.query,
     agentInput.keylessDataAsk,
   )
-  const capabilityCandidates = keylessDataAsk?.kind === 'resolved'
-    ? keylessDataAsk.candidates
-    : []
-  const selectedCapability = keylessDataAsk?.kind === 'resolved'
-    ? keylessDataAsk.selected
-    : undefined
+  const capabilityCandidates =
+    keylessDataAsk?.kind === 'resolved' ? keylessDataAsk.candidates : []
+  const selectedCapability =
+    keylessDataAsk?.kind === 'resolved' ? keylessDataAsk.selected : undefined
   const capabilityName = selectedCapability?.name.trim() || 'selected operation'
   const hasCapabilityCandidates = capabilityCandidates.length > 0
   const recoveryStartedAt = Date.now()
@@ -76,16 +90,23 @@ async function streamAgentTurn(
       id: 'capability.execute',
       phase: 'read',
       status: 'running',
-      title: selectedCapability === undefined ? 'Choosing a live capability' : `Running ${capabilityName}`,
-      summary: selectedCapability === undefined
-        ? 'Choosing from the matching published operations.'
-        : 'Running the selected operation.',
+      title:
+        selectedCapability === undefined
+          ? 'Choosing a live capability'
+          : `Running ${capabilityName}`,
+      summary:
+        selectedCapability === undefined
+          ? 'Choosing from the matching published operations.'
+          : 'Running the selected operation.',
       startedAtMs: recoveryStartedAt,
     })
     ctx.send({
       type: 'thinking',
       step: 'read',
-      label: selectedCapability === undefined ? 'Choosing a live capability…' : `Running ${capabilityName}…`,
+      label:
+        selectedCapability === undefined
+          ? 'Choosing a live capability…'
+          : `Running ${capabilityName}…`,
     })
   } else if (agentInput.disableTools === true) {
     ctx.workLog.emit({
@@ -96,41 +117,78 @@ async function streamAgentTurn(
       summary: 'No extra search is needed for this follow-up.',
       completedAtMs: recoveryStartedAt,
     })
-    ctx.send({ type: 'thinking', step: 'search', label: 'Searching for matches…' })
+    ctx.send({
+      type: 'thinking',
+      step: 'search',
+      label: 'Searching for matches…',
+    })
   } else {
     ctx.workLog.emit({
       id: 'search.registry.recovery',
       phase: 'search',
       status: 'running',
       title: 'Trying another search',
-      summary: 'The first search did not settle the answer, so another search is underway.',
+      summary:
+        'The first search did not settle the answer, so another search is underway.',
       startedAtMs: recoveryStartedAt,
     })
-    ctx.send({ type: 'thinking', step: 'search', label: 'Searching for matches…' })
+    ctx.send({
+      type: 'thinking',
+      step: 'search',
+      label: 'Searching for matches…',
+    })
   }
 
-  const stopModelTiming = ctx.timings.start('model.agent_total', {
-    toolsEnabled: agentInput.disableTools !== true,
-    seedToolCalls: seedToolCalls.length,
+  let latestCheckpoint: AnswerToolUseAgentCheckpoint | undefined
+  const stopAgentTiming = ctx.timings.start('model.agent_total', {
+    hasCapabilityCandidates,
   })
+  let agentTimingStopped = false
+  const stopModelTiming = (
+    metadata?: Record<string, string | number | boolean | null>,
+  ): void => {
+    if (agentTimingStopped) return
+    agentTimingStopped = true
+    stopAgentTiming(metadata)
+  }
   try {
     const result = await runAnswerToolUseAgent({
       ...agentInput,
+      turnId: ctx.turnId,
+      ...(ctx.operationInvokeContext === undefined
+        ? {}
+        : {
+            operationInvokeContext: {
+              ...ctx.operationInvokeContext,
+              reservationKey: ctx.reservationKey,
+              generation: ctx.generation,
+            },
+          }),
       ...(keylessDataAsk === undefined ? {} : { keylessDataAsk }),
+      ...(ctx.resumeCheckpoint === undefined
+        ? {}
+        : { resumeCheckpoint: ctx.resumeCheckpoint }),
+      onToolCheckpoint: async (checkpoint) => {
+        latestCheckpoint = checkpoint
+        await ctx.persistCheckpoint?.(checkpoint)
+      },
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
-      harnessLoop: ctx.harness.loop,
       onModelRequest: (record) => {
         agentInput.onModelRequest?.(record)
         ctx.harness.loop.recordModelRequest(record)
       },
     })
+    ctx.timings.add(result.timings, { phase: 'agent' })
     stopModelTiming({
       providerCount: result.providers.length,
       toolCalls: result.toolCalls.length,
       gateOk: result.gate.ok,
     })
-    ctx.timings.add(result.timings, { phase: 'agent' })
-    const capabilityCalls = result.toolCalls.filter((call) => call.toolId === 'operation.execute')
+    const capabilityCalls = result.toolCalls.filter(
+      (call) =>
+        call.toolId === 'operation.execute' ||
+        call.toolId === 'operation.invoke',
+    )
     if (hasCapabilityCandidates) {
       if (capabilityCalls.length === 0) {
         ctx.workLog.emit({
@@ -145,18 +203,29 @@ async function streamAgentTurn(
       } else {
         capabilityCalls.forEach((call, index) => {
           const executedOperationRef = readExecutedOperationRef(call)
-          const executedCapabilityName = keylessDataAsk?.kind === 'resolved'
-            ? keylessDataAsk.descriptors.find(({ operationRef }) => operationRef === executedOperationRef)?.name.trim()
-            : undefined
+          const executedCapabilityName =
+            keylessDataAsk?.kind === 'resolved'
+              ? keylessDataAsk.descriptors
+                  .find(
+                    ({ operationRef }) => operationRef === executedOperationRef,
+                  )
+                  ?.name.trim()
+              : undefined
           const selectedCapabilityName = capabilityCandidates
             .find(({ operationRef }) => operationRef === executedOperationRef)
             ?.name.trim()
-          ctx.workLog.emit(buildCapabilityExecutionWorkStep(
-            executedCapabilityName || selectedCapabilityName || capabilityName,
-            call,
-            recoveryStartedAt,
-            index === 0 ? 'capability.execute' : `capability.execute.${index + 1}`,
-          ))
+          ctx.workLog.emit(
+            buildCapabilityExecutionWorkStep(
+              executedCapabilityName ||
+                selectedCapabilityName ||
+                capabilityName,
+              call,
+              recoveryStartedAt,
+              index === 0
+                ? 'capability.execute'
+                : `capability.execute.${index + 1}`,
+            ),
+          )
         })
       }
     } else if (agentInput.disableTools !== true) {
@@ -164,13 +233,18 @@ async function streamAgentTurn(
         id: 'search.registry.recovery',
         phase: 'search',
         status: result.toolCalls.length === 0 ? 'skipped' : 'complete',
-        title: result.toolCalls.length === 0
-          ? 'Using the first search result'
-          : 'Trying another search',
-        summary: result.toolCalls.length === 0
-          ? 'No extra search was needed.'
-          : describeProviderCount(result.providers.length, 'match'),
-        detailRows: buildRecoveryWorkStepDetailRows(result.toolCalls, result.providers.length),
+        title:
+          result.toolCalls.length === 0
+            ? 'Using the first search result'
+            : 'Trying another search',
+        summary:
+          result.toolCalls.length === 0
+            ? 'No extra search was needed.'
+            : describeProviderCount(result.providers.length, 'match'),
+        detailRows: buildRecoveryWorkStepDetailRows(
+          result.toolCalls,
+          result.providers.length,
+        ),
         relatedProviderSlugs: result.providers.map((provider) => provider.slug),
         startedAtMs: recoveryStartedAt,
         completedAtMs: Date.now(),
@@ -184,6 +258,7 @@ async function streamAgentTurn(
     if (!result.gate.ok) {
       const copyId = result.gate.copyId
       const errorProblem = buildAnswerTurnProblem(result.gate.code)
+      const operationArtifacts = readOperationArtifacts(result.snapshot)
       return {
         snapshot: undefined,
         toolCalls,
@@ -192,22 +267,27 @@ async function streamAgentTurn(
         errorCopyId: copyId,
         errorProblem,
         gate,
+        ...(operationArtifacts === undefined ? {} : { operationArtifacts }),
       }
     }
 
     emitReadAndCompareSteps(ctx.workLog, result.providers)
     const snapshot = {
       ...withFollowUpLayout(result.snapshot, ctx.priorTurnsCount, ctx.intent),
-      ...(hasCapabilityCandidates ? { layoutProfile: 'data_answer' as const } : {}),
+      ...(hasCapabilityCandidates
+        ? { layoutProfile: 'data_answer' as const }
+        : {}),
     }
     const finalized = finalizeAnswerTurnSnapshot({
       snapshot,
       allowedSlugs: result.allowedSlugs,
     })
     if (!finalized.ok) {
+      const operationArtifacts = readOperationArtifacts(result.snapshot)
       return {
         ...rejectBlockedSnapshot(toolCalls, result.allowedSlugs, finalized),
         modelRequests: result.modelRequests,
+        ...(operationArtifacts === undefined ? {} : { operationArtifacts }),
       }
     }
     const assembly = await ctx.emitOrDeferSnapshot(
@@ -215,7 +295,9 @@ async function streamAgentTurn(
       'agent',
       hasCapabilityCandidates
         ? { planMode: 'answer' }
-        : (planMode === undefined ? {} : { planMode }),
+        : planMode === undefined
+          ? {}
+          : { planMode },
     )
     return {
       snapshot: finalized.snapshot,
@@ -228,12 +310,40 @@ async function streamAgentTurn(
     }
   } catch (error) {
     stopModelTiming({ error: true })
+    const recoveryCheckpoint = latestCheckpoint ?? ctx.resumeCheckpoint
+    const recoveredToolCalls = recoveryCheckpoint?.toolCalls ?? []
+    const toolCalls = [
+      ...seedToolCalls,
+      ...resequenceToolCalls(recoveredToolCalls, seedToolCalls.length),
+    ]
+    const capabilityCalls = toolCalls.filter(
+      (call) =>
+        call.toolId === 'operation.execute' ||
+        call.toolId === 'operation.invoke',
+    )
     if (hasCapabilityCandidates) {
-      ctx.workLog.emit(buildCapabilityExecutionWorkStep(
-        capabilityName,
-        undefined,
-        recoveryStartedAt,
-      ))
+      if (capabilityCalls.length === 0) {
+        ctx.workLog.emit(
+          buildCapabilityExecutionWorkStep(
+            capabilityName,
+            undefined,
+            recoveryStartedAt,
+          ),
+        )
+      } else {
+        capabilityCalls.forEach((call, index) => {
+          ctx.workLog.emit(
+            buildCapabilityExecutionWorkStep(
+              capabilityName,
+              call,
+              recoveryStartedAt,
+              index === 0
+                ? 'capability.execute'
+                : `capability.execute.${index + 1}`,
+            ),
+          )
+        })
+      }
     } else {
       ctx.workLog.emit({
         id: 'search.registry.recovery',
@@ -249,13 +359,24 @@ async function streamAgentTurn(
     const errorProblem = buildAnswerTurnProblem(
       isAnswerToolUseAgentError(error) ? error.code : 'answer_turn_failed',
     )
+    const allowedSlugs = new Set([
+      ...(recoveryCheckpoint?.priorAllowedSlugs ?? []),
+      ...collectAllowedSlugsFromToolResults(
+        toolCallRecordsToGateInput(toolCalls),
+      ),
+    ])
+    const operationArtifacts = readOperationArtifacts(recoveryCheckpoint)
     return {
       snapshot: undefined,
-      toolCalls: [...seedToolCalls],
-      allowedSlugs: collectAllowedSlugsFromToolResults(toolCallRecordsToGateInput(seedToolCalls)),
+      toolCalls,
+      ...(recoveryCheckpoint === undefined
+        ? {}
+        : { modelRequests: recoveryCheckpoint.modelRequests }),
+      allowedSlugs,
       errorCopyId: copyId,
       errorProblem,
       gate: undefined,
+      ...(operationArtifacts === undefined ? {} : { operationArtifacts }),
     }
   }
 }
@@ -269,7 +390,37 @@ function resequenceToolCalls(
     seq: startSeq + index,
   }))
 }
-
+export function readOperationArtifacts(
+  source:
+    | AnswerSnapshot
+    | AnswerToolUseAgentCheckpoint
+    | AnswerTurnOperationArtifacts
+    | undefined,
+): AnswerTurnOperationArtifacts | undefined {
+  if (source === undefined) return undefined
+  if (
+    source.operationCandidates === undefined &&
+    source.operationCandidatesDigest === undefined &&
+    source.operationOutcome === undefined &&
+    source.operationSelection === undefined
+  ) {
+    return undefined
+  }
+  return {
+    ...(source.operationCandidates === undefined
+      ? {}
+      : { operationCandidates: source.operationCandidates }),
+    ...(source.operationCandidatesDigest === undefined
+      ? {}
+      : { operationCandidatesDigest: source.operationCandidatesDigest }),
+    ...(source.operationOutcome === undefined
+      ? {}
+      : { operationOutcome: source.operationOutcome }),
+    ...(source.operationSelection === undefined
+      ? {}
+      : { operationSelection: source.operationSelection }),
+  }
+}
 
 function buildRecoveryWorkStepDetailRows(
   toolCalls: readonly AnswerToolCallRecord[],
@@ -284,7 +435,14 @@ function buildRecoveryWorkStepDetailRows(
   }
 
   return [
-    ...(queries.length === 0 ? [] : [{ label: 'Searches tried', value: queries.map(safeWorkLogUserText).join(' -> ') }]),
+    ...(queries.length === 0
+      ? []
+      : [
+          {
+            label: 'Searches tried',
+            value: queries.map(safeWorkLogUserText).join(' -> '),
+          },
+        ]),
     { label: 'Matches found', value: String(providerCount) },
   ]
 }
@@ -297,54 +455,120 @@ function buildCapabilityExecutionWorkStep(
 ): AnswerWorkStep {
   let resultKind: string | undefined
   let resultReason: string | undefined
+  let invokeResult: OperationInvokeResult | undefined
   try {
-    const parsed = JSON.parse(call?.resultJson ?? '') as {
-      kind?: unknown
-      reason?: unknown
-      code?: unknown
+    const parsed = JSON.parse(call?.resultJson ?? '')
+    if (call?.toolId === 'operation.invoke') {
+      const validated = operationInvokeResultSchema.safeParse(parsed)
+      if (validated.success) {
+        invokeResult = validated.data
+        resultKind = validated.data.kind
+        resultReason =
+          validated.data.kind === 'pending'
+            ? `Retry after ${validated.data.retryAfterMs} ms.`
+            : validated.data.kind === 'needs_authority'
+              ? 'Required authority has not been granted.'
+              : validated.data.kind === 'reconciliation_required'
+                ? 'The outcome must be reconciled before relying on it.'
+                : validated.data.kind === 'refused'
+                  ? validated.data.code
+                  : undefined
+      }
+    } else {
+      const parsedRecord = parsed as {
+        kind?: unknown
+        reason?: unknown
+        code?: unknown
+      }
+      resultKind =
+        typeof parsedRecord.kind === 'string' ? parsedRecord.kind : undefined
+      resultReason =
+        typeof parsedRecord.reason === 'string'
+          ? parsedRecord.reason
+          : typeof parsedRecord.code === 'string'
+            ? parsedRecord.code
+            : undefined
     }
-    resultKind = typeof parsed.kind === 'string' ? parsed.kind : undefined
-    resultReason = typeof parsed.reason === 'string'
-      ? parsed.reason
-      : typeof parsed.code === 'string' ? parsed.code : undefined
   } catch {
     // A malformed or missing execution record is represented as an error step.
   }
 
-  const reason = resultReason === undefined ? undefined : safeWorkLogUserText(resultReason)
+  const reason =
+    resultReason === undefined ? undefined : safeWorkLogUserText(resultReason)
   const operationRef = readExecutedOperationRef(call)
   const detailRows = [
     ...(operationRef === undefined
       ? []
       : [{ label: 'Source', value: safeWorkLogUserText(operationRef) }]),
-    ...(reason === undefined && resultKind !== 'ok'
+    ...(resultKind === undefined
       ? []
-      : [{ label: 'Result', value: reason ?? 'Data returned' }]),
+      : [
+          {
+            label: 'Result',
+            value:
+              reason ??
+              (resultKind === 'ok' || resultKind === 'completed'
+                ? 'Data returned.'
+                : resultKind),
+          },
+        ]),
   ]
-  const status = resultKind === 'ok' ? 'complete' : 'error'
-  const summary = resultKind === 'ok'
-    ? 'Data returned.'
-    : resultKind === 'refused'
-      ? reason === undefined
-        ? 'The operation refused this request.'
-        : `The operation refused this request: ${reason}`
-      : resultKind === 'error'
-        ? reason === undefined
-          ? 'The operation did not complete.'
-          : `The operation did not complete: ${reason}`
-        : call === undefined
-          ? 'The operation did not run.'
-          : 'The operation returned no usable result.'
+  const status: AnswerWorkStep['status'] =
+    invokeResult === undefined
+      ? resultKind === 'ok'
+        ? 'complete'
+        : 'error'
+      : invokeResult.kind === 'completed'
+        ? 'complete'
+        : invokeResult.kind === 'pending'
+          ? 'running'
+          : invokeResult.kind === 'needs_authority'
+            ? 'skipped'
+            : invokeResult.kind === 'reconciliation_required'
+              ? 'stopped'
+              : 'error'
+  const summary =
+    invokeResult?.kind === 'completed'
+      ? 'Data returned.'
+      : invokeResult?.kind === 'pending'
+        ? 'The operation is still running.'
+        : invokeResult?.kind === 'needs_authority'
+          ? 'The operation is waiting for the required authority.'
+          : invokeResult?.kind === 'reconciliation_required'
+            ? 'The operation outcome is unknown and requires reconciliation.'
+            : resultKind === 'ok'
+              ? 'Data returned.'
+              : resultKind === 'refused'
+                ? reason === undefined
+                  ? 'The operation refused this request.'
+                  : `The operation refused this request: ${reason}`
+                : resultKind === 'error'
+                  ? reason === undefined
+                    ? 'The operation did not complete.'
+                    : `The operation did not complete: ${reason}`
+                  : call === undefined
+                    ? 'The operation did not run.'
+                    : 'The operation returned no usable result.'
+  const title =
+    status === 'complete'
+      ? `Ran ${capabilityName}`
+      : status === 'running'
+        ? `Running ${capabilityName}`
+        : status === 'skipped'
+          ? `Waiting for authority: ${capabilityName}`
+          : status === 'stopped'
+            ? `Reconciliation required: ${capabilityName}`
+            : `Tried ${capabilityName}`
 
   return {
     id: stepId,
     phase: 'read',
     status,
-    title: `${status === 'complete' ? 'Ran' : 'Tried'} ${capabilityName}`,
+    title,
     summary,
     ...(detailRows.length === 0 ? {} : { detailRows }),
     startedAtMs,
-    completedAtMs: Date.now(),
+    ...(status === 'running' ? {} : { completedAtMs: Date.now() }),
   }
 }
 
@@ -357,10 +581,16 @@ function readToolCallQuery(call: AnswerToolCallRecord): string {
   }
 }
 
-function readExecutedOperationRef(call: AnswerToolCallRecord | undefined): string | undefined {
+function readExecutedOperationRef(
+  call: AnswerToolCallRecord | undefined,
+): string | undefined {
   try {
-    const parsed = JSON.parse(call?.inputJson ?? '') as { operationRef?: unknown }
-    return typeof parsed.operationRef === 'string' ? parsed.operationRef : undefined
+    const parsed = JSON.parse(call?.inputJson ?? '') as {
+      operationRef?: unknown
+    }
+    return typeof parsed.operationRef === 'string'
+      ? parsed.operationRef
+      : undefined
   } catch {
     return undefined
   }

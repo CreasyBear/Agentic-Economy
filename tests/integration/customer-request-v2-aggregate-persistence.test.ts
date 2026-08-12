@@ -172,8 +172,8 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       routeGenerationRef: routeGeneration.generationRef,
     })
     if (current.kind !== 'current') throw new Error('stored aggregate missing')
-    expect(current.aggregate.evaluation.candidates.find(({ publicationRef }) => (
-      publicationRef === publication.publicationRef
+    expect(current.aggregate.evaluation.candidates.find((candidate) => (
+      candidate.publicationRef === publication.publicationRef
     ))?.readinessValidUntil).toBe(compiledReadiness)
   })
 

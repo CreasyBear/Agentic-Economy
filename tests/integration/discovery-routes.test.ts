@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
-import {
-  createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
-} from '@/modules/discovery/public'
-import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
+import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
+import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
 
@@ -66,7 +64,8 @@ describe('discovery route handlers', () => {
   it('serves the explicit local AE-hosted UCP fallback manifest with route-safe headers', async () => {
     const response = handleUcpManifestRequest(
       new Request('https://ae.example/parramatta-emergency-plumbing/ucp'),
-      'parramatta-emergency-plumbing'
+      'parramatta-emergency-plumbing',
+      createFixtureDiscoverySourceState(),
     )
     const body = await response.json()
 
@@ -99,7 +98,8 @@ describe('discovery route handlers', () => {
   it('returns an explicit local not-found shape for absent or non-public slugs', async () => {
     const response = handleUcpManifestRequest(
       new Request('https://ae.example/missing-business/ucp'),
-      'missing-business'
+      'missing-business',
+      createFixtureDiscoverySourceState(),
     )
     const body = await response.json()
 

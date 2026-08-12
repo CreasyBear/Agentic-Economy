@@ -124,6 +124,17 @@ describe('published operation materialization', () => {
       consequenceClass: 'communication',
     })
   })
+  it('binds runtime environment into material identity', () => {
+    const packet = buildDevelopmentPublishedOperationEvidence()
+    const production = materializePublishedOperation({
+      ...packet.sourceMaterial,
+      publication: { ...packet.sourceMaterial.publication, runtimeEnvironment: 'production' },
+    })
+
+    expect(packet.operation.runtimeEnvironment).toBe('sandbox')
+    expect(production.runtimeEnvironment).toBe('production')
+    expect(production.materialDigest).not.toBe(packet.operation.materialDigest)
+  })
 
   it('rejects a caller attempt to widen the closed operation input', () => {
     const packet = buildDevelopmentPublishedOperationEvidence()
@@ -200,6 +211,7 @@ describe('published operation materialization', () => {
     }
     await expect(invokeRouteTransport(invocation, {
       readProviderConnectionCredentialRef: providerCredentialReader(packet.operation),
+      validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
       send,
       resolveCredential: () => 'mock-credential',
       ...preparedX402Custody(async () => 'mock:payment-signature'),
@@ -210,7 +222,7 @@ describe('published operation materialization', () => {
   it.each(['GET', 'POST'] as const)(
     'carries imported x402 %s through admission, materialization and runtime',
     async (method) => {
-      const operation = buildImportedOperation(method)
+      const operation = await buildImportedOperation(method)
       const send = vi.fn(async (url: URL, init?: { method?: string; body?: string }) => {
         expect(init?.method).toBe(method)
         if (method === 'GET') {
@@ -246,6 +258,7 @@ describe('published operation materialization', () => {
         },
         inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
       }, {
+        validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
         readProviderConnectionCredentialRef: providerCredentialReader(operation),
         send,
         resolveCredential: () => 'mock-credential',
@@ -309,11 +322,11 @@ describe('published operation materialization', () => {
   })
 })
 
-function buildImportedOperation(method: 'GET' | 'POST') {
+async function buildImportedOperation(method: 'GET' | 'POST') {
   const base = buildDevelopmentPublishedOperationEvidence()
   const source = base.sourceMaterial
   const { contractFormat: _format, inputSchema, outputSchema, ref: _ref, ...metadata } = source.contract
-  const imported = importX402Capability({
+  const imported = await importX402Capability({
     kind: 'x402',
     resource: {
       resourceUrl: source.binding.endpointUrl,

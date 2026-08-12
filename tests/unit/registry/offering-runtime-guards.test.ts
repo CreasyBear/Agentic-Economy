@@ -77,8 +77,11 @@ function nativeProjection(): BusinessSupplyProjection {
       slug: 'native',
       name: 'Native Co',
       category: 'Advisory',
-      suburb: 'Perth',
-      stateTerritory: 'WA',
+      businessContext: {
+        kind: 'local_human',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+      },
       publicUrl: '/native',
       trustTier: 'claimed',
     },

@@ -4,9 +4,6 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readPublicLlmsTxt } from '@/modules/discovery/discovery.functions'
-import {
-  readFixtureLlmsTxt,
-} from '@/modules/discovery/public'
 
 export const Route = createFileRoute('/llms.txt')({
   server: {
@@ -34,12 +31,3 @@ export async function handleDurableLlmsTxtRequest(request: Request): Promise<Res
   return discoveryTextResponse(result.body, 'text/plain; charset=utf-8')
 }
 
-export function handleLlmsTxtRequest(request: Request): Response {
-  const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
-  const result = readFixtureLlmsTxt({
-    canonicalBaseUrl,
-    routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || canonicalBaseUrl,
-  })
-
-  return discoveryTextResponse(result.body, 'text/plain; charset=utf-8')
-}

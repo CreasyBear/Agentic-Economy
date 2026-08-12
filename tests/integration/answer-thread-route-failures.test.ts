@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { handleGetAnswerThreadRequest, handleDeleteAnswerThreadRequest } from '@/routes/api.answer.threads.$threadId'
 import { handleListAnswerThreadsRequest } from '@/routes/api.answer.threads'
 import {
@@ -11,6 +12,7 @@ import {
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../helpers/answer-thread-test-port'
+import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
 describe('answer thread route failure boundaries', () => {
   afterEach(() => {
@@ -156,6 +158,63 @@ describe('answer thread route failure boundaries', () => {
       expect(await response.json()).toMatchObject({ threadId: 'thread-1', revoked: false })
     } finally {
       resetRevokePort()
+    }
+  })
+
+  it('durably finalizes a thrown stream before emitting its terminal error', async () => {
+    const store = createAnswerThreadTestStore()
+    const resetPort = installAnswerThreadTestPort(store)
+    const body = JSON.stringify({ query: 'businesses in Perth' })
+    const request = () => new Request('https://ae.example/api/answer/turn', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-AE-Turn-Key': 'route-failure-terminal-error',
+        cookie: sessionCookieHeader('owner-terminal-error'),
+      },
+      body,
+    })
+    const stream = async () => {
+      throw new Error('stream exploded')
+    }
+
+    try {
+      const firstResponse = await handleAnswerTurnRequest(request(), {
+        stream,
+        admit: async () => ({ ok: true }),
+      })
+      const firstFrames = await readAnswerTurnStream(firstResponse)
+      expect(firstFrames.at(-1)?.event).toMatchObject({
+        type: 'error',
+        problem: { code: 'answer_turn_failed' },
+      })
+
+      const reservation = [...store.reservations.values()][0]
+      expect(reservation).toMatchObject({ state: 'finalized', finalStatus: 'error' })
+      const reload = await handleGetAnswerThreadRequest(
+        new Request(`https://ae.example/api/answer/threads/${reservation?.threadId}`, {
+          headers: { cookie: sessionCookieHeader('owner-terminal-error') },
+        }),
+        reservation?.threadId ?? '',
+      )
+      expect(reload.status).toBe(200)
+      expect(await reload.json()).toMatchObject({
+        threadId: reservation?.threadId,
+        turns: [{ turnId: reservation?.turnId, status: 'error' }],
+      })
+
+      const replayResponse = await handleAnswerTurnRequest(request(), {
+        stream,
+        admit: async () => ({ ok: true }),
+      })
+      const replayFrames = await readAnswerTurnStream(replayResponse)
+      expect(replayFrames.at(-1)?.event).toMatchObject({
+        type: 'error',
+        problem: { code: 'answer_turn_failed' },
+      })
+      expect(store.turns.size).toBe(1)
+    } finally {
+      resetPort()
     }
   })
 })

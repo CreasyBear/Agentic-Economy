@@ -176,6 +176,14 @@ export const preparedActionV2Value = v.object({
     responseDigest: v.string(), outputDigest: v.string(), output: v.any(), // runtime-validated JsonValue boundary
     evidence: v.array(preparedActionEvidenceV2Value),
   }),
+  pricingConfig: v.object({
+    version: v.literal('pricing:v2'), unit: v.literal('call'), paidAmount: exactAmountValue,
+    freeTier: v.optional(v.object({
+      maxCalls: v.number(),
+      window: v.union(v.literal('day'), v.literal('month')),
+    })),
+  }),
+  priceDigest: v.string(),
   price: preparedActionPriceV2Value,
   materialTerms: v.array(v.object({ termId: v.string(), label: v.string(), value: v.string() })),
   commercialRelationship: v.object({
@@ -208,6 +216,14 @@ export const preparedActionV2Value = v.object({
     offeringRegistrationEvidenceRefs: v.array(v.string()),
     bindingId: v.string(), bindingRegistrationHash: v.string(),
     bindingRegistrationEvidenceRefs: v.array(v.string()),
+    pricingConfig: v.object({
+      version: v.literal('pricing:v2'), unit: v.literal('call'), paidAmount: exactAmountValue,
+      freeTier: v.optional(v.object({
+        maxCalls: v.number(),
+        window: v.union(v.literal('day'), v.literal('month')),
+      })),
+    }),
+    priceDigest: v.string(),
     price: preparedActionPriceV2Value,
     materialTerms: v.array(v.object({ termId: v.string(), label: v.string(), value: v.string() })),
     commercialRelationship: v.object({
@@ -572,6 +588,7 @@ export const requestEvaluationCandidateV2Value = v.object({
   offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
   publicationRef: v.optional(v.string()), publicationRevision: v.optional(v.number()), readinessValidUntil: v.optional(v.number()),
   price: v.optional(registeredPriceV2Value),
+  priceDigest: v.optional(v.string()),
   // Optional only for immutable Request revisions written before recommendation integrity was source-owned.
   commercialRelationship: v.optional(commercialRelationshipV2Value),
   // Optional only for immutable Request revisions written before RoutePlan cancellation was bound.
@@ -622,7 +639,7 @@ const routePlanV2Value = v.object({
     contractRef: capabilityContractRefV2Value, offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
     publicationRef: v.string(), publicationRevision: v.number(),
     resolvedInputs: v.array(requestFactV2Value), deferredInputs: v.array(actionInputMappingV2Value),
-    price: registeredPriceV2Value,
+    price: registeredPriceV2Value, priceDigest: v.string(),
     // Optional only for immutable RoutePlan generations written before recommendation integrity was source-owned.
     commercialRelationship: v.optional(commercialRelationshipV2Value),
     dataUse: v.array(v.object({
@@ -829,15 +846,7 @@ export const customerRequestV2StoredAggregateValue = v.union(
 )
 
 export const customerRequestV2Tables = {
-  customerRequestAgentPrincipals: defineTable({
-    principalId: v.string(), ownerId: v.string(), ownerTokenIdentifier: v.optional(v.string()),
-    credentialId: v.string(), scopes: v.array(v.string()),
-    recordedAt: v.number(), lastSeenAt: v.number(),
-  })
-    .index('by_principalId', ['principalId'])
-    .index('by_credentialId', ['credentialId'])
-    .index('by_ownerId', ['ownerId'])
-    .index('by_ownerId_and_lastSeenAt', ['ownerId', 'lastSeenAt']),
+
 
   customerRequestV2Heads: defineTable({
     requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), currentRevision: v.number(),

@@ -7,6 +7,8 @@ import {
 } from '@/lib/server/convex-source'
 import {
   createSourceWriteAdmission,
+  sourceWriteCommandDigest,
+  sourceWriteRequestFromAdmission,
   type SourceWriteAdmission,
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
@@ -26,6 +28,7 @@ type SourceWriteFields = Readonly<{
   operationKey: string
   correlationId: string
   sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
 }>
 
 export type ConvexActionInvocationDurablePortOptions = Readonly<{
@@ -48,15 +51,24 @@ export async function createConvexActionInvocationDurablePort<Result extends Act
   const envOptions = options.env === undefined ? {} : { env: options.env }
   const transport = options.transport ?? createPublicSourceTransport(envOptions)
   const request = options.request
-  const sourceWrite = (operationKey: string, correlationId: string): SourceWriteAdmission => (
-    createSourceWriteAdmission({
+  const sourceWriteFor = async (
+    command: Readonly<{ operationKey: string; correlationId: string }>,
+  ): Promise<SourceWriteFields> => {
+    const sourceWrite = await createSourceWriteAdmission({
       ...envOptions,
       request,
       scope: 'protected_action',
-      operationKey,
-      correlationId,
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
     })
-  )
+    return {
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    }
+  }
   const transactMutation = sourceMutation<
     Omit<PersistControlCommand<Result>, 'canonicalCommandMaterial'> & SourceWriteFields,
     PersistControlResult
@@ -98,7 +110,7 @@ export async function createConvexActionInvocationDurablePort<Result extends Act
         currentAttemptWrite,
         history,
       } = command
-      return transport.mutation(transactMutation, {
+      const mutationCommand = {
         commandId,
         commandDigest,
         expectedInvocationVersion,
@@ -107,73 +119,91 @@ export async function createConvexActionInvocationDurablePort<Result extends Act
         ...(currentAttemptWrite === undefined ? {} : { currentAttemptWrite }),
         history,
         ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+      }
+      return transport.mutation(transactMutation, {
+        ...mutationCommand,
+        ...await sourceWriteFor(mutationCommand),
       })
     },
     async readControl(invocationRef) {
       const context = sourceContext('read-control', invocationRef)
-      const row = await transport.query(readControlQuery, {
+      const queryCommand = {
         invocationRef,
         callerRef: options.owner.callerRef,
         principalRef: options.owner.principalRef,
         ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+      }
+      const row = await transport.query(readControlQuery, {
+        ...queryCommand,
+        ...await sourceWriteFor(queryCommand),
       })
       return row ?? undefined
     },
     async readAttempts(invocationRef, limit) {
       const context = sourceContext('read-attempts', invocationRef)
-      return transport.query(readAttemptsQuery, {
+      const queryCommand = {
         invocationRef,
         callerRef: options.owner.callerRef,
         principalRef: options.owner.principalRef,
         limit,
         ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+      }
+      return transport.query(readAttemptsQuery, {
+        ...queryCommand,
+        ...await sourceWriteFor(queryCommand),
       })
     },
     async readAttempt(invocationRef, attemptRef) {
       const context = sourceContext('read-attempt', invocationRef, attemptRef)
-      const row = await transport.query(readAttemptQuery, {
+      const queryCommand = {
         invocationRef,
         attemptRef,
         callerRef: options.owner.callerRef,
         principalRef: options.owner.principalRef,
         ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+      }
+      const row = await transport.query(readAttemptQuery, {
+        ...queryCommand,
+        ...await sourceWriteFor(queryCommand),
       })
       return row ?? undefined
     },
     async readHistory(invocationRef, afterVersion, limit) {
       const context = sourceContext('read-history', invocationRef, `${afterVersion}:${limit}`)
-      return transport.query(readHistoryQuery, {
+      const queryCommand = {
         invocationRef,
         afterVersion,
         limit,
         callerRef: options.owner.callerRef,
         principalRef: options.owner.principalRef,
         ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+      }
+      return transport.query(readHistoryQuery, {
+        ...queryCommand,
+        ...await sourceWriteFor(queryCommand),
       })
     },
     async readHistoryCommand(invocationRef, commandId) {
       const context = sourceContext('read-history-command', invocationRef, commandId)
-      const row = await transport.query(readHistoryCommandQuery, {
+      const queryCommand = {
         invocationRef,
         commandId,
         callerRef: options.owner.callerRef,
         principalRef: options.owner.principalRef,
         ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+      }
+      const row = await transport.query(readHistoryCommandQuery, {
+        ...queryCommand,
+        ...await sourceWriteFor(queryCommand),
       })
       return row ?? undefined
     },
     async recordLateObservation(input) {
       const context = sourceContext('late-observation', input.invocationRef, input.commandId)
+      const mutationCommand = { ...input, ...context }
       return transport.mutation(lateObservationMutation, {
-        ...input,
-        ...context,
-        sourceWrite: sourceWrite(context.operationKey, context.correlationId),
+        ...mutationCommand,
+        ...await sourceWriteFor(mutationCommand),
       })
     },
   }

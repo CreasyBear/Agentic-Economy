@@ -60,11 +60,10 @@ const writeContext = {
   correlationId: v.string(),
   reasonCode: v.string(),
   evidenceRefs: v.array(v.string()),
-  ...sourceWriteArgs,
 } as const
 
 export const createManifest = mutation({
-  args: { manifest: manifestInput, ...writeContext },
+  args: { manifest: manifestInput, ...writeContext, ...sourceWriteArgs },
   handler: async (ctx, args) => {
     const guard = await requireExternalRunAdmin(ctx, args)
     if (guard.kind === 'refused') return guard
@@ -98,7 +97,7 @@ export const createManifest = mutation({
 })
 
 export const updateManifest = mutation({
-  args: { manifest: manifestInput, ...writeContext },
+  args: { manifest: manifestInput, ...writeContext, ...sourceWriteArgs },
   handler: async (ctx, args) => {
     const guard = await requireExternalRunAdmin(ctx, args)
     if (guard.kind === 'refused') return guard
@@ -132,7 +131,7 @@ export const inspectManifest = query({
 })
 
 export const admitStart = mutation({
-  args: { runId: v.string(), candidate: candidateInput, ...writeContext },
+  args: { runId: v.string(), candidate: candidateInput, ...writeContext, ...sourceWriteArgs },
   handler: async (ctx, args) => {
     const source = await requireExternalRunSourceWrite(ctx, args)
     if (source.kind === 'refused') return source
@@ -200,7 +199,7 @@ export const admitStart = mutation({
 })
 
 export const recordEvidence = mutation({
-  args: { runId: v.string(), evidence: evidenceInput, ...writeContext },
+  args: { runId: v.string(), evidence: evidenceInput, ...writeContext, ...sourceWriteArgs },
   handler: async (ctx, args) => {
     const source = await requireExternalRunSourceWrite(ctx, args)
     if (source.kind === 'refused') return source
@@ -250,7 +249,7 @@ export const recordEvidence = mutation({
   },
 })
 export const finalizeRun = mutation({
-  args: { manifest: manifestInput, ...writeContext },
+  args: { manifest: manifestInput, ...writeContext, ...sourceWriteArgs },
   handler: async (ctx, args) => {
     const guard = await requireExternalRunAdmin(ctx, args)
     if (guard.kind === 'refused') return guard

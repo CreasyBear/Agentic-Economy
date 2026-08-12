@@ -1,6 +1,7 @@
 import sindreSlugify from '@sindresorhus/slugify'
  
 
+import type { BusinessContext } from '@/modules/business/public'
 import type { PublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 
 export const StorefrontImportSourceLabel = 'imported-from-website' as const
@@ -91,13 +92,16 @@ export function extractStorefrontDraftFromHtml(input: StorefrontImportInput & { 
   const serviceName = inferServiceName(heading, category)
   const businessName = cleanBusinessName(title, parsedUrl.hostname)
   const sourceLabel = `Website import reviewed by owner: ${parsedUrl.origin}`
+  const businessContext: BusinessContext = {
+    kind: 'programmable_provider',
+    website: sourceUrl,
+    providerIdentifier: input.abn?.trim() ?? '',
+  }
   const profile: PublicOwnerClaimFlowInput = {
+    businessContext,
     businessName,
     category,
-    suburb: '',
-    stateTerritory: '',
     requestedSlug: normalizeStorefrontSlug(businessName),
-    publishedPhone: '',
     ownerMessage: 'Draft imported from the business website for owner review before publication.',
     sourceLabel,
     serviceName,

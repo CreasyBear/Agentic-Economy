@@ -67,7 +67,7 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
     readProviderEarnings: async (query: ProviderEarningsQuery): Promise<ProviderEarningsView> => {
       const provider = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'provider_earnings' && item.businessId === query.businessId && item.balance.currency === query.currency)
       if (provider === undefined) throw new Error('payout_not_ready')
-      const grossEntries = input.ledger.entries.filter((entry) => entry.businessId === query.businessId && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.amount.currency === query.currency)
+      const grossEntries = input.ledger.entries.filter((entry) => entry.businessId === query.businessId && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.reversalOf === undefined && entry.amount.currency === query.currency)
       const rakeEntries = input.ledger.entries.filter((entry) => entry.businessId === query.businessId && entry.entryType === 'rake' && entry.direction === 'credit' && entry.amount.currency === query.currency)
       const providerNetAccrued = grossEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
       const rake = rakeEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
@@ -102,8 +102,11 @@ function activity(event: LedgerState['usageEvents'][number]): CreditActivityView
     offeringRef: event.offeringRef,
     businessId: event.businessId,
     operationKey: event.operationKey,
+    invocationRef: event.invocationRef,
+    attemptRef: event.attemptRef,
     grossAmount: event.amount,
     chargeState: event.chargeState,
+    priceDigest: event.priceDigest,
     observedAt: event.observedAt,
     ...(event.transactionRef === undefined ? {} : { transactionRef: event.transactionRef }),
   }

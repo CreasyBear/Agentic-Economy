@@ -41,6 +41,8 @@ describe('normalizeOfferingPrice', () => {
   it('normalizes each published kind without duplicating currency or minor fields', () => {
     expect(normalizeOfferingPrice({ kind: 'fixed', amount: amount('AUD', '18000', 2), unit: 'visit', taxTreatment: 'inclusive' }))
       .toEqual({ kind: 'fixed', amount: amount('AUD', '18000', 2), unit: 'visit', taxTreatment: 'inclusive' })
+    expect(normalizeOfferingPrice({ kind: 'fixed', amount: amount('USD', '7', 3), unit: 'call', taxTreatment: 'unstated' }))
+      .toEqual({ kind: 'fixed', amount: amount('USD', '7', 3), unit: 'call', taxTreatment: 'unstated' })
     expect(normalizeOfferingPrice({ kind: 'from', amount: amount('AUD', '14000', 2), unit: 'hour', taxTreatment: 'exclusive' }))
       .toEqual({ kind: 'from', amount: amount('AUD', '14000', 2), unit: 'hour', taxTreatment: 'exclusive' })
     expect(normalizeOfferingPrice({
@@ -126,6 +128,7 @@ describe('normalizeOfferingPrice', () => {
 describe('formatOfferingPrice', () => {
   it('renders each kind as plain copy without truncating exact decimals', () => {
     expect(formatOfferingPrice({ kind: 'fixed', amount: amount('AUD', '18000', 2), unit: 'visit', taxTreatment: 'inclusive' })).toBe('AUD 180.00 per visit incl. tax')
+    expect(formatOfferingPrice({ kind: 'fixed', amount: amount('USD', '7', 3), unit: 'call', taxTreatment: 'unstated' })).toBe('USD 0.007 per call')
     expect(formatOfferingPrice({ kind: 'from', amount: amount('AUD', '14050', 2), unit: 'hour', taxTreatment: 'exclusive' })).toBe('From AUD 140.50 per hour excl. tax')
     expect(formatOfferingPrice({
       kind: 'range',

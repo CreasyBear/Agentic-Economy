@@ -7,7 +7,6 @@ import type {
   ServiceOperationMap,
 } from '@/modules/registry/public'
 import { projectPublicServicesPage, toConsumerSupplyOption } from '@/modules/registry/public'
-import { isOpenSandboxEndpoint } from '@/modules/sandbox-supply/public'
 
 describe('agentic.market Service mapping', () => {
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {
@@ -24,6 +23,7 @@ describe('agentic.market Service mapping', () => {
     expect(Object.keys(service).sort()).toEqual([
       'ae',
       'category',
+      'description',
       'domain',
       'endpoints',
       'enriched',
@@ -32,6 +32,8 @@ describe('agentic.market Service mapping', () => {
       'name',
       'networks',
       'priceSummary',
+      'provider',
+      'providerUrl',
       'serviceName',
       'tags',
     ])
@@ -40,14 +42,18 @@ describe('agentic.market Service mapping', () => {
       name: 'EXA AI',
       category: 'search',
       domain: 'api.example',
+      description: 'Read the text of a page. Search the open web.',
       networks: [],
       enriched: false,
       integrationType: '3P',
+      provider: 'EXA AI',
+      providerUrl: 'https://api.example',
       serviceName: 'EXA AI',
-      tags: [],
+      tags: ['search'],
       priceSummary: { currency: 'USDC', minAmount: '0.01', maxAmount: '0.07', avgCostBasis: 'varies' },
     })
     expect(Object.keys(service.ae).sort()).toEqual([
+      'businessContext',
       'disposition',
       'links',
       'observedAt',
@@ -55,15 +61,16 @@ describe('agentic.market Service mapping', () => {
       'photos',
       'publicUrl',
       'source',
-      'stateTerritory',
-      'suburb',
       'trustTier',
     ])
     expect(Object.keys(service.ae.links).sort()).toEqual(['business', 'manifest'])
     expect(service.ae).toMatchObject({
       trustTier: 'listed',
-      suburb: 'Melbourne',
-      stateTerritory: 'VIC',
+      businessContext: {
+        kind: 'programmable_provider',
+        website: 'https://api.example',
+        providerIdentifier: 'EXA AI',
+      },
       publicUrl: 'https://api.example',
       photos: [],
       observedAt: 1_700_000_000_000,
@@ -101,7 +108,7 @@ describe('agentic.market Service mapping', () => {
       serviceName: 'EXA AI',
       parameters: [],
       quality: null,
-      tags: [],
+      tags: ['search'],
       ae: {
         offeringRef: 'offering:api-exa-ai:search',
         provenance: 'business_declared',
@@ -195,7 +202,7 @@ describe('agentic.market Service mapping', () => {
     expect(contentsEndpoint.ae).not.toHaveProperty('operationRef')
     expect(contentsEndpoint).not.toHaveProperty('pricing')
     expect(contentsEndpoint.parameters).toEqual([])
-    expect(contentsEndpoint.tags).toEqual([])
+    expect(contentsEndpoint.tags).toEqual(['search'])
     expect(contentsEndpoint.quality).toBeNull()
     // Unmapped run still yields plain endpoints (fully additive).
     const plainEndpoint = projectPublicServicesPage(mappingPage()).services[0]!.endpoints[0]!
@@ -234,6 +241,16 @@ describe('agentic.market Service mapping', () => {
       ],
     }
     expect(projectPublicServicesPage(mappingPage(), ambiguous).services[0]!.enriched).toBe(false)
+    const ambiguousEndpoint = projectPublicServicesPage(mappingPage(), ambiguous).services[0]!.endpoints[0]!
+    expect(ambiguousEndpoint.ae).toMatchObject({
+      access: 'external',
+      execution: 'catalog_only',
+      authentication: { kind: 'unknown' },
+      settlementSupport: 'unpriced',
+    })
+    expect(ambiguousEndpoint.ae).not.toHaveProperty('operationRef')
+    expect(ambiguousEndpoint).not.toHaveProperty('pricing')
+    expect(JSON.stringify(ambiguousEndpoint)).not.toMatch(/credentialRef|credentialValue|route/u)
 
     const additionalPath = projectPublicServicesPage(
       mappingPageWithAdditionalPath(),
@@ -270,6 +287,19 @@ describe('agentic.market Service mapping', () => {
     expect(JSON.stringify(endpoints)).not.toMatch(/credentialRef|credentialValue|env:/)
   })
 
+  it('uses the canonical answer_tool execution enum only for linked keyless operations', () => {
+    const entry = linkedOperationEntry('offering:api-exa-ai:search')
+    const endpoint = projectPublicServicesPage(mappingPage(), {
+      'offering:api-exa-ai:search': [{ ...entry, answerExecutable: true }],
+    }).services[0]!.endpoints[0]!
+
+    expect(endpoint.ae).toMatchObject({
+      access: 'external',
+      execution: 'answer_tool',
+      operationRef: entry.operationRef,
+    })
+  })
+
   it('does not claim executable settlement for a non-routeable operation', () => {
     const entry = linkedOperationEntry('offering:api-exa-ai:search', {
       network: 'eip155:84532',
@@ -283,6 +313,7 @@ describe('agentic.market Service mapping', () => {
     }
     const endpoint = projectPublicServicesPage(mappingPage(), operationMap).services[0]!.endpoints[0]!
     expect(endpoint.ae.settlementSupport).toBe('catalog_only')
+    expect(endpoint.ae).toMatchObject({ access: 'external', execution: 'catalog_only' })
   })
 
 })
@@ -388,17 +419,17 @@ describe('public services API projection', () => {
       id: 'acme-plumbing',
       name: 'Acme Plumbing',
       category: 'plumbing',
+      description: 'A rapid plumbing checkup. An inspection by request.',
       domain: 'acme.example',
       networks: [],
       enriched: false,
       integrationType: '3P',
       serviceName: 'Acme Plumbing',
-      tags: [],
+      tags: ['plumbing'],
       priceSummary: { currency: 'AUD', minAmount: '80.00', maxAmount: '80.00', avgCostBasis: 'exact' },
       ae: {
-        suburb: 'Fremantle',
-        stateTerritory: 'WA',
-        source: 'ae_sandbox',
+        businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
+        source: 'business_published',
         offerings: [
           {
             offeringRef: 'offering-open',
@@ -416,20 +447,20 @@ describe('public services API projection', () => {
       },
       endpoints: [
         {
-          url: '/api/sandbox/acme-plumbing/checkup-quote',
-          description: 'Returns a sandbox quote.',
+          url: 'https://another-origin.example/api/provider/acme-plumbing/checkup-quote',
+          description: 'Returns a provider quote.',
           method: 'POST',
           serviceName: 'Acme Plumbing',
           parameters: [],
           quality: null,
-          tags: [],
+          tags: ['plumbing'],
           ae: {
             offeringRef: 'offering-open',
             provenance: 'business_declared',
-            access: 'open',
-            authentication: { kind: 'keyless' },
-            execution: 'request_route',
-            authenticationSummary: 'No API key required in the sandbox.',
+            access: 'external',
+            authentication: { kind: 'unknown' },
+            execution: 'catalog_only',
+            authenticationSummary: 'Provider endpoint does not expose credentials.',
             settlementSupport: 'unpriced',
           },
         },
@@ -440,7 +471,7 @@ describe('public services API projection', () => {
           serviceName: 'Acme Plumbing',
           parameters: [],
           quality: null,
-          tags: [],
+          tags: ['plumbing'],
           ae: {
             offeringRef: 'offering-open',
             provenance: 'publicly_observed',
@@ -466,7 +497,7 @@ describe('public services API projection', () => {
       optionRef: 'acme-plumbing',
       business: { slug: 'acme-plumbing', name: 'Acme Plumbing', location: 'Fremantle, WA' },
       availability: { kind: 'published', summary: 'Weekdays by appointment' },
-      evidence: { source: 'ae_sandbox', observedAt: 1_700_000_000_000 },
+      evidence: { source: 'business_published', observedAt: 1_700_000_000_000 },
     })
   })
 
@@ -484,38 +515,35 @@ describe('public services API projection', () => {
     expect(result.continueCursor).toBe(source.continueCursor)
   })
 
-  it('opens only the exact keyless POST quote path', () => {
-    const path = '/api/sandbox/acme-plumbing/checkup-quote'
-    expect(isOpenSandboxEndpoint(`https://other.example${path}`, 'acme-plumbing')).toBe(true)
-    expect(isOpenSandboxEndpoint(path, 'acme-plumbing', 'POST')).toBe(true)
-    expect(isOpenSandboxEndpoint(path, 'acme-plumbing', 'GET')).toBe(false)
-    expect(isOpenSandboxEndpoint(`${path}?source=catalog`, 'acme-plumbing')).toBe(false)
-    expect(isOpenSandboxEndpoint(`${path}#fragment`, 'acme-plumbing')).toBe(false)
-    expect(isOpenSandboxEndpoint(`https://user:pass@other.example${path}`, 'acme-plumbing')).toBe(false)
-  })
 })
 
 describe('agentic.market merchandising fields (CAVEAT 2)', () => {
-  it('derives provider attribution only from authoritative provider-owned linkage and keeps networks empty', () => {
+  it('derives provider identity and domain from programmable-provider context', () => {
     const service = projectPublicServicesPage(mappingPage()).services[0]!
 
-    expect(service.provider).toBeUndefined()
-    expect(service.providerUrl).toBeUndefined()
+    expect(service.provider).toBe('EXA AI')
+    expect(service.providerUrl).toBe('https://api.example')
     expect(service.domain).toBe('api.example')
     expect(service.networks).toEqual([])
   })
 
-  it('omits domain when the public URL is not a parseable http(s) URL (no fabrication)', () => {
-    const nonUrl = mappingPage()
-    // Force an unparseable publicUrl so no domain may be derived.
-    const page = nonUrl.kind === 'ok'
-      ? { ...nonUrl, page: nonUrl.page.map((business) => business.slug === 'api-exa-ai'
-          ? { ...business, publicUrl: 'not-a-url' }
-          : business) }
-      : nonUrl
+  it('omits provider URL and domain when the programmable-provider website is not http(s)', () => {
+    const source = mappingPage()
+    const page = {
+      ...source,
+      page: source.page.map((business) => ({
+        ...business,
+        publicUrl: 'not-a-url',
+        businessContext: {
+          kind: 'programmable_provider' as const,
+          website: 'not-a-url',
+          providerIdentifier: 'EXA AI',
+        },
+      })),
+    }
     const service = projectPublicServicesPage(page).services[0]!
-    expect(service.provider).toBeUndefined()
-    expect(service.providerUrl).toBeUndefined()
+    expect(service.provider).toBe('EXA AI')
+    expect(service.providerUrl).toBe('not-a-url')
     expect(service).not.toHaveProperty('domain')
     expect(service.networks).toEqual([])
   })
@@ -634,7 +662,7 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
 
     const unlinked = projectPublicServicesPage(oneOfferingPage).services[0]!
     expect(unlinked.integrationType).toBe('3P')
-    expect(unlinked.provider).toBeUndefined()
+    expect(unlinked.provider).toBe('EXA AI')
     expect(unlinked.endpoints[0]).not.toHaveProperty('providerName')
   })
 
@@ -691,8 +719,11 @@ function mappingPage(provenance: 'business_declared' | 'publicly_observed' = 'bu
         slug: 'api-exa-ai',
         name: 'EXA AI',
         category: 'search',
-        suburb: 'Melbourne',
-        stateTerritory: 'VIC',
+        businessContext: {
+          kind: 'programmable_provider',
+          website: 'https://api.example',
+          providerIdentifier: 'EXA AI',
+        },
         publicUrl: 'https://api.example',
         trustTier: 'listed',
         photos: [],
@@ -805,8 +836,7 @@ function page(): PublicBusinessCatalogApiV2Page {
         slug: 'acme-plumbing',
         name: 'Acme Plumbing',
         category: 'plumbing',
-        suburb: 'Fremantle',
-        stateTerritory: 'WA',
+        businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
         publicUrl: 'https://acme.example',
         trustTier: 'listed',
         photos: [],
@@ -832,11 +862,11 @@ function page(): PublicBusinessCatalogApiV2Page {
                 accessPathRef: 'path-open',
                 offeringRevision: 3,
                 kind: 'external_operation',
+                summary: 'Returns a provider quote.',
                 name: 'Get a checkup quote',
-                summary: 'Returns a sandbox quote.',
-                url: 'https://another-origin.example/api/sandbox/acme-plumbing/checkup-quote',
+                url: 'https://another-origin.example/api/provider/acme-plumbing/checkup-quote',
                 method: 'POST',
-                authenticationSummary: 'No API key required in the sandbox.',
+                authenticationSummary: 'Provider endpoint does not expose credentials.',
                 provenance: 'business_declared',
               },
               {

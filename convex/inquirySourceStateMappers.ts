@@ -29,10 +29,12 @@ import type {
   ResolvableOwnerRecipient,
 } from '../src/modules/inquiries/public'
 import type {
+  BusinessContext,
   BusinessOwnerRecord,
   BusinessRecord,
   ClaimRecord,
 } from '../src/modules/business/public'
+
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
@@ -177,6 +179,30 @@ function requiredRecord(row: Record<string, unknown>, field: string): Record<str
   if (!isRecord(value)) throw new Error(`inquiry_row_record_required:${field}`)
   return value
 }
+function requiredBusinessContext(row: Record<string, unknown>): BusinessContext {
+  const context = requiredRecord(row, 'businessContext')
+  const kind = requiredString(context, 'kind')
+  if (kind === 'local_human') {
+    const postcode = optionalString(context, 'postcode')
+    const publishedPhone = optionalString(context, 'publishedPhone')
+    return {
+      kind,
+      suburb: requiredString(context, 'suburb'),
+      stateTerritory: requiredString(context, 'stateTerritory'),
+      ...(postcode === undefined ? {} : { postcode }),
+      ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    }
+  }
+  if (kind === 'programmable_provider') {
+    return {
+      kind,
+      website: requiredString(context, 'website'),
+      providerIdentifier: requiredString(context, 'providerIdentifier'),
+    }
+  }
+  throw new Error('inquiry_row_business_context_invalid')
+}
+
 function requiredEnum<T extends string>(row: Record<string, unknown>, field: string, values: readonly T[]): T {
   const value = requiredString(row, field)
   const match = values.find((candidate) => candidate === value)
@@ -273,7 +299,6 @@ function offeringAccessPathDescriptor(row: Record<string, unknown>): OfferingAcc
   throw new Error('inquiry_row_access_path_descriptor_invalid')
 }
 export function toBusinessRecord(row: InquirySourceDocument): BusinessRecord {
-  const publishedPhone = optionalString(row, 'publishedPhone')
   const suppressedAt = optionalNumber(row, 'suppressedAt')
   return {
     businessId: brandNonEmpty(requiredString(row, '_id'), 'BusinessId'),
@@ -282,9 +307,7 @@ export function toBusinessRecord(row: InquirySourceDocument): BusinessRecord {
     name: requiredString(row, 'name'),
     normalizedName: requiredString(row, 'normalizedName'),
     category: requiredString(row, 'category'),
-    suburb: requiredString(row, 'suburb'),
-    stateTerritory: requiredString(row, 'stateTerritory'),
-    ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    businessContext: requiredBusinessContext(row),
     publicStatus: requiredEnum(row, 'publicStatus', PublicStatusValues),
     trustTier: requiredEnum(row, 'trustTier', TrustTierValues),
     claimStatus: requiredEnum(row, 'claimStatus', ClaimStatusValues),

@@ -107,11 +107,11 @@ function hasInquiryPath(offering: ProviderPresentationOffering): boolean {
 }
 
 function formatProviderLocation(catalog: ProviderPresentationCatalog): string {
-  const parts = [catalog.suburb, catalog.stateTerritory]
-  if (catalog.postcode !== undefined && catalog.postcode.trim().length > 0) {
-    parts.push(catalog.postcode)
-  }
-  return parts.join(', ')
+  return catalog.businessContext.kind === 'local_human'
+    ? [catalog.businessContext.suburb, catalog.businessContext.stateTerritory, catalog.businessContext.postcode]
+        .filter((part): part is string => part !== undefined && part.trim().length > 0)
+        .join(', ')
+    : `${catalog.businessContext.providerIdentifier} · ${catalog.businessContext.website}`
 }
 
 function readOfferingChips(

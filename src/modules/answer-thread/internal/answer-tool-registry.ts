@@ -1,6 +1,5 @@
 import { registryDetailAction, registrySearchAction } from '@/modules/registry/registry.actions'
 import { registryOperationsSearchAction } from '@/modules/registry/operations.actions'
-import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
 import { webDiscoverAction } from '@/modules/storefront/storefront.actions'
 import type { AnyAction } from '@/modules/common/action'
 
@@ -12,7 +11,6 @@ import {
 const ANSWER_READ_ACTIONS: readonly AnyAction[] = [
   registrySearchAction,
   registryDetailAction,
-  sandboxCheckupQuoteAction,
   webDiscoverAction,
   registryOperationsSearchAction,
 ]

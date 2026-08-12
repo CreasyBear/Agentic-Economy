@@ -16,6 +16,7 @@ import { createCustomerRequestServiceAssertion } from '../src/modules/customer-r
 import { createTestOperationLineage } from '../tests/helpers/customer-request-lineage'
 import { customerRouteRef } from '../src/modules/customer-request/route-plan-customer-projection'
 import { mintBrowserGuestAssertion } from '../src/lib/server/browser-guest-assertion'
+import type { WorkNode } from '../src/modules/work-tree/public'
 import { internal } from './_generated/api'
 import schema from './schema'
 
@@ -49,7 +50,14 @@ const node = (input: Partial<{
   timing: { certainty: 'fixed' | 'window' | 'fog' }
   description: string
   evidenceRefs: string[]
-}> = {}) => ({
+  quote: {
+    quoteRef: string
+    observedAt: number
+    expiresAt: number
+    revision: number
+    evidenceClass: 'ae_sandbox_provider' | 'published_price' | 'business_quote'
+  }
+}> = {}): WorkNode => ({
   format: 'ae.work-node:v1' as const,
   nodeId: input.nodeId ?? 'target',
   kind: input.kind ?? 'task',
@@ -61,6 +69,7 @@ const node = (input: Partial<{
   ...(input.timing === undefined ? {} : { timing: input.timing }),
   ...(input.description === undefined ? {} : { description: input.description }),
   evidenceRefs: input.evidenceRefs ?? [],
+  ...(input.quote === undefined ? {} : { quote: input.quote }),
   createdAt: 1,
   updatedAt: 1,
 })
@@ -192,6 +201,11 @@ async function seedRoutedCustomerRequest(backend: Pick<TestConvex<typeof schema>
       resolvedInputs: [],
       deferredInputs: [],
       price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '0', exponent: 2 } },
+      priceDigest: canonicalDigest({
+        version: 'pricing:v2',
+        unit: 'call',
+        paidAmount: { currency: 'AUD', units: '0', exponent: 2 },
+      }),
       dataUse: [],
       effects: [],
       evidence: [],
@@ -284,10 +298,16 @@ async function seedRoutedCustomerRequest(backend: Pick<TestConvex<typeof schema>
       requestRevision: ROUTED_REVISION,
       aggregate,
     })
-    await ctx.db.insert('customerRequestAgentPrincipals', {
+    await ctx.db.insert('agentAccessPrincipals', {
       principalId: ROUTED_REQUEST_PRINCIPAL,
       ownerId: ROUTED_OWNER_ID,
       credentialId: 'credential:request-owner',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: 'test-policy:work-tree-lineage',
+      lifecycle: 'active',
       scopes: ['customer_requests:create'],
       recordedAt: 1,
       lastSeenAt: 1,
@@ -347,6 +367,79 @@ describe('gardener verbs Convex contract', () => {
     await expect(backend.mutation(applyWorkTree, args('hostile', {
       kind: 'hostile', targetNodeId: 'target', expectedGeneration: 1, expectedRevision: 1, proposalDigest: 'x',
     } as never))).rejects.toThrow()
+  })
+
+  it('keeps production quote evidence exact while refusing sandbox evidence', async () => {
+    const backend = await backendWithTree()
+    const quotes = [
+      {
+        quoteRef: 'quote:published',
+        observedAt: 10,
+        expiresAt: 20,
+        revision: 2,
+        evidenceClass: 'published_price' as const,
+      },
+      {
+        quoteRef: 'quote:business',
+        observedAt: 11,
+        expiresAt: 21,
+        revision: 3,
+        evidenceClass: 'business_quote' as const,
+      },
+    ]
+    const accepted = verb({
+      kind: 'elaborate',
+      targetNodeId: 'target',
+      expectedGeneration: 1,
+      expectedRevision: 1,
+      children: quotes.map((quote, index) => ({
+        kind: 'task' as const,
+        title: `Quoted child ${index}`,
+        quote,
+      })),
+    })
+    const applied = await backend.mutation(applyWorkTree, args('production-quotes', accepted))
+    expect(applied.tree.nodes.filter((candidate: { parentId?: string }) => candidate.parentId === 'target')
+      .map((candidate: { quote?: unknown }) => candidate.quote)).toEqual(quotes)
+
+    const sandboxProposal = {
+      kind: 'elaborate' as const,
+      targetNodeId: 'target',
+      expectedGeneration: 1,
+      expectedRevision: 1,
+      proposalDigest: 'ignored',
+      children: [{
+        kind: 'task' as const,
+        title: 'Retired sandbox quote',
+        quote: {
+          quoteRef: 'quote:sandbox',
+          observedAt: 12,
+          expiresAt: 22,
+          revision: 4,
+          evidenceClass: 'ae_sandbox_provider' as const,
+        },
+      }],
+    } as never
+    await expect(backend.mutation(applyWorkTree, args('sandbox-evidence', sandboxProposal))).rejects.toThrow()
+  })
+
+  it('reads historical sandbox quote evidence from a persisted snapshot', async () => {
+    const historicalQuote = {
+      quoteRef: 'quote:historical-sandbox',
+      observedAt: 10,
+      expiresAt: 20,
+      revision: 2,
+      evidenceClass: 'ae_sandbox_provider' as const,
+    }
+    const backend = await backendWithTree(baseTree([
+      node({ nodeId: 'root', kind: 'package', status: 'ready', timing: { certainty: 'fog' } }),
+      { ...node({ nodeId: 'target' }), quote: historicalQuote },
+    ]))
+
+    const read = await backend.query(readWorkTreeByProject, { projectId: 'project:one' })
+    expect(read?.tree.nodes.find((candidate: { nodeId: string }) => candidate.nodeId === 'target')).toMatchObject({
+      quote: historicalQuote,
+    })
   })
 
   it('rejects a target outside the elaboration frontier', async () => {
@@ -841,10 +934,7 @@ describe('gardener verbs Convex contract', () => {
       proposalDigest: canonicalDigest({ ...proposal, kind: 'park' as const }),
       idempotencyKey: firstArgs.idempotencyKey,
     }
-    await expect(backend.mutation(decideWorkTree, changed)).resolves.toMatchObject({
-      kind: 'refused',
-      refusalCode: 'digest_mismatch',
-    })
+    await expect(backend.mutation(decideWorkTree, changed)).resolves.toEqual({ kind: 'unknown' })
     const receipts = await backend.run(async (ctx) => await ctx.db
       .query('workTreeDecisionReceipts')
       .withIndex('by_projectId_and_idempotencyKey', (query) =>
@@ -909,10 +999,7 @@ describe('gardener verbs Convex contract', () => {
       issuer: 'https://identity.example',
       tokenIdentifier: 'https://identity.example|clerk-other-t45',
     })
-    await expect(stranger.mutation(decideWorkTree, command)).resolves.toMatchObject({
-      kind: 'refused',
-      refusalCode: 'forbidden',
-    })
+    await expect(stranger.mutation(decideWorkTree, command)).resolves.toEqual({ kind: 'unknown' })
   })
 
   it('refuses a paid Lock while the first-dollar money gate is closed and rereads the refusal receipt', async () => {
@@ -1054,10 +1141,12 @@ describe('gardener verbs Convex contract', () => {
         cumulativeSpend: { currency: 'AUD', units: '1', exponent: 2 },
       },
     }
-    await expect(backend.mutation(decideWorkTree, positiveSpendGrant)).resolves.toMatchObject({
-      kind: 'refused',
-      refusalCode: 'forbidden',
+    await expect(backend.mutation(decideWorkTree, positiveSpendGrant)).resolves.toEqual({
+      kind: 'unknown',
     })
+    await expect(backend.run(async (ctx) => ctx.db
+      .query('workTreeRepeatPermissions')
+      .collect())).resolves.toEqual([])
     const accepted = await backend.mutation(decideWorkTree, lockArgs)
     expect(accepted).toMatchObject({
       kind: 'accepted',
@@ -1138,7 +1227,7 @@ describe('gardener verbs Convex contract', () => {
         proposalDigest: canonicalDigest(proposal),
         idempotencyKey: `t49:repeat-invalid:${index}`,
         repeatGrant,
-      })).resolves.toMatchObject({ kind: 'refused', refusalCode: 'forbidden' })
+      })).resolves.toEqual({ kind: 'unknown' })
     }
   })
 })

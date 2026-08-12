@@ -338,7 +338,7 @@ export async function authenticateRequestOwnerForMutation(
     )
   }
   if (head.principalId !== identity.tokenIdentifier) {
-    const delegated = await ctx.db.query('customerRequestAgentPrincipals')
+    const delegated = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', head.principalId)).unique()
     if (delegated?.ownerTokenIdentifier !== identity.tokenIdentifier) return { kind: 'not_found' }
   }
@@ -365,7 +365,7 @@ export async function authenticateRequestOwnerForServiceOperation(
       assertion,
     })) return { kind: 'unauthenticated' }
   if (head.principalId !== assertion.principalId) return { kind: 'not_found' }
-  const recorded = await ctx.db.query('customerRequestAgentPrincipals')
+  const recorded = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_principalId', (query) => query.eq('principalId', assertion.principalId)).unique()
   const recordedScopes = new Set(recorded?.scopes ?? [])
   if (recorded === null || recorded.ownerId !== assertion.ownerId
@@ -390,7 +390,7 @@ export async function authenticateRequestOwner(
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   if (head === null) return { kind: 'not_found' }
   if (head.principalId !== identity.tokenIdentifier) {
-    const delegated = await ctx.db.query('customerRequestAgentPrincipals')
+    const delegated = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', head.principalId)).unique()
     if (delegated?.ownerTokenIdentifier !== identity.tokenIdentifier) return { kind: 'not_found' }
   }
@@ -541,7 +541,7 @@ export function writableMandate(value: RouteMandate) {
         ...step,
         contractRef: { ...step.contractRef },
         price: { ...step.price },
-        dataScope: step.dataScope.map((scope) => ({
+        dataScope: step.dataScope.map((scope: RouteMandate['route']['steps'][number]['dataScope'][number]) => ({
           ...scope,
           recipient: { ...scope.recipient },
           purposes: [...scope.purposes],

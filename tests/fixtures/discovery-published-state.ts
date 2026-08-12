@@ -23,8 +23,11 @@ export function createDurablePublishedDiscoveryState(input: {
     facts: {
       name: input.businessName,
       category: 'Heat pump repair',
-      suburb: input.suburb,
-      stateTerritory: 'WA',
+      businessContext: {
+        kind: 'local_human',
+        suburb: input.suburb,
+        stateTerritory: 'WA',
+      },
       requestedSlug: input.requestedSlug,
       ownerMessage: 'Owner supplied durable source facts.',
       sourceRefs: [

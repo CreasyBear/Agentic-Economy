@@ -32,8 +32,18 @@ import {
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
-import type { ExactAmount } from '@/modules/money/public'
+import { pricingConfigDigest, type ExactAmount, type PricingConfig } from '@/modules/money/public'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
+
+const fixedPricingConfig: PricingConfig = {
+  version: 'pricing:v2',
+  unit: 'call',
+  paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+}
+const fixedPriceDigest = pricingConfigDigest(fixedPricingConfig)
+function fixedPriceDigestFor(amount: ExactAmount): string {
+  return pricingConfigDigest({ version: 'pricing:v2', unit: 'call', paidAmount: amount })
+}
 
 describe('V2 Request semantics', () => {
   it('identifies one exact registered supply choice independently of incidental step enumeration', () => {
@@ -41,11 +51,13 @@ describe('V2 Request semantics', () => {
       businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
       contractRef: { capabilityId: 'capability:one', version: 1, contractDigest: 'sha256:one' },
       offeringRegistrationHash: 'sha256:offering-one', bindingRegistrationHash: 'sha256:binding-one',
+      priceDigest: fixedPriceDigest,
     }
     const second = {
       businessId: 'business:two', offeringId: 'offering:two', bindingId: 'binding:two',
       contractRef: { capabilityId: 'capability:two', version: 1, contractDigest: 'sha256:two' },
       offeringRegistrationHash: 'sha256:offering-two', bindingRegistrationHash: 'sha256:binding-two',
+      priceDigest: fixedPriceDigest,
     }
 
     expect(routeChoiceSignature({ steps: [first, second] }))
@@ -1070,12 +1082,14 @@ describe('V2 Request semantics', () => {
       expectedRouteGeneration = 0,
       downstreamAmount = 100,
     ) => {
-      const bindings = models.map((model) => ({
-        ...supply(`binding:${model.contractRef.capabilityId}`, model),
-        price: {
-          kind: 'fixed' as const, amount: audAmount(model === shipping ? downstreamAmount : 100),
-        },
-      }))
+      const bindings = models.map((model) => {
+        const amount = audAmount(model === shipping ? downstreamAmount : 100)
+        return {
+          ...supply(`binding:${model.contractRef.capabilityId}`, model),
+          price: { kind: 'fixed' as const, amount },
+          priceDigest: fixedPriceDigestFor(amount),
+        }
+      })
       return compileCustomerRequest({
         requestId: 'request:composed', expectedRevision: 4, expectedRouteGeneration,
         principalId: 'principal:test', delegatedAgentId: 'agent:test',
@@ -1402,16 +1416,29 @@ describe('V2 Request semantics', () => {
           businessId: 'business:binding:lookup:cheap',
         }),
         price: { kind: 'fixed' as const, amount: audAmount(150) },
+        priceDigest: fixedPriceDigestFor(audAmount(150)),
       },
-      { ...supply('binding:lookup:expensive', lookup, {
-        operationId: lookupOperationId, publicationRef: lookupPublicationRef,
-      }), price: { kind: 'fixed' as const, amount: audAmount(200) } },
-      { ...supply('binding:shipping:expensive', shipping, {
-        operationId: shippingOperationId, publicationRef: shippingPublicationRef,
-      }), price: { kind: 'fixed' as const, amount: audAmount(300) } },
-      { ...supply('binding:shipping:cheap', shipping, {
-        operationId: shippingOperationId, publicationRef: shippingPublicationRef,
-      }), price: { kind: 'fixed' as const, amount: audAmount(100) } },
+      {
+        ...supply('binding:lookup:expensive', lookup, {
+          operationId: lookupOperationId, publicationRef: lookupPublicationRef,
+        }),
+        price: { kind: 'fixed' as const, amount: audAmount(200) },
+        priceDigest: fixedPriceDigestFor(audAmount(200)),
+      },
+      {
+        ...supply('binding:shipping:expensive', shipping, {
+          operationId: shippingOperationId, publicationRef: shippingPublicationRef,
+        }),
+        price: { kind: 'fixed' as const, amount: audAmount(300) },
+        priceDigest: fixedPriceDigestFor(audAmount(300)),
+      },
+      {
+        ...supply('binding:shipping:cheap', shipping, {
+          operationId: shippingOperationId, publicationRef: shippingPublicationRef,
+        }),
+        price: { kind: 'fixed' as const, amount: audAmount(100) },
+        priceDigest: fixedPriceDigestFor(audAmount(100)),
+      },
     ]
     const result = compileCustomerRequest({
       requestId: 'request:ranked-fallback', expectedRevision: 0,
@@ -1499,8 +1526,8 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test',
       mappings: [registeredFieldMapping(lookup, shipping, '/optionId', '/optionId')],
       bindings: [
-        { ...supply('binding:lookup:hard-spend', lookup), price: { kind: 'fixed', amount: audAmount(300) } },
-        { ...supply('binding:shipping:hard-spend', shipping), price: { kind: 'fixed', amount: audAmount(700) } },
+        { ...supply('binding:lookup:hard-spend', lookup), price: { kind: 'fixed', amount: audAmount(300) }, priceDigest: fixedPriceDigestFor(audAmount(300)) },
+        { ...supply('binding:shipping:hard-spend', shipping), price: { kind: 'fixed', amount: audAmount(700) }, priceDigest: fixedPriceDigestFor(audAmount(700)) },
       ],
       models: [lookup, shipping], now: 10_000,
     })
@@ -2081,6 +2108,7 @@ function supply(
     publicationRevision: lineage.admittedOperation.publicationRevision,
     readinessValidUntil: lineage.admittedOperation.readinessValidUntil,
     price: { kind: 'fixed' as const, amount: audAmount(100) },
+    priceDigest: fixedPriceDigest,
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }

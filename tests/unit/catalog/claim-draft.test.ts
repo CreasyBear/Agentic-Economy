@@ -16,7 +16,14 @@ describe('Claim draft state', () => {
     const hydrated = reduceClaimDraft(edited, {
       type: 'hydrate',
       snapshot: {
-        value: { ...emptyPublicOwnerClaimInput, businessName: 'Stored name', suburb: 'Perth' },
+        value: {
+          ...emptyPublicOwnerClaimInput,
+          businessName: 'Stored name',
+          businessContext: {
+            ...emptyPublicOwnerClaimInput.businessContext,
+            suburb: 'Perth',
+          },
+        },
         factsConfirmed: true,
         dirtyFields: ['suburb'],
       },
@@ -24,7 +31,10 @@ describe('Claim draft state', () => {
 
     expect(hydrated).toMatchObject({
       phase: 'ready',
-      value: { businessName: 'Owner edit', suburb: 'Perth' },
+      value: {
+        businessName: 'Owner edit',
+        businessContext: { kind: 'local_human', suburb: 'Perth' },
+      },
       factsConfirmed: true,
     })
     expect([...hydrated.dirtyFields].sort()).toEqual(['businessName', 'suburb'])

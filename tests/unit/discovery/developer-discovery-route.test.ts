@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { emptyDiscoverySourceState } from '../../fixtures/source-state'
-import {
-  createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
-} from '@/modules/discovery/public'
+import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
+import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   evaluateDiscoveryProjectionGate,
@@ -49,7 +47,7 @@ const privateP2FieldNames = [
 
 describe('developer discovery route readback', () => {
   it('renders available public catalog facts with schema, example, download, and unsupported labels', async () => {
-    const state = createDefaultDiscoverySourceState()
+    const state = createFixtureDiscoverySourceState()
     const generated = regenerateDiscoveryManifest(state, { businessId: firstBusiness(state).businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_000 })
 
     expect(generated.kind).toBe('ok')
@@ -78,12 +76,10 @@ describe('developer discovery route readback', () => {
           downloadLabel: 'Download examples JSON',
           state: 'available',
         }),
-        expect.objectContaining({
-          label: 'Public catalog fixture bundle',
-          downloadLabel: 'Download fixture bundle',
-          state: 'available',
-        }),
       ])
+    )
+    expect(readback.artifacts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: 'Public catalog fixture bundle' })])
     )
     expect(readback.routeHealth.every((route) => route.status === 'available')).toBe(true)
     expect(readback.p2InquiryAvailability).toMatchObject({
@@ -126,7 +122,7 @@ describe('developer discovery route readback', () => {
       name: 'Durable Route Plumbing',
       disposition: 'current',
     })
-    const readback = readDeveloperDiscoveryRoute(createDefaultDiscoverySourceState(), {
+    const readback = readDeveloperDiscoveryRoute(createFixtureDiscoverySourceState(), {
       canonicalBaseUrl: 'https://ae.example',
       now: 8_000,
       routeSnapshot,
@@ -240,7 +236,7 @@ describe('developer discovery route readback', () => {
   })
 
   it('renders degraded when public facts exist without current discovery readback', () => {
-    const readback = readDeveloperDiscoveryRoute(createDefaultDiscoverySourceState(), { now: 4_000 })
+    const readback = readDeveloperDiscoveryRoute(createFixtureDiscoverySourceState(), { now: 4_000 })
     const copy = renderDeveloperDiscoveryRouteCopy(readback)
 
     expect(readback.catalogCount).toBe(1)
@@ -350,8 +346,7 @@ function routeSnapshotWithBusiness(input: {
     slug: input.slug,
     name: input.name,
     category: 'Emergency plumbing',
-    suburb: 'Fremantle',
-    stateTerritory: 'WA',
+    businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
     publicUrl: `/${input.slug}`,
     trustTier: 'claimed',
     observedAt: 8_000,

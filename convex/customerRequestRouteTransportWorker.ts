@@ -14,7 +14,6 @@ import {
   type DurableActionInvocationPort,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import type { RouteExecutionBinding } from '@/modules/customer-request/route-execution/machines/types'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
@@ -22,6 +21,7 @@ import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,
   type ProviderConnectionAuthorityReader,
+  type ProviderConnectionAuthorityValidator,
   type RouteTransportFetch,
   type RouteTransportInvocation,
   type RouteTransportObservation,
@@ -29,7 +29,12 @@ import {
   type X402PreparedAuthorization,
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
-import { createEvmX402PaymentSignature, signRouteTransportCall } from '@/modules/capability-supply/server'
+import {
+  createEvmX402PaymentSignature,
+  credentialFromEnvironment,
+  signRouteTransportCall,
+  x402PaymentCredentialRefFromEnvironment,
+} from '@/modules/capability-supply/server'
 import type { ExactAmount } from '@/modules/money/public'
 
 import { internal } from './_generated/api'
@@ -146,7 +151,12 @@ export const run = internalAction({
       )
     }
 
-    const preparation = prepareRegisteredRouteTransportInvocation(invocation)
+    const preparation = prepareRegisteredRouteTransportInvocation(
+      invocation,
+      invocation.binding.adapterId === 'x402-fetch:v2'
+        ? () => x402PaymentCredentialRefFromEnvironment() !== undefined
+        : undefined,
+    )
     if (preparation.kind === 'refused') {
       return await convergePreReleaseAndProjection(
         ctx,
@@ -194,25 +204,14 @@ export const run = internalAction({
       send: fetch,
       resolveCredential,
       readProviderConnectionCredentialRef: readProviderCredential,
-      // x402 payment here is the external provider credential, not an AE-internal
-      // charge; per-call billing is the action-invocation preReleaseCheck →
-      // moneyLedger seam only. The two are disjoint by design.
+      validateProviderConnectionAuthority: providerConnectionAuthorityValidator(ctx, opened.invocation.binding),
+      readX402PaymentCredentialRef: x402PaymentCredentialRefFromEnvironment,
       prepareX402PaymentAuthorization: async (request) => {
         if (opened.invocation.binding.authority.kind !== 'provider_connection') return undefined
         const connectionAuthority = opened.invocation.binding.connectionAuthority
         if (connectionAuthority === undefined) return undefined
-        const providerCredential = await readProviderCredential({
-          connectionRef: opened.invocation.binding.authority.connectionRef,
-          providerRef: opened.invocation.binding.authority.providerRef,
-          adapterId: opened.invocation.binding.adapterId,
-          authorityGeneration: connectionAuthority.authorityGeneration,
-          authorityDigest: connectionAuthority.authorityDigest,
-        })
-        if (providerCredential.kind !== 'resolved'
-          || credentialFromEnvironment(providerCredential.credentialRef) === undefined) {
-          return undefined
-        }
-        const paymentCredentialRef = providerCredential.credentialRef
+        const paymentCredentialRef = x402PaymentCredentialRefFromEnvironment()
+        if (paymentCredentialRef === undefined || request.credential !== paymentCredentialRef) return undefined
         return await ctx.runMutation(
           internal.customerRequestRouteExecution.prepareX402PaymentAuthorization,
           {
@@ -589,11 +588,32 @@ function readProviderConnectionCredentialRef(ctx: ActionCtx): ProviderConnection
     })
   }
 }
-
-function credentialFromEnvironment(reference: string): string | undefined {
-  const match = /^env:([A-Z][A-Z0-9_]{1,199})$/.exec(reference)
-  return match?.[1] === undefined ? undefined : readTrimmedEnv(process.env, match[1])
+function providerConnectionAuthorityValidator(
+  ctx: ActionCtx,
+  binding: RouteExecutionBinding,
+): ProviderConnectionAuthorityValidator {
+  return async (lookup) => {
+    if (binding.authority.kind !== 'provider_connection') {
+      return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    }
+    const connectionAuthority = binding.connectionAuthority
+    if (
+      connectionAuthority === undefined
+      || lookup.connectionRef !== connectionAuthority.connectionRef
+      || lookup.providerRef !== binding.authority.providerRef
+      || lookup.adapterId !== connectionAuthority.adapterId
+      || lookup.authorityGeneration !== connectionAuthority.authorityGeneration
+      || lookup.authorityDigest !== connectionAuthority.authorityDigest
+    ) return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    return await ctx.runQuery(internal.capabilityProviderConnections.validateAuthority, {
+      connectionRef: lookup.connectionRef,
+      expectedAuthorityGeneration: lookup.authorityGeneration,
+      expectedAuthorityDigest: lookup.authorityDigest,
+      now: Date.now(),
+    })
+  }
 }
+
 async function readX402Authorization(
   ctx: ActionCtx,
   prepared: X402PreparedAuthorization,

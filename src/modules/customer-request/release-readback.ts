@@ -44,6 +44,7 @@ const customerRequestReleaseReadbackSchema = z.strictObject({
       provider: z.literal('convex'),
       id: z.string().trim().min(1).max(200),
       url: z.url().startsWith('https://'),
+      sourceRevision: z.string().regex(gitRevision).optional(),
     }).optional(),
   }),
   requestEntrypoint: z.strictObject({
@@ -98,6 +99,7 @@ export type CustomerRequestReleaseReadback = Readonly<{
       provider: 'convex'
       id: string
       url: string
+      sourceRevision?: string | undefined
     }> | undefined
   }>
   requestEntrypoint: typeof CUSTOMER_REQUEST_AGENT_ENTRYPOINT
@@ -196,6 +198,11 @@ export function verifyCustomerRequestHostedRevision(options: Readonly<{
     throw new Error('hosted_release_revision_mismatch')
   }
   if (
+    options.expectedDeploymentId !== undefined
+    && options.readback.deployment.id !== options.expectedDeploymentId
+  ) throw new Error('hosted_release_deployment_id_mismatch')
+
+  if (
     options.readback.schemaVersion !== RELEASE_SCHEMA_VERSION
     || options.readback.source.provider !== 'github'
     || options.readback.source.repository !== SOURCE_REPOSITORY
@@ -210,8 +217,11 @@ export function verifyCustomerRequestHostedRevision(options: Readonly<{
     || options.readback.requestEntrypoint.requiredScope !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope
   ) throw new Error('hosted_release_entrypoint_mismatch')
 
-  if (options.expectedDeploymentId !== undefined && options.readback.deployment.id !== options.expectedDeploymentId) {
-    throw new Error('hosted_release_deployment_id_mismatch')
+  if (
+    options.readback.deployment.convex !== undefined
+    && options.readback.deployment.convex.sourceRevision !== options.expectedRevision
+  ) {
+    throw new Error('hosted_release_convex_source_revision_mismatch')
   }
   if (options.expectedConvexDeploymentId !== undefined && options.readback.deployment.convex?.id !== options.expectedConvexDeploymentId) {
     throw new Error('hosted_release_convex_deployment_id_mismatch')

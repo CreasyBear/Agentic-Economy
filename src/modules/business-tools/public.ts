@@ -1,5 +1,6 @@
 import type { OfferingRef } from '@/modules/common/ids'
 
+
 /**
  * Business tool calling.
  *
@@ -12,7 +13,6 @@ import type { OfferingRef } from '@/modules/common/ids'
  * action's own consequence class and authority requirement rather than
  * restating them more comfortably.
  */
-
 export const BUSINESS_TOOL_AGENT_SCOPE = 'business_tools:invoke' as const
 
 export const BusinessToolContractVersion = 'ae-business-tools:v1' as const
@@ -21,7 +21,6 @@ export {
   businessToolInvokeSchema,
   businessToolPrepareSchema,
 } from './public-values'
-
 
 export type BusinessToolInvocationStyle = Readonly<{
   /**

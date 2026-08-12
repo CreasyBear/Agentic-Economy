@@ -38,6 +38,14 @@ const movedSymbols = [
   'isTrustedQuarantineParent',
 ] as const
 
+const retiredUnsignedLifecycleMutations = [
+  'registerOffering',
+  'registerBinding',
+  'registerMapping',
+  'setEligibility',
+  'quarantineBinding',
+] as const
+
 describe('capability-supply convex host thinness', () => {
   it('does not redefine moved pure helpers in Convex', () => {
     for (const symbol of movedSymbols) {
@@ -46,19 +54,31 @@ describe('capability-supply convex host thinness', () => {
     }
   })
 
+  it('keeps retired unsigned lifecycle mutations absent from the public host and callers', () => {
+    for (const name of retiredUnsignedLifecycleMutations) {
+      expect(convexHost).not.toMatch(new RegExp(`export const ${name}\\s*=\\s*mutation\\s*\\(`))
+      const publicReference = new RegExp(`api\\.capabilitySupply\\.${name}\\b`)
+      for (const file of [...listTsFiles('src'), ...listTsFiles('tests'), ...listTsFiles('convex')]) {
+        if (file.includes('/_generated/')) continue
+        expect(readFileSync(file, 'utf8'), `${file} still references ${name}`).not.toMatch(publicReference)
+      }
+    }
+  })
+
   it('imports moved behaviors from capability-supply public seam', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
     expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     for (const symbol of [
       'publicationLifecycle',
       'bindingObservedRowDigest',
-      'publishCapabilityCommand',
-      'refreshCapabilityCommand',
+      'publishPreparedCapabilityCommand',
       'registerCapabilityOfferingWrite',
       'queryCapabilityGraphFromModule',
     ]) {
       expect(convexHost).toContain(symbol)
     }
+    expect(convexHost).not.toContain(['publishCapability', 'Command'].join(''))
+    expect(convexHost).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
   })
 
   it('keeps deepened module files free of Convex runtime imports', () => {
@@ -84,16 +104,17 @@ describe('capability-supply convex host thinness', () => {
     expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
   })
 
-  it('delegates publish/refresh/withdraw via publication ports while keeping thin wrappers', () => {
+  it('keeps prepared publish and curated withdrawal thin while retiring owner bypass mutations', () => {
     expect(convexHost).toContain('capabilitySupplyPublicationPorts')
-    expect(convexHost).toContain('publishCapabilityCommand')
-    expect(convexHost).toContain('refreshCapabilityCommand')
+    expect(convexHost).toContain('publishPreparedCapabilityCommand')
+    expect(convexHost).not.toContain('refreshCapabilityCommand')
     expect(convexHost).toContain('withdrawCapabilityCommand')
     expect(convexHost).toMatch(/function publicationPorts\s*\(/)
-    expect(convexHost).toMatch(/export const publishCapability\s*=/)
-    expect(convexHost).toMatch(/export const refreshCapability\s*=/)
-    expect(convexHost).toMatch(/export const withdrawCapability\s*=/)
-    expect(convexHost).not.toMatch(/normalizeCapabilityPublication/)
+    expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const refreshCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
+    expect(convexHost).not.toContain(['publishCapability', 'Command'].join(''))
+    expect(convexHost).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
     expect(convexHost).not.toMatch(/encodeCapabilityContractDocumentJson/)
   })
 

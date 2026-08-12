@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(),
 }))
 
-vi.mock('@/lib/server/customer-request-agent-auth', () => ({
-  authenticateCustomerRequestAgent: mocks.authenticate,
+vi.mock('@/lib/server/agent-access-auth', () => ({
+  authenticateAgentAccess: mocks.authenticate,
+  resolveAgentAccessPrincipal: vi.fn(),
 }))
 
+import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { handleWorkTreeAgentAction } from '@/lib/server/work-tree-agent-api'
 
 const principal = {
@@ -21,6 +23,7 @@ const principal = {
   ],
   authorityMode: 'approve_each' as const,
 }
+const resolvePrincipal = async (value: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => value
 
 beforeEach(() => {
   mocks.authenticate.mockReset()
@@ -112,7 +115,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
         }),
       }),
       'reserveRepeatUse',
-      { callOperation },
+      { resolvePrincipal, callOperation },
     )
     expect(reserve.status).toBe(200)
     await expect(reserve.json()).resolves.toMatchObject({ kind: 'accepted', useRef: 'repeat-use:http' })
@@ -124,7 +127,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
         body: JSON.stringify({ useRef: 'repeat-use:http' }),
       }),
       'inspectRepeatUse',
-      { callOperation },
+      { resolvePrincipal, callOperation },
     )
     expect(inspect.status).toBe(200)
     expect(calls[0]?.principal.credentialId).toBe('credential:repeat')
@@ -156,7 +159,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
         }),
       }),
       'reserveRepeatUse',
-      { callOperation },
+      { resolvePrincipal, callOperation },
     )
     expect(malformed.status).toBe(400)
     await expect(malformed.json()).resolves.toMatchObject({
@@ -183,7 +186,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
         }),
       }),
       'reserveRepeatUse',
-      { callOperation },
+      { resolvePrincipal, callOperation },
     )
     expect(unauthorized.status).toBe(403)
     expect(unauthorized.headers.get('content-type')).toBe('application/problem+json')

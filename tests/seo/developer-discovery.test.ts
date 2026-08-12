@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
-} from '@/modules/discovery/public'
+import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   generateDeveloperDiscoveryExamples,
-  generateDeveloperDiscoveryFixtureBundle,
   generateDeveloperDiscoverySchema,
 } from '@/modules/discovery/developer-discovery'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
@@ -22,7 +19,6 @@ describe('developer discovery SEO and AEO safety', () => {
     const artifacts = [
       generateDeveloperDiscoverySchema(state, options),
       generateDeveloperDiscoveryExamples(state, options),
-      generateDeveloperDiscoveryFixtureBundle(state, options),
     ]
     const serialized = artifacts.map((artifact) => JSON.stringify(artifact)).join('\n')
 
@@ -51,7 +47,7 @@ describe('developer discovery SEO and AEO safety', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createDefaultDiscoverySourceState()
+  const state = createFixtureDiscoverySourceState()
   const business = state.businesses.at(0)
 
   if (business === undefined) {

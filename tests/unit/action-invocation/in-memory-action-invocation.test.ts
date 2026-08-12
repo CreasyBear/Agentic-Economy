@@ -723,6 +723,7 @@ describe('in-memory Action Invocation tracer', () => {
     if (possibleRelease.kind !== 'accepted') throw new Error('Expected uncertain observation')
     const cancelAfterRelease = await restored.cancel({
       invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:possible-release`,
       expectedInvocationVersion: possibleRelease.view.invocationVersion,
       actor,
       origin,
@@ -801,6 +802,7 @@ describe('in-memory Action Invocation tracer', () => {
     if (cancelAuthority.kind !== 'accepted') throw new Error('Expected accepted authority')
     expect(await cancellationTracer.cancel({
       invocationRef: cancelPrepared.invocationRef,
+      idempotencyKey: `cancel:${cancelPrepared.invocationRef}:authority`,
       expectedInvocationVersion: cancelAuthority.view.invocationVersion,
       actor,
       origin,
@@ -885,6 +887,7 @@ describe('in-memory Action Invocation tracer', () => {
     })
     const cancelled = await tracer.cancel({
       invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:late-return`,
       expectedInvocationVersion: releaseStarted.invocationVersion,
       actor,
       origin: standaloneOrigin,

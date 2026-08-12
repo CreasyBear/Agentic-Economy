@@ -85,7 +85,6 @@ export const workTreeStepUpSchema = z.strictObject({
 export type WorkTreeStepUp = z.infer<typeof workTreeStepUpSchema>
 
 const workTreeDecisionRefusalCodeSchema = z.enum([
-  'authentication_required',
   'stale_fence',
   'forbidden',
   'not_found',
@@ -149,38 +148,28 @@ const workTreeDecisionRefusedReceiptSchema = z.strictObject({
   occurredAt: z.number().finite(),
   readback: workTreeDecisionReadbackSchema,
 })
-const workTreeDecisionUnknownReceiptSchema = z.strictObject({
-  kind: z.literal('unknown'),
-  decision: z.enum(['lock', 'adjust', 'park']),
-  projectId: z.string().min(1),
-  nodeId: z.string().min(1),
-  receiptId: z.string().min(1),
-  generation: z.number().int().min(0),
-  revision: z.number().int().min(0),
-  disposition: z.enum(['locked', 'queued', 'adjusted', 'unchanged']),
-  actor: workTreeActorSchema.optional(),
-  refusalCode: workTreeDecisionRefusalCodeSchema.optional(),
-  occurredAt: z.number().finite(),
-  readback: workTreeDecisionReadbackSchema,
-})
-
 const workTreeFullDecisionReceiptSchema = z.discriminatedUnion('kind', [
   workTreeDecisionAcceptedReceiptSchema,
   workTreeDecisionReplayedReceiptSchema,
   workTreeDecisionRefusedReceiptSchema,
-  workTreeDecisionUnknownReceiptSchema,
 ])
+export const workTreeDecisionReceiptSchema = workTreeFullDecisionReceiptSchema
+export type WorkTreeDecisionReceipt = z.infer<typeof workTreeDecisionReceiptSchema>
+
 const workTreeDecisionAuthenticationRefusalSchema = z.strictObject({
   kind: z.literal('refused'),
   code: z.literal('authentication_required'),
   replayed: z.literal(false),
 })
-
-export const workTreeDecisionReceiptSchema = z.union([
-  workTreeFullDecisionReceiptSchema,
+const workTreeDecisionUnknownResultSchema = z.strictObject({
+  kind: z.literal('unknown'),
+})
+export const workTreeDecisionResultSchema = z.union([
+  workTreeDecisionReceiptSchema,
   workTreeDecisionAuthenticationRefusalSchema,
+  workTreeDecisionUnknownResultSchema,
 ])
-export type WorkTreeDecisionReceipt = z.infer<typeof workTreeDecisionReceiptSchema>
+export type WorkTreeDecisionResult = z.infer<typeof workTreeDecisionResultSchema>
 
 const workTreeEventReadbackCommonShape = {
   operationKey: z.string(),
@@ -466,7 +455,7 @@ export const workTreeDecisionInputSchema = z.strictObject({
 export type WorkTreeDecisionInput = z.infer<typeof workTreeDecisionInputSchema>
 
 const applyWorkTreeSourceMutation = sourceMutation<WorkTreeApplyInput, WorkTreeRawApplySourceResult>('workTrees:apply')
-const decideWorkTreeSourceMutation = sourceMutation<WorkTreeDecisionInput, WorkTreeDecisionReceipt>('workTrees:decide')
+const decideWorkTreeSourceMutation = sourceMutation<WorkTreeDecisionInput, WorkTreeDecisionResult>('workTrees:decide')
 
 export async function applyWorkTreeThroughSource(input: WorkTreeApplyInput): Promise<WorkTreeApplyResult> {
   try {
@@ -493,35 +482,19 @@ export async function applyWorkTreeThroughSource(input: WorkTreeApplyInput): Pro
   }
 }
 
-export async function decideWorkTreeThroughSource(input: WorkTreeDecisionInput): Promise<WorkTreeDecisionReceipt> {
+export async function decideWorkTreeThroughSource(input: WorkTreeDecisionInput): Promise<WorkTreeDecisionResult> {
   const parsedInput = workTreeDecisionInputSchema.parse(input)
   try {
     const result = parsedInput.guestAssertion === undefined
       ? await callSourceMutation(decideWorkTreeSourceMutation, parsedInput)
       : await callPublicSourceMutation(decideWorkTreeSourceMutation, parsedInput)
-    return workTreeDecisionReceiptSchema.parse(result)
+    return workTreeDecisionResultSchema.parse(result)
   } catch (error) {
-    return fallbackDecisionReceipt(parsedInput, isSourceRefusal(error) ? 'forbidden' : undefined)
+    if (error instanceof ConvexSourceError && error.code === 'missing_auth') {
+      return { kind: 'refused', code: 'authentication_required', replayed: false }
+    }
+    return { kind: 'unknown' }
   }
-}
-
-function fallbackDecisionReceipt(
-  input: WorkTreeDecisionInput,
-  refusalCode: WorkTreeDecisionRefusalCode | undefined,
-): WorkTreeDecisionReceipt {
-  return {
-    kind: refusalCode === undefined ? 'unknown' : 'refused',
-    decision: input.kind,
-    projectId: input.projectId,
-    nodeId: input.nodeId,
-    receiptId: `unknown:${input.idempotencyKey}`,
-    generation: input.expectedGeneration,
-    revision: input.expectedRevision,
-    disposition: 'unchanged',
-    ...(refusalCode === undefined ? {} : { refusalCode }),
-    occurredAt: Date.now(),
-    readback: { projectId: input.projectId, revision: input.expectedRevision },
-  } as WorkTreeDecisionReceipt
 }
 
 const sourceRefusalCodeSchema = z.enum([

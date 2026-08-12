@@ -29,6 +29,7 @@ type AvailableRouteableSupply = Readonly<{
       readinessValidUntil: number
       operationRef: PublicOperationRef
       admittedOperation: AdmittedOperationRef
+      priceDigest: string
     }>
   }>>
 }>
@@ -49,6 +50,7 @@ export function registeredEvaluationBindingsFromRouteableSupply(
     offeringRegistrationHash: offering.registrationHash,
     bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    priceDigest: publication.priceDigest,
     commercialRelationship: {
       ...offering.presentation.commercialRelationship,
       evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],

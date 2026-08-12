@@ -1,5 +1,4 @@
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 import { isRecord } from '../src/modules/common/is-record'
 import {
   ExternalOperationProvenanceValues,
@@ -8,10 +7,14 @@ import {
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
   PublicSupportReasonValues,
-  type BusinessSupplyProjection,
-  type OfferingAccessPathDescriptor,
-  type OfferingPrice,
+} from '../src/modules/catalog/convex'
+import type {
+  BusinessSupplyProjection,
+  OfferingAccessPathDescriptor,
+  OfferingPrice,
 } from '../src/modules/catalog/public'
+import type { BusinessContext } from '../src/modules/business/public'
+import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 
 export type BusinessSupplyProjectionErrorPrefix = 'catalog' | 'registry' | 'discovery'
 
@@ -108,8 +111,7 @@ function readPersistedBusiness(
   const row = readRecord(value, `${context.errorPrefix}_projection_business_invalid`)
   const businessId = readString(row.businessId, `${context.errorPrefix}_projection_business_id_invalid`)
   const slug = readString(row.slug, `${context.errorPrefix}_projection_business_slug_invalid`)
-  const publishedPhone = readOptionalString(row.publishedPhone, `${context.errorPrefix}_projection_business_phone_invalid`)
-  const postcode = readOptionalString(row.postcode, `${context.errorPrefix}_projection_business_postcode_invalid`)
+  const businessContext = readBusinessContext(row.businessContext, context)
   const responseTimeMinutes = readOptionalNumber(row.responseTimeMinutes, `${context.errorPrefix}_projection_business_response_time_invalid`)
   const photos = row.photos === undefined
     ? undefined
@@ -131,15 +133,48 @@ function readPersistedBusiness(
     slug,
     name: readString(row.name, `${context.errorPrefix}_projection_business_name_invalid`),
     category: readString(row.category, `${context.errorPrefix}_projection_business_category_invalid`),
-    suburb: readString(row.suburb, `${context.errorPrefix}_projection_business_suburb_invalid`),
-    stateTerritory: readString(row.stateTerritory, `${context.errorPrefix}_projection_business_state_invalid`),
-    ...(publishedPhone === undefined ? {} : { publishedPhone }),
-    ...(postcode === undefined ? {} : { postcode }),
+    businessContext,
     publicUrl: readString(row.publicUrl, `${context.errorPrefix}_projection_business_url_invalid`),
     trustTier: readTrustTier(row.trustTier, context),
     ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
     ...(photos === undefined ? {} : { photos }),
   }
+}
+
+function readBusinessContext(value: unknown, context: DecoderContext): BusinessContext {
+  const row = readRecord(value, `${context.errorPrefix}_projection_business_context_invalid`)
+  const kind = readString(row.kind, `${context.errorPrefix}_projection_business_context_kind_invalid`)
+  if (kind === 'programmable_provider') {
+    return {
+      kind,
+      website: readString(row.website, `${context.errorPrefix}_projection_business_website_invalid`),
+      providerIdentifier: readString(
+        row.providerIdentifier,
+        `${context.errorPrefix}_projection_business_provider_identifier_invalid`,
+      ),
+    }
+  }
+  if (kind === 'local_human') {
+    const postcode = readOptionalString(
+      row.postcode,
+      `${context.errorPrefix}_projection_business_postcode_invalid`,
+    )
+    const publishedPhone = readOptionalString(
+      row.publishedPhone,
+      `${context.errorPrefix}_projection_business_phone_invalid`,
+    )
+    return {
+      kind,
+      suburb: readString(row.suburb, `${context.errorPrefix}_projection_business_suburb_invalid`),
+      stateTerritory: readString(
+        row.stateTerritory,
+        `${context.errorPrefix}_projection_business_state_invalid`,
+      ),
+      ...(postcode === undefined ? {} : { postcode }),
+      ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    }
+  }
+  throw new Error(`${context.errorPrefix}_projection_business_context_kind_invalid`)
 }
 
 function readPersistedOffering(

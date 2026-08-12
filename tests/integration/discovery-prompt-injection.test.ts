@@ -5,7 +5,7 @@ import {
   buildCatalogDiscoveryManifest,
   buildLlmsTxt,
 } from '@/modules/discovery/public'
-import { createLocalE2eRegistrySourceState } from '@/modules/registry/public'
+import { createLocalE2eRegistrySourceState } from '../helpers/registry-local-e2e'
 
 describe('discovery prompt-injection protection', () => {
   it('does not let owner text upgrade trust or support state in Offering manifests', () => {

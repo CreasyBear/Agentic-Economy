@@ -13,6 +13,7 @@ import {
   type InvocationActor,
   type DynamicPublishedSnapshotAnchors,
 } from '@/modules/action-invocation'
+import { createDevelopmentScenarioX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
@@ -29,8 +30,10 @@ import {
 
 import {
   buildDevelopmentPublishedOperationEvidence,
+  createDevelopmentProviderLeaseIssuer,
   projectDevelopmentPublishedOperationEvidence,
   verifyDevelopmentPublishedOperationEvidence,
+  developmentProviderConnectionAuthorityDigest,
 } from './development-published-operation-evidence'
 import {
   materializePublishedOperation,
@@ -183,10 +186,12 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         source,
         runtime: successRuntime(fixture.operation.binding.endpointUrl, effects),
         now: () => now,
+        issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, now),
         nextInvocationRef: () => `dynamic:invocation:${origin.kind}:${++invocationSequence}`,
         nextAuthorityRef: () => `dynamic:authority:${++authoritySequence}`,
         nextAttemptRef: () => `dynamic:attempt:${++attemptSequence}`,
         durablePort,
+        paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort(),
         developmentSnapshot: durableState,
       })
       const prepared = await adapter.prepare({
@@ -231,6 +236,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       })
       const cancellation = await adapter.cancel({
         invocationRef: prepared.invocationRef,
+        idempotencyKey: `cancel:${prepared.invocationRef}:completed`,
         expectedInvocationVersion: completed.view.invocationVersion,
         actor,
         origin,
@@ -263,14 +269,17 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         source: coldSource,
         runtime: successRuntime(fixture.operation.binding.endpointUrl, effects),
         now: () => now + 1,
+        issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, now + 1),
         nextInvocationRef: () => 'unused',
         nextAuthorityRef: () => 'unused',
         nextAttemptRef: () => 'unused',
         durablePort: loaded.durablePort,
         initialSnapshot: loaded.initialSnapshot,
         developmentSnapshot: loaded.developmentSnapshot,
-        paymentAttempts: loaded.paymentAttempts,
-        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+        paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort({
+          attempts: loaded.paymentAttempts,
+          authorizationEvents: loaded.paymentAuthorizationEvents,
+        }),
       })
       cases.push({
         origin,
@@ -278,7 +287,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         actionId: completed.view.action.id,
         actionVersion: completed.view.action.contractVersion,
         authority: {
-          amount: { currency: 'USD', units: '1', exponent: 2 },
+          amount: fixture.operation.pricingConfig.paidAmount,
           network: fixture.operation.identity.payment.kind === 'x402'
             ? fixture.operation.identity.payment.network : 'none',
           asset: fixture.operation.identity.payment.kind === 'x402'
@@ -308,10 +317,12 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       source: recoverySource,
       runtime: lostResponseRuntime(fixture.operation.binding.endpointUrl, recoveryEffects),
       now: () => now,
+      issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, now),
       nextInvocationRef: () => 'dynamic:invocation:recovery',
       nextAuthorityRef: () => 'dynamic:authority:recovery',
       nextAttemptRef: () => 'dynamic:attempt:recovery',
       durablePort: recoveryDurablePort,
+      paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort(),
       developmentSnapshot: recoveryDurableState,
     })
     const recoveryPrepared = await recoveryAdapter.prepare({
@@ -365,6 +376,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     })
     const cancellation = await recoveryAdapter.cancel({
       invocationRef: recoveryPrepared.invocationRef,
+      idempotencyKey: `cancel:${recoveryPrepared.invocationRef}:uncertain`,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       actor, origin: recoveryOrigin,
     })
@@ -421,10 +433,12 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       source: semanticSource,
       runtime: successRuntime(fixture.operation.binding.endpointUrl, semanticEffects),
       now: () => now,
+      issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, now),
       nextInvocationRef: () => `semantic:invocation:${++semanticInvocationSequence}`,
       nextAuthorityRef: () => `semantic:authority:${++semanticAuthoritySequence}`,
       nextAttemptRef: () => `semantic:attempt:${++semanticAttemptSequence}`,
       durablePort: semanticDurablePort,
+      paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort(),
       developmentSnapshot: semanticDurableState,
     })
     const executeSemantic = async () => {
@@ -502,10 +516,12 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       source: killSource,
       runtime: successRuntime(fixture.operation.binding.endpointUrl, { payment: 0, provider: 0 }),
       now: () => now,
+      issueProviderLease: createDevelopmentProviderLeaseIssuer(fixture.operation, now),
       nextInvocationRef: () => 'process-kill:invocation:1',
       nextAuthorityRef: () => 'process-kill:authority:1',
       nextAttemptRef: () => 'process-kill:attempt:1',
       durablePort: killDurablePort,
+      paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort(),
       developmentSnapshot: killDurableState,
     })
     const killPrepared = await killAdapter.prepare({
@@ -668,14 +684,17 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       source,
       runtime: verifierRuntime(),
       now: () => rebuiltOperation.readiness.observedAt + 2_000,
+      issueProviderLease: createDevelopmentProviderLeaseIssuer(rebuiltOperation, rebuiltOperation.readiness.observedAt + 2_000),
       nextInvocationRef: () => 'verifier:unused',
       nextAuthorityRef: () => 'verifier:unused',
       nextAttemptRef: () => 'verifier:unused',
       durablePort: loaded.durablePort,
       initialSnapshot: loaded.initialSnapshot,
       developmentSnapshot: loaded.developmentSnapshot,
-      paymentAttempts: loaded.paymentAttempts,
-      paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
+      paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort({
+        attempts: loaded.paymentAttempts,
+        authorizationEvents: loaded.paymentAuthorizationEvents,
+      }),
     })
     const view = adapter.inspect(entry.invocationRef)
     return view?.control.state === 'terminal'
@@ -774,14 +793,17 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     source: processKillSource,
     runtime: verifierRuntime(),
     now: () => rebuiltOperation.readiness.observedAt + 2_000,
+    issueProviderLease: createDevelopmentProviderLeaseIssuer(rebuiltOperation, rebuiltOperation.readiness.observedAt + 2_000),
     nextInvocationRef: () => 'verifier:unused',
     nextAuthorityRef: () => 'verifier:unused',
     nextAttemptRef: () => 'verifier:unused',
     durablePort: loadedProcessKill.durablePort,
+    paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort({
+      attempts: loadedProcessKill.paymentAttempts,
+      authorizationEvents: loadedProcessKill.paymentAuthorizationEvents,
+    }),
     initialSnapshot: loadedProcessKill.initialSnapshot,
     developmentSnapshot: loadedProcessKill.developmentSnapshot,
-    paymentAttempts: loadedProcessKill.paymentAttempts,
-    paymentAuthorizationEvents: loadedProcessKill.paymentAuthorizationEvents,
   })
   const processKillView = processKillAdapter.inspect(packet.processKill.invocationRef)
   if (
@@ -909,6 +931,7 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
+    readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     readProviderConnectionCredentialRef: (input) => {
       if (
         input.connectionRef !== 'connection:mock-provider'
@@ -916,15 +939,23 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
         || input.adapterId !== 'x402-fetch:v2'
         || input.authorityGeneration !== 1
       ) return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
-      const authorityDigest = canonicalDigest({
+      const authorityDigest = developmentProviderConnectionAuthorityDigest({
         connectionRef: 'connection:mock-provider',
+        businessId: 'mock:business:published-api',
         providerRef: 'provider:mock-provider',
-        authorityGeneration: 1,
+        adapterId: 'x402-fetch:v2',
       })
       return input.authorityDigest === authorityDigest
         ? { kind: 'resolved' as const, credentialRef: 'connection:mock-provider' }
         : { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
     },
+    validateProviderConnectionAuthority: (input) =>
+      input.connectionRef === 'connection:mock-provider'
+        && input.providerRef === 'provider:mock-provider'
+        && input.adapterId === 'x402-fetch:v2'
+        && input.authorityGeneration === 1
+        ? { kind: 'valid' as const }
+        : { kind: 'unavailable' as const, reason: 'stale_generation' as const },
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({

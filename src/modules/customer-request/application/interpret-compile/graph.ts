@@ -16,6 +16,7 @@ import {
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
 import { exactContractRefKey } from '@/modules/customer-request/contract-ref-key'
+import { compareExactAmounts, pricingConfigDigest } from '@/modules/money/public'
 import { classifyDeclaredCapabilityDomain } from './capability-domain'
 import { bindCustomerCapabilityDescriptor, type ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 import {
@@ -112,6 +113,16 @@ export async function assembleRequestGraph(
       }) !== publication.operationRef) {
       return { kind: 'unavailable', reason: 'graph_unreadable' }
     }
+    if (
+      pricingConfigDigest(publication.pricingConfig) !== publication.priceDigest
+      || item.offering.presentation.price.kind !== 'fixed'
+      || compareExactAmounts(
+        item.offering.presentation.price.amount,
+        publication.pricingConfig.paidAmount,
+      ) !== 0
+    ) {
+      return { kind: 'unavailable', reason: 'graph_unreadable' }
+    }
     const key = exactContractRefKey(contractRef)
     let model = modelsByRef.get(key)
     if (model === undefined) {
@@ -153,6 +164,7 @@ export async function assembleRequestGraph(
       offeringRegistrationHash: item.offering.registrationHash,
       bindingRegistrationHash: item.binding.registrationHash,
       price: item.offering.presentation.price,
+      priceDigest: publication.priceDigest,
       commercialRelationship: {
         ...item.offering.presentation.commercialRelationship,
         evidenceRefs: [...item.offering.presentation.commercialRelationship.evidenceRefs],

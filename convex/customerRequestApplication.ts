@@ -1847,7 +1847,7 @@ async function resolveRequestCaller(
           ? current.principalId
           : undefined
       if (requestPrincipalId !== undefined && requestPrincipalId !== identity.tokenIdentifier) {
-        const agentPrincipal = await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
+        const agentPrincipal = await ctx.runQuery(internal.agentAccessPrincipals.getAgentPrincipal, {
           principalId: requestPrincipalId,
         })
         if (agentPrincipal?.ownerTokenIdentifier === identity.tokenIdentifier) {
@@ -1875,12 +1875,6 @@ async function resolveRequestCaller(
   if (!verified) return undefined
   const clerkIssuer = env.CLERK_JWT_ISSUER_DOMAIN?.trim()
   if (clerkIssuer === undefined || clerkIssuer.length === 0) return undefined
-  const recorded = await ctx.runMutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
-    principalId: assertion.principalId, ownerId: assertion.ownerId, credentialId: assertion.credentialId,
-    ownerTokenIdentifier: `${clerkIssuer}|${assertion.ownerId}`,
-    scopes: [...assertion.scopes], seenAt: Date.now(),
-  })
-  if (recorded.kind !== 'recorded') return undefined
   if (requestRef !== undefined) {
     const current = await loadCurrent(ctx, requestRef)
     const requestPrincipalId = current.kind === 'current'
@@ -1889,7 +1883,7 @@ async function resolveRequestCaller(
         ? current.principalId
         : undefined
     if (requestPrincipalId !== undefined && requestPrincipalId !== assertion.principalId) {
-      const requestPrincipal = await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
+      const requestPrincipal = await ctx.runQuery(internal.agentAccessPrincipals.getAgentPrincipal, {
         principalId: requestPrincipalId,
       })
       if (requestPrincipal?.ownerId === assertion.ownerId

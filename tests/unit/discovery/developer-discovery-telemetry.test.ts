@@ -18,7 +18,6 @@ describe('developer discovery fetch telemetry', () => {
     ['docs', 'successful', 'developer_docs_viewed', 'shipped'],
     ['schema', 'cached', 'schema_downloaded', 'shipped'],
     ['examples', 'stale', 'example_fixture_downloaded', 'degraded'],
-    ['fixtures', 'schema_version_mismatch', 'example_fixture_downloaded', 'degraded'],
     ['health', 'invalid', 'discovery_health_viewed', 'withheld'],
     ['schema', 'not_found', 'schema_downloaded', 'unavailable'],
     ['docs', 'route_outage', 'developer_docs_viewed', 'unavailable'],

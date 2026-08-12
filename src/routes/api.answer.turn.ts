@@ -1,11 +1,12 @@
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+
 import { createFileRoute } from '@tanstack/react-router'
 
-import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { answerTurnSourceErrorResponse } from '@/lib/server/answer-source-error'
 import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { assertHttpAdmission, requestAdmissionKey, type RateLimitAdmission, type RateLimitResult } from '@/lib/server/rate-limit'
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
 
 import {
   ANSWER_TURN_DATA_PART,
@@ -19,7 +20,14 @@ import {
   appendSessionCookie,
   buildThreadTitle,
   resolveOrCreateSessionId,
+  type AnswerOperationInvokeContext,
 } from '@/modules/answer-thread/public'
+import {
+  authenticateOperationGateway,
+  createOperationInvokeService,
+  type OperationInvokeHandlerOptions,
+} from '@/lib/server/operation-invoke-api'
+import { runWithRequestCorrelation } from '@/lib/server/request-correlation'
 import type {
   AnswerTurnReservationResult,
   streamAnswerTurn,
@@ -52,29 +60,35 @@ const admitAnswerTurn: RateLimitAdmission = ({ request, key, keySuffix }) =>
 type AnswerTurnHandlerOptions = Readonly<{
   admit?: RateLimitAdmission
   stream?: typeof streamAnswerTurn
+  authenticate?: OperationInvokeHandlerOptions['authenticate']
+  operationInvokeService?: OperationInvokeHandlerOptions['operationInvokeService']
 }>
 
 export async function handleAnswerTurnRequest(
   request: Request,
   options: AnswerTurnHandlerOptions = {},
 ): Promise<Response> {
-  const { sessionId, setCookie } = resolveOrCreateSessionId(request)
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
-  if (!request.headers.get('content-type')?.includes('application/json')) {
-    return problem(buildAnswerTurnProblem('invalid_content_type'))
-  }
+    if (!request.headers.get('content-type')?.includes('application/json')) {
+      return problem(buildAnswerTurnProblem('invalid_content_type'))
+    }
+    const boundedBody = await readBoundedRequestText(request, MAX_ANSWER_TURN_BODY_BYTES)
+    if (!boundedBody.ok) {
+      return problem(buildAnswerTurnProblem('payload_too_large'))
+    }
 
-  const boundedBody = await readBoundedRequestJson(request, MAX_ANSWER_TURN_BODY_BYTES)
-  if (!boundedBody.ok) {
-    return problem(buildAnswerTurnProblem(
-      boundedBody.code === 'payload_too_large' ? 'payload_too_large' : 'invalid_body',
-    ))
-  }
-
-  const parsed = answerTurnRequestSchema.safeParse(boundedBody.value)
-  if (!parsed.success) {
-    return problem(buildAnswerTurnProblem('invalid_body'))
-  }
+    let rawBody: unknown
+    try {
+      rawBody = JSON.parse(boundedBody.text) as unknown
+    } catch {
+      return problem(buildAnswerTurnProblem('invalid_body'))
+    }
+    const parsed = answerTurnRequestSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return problem(buildAnswerTurnProblem('invalid_body'))
+    }
 
   const clientTurnKey = request.headers.get('x-ae-turn-key')?.trim()
   if (
@@ -101,11 +115,25 @@ export async function handleAnswerTurnRequest(
       'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))),
     })
   }
+    let operationInvokeContext: AnswerOperationInvokeContext | undefined
+    if (request.headers.has('authorization')) {
+      const authenticated = await authenticateOperationGateway(request, correlationId, {
+        ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+        ...(options.operationInvokeService === undefined ? {} : { operationInvokeService: options.operationInvokeService }),
+      }, boundedBody.text)
+      if (authenticated instanceof Response) return authenticated
+      operationInvokeContext = {
+        principal: authenticated.principal,
+        correlationId,
+        service: options.operationInvokeService ?? createOperationInvokeService(request, boundedBody.text),
+      }
+    }
 
   // Static import would pull Node-only answer execution into the client route graph.
   const {
     answerTurnRequestDigest,
     answerTurnReservationKey,
+    finalizeReservedAnswerTurnError,
     reserveAnswerTurn,
     streamAnswerTurn: loadStreamAnswerTurn,
   } = await import('@/modules/answer-thread/server')
@@ -134,6 +162,7 @@ export async function handleAnswerTurnRequest(
       reservationKey,
       title: buildThreadTitle(parsed.data.query),
       sourceWriteRequest: request,
+      sourceWriteBody: boundedBody.text,
     })
   } catch (error) {
     const sourceError = answerTurnSourceErrorResponse(error)
@@ -170,11 +199,13 @@ export async function handleAnswerTurnRequest(
             sessionId,
             query: parsed.data.query,
             ...(parsed.data.threadId === undefined ? {} : { threadId: parsed.data.threadId }),
+            ...(parsed.data.searchContext === undefined ? {} : { searchContext: parsed.data.searchContext }),
             requestDigest,
             admission: reservation,
-            ...(parsed.data.searchContext === undefined ? {} : { searchContext: parsed.data.searchContext }),
             signal: request.signal,
             sourceWriteRequest: request,
+            sourceWriteBody: boundedBody.text,
+            ...(operationInvokeContext === undefined ? {} : { operationInvokeContext }),
           },
           send,
         )
@@ -182,10 +213,31 @@ export async function handleAnswerTurnRequest(
         if (request.signal.aborted || isAbortError(error) || terminalSent) {
           return
         }
-        send({
-          seq: nextFrameSeq,
-          event: { type: 'error', problem: buildAnswerTurnProblem('answer_turn_failed') },
+        const finalized = await finalizeReservedAnswerTurnError({
+          request,
+          sourceWriteBody: boundedBody.text,
+          admission: reservation,
+          sessionId,
+          requestDigest,
+          query: parsed.data.query,
+          ...(parsed.data.searchContext === undefined
+            ? {}
+            : { searchContext: parsed.data.searchContext }),
+          isNewThread: parsed.data.threadId === undefined,
         })
+        send(
+          finalized.kind === 'error'
+            ? { seq: nextFrameSeq, event: { type: 'error', problem: finalized.problem } }
+            : finalized.kind === 'stopped'
+              ? { seq: nextFrameSeq, event: { type: 'stopped' } }
+              : {
+                  seq: nextFrameSeq,
+                  event: {
+                    type: 'error',
+                    problem: buildAnswerTurnProblem('answer_turn_persist_failed'),
+                  },
+                },
+        )
       }
     },
     // A turn that fails after the stream opened has already sent its own typed
@@ -198,6 +250,7 @@ export async function handleAnswerTurnRequest(
     headers: { 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' },
   })
   return appendSessionCookie(response, sessionId, setCookie, request)
+})
 }
 
 

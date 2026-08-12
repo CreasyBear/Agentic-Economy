@@ -136,7 +136,7 @@ export async function registerCapabilityTransportBinding(
     if (loaded.adapterId !== admission.transport.adapterId) {
       return { kind: 'refused' as const, reason: 'connection_adapter_mismatch' as const }
     }
-    if (loaded.lifecycle !== 'active') {
+    if (loaded.lifecycle !== 'active' || (loaded.expiresAt !== undefined && loaded.expiresAt <= registeredAt)) {
       return { kind: 'refused' as const, reason: 'connection_inactive' as const }
     }
     if (!isProviderConnectionAuthorityCurrent(loaded)) {

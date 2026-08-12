@@ -147,7 +147,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     expect(screen.queryByLabelText('Amount')).toBeNull()
     choose('Price type', 'Fixed price')
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '129.50' } })
-    choose('Charged per', 'Hour')
+    choose('Charged per', 'Call')
     choose('Tax', 'Includes tax')
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
 
@@ -155,7 +155,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     expect(onSave.mock.calls[0]?.[0]?.price).toEqual({
       kind: 'fixed',
       amount: { currency: 'AUD', units: '12950', exponent: 2 },
-      unit: 'hour',
+      unit: 'call',
       taxTreatment: 'inclusive',
     })
   })

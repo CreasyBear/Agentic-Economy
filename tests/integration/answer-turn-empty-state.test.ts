@@ -6,13 +6,16 @@ vi.mock('@/lib/server/rate-limit', () => ({
 }))
 
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
-import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { streamAnswerTurn } from '@/modules/answer-thread/server'
+import { handleAnswerTurnRequest as handleAnswerTurnRequestRaw } from '@/routes/api.answer.turn'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../helpers/answer-thread-test-port'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 import {
   openRouterProseResponse,
@@ -20,8 +23,8 @@ import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
-
-
+ 
+ 
 const SESSION_COOKIE = sessionCookieHeader('session-empty-state')
 
 function isSafetyModelRequest(request: {
@@ -40,17 +43,33 @@ function stubThreadPort(turns: unknown[]): void {
   store.persisted = turns
   installAnswerThreadTestPort(store)
 }
+const EMPTY_KEYLESS_EXECUTABLE_SOURCE: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
 
+const streamAnswerTurnWithLocalPorts: typeof streamAnswerTurn = (input, send) =>
+  streamAnswerTurn({
+    ...input,
+    keylessExecutableSource: EMPTY_KEYLESS_EXECUTABLE_SOURCE,
+  }, send)
+
+function handleAnswerTurnRequest(request: Request): Promise<Response> {
+  return handleAnswerTurnRequestRaw(request, { stream: streamAnswerTurnWithLocalPorts })
+}
 describe('POST /api/answer/turn empty-state queries', () => {
 
   let previousConvexUrl: string | undefined
   let previousViteConvexUrl: string | undefined
+  let restoreRegistrySource: (() => void) | undefined
 
   beforeEach(() => {
     previousConvexUrl = process.env.CONVEX_URL
     previousViteConvexUrl = process.env.VITE_CONVEX_URL
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    restoreRegistrySource = installLocalE2eRegistrySourceForTests()
   })
 
   afterEach(() => {
@@ -67,6 +86,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
+    restoreRegistrySource?.()
+    restoreRegistrySource = undefined
   })
 
   it('completes with honest empty-state copy when no providers match', async () => {
@@ -159,9 +180,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
 
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
-        'plumbing-demo',
       ])
-      expect(complete.answer.oneLine).toBe('These 2 businesses may fit what you need in Parramatta.')
+      expect(complete.answer.oneLine).toBe('This business may fit what you need in Parramatta.')
       expect(complete.answer.summary).toContain('What they offer, price, and current availability still need confirmation.')
       expect(complete.answer.nextStep).toContain('what it costs')
 
@@ -200,7 +220,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       ])
       const searchStep = evidence.workLog?.find((step) => step.phase === 'search')
       expect(searchStep?.status).toBe('complete')
-      expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '2')).toBe(true)
+      expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '1')).toBe(true)
       // Retrieval-first already has the complete provider projection; only the
       // explicit safety preflight spends a model request.
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
@@ -399,9 +419,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('Perth')
-      expect(complete.answer.summary).toContain('confirm')
-      expect(complete.answer.nextStep).toContain('Confirm Perth, WA')
+      expect(complete.answer.oneLine).toBe('Should I look in Perth, WA?')
+      expect(complete.answer.summary).toBe('Your configured context proposes Perth, WA, but I need you to confirm that area before I search.')
+      expect(complete.answer.nextStep).toBe('Confirm Perth, WA, or add a different suburb or city before I search.')
       expect(complete.answer.agentJsonUrl).not.toContain('near+Perth')
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
       expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(0)
@@ -441,6 +461,16 @@ describe('POST /api/answer/turn empty-state queries', () => {
           whatToDoNow:
             'Contact the business and ask whether it handles this job, what it costs, and when it is available.',
         })
+      }
+      if (request.tools === undefined && request.response_format?.type !== 'json_schema') {
+        return {
+          id: 'chatcmpl-discovery-empty',
+          model: 'test-model',
+          choices: [{
+            finish_reason: 'stop',
+            message: { role: 'assistant', content: JSON.stringify({ businesses: [] }) },
+          }],
+        }
       }
       if (hasToolResult && /brunswick/i.test(latestQuery)) {
         return openRouterProseResponse({

@@ -29,7 +29,11 @@ import { encodeGovernedAction } from '@/modules/governed-action/public'
 import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import type { DataModel } from '../../../convex/_generated/dataModel'
 import { createEmptyInquirySourceState, type InquiryThreadRecord } from '@/modules/inquiries/public'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -79,6 +83,7 @@ type SubmitArgs = {
   csrfCookie?: string
   origin?: string
   sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
 }
 
 type SubmitOk = {
@@ -150,7 +155,7 @@ describe('Convex inquiry runtime bridge', () => {
     const db = seededInquiryDb()
     const inquiryOrigin = { kind: 'answer_thread' as const, threadId: 'thread:selected-provider' }
 
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first', { inquiryOrigin })))
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), await submitArgs('first', { inquiryOrigin })))
 
     expect(submitted.code).toBe('inquiry_submitted')
     expect(db.dump('inquiryThreads')).toHaveLength(1)
@@ -201,7 +206,7 @@ describe('Convex inquiry runtime bridge', () => {
     )
     expect(JSON.stringify([db.dump('notificationDispatches'), db.dump('auditEvents')])).not.toContain('Pipe burst under the sink')
 
-    const replay = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first', { inquiryOrigin })))
+    const replay = requireSubmitOk(await submitHandler(authCtx(db, null), await submitArgs('first', { inquiryOrigin })))
     expect(replay.code).toBe('inquiry_replayed')
     expect(replay.thread.threadId).toBe(submitted.thread.threadId)
     expect(replay.thread.customerAccessKey).toBe(submitted.thread.customerAccessKey)
@@ -518,7 +523,7 @@ describe('Convex inquiry runtime bridge', () => {
     const db = seededInquiryDb()
     db.remove('claims', 'claims:1')
 
-    const rejectedSubmit = await submitHandler(authCtx(db, null), submitArgs('missing-claim'))
+    const rejectedSubmit = await submitHandler(authCtx(db, null), await submitArgs('missing-claim'))
 
     expect(rejectedSubmit).toMatchObject({
       kind: 'error',
@@ -535,7 +540,7 @@ describe('Convex inquiry runtime bridge', () => {
     const db = seededInquiryDb()
     await db.patch('owners:1', { emailHash: undefined })
 
-    const rejectedSubmit = await submitHandler(authCtx(db, null), submitArgs('missing-owner-email'))
+    const rejectedSubmit = await submitHandler(authCtx(db, null), await submitArgs('missing-owner-email'))
 
     expect(rejectedSubmit).toEqual({
       kind: 'error',
@@ -552,7 +557,7 @@ describe('Convex inquiry runtime bridge', () => {
 
   it('rejects raw source-write nonce replay before downstream inquiry idempotency', async () => {
     const db = seededInquiryDb()
-    const args = submitArgs('nonce-replay')
+    const args = await submitArgs('nonce-replay')
     const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), args))
     const replay = await submitHandler(authCtx(db, null), args)
 
@@ -567,16 +572,36 @@ describe('Convex inquiry runtime bridge', () => {
 
   it('requires independent operation and correlation arguments instead of source-write self-attestation', async () => {
     const db = seededInquiryDb()
+    const publicAdmission = await sourceWriteAdmission('public_inquiry', 'op:inquiry', 'corr:inquiry')
+    const billingAdmission = await sourceWriteAdmission('billing', 'op:billing', 'corr:billing')
+    const protectedAdmission = await sourceWriteAdmission('protected_action', 'op:protected', 'corr:protected')
     await expect(
-      requireSourceWrite(authCtx(db, null), { sourceWrite: sourceWriteAdmission('public_inquiry', 'op:inquiry', 'corr:inquiry') }, 'public_inquiry')
-    ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
-    await expect(
-      requireSourceWrite(authCtx(db, null), { sourceWrite: sourceWriteAdmission('billing', 'op:billing', 'corr:billing') }, 'billing')
+      requireSourceWrite(
+        authCtx(db, null),
+        {
+          sourceWrite: publicAdmission,
+          sourceWriteRequest: sourceWriteRequestFromAdmission(publicAdmission),
+        },
+        'public_inquiry'
+      )
     ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
     await expect(
       requireSourceWrite(
         authCtx(db, null),
-        { sourceWrite: sourceWriteAdmission('protected_action', 'op:protected', 'corr:protected') },
+        {
+          sourceWrite: billingAdmission,
+          sourceWriteRequest: sourceWriteRequestFromAdmission(billingAdmission),
+        },
+        'billing'
+      )
+    ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
+    await expect(
+      requireSourceWrite(
+        authCtx(db, null),
+        {
+          sourceWrite: protectedAdmission,
+          sourceWriteRequest: sourceWriteRequestFromAdmission(protectedAdmission),
+        },
         'protected_action'
       )
     ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
@@ -645,26 +670,28 @@ describe('Convex inquiry runtime bridge', () => {
 
   it('persists owner read, reply, close, replay, stale, terminal, and wrong-owner outcomes', async () => {
     const db = seededInquiryDb()
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('owner-actions')))
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), await submitArgs('owner-actions')))
 
-    const wrongOwnerRead = await markReadHandler(authCtx(db, alex()), ownerVersionedArgs(submitted.thread.threadId, 1, 'wrong-read'))
+    const wrongOwnerRead = await markReadHandler(authCtx(db, alex()), await ownerVersionedArgs(submitted.thread.threadId, 1, 'wrong-read'))
     expect(wrongOwnerRead).toMatchObject({ kind: 'error', code: 'inquiry_not_found' })
 
-    const staleRead = await markReadHandler(authCtx(db, sam()), ownerVersionedArgs(submitted.thread.threadId, 2, 'stale-read'))
+    const staleRead = await markReadHandler(authCtx(db, sam()), await ownerVersionedArgs(submitted.thread.threadId, 2, 'stale-read'))
     expect(staleRead).toMatchObject({ kind: 'error', code: 'inquiry_stale_version' })
 
-    const read = await markReadHandler(authCtx(db, sam()), ownerVersionedArgs(submitted.thread.threadId, 1, 'read'))
+    const read = await markReadHandler(authCtx(db, sam()), await ownerVersionedArgs(submitted.thread.threadId, 1, 'read'))
     expect(read).toMatchObject({ kind: 'ok', code: 'inquiry_read_marked', thread: { status: 'read', version: 2 } })
     expect(db.dump('inquiryThreads')[0]).toMatchObject({ status: 'read', version: 2 })
 
-    const readReplay = await markReadHandler(authCtx(db, sam()), ownerVersionedArgs(submitted.thread.threadId, 1, 'read'))
+    const readReplay = await markReadHandler(authCtx(db, sam()), await ownerVersionedArgs(submitted.thread.threadId, 1, 'read'))
     expect(readReplay).toMatchObject({ kind: 'ok', code: 'inquiry_read_replayed', thread: { status: 'read', version: 2 } })
     expect(db.dump('auditEvents').filter((event) => event.eventType === 'inquiry.read_marked')).toHaveLength(1)
 
-    const reply = await replyHandler(authCtx(db, sam()), {
-      ...ownerVersionedArgs(submitted.thread.threadId, 2, 'reply'),
-      body: 'Thanks, a human owner has received this and will follow up.',
-    })
+    const reply = await replyHandler(authCtx(db, sam()), await ownerReplyArgs(
+      submitted.thread.threadId,
+      2,
+      'reply',
+      'Thanks, a human owner has received this and will follow up.',
+    ))
     expect(reply).toMatchObject({
       kind: 'ok',
       code: 'inquiry_replied',
@@ -680,30 +707,36 @@ describe('Convex inquiry runtime bridge', () => {
       dispatchStatuses: expect.arrayContaining(['queued']),
     })
 
-    const replyReplay = await replyHandler(authCtx(db, sam()), {
-      ...ownerVersionedArgs(submitted.thread.threadId, 2, 'reply'),
-      body: 'Thanks, a human owner has received this and will follow up.',
-    })
+    const replyReplay = await replyHandler(authCtx(db, sam()), await ownerReplyArgs(
+      submitted.thread.threadId,
+      2,
+      'reply',
+      'Thanks, a human owner has received this and will follow up.',
+    ))
     expect(replyReplay).toMatchObject({ kind: 'ok', code: 'inquiry_reply_replayed', thread: { status: 'replied', version: 3 } })
     expect(db.dump('inquiryMessages')).toHaveLength(2)
     expect(db.dump('notificationDispatches')).toHaveLength(4)
 
-    const replyConflict = await replyHandler(authCtx(db, sam()), {
-      ...ownerVersionedArgs(submitted.thread.threadId, 3, 'reply'),
-      body: 'Changed body with the same operation key.',
-    })
+    const replyConflict = await replyHandler(authCtx(db, sam()), await ownerReplyArgs(
+      submitted.thread.threadId,
+      3,
+      'reply',
+      'Changed body with the same operation key.',
+    ))
     expect(replyConflict).toMatchObject({ kind: 'error', code: 'inquiry_duplicate_conflict' })
 
-    const close = await closeHandler(authCtx(db, sam()), ownerVersionedArgs(submitted.thread.threadId, 3, 'close'))
+    const close = await closeHandler(authCtx(db, sam()), await ownerVersionedArgs(submitted.thread.threadId, 3, 'close'))
     expect(close).toMatchObject({ kind: 'ok', code: 'inquiry_closed', thread: { status: 'closed', version: 4 } })
 
-    const closeReplay = await closeHandler(authCtx(db, sam()), ownerVersionedArgs(submitted.thread.threadId, 3, 'close'))
+    const closeReplay = await closeHandler(authCtx(db, sam()), await ownerVersionedArgs(submitted.thread.threadId, 3, 'close'))
     expect(closeReplay).toMatchObject({ kind: 'ok', code: 'inquiry_close_replayed', thread: { status: 'closed', version: 4 } })
 
-    const terminalReply = await replyHandler(authCtx(db, sam()), {
-      ...ownerVersionedArgs(submitted.thread.threadId, 4, 'terminal-reply'),
-      body: 'Closed threads must not accept this.',
-    })
+    const terminalReply = await replyHandler(authCtx(db, sam()), await ownerReplyArgs(
+      submitted.thread.threadId,
+      4,
+      'terminal-reply',
+      'Closed threads must not accept this.',
+    ))
     expect(terminalReply).toMatchObject({ kind: 'error', code: 'inquiry_terminal' })
 
     expect(db.dump('operationKeys').map((operation) => operation.operationName)).toEqual(
@@ -714,7 +747,7 @@ describe('Convex inquiry runtime bridge', () => {
 
   it('rejects missing CSRF evidence before Phase 2 inquiry side effects', async () => {
     const db = seededInquiryDb()
-    const rejectedSubmit = await submitHandler(authCtx(db, null), withoutCsrf(submitArgs('missing-csrf')))
+    const rejectedSubmit = await submitHandler(authCtx(db, null), withoutCsrf(await submitArgs('missing-csrf')))
     expect(rejectedSubmit).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
     expect(db.dump('inquiryThreads')).toHaveLength(0)
     expect(db.dump('notificationDispatches')).toHaveLength(0)
@@ -722,19 +755,19 @@ describe('Convex inquiry runtime bridge', () => {
     expect(db.dump('auditEvents')).toHaveLength(0)
     expect(db.dump('funnelEvents')).toHaveLength(0)
 
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('csrf-seed')))
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), await submitArgs('csrf-seed')))
 
     await expect(
-      markReadHandler(authCtx(db, sam()), withoutCsrf(ownerVersionedArgs(submitted.thread.threadId, 1, 'csrf-read')))
+      markReadHandler(authCtx(db, sam()), withoutCsrf(await ownerVersionedArgs(submitted.thread.threadId, 1, 'csrf-read')))
     ).resolves.toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
     await expect(
       replyHandler(authCtx(db, sam()), {
-        ...withoutCsrf(ownerVersionedArgs(submitted.thread.threadId, 1, 'csrf-reply')),
+        ...withoutCsrf(await ownerVersionedArgs(submitted.thread.threadId, 1, 'csrf-reply')),
         body: 'This reply must not be written.',
       })
     ).resolves.toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
     await expect(
-      closeHandler(authCtx(db, sam()), withoutCsrf(ownerVersionedArgs(submitted.thread.threadId, 1, 'csrf-close')))
+      closeHandler(authCtx(db, sam()), withoutCsrf(await ownerVersionedArgs(submitted.thread.threadId, 1, 'csrf-close')))
     ).resolves.toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
 
     expect(db.dump('inquiryThreads')).toHaveLength(1)
@@ -746,28 +779,28 @@ describe('Convex inquiry runtime bridge', () => {
 
   it('rejects same-site Origin without source admission for Phase 2 inquiry mutations', async () => {
     const db = seededInquiryDb()
-    const rejectedSubmit = await submitHandler(authCtx(db, null), withOriginOnly(submitArgs('origin-submit')))
+    const rejectedSubmit = await submitHandler(authCtx(db, null), withOriginOnly(await submitArgs('origin-submit')))
     expect(rejectedSubmit).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
 
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('origin-seed')))
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), await submitArgs('origin-seed')))
 
-    const read = await markReadHandler(authCtx(db, sam()), withOriginOnly(ownerVersionedArgs(submitted.thread.threadId, 1, 'origin-read')))
+    const read = await markReadHandler(authCtx(db, sam()), withOriginOnly(await ownerVersionedArgs(submitted.thread.threadId, 1, 'origin-read')))
     expect(read).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
 
     const reply = await replyHandler(authCtx(db, sam()), {
-      ...withOriginOnly(ownerVersionedArgs(submitted.thread.threadId, 2, 'origin-reply')),
+      ...withOriginOnly(await ownerVersionedArgs(submitted.thread.threadId, 2, 'origin-reply')),
       body: 'Same-site Origin admitted owner reply.',
     })
     expect(reply).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
 
-    const close = await closeHandler(authCtx(db, sam()), withOriginOnly(ownerVersionedArgs(submitted.thread.threadId, 3, 'origin-close')))
+    const close = await closeHandler(authCtx(db, sam()), withOriginOnly(await ownerVersionedArgs(submitted.thread.threadId, 3, 'origin-close')))
     expect(close).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
     expect(db.dump('inquiryThreads')[0]).toMatchObject({ status: 'unread', version: 1 })
   })
 
   it('persists owner delivery readback, export, privacy delete, tombstone, replay, and conflict outcomes', async () => {
     const db = seededInquiryDb()
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('privacy')))
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), await submitArgs('privacy')))
 
     const delivery = await deliveryHandler(authCtx(db, sam()), { threadId: submitted.thread.threadId })
     expect(delivery).toMatchObject({
@@ -775,10 +808,12 @@ describe('Convex inquiry runtime bridge', () => {
       readback: { notifications: [expect.objectContaining({ status: 'queued', recipientRole: 'owner' })] },
     })
 
-    const reply = await replyHandler(authCtx(db, sam()), {
-      ...ownerVersionedArgs(submitted.thread.threadId, 1, 'privacy-reply'),
-      body: 'Private owner bridge reply that should be deleted.',
-    })
+    const reply = await replyHandler(authCtx(db, sam()), await ownerReplyArgs(
+      submitted.thread.threadId,
+      1,
+      'privacy-reply',
+      'Private owner bridge reply that should be deleted.',
+    ))
     expect(reply).toMatchObject({ kind: 'ok', code: 'inquiry_replied' })
 
     const ownerExport = await exportHandler(authCtx(db, sam()), { threadId: submitted.thread.threadId })
@@ -795,7 +830,7 @@ describe('Convex inquiry runtime bridge', () => {
     const wrongOwnerExport = await exportHandler(authCtx(db, alex()), { threadId: submitted.thread.threadId })
     expect(wrongOwnerExport).toMatchObject({ kind: 'error', code: 'inquiry_not_found' })
 
-    const deleted = await deletePrivateHandler(authCtx(db, sam()), ownerPrivacyDeleteArgs(submitted.thread.threadId))
+    const deleted = await deletePrivateHandler(authCtx(db, sam()), await ownerPrivacyDeleteArgs(submitted.thread.threadId))
     expect(deleted).toMatchObject({
       kind: 'ok',
       code: 'inquiry_private_content_deleted',
@@ -863,7 +898,7 @@ describe('Convex inquiry runtime bridge', () => {
       tombstones: [expect.objectContaining({ status: 'applied', operationKey: 'inquiry:privacy-delete' })],
     })
 
-    const replay = await deletePrivateHandler(authCtx(db, sam()), ownerPrivacyDeleteArgs(submitted.thread.threadId))
+    const replay = await deletePrivateHandler(authCtx(db, sam()), await ownerPrivacyDeleteArgs(submitted.thread.threadId))
     expect(replay).toMatchObject({ kind: 'ok', code: 'inquiry_private_content_delete_replayed' })
     expect(db.dump('inquiryPrivacyTombstones')).toHaveLength(1)
     expect(db.dump('governedSendErasureLineage')).toHaveLength(1)
@@ -877,7 +912,7 @@ describe('Convex inquiry runtime bridge', () => {
 
     const conflict = await deletePrivateHandler(
       authCtx(db, sam()),
-      ownerPrivacyDeleteArgs(submitted.thread.threadId, 'changed_reason')
+      await ownerPrivacyDeleteArgs(submitted.thread.threadId, 'changed_reason')
     )
     expect(conflict).toMatchObject({ kind: 'error', code: 'inquiry_duplicate_conflict' })
     expect(db.dump('governedSendErasureLineage')).toHaveLength(1)
@@ -894,8 +929,8 @@ type OwnerVersionedArgs = {
   correlationId: string
   csrfToken?: string
   csrfCookie?: string
-  origin?: string
   sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
 }
 
 type OwnerReplyArgs = OwnerVersionedArgs & {
@@ -909,8 +944,8 @@ type OwnerPrivacyDeleteArgs = {
   correlationId: string
   csrfToken?: string
   csrfCookie?: string
-  origin?: string
   sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
 }
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -1082,8 +1117,11 @@ function seededInquiryDb(): FakeDb {
     name: 'Sam Plumbing',
     normalizedName: 'sam plumbing',
     category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
+    businessContext: {
+      kind: 'local_human',
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+    },
     publicStatus: 'published',
     trustTier: 'claimed',
     claimStatus: 'published',
@@ -1264,7 +1302,7 @@ function persistedLegacyThread(
 }
 
 
-function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArgs {
+async function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): Promise<SubmitArgs> {
   const operationKey = `inquiry:${key}`
   const correlationId = `correlation:${key}`
   const { expectedDigest, ...argOverrides } = overrides
@@ -1295,16 +1333,35 @@ function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArg
     throw new Error(`expected governed action encoding, received ${encoded.code} at ${encoded.path}`)
   }
 
-  return withSourceWrite('public_inquiry', {
+  return await withSourceWrite('public_inquiry', {
     ...args,
     expectedDigest: expectedDigest ?? encoded.digest,
   })
 }
 
-function ownerVersionedArgs(threadId: string, expectedVersion: number, key: string, overrides: Partial<OwnerVersionedArgs> = {}): OwnerVersionedArgs {
+async function ownerReplyArgs(
+  threadId: string,
+  expectedVersion: number,
+  key: string,
+  body: string,
+): Promise<OwnerReplyArgs> {
   const operationKey = `inquiry:${key}`
   const correlationId = `correlation:${key}`
-  return withSourceWrite('owner_inquiry', {
+  return await withSourceWrite('owner_inquiry', {
+    threadId,
+    expectedVersion,
+    body,
+    csrfToken: 'csrf-inquiry',
+    csrfCookie: 'csrf-inquiry',
+    operationKey,
+    correlationId,
+  })
+}
+
+async function ownerVersionedArgs(threadId: string, expectedVersion: number, key: string, overrides: Partial<OwnerVersionedArgs> = {}): Promise<OwnerVersionedArgs> {
+  const operationKey = `inquiry:${key}`
+  const correlationId = `correlation:${key}`
+  return await withSourceWrite('owner_inquiry', {
     threadId,
     expectedVersion,
     csrfToken: 'csrf-inquiry',
@@ -1315,11 +1372,11 @@ function ownerVersionedArgs(threadId: string, expectedVersion: number, key: stri
   })
 }
 
-function ownerPrivacyDeleteArgs(
+async function ownerPrivacyDeleteArgs(
   threadId: string,
   reasonCode = 'privacy_delete_requested'
-): OwnerPrivacyDeleteArgs {
-  return withSourceWrite('owner_inquiry', {
+): Promise<OwnerPrivacyDeleteArgs> {
+  return await withSourceWrite('owner_inquiry', {
     threadId,
     reasonCode,
     csrfToken: 'csrf-inquiry',

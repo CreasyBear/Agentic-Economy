@@ -1,16 +1,18 @@
 export type {
   CapabilityGraphPorts,
   GraphActiveExactCapabilityContractResult,
+  GraphCatalogAccessPath,
   GraphPublicationRow,
   GraphPublishedBusiness,
   ProbeReadinessPatch,
 } from './ports'
 
-export { probeTargetDigest } from './probe-digest'
+export { probeRequestDigest, probeTargetDigest } from './probe-digest'
 
 export {
   readCapabilityProbeTarget,
   type CapabilityProbeTarget,
+  type CapabilityProbeTargetUnavailableReason,
   type ReadCapabilityProbeTargetResult,
 } from './read-probe-target'
 
@@ -34,3 +36,10 @@ export {
   type SuppliedCandidateRef,
   type SuppliedCandidateSourceReference,
 } from './qualify-candidate'
+
+export {
+  exactCurrentCatalogOperationIsRouteable,
+  routeabilityQualityGate,
+  type CurrentCatalogOperationInput,
+  type RouteabilityQualityInput,
+} from './quality-gate'

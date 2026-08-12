@@ -134,7 +134,10 @@ describe('Offering discovery manifest', () => {
   it('describes a surviving phone channel by its own channel when inquiry is refused', () => {
     const business = projectBusinessSupplyToPublicApi({
       ...projection([humanRequestOffering('phone')]),
-      business: { ...projection([]).business, publishedPhone: '(08) 5550 1030' },
+      business: {
+        ...projection([]).business,
+        businessContext: { kind: 'local_human', suburb: 'Online', stateTerritory: 'Global', publishedPhone: '(08) 5550 1030' },
+      },
     })
 
     const result = buildOfferingDiscoveryManifest({
@@ -167,8 +170,7 @@ function projection(offerings: BusinessSupplyProjection['offerings']): BusinessS
       slug: 'the-graph',
       name: 'The Graph',
       category: 'Data',
-      suburb: 'Online',
-      stateTerritory: 'Global',
+      businessContext: { kind: 'local_human', suburb: 'Online', stateTerritory: 'Global' },
       publicUrl: '/the-graph',
       trustTier: 'claimed',
     },

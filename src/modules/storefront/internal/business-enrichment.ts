@@ -1,6 +1,7 @@
 import { APICallError, generateText, RetryError, type LanguageModelUsage } from 'ai'
 import { z } from 'zod'
 
+import type { BusinessContext } from '@/modules/business/public'
 import {
   openRouterModel,
   type OpenRouterGatewayConfig,
@@ -141,8 +142,8 @@ const draftedFieldLabels: readonly {
 }[] = [
   { key: 'businessName', field: 'businessName', label: 'Business name' },
   { key: 'category', field: 'category', label: 'Business category' },
-  { key: 'suburb', field: 'suburb', label: 'Suburb' },
-  { key: 'stateTerritory', field: 'stateTerritory', label: 'State or territory' },
+  { key: 'suburb', field: 'businessContext', label: 'Suburb' },
+  { key: 'stateTerritory', field: 'businessContext', label: 'State or territory' },
   { key: 'websiteUrl', field: 'websiteUrl', label: 'Website URL' },
   { key: 'serviceName', field: 'serviceName', label: 'Service name' },
   { key: 'serviceCategory', field: 'serviceCategory', label: 'Service category' },
@@ -413,10 +414,13 @@ function buildEnrichmentDraft(
   const businessName = fields.businessName?.trim() || requestedBusinessName
   const profile: PublicOwnerClaimFlowInput = {
     ...emptyPublicOwnerClaimInput,
+    businessContext: {
+      kind: 'local_human',
+      suburb: fields.suburb?.trim() ?? '',
+      stateTerritory: fields.stateTerritory?.trim() ?? '',
+    } satisfies BusinessContext,
     businessName,
     category: fields.category?.trim() ?? '',
-    suburb: fields.suburb?.trim() ?? '',
-    stateTerritory: fields.stateTerritory?.trim() ?? '',
     requestedSlug: normalizeStorefrontSlug(businessName),
     sourceLabel: 'Gathered from a web search. Review before publishing.',
     serviceName: fields.serviceName?.trim() ?? '',

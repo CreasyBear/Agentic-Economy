@@ -10,6 +10,7 @@ import type {
   OperationSearchWireResult,
   OperationSurfaceWireDescriptor,
 } from '@/modules/capability-supply/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type CuratedSeedPublication = Pick<Doc<'capabilityPublications'>, 'capabilityId' | 'publicationRef'>
 
@@ -89,7 +90,7 @@ async function capabilityIdsInRouteableSupply(
 describe('keyed + observed-x402 readiness honesty', () => {
   it('keyed ops with no credential are discoverable but not ready and never plan-able', async () => {
     const backend = convexTest(schema, modules)
-    await backend.mutation(internal.curatedProviders.seed, {})
+    await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
     for (const { capabilityId, token } of KEYED_OPS) {
       await expectNotExecutable(backend, capabilityId, token)
@@ -101,17 +102,18 @@ describe('keyed + observed-x402 readiness honesty', () => {
 
   it('keyed ops stay inert when the readiness probe reports credential_unavailable', async () => {
     const backend = convexTest(schema, modules)
-    const seeded = await backend.mutation(internal.curatedProviders.seed, {})
+    const seeded = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
-    const byCapability = new Map(
+    const byCapability = new Map<string, CuratedSeedPublication>(
       seeded.publications.map((p: CuratedSeedPublication): readonly [string, CuratedSeedPublication] => [p.capabilityId, p]),
     )
     for (const { capabilityId, token } of KEYED_OPS) {
       const publication = byCapability.get(capabilityId)
       expect(publication).toBeDefined()
+      if (publication === undefined) throw new Error(`seeded publication missing: ${capabilityId}`)
       const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-        publicationRef: publication!.publicationRef,
         expectedRevision: 1,
+        publicationRef: publication.publicationRef,
         credentialState: 'unavailable',
         healthState: 'healthy',
         validUntil: Date.now() + 300_000,
@@ -128,9 +130,65 @@ describe('keyed + observed-x402 readiness honesty', () => {
     for (const id of KEYED_CAPABILITY_IDS) expect(routeable.has(id)).toBe(false)
   })
 
+  it('persists credential_rejected readiness as unavailable instead of target_changed', async () => {
+    const backend = convexTest(schema, modules)
+    const seeded = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
+    const publication = seeded.publications.find((item: CuratedSeedPublication) => item.capabilityId === 'frankfurter.single-rate')
+    if (publication === undefined) throw new Error('frankfurter publication missing')
+
+    const targetResult = await backend.query(internal.capabilitySupply.readCapabilityProbeTarget, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: 1,
+    })
+    if (targetResult.kind !== 'available') throw new Error(`probe target unavailable: ${targetResult.reason}`)
+    const target = targetResult.target
+    const requestDigest = canonicalDigest({
+      targetDigest: target.targetDigest,
+      endpointUrl: target.endpointUrl,
+      adapterId: target.adapterId,
+      probeKind: target.probeKind ?? null,
+      probeMethod: target.probeMethod ?? null,
+      probeQuery: target.probeQuery ?? [],
+      transportConfigJson: target.transportConfigJson ?? null,
+      probeInputJson: target.probeInputJson ?? null,
+      outputSchemaJson: target.outputSchemaJson ?? null,
+      expectedPaymentJson: target.expectedPaymentJson ?? null,
+    })
+    const observedAt = Date.now()
+    const observed = await backend.mutation(internal.capabilitySupply.recordCapabilityProbeResult, {
+      publicationRef: target.publicationRef,
+      expectedRevision: target.revision,
+      targetDigest: target.targetDigest,
+      requestDigest,
+      responseStatus: 401,
+      responseContentType: 'application/json',
+      outcome: 'credential_rejected',
+      credentialState: 'unavailable',
+      healthState: 'unhealthy',
+      observedAt,
+      validUntil: observedAt + 60_000,
+      evidenceRefs: ['probe:credential_rejected'],
+    })
+    expect(observed).toMatchObject({ kind: 'observed' })
+
+    const persisted = await backend.run(async (ctx) => (
+      await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', target.publicationRef).eq('revision', target.revision)
+        ))
+        .unique()
+    ))
+    expect(persisted).toMatchObject({
+      credentialState: 'unavailable',
+      healthState: 'unhealthy',
+      readinessOutcome: 'credential_rejected',
+      readinessResponseStatus: 401,
+    })
+  })
+
   it('observed x402 ops are discoverable but never produce a real plan', async () => {
     const backend = convexTest(schema, modules)
-    await backend.mutation(internal.curatedProviders.seed, {})
+    await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
     for (const { capabilityId, token } of X402_OPS) {
       await expectNotExecutable(backend, capabilityId, token)
@@ -142,12 +200,13 @@ describe('keyed + observed-x402 readiness honesty', () => {
 
   it('a routeable op still produces a real plan (honest executable path preserved)', async () => {
     const backend = convexTest(schema, modules)
-    const seeded = await backend.mutation(internal.curatedProviders.seed, {})
+    const seeded = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
 
     const publication = seeded.publications.find((p: CuratedSeedPublication) => p.capabilityId === 'frankfurter.single-rate')
     expect(publication).toBeDefined()
+    if (publication === undefined) throw new Error('frankfurter publication missing')
     await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-      publicationRef: publication!.publicationRef,
+      publicationRef: publication.publicationRef,
       expectedRevision: 1,
       credentialState: 'ready',
       healthState: 'healthy',

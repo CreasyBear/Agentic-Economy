@@ -1,3 +1,9 @@
+import {
+  CallToolResultSchema,
+  InitializeResultSchema,
+  JSONRPCResponseSchema,
+  ListToolsResultSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { NetworkSchemaV2 } from '@x402/core/schemas'
 import { z } from 'zod'
 import type { JsonValue } from '@/modules/capability-contract/public'
@@ -8,6 +14,35 @@ import type {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+export function isMcpJsonRpcResult(value: unknown, expectedId: string): boolean {
+  const parsed = JSONRPCResponseSchema.safeParse(value)
+  return parsed.success && parsed.data.id === expectedId && 'result' in parsed.data
+}
+export function parseMcpJsonRpcResponse(value: unknown, expectedId: string): unknown | undefined {
+  const parsed = JSONRPCResponseSchema.safeParse(value)
+  return parsed.success && parsed.data.id === expectedId ? parsed.data : undefined
+}
+
+
+function mcpJsonRpcResult(value: unknown, expectedId: string): unknown {
+  const parsed = JSONRPCResponseSchema.safeParse(value)
+  return parsed.success && parsed.data.id === expectedId && 'result' in parsed.data ? parsed.data.result : undefined
+}
+
+export function parseMcpInitializeResult(value: unknown, expectedId: string) {
+  const parsed = InitializeResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
+  return parsed.success ? parsed.data : undefined
+}
+
+export function parseMcpListToolsResult(value: unknown, expectedId: string) {
+  const parsed = ListToolsResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
+  return parsed.success ? parsed.data : undefined
+}
+
+export function parseMcpCallToolResult(value: unknown, expectedId: string) {
+  const parsed = CallToolResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
+  return parsed.success ? parsed.data : undefined
+}
 
 export type X402CatalogPayment = Readonly<{
   network: string
@@ -23,6 +58,27 @@ const encoder = new TextEncoder()
 export type HttpJsonQueryParameterMapping = Readonly<{
   inputPointer: string
   parameter: string
+  /**
+   * OpenAPI's required flag. Older stored bindings omit this field and retain
+   * the historical all-mapped-values-required behavior at the runtime seam.
+   */
+  required?: boolean
+  style?: 'form'
+  explode?: boolean
+}>
+export type HttpJsonPathParameterMapping = Readonly<{
+  inputPointer: string
+  parameter: string
+  required?: boolean
+  style?: 'simple'
+  explode?: boolean
+}>
+export type HttpJsonHeaderParameterMapping = Readonly<{
+  inputPointer: string
+  parameter: string
+  required?: boolean
+  style?: 'simple'
+  explode?: boolean
 }>
 export type HttpJsonFixedQueryParameter = Readonly<{
   parameter: string
@@ -36,15 +92,26 @@ export type HttpJsonCredential = Readonly<
 export type HttpJsonTransportConfiguration = Readonly<{
   method: 'GET' | 'POST'
   query?: readonly HttpJsonQueryParameterMapping[]
+  path?: readonly HttpJsonPathParameterMapping[]
+  headers?: readonly HttpJsonHeaderParameterMapping[]
   fixedQuery?: readonly HttpJsonFixedQueryParameter[]
+  requestContentType?: string
+  responseContentType?: string
+  responseStatus?: number
   requestTimeoutMs: number
   credential?: HttpJsonCredential
   reconciliation?: Readonly<{ path: string; requestTimeoutMs: number }>
   cancellation?: Readonly<{ path: string; requestTimeoutMs: number }>
 }>
+const inputPointer = z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/)
+const queryParameterName = z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/)
+const headerParameterName = z.string().regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,100}$/)
 const queryMapping = z.array(z.strictObject({
-  inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
-  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+  inputPointer,
+  parameter: queryParameterName,
+  required: z.boolean().optional(),
+  style: z.literal('form').optional(),
+  explode: z.boolean().optional(),
 })).min(1).max(64).superRefine((items, context) => {
   const pointers = new Set<string>()
   const parameters = new Set<string>()
@@ -56,8 +123,43 @@ const queryMapping = z.array(z.strictObject({
     parameters.add(item.parameter)
   }
 })
+const pathMapping = z.array(z.strictObject({
+  inputPointer,
+  parameter: queryParameterName,
+  required: z.boolean().optional(),
+  style: z.literal('simple').optional(),
+  explode: z.boolean().optional(),
+})).min(1).max(32).superRefine((items, context) => {
+  const pointers = new Set<string>()
+  const parameters = new Set<string>()
+  for (const [index, item] of items.entries()) {
+    if (pointers.has(item.inputPointer) || parameters.has(item.parameter)) {
+      context.addIssue({ code: 'custom', path: [index], message: 'path_mapping_duplicate' })
+    }
+    pointers.add(item.inputPointer)
+    parameters.add(item.parameter)
+  }
+})
+const headerMapping = z.array(z.strictObject({
+  inputPointer,
+  parameter: headerParameterName,
+  required: z.boolean().optional(),
+  style: z.literal('simple').optional(),
+  explode: z.boolean().optional(),
+})).min(1).max(64).superRefine((items, context) => {
+  const pointers = new Set<string>()
+  const parameters = new Set<string>()
+  for (const [index, item] of items.entries()) {
+    if (pointers.has(item.inputPointer) || parameters.has(item.parameter)) {
+      context.addIssue({ code: 'custom', path: [index], message: 'header_mapping_duplicate' })
+    }
+    pointers.add(item.inputPointer)
+    parameters.add(item.parameter)
+  }
+})
+const contentType = z.string().trim().regex(/^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/).max(200)
 const fixedQueryMapping = z.array(z.strictObject({
-  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+  parameter: queryParameterName,
   value: z.string().trim().min(1).max(200),
 })).max(64).superRefine((items, context) => {
   const seen = new Set<string>()
@@ -78,7 +180,12 @@ const httpJsonCredential = z.discriminatedUnion('kind', [
 const httpJsonConfiguration = z.strictObject({
   method: z.enum(['GET', 'POST']),
   query: queryMapping.optional(),
+  path: pathMapping.optional(),
+  headers: headerMapping.optional(),
   fixedQuery: fixedQueryMapping.optional(),
+  requestContentType: contentType.optional(),
+  responseContentType: contentType.optional(),
+  responseStatus: z.number().int().min(200).max(299).optional(),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   credential: httpJsonCredential.optional(),
   reconciliation: z.strictObject({
@@ -90,10 +197,14 @@ const httpJsonConfiguration = z.strictObject({
     requestTimeoutMs: z.number().int().min(100).max(120_000),
   }).optional(),
 }).refine((value) => value.method === 'GET'
-  ? (value.query !== undefined || (value.fixedQuery?.length ?? 0) > 0)
-    && value.reconciliation === undefined
+  ? value.reconciliation === undefined
     && value.cancellation === undefined
-  : value.query === undefined)
+  : true)
+.refine((value) => value.method !== 'GET'
+  || (value.query?.length ?? 0) > 0
+  || (value.path?.length ?? 0) > 0
+  || (value.headers?.length ?? 0) > 0
+  || (value.fixedQuery?.length ?? 0) > 0)
 .refine((value) => {
   const credential = value.credential
   if (credential?.kind !== 'api_key' || credential.location !== 'query') return true
@@ -101,10 +212,16 @@ const httpJsonConfiguration = z.strictObject({
   const fixed = value.fixedQuery?.some(({ parameter }) => parameter === credential.name) ?? false
   return !dynamic && !fixed
 })
+.refine((value) => {
+  const credential = value.credential
+  if (credential?.kind !== 'api_key' || credential.location !== 'header') return true
+  return !(value.headers?.some(({ parameter }) => parameter.toLowerCase() === credential.name.toLowerCase()) ?? false)
+})
 const mcpJsonRpcConfiguration = z.strictObject({
   protocolVersion: z.string().trim().min(1).max(64),
   toolName: z.string().trim().min(1).max(200),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
+  credential: httpJsonCredential.optional(),
 })
 const x402FetchConfiguration = z.strictObject({
   method: z.enum(['GET', 'POST']),
@@ -197,6 +314,83 @@ export function parseHttpJsonTransportConfiguration(
   return parsed.success ? parsed.data as HttpJsonTransportConfiguration : undefined
 }
 
+export type McpJsonRpcTransportConfiguration = Readonly<{
+  protocolVersion: string
+  toolName: string
+  requestTimeoutMs: number
+  credential?: HttpJsonCredential
+}>
+
+export function parseMcpJsonRpcTransportConfiguration(
+  value: unknown,
+): McpJsonRpcTransportConfiguration | undefined {
+  const parsed = mcpJsonRpcConfiguration.safeParse(value)
+  return parsed.success ? parsed.data as McpJsonRpcTransportConfiguration : undefined
+}
+
+export type X402FetchTransportConfiguration = Readonly<{
+  method: 'GET' | 'POST'
+  query?: readonly HttpJsonQueryParameterMapping[]
+  requestTimeoutMs: number
+  scheme: 'exact'
+  network: string
+  currency: string
+  routeAmountExponent: number
+  assetAmountExponent: number
+  asset: string
+  payTo: string
+}>
+
+export function parseX402FetchTransportConfiguration(
+  value: unknown,
+): X402FetchTransportConfiguration | undefined {
+  const parsed = x402FetchConfiguration.safeParse(value)
+  return parsed.success ? parsed.data as X402FetchTransportConfiguration : undefined
+}
+
+export function readHttpJsonProbeConfiguration(
+  adapterId: string,
+  configJson: string,
+): HttpJsonProbeConfiguration {
+  try {
+    const value: unknown = JSON.parse(configJson)
+    if (adapterId === 'http-json:v1') {
+      const configuration = parseHttpJsonTransportConfiguration(value)
+      return configuration === undefined
+        ? { method: 'GET', query: [], path: [], headers: [], fixedQuery: [] }
+        : {
+            method: configuration.method,
+            query: configuration.query ?? [],
+            path: configuration.path ?? [],
+            headers: configuration.headers ?? [],
+            fixedQuery: configuration.fixedQuery ?? [],
+            ...(configuration.requestContentType === undefined
+              ? {} : { requestContentType: configuration.requestContentType }),
+            ...(configuration.responseContentType === undefined
+              ? {} : { responseContentType: configuration.responseContentType }),
+            ...(configuration.responseStatus === undefined
+              ? {} : { responseStatus: configuration.responseStatus }),
+            ...(configuration.credential === undefined ? {} : { credential: configuration.credential }),
+        }
+    }
+    if (adapterId === 'x402-fetch:v2') {
+      const configuration = parseX402FetchTransportConfiguration(value)
+      return configuration === undefined
+        ? { method: 'GET', query: [], path: [], headers: [], fixedQuery: [] }
+        : {
+            method: configuration.method,
+            query: configuration.query ?? [],
+            path: [],
+            headers: [],
+            fixedQuery: [],
+        }
+    }
+  } catch {
+    // Fall through to the safe non-target default.
+  }
+  return { method: 'GET', query: [], path: [], headers: [], fixedQuery: [] }
+}
+
 export function injectHttpJsonCredential(
   configuration: HttpJsonTransportConfiguration,
   endpoint: URL,
@@ -223,31 +417,16 @@ export function injectHttpJsonCredential(
 }
 
 export type HttpJsonProbeConfiguration = Readonly<{
-  method: 'GET' | 'HEAD'
+  method: 'GET' | 'POST'
   query: readonly HttpJsonQueryParameterMapping[]
+  path: readonly HttpJsonPathParameterMapping[]
+  headers: readonly HttpJsonHeaderParameterMapping[]
   fixedQuery: readonly HttpJsonFixedQueryParameter[]
+  requestContentType?: string
+  responseContentType?: string
+  responseStatus?: number
   credential?: HttpJsonCredential
 }>
-
-export function readHttpJsonProbeConfiguration(
-  adapterId: string,
-  configJson: string,
-): HttpJsonProbeConfiguration {
-  if (adapterId !== 'http-json:v1') return { method: 'HEAD', query: [], fixedQuery: [] }
-  try {
-    const configuration = parseHttpJsonTransportConfiguration(JSON.parse(configJson))
-    return configuration === undefined
-      ? { method: 'HEAD', query: [], fixedQuery: [] }
-      : {
-          method: configuration.method === 'GET' ? 'GET' : 'HEAD',
-          query: configuration.query ?? [],
-          fixedQuery: configuration.fixedQuery ?? [],
-          ...(configuration.credential === undefined ? {} : { credential: configuration.credential }),
-        }
-  } catch {
-    return { method: 'HEAD', query: [], fixedQuery: [] }
-  }
-}
 function validAuthority(value: CapabilityTransportAuthority, allowKeyless: boolean): boolean {
   if (value.kind === 'keyless') return allowKeyless
   return /^connection:[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(value.connectionRef)

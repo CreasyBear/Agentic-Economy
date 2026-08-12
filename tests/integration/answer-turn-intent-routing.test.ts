@@ -1,19 +1,38 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { streamAnswerTurn } from '@/modules/answer-thread/server'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
 } from '../helpers/answer-thread-test-port'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
 
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
+const emptyKeylessExecutableSource: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
+
+const streamWithLocalSources: typeof streamAnswerTurn = (input, onEvent) =>
+  streamAnswerTurn({
+    ...input,
+    keylessExecutableSource: emptyKeylessExecutableSource,
+  }, onEvent)
+
+function handleLocalAnswerTurnRequest(request: Request): Promise<Response> {
+  return handleAnswerTurnRequest(request, { stream: streamWithLocalSources })
+}
+
 
 const PARRAMATTA_PROVIDER = {
   citationIndex: 1,
@@ -94,10 +113,34 @@ function turnRequest(query: string, threadId: string = PRIOR_THREAD_ID): Request
 }
 
 describe('POST /api/answer/turn intent routing (tool-use)', () => {
+  let previousConvexUrl: string | undefined
+  let previousViteConvexUrl: string | undefined
+  let restoreRegistrySource: (() => void) | undefined
+
+  beforeEach(() => {
+    previousConvexUrl = process.env.CONVEX_URL
+    previousViteConvexUrl = process.env.VITE_CONVEX_URL
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+    restoreRegistrySource = installLocalE2eRegistrySourceForTests()
+  })
+
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
+    restoreRegistrySource?.()
+    restoreRegistrySource = undefined
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousViteConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousViteConvexUrl
+    }
   })
 
   it('refine_search: runs the agent with registry tools and records the tool call', async () => {
@@ -118,7 +161,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
     try {
       // First turn (no threadId) → refine_search.
-      const response = await handleAnswerTurnRequest(
+      const response = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -164,7 +207,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(turnRequest('which ones accept inquiries'))
+      const response = await handleLocalAnswerTurnRequest(turnRequest('which ones accept inquiries'))
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
@@ -198,7 +241,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(turnRequest('message the first one'))
+      const response = await handleLocalAnswerTurnRequest(turnRequest('message the first one'))
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
@@ -246,7 +289,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(turnRequest('what can agentic economy do'))
+      const response = await handleLocalAnswerTurnRequest(turnRequest('what can agentic economy do'))
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
@@ -279,7 +322,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(
+      const response = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: {
@@ -321,7 +364,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(turnRequest('book now and pay today'))
+      const response = await handleLocalAnswerTurnRequest(turnRequest('book now and pay today'))
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event

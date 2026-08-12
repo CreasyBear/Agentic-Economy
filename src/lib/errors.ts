@@ -147,6 +147,164 @@ export function buildProblem(input: ProblemInput): ProblemDetails {
 }
 
 /**
+ * Failure codes emitted by the authenticated operation gateway. These are
+ * intentionally a projection vocabulary, not a second domain error model:
+ * runtime/action results stay typed, while HTTP/MCP adapters use this mapper
+ * for protocol failures only.
+ */
+export const GATEWAY_PROBLEM_CODES = [
+  'authentication_required',
+  'access_grant_required',
+  'scope_required',
+  'operation_not_found',
+  'operation_input_invalid',
+  'input_invalid',
+  'operation_not_current',
+  'operation_unsupported',
+  'operation_not_admitted',
+  'operation_not_ready',
+  'operation_withdrawn',
+  'grant_not_found',
+  'grant_revoked',
+  'grant_generation_stale',
+  'environment_mismatch',
+  'authority_required',
+  'authority_denied',
+  'authority_expired',
+  'budget_exceeded',
+  'budget_exhausted',
+  'rate_limited',
+  'rate_limit_exceeded',
+  'concurrency_limited',
+  'concurrency_limit',
+  'idempotency_conflict',
+  'provider_unavailable',
+  'provider_refused',
+  'pre_release_failed',
+  'outcome_unknown',
+  'reconciliation_required',
+  'invocation_not_found',
+  'lease_not_current',
+  'result_invalid',
+  'source_unavailable',
+  'invocation_runtime_unavailable',
+  'authority_reader_unavailable',
+  'invocation_in_progress',
+  'invocation_cancelled',
+  'operation_invoke_unavailable',
+  'operation_invoke_result_invalid',
+  'operation_invoke_failed',
+] as const
+
+export type GatewayProblemCode = (typeof GATEWAY_PROBLEM_CODES)[number]
+
+export type GatewayFailureInput = Readonly<{
+  code?: string
+  reason?: string
+  retryable?: boolean
+  kind?: 'refused' | 'error'
+}>
+
+const GATEWAY_CODE_KIND: Readonly<Record<string, ProblemKind>> = {
+  authentication_required: 'UNAUTHENTICATED',
+  access_grant_required: 'PERMISSION_DENIED',
+  scope_required: 'PERMISSION_DENIED',
+  operation_not_found: 'NOT_FOUND',
+  operation_input_invalid: 'INVALID_ARGUMENT',
+  input_invalid: 'INVALID_ARGUMENT',
+  operation_not_current: 'FAILED_PRECONDITION',
+  operation_unsupported: 'FAILED_PRECONDITION',
+  operation_not_admitted: 'FAILED_PRECONDITION',
+  operation_not_ready: 'FAILED_PRECONDITION',
+  operation_withdrawn: 'FAILED_PRECONDITION',
+  grant_not_found: 'PERMISSION_DENIED',
+  grant_revoked: 'PERMISSION_DENIED',
+  grant_expired: 'PERMISSION_DENIED',
+  grant_generation_stale: 'PERMISSION_DENIED',
+  environment_mismatch: 'FAILED_PRECONDITION',
+  authority_required: 'FAILED_PRECONDITION',
+  authority_denied: 'PERMISSION_DENIED',
+  authority_expired: 'FAILED_PRECONDITION',
+  budget_exceeded: 'RESOURCE_EXHAUSTED',
+  budget_exhausted: 'RESOURCE_EXHAUSTED',
+  rate_limited: 'RESOURCE_EXHAUSTED',
+  rate_limit_exceeded: 'RESOURCE_EXHAUSTED',
+  concurrency_limited: 'RESOURCE_EXHAUSTED',
+  concurrency_limit: 'RESOURCE_EXHAUSTED',
+  idempotency_conflict: 'ALREADY_EXISTS',
+  provider_unavailable: 'UNAVAILABLE',
+  provider_refused: 'FAILED_PRECONDITION',
+  pre_release_failed: 'FAILED_PRECONDITION',
+  outcome_unknown: 'UNAVAILABLE',
+  reconciliation_required: 'FAILED_PRECONDITION',
+  invocation_not_found: 'NOT_FOUND',
+  lease_not_current: 'FAILED_PRECONDITION',
+  result_invalid: 'INTERNAL',
+  source_unavailable: 'UNAVAILABLE',
+  invocation_runtime_unavailable: 'UNAVAILABLE',
+  authority_reader_unavailable: 'UNAVAILABLE',
+  invocation_in_progress: 'ALREADY_EXISTS',
+  operation_invoke_unavailable: 'UNAVAILABLE',
+  operation_invoke_result_invalid: 'INTERNAL',
+  operation_invoke_failed: 'INTERNAL',
+  invocation_cancelled: 'FAILED_PRECONDITION',
+}
+
+const PUBLIC_STABLE_CODE_PATTERN = /^[a-z][a-z0-9_:-]{0,95}$/u
+
+function publicGatewayCode(code: string | undefined, fallback: GatewayProblemCode): string {
+  return code !== undefined && PUBLIC_STABLE_CODE_PATTERN.test(code) ? code : fallback
+}
+
+/**
+ * Project an authenticated gateway failure onto the shared RFC 9457 model.
+ * Provider text and arbitrary runtime details are deliberately not copied:
+ * callers receive stable taxonomy and retryability, never content-shaped
+ * exceptions or supplier responses.
+ */
+export function gatewayFailureToProblem(input: GatewayFailureInput): ProblemInput {
+  const code = publicGatewayCode(input.code, input.kind === 'refused' ? 'operation_not_admitted' : 'operation_invoke_failed')
+  const mapped = GATEWAY_CODE_KIND[code]
+  const kind = mapped
+    ?? (input.kind === 'refused'
+      ? 'FAILED_PRECONDITION'
+      : input.retryable === true ? 'UNAVAILABLE' : 'INTERNAL')
+  return {
+    kind,
+    code,
+    ...(input.retryable === undefined ? {} : { retryable: input.retryable }),
+  }
+}
+
+/**
+ * HTTP/MCP adapters keep domain outcomes as successful typed responses. Only
+ * refusal/error variants are projected to Problem Details.
+ */
+export function operationInvokeResultToProblem(result: unknown): ProblemInput | null {
+  if (typeof result !== 'object' || result === null || !('kind' in result)) {
+    return gatewayFailureToProblem({ kind: 'error' })
+  }
+  const record = result as Record<string, unknown>
+  if (
+    record.kind === 'completed'
+    || record.kind === 'pending'
+    || record.kind === 'needs_authority'
+    || record.kind === 'reconciliation_required'
+  ) {
+    return null
+  }
+  if (record.kind === 'refused' || record.kind === 'error') {
+    return gatewayFailureToProblem({
+      kind: record.kind,
+      ...(typeof record.code === 'string' ? { code: record.code } : {}),
+      ...(typeof record.reason === 'string' ? { reason: record.reason } : {}),
+      ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+    })
+  }
+  return gatewayFailureToProblem({ kind: 'error' })
+}
+
+/**
  * Map a keyless-execution outcome to a {@link ProblemInput}. Returns `null`
  * for `ok` (not an error). `refused` and `error` carry their stable code +
  * canonical kind; refusal honesty is preserved via `code`/`reason`/`detail`.
@@ -171,6 +329,7 @@ export function operationResultToProblem(result: OperationExecuteResult): Proble
     detail: reason,
   }
 }
+
 /** Public answer-turn error codes. Unknown private/provider codes are redacted. */
 export const ANSWER_TURN_PROBLEM_CODES = [
   'invalid_content_type',

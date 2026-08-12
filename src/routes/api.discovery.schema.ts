@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
 import {
   generateDeveloperDiscoverySchema,
   recordDeveloperDiscoveryFetch,
@@ -54,7 +53,7 @@ export async function handleDeveloperDiscoverySchemaRequest(
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): Promise<Response> {
   const routeOptions = await readDeveloperDiscoveryRuntimeOptions(request, state, options)
-  const artifact = generateDeveloperDiscoverySchema(state ?? createDefaultDiscoverySourceState(), routeOptions)
+  const artifact = generateDeveloperDiscoverySchema(state, routeOptions)
   const fetchReadback = readDeveloperDiscoveryFetchReadback('schema', '/api/discovery/schema', artifact, routeOptions.now ?? 0)
 
   return developerDiscoveryJsonResponse(artifact, fetchReadback)

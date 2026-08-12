@@ -1,15 +1,22 @@
-import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke'
 import {
-  CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY,
-  CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
-  CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES,
-  WORK_TREE_AGENT_SCOPE_VALUES,
-} from '@/modules/customer-request/agent-contract'
-// The leaf module, not the barrel: `answer-thread/public` drags the turn
-// orchestrator and its Node-only transport into every Convex function that
-// reaches discovery, which breaks Convex bundling.
-import { AGENT_KEY_ISSUANCE_PATH, ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
+  AGENT_ACCESS_OAUTH_PATHS,
+} from '@/modules/agent-access/oauth-state'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import { operationRouteExamples } from './operation-contract'
+import {
+  OperationMarketAnonymousBoundaryLine,
+  OperationMarketIdempotencyLine,
+  OperationMarketInvokeScopeLine,
+} from './offering-discovery-file'
+import { listMcpActions, mcpToolName } from '@/modules/actions'
+import {
+  OPERATION_MARKET_COMPARE_PATH,
+  OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_SEARCH_PATH,
+} from '@/modules/registry/operation-entry'
 
 export const PublicAgentSkillPath = '/SKILL.md' as const
 
@@ -18,117 +25,124 @@ export function buildPublicAgentSkillMarkdown(options: {
   routingBaseUrl?: string
 }): string {
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
-  const entry = ANSWER_THREAD_AGENT_ENTRYPOINT
+  const routes = operationRouteExamples()
+  const routeFor = (actionId: string) => {
+    const route = routes.find((candidate) => candidate.route.actionId === actionId)
+    if (route === undefined) throw new Error(`Operation route is not registered: ${actionId}`)
+    return route
+  }
+  const invoke = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
+  const status = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
+  const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
+  const authenticatedToolNames = new Set(routes.map(({ route }) => route.mcpToolName).filter((name): name is string => name !== undefined))
+  const anonymousToolNames = listMcpActions()
+    .filter((action) => action.readOnly && action.credentialAdmission === undefined)
+    .map(mcpToolName)
+  const operationMcpToolNames = [...authenticatedToolNames]
+  const invokeInputExample = JSON.stringify(invoke.example.actionInput)
+  const invokeHttpExample = JSON.stringify(invoke.example.http.body ?? {})
+  const invokeInputSchema = JSON.stringify(invoke.route.inputJsonSchema ?? {})
+  const operationOutcomes = operationInvokeResultKindValues.join(' | ')
+  const cli = 'npm run -s ae --'
   return [
     '---',
     'name: agentic-economy',
-    'description: Discover current AE capabilities and execute only admitted keyless read operations with literal evidence.',
+    'description: Read the raw AE handshake, search and inspect current Market Operations anonymously, then invoke and recover work through one authenticated caller boundary.',
     '---',
     '',
-    '# Agentic Economy — assistant setup',
+    '# Agentic Economy — Operation market loop',
     '',
-    `Fetch from the site origin: \`GET ${base}${PublicAgentSkillPath}\`.`,
+    '## 1. Read the raw handshake (no install)',
     '',
-    '## Start here (no key needed)',
+    `\`curl -fsSL ${base}/.well-known/ucp\``,
     '',
-    `The first call needs no credential, no account, and no setup. Authentication: \`${entry.authentication}\`.`,
-    'Your assistant can use this market directly: reads are free and keyless, so no account is needed to compare published options.',
-    '',
+    'Install the repository package only when local execution is needed, then inspect the same contract with:',
     '```sh',
-    `curl -N -X ${entry.method} ${base}${entry.path} \\`,
-    '  -H \'Content-Type: application/json\' \\',
-    '  -H "X-AE-Turn-Key: $(uuidgen)" \\',
-    '  -d \'{"query": "electrician in Fremantle who can come today"}\'',
+    `${cli} manifest --json`,
     '```',
     '',
-    'Generate a fresh opaque `X-AE-Turn-Key` for every turn; it is not a credential and must never be reused.',
-    `Response: \`${entry.responseMediaType}\`. ${entry.boundary}`,
     '',
-    `Other keyless reads: \`GET ${base}/api/businesses\`; \`GET ${base}/api/businesses/search?q=\`.`,
+    '## 2. Search by job — anonymous',
     '',
-    '## Services API',
-    '',
-    `- \`GET /api/v1/services\` (${base}/api/v1/services): ONE PAGE per business with \`serviceName\`, \`tags[]\`, flat \`endpoints[]\`, \`continueCursor\`, and \`isDone\`.`,
-    `- \`GET /api/v1/services/search?q={query}\` (${base}/api/v1/services/search?q={query}): uses \`pagination.nextCursor\` and \`pagination.hasMore\`.`,
-    `- \`GET /api/v1/services/{id}\` (${base}/api/v1/services/{id}): Service detail.`,
-    '- Exact display data is in `priceSummary`; offering facts stay in `ae.offerings[]`.',
-    '- `ae.provenance` is `business_declared` or `publicly_observed`; `ae.authentication` exposes no secret; `ae.execution` is `answer_tool`, `request_route`, or `catalog_only`.',
-    '- `ae.access: \'open\'` means a keyless AE sandbox path, not fulfilment or settlement proof. Invalid endpoint URLs are omitted.',
-    '- QUOTE RESPONSE carries `provenance: ae_sandbox_provider`.',
-    `- Example: POST ${base}/api/sandbox/adelaide-dental-clinic/checkup-quote returns priced, time-bounded quote JSON.`,
-    '',
-    'Flow: Discover services; follow pagination; Pick a Service and endpoint; call only a valid URL with `ae.execution: request_route`.',
-    '',
-    '## MCP server',
-    '',
-    `Endpoint: \`${base}/mcp\` (Streamable HTTP, keyless).`,
-    '',
-    'Install:',
     '```sh',
-    `claude mcp add --transport http agentic-economy ${base}/mcp`,
-    `codex mcp add agentic-economy --url ${base}/mcp`,
+    `${cli} search "extract line items from a supplier invoice" --json`,
     '```',
     '',
-    'Tools (static; live operations are not enumerated):',
-    '- `ae_registry_operations_search` — search current admitted operations for the user’s need.',
-    '- `ae_registry_operations_detail` — inspect one operation when inputs, cost, provenance, effects, or availability need confirmation.',
-    '- `ae_registry_operations_inspectPlan` — inspect a paid or effectful composition without executing it.',
-    '- `ae_operation_execute` — execute one current admitted keyless read operation using its published schema.',
+    `HTTP: \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`. This read needs no account or caller key.`,
     '',
-    'Operation flow:',
-    '1. Call `ae_registry_operations_search` with the user’s need.',
-    '2. Call `ae_registry_operations_detail` (or `ae_registry_operations_inspectPlan`) when inputs, cost, provenance, effects, or availability need confirmation.',
-    '3. Call `ae_operation_execute` only for a current admitted keyless read operation and its published schema.',
-    '4. Interpret `ok | refused | error` literally and ground the answer in returned evidence.',
-    '5. For paid or effectful work, use inspect-plan and the Customer Request path instead of direct execution.',
+    '## 3. Inspect one exact Operation — anonymous',
     '',
-    'Search results and operation refs are hints, never authority. Never accept a caller-supplied URL, method, credential, or infer a result, payment, or fulfilment. Never book, pay, dispatch, inquire, or retry automatically. Use one static skill, not a per-capability skill.',
+    '```sh',
+    `${cli} inspect "$AE_OPERATION_REF" --json`,
+    '```',
     '',
-    '## What AE is',
+    `HTTP detail: \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read the current input schema, terms, price, effects, availability, and evidence before connecting or invoking.`,
+    `Optional anonymous reads: \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`; inspect a proposed plan with \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
+
+    'After exact detail, choose one execution mode: the global `executionModes.directKeyless` entry describes an optional capability, not a guarantee for every Operation. Use the anonymous MCP tool `ae_operation_execute` (action `operation.execute`) only when that exact current detail includes a navigation relation with `relation: "execute"`, `actionId: "operation.execute"`, `authentication: "none"`, and routeable availability; then pass the exact `operationRef` and only the published `input` fields. Otherwise continue to connect and use the authenticated `operation.invoke` path below for the controlled market flow. Never substitute one path for the other.',
+    OperationMarketAnonymousBoundaryLine,
     '',
-    ...CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES,
+    '## 4. Connect one AE caller key',
     '',
-    'Give AE a request; report only the exact state it returns.',
+    '```sh',
+    `${cli} connect --json`,
+    '```',
     '',
-    '## Choose your setup',
+    `The command registers a public device client at \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.register}\`, starts the device flow at \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\`, sends the owner to \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\`, and polls \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`. If \`AE_API_KEY\` is already present, the command validates it against the authenticated gateway before reporting connected; a nonempty string alone is never proof.`,
     '',
-    'Pick by host; Never ask the customer which one to use.',
-    `- Claude Code, Codex CLI, Gemini CLI: run the \`curl\` against \`${base}${entry.path}\`.`,
-    `- Chat-only: send the customer to \`${base}/\` and continue from the returned thread link.`,
-    '- For customers say "AE" and "businesses". Do not say "endpoint", "SSE", or "Bearer token".',
+    'The AE key identifies the caller. It never contains or grants a provider credential, endpoint override, payment approval, or silent consequential authority.',
     '',
-    '## Confirming and starting an option (the key-gated escalation)',
+    '## 5. Invoke with one required stable idempotency key',
     '',
-    `Request a seven days scoped Clerk API key: \`POST ${base}/oauth/device_authorization\` with \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\` and one of \`${CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES.slice(1).join('`, `')}\`. The owner approves at \`${base}${AGENT_KEY_ISSUANCE_PATH}/authorize?user_code=...\`; poll \`POST ${base}/oauth/token\`, then send \`${CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY}\` only to \`${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}\`.`,
-    'Without it AE cannot confirm or start anything. The owner can revoke it at any time.',
+    '```sh',
+    'export AE_IDEMPOTENCY_KEY="invoice-extract-2026-08-11-001"',
+    `${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    '```',
     '',
-    '## WorkTree parity (authenticated)',
+    `HTTP: \`${invoke.route.method} ${base}${invoke.route.path}\` with \`Authorization: Bearer $AE_API_KEY\`, \`Content-Type: ${OPERATION_INVOKE_ROUTE_CONTRACT.media.request}\`, and only schema-valid material in the body.`,
+    OperationMarketInvokeScopeLine,
+    `Canonical action input schema: \`${invokeInputSchema}\`. Schema-valid action input example: \`${invokeInputExample}\`. HTTP POST body example: \`${invokeHttpExample}\`.`,
+    `The request JSON body field \`idempotencyKey\` is required. ${OperationMarketIdempotencyLine} The same key with identical material replays the original state; changed material is refused.`,
+    'Never send a provider, URL, method, credential, price, payment recipient, or approval.',
     '',
-    `Host: \`${base}/api/v1/work-tree/{create|inspect|apply|decide|reserveRepeatUse|finalizeRepeatUse|reconcileRepeatUse|inspectRepeatUse}\`. Scopes: \`work_trees:create\`, \`work_trees:inspect\`, \`work_trees:apply\`, \`work_trees:decide\`, \`work_trees:repeat_reserve\`, \`work_trees:repeat_finalize\`, \`work_trees:repeat_reconcile\` (approve-each writes), \`work_trees:repeat_inspect\` (inspect-only).`,
+    '## 6. Read status',
     '',
-    `Index: ${base}/llms.txt. POST ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path} with idempotency key, requestRef, and request.`,
-    'Follow only one matching `navigation.actions` relation and its displayed input. On `routes_ready`, stop for explicit approval; then follow `confirm_option` and `start_confirmed_option` only within displayed authority.',
+    '```sh',
+    `${cli} status "$AE_INVOCATION_REF" --json`,
+    '```',
     '',
-    '## Refusal recovery',
+    `HTTP: \`${status.route.method} ${base}${status.route.path}\`. Interpret \`${operationOutcomes}\` literally. Usage or evidence fields are authoritative only when present on this invocation’s recorded result.`,
     '',
-    '| Symptom | Meaning | Do next |',
-    '| --- | --- | --- |',
-    `| \`401\` | Key invalid. | Restart \`POST ${base}/oauth/device_authorization\`. |`,
-    '| `429` | Rate limited. | Wait, then retry the same thread. |',
-    '| `403` | Scope is insufficient. | Request the exact narrower mode. |',
-    '| `413` | Payload too large. | Shorten query to 200 characters. |',
-    `| No search results | No match. | Broaden query or browse \`${base}/api/businesses\`. |`,
-    '| `routes_ready` | Options are proposals. | Stop for explicit approval. |',
-    '| `route_confirmed` | Confirmed, not started. | Follow `start_confirmed_option` within authority. |',
-    '| `in_progress` | Request is running. | Resume it; do not replace it. |',
-    '| `outcome_unknown` | Outcome is unknown. | Do not retry; reconcile or inspect evidence. |',
-    '| `cancelled` | No further step starts. | Do not imply reversal. |',
-    '| `needs_attention` | A step needs correction. | Follow `nextAction`. |',
+    '## 7. Recover uncertain work',
     '',
-    '## Boundaries (hard)',
+    '```sh',
+    `${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    '```',
     '',
-    'Business listings are supply facts, not routing or execution authority.',
-    'Never choose provider tools directly when delegating the decision to AE.',
+    `Recovery submits bounded evidence through \`${reconcile.route.method} ${base}${reconcile.route.path}\`. Use the same invocation and original stable key. Never create a replacement invocation or retry automatically while release may have started.`,
+    '',
+    '## Problem responses and retry rules',
+    '',
+    '- Errors are `application/problem+json` with `type`, `title`, `status`, `kind`, `code`, and optional `retryable`.',
+    '- If `retryable` is true, respect `Retry-After` when present and retry only the same material command identity.',
+    '- A timeout, `outcome_unknown`, or `reconciliation_required` is not a terminal success and is not permission to create a new invocation; read status, then recover.',
+    '- Do not retry authentication, validation, authority, or idempotency-conflict problems without changing the invalid input or authority state.',
+    '',
+    '## Advanced only',
+    '',
+    `Cancellation is an advanced operator action; use \`${cli} advanced cancel\` only when the manifest and current status direct you there. Use the root \`${cli} recover\` command for reconciliation.`,
+    '',
+    '## MCP projection',
+    '',
+    `Endpoint: \`${base}/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}. Authenticated tools: ${operationMcpToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}.`,
+    'MCP follows the same order and boundaries. Static tool names do not enumerate live Operations.',
+    '',
+    '## Stop rules',
+    '',
+    '- Stop when an exact current Operation is unavailable or its terms, required input, price, effects, or evidence are unclear.',
+    '- Stop on `needs_authority`; only the owner-controlled flow can grant the requested authority.',
+    '- On `pending`, read status. On `reconciliation_required`, recover the same invocation before any retry.',
+    '- Never infer fulfilment, payment, deployment, or a receipt from discovery, a key, a balance, or a request accepted for processing.',
     '',
   ].join('\n')
 }

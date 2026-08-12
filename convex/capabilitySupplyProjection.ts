@@ -22,13 +22,15 @@ import {
   type CapabilityOfferingOrigin,
   type CapabilityOfferingRow,
 } from '../src/modules/capability-supply/public'
-import { normalizeTrustTier } from '../src/modules/business/public'
+import { normalizeTrustTier, type BusinessContext } from '../src/modules/business/public'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { isRecord } from '../src/modules/common/is-record'
 import {
   buildRegistrySearchDocumentsForCatalog,
   projectBusinessSupplyToPublicApi,
 } from '../src/modules/registry/public'
+import { qualifySuppliedCandidate } from '../src/modules/capability-supply/public'
+import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 
 export type CapabilityProjectionDb = GenericDatabaseWriter<DataModel>
 type CapabilityProjectionReadDb = GenericDatabaseReader<DataModel>
@@ -101,10 +103,7 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
       slug: business.slug,
       name: business.name,
       category: context.category,
-      suburb: context.suburb,
-      stateTerritory: context.stateTerritory,
-      ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
-      ...(context.postcode === undefined ? {} : { postcode: context.postcode }),
+      businessContext: context.businessContext,
       publicUrl: `/${business.slug}`,
       trustTier: normalizeTrustTier(business.trustTier),
       ...(context.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: context.responseTimeMinutes }),
@@ -196,12 +195,25 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(
       || binding.admission !== 'admitted'
       || binding.conformance !== 'conformant'
     ) continue
-    const expiry = publication.readinessValidUntil
-    const routeable = publication.credentialState === 'ready'
-      && publication.healthState === 'healthy'
-      && expiry !== undefined
-      && expiry > now
+    const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(db), {
+      candidate: {
+        publicationRef: publication.publicationRef,
+        revision: publication.revision,
+        networkId: publication.networkId,
+        businessId: publication.businessId,
+        offeringId: publication.offeringId,
+        bindingId: publication.bindingId,
+        contractRef: {
+          capabilityId: publication.capabilityId,
+          version: publication.version,
+          contractDigest: publication.contractDigest,
+        },
+      },
+      now,
+    })
     const readinessObservedAt = publication.readinessObservedAt
+    const expiry = publication.readinessValidUntil
+    const routeable = qualification.status === 'eligible'
     const next: OfferingSupportProjection = routeable
       ? {
           integrated: true,
@@ -279,42 +291,34 @@ type BusinessSource = {
   slug: string
   name: string
   publicStatus?: string
-  publishedPhone?: string
   updatedAt: number
   trustTier: unknown
 }
 
 type BusinessContextSource = {
   category: string
-  suburb: string
-  stateTerritory: string
-  postcode?: string
+  businessContext: BusinessContext
   responseTimeMinutes?: number
   photos?: readonly Readonly<{ url: string; alt: string }>[]
 }
 
 function readBusinessSource(row: Doc<'businesses'>): BusinessSource {
   const publicStatus = optionalString(row, 'publicStatus')
-  const publishedPhone = optionalString(row, 'publishedPhone')
   return {
     slug: requiredString(row, 'slug'),
     name: requiredString(row, 'name'),
     ...(publicStatus === undefined ? {} : { publicStatus }),
-    ...(publishedPhone === undefined ? {} : { publishedPhone }),
     updatedAt: requiredNumber(row, 'updatedAt'),
     trustTier: row.trustTier,
   }
 }
 
 function readBusinessContextSource(row: Doc<'businessContexts'>): BusinessContextSource {
-  const postcode = optionalString(row, 'postcode')
   const responseTimeMinutes = optionalNumber(row, 'responseTimeMinutes')
   const photos = optionalPhotos(row, 'photos')
   return {
     category: requiredString(row, 'category'),
-    suburb: requiredString(row, 'suburb'),
-    stateTerritory: requiredString(row, 'stateTerritory'),
-    ...(postcode === undefined ? {} : { postcode }),
+    businessContext: row.businessContext,
     ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
     ...(photos === undefined ? {} : { photos }),
   }
@@ -375,6 +379,13 @@ type CapabilityOfferingSource = {
 }
 
 type CapabilityPublicationSource = {
+  publicationRef: string
+  revision: number
+  networkId: string
+  businessId: string
+  capabilityId: string
+  version: number
+  contractDigest: string
   offeringId: string
   bindingId: string
   credentialState: string
@@ -402,6 +413,13 @@ function readCapabilityPublication(row: Doc<'capabilityPublications'>): Capabili
   const readinessObservedAt = optionalNumber(row, 'readinessObservedAt')
   const readinessValidUntil = optionalNumber(row, 'readinessValidUntil')
   return {
+    publicationRef: requiredString(row, 'publicationRef'),
+    revision: requiredNumber(row, 'revision'),
+    networkId: requiredString(row, 'networkId'),
+    businessId: requiredString(row, 'businessId'),
+    capabilityId: requiredString(row, 'capabilityId'),
+    version: requiredNumber(row, 'version'),
+    contractDigest: requiredString(row, 'contractDigest'),
     offeringId: requiredString(row, 'offeringId'),
     bindingId: requiredString(row, 'bindingId'),
     credentialState: requiredString(row, 'credentialState'),
@@ -428,11 +446,18 @@ function catalogOfferingOrigin(value: unknown): CatalogOfferingOrigin | undefine
     || typeof value.offeringRevision !== 'number'
     || typeof value.offeringSourceHash !== 'string'
   ) return undefined
-  return {
-    kind: 'catalog_offering',
+  const origin = {
+    kind: 'catalog_offering' as const,
     offeringRef: value.offeringRef,
     offeringRevision: value.offeringRevision,
     offeringSourceHash: value.offeringSourceHash,
+  }
+  if (value.declaredAccessPathRef === undefined && value.accessPathSourceHash === undefined) return origin
+  if (typeof value.declaredAccessPathRef !== 'string' || typeof value.accessPathSourceHash !== 'string') return undefined
+  return {
+    ...origin,
+    declaredAccessPathRef: value.declaredAccessPathRef,
+    accessPathSourceHash: value.accessPathSourceHash,
   }
 }
 
@@ -506,10 +531,7 @@ function toPersistedProjection(projection: BusinessSupplyProjection, businessId:
       slug: projection.business.slug,
       name: projection.business.name,
       category: projection.business.category,
-      suburb: projection.business.suburb,
-      stateTerritory: projection.business.stateTerritory,
-      ...(projection.business.publishedPhone === undefined ? {} : { publishedPhone: projection.business.publishedPhone }),
-      ...(projection.business.postcode === undefined ? {} : { postcode: projection.business.postcode }),
+      businessContext: projection.business.businessContext,
       publicUrl: projection.business.publicUrl,
       trustTier: projection.business.trustTier,
       ...(projection.business.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: projection.business.responseTimeMinutes }),

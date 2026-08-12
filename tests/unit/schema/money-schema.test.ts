@@ -9,7 +9,7 @@ describe('money schema ownership', () => {
     const tables = JSON.parse(String(exported.call(schema))).tables as readonly { tableName: string; indexes: readonly { indexDescriptor: string; fields: readonly string[] }[] }[]
     const byName = new Map(tables.map((table) => [table.tableName, table]))
     expect([...byName.keys()].filter((name) => name.startsWith('money'))).toEqual(expect.arrayContaining([
-      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyFreeTierCounters', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
+      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyCredentialBudgetStates', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyFreeTierCounters', 'moneyTopupCommands', 'moneyConnectAccountCommands', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
     ]))
     expect(byName.get('moneyLedgerEntries')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_accountRef_and_createdAt', fields: ['accountRef', 'createdAt'] }),
@@ -20,6 +20,14 @@ describe('money schema ownership', () => {
     ]))
     expect(byName.get('moneyCredentialUsageSummaries')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_principalId_and_credentialId_and_currency', fields: ['principalId', 'credentialId', 'currency'] }),
+    ]))
+    expect(byName.get('moneyPayoutAccounts')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency', fields: ['businessId', 'currency'] }),
+      expect.objectContaining({ indexDescriptor: 'by_stripeAccountId', fields: ['stripeAccountId'] }),
+    ]))
+    expect(byName.get('moneyConnectAccountCommands')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency', fields: ['businessId', 'currency'] }),
+      expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency_and_idempotencyKey', fields: ['businessId', 'currency', 'idempotencyKey'] }),
     ]))
     const serialized = JSON.stringify(tables.filter((table) => table.tableName.startsWith('money')))
     expect(serialized).not.toMatch(/secret|paymentMethod|clientSecret/i)

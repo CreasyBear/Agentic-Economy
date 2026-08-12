@@ -7,7 +7,12 @@ const contractRefFields = {
   contractDigest: v.string(),
 }
 const commercialRelationship = v.object({
-  kind: v.union(v.literal('none'), v.literal('direct'), v.literal('affiliate'), v.literal('ownership')),
+  kind: v.union(
+    v.literal('none'),
+    v.literal('direct'),
+    v.literal('affiliate'),
+    v.literal('ownership'),
+  ),
   summary: v.string(),
   influencesEligibility: v.boolean(),
   influencesInclusion: v.boolean(),
@@ -18,6 +23,69 @@ const exactAmount = v.object({
   currency: v.string(),
   units: v.string(),
   exponent: v.number(),
+})
+export const capabilityPublicationSourceSelectorValue = v.union(
+  v.object({}),
+  v.object({
+    path: v.string(),
+    method: v.union(v.literal('get'), v.literal('post')),
+  }),
+  v.object({ toolName: v.string(), protocolVersion: v.string() }),
+  v.object({
+    serverName: v.string(),
+    toolName: v.string(),
+    protocolVersion: v.string(),
+  }),
+  v.object({ resourceUrl: v.string() }),
+)
+export const pricingConfigValue = v.object({
+  version: v.literal('pricing:v2'),
+  unit: v.literal('call'),
+  paidAmount: exactAmount,
+  freeTier: v.optional(
+    v.object({
+      maxCalls: v.number(),
+      window: v.union(v.literal('day'), v.literal('month')),
+    }),
+  ),
+})
+export const readinessOutcomeValue = v.union(
+  v.literal('healthy'),
+  v.literal('credential_unavailable'),
+  v.literal('credential_rejected'),
+  v.literal('target_not_public'),
+  v.literal('transport_unreachable'),
+  v.literal('http_redirect'),
+  v.literal('http_4xx'),
+  v.literal('http_5xx'),
+  v.literal('response_content_type_invalid'),
+  v.literal('response_too_large'),
+  v.literal('response_invalid'),
+)
+const capabilitySupplyOpenApiPreflightOutcomeValue = v.union(
+  v.object({
+    selector: v.object({ path: v.string(), method: v.string() }),
+    kind: v.literal('executable'),
+  }),
+  v.object({
+    selector: v.object({ path: v.string(), method: v.string() }),
+    kind: v.literal('credential_required'),
+    credential: v.object({
+      kind: v.union(v.literal('api_key'), v.literal('http_bearer')),
+      location: v.optional(v.union(v.literal('query'), v.literal('header'))),
+      name: v.optional(v.string()),
+    }),
+  }),
+  v.object({
+    selector: v.object({ path: v.string(), method: v.string() }),
+    kind: v.union(v.literal('unsupported_shape'), v.literal('unsafe')),
+    reason: v.string(),
+  }),
+)
+const capabilitySupplyOpenApiPreflightValue = v.object({
+  sourceDigest: v.string(),
+  outcomes: v.array(capabilitySupplyOpenApiPreflightOutcomeValue),
+  truncated: v.boolean(),
 })
 const price = v.union(
   v.object({ kind: v.literal('fixed'), amount: exactAmount }),
@@ -125,6 +193,7 @@ export const capabilitySupplyTables = {
     revision: v.number(),
     businessId: v.id('businesses'),
     networkId: v.string(),
+    runtimeEnvironment: v.union(v.literal('sandbox'), v.literal('production')),
     ...contractRefFields,
     sourceKind: v.union(
       v.literal('ae_envelope'),
@@ -135,10 +204,16 @@ export const capabilitySupplyTables = {
     ),
     sourceRevision: v.string(),
     sourceDigest: v.string(),
+    sourceSelector: v.optional(capabilityPublicationSourceSelectorValue),
+    sourceDescriptorJson: v.optional(v.string()),
+    pricingConfigJson: v.optional(v.string()),
+    priceDigest: v.optional(v.string()),
     publisherRef: v.string(),
     authorityMode: v.union(
-      v.literal('provider_owned'), v.literal('ae_curated_external'),
-      v.literal('third_party_gateway'), v.literal('observed_external'),
+      v.literal('provider_owned'),
+      v.literal('ae_curated_external'),
+      v.literal('third_party_gateway'),
+      v.literal('observed_external'),
     ),
     provenanceDigest: v.string(),
     offeringId: v.string(),
@@ -163,6 +238,12 @@ export const capabilitySupplyTables = {
     ),
     readinessObservedAt: v.optional(v.number()),
     readinessValidUntil: v.optional(v.number()),
+    readinessTargetDigest: v.optional(v.string()),
+    readinessRequestDigest: v.optional(v.string()),
+    readinessResponseStatus: v.optional(v.number()),
+    readinessResponseContentType: v.optional(v.string()),
+    readinessResponseDigest: v.optional(v.string()),
+    readinessOutcome: v.optional(readinessOutcomeValue),
     readinessEvidenceRefs: v.array(v.string()),
     registrationEvidenceRefs: v.array(v.string()),
     createdAt: v.number(),
@@ -170,9 +251,13 @@ export const capabilitySupplyTables = {
     withdrawnAt: v.optional(v.number()),
   })
     .index('by_publicationRef_and_revision', ['publicationRef', 'revision'])
+    .index('by_operationRef_and_disposition', ['operationRef', 'disposition'])
     .index('by_networkId_and_disposition', ['networkId', 'disposition'])
     .index('by_businessId_and_disposition', ['businessId', 'disposition'])
-    .index('by_disposition_and_readinessValidUntil', ['disposition', 'readinessValidUntil'])
+    .index('by_disposition_and_readinessValidUntil', [
+      'disposition',
+      'readinessValidUntil',
+    ])
     .index('by_bindingId_and_disposition', ['bindingId', 'disposition']),
 
   capabilityOfferings: defineTable({
@@ -185,7 +270,9 @@ export const capabilitySupplyTables = {
       label: v.string(),
       summary: v.string(),
       price,
-      materialTerms: v.array(v.object({ termId: v.string(), label: v.string(), value: v.string() })),
+      materialTerms: v.array(
+        v.object({ termId: v.string(), label: v.string(), value: v.string() }),
+      ),
       commercialRelationship,
     }),
     searchTerms: v.array(v.string()),
@@ -200,7 +287,11 @@ export const capabilitySupplyTables = {
     .index('by_offeringId', ['offeringId'])
     .index('by_businessId_and_status', ['businessId', 'status'])
     .index('by_networkId_status_capabilityId_version_contractDigest', [
-      'networkId', 'status', 'capabilityId', 'version', 'contractDigest',
+      'networkId',
+      'status',
+      'capabilityId',
+      'version',
+      'contractDigest',
     ]),
 
   capabilityTransportBindings: defineTable({
@@ -240,8 +331,69 @@ export const capabilitySupplyTables = {
     updatedAt: v.number(),
   })
     .index('by_bindingId', ['bindingId'])
-    .index('by_offeringId_and_admission_and_conformance', ['offeringId', 'admission', 'conformance'])
-    .index('by_networkId_admission_conformance', ['networkId', 'admission', 'conformance']),
+    .index('by_offeringId_and_admission_and_conformance', [
+      'offeringId',
+      'admission',
+      'conformance',
+    ])
+    .index('by_networkId_admission_conformance', [
+      'networkId',
+      'admission',
+      'conformance',
+    ]),
+  capabilitySupplySourceDrafts: defineTable({
+    ownerId: v.id('owners'),
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    offeringRevision: v.number(),
+    revision: v.number(),
+    operationKey: v.string(),
+    sourceKind: v.union(
+      v.literal('ae_envelope'),
+      v.literal('openapi_http'),
+      v.literal('mcp'),
+      v.literal('agent_plugin_mcp'),
+      v.literal('x402'),
+    ),
+    sourceRevision: v.string(),
+    sourceJson: v.string(),
+    sourceDigest: v.string(),
+    preflight: v.object({
+      status: v.union(
+        v.literal('pending'),
+        v.literal('prepared'),
+        v.literal('refused'),
+      ),
+      draftRevision: v.number(),
+      sourceDigest: v.string(),
+      observedAt: v.number(),
+      reason: v.optional(v.string()),
+      summary: v.optional(
+        v.object({
+          sourceKind: v.string(),
+          sourceRevision: v.string(),
+          sourceDigest: v.string(),
+          priceDigest: v.string(),
+          preparedDigest: v.string(),
+        }),
+      ),
+      openApi: v.optional(capabilitySupplyOpenApiPreflightValue),
+      evidenceRefs: v.array(v.string()),
+    }),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef'])
+    .index('by_ownerId_and_businessId_and_offeringRef', [
+      'ownerId',
+      'businessId',
+      'offeringRef',
+    ])
+    .index('by_businessId_and_offeringRef_and_operationKey', [
+      'businessId',
+      'offeringRef',
+      'operationKey',
+    ]),
   capabilityProviderConnections: defineTable({
     connectionRef: v.string(),
     businessId: v.id('businesses'),
@@ -269,11 +421,62 @@ export const capabilitySupplyTables = {
     updatedAt: v.number(),
     lastCommandId: v.string(),
     lastCommandDigest: v.string(),
+    revocationRef: v.optional(v.string()),
+    cleanupAttempt: v.optional(v.number()),
+    cleanupWorkId: v.optional(v.string()),
+    cleanupWorkKind: v.optional(
+      v.union(v.literal('lease_drain'), v.literal('cleanup')),
+    ),
+    cleanupCommandId: v.optional(v.string()),
+    cleanupRequestDigest: v.optional(v.string()),
+    cleanupCallbackGraceUntil: v.optional(v.number()),
   })
     .index('by_connectionRef', ['connectionRef'])
     .index('by_businessId_and_lifecycle', ['businessId', 'lifecycle'])
     .index('by_providerRef_and_lifecycle', ['providerRef', 'lifecycle'])
-    .index('by_connectionRef_and_authorityGeneration', ['connectionRef', 'authorityGeneration']),
+    .index('by_connectionRef_and_authorityGeneration', [
+      'connectionRef',
+      'authorityGeneration',
+    ]),
+  capabilityProviderConnectionLeases: defineTable({
+    leaseRef: v.string(),
+    invocationRef: v.string(),
+    operationRef: v.string(),
+    connectionRef: v.string(),
+    providerRef: v.string(),
+    providerAccountRef: v.string(),
+    adapterId: v.string(),
+    authorityGeneration: v.number(),
+    authorityDigest: v.string(),
+    grantedScopes: v.array(v.string()),
+    grantedResources: v.array(v.string()),
+    approvalDecisionRef: v.string(),
+    approvalDecisionDigest: v.string(),
+    readinessValidUntil: v.number(),
+    readinessDigest: v.optional(v.string()),
+    state: v.union(
+      v.literal('active'),
+      v.literal('consumed'),
+      v.literal('expired'),
+      v.literal('invalidated'),
+    ),
+    issuedAt: v.number(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+    invalidatedAt: v.optional(v.number()),
+    evidenceRefs: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastCommandId: v.string(),
+    lastCommandDigest: v.string(),
+  })
+    .index('by_leaseRef', ['leaseRef'])
+    .index('by_connectionRef_and_state', ['connectionRef', 'state'])
+    .index('by_invocationRef', ['invocationRef'])
+    .index('by_connectionRef_and_authorityGeneration', [
+      'connectionRef',
+      'authorityGeneration',
+    ]),
   capabilityProviderApprovals: defineTable({
     decisionRef: v.string(),
     commandId: v.string(),
@@ -287,7 +490,11 @@ export const capabilitySupplyTables = {
     grantedScopes: v.array(v.string()),
     requestedResources: v.array(v.string()),
     grantedResources: v.array(v.string()),
-    decision: v.union(v.literal('granted'), v.literal('refused'), v.literal('partial')),
+    decision: v.union(
+      v.literal('granted'),
+      v.literal('refused'),
+      v.literal('partial'),
+    ),
     decisionDigest: v.string(),
     decisionTime: v.number(),
     decisionMakerAuthorityRef: v.string(),
@@ -296,46 +503,76 @@ export const capabilitySupplyTables = {
   })
     .index('by_decisionRef', ['decisionRef'])
     .index('by_commandId', ['commandId'])
-    .index('by_connectionRef_and_authorityGeneration', ['connectionRef', 'authorityGeneration']),
+    .index('by_connectionRef_and_authorityGeneration', [
+      'connectionRef',
+      'authorityGeneration',
+    ]),
   registeredOperationMappings: defineTable({
     networkId: v.string(),
     mappingRef: v.string(),
     material: registeredOperationMappingMaterialValue,
     publisherRef: v.string(),
     authorityMode: v.union(
-      v.literal('provider_owned'), v.literal('ae_curated_external'),
-      v.literal('third_party_gateway'), v.literal('observed_external'),
+      v.literal('provider_owned'),
+      v.literal('ae_curated_external'),
+      v.literal('third_party_gateway'),
+      v.literal('observed_external'),
     ),
     registrationEvidenceRefs: v.array(v.string()),
     registeredAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index('by_networkId_and_mappingRef', ['networkId', 'mappingRef']),
+  }).index('by_networkId_and_mappingRef', ['networkId', 'mappingRef']),
   capabilityCallEvents: defineTable({
     eventRef: v.string(),
     businessId: v.id('businesses'),
     offeringRef: v.string(),
     publicationRef: v.optional(v.string()),
+    publicationRevision: v.optional(v.number()),
+    operationRef: v.optional(v.string()),
     taskDigest: v.string(),
     eventKind: v.union(
       v.literal('supply_liquidity_fill_observed'),
       v.literal('supply_liquidity_first_success_observed'),
       v.literal('supply_liquidity_depth_observed'),
+      v.literal('supply_owner_test_observed'),
     ),
     outcome: v.union(v.literal('filled'), v.literal('zero')),
-    zeroReason: v.optional(v.union(
-      v.literal('no_routeable_supply'), v.literal('readiness_unavailable'), v.literal('provider_refused'),
-      v.literal('credential_unavailable'), v.literal('price_unavailable'), v.literal('insufficient_credit'),
-      v.literal('input_invalid'), v.literal('outcome_unknown'),
-    )),
+    zeroReason: v.optional(
+      v.union(
+        v.literal('no_routeable_supply'),
+        v.literal('readiness_unavailable'),
+        v.literal('provider_refused'),
+        v.literal('credential_unavailable'),
+        v.literal('price_unavailable'),
+        v.literal('insufficient_credit'),
+        v.literal('input_invalid'),
+        v.literal('outcome_unknown'),
+      ),
+    ),
     taskStartedAt: v.optional(v.number()),
     successfulAt: v.optional(v.number()),
     durationMs: v.optional(v.number()),
     eligibleDepth: v.optional(v.number()),
     observedAt: v.number(),
     evidenceRefs: v.array(v.string()),
-    environment: v.union(v.literal('local'), v.literal('development'), v.literal('sandbox'), v.literal('production')),
+    environment: v.union(
+      v.literal('local'),
+      v.literal('development'),
+      v.literal('sandbox'),
+      v.literal('production'),
+    ),
   })
+    .index('by_owner_test_publication_identity', [
+      'businessId',
+      'offeringRef',
+      'publicationRef',
+      'publicationRevision',
+      'operationRef',
+      'eventKind',
+      'outcome',
+      'environment',
+      'observedAt',
+    ])
     .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
     .index('by_taskDigest_and_observedAt', ['taskDigest', 'observedAt'])
     .index('by_eventRef', ['eventRef']),

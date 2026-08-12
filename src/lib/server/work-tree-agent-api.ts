@@ -1,15 +1,16 @@
 import { kindForStatus } from '@/lib/errors'
-import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { problem } from '@/lib/server/problem'
+import { readRequestCorrelationId } from '@/lib/server/request-correlation'
 import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
-import { authenticateCustomerRequestAgent, type CustomerRequestAgentPrincipal } from './customer-request-agent-auth'
+import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessPrincipal } from './agent-access-auth'
 import { resolveCanonicalBaseUrl } from './canonical-url'
 import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from './convex-source'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
 import { customerRequestScopeForMode, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 import { findAction } from '@/modules/actions'
-import { workTreeApplyResultSchema, workTreeDecisionReceiptSchema, workTreeRawApplyReceiptSchema, type WorkTreeApplyResult, type WorkTreeDecisionReceipt } from '@/modules/work-tree/work-tree.functions'
+import { workTreeApplyResultSchema, workTreeDecisionResultSchema, workTreeRawApplyReceiptSchema, type WorkTreeApplyResult } from '@/modules/work-tree/work-tree.functions'
 import {
   workTreeRepeatFinalizeResultSchema,
   workTreeRepeatInspectResultSchema,
@@ -34,11 +35,13 @@ const WORK_TREE_SCOPES: Readonly<Record<WorkTreeAgentOperation, string>> = {
 }
 
 type HandlerOptions = Readonly<{
+  authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  resolvePrincipal?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['resolvePrincipal']
   env?: Record<string, string | undefined>
   now?: () => number
-  callOperation?: (input: Readonly<{ operation: WorkTreeAgentOperation; command: Record<string, unknown>; principal: CustomerRequestAgentPrincipal }>) => Promise<Record<string, unknown>>
+  callOperation?: (input: Readonly<{ operation: WorkTreeAgentOperation; command: Record<string, unknown>; principal: AgentAccessPrincipal }>) => Promise<Record<string, unknown>>
 }>
-type JsonBody = Readonly<{ ok: true; value: unknown }> | Readonly<{ ok: false; status: 400 | 413 }>
+type JsonBody = Readonly<{ ok: true; value: unknown; bodyText: string }> | Readonly<{ ok: false; status: 400 | 413 }>
 
 const sourceRefusalSchema = z.strictObject({
   kind: z.literal('refused'),
@@ -133,9 +136,20 @@ export async function handleWorkTreeAgentAction(request: Request, operationInput
     return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request' }, { Vary: 'Authorization' })
   }
   const mode = requiredMode(operation)
-  const admitted = await authenticateCustomerRequestAgent({
+  const resolvePrincipal = options.resolvePrincipal
+    ?? (options.authenticate === undefined
+      ? resolveAgentAccessPrincipal(
+          request,
+          body.bodyText,
+          readRequestCorrelationId(request),
+          options.env === undefined ? {} : { env: options.env },
+        )
+      : undefined)
+  const admitted = await authenticateAgentAccess({
     requiredScope: WORK_TREE_SCOPES[operation],
     requiredMode: mode,
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+    ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
   })
   if (admitted.kind === 'refused') return authRefusal(request, admitted.status, admitted.reason, mode)
   const principal = admitted.principal
@@ -157,7 +171,7 @@ function requiredMode(operation: WorkTreeAgentOperation): CustomerRequestAuthori
   return operation === 'inspect' || operation === 'inspectRepeatUse' ? 'inspect_only' : 'approve_each'
 }
 
-async function callWorkTreeSource(input: Readonly<{ operation: WorkTreeAgentOperation; command: Record<string, unknown>; principal: CustomerRequestAgentPrincipal; options: HandlerOptions }>): Promise<Record<string, unknown>> {
+async function callWorkTreeSource(input: Readonly<{ operation: WorkTreeAgentOperation; command: Record<string, unknown>; principal: AgentAccessPrincipal; options: HandlerOptions }>): Promise<Record<string, unknown>> {
   const key = (input.options.env ?? process.env).AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (key === undefined || key.length < 32) throw new Error('work_tree_service_auth_unavailable')
   // Only the signed principal fields travel; authorityMode is HTTP-admission
@@ -213,12 +227,12 @@ function projectResult(
     }) as WorkTreeApplyResult, 200, { Vary: 'Authorization' })
   }
   if (operation === 'decide') {
-    const parsed = workTreeDecisionReceiptSchema.safeParse(value)
+    const parsed = workTreeDecisionResultSchema.safeParse(value)
     if (!parsed.success) return unknownResponse(operation, 'work_tree_decide_source_result_invalid')
     if (parsed.data.kind === 'refused' && 'refusalCode' in parsed.data && typeof parsed.data.refusalCode === 'string') {
       return refusalResponse(request, operation, parsed.data.refusalCode, mode)
     }
-    return response(parsed.data as WorkTreeDecisionReceipt, 200, { Vary: 'Authorization' })
+    return response(parsed.data, 200, { Vary: 'Authorization' })
   }
   if (operation === 'reserveRepeatUse' || operation === 'finalizeRepeatUse'
     || operation === 'reconcileRepeatUse' || operation === 'inspectRepeatUse') {
@@ -279,6 +293,7 @@ function authRefusal(request: Request, status: 401 | 403, reason: string, mode: 
   return problem({ status, kind: kindForStatus(status), code: reason, detail: reason }, { Vary: 'Authorization', 'WWW-Authenticate': challenge })
 }
 function unknownResponse(operation: WorkTreeAgentOperation, error: unknown): Response {
+  if (operation === 'decide') return response({ kind: 'unknown' }, 200, { Vary: 'Authorization' })
   const reason = typeof error === 'string' && error.trim().length > 0
     ? error
     : error instanceof Error && error.message.trim().length > 0
@@ -287,7 +302,11 @@ function unknownResponse(operation: WorkTreeAgentOperation, error: unknown): Res
   return response({ kind: 'unknown', reason }, 200, { Vary: 'Authorization' })
 }
 async function readBody(request: Request): Promise<JsonBody> {
-  const bounded = await readBoundedRequestJson(request, MAX_WORK_TREE_AGENT_BODY_BYTES)
+  const bounded = await readBoundedRequestText(request, MAX_WORK_TREE_AGENT_BODY_BYTES)
   if (!bounded.ok) return { ok: false, status: bounded.code === 'payload_too_large' ? 413 : 400 }
-  return { ok: true, value: bounded.value }
+  try {
+    return { ok: true, value: JSON.parse(bounded.text) as unknown, bodyText: bounded.text }
+  } catch {
+    return { ok: false, status: 400 }
+  }
 }

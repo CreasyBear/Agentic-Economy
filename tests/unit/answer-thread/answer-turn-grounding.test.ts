@@ -123,6 +123,7 @@ describe('answer turn catalog grounding', () => {
             method: 'POST',
             headers: { 'X-AE-Turn-Key': 'grounding:turn-1' },
           }),
+          sourceWriteBody: '',
         },
         ({ event }) => {
           const turn = store.turns.get(admission.turnId)

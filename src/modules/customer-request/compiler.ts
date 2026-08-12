@@ -120,6 +120,7 @@ export type CustomerRequestRoutePlan = Readonly<{
     resolvedInputs: readonly RequestFact[]
     deferredInputs: readonly RequestActionInputMapping[]
     price: RegisteredSupplyPrice
+    priceDigest: string
     /** Optional only for immutable generations compiled before recommendation integrity was source-owned. */
     commercialRelationship?: RegisteredCommercialRelationship
     dataUse: CapabilityDecisionModel['dataUse']
@@ -654,6 +655,7 @@ export function compileRoutePlans(input: Readonly<{
         resolvedInputs: action.inputs,
         deferredInputs: action.inputMappings,
         price: candidate.price,
+        priceDigest: candidate.priceDigest,
         ...(candidate.commercialRelationship === undefined ? {} : {
           commercialRelationship: {
             ...candidate.commercialRelationship,
@@ -760,6 +762,7 @@ export function routeChoiceSignature(
     contractRef: CapabilityContractRef
     offeringRegistrationHash: string
     bindingRegistrationHash: string
+    priceDigest: string
   }>[] }>,
 ): string {
   const supplyIdentities = route.steps.map((step) => ({
@@ -769,21 +772,22 @@ export function routeChoiceSignature(
     contractRef: step.contractRef,
     offeringRegistrationHash: step.offeringRegistrationHash,
     bindingRegistrationHash: step.bindingRegistrationHash,
+    priceDigest: step.priceDigest,
   }))
   supplyIdentities.sort((left, right) => (
     canonicalDigest(left as StableHashValue).localeCompare(canonicalDigest(right as StableHashValue))
   ))
   return canonicalDigest(supplyIdentities as StableHashValue)
 }
-
 type RouteCandidate = RequestEvaluation['candidates'][number] & Required<Pick<
   RequestEvaluation['candidates'][number],
-  'publicationRef' | 'publicationRevision' | 'readinessValidUntil' | 'price' | 'cancellation'
+  'publicationRef' | 'publicationRevision' | 'readinessValidUntil' | 'price' | 'priceDigest' | 'cancellation'
 >>
 
 function isRouteCandidate(candidate: RequestEvaluation['candidates'][number]): candidate is RouteCandidate {
   return candidate.publicationRef !== undefined && candidate.publicationRevision !== undefined
     && candidate.readinessValidUntil !== undefined && candidate.price !== undefined
+    && candidate.priceDigest !== undefined
     && candidate.cancellation !== undefined
 }
 

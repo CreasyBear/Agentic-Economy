@@ -8,8 +8,12 @@ import {
   type DynamicPublishedInvocationResult,
 } from '../../../src/modules/action-invocation'
 import type { RouteTransportRuntime } from '../../../src/modules/capability-supply/route-transport-runtime'
-import { buildDevelopmentPublishedOperationEvidence } from '../../../src/modules/capability-supply/development-published-operation-evidence'
+import {
+  buildDevelopmentPublishedOperationEvidence,
+  createDevelopmentProviderLeaseIssuer,
+} from '../../../src/modules/capability-supply/development-published-operation-evidence'
 import type { MoneyInvocationPort } from '../../../src/modules/money/public'
+import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 
 const actor = { callerRef: 'agent:local', principalRef: 'clerk_api_key:key-1' }
 const origin = { kind: 'standalone' as const, callerRef: actor.callerRef, principalRef: actor.principalRef }
@@ -46,12 +50,17 @@ describe('money metering at the published invocation seam', () => {
     let attempt = 0
     const adapter = createDynamicPublishedActionInvocationAdapter({
       operation: fixture.operation,
+      issueProviderLease: createDevelopmentProviderLeaseIssuer(
+        fixture.operation,
+        fixture.operation.readiness.observedAt + 1_000,
+      ),
       source: createDevelopmentDynamicPublishedSource([fixture.operation]),
       runtime,
       moneyPort,
       now: () => fixture.operation.readiness.observedAt + 1_000,
       nextInvocationRef: () => `invocation:${++invocation}`,
       nextAuthorityRef: () => `authority:${++authority}`,
+      paymentAttemptPort: createInMemoryX402PaymentAttemptPort(),
       nextAttemptRef: () => `attempt:${++attempt}`,
       durablePort: createDevelopmentDurablePort(durableState),
     })

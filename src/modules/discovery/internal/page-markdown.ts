@@ -1,15 +1,23 @@
-import { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from '@/modules/answer-thread/agent-entry'
+import type { BusinessContext } from '@/modules/business/public'
+import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { formatOfferingPrice } from '@/modules/catalog/public'
-import {
-  CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY,
-  CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
-  CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES,
-} from '@/modules/customer-request/agent-contract'
-import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { DiscoveryListingBoundaryLine } from './discovery-files'
+import {
+  OperationMarketAnonymousBoundaryLine,
+  OperationMarketIdempotencyLine,
+  OperationMarketInvokeScopeLine,
+} from './offering-discovery-file'
 import { safePublicText } from './ucp-manifest'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
+import { operationRouteExamples } from './operation-contract'
+import {
+  OPERATION_MARKET_COMPARE_PATH,
+  OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_SEARCH_PATH,
+} from '@/modules/registry/operation-entry'
 
 /**
  * Markdown projections of the public page routes, for a caller that asked for
@@ -24,49 +32,100 @@ export const AgentCatalogMarkdownLimit = 25
 
 export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): string {
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
+  const routes = operationRouteExamples()
+  const routeFor = (actionId: string) => {
+    const route = routes.find((candidate) => candidate.route.actionId === actionId)
+    if (route === undefined) throw new Error(`Operation route is not registered: ${actionId}`)
+    return route
+  }
+  const invoke = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
+  const status = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
+  const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
+  const cli = 'npm run -s ae --'
   return [
-    '# Agentic Economy',
+    '# Agentic Economy — Operation market loop',
     '',
-    ...CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES,
+    '1. No-install Step 1: read the raw machine handshake.',
+    `   \`curl -fsSL ${base}/.well-known/ucp\``,
+    '2. Search a job anonymously with the repo-local CLI or the public POST route.',
+    `   \`${cli} search "<job>" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
+    `3. Inspect one exact result with \`${cli} inspect "$AE_OPERATION_REF" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`; read its inputs, terms, price, effects, availability, and evidence.`,
+    `4. Optionally compare exact candidates with \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`.`,
+    `5. Run \`${cli} connect --json\` and complete the OAuth device flow.`,
+    `6. Invoke with \`${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.route.method} ${base}${invoke.route.path}\`).`,
+    `7. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.route.method} ${base}${status.route.path}\`).`,
+    `8. Recover uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.route.method} ${base}${reconcile.route.path}\`).`,
     '',
-    '## Start here (no key needed)',
-    '',
-    '```http',
-    `${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path} HTTP/1.1`,
-    'Content-Type: application/json',
-    'X-AE-Turn-Key: <fresh opaque value>',
-    '',
-    '{ "query": "emergency plumber in Adelaide" }',
-    '```',
-    '',
-    `No credential. The response is a \`${ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType}\` stream.`,
-    'Use a fresh opaque `X-AE-Turn-Key` for every turn; it is an idempotency and correlation value, not a credential.',
-    ANSWER_THREAD_AGENT_ENTRYPOINT.boundary,
-    '',
-    '## Read the catalog',
-    '',
-    `- \`GET ${base}/api/businesses\` — every published business`,
-    `- \`GET ${base}/api/businesses/search?q=\` — search the catalog`,
-    `- \`GET ${base}/api/businesses/{slug}\` — one business`,
-    `- \`GET ${base}/{slug}/ucp\` — one business as a discovery manifest`,
-    '',
-    '## Confirm and start an option',
-    '',
-    `\`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method} ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}\` carries a Customer Request from comparison`,
-    'through confirmation, start, progress, evidence, problem reporting, and cancellation.',
-    `It needs ${CUSTOMER_REQUEST_AGENT_AUTHENTICATION_SUMMARY} with \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\`, issued after signed-in owner approval at`,
-    `Use \`${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope}\` plus exactly one mode scope: \`${CUSTOMER_REQUEST_AGENT_REQUIRED_SCOPES.slice(1).join('`, `')}\`.`,
-    `${base}${AGENT_KEY_ISSUANCE_PATH}. Read \`GET ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}\` first.`,
+    OperationMarketAnonymousBoundaryLine,
+    'Invoke, status, and recovery require one owner-approved AE caller key.',
+    `Connect uses \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\`, owner approval at \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\`, and \`${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`.`,
+    'The key identifies the caller; it never contains provider credentials or silently grants payment or consequential authority.',
+    OperationMarketInvokeScopeLine,
+    OperationMarketIdempotencyLine,
     '',
     '## Boundary',
     '',
     DiscoveryListingBoundaryLine,
+    'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
+    '',
+    '## Problem responses and retry rules',
+    '',
+    '- Errors use `application/problem+json` with `type`, `title`, `status`, `kind`, `code`, and optional `retryable`.',
+    '- If `retryable` is true, respect `Retry-After` when present and retry only the same material command identity.',
+    '- A timeout, `outcome_unknown`, or `reconciliation_required` is not permission to create a new invocation; read status, then recover with the same key.',
+    '- Never retry authentication, validation, authority, or idempotency-conflict problems without changing the invalid input or authority state.',
     '',
     '## More',
     '',
-    `- \`${base}/llms.txt\` — the public surface index`,
-    `- \`${base}/SKILL.md\` — the full assistant procedure`,
-    `- \`${base}/privacy/remove-business\` — listing correction or removal`,
+    `- \`${base}/llms.txt\` — the public Operation index`,
+    `- \`${base}/SKILL.md\` — the full Operation procedure`,
+    `- \`${base}/.well-known/ucp\` — the raw no-install machine handshake`,
+    `- \`${base}/for-agents\` — the machine guide when requested as markdown`,
+    '',
+  ].join('\n')
+}
+
+export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): string {
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
+  const cli = 'npm run -s ae --'
+  const invoke = operationRouteExamples().find(({ route }) => route.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
+  if (invoke === undefined) throw new Error('Operation invoke route is not registered')
+  return [
+    '# Agentic Economy — machine guide',
+    '',
+    '## Step 1 — no install',
+    '',
+    `Read the raw machine handshake first: \`curl -fsSL ${base}/.well-known/ucp\`.`,
+    'It is the canonical source for current routes, action IDs, POST inputJsonSchema values, and schema-valid examples. Do not infer a request body from prose.',
+    OperationMarketAnonymousBoundaryLine,
+    OperationMarketInvokeScopeLine,
+    '',
+    '## Step 2 — use the repo-local CLI',
+    '',
+    `The executable entrypoint in this repository is \`${cli}\`; no bare \`ae\` command is assumed.`,
+    '',
+    '```sh',
+    `${cli} search "extract line items from a supplier invoice" --json`,
+    `${cli} inspect "$AE_OPERATION_REF" --json`,
+    `${cli} connect --json`,
+    `export AE_IDEMPOTENCY_KEY="invoice-extract-2026-08-11-001"`,
+    `${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    `${cli} status "$AE_INVOCATION_REF" --json`,
+    `${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    '```',
+    '',
+    `POST body example (action-derived): \`${JSON.stringify(invoke.example.http.body)}\`.`,
+    OperationMarketIdempotencyLine,
+    '',
+    '## Problem responses and retry rules',
+    '',
+    '- Parse `application/problem+json`; use `kind` and `code` for branching, not human text.',
+    '- Retry only when `retryable: true`, respecting `Retry-After`, and preserve the same operation, input, and idempotency key.',
+    '- On an unknown outcome, read status and then recover; never create a second invocation to guess.',
+    '',
+    '## Advanced only',
+    '',
+    `Cancellation is an advanced operator action: use \`${cli} advanced cancel\` only when the manifest and current status direct you there. Use the root \`${cli} recover\` command for reconciliation.`,
     '',
   ].join('\n')
 }
@@ -107,12 +166,13 @@ export function buildBusinessMarkdown(
   business: PublicBusinessCatalogApiV2Dto,
   options: AgentPageMarkdownOptions,
 ): string {
+  const context = businessContextLabel(business.businessContext)
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
   return [
     `# ${oneLine(business.name)}`,
     '',
     `- Category: ${oneLine(business.category)}`,
-    `- Where: ${oneLine(business.suburb)}, ${oneLine(business.stateTerritory)}`,
+    `- Where: ${oneLine(context)}`,
     `- Listing standing: ${business.trustTier}`,
     `- Slug: \`${business.slug}\``,
     `- JSON: \`GET ${base}/api/businesses/${business.slug}\``,
@@ -183,12 +243,18 @@ function catalogRow(business: PublicBusinessCatalogApiV2Dto, base: string): stri
   // The first published price, not a computed cheapest: a row is a pointer to
   // the listing, and inventing a business-level minimum would publish a number
   // no offering carries.
+  const context = businessContextLabel(business.businessContext)
   const price = business.offerings.find((offering) => offering.price !== undefined)?.price
-  return `| ${oneLine(business.name)} | ${oneLine(business.category)} | ${oneLine(business.suburb)}, ${oneLine(business.stateTerritory)} | ${offerings.length === 0 ? '—' : offerings.join(', ')} | ${price === undefined ? '—' : oneLine(formatOfferingPrice(price))} | ${base}/${business.slug} |`
+  return `| ${oneLine(business.name)} | ${oneLine(business.category)} | ${oneLine(context)} | ${offerings.length === 0 ? '—' : offerings.join(', ')} | ${price === undefined ? '—' : oneLine(formatOfferingPrice(price))} | ${base}/${business.slug} |`
 }
 
 /** Table cells and headings break on a newline or a stray pipe. */
 function oneLine(value: string): string {
   return safePublicText(value).replace(/\s+/gu, ' ').replaceAll('|', '/').trim()
+}
+function businessContextLabel(context: BusinessContext): string {
+  return context.kind === 'local_human'
+    ? `${context.suburb}, ${context.stateTerritory}`
+    : `${context.providerIdentifier} (${context.website})`
 }
 

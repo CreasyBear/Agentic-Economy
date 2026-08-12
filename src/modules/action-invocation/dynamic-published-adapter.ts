@@ -11,12 +11,10 @@ import { uniq } from 'es-toolkit/array'
 import type { ActionContext } from '@/modules/common/action'
 
 import {
-  compareExactAmounts,
   pricingConfigDigest,
   pricingConfigSchema,
   type ExactAmount,
   type MoneyInvocationPort,
-  type PricingConfig,
 } from '@/modules/money/public'
 import type {
   ActionInvocationOrigin,
@@ -33,7 +31,6 @@ import {
   buildDynamicPublishedInput,
   createDynamicPublishedAction,
   dynamicPublishedSourceDigest,
-  executableFixedPrice,
   type DynamicPublishedInvocationInput,
   type DynamicPublishedInvocationResult,
 } from './dynamic-published-contract'
@@ -80,7 +77,6 @@ import {
 } from './input-work'
 import { createDynamicPublishedInputApplication } from './input-application'
 import {
-  createInMemoryX402PaymentAttemptPort,
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
@@ -183,6 +179,7 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
   }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
   cancel(input: Readonly<{
     invocationRef: string
+    idempotencyKey: string
     expectedInvocationVersion: number
     actor: InvocationActor
     origin: ActionInvocationOrigin
@@ -222,6 +219,13 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   nextInvocationRef: () => string
   nextAuthorityRef: () => string
   nextAttemptRef: () => string
+  issueProviderLease?: (input: Readonly<{
+    invocationRef: string
+    attemptRef: string
+    effectGeneration: number
+    authorityRef: string
+    expiresAt: number
+  }>) => Promise<DynamicPublishedExecutionToken['providerLease']>
   durablePort: DurableActionInvocationPort<DynamicPublishedInvocationResult>
   initialSnapshot?: InMemoryControlSnapshot<
     DynamicPublishedInvocationInput,
@@ -231,41 +235,15 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   inputWork?: readonly InvocationInputWork[]
   inputHistory?: readonly InvocationInputHistory[]
-  paymentAttempts?: readonly X402PaymentAttempt[]
-  paymentAttemptPort?: X402PaymentAttemptPort
-  paymentAuthorizationEvents?: readonly X402PaymentAuthorizationEvent[]
-  verifyPaymentReconciliationEvidence?: X402PaymentReconciliationEvidenceVerifier
+  paymentAttemptPort: X402PaymentAttemptPort
   moneyPort?: MoneyInvocationPort
-  pricingConfig?: PricingConfig
+  verifyPaymentReconciliationEvidence?: X402PaymentReconciliationEvidenceVerifier
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
   const durablePort = input.durablePort
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
   const preparedTransports = new Map<string, DynamicPublishedPreparedTransport>()
-  const paymentAttempts = new Map(
-    (input.paymentAttempts ?? []).map((attempt) => [
-      `${attempt.invocationRef}\u0000${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
-      attempt,
-    ]),
-  )
-  const moneyCharges = new Map<string, Readonly<{
-    transactionRef: string
-    principalId: string
-    chargeState: 'free_tier' | 'paid'
-    amount: ExactAmount
-    priceDigest: string
-  }>>()
-  const paymentAttemptPort = input.paymentAttemptPort
-    ?? createInMemoryX402PaymentAttemptPort(
-      input.paymentAttempts,
-      input.paymentAuthorizationEvents,
-    )
-  const paymentAuthorizationEvents = new Map(
-    (input.paymentAuthorizationEvents ?? []).map((event) => [
-      `${event.invocationRef}\u0000${event.attemptRef}\u0000${event.effectGeneration}`,
-      event,
-    ]),
-  )
+  const moneyCharges = new Map<string, NonNullable<DynamicPublishedSourceRow['moneyCharge']>>()
   const semanticClaims = new Map<string, Readonly<{
     kind: 'owner' | 'reuse'
     semanticBaseKey: string
@@ -391,13 +369,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
             failureCode: 'billing_identity_missing',
           }
         }
-        const fixedPrice = executableFixedPrice(input.operation)
-        const pricingConfigInput = input.pricingConfig ?? {
-          version: 'pricing:v2' as const,
-          unit: 'call' as const,
-          paidAmount: fixedPrice,
-        }
-        const parsedPricingConfig = pricingConfigSchema.safeParse(pricingConfigInput)
+        const parsedPricingConfig = pricingConfigSchema.safeParse(input.operation.pricingConfig)
         if (!parsedPricingConfig.success) {
           return {
             kind: 'published_operation_refused',
@@ -409,31 +381,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           }
         }
         const pricingConfig = parsedPricingConfig.data
-        if (
-          pricingConfig.paidAmount.currency !== fixedPrice.currency
-          || pricingConfig.paidAmount.exponent !== fixedPrice.exponent
-        ) {
-          return {
-            kind: 'published_operation_refused',
-            sourceDisposition: 'refused',
-            operationId: input.operation.operationId,
-            operationVersion: descriptor.version,
-            requestDigest: value.operationKey,
-            failureCode: 'currency_mismatch',
-          }
-        }
-        const priceComparison = compareExactAmounts(pricingConfig.paidAmount, fixedPrice)
-        if (priceComparison === undefined) {
-          return {
-            kind: 'published_operation_refused',
-            sourceDisposition: 'refused',
-            operationId: input.operation.operationId,
-            operationVersion: descriptor.version,
-            requestDigest: value.operationKey,
-            failureCode: 'currency_mismatch',
-          }
-        }
-        if (priceComparison !== 0) {
+        const priceDigest = pricingConfigDigest(pricingConfig)
+        if (priceDigest !== input.operation.priceDigest) {
           return {
             kind: 'published_operation_refused',
             sourceDisposition: 'refused',
@@ -443,8 +392,17 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
             failureCode: 'price_changed',
           }
         }
-        const priceDigest = pricingConfigDigest(pricingConfig)
         const existingCharge = row.moneyCharge
+        if (existingCharge !== undefined && existingCharge.priceDigest !== input.operation.priceDigest) {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: 'price_changed',
+          }
+        }
         const charge = existingCharge === undefined
           ? await input.moneyPort.authorizeInvocationCharge({
               principalId: principalRef,
@@ -458,14 +416,16 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
               pricingConfig,
               priceDigest,
               priceSourceDigest: priceDigest,
-              authorityMaximumSpend: fixedPrice,
+              authorityMaximumSpend: pricingConfig.paidAmount,
             })
           : {
               kind: 'accepted' as const,
               chargeState: existingCharge.chargeState,
               amount: existingCharge.amount,
               priceDigest: existingCharge.priceDigest,
-              transactionRef: existingCharge.transactionRef,
+              usageRef: existingCharge.usageRef,
+              observedAt: existingCharge.observedAt,
+              ...(existingCharge.transactionRef === undefined ? {} : { transactionRef: existingCharge.transactionRef }),
             }
         if (charge.kind === 'refused') {
           return {
@@ -478,7 +438,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           }
         }
         const moneyCharge = {
-          transactionRef: charge.transactionRef ?? `free:${execution.invocationRef}:${execution.effectGeneration}`,
+          ...(charge.transactionRef === undefined ? {} : { transactionRef: charge.transactionRef }),
+          usageRef: charge.usageRef,
+          observedAt: charge.observedAt,
           principalId: principalRef,
           chargeState: charge.chargeState,
           amount: charge.amount,
@@ -520,12 +482,11 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           descriptor,
           prepared,
           runtime: input.runtime,
-          paymentAttempts,
-          paymentAttemptPort,
-          paymentAuthorizationEvents,
+          paymentAttemptPort: input.paymentAttemptPort,
           now: input.now,
         })
         if (result.kind === 'published_operation_refused' && charge !== undefined && charge.chargeState === 'paid') {
+          if (charge.transactionRef === undefined) throw new Error('published_operation_payment_reconciliation_required:transaction_missing')
           const refund = await input.moneyPort?.refundCharge?.({
             transactionRef: charge.transactionRef,
             principalId: charge.principalId,
@@ -537,12 +498,25 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
             throw new Error('published_operation_payment_reconciliation_required:refund_refused')
           }
         }
-        return result
+        return result.kind === 'published_operation_succeeded' && charge !== undefined
+          ? {
+              ...result,
+              usage: {
+                usageRef: charge.usageRef,
+                observedAt: charge.observedAt,
+                chargeState: charge.chargeState,
+                amount: charge.amount,
+                priceDigest: charge.priceDigest,
+                ...(charge.transactionRef === undefined ? {} : { transactionRef: charge.transactionRef }),
+              },
+            }
+          : result
       } catch (error) {
         const message = error instanceof Error ? error.message : ''
         const unknown = message.startsWith('published_operation_outcome_unknown:')
           || message.startsWith('published_operation_payment_reconciliation_required:')
         if (unknown && charge !== undefined) {
+          if (charge.transactionRef === undefined) throw new Error('published_operation_payment_reconciliation_required:transaction_missing')
           await input.moneyPort?.markChargeOutcomeUnknown?.({
             transactionRef: charge.transactionRef,
             principalId: charge.principalId,
@@ -586,9 +560,10 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         }
         return
       }
-      const reusedIdentity = claim?.kind === 'reuse' ? claim.outcome?.resultIdentity : undefined
+      const referenceable = view.observedResolution.resultReferenceable
+      const reusedIdentity = referenceable && claim?.kind === 'reuse' ? claim.outcome?.resultIdentity : undefined
       const resultIdentity = reusedIdentity ?? {
-        sourceResultRef: `published-result:${claim?.semanticIdentityDigest ?? view.invocationRef}`,
+        sourceResultRef: `published-result:${referenceable ? claim?.semanticIdentityDigest ?? view.invocationRef : view.invocationRef}`,
         resultDigest: canonicalDigest(
           view.observedResolution.result,
         ),
@@ -823,6 +798,18 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         effectGeneration: request.effectGeneration,
       }
       const key = runtimeKey(request.invocationRef, request.attemptRef, request.effectGeneration)
+      const providerLease = input.issueProviderLease === undefined
+        ? undefined
+        : await input.issueProviderLease({
+            invocationRef: request.invocationRef,
+            attemptRef: request.attemptRef,
+            effectGeneration: request.effectGeneration,
+            authorityRef: authority.reference,
+            expiresAt: Date.parse(authority.expiresAt),
+          })
+      if (input.operation.binding.authority.kind === 'provider_connection' && providerLease === undefined) {
+        return { kind: 'refused', code: 'invalid_control_state', view }
+      }
       executionTokens.set(key, {
         invocationRef: request.invocationRef,
         attemptRef: request.attemptRef,
@@ -835,6 +822,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           origin: persisted.control.origin,
         }),
         expiresAt: Date.parse(authority.expiresAt),
+        ...(providerLease === undefined ? {} : { providerLease }),
       })
       try {
         return await tracer.executeAcquired(request)
@@ -898,7 +886,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     },
     async reconcilePayment({ evidence, persist = true }) {
       const key = x402PaymentAttemptKey(evidence)
-      const current = paymentAttemptPort.load(key)
+      const current = input.paymentAttemptPort.load(key)
       if (current === undefined) return { kind: 'refused', code: 'payment_attempt_not_found' }
       const code = validateX402PaymentReconciliationEvidence({
         evidence,
@@ -918,7 +906,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         return { kind: 'refused', code: 'payment_attempt_reconciliation_not_required' }
       }
       if (!persist) return { kind: 'accepted', attempt: current }
-      const authorizationEvent = paymentAttemptPort.loadAuthorizationEvent(key)
+      const authorizationEvent = input.paymentAttemptPort.loadAuthorizationEvent(key)
       if (authorizationEvent === undefined) {
         return { kind: 'refused', code: 'payment_attempt_not_found' }
       }
@@ -931,8 +919,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         reconciliationEvidenceDigest: evidence.digest,
         ...(evidence.settledAmount === undefined ? {} : { settledAmount: evidence.settledAmount }),
       }
-      await paymentAttemptPort.persist({ attempt, authorizationEvent })
-      paymentAttempts.set(key, attempt)
+      await input.paymentAttemptPort.persist({ attempt, authorizationEvent })
       return { kind: 'accepted', attempt }
     },
     inspect: tracer.inspect,
@@ -980,8 +967,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         inputWork: [...inputWork.values()],
         inputHistory: [...inputHistory],
         operations: [input.operation],
-        paymentAttempts: paymentAttemptPort.list(),
-        paymentAuthorizationEvents: paymentAttemptPort.listAuthorizationEvents(),
+        paymentAttempts: input.paymentAttemptPort.list(),
+        paymentAuthorizationEvents: input.paymentAttemptPort.listAuthorizationEvents(),
       }
       return copyDynamicPublishedSnapshot(snapshot)
     },

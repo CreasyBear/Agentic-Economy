@@ -11,10 +11,10 @@ import {
   workNodeCostSchema,
   workNodeEffortSchema,
   workNodeKindSchema,
-  workNodeQuoteSchema,
   workNodeResourceSchema,
   workNodeScopeSchema,
   workNodeTimingSchema,
+  workNodeWriteQuoteSchema,
   type WorkNode,
   type WorkNodeStatus,
   type WorkTree,
@@ -45,7 +45,7 @@ export const workNodeDraftSchema = z.strictObject({
   scope: workNodeScopeSchema.optional(),
   authorityRef: z.string().optional(),
   evidenceRefs: z.array(z.string()).max(32).default([]),
-  quote: workNodeQuoteSchema.optional(),
+  quote: workNodeWriteQuoteSchema.optional(),
 })
 export type WorkNodeDraft = z.input<typeof workNodeDraftSchema>
 export type ParsedWorkNodeDraft = z.output<typeof workNodeDraftSchema>

@@ -1,6 +1,4 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { DiscoveryManifestContract } from '@/modules/discovery/public'
@@ -34,22 +32,13 @@ const readPublicCatalogInquiryAvailabilityQuery = sourceQuery<
 >('inquiries:readPublicCatalogInquiryAvailability')
 
 /**
- * Local development has no Convex admission source. Reading `[]` there means
- * "nothing is admitted", which silently withheld the inquiry path from every
- * local surface — including the one fixture that exists precisely to model an
- * admitted business. Resolve admission from the fixture set instead, so local
- * behavior matches the fact the fixture declares.
+ * Admission is a current source fact, so the claim is re-checked on every
+ * read and the path is dropped when the source will not accept an inquiry.
+ * Phone, website and external-operation paths are the business's own
+ * reachability and are never touched here.
  */
 const defaultDependencies: ProjectionDependencies = {
   readAvailability: async (targets) => {
-    if (isLocalE2EAuthBypassEnabled()) {
-      return targets.map((target) => ({
-        ...target,
-        admitted: LOCAL_E2E_BUSINESS_FIXTURES.some((fixture) =>
-          fixture.requestedSlug === target.businessSlug
-          && fixture.inquiryAdmission === 'admitted'),
-      }))
-    }
     try {
       return await callPublicSourceQuery(readPublicCatalogInquiryAvailabilityQuery, { targets })
     } catch {

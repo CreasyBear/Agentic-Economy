@@ -1,14 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
+import { describe, expect, it } from 'vitest'
 
-import { getPublicBusinessCatalog, getPublicBusinessPageReadback } from '@/modules/catalog/public'
+import { getPublicBusinessCatalog } from '@/modules/catalog/public'
+import {
+  operationCompareOutputSchema,
+  operationDetailOutputSchema,
+  operationInspectPlanOutputSchema,
+  operationSearchOutputSchema,
+} from '@/modules/capability-supply/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { uniq } from 'es-toolkit/array'
+import { isRecord } from '@/modules/common/is-record'
+import {
+  createPublicSourceTransport,
+  setPublicSourceTransportForTests,
+} from '@/lib/server/convex-source'
+import {
+  OPERATION_MARKET_ACTION_ENTRIES,
+  OPERATION_MARKET_COMPARE_PATH,
+  OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_SEARCH_PATH,
+} from '@/modules/registry/operation-entry'
+import { registryDetailAction, registryListAction } from '@/modules/registry/registry.actions'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
   buildSitemapXml,
-  createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
@@ -17,67 +33,21 @@ import {
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
-import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
-import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
-import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
-import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
-import { handleDurableServiceDetailRequest } from '@/routes/api.v1.services.$serviceId'
-import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.search'
-import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { Route as MarketOperationCompareRoute } from '@/routes/api.v1.market-operations.compare'
+import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-operations.detail'
+import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
+import { Route as MarketOperationSearchRoute } from '@/routes/api.v1.market-operations.search'
+import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
-import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
-import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
-import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
-import { handleCustomerRequestContractSchemaGet } from '@/routes/api.v1.requests.schema'
-import { handleAgentCustomerRequestPost } from '@/lib/server/customer-request-agent-api'
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
 
-beforeEach(() => {
-  // `.env.development.local` sets a machine-specific canonical host, which
-  // otherwise leaks into every generated discovery artifact and makes this
-  // parity assertion depend on whose laptop is running it.
-  vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
-  vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'ae.example')
-  // Same class of leak, worse consequence: Vite loads `.env.local`, so a
-  // developer's `VITE_CONVEX_URL` reaches this process and
-  // `useLocalRegistryFixture()` (registry.functions.ts:409-412) turns false.
-  // These cases then silently assert against whatever the local Convex
-  // deployment happens to hold instead of the explicit fixture below. The keys
-  // must be removed rather than blanked — the gate tests `=== undefined`, and
-  // an empty string would still read as configured.
-  vi.stubEnv('CONVEX_URL', undefined)
-  vi.stubEnv('VITE_CONVEX_URL', undefined)
-})
-
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
 /**
  * Every case here asserts parity between advertised discovery output and the
- * routes that serve it. The durable route handlers reach the configured source
- * first, so without pinning the explicit local catalog these assert against
- * whatever a shared deployment currently holds.
+ * pure projections that back the public routes.
  */
 describe('discovery route parity', () => {
-  let restoreLocalBypass: (() => void) | undefined
-
-  beforeEach(() => {
-    const previous = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    restoreLocalBypass = () => {
-      if (previous === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-        return
-      }
-      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previous
-    }
-  })
-
-  afterEach(() => {
-    restoreLocalBypass?.()
-    restoreLocalBypass = undefined
-  })
 
   it('tracks one durable catalog and suppression across public page, registry projections, UCP, llms, and sitemap', async () => {
     const state = createDurablePublishedDiscoveryState({
@@ -114,11 +84,6 @@ describe('discovery route parity', () => {
     const ucp = generated.manifest
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })
-    const fixtures = await (
-      await handleDeveloperDiscoveryFixturesRequest(new Request('https://ae.example/api/discovery/fixtures'), state, {
-        now: 13_000,
-      })
-    ).json()
 
     expect(page).toMatchObject({
       kind: 'available',
@@ -136,33 +101,6 @@ describe('discovery route parity', () => {
     })
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('https://ae.example/fremantle-heat-pump-repairs')
-    expect(fixtures).toMatchObject({
-      kind: 'public_catalog_fixture_bundle',
-      state: 'available',
-    })
-    expect(fixtures.examples).toEqual([
-      expect.objectContaining({ slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' }),
-    ])
-    expect(fixtures.routeHealth).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          route: 'https://ae.example/api/businesses',
-          status: 'available',
-        }),
-        expect.objectContaining({
-          route: 'https://ae.example/api/businesses/search?q=',
-          status: 'available',
-        }),
-        expect.objectContaining({
-          route: 'https://ae.example/api/businesses/{slug}',
-          status: 'available',
-        }),
-        expect.objectContaining({
-          route: 'https://ae.example/{slug}/ucp',
-          status: 'available',
-        }),
-      ])
-    )
     expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llms })).not.toContain(
       'parramatta-emergency-plumbing'
     )
@@ -211,144 +149,327 @@ describe('discovery route parity', () => {
 
   it('keeps every URL advertised by explicit local manifest, llms, sitemap, and robots outputs resolvable', async () => {
     const origin = 'https://ae.example'
-    const state = createDefaultDiscoverySourceState()
+    const state = createFixtureDiscoverySourceState()
     const manifestResponse = handleUcpManifestRequest(
       new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
-      'parramatta-emergency-plumbing'
+      'parramatta-emergency-plumbing',
+      state,
     )
     const manifest = await manifestResponse.json()
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: origin })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: origin, now: 0 })
     const robots = buildRobotsTxt({ canonicalBaseUrl: origin })
-    const urls = uniqueUrls([
-      ...manifest.routes.map((route: { url: string }) => route.url),
-      ...llms.urls,
-      ...sitemap.urls,
-      ...sitemapLocs(sitemap.body),
-      ...robots.urls,
+    const routes = uniqueRoutes([
+      ...manifest.routes.map((route: { url: string }) => advertisedRoute(route.url)),
+      ...llms.urls.map(advertisedRoute),
+      ...sitemap.urls.map(advertisedRoute),
+      ...sitemapLocs(sitemap.body).map(advertisedRoute),
+      ...robots.urls.map(advertisedRoute),
     ])
 
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) {
-      const resolved = await resolveAdvertisedUrl(url)
-      expect(resolved, url).toBe(true)
+    expect(routes.length).toBeGreaterThan(0)
+    const restoreMarketOperationSource = installMarketOperationSource()
+    try {
+      for (const route of routes) {
+        const resolved = await resolveAdvertisedRoute(route, state)
+        expect(resolved, `${route.method} ${route.url}`).toBe(true)
+      }
+    } finally {
+      restoreMarketOperationSource()
     }
   })
 
-  it('keeps llms API routes aligned with public API response schemas', async () => {
+  it('keeps llms API routes aligned with current public response schemas', async () => {
+    const state = createFixtureDiscoverySourceState()
     const origin = 'https://ae.example'
-    const llms = buildLlmsTxt(createDefaultDiscoverySourceState(), { canonicalBaseUrl: origin })
-    const listUrl = llms.urls.find((url) => new URL(url).pathname === '/api/businesses')
-    const searchUrl = llms.urls.find((url) => new URL(url).pathname === '/api/businesses/search')
-    const detailUrl = llms.urls.find((url) => new URL(url).pathname === '/api/businesses/parramatta-emergency-plumbing')
+    const llms = buildLlmsTxt(state, { canonicalBaseUrl: origin })
+    const apiRoutes = llms.urls
+      .filter((url) => new URL(url).pathname.startsWith('/api/'))
+      .map(advertisedRoute)
+    const apiPaths = apiRoutes.map((route) => new URL(route.url).pathname)
+    const expectedApiPaths = [
+      '/api/businesses',
+      '/api/businesses/parramatta-emergency-plumbing',
+      OPERATION_MARKET_SEARCH_PATH,
+      OPERATION_MARKET_DETAIL_PATH,
+      OPERATION_MARKET_COMPARE_PATH,
+      OPERATION_MARKET_INSPECT_PLAN_PATH,
+    ].sort()
 
-    if (listUrl === undefined || searchUrl === undefined || detailUrl === undefined) {
-      throw new Error('Expected llms API URLs to be present.')
+    expect(apiPaths.sort()).toEqual(expectedApiPaths)
+    expect(
+      apiRoutes
+        .filter((route) => new URL(route.url).pathname.startsWith('/api/v1/market-operations/'))
+        .every((route) => route.method === 'POST'),
+    ).toBe(true)
+
+    const listRoute = apiRoutes.find((route) => new URL(route.url).pathname === '/api/businesses')
+    const businessDetailRoute = apiRoutes.find(
+      (route) => new URL(route.url).pathname === '/api/businesses/parramatta-emergency-plumbing',
+    )
+    const searchRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_SEARCH_PATH)
+    const operationDetailRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_DETAIL_PATH)
+    if (
+      listRoute === undefined
+      || businessDetailRoute === undefined
+      || searchRoute === undefined
+      || operationDetailRoute === undefined
+    ) {
+      throw new Error('Expected current llms list, search, and detail URLs to be present.')
     }
 
-    const listBody = await (await handleDurableListBusinessesRequest(new Request(listUrl))).json()
-    const searchBody = await (await handleDurableSearchBusinessesRequest(new Request(searchUrl))).json()
-    const detailBody = await (await handleDurableBusinessDetailRequest('parramatta-emergency-plumbing')).json()
+    const listBody = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    const detailBody = getPublicBusinessOfferingSupplyBySlug(state, {
+      slug: new URL(businessDetailRoute.url).pathname.split('/').at(-1) ?? '',
+    })
 
-    // The contract under test is parity: every slug llms.txt advertises must
-    // be served by the list route on the same schema. Which other businesses
-    // the catalog holds is not this test's business.
-    expect(listBody).toMatchObject({
-      kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v2',
-    })
-    const listPage = z.object({ page: z.array(z.object({ slug: z.string() })) }).parse(listBody)
-    expect(listPage.page.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
-    expect(searchBody).toMatchObject({
-      kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v2',
-      query: '',
-      items: [],
-    })
-    expect(detailBody).toMatchObject({
-      kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v2',
-      business: { slug: 'parramatta-emergency-plumbing' },
-    })
+    expect(registryListAction.outputSchema.safeParse(listBody).success).toBe(true)
+    expect(listBody.page.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
+    expect(registryDetailAction.outputSchema.safeParse(detailBody).success).toBe(true)
+    const restoreMarketOperationSource = installMarketOperationSource()
+    try {
+      for (const route of apiRoutes) {
+        expect(await resolveAdvertisedRoute(route, state), `${route.method} ${route.url}`).toBe(true)
+      }
+
+      const wrongMethod = await routeHandler(MarketOperationSearchRoute, 'GET')({
+        request: new Request(`${origin}${OPERATION_MARKET_SEARCH_PATH}`, { method: 'GET' }),
+        params: {},
+      })
+      expect(wrongMethod.status).toBe(405)
+      expect(wrongMethod.headers.get('allow')).toBe('POST')
+      await expect(wrongMethod.json()).resolves.toMatchObject({
+        status: 405,
+        kind: 'METHOD_NOT_ALLOWED',
+        code: 'method_not_allowed',
+      })
+    } finally {
+      restoreMarketOperationSource()
+    }
   })
 })
 
-async function resolveAdvertisedUrl(url: string): Promise<boolean> {
-  const parsed = new URL(url)
+type AdvertisedRoute = Readonly<{
+  url: string
+  method: 'GET' | 'POST'
+}>
+
+function advertisedRoute(url: string): AdvertisedRoute {
+  const path = new URL(url).pathname
+  const marketRoute = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+  return {
+    url,
+    method: path === '/api/v1/requests' ? 'POST' : (marketRoute?.method ?? 'GET'),
+  }
+}
+type RouteHandler = (context: Readonly<{
+  request: Request
+  params: Record<string, string>
+}>) => Response | Promise<Response>
+
+
+type OutputSchema = Readonly<{
+  safeParse: (value: unknown) => Readonly<{ success: boolean }>
+}>
+
+type MarketOperationRouteCase = Readonly<{
+  path: string
+  route: unknown
+  input: Readonly<Record<string, unknown>>
+  outputSchema: OutputSchema
+}>
+
+const MARKET_OPERATION_ROUTE_CASES: readonly MarketOperationRouteCase[] = [
+  {
+    path: OPERATION_MARKET_SEARCH_PATH,
+    route: MarketOperationSearchRoute,
+    input: { query: 'reference lookup', limit: 1 },
+    outputSchema: operationSearchOutputSchema,
+  },
+  {
+    path: OPERATION_MARKET_DETAIL_PATH,
+    route: MarketOperationDetailRoute,
+    input: { operationRef: `operation:v1:${'f'.repeat(64)}` },
+    outputSchema: operationDetailOutputSchema,
+  },
+  {
+    path: OPERATION_MARKET_COMPARE_PATH,
+    route: MarketOperationCompareRoute,
+    input: {
+      operationRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
+    },
+    outputSchema: operationCompareOutputSchema,
+  },
+  {
+    path: OPERATION_MARKET_INSPECT_PLAN_PATH,
+    route: MarketOperationInspectPlanRoute,
+    input: { operationRefs: [`operation:v1:${'c'.repeat(64)}`], expiresInMs: 1_000 },
+    outputSchema: operationInspectPlanOutputSchema,
+  },
+]
+
+async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySourceState): Promise<boolean> {
+  const parsed = new URL(route.url)
   const path = parsed.pathname
+  const marketRoute = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+
+  if (marketRoute !== undefined) {
+    return route.method === marketRoute.method && await resolveMarketOperationRoute(route)
+  }
 
   if (path === '/') {
-    return true
+    return route.method === 'GET'
   }
 
   if (path === '/claim' || path === '/for-agents' || path === '/privacy/remove-business') {
-    return true
-  }
-
-  if (path === '/api/v1/requests/schema') {
-    return handleCustomerRequestContractSchemaGet().status === 200
+    return route.method === 'GET'
   }
 
   if (path === '/llms.txt') {
-    return handleLlmsTxtRequest(new Request(url)).status === 200
+    return route.method === 'GET' && buildLlmsTxt(state, { canonicalBaseUrl: parsed.origin }).body.length > 0
   }
 
   if (path === '/sitemap.xml') {
-    return handleSitemapXmlRequest(new Request(url)).status === 200
+    return route.method === 'GET' && buildSitemapXml(state, { canonicalBaseUrl: parsed.origin, now: 0 }).body.length > 0
   }
 
   if (path === '/robots.txt') {
-    return handleRobotsTxtRequest(new Request(url)).status === 200
+    return route.method === 'GET' && handleRobotsTxtRequest(new Request(route.url)).status === 200
   }
 
   if (path === '/.well-known/ucp') {
-    return handleSiteDiscoveryManifestRequest(new Request(url)).status === 200
+    return route.method === 'GET' && handleSiteDiscoveryManifestRequest(new Request(route.url)).status === 200
   }
 
   if (path === '/api/businesses') {
-    return (await handleDurableListBusinessesRequest(new Request(url))).status === 200
-  }
-
-  if (path === '/api/v1/services') {
-    return (await handleDurableListServicesRequest(new Request(url))).status === 200
-  }
-
-  if (path === '/api/businesses/search') {
-    return (await handleDurableSearchBusinessesRequest(new Request(url))).status === 200
-  }
-
-  if (path === '/api/v1/services/search') {
-    return (await handleDurableSearchServicesRequest(new Request(url))).status === 200
-  }
-
-  const serviceDetailMatch = /^\/api\/v1\/services\/([^/]+)$/u.exec(path)
-  if (serviceDetailMatch?.[1] !== undefined) {
-    return (await handleDurableServiceDetailRequest(serviceDetailMatch[1], new Request(url))).status === 200
-  }
-
-  if (path === '/api/v1/requests') {
-    const response = await handleAgentCustomerRequestPost(new Request(url, { method: 'POST', body: '{}' }), {
-      authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
+    const body = listPublicBusinessOfferingSupply(state, {
+      paginationOpts: { cursor: null, numItems: 20 },
     })
-    return response.status === 401
+    return route.method === 'GET' && registryListAction.outputSchema.safeParse(body).success
   }
 
   const detailMatch = /^\/api\/businesses\/([^/]+)$/u.exec(path)
   if (detailMatch?.[1] !== undefined) {
-    return (await handleDurableBusinessDetailRequest(detailMatch[1])).status === 200
+    const body = getPublicBusinessOfferingSupplyBySlug(state, { slug: detailMatch[1] })
+    return route.method === 'GET'
+      && body.kind === 'found'
+      && registryDetailAction.outputSchema.safeParse(body).success
   }
 
   const ucpMatch = /^\/([^/]+)\/ucp$/u.exec(path)
   if (ucpMatch?.[1] !== undefined) {
-    return handleUcpManifestRequest(new Request(url), ucpMatch[1]).status === 200
+    return route.method === 'GET' && handleUcpManifestRequest(new Request(route.url), ucpMatch[1], state).status === 200
   }
 
   const pageMatch = /^\/([^/]+)$/u.exec(path)
   if (pageMatch?.[1] !== undefined) {
-    return getPublicBusinessPageReadback(pageMatch[1]).kind === 'available'
+    return route.method === 'GET' && getPublicBusinessCatalog(state, {
+      slug: brandNonEmpty(pageMatch[1], 'Slug'),
+      indexStatus: 'indexed',
+      discoveryStatus: 'available',
+    }).kind === 'available'
   }
 
   return false
+}
+
+async function resolveMarketOperationRoute(route: AdvertisedRoute): Promise<boolean> {
+  const path = new URL(route.url).pathname
+  const routeCase = MARKET_OPERATION_ROUTE_CASES.find((candidate) => candidate.path === path)
+  if (routeCase === undefined || route.method !== 'POST') return false
+
+  const response = await routeHandler(routeCase.route, 'POST')({
+    request: new Request(route.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(routeCase.input),
+    }),
+    params: {},
+  })
+  if (response.status !== 200) return false
+  return routeCase.outputSchema.safeParse(await response.json()).success
+}
+
+function routeHandler(route: unknown, method: 'GET' | 'POST'): RouteHandler {
+  if (!isRecord(route) || !isRecord(route.options) || !isRecord(route.options.server)) {
+    throw new Error('Market operation route handlers are missing.')
+  }
+  const handlers = route.options.server.handlers
+  if (!isRecord(handlers)) {
+    throw new Error('Market operation route handlers are missing.')
+  }
+  const handler = handlers[method]
+  if (!isRouteHandler(handler)) {
+    throw new Error(`Market operation ${method} handler is missing.`)
+  }
+  return handler
+}
+
+function isRouteHandler(value: unknown): value is RouteHandler {
+  return typeof value === 'function'
+}
+
+function installMarketOperationSource(): () => void {
+  return setPublicSourceTransportForTests(createPublicSourceTransport({
+    env: { CONVEX_URL: 'https://ae.test' },
+    fetch: async (_input, init) => {
+      const payload: unknown = JSON.parse(String(init?.body ?? '{}'))
+      if (!isRecord(payload) || typeof payload.path !== 'string') {
+        throw new Error('market_operation_source_request_invalid')
+      }
+      switch (payload.path) {
+        case 'rateLimit:admitHttp':
+          return Response.json({ status: 'success', value: { ok: true } })
+        case 'capabilitySupplyOperations:search':
+          return Response.json({
+            status: 'success',
+            value: {
+              kind: 'no_candidates',
+              schemaVersion: 'registry-operations:v1',
+              query: 'reference lookup',
+              appliedFilters: {},
+              matchedCount: 0,
+              ranking: [],
+              navigation: [],
+            },
+          })
+        case 'capabilitySupplyOperations:detail':
+          return Response.json({
+            status: 'success',
+            value: {
+              kind: 'not_found',
+              schemaVersion: 'registry-operations:v1',
+              operationRef: `operation:v1:${'f'.repeat(64)}`,
+              navigation: [],
+            },
+          })
+        case 'capabilitySupplyOperations:compare':
+          return Response.json({
+            status: 'success',
+            value: {
+              kind: 'unavailable',
+              schemaVersion: 'registry-operations:v1',
+              reason: 'operation_not_found',
+              navigation: [],
+            },
+          })
+        case 'capabilitySupplyOperations:inspectPlan':
+          return Response.json({
+            status: 'success',
+            value: {
+              kind: 'unavailable',
+              schemaVersion: 'registry-operations:v1',
+              reason: 'mapping_unavailable',
+              navigation: [],
+            },
+          })
+        default:
+          throw new Error(`market_operation_source_unconfigured:${payload.path}`)
+      }
+    },
+  }))
 }
 
 function sitemapLocs(body: string): readonly string[] {
@@ -356,8 +477,14 @@ function sitemapLocs(body: string): readonly string[] {
     .filter((url) => url.length > 0)
 }
 
-function uniqueUrls(urls: readonly string[]): readonly string[] {
-  return uniq(urls)
+function uniqueRoutes(routes: readonly AdvertisedRoute[]): readonly AdvertisedRoute[] {
+  const seen = new Set<string>()
+  return routes.filter((route) => {
+    const key = `${route.method} ${route.url}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 

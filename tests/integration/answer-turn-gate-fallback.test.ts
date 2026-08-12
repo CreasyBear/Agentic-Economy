@@ -1,28 +1,72 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
+import { streamAnswerTurn } from '@/modules/answer-thread/server'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
 } from '../helpers/answer-thread-test-port'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../helpers/openrouter-contract-server'
+const emptyKeylessExecutableSource: KeylessExecutableSourcePort = {
+  list: async () => [],
+  read: async () => null,
+  search: async () => [],
+}
+
+const streamWithLocalSources: typeof streamAnswerTurn = (input, onEvent) =>
+  streamAnswerTurn({
+    ...input,
+    keylessExecutableSource: emptyKeylessExecutableSource,
+  }, onEvent)
+
+function handleLocalAnswerTurnRequest(request: Request): Promise<Response> {
+  return handleAnswerTurnRequest(request, { stream: streamWithLocalSources })
+}
+
 
 
 describe('POST /api/answer/turn gate failure', () => {
+  let previousConvexUrl: string | undefined
+  let previousViteConvexUrl: string | undefined
+  let restoreRegistrySource: (() => void) | undefined
+
+  beforeEach(() => {
+    previousConvexUrl = process.env.CONVEX_URL
+    previousViteConvexUrl = process.env.VITE_CONVEX_URL
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+    restoreRegistrySource = installLocalE2eRegistrySourceForTests()
+  })
+
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
+    restoreRegistrySource?.()
+    restoreRegistrySource = undefined
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+    if (previousViteConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousViteConvexUrl
+    }
   })
+
 
   it('discards model prose and persists a safe empty answer when no provider is grounded', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick' } }],
       prose: {
         // Trips the injection guard. It used to trip an overclaim guard with
         // "Book now for instant service", but stating a capability is no
@@ -43,7 +87,7 @@ describe('POST /api/answer/turn gate failure', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleAnswerTurnRequest(
+      const response = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', cookie: '', 'X-AE-Turn-Key': 'gate-fallback:paramata' },

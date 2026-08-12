@@ -63,12 +63,6 @@ const notificationAttemptStatus = literalUnion(NotificationAttemptStatusValues)
 const notificationWebhookEventStatus = literalUnion(NotificationWebhookEventStatusValues)
 const notificationSignatureStatus = literalUnion(NotificationSignatureStatusValues)
 
-export const csrfArgs = {
-  csrfToken: v.optional(v.string()),
-  csrfCookie: v.optional(v.string()),
-  origin: v.optional(v.string()),
-  ...sourceWriteArgs,
-} as const
 
 const notificationErrorCode = v.union(
   v.literal('notification_not_found'),
@@ -575,7 +569,7 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
   args: {
     dispatchId: v.string(),
     retryAfter: v.number(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
@@ -608,7 +602,7 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
   args: {
     dispatchId: v.string(),
     reason: v.string(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 
 describe('public business SEO builder', () => {
   it('builds canonical metadata and schema without ratings, offers, or payments', () => {
@@ -44,10 +45,12 @@ describe('public business SEO builder', () => {
     vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
     vi.stubEnv('CONVEX_URL', undefined)
     vi.stubEnv('VITE_CONVEX_URL', undefined)
+    const restoreRegistrySource = installLocalE2eRegistrySourceForTests()
 
     try {
       await assertPublicCatalogSubsetResponse()
     } finally {
+      restoreRegistrySource()
       vi.unstubAllEnvs()
     }
   })

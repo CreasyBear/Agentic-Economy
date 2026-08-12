@@ -46,7 +46,7 @@ describe('Convex governed-send receipt persistence', () => {
   it('accepts an exact pre-existing immutable receipt without inserting another receipt or key', async () => {
     const source = createBackend()
     const target = await seedAdmittedTarget(source)
-    const args = submissionArgs(target, 'exact-preexisting')
+    const args = await submissionArgs(target, 'exact-preexisting')
     await expect(source.mutation(api.inquiries.submitPublicInquiry, args)).resolves.toMatchObject({
       kind: 'ok',
       code: 'inquiry_submitted',
@@ -59,7 +59,7 @@ describe('Convex governed-send receipt persistence', () => {
 
     await expect(destination.mutation(
       api.inquiries.submitPublicInquiry,
-      submissionArgs(target, 'exact-preexisting'),
+      await submissionArgs(target, 'exact-preexisting'),
     )).resolves.toMatchObject({ kind: 'ok', code: 'inquiry_submitted' })
 
     const rows = await inquiryPersistenceRows(destination)
@@ -72,7 +72,7 @@ describe('Convex governed-send receipt persistence', () => {
   it('rejects a conflicting immutable receipt with a typed integrity error and rolls back inquiry effects', async () => {
     const source = createBackend()
     const target = await seedAdmittedTarget(source)
-    const args = submissionArgs(target, 'conflicting-preexisting')
+    const args = await submissionArgs(target, 'conflicting-preexisting')
     await source.mutation(api.inquiries.submitPublicInquiry, args)
     const evidence = await storedEvidence(source)
     const conflictingReceipt = {
@@ -92,7 +92,7 @@ describe('Convex governed-send receipt persistence', () => {
 
     await expect(destination.mutation(
       api.inquiries.submitPublicInquiry,
-      submissionArgs(target, 'conflicting-preexisting'),
+      await submissionArgs(target, 'conflicting-preexisting'),
     )).rejects.toThrow('governed_send_receipt_conflict')
 
     const rows = await inquiryPersistenceRows(destination)
@@ -105,7 +105,7 @@ describe('Convex governed-send receipt persistence', () => {
   it('rejects duplicate physical receipt rows with a typed integrity error and rolls back inquiry effects', async () => {
     const source = createBackend()
     const target = await seedAdmittedTarget(source)
-    const args = submissionArgs(target, 'duplicate-preexisting')
+    const args = await submissionArgs(target, 'duplicate-preexisting')
     await source.mutation(api.inquiries.submitPublicInquiry, args)
     const evidence = await storedEvidence(source)
 
@@ -115,7 +115,7 @@ describe('Convex governed-send receipt persistence', () => {
 
     await expect(destination.mutation(
       api.inquiries.submitPublicInquiry,
-      submissionArgs(target, 'duplicate-preexisting'),
+      await submissionArgs(target, 'duplicate-preexisting'),
     )).rejects.toThrow('governed_send_receipt_duplicate_rows')
 
     const rows = await inquiryPersistenceRows(destination)
@@ -127,7 +127,7 @@ describe('Convex governed-send receipt persistence', () => {
   it('deletes a surviving wrapped key when exact erasure lineage already exists', async () => {
     const backend = createBackend()
     const target = await seedAdmittedTarget(backend)
-    const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, submissionArgs(target, 'erasure-repair'))
+    const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, await submissionArgs(target, 'erasure-repair'))
     if (submitted.kind !== 'ok') throw new Error(submitted.code)
     const evidence = await storedEvidence(backend)
     const owner = backend.withIdentity({
@@ -135,7 +135,7 @@ describe('Convex governed-send receipt persistence', () => {
       issuer: 'https://identity.test',
       tokenIdentifier: 'clerk:evidence-integrity-owner',
     })
-    const deletionArgs = withSourceWrite('owner_inquiry', {
+    const deletionArgs = await withSourceWrite('owner_inquiry', {
       threadId: submitted.thread.threadId,
       reasonCode: 'privacy_delete_requested',
       operationKey: 'privacy:erasure-repair',
@@ -144,7 +144,7 @@ describe('Convex governed-send receipt persistence', () => {
     await expect(owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, deletionArgs))
       .resolves.toMatchObject({ kind: 'ok', code: 'inquiry_private_content_deleted' })
     await reinsertWrappedKey(backend, evidence.key)
-    const replayArgs = withSourceWrite('owner_inquiry', {
+    const replayArgs = await withSourceWrite('owner_inquiry', {
       threadId: submitted.thread.threadId,
       reasonCode: 'privacy_delete_requested',
       operationKey: 'privacy:erasure-repair',
@@ -165,7 +165,7 @@ describe('Convex governed-send receipt persistence', () => {
       })
     })
     await reinsertWrappedKey(backend, evidence.key)
-    await expect(owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, withSourceWrite('owner_inquiry', {
+    await expect(owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, await withSourceWrite('owner_inquiry', {
       threadId: submitted.thread.threadId,
       reasonCode: 'privacy_delete_requested',
       operationKey: 'privacy:erasure-repair',
@@ -177,7 +177,7 @@ describe('Convex governed-send receipt persistence', () => {
   it('rejects conflicting same-event erasure lineage and preserves the transaction', async () => {
     const backend = createBackend()
     const target = await seedAdmittedTarget(backend)
-    const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, submissionArgs(target, 'erasure-conflict'))
+    const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, await submissionArgs(target, 'erasure-conflict'))
     if (submitted.kind !== 'ok') throw new Error(submitted.code)
     const evidence = await storedEvidence(backend)
     const owner = backend.withIdentity({
@@ -185,7 +185,7 @@ describe('Convex governed-send receipt persistence', () => {
       issuer: 'https://identity.test',
       tokenIdentifier: 'clerk:evidence-integrity-owner',
     })
-    const deletionArgs = withSourceWrite('owner_inquiry', {
+    const deletionArgs = await withSourceWrite('owner_inquiry', {
       threadId: submitted.thread.threadId,
       reasonCode: 'privacy_delete_requested',
       operationKey: 'privacy:erasure-conflict',
@@ -203,7 +203,7 @@ describe('Convex governed-send receipt persistence', () => {
       })
     })
     await reinsertWrappedKey(backend, evidence.key)
-    const replayArgs = withSourceWrite('owner_inquiry', {
+    const replayArgs = await withSourceWrite('owner_inquiry', {
       threadId: submitted.thread.threadId,
       reasonCode: 'privacy_delete_requested',
       operationKey: 'privacy:erasure-conflict',
@@ -222,7 +222,7 @@ describe('Convex governed-send receipt persistence', () => {
     async (restoreKey) => {
       const backend = createBackend()
       const target = await seedAdmittedTarget(backend)
-      const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, submissionArgs(target, `duplicate-lineage-${restoreKey}`))
+      const submitted = await backend.mutation(api.inquiries.submitPublicInquiry, await submissionArgs(target, `duplicate-lineage-${restoreKey}`))
       if (submitted.kind !== 'ok') throw new Error(submitted.code)
       const evidence = await storedEvidence(backend)
       const owner = backend.withIdentity({
@@ -230,7 +230,7 @@ describe('Convex governed-send receipt persistence', () => {
       })
       const operationKey = `privacy:duplicate-lineage-${restoreKey}`
       const correlationId = `correlation:${operationKey}`
-      await owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, withSourceWrite('owner_inquiry', {
+      await owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, await withSourceWrite('owner_inquiry', {
         threadId: submitted.thread.threadId,
         reasonCode: 'privacy_delete_requested',
         operationKey,
@@ -248,7 +248,7 @@ describe('Convex governed-send receipt persistence', () => {
       })
       if (restoreKey) await reinsertWrappedKey(backend, evidence.key)
 
-      await expect(owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, withSourceWrite('owner_inquiry', {
+      await expect(owner.mutation(api.inquiries.deleteCurrentOwnerInquiryPrivateContent, await withSourceWrite('owner_inquiry', {
         threadId: submitted.thread.threadId,
         reasonCode: 'privacy_delete_requested',
         operationKey,
@@ -283,8 +283,7 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
       name: 'Evidence Integrity Plumbing',
       normalizedName: 'evidence integrity plumbing',
       category: 'Emergency plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
+      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
       publicStatus: 'published',
       trustTier: 'contact_confirmed',
       claimStatus: 'published',
@@ -380,7 +379,7 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
   })
 }
 
-function submissionArgs(target: SeededTarget, key: string) {
+async function submissionArgs(target: SeededTarget, key: string) {
   const operationKey = `inquiry:${key}`
   const correlationId = `correlation:${key}`
   const body = 'Can a human owner contact me about this service?'
@@ -392,7 +391,7 @@ function submissionArgs(target: SeededTarget, key: string) {
   const encoded = encodeGovernedAction(buildGovernedSendIntent({ target: targetRef, body, contact }))
   if (encoded.kind !== 'encoded') throw new Error(`governed encoding failed: ${encoded.code}`)
 
-  return withSourceWrite('public_inquiry', {
+  return await withSourceWrite('public_inquiry', {
     target,
     body,
     contact,

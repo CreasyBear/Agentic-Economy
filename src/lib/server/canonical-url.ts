@@ -3,9 +3,11 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 export type CanonicalBaseUrlResolution =
   | { kind: 'configured'; baseUrl: string }
   | { kind: 'allowlisted-origin'; baseUrl: string }
+  | { kind: 'loopback-origin'; baseUrl: string }
   | { kind: 'fallback'; baseUrl: string }
 
 const fallbackCanonicalBaseUrl = 'http://localhost:3000'
+const loopbackHostnames: Record<string, true> = { localhost: true, '127.0.0.1': true, '[::1]': true }
 
 export function resolveCanonicalBaseUrl(request?: Request): CanonicalBaseUrlResolution {
   const configuredBaseUrl = readConfiguredCanonicalBaseUrl(process.env.AE_CANONICAL_BASE_URL)
@@ -21,6 +23,9 @@ export function resolveCanonicalBaseUrl(request?: Request): CanonicalBaseUrlReso
 
   if (process.env.NODE_ENV === 'production') {
     throw new Error('canonical_base_url_configuration_required')
+  }
+  if (requestUrl !== undefined && loopbackHostnames[requestUrl.hostname.toLowerCase()] === true) {
+    return { kind: 'loopback-origin', baseUrl: requestUrl.origin }
   }
 
   return { kind: 'fallback', baseUrl: fallbackCanonicalBaseUrl }

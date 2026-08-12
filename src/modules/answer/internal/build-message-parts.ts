@@ -1,4 +1,10 @@
-import type { AnswerArtifact, AnswerCompareField } from '../answer-schema'
+import type {
+  AnswerArtifact,
+  AnswerCompareField,
+  AnswerOperationCandidate,
+  AnswerOperationOutcome,
+  AnswerOperationSelection,
+} from '../answer-schema'
 import type { AnswerSnapshot, AnswerSource } from '../answer-synthesizer'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
@@ -14,6 +20,8 @@ export type AnswerMessagePart =
   | { kind: 'one-line'; text: string }
   | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'imported-claims'; claims: readonly WebDiscoveryClaim[] }
+  | { kind: 'operation-candidates'; candidates: readonly AnswerOperationCandidate[]; operationCandidatesDigest?: string; selection?: AnswerOperationSelection }
+  | { kind: 'operation-outcome'; outcome: AnswerOperationOutcome }
   | { kind: 'provider-cards'; providers: AnswerSnapshot['providers']; scroll?: boolean }
   | {
       kind: 'provider-compare-table'
@@ -62,6 +70,7 @@ export function artifactsToMessageParts(
     profile === 'compare_pair'
   const budget = getArtifactBudgetForArtifacts(profile, artifacts, budgetOverride)
   const budgetedArtifacts = filterArtifactsForBudget(artifacts, budget)
+  const hasOperationOutcome = budgetedArtifacts.some((artifact) => artifact.kind === 'operation-outcome')
   const parts: AnswerMessagePart[] = []
 
   for (const artifact of budgetedArtifacts) {
@@ -70,24 +79,39 @@ export function artifactsToMessageParts(
         parts.push({ kind: 'one-line', text: artifact.text })
         break
       case 'selected-provider':
-        parts.push({ kind: 'selected-provider', provider: artifact.provider })
+        if (!hasOperationOutcome) parts.push({ kind: 'selected-provider', provider: artifact.provider })
         break
       case 'imported-claims':
         parts.push({ kind: 'imported-claims', claims: artifact.claims })
         break
       case 'provider-cards':
-        parts.push({
-          kind: 'provider-cards',
-          providers: artifact.providers,
-          ...(scrollCards ? { scroll: true } : {}),
-        })
+        if (!hasOperationOutcome) {
+          parts.push({
+            kind: 'provider-cards',
+            providers: artifact.providers,
+            ...(scrollCards ? { scroll: true } : {}),
+          })
+        }
         break
       case 'provider-compare-table':
+        if (!hasOperationOutcome) {
+          parts.push({
+            kind: 'provider-compare-table',
+            providers: artifact.providers,
+            ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
+          })
+        }
+        break
+      case 'operation-candidates':
         parts.push({
-          kind: 'provider-compare-table',
-          providers: artifact.providers,
-          ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
+          kind: 'operation-candidates',
+          candidates: artifact.candidates,
+          ...(artifact.operationCandidatesDigest === undefined ? {} : { operationCandidatesDigest: artifact.operationCandidatesDigest }),
+          ...(artifact.selection === undefined ? {} : { selection: artifact.selection }),
         })
+        break
+      case 'operation-outcome':
+        parts.push({ kind: 'operation-outcome', outcome: artifact.outcome })
         break
       case 'recovery-prompts':
         parts.push({

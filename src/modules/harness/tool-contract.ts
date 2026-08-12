@@ -26,7 +26,6 @@ import {
 export const AnswerModelToolIds = [
   'registry.search',
   'registry.detail',
-  'sandbox.checkup_quote',
   'web.discover',
   'registry.operations.search',
 ] as const

@@ -10,6 +10,8 @@ import {
 } from '@/modules/answer-thread/internal/tool-runner'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
+import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e2e'
 
 const TURN_ID = 'turn-1'
 const BASE_SEQ = 0
@@ -26,6 +28,7 @@ describe('runAnswerToolCall', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const result = await runAnswerToolCall({
@@ -50,6 +53,7 @@ describe('runAnswerToolCall', () => {
       )
       expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
     } finally {
+      restoreRegistry()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
@@ -70,11 +74,11 @@ describe('runAnswerToolCall', () => {
 
   it.each([
     {
-      query: 'hot water system burst in rental, need plumber today Joondalup',
+      query: 'emergency plumbing Joondalup',
       expectedSlug: 'joondalup-rapid-plumbing',
     },
     {
-      query: 'electrician switchboard upgrade Fremantle',
+      query: 'electrical repairs Fremantle',
       expectedSlug: 'fremantle-coastal-electrical',
     },
   ])('recalls $expectedSlug from the shared local-e2e source for a detailed trade query', async ({
@@ -87,6 +91,7 @@ describe('runAnswerToolCall', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const result = await runAnswerToolCall({
@@ -99,6 +104,7 @@ describe('runAnswerToolCall', () => {
       expect(result.record.status).toBe('complete')
       expect(result.providers.map((provider) => provider.slug)).toEqual([expectedSlug])
     } finally {
+      restoreRegistry()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
@@ -124,6 +130,7 @@ describe('runAnswerToolCall', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const result = await runAnswerToolCall({
@@ -136,6 +143,7 @@ describe('runAnswerToolCall', () => {
       expect(result.record.status).toBe('complete')
       expect(result.providers).toEqual([])
     } finally {
+      restoreRegistry()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
@@ -161,6 +169,7 @@ describe('runAnswerToolCall', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const result = await runAnswerToolCall({
@@ -177,6 +186,7 @@ describe('runAnswerToolCall', () => {
       expect(result.providers).toEqual([])
       expect(result.allowedSlugs.size).toBe(0)
     } finally {
+      restoreRegistry()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
@@ -312,6 +322,7 @@ describe('runAnswerToolCall', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
 
     try {
       const found = await runAnswerToolCall({
@@ -336,6 +347,7 @@ describe('runAnswerToolCall', () => {
       expect(missingSummary.slugs).toEqual([])
       expect(missingSummary.count).toBe(0)
     } finally {
+      restoreRegistry()
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {

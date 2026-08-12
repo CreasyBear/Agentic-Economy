@@ -17,6 +17,7 @@ import {
   DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID,
 } from '@/modules/customer-request/semantic-interpreter'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
+import { pricingConfigDigest } from '@/modules/money/public'
 
 const BURST_PIPE_JOB = 'emergency plumber near me tonight, how much?'
 
@@ -273,6 +274,9 @@ function supply(bindingId: string, model: CapabilityDecisionModel) {
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
     publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
     price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '100', exponent: 2 } },
+    priceDigest: pricingConfigDigest({
+      version: 'pricing:v2', unit: 'call', paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+    }),
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }

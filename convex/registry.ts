@@ -6,6 +6,8 @@ import { v, type GenericId, type Infer } from 'convex/values'
 import { compareExactAmounts, type ExactAmount } from '../src/modules/money/public'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { PublicStatusValues } from '../src/modules/business/public'
+import { businessContext as businessContextDto } from '../src/modules/business/public'
+
 import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
 import {
   projectBusinessSupplyToPublicApi,
@@ -115,17 +117,17 @@ const exactAmountDto = v.object({
 const offeringPriceDto = v.union(
   v.object({
     kind: v.union(v.literal('fixed'), v.literal('from')), amount: exactAmountDto,
-    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    unit: v.optional(v.union(v.literal('call'), v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
     taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
   }),
   v.object({
     kind: v.literal('range'), minimum: exactAmountDto, maximum: exactAmountDto,
-    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    unit: v.optional(v.union(v.literal('call'), v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
     taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
   }),
   v.object({
     kind: v.literal('quote_only'), currency: v.string(),
-    unit: v.optional(v.union(v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
+    unit: v.optional(v.union(v.literal('call'), v.literal('job'), v.literal('hour'), v.literal('visit'), v.literal('item'), v.literal('day'), v.literal('week'), v.literal('month'))),
     taxTreatment: v.union(v.literal('inclusive'), v.literal('exclusive'), v.literal('unstated')),
   }),
 )
@@ -159,11 +161,22 @@ const offeringDto = v.object({
   accessPaths: v.array(offeringAccessPathDto), support: v.object({ integrated: v.boolean(), aeSupportedAction: v.boolean(), observedAt: v.optional(v.number()), validUntil: v.optional(v.number()) }),
 })
 const offeringBusinessDto = v.object({
-  schemaVersion: v.literal('public-business-catalog-api:v2'), businessId: v.string(), slug: v.string(), name: v.string(), category: v.string(), suburb: v.string(), stateTerritory: v.string(),
-  publishedPhone: v.optional(v.string()), postcode: v.optional(v.string()), publicUrl: v.string(), trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
-  responseTimeMinutes: v.optional(v.number()), photos: v.array(v.object({ url: v.string(), alt: v.string() })), observedAt: v.number(), disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
-  offerings: v.array(offeringDto), accessSummary: v.object({ humanRequest: v.boolean(), externalOperation: v.boolean(), aeSupportedAction: v.boolean() }),
+  schemaVersion: v.literal('public-business-catalog-api:v2'),
+  businessId: v.string(),
+  slug: v.string(),
+  name: v.string(),
+  category: v.string(),
+  businessContext: businessContextDto,
+  publicUrl: v.string(),
+  trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
+  responseTimeMinutes: v.optional(v.number()),
+  photos: v.array(v.object({ url: v.string(), alt: v.string() })),
+  observedAt: v.number(),
+  disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
+  offerings: v.array(offeringDto),
+  accessSummary: v.object({ humanRequest: v.boolean(), externalOperation: v.boolean(), aeSupportedAction: v.boolean() }),
 })
+
 const offeringPageResult = v.object({
   kind: v.literal('ok'), schemaVersion: v.literal('public-business-catalog-api:v2'), query: v.optional(v.string()), items: v.array(offeringBusinessDto),
   pagination: v.object({ cursor: v.optional(v.string()), nextCursor: v.optional(v.string()), limit: v.number(), total: v.number(), hasMore: v.boolean() }),
@@ -397,7 +410,26 @@ function toConvexOffering(offering: OfferingSupplyDto['offerings'][number]): Con
 }
 
 function toConvexOfferingBusiness(item: OfferingSupplyDto): ConvexOfferingBusinessDto {
-  return { schemaVersion: item.schemaVersion, businessId: item.businessId, slug: item.slug, name: item.name, category: item.category, suburb: item.suburb, stateTerritory: item.stateTerritory, ...(item.publishedPhone === undefined ? {} : { publishedPhone: item.publishedPhone }), ...(item.postcode === undefined ? {} : { postcode: item.postcode }), publicUrl: item.publicUrl, trustTier: item.trustTier, ...(item.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: item.responseTimeMinutes }), photos: item.photos.map((photo) => ({ url: photo.url, alt: photo.alt })), observedAt: item.observedAt, disposition: item.disposition, offerings: item.offerings.map(toConvexOffering), accessSummary: { humanRequest: item.accessSummary.humanRequest, externalOperation: item.accessSummary.externalOperation, aeSupportedAction: item.accessSummary.aeSupportedAction } }
+  return {
+    schemaVersion: item.schemaVersion,
+    businessId: item.businessId,
+    slug: item.slug,
+    name: item.name,
+    category: item.category,
+    businessContext: item.businessContext,
+    publicUrl: item.publicUrl,
+    trustTier: item.trustTier,
+    ...(item.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: item.responseTimeMinutes }),
+    photos: item.photos.map((photo) => ({ url: photo.url, alt: photo.alt })),
+    observedAt: item.observedAt,
+    disposition: item.disposition,
+    offerings: item.offerings.map(toConvexOffering),
+    accessSummary: {
+      humanRequest: item.accessSummary.humanRequest,
+      externalOperation: item.accessSummary.externalOperation,
+      aeSupportedAction: item.accessSummary.aeSupportedAction,
+    },
+  }
 }
 
 function offeringPriceCeiling(price: OfferingSupplyDto['offerings'][number]['price']): ExactAmount | undefined {
@@ -442,9 +474,19 @@ function paginateOfferingSupply(items: readonly OfferingSupplyDto[], input: Quer
 function matchesOfferingSupply(item: OfferingSupplyDto, tokens: readonly string[], locationKey: string | undefined): boolean {
   if (tokens.length === 0) return false
   if (locationKey !== undefined && !offeringPlaceKeys(item).includes(locationKey)) return false
-  const haystack = normalizeSearchText([item.slug, item.name, item.category, item.suburb, item.stateTerritory, item.postcode ?? '', ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary, offering.serviceAreaSummary ?? ''])].join(' '))
+  const contextTerms = item.businessContext.kind === 'local_human'
+    ? [item.businessContext.suburb, item.businessContext.stateTerritory, item.businessContext.postcode ?? '']
+    : [item.businessContext.website, item.businessContext.providerIdentifier]
+  const haystack = normalizeSearchText([
+    item.slug,
+    item.name,
+    item.category,
+    ...contextTerms,
+    ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary, offering.serviceAreaSummary ?? '']),
+  ].join(' '))
   return matchesQueryTokens(haystack, tokens)
 }
+
 
 function matchesSearchDocument(document: Doc<'registrySearchDocuments'>, tokens: readonly string[], locationKey: string | undefined): boolean {
   if (tokens.length === 0) return false
@@ -453,7 +495,7 @@ function matchesSearchDocument(document: Doc<'registrySearchDocuments'>, tokens:
 }
 async function resolvePublishedInquiryTargetFromDb(db: DatabaseReader, businessSlug: string, offeringRef: string): Promise<{ kind: 'resolved'; businessId: string; offeringRef: string } | { kind: 'not_found'; reason: string }> {
   const business = await db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', businessSlug)).unique()
-  if (business === null || business.publicStatus !== 'published') return { kind: 'not_found', reason: 'No published business is discoverable for this slug.' }
+  if (business === null || business.publicStatus !== 'published') return { kind: 'not_found', reason: 'No published Offering is discoverable for this slug on the business.' }
   const item = await readOfferingSupplyForBusiness(createOfferingSupplyReadPort(db), business)
   const offering = item?.offerings.find((candidate) => candidate.offeringRef === offeringRef)
   if (item === undefined || offering === undefined) return { kind: 'not_found', reason: 'No published Offering is discoverable for this reference on the business.' }
@@ -468,11 +510,12 @@ function uniqueBusinessSlugs(documents: readonly Doc<'registrySearchDocuments'>[
 }
 
 function offeringPlaceKeys(item: OfferingSupplyDto): readonly string[] {
+  if (item.businessContext.kind !== 'local_human') return []
   const keys = new Set<string>()
-  addPlaceKey(keys, item.suburb)
-  addPlaceKey(keys, `${item.suburb} ${item.stateTerritory}`)
-  addPlaceKey(keys, item.stateTerritory)
-  if (item.postcode !== undefined) addPlaceKey(keys, item.postcode)
+  addPlaceKey(keys, item.businessContext.suburb)
+  addPlaceKey(keys, `${item.businessContext.suburb} ${item.businessContext.stateTerritory}`)
+  addPlaceKey(keys, item.businessContext.stateTerritory)
+  if (item.businessContext.postcode !== undefined) addPlaceKey(keys, item.businessContext.postcode)
   for (const offering of item.offerings) for (const candidate of extractPlaceCandidates(offering.serviceAreaSummary ?? '')) addPlaceKey(keys, candidate)
   return [...keys]
 }

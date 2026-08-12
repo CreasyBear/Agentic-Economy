@@ -1,15 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { createHttpRateLimitAdmission } from '@/lib/server/rate-limit'
-import { createConvexCustomerRequestAgentOAuthStore } from '@/lib/server/customer-request-agent-oauth-store'
-import { handleOAuthRegisterPost } from '@/lib/server/customer-request-agent-oauth-api'
+import { createConvexAgentAccessOAuthStore } from '@/lib/server/agent-access-oauth-store'
+import { handleOAuthRegisterPost } from '@/lib/server/agent-access-oauth-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 const admitOAuth = createHttpRateLimitAdmission('oauth-issuance')
 
 export const Route = createFileRoute('/oauth/register')({
   server: {
     handlers: {
-      POST: ({ request }) => handleOAuthRegisterPost(request, { store: createConvexCustomerRequestAgentOAuthStore(request), rateLimit: admitOAuth }),
+      POST: async ({ request }) => {
+        const body = await request.clone().text()
+        return await handleOAuthRegisterPost(request, { store: createConvexAgentAccessOAuthStore(request, body), rateLimit: admitOAuth })
+      },
       GET: () => methodNotAllowed(['POST']),
       PUT: () => methodNotAllowed(['POST']),
       PATCH: () => methodNotAllowed(['POST']),

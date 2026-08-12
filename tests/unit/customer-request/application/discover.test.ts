@@ -14,10 +14,11 @@ import {
 } from '@/modules/customer-request/application/public'
 import { requestRegistrySnapshotDigest, type RegisteredEvaluationBinding } from '@/modules/customer-request/evaluation'
 import { bindCustomerCapabilityDescriptor, type ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
-import type { OperationSearchResult, PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import type { OperationSearchResult, PublicOperationDescriptor, PublicOperationRef } from '@/modules/capability-supply/public'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { createTestOperationLineage } from '../../../helpers/customer-request-lineage'
 import { capabilityContractV2 } from '../../../fixtures/capability-contract-v2'
+import { pricingConfigDigest } from '@/modules/money/public'
 
 const FX_JOB = 'convert EUR to USD'
 const UNRELATED_JOB = 'book a dentist appointment for a filling'
@@ -35,7 +36,7 @@ describe('discoverAndFilterDescriptors', () => {
 
   it('falls back to the full descriptor set when discovery finds nothing', async () => {
     const graph = graphWith(fx(), documentLookup())
-    const noCandidates: DiscoverCapabilities = async () => ({ kind: 'no_candidates', schemaVersion: 'registry-operations:v1' as const, query: UNRELATED_JOB, appliedFilters: {}, navigation: [] })
+    const noCandidates: DiscoverCapabilities = async () => ({ kind: 'no_candidates', schemaVersion: 'registry-operations:v1' as const, query: UNRELATED_JOB, appliedFilters: {}, matchedCount: 0, ranking: [], navigation: [] })
 
     const filtered = await discoverAndFilterDescriptors(UNRELATED_JOB, graph, noCandidates)
 
@@ -96,7 +97,7 @@ describe('previewCustomerRequest discovery threading', () => {
 
   it('does not fabricate a currency plan for an unrelated query when discovery is empty', async () => {
     const graph = graphWith(fx())
-    const discover = vi.fn<DiscoverCapabilities>(async () => ({ kind: 'no_candidates', schemaVersion: 'registry-operations:v1' as const, query: UNRELATED_JOB, appliedFilters: {}, navigation: [] }))
+    const discover = vi.fn<DiscoverCapabilities>(async () => ({ kind: 'no_candidates', schemaVersion: 'registry-operations:v1' as const, query: UNRELATED_JOB, appliedFilters: {}, matchedCount: 0, ranking: [], navigation: [] }))
 
     vi.stubGlobal('fetch', vi.fn(async () => modelResponse({
       kind: 'unsupported_request',
@@ -221,20 +222,55 @@ function supply(bindingId: string, model: CapabilityDecisionModel): RegisteredEv
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
     publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
     price: { kind: 'fixed' as const, amount: { currency: 'AUD', units: '100', exponent: 2 } },
+    priceDigest: pricingConfigDigest({
+      version: 'pricing:v2', unit: 'call', paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+    }),
     cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }
 
-function searchOk(graph: RequestGraph, ...operationRefs: string[]): OperationSearchResult {
+function operationDescriptorFor(graph: RequestGraph, operationRef: PublicOperationRef): PublicOperationDescriptor {
+  const source = graph.descriptors.find((descriptor) => descriptor.operationRef === operationRef)
+  if (source === undefined) throw new Error('test_operation_descriptor_missing')
+  return {
+    operationRef,
+    operationId: `operation:${source.name}`,
+    contract: {
+      capabilityId: source.name,
+      version: 1,
+      inputJsonSchema: { type: 'object', properties: {}, additionalProperties: false },
+      outputJsonSchema: { type: 'object', properties: {}, additionalProperties: false },
+      customerAnnotations: [],
+    },
+    business: { businessId: `business:${operationRef}`, slug: source.name, name: source.name },
+    offering: { offeringRef: `offering:${operationRef}`, revision: 1, label: source.name, summary: source.description },
+    summary: source.description,
+    commercial: {
+      price: { kind: 'on_request' },
+      materialTerms: [],
+      relationship: { kind: 'none', summary: 'Test operation.' },
+    },
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    cancellation: { kind: 'unsupported' },
+    recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+    authentication: { kind: 'keyless' },
+    transport: { method: 'GET', requestTimeoutMs: 1_000 },
+    provenance: { publisher: 'ae_curated_external', sourceKind: 'openapi_http' },
+    availability: { posture: 'routeable' },
+    navigation: [],
+  }
+}
+
+function searchOk(graph: RequestGraph, ...operationRefs: PublicOperationRef[]): OperationSearchResult {
   return {
     kind: 'ok',
     schemaVersion: 'registry-operations:v1' as const,
     query: FX_JOB,
-    items: operationRefs.map((operationRef) => ({
-      operationRef,
-      name: graph.descriptors.find((descriptor) => descriptor.operationRef === operationRef)?.name ?? 'unknown',
-      navigation: [],
-    }) as unknown as PublicOperationDescriptor),
+    items: operationRefs.map((operationRef) => operationDescriptorFor(graph, operationRef)),
+    matchedCount: operationRefs.length,
+    ranking: operationRefs.map((operationRef, index) => ({ operationRef, rank: index + 1, score: operationRefs.length - index })),
     pagination: { limit: 20, hasMore: false },
     navigation: [],
   }

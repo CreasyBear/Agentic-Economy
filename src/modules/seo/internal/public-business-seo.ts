@@ -1,4 +1,5 @@
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import type { BusinessContext } from '@/modules/business/public'
 import type {
   BuildPublicBusinessSeoInput,
   PublicBusinessSeoContract,
@@ -11,7 +12,7 @@ export function buildPublicBusinessSeo(input: BuildPublicBusinessSeoInput): Publ
   const canonicalUrl = `${canonicalBaseUrl}/${input.catalog.slug}`
   const primaryOffering = input.catalog.offerings.at(0)
   const offeringPhrase = primaryOffering?.name ?? input.catalog.category
-  const location = `${input.catalog.suburb}, ${input.catalog.stateTerritory}`
+  const location = businessContextLabel(input.catalog.businessContext)
 
   return {
     slug: input.catalog.slug,
@@ -21,28 +22,36 @@ export function buildPublicBusinessSeo(input: BuildPublicBusinessSeoInput): Publ
     canonicalUrl,
     indexDirective: 'index',
     jsonLd: [
-      buildLocalBusinessJsonLd(input.catalog.name, input.catalog.category, location, canonicalUrl),
+      buildBusinessJsonLd(input.catalog.name, input.catalog.category, input.catalog.businessContext, canonicalUrl),
       ...input.catalog.offerings.map((offering) => buildOfferingJsonLd(offering, location, canonicalUrl)),
       buildBreadcrumbJsonLd(input.catalog.name, canonicalBaseUrl, canonicalUrl),
     ],
   }
 }
 
-function buildLocalBusinessJsonLd(
+function buildBusinessJsonLd(
   name: string,
   category: string,
-  location: string,
-  canonicalUrl: string
+  context: BusinessContext,
+  canonicalUrl: string,
 ): JsonLdObject {
+  const location = businessContextLabel(context)
   return {
     '@context': 'https://schema.org',
-    '@type': 'LocalBusiness',
+    '@type': context.kind === 'local_human' ? 'LocalBusiness' : 'Organization',
     '@id': `${canonicalUrl}#business`,
     name,
     url: canonicalUrl,
     description: `${category} service catalog for ${location}`,
-    areaServed: location,
+    ...(context.kind === 'local_human'
+      ? { areaServed: location }
+      : { identifier: context.providerIdentifier, sameAs: [context.website] }),
   }
+}
+function businessContextLabel(context: BusinessContext): string {
+  return context.kind === 'local_human'
+    ? `${context.suburb}, ${context.stateTerritory}`
+    : `${context.providerIdentifier} (${context.website})`
 }
 
 function buildOfferingJsonLd(

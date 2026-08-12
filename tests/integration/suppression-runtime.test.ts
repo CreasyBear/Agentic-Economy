@@ -11,7 +11,7 @@ import {
 } from '../../convex/security'
 import { getPublicBusinessOfferingSupplyBySlug } from '../../convex/registry'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -51,7 +51,8 @@ type SuppressionArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+  sourceWrite: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -69,7 +70,8 @@ type OpenDisputeArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
-  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+  sourceWrite: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -78,7 +80,8 @@ type CloseDisputeArgs = {
   disputeId: string
   reasonCode: string
   evidenceRefs: string[]
-  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+  sourceWrite: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -93,10 +96,10 @@ describe('suppression and removal Convex runtime controls', () => {
   it('suppresses and unsuppresses a published catalog through source-owned owner_admin authority', async () => {
     const db = seededPublishedDb()
 
-    const before = await detailHandler(queryCtx(db), { slug: 'parramatta-emergency-plumbing' })
-    expect(before).toMatchObject({ kind: 'found', business: { slug: 'parramatta-emergency-plumbing' } })
+    const before = await detailHandler(queryCtx(db), { slug: 'suppression-runtime-catalog' })
+    expect(before).toMatchObject({ kind: 'found', business: { slug: 'suppression-runtime-catalog' } })
 
-    const supportDenied = await suppressHandler(authCtx(db, support()), suppressionArgs('support-denied'))
+    const supportDenied = await suppressHandler(authCtx(db, support()), await suppressionArgs('support-denied'))
     expect(supportDenied).toMatchObject({
       kind: 'error',
       code: 'business_suppress_admin_denied',
@@ -106,7 +109,7 @@ describe('suppression and removal Convex runtime controls', () => {
       expect.arrayContaining([expect.objectContaining({ eventType: 'admin.action_denied', actorRef: 'user_support' })])
     )
 
-    const suppressed = await suppressHandler(authCtx(db, ownerAdmin()), suppressionArgs('owner-suppress'))
+    const suppressed = await suppressHandler(authCtx(db, ownerAdmin()), await suppressionArgs('owner-suppress'))
     expect(suppressed).toMatchObject({
       kind: 'ok',
       code: 'business_suppressed',
@@ -116,13 +119,13 @@ describe('suppression and removal Convex runtime controls', () => {
     expect(db.dump('businesses')[0]).toMatchObject({ publicStatus: 'suppressed', claimStatus: 'suppressed' })
     expect(db.dump('suppressionRules')).toHaveLength(1)
 
-    const hidden = await detailHandler(queryCtx(db), { slug: 'parramatta-emergency-plumbing' })
+    const hidden = await detailHandler(queryCtx(db), { slug: 'suppression-runtime-catalog' })
     expect(hidden).toMatchObject({ kind: 'not_found' })
 
-    const unsuppressed = await unsuppressHandler(authCtx(db, ownerAdmin()), {
-      ...suppressionArgs('owner-unsuppress'),
-      reasonCode: 'removal_resolved',
-    })
+    const unsuppressed = await unsuppressHandler(
+      authCtx(db, ownerAdmin()),
+      await suppressionArgs('owner-unsuppress', 'removal_resolved')
+    )
     expect(unsuppressed).toMatchObject({
       kind: 'ok',
       code: 'business_unsuppressed',
@@ -135,7 +138,7 @@ describe('suppression and removal Convex runtime controls', () => {
   it('opens public removal disputes with redacted receipt only and closes them through owner_admin', async () => {
     const db = seededPublishedDb()
 
-    const opened = await openDisputeHandler(authCtx(db, null), openDisputeArgs('first'))
+    const opened = await openDisputeHandler(authCtx(db, null), await openDisputeArgs('first'))
     expect(opened).toMatchObject({
       kind: 'ok',
       code: 'dispute_opened',
@@ -145,7 +148,8 @@ describe('suppression and removal Convex runtime controls', () => {
     expect(JSON.stringify(db.dump('disputes'))).not.toMatch(/owner@example\.test|0412|Remove my private details/i)
     expect(db.dump('disputes')).toHaveLength(1)
 
-    const supportClose = await closeDisputeHandler(authCtx(db, support()), closeDisputeArgs('support-close'))
+    const disputeId = String(db.dump('disputes')[0]?._id)
+    const supportClose = await closeDisputeHandler(authCtx(db, support()), await closeDisputeArgs('support-close', disputeId))
     expect(supportClose).toMatchObject({
       kind: 'error',
       code: 'admin_action_denied',
@@ -155,11 +159,7 @@ describe('suppression and removal Convex runtime controls', () => {
       expect.arrayContaining([expect.objectContaining({ eventType: 'admin.action_denied', actorRef: 'user_support' })])
     )
 
-    const disputeId = String(db.dump('disputes')[0]?._id)
-    const closed = await closeDisputeHandler(authCtx(db, ownerAdmin()), {
-      ...closeDisputeArgs('owner-close'),
-      disputeId,
-    })
+    const closed = await closeDisputeHandler(authCtx(db, ownerAdmin()), await closeDisputeArgs('owner-close', disputeId))
     expect(closed).toMatchObject({
       kind: 'ok',
       code: 'dispute_closed',
@@ -271,76 +271,179 @@ function seededPublishedDb(): FakeDb {
     grantedBy: 'user_owner',
     grantedAt: 2,
   })
+  seedCanonicalSuppressionCatalog(db)
+  return db
+}
+
+function seedCanonicalSuppressionCatalog(db: FakeDb): void {
+  const source = {
+    businessId: 'businesses:1',
+    slug: 'suppression-runtime-catalog',
+    name: 'Suppression Runtime Catalog',
+    normalizedName: 'suppression runtime catalog',
+    category: 'Emergency plumbing',
+    businessContext: { kind: 'local_human' as const, suburb: 'Parramatta', stateTerritory: 'NSW' },
+    businessSourceHash: 'business-source:suppression-runtime:v1',
+    offering: {
+      offeringRef: 'catalog-offering:suppression-runtime',
+      revision: 1,
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+      availabilitySummary: 'Hours supplied by owner',
+      pricingSummary: 'Owner-supplied call-out price before work starts.',
+      price: {
+        kind: 'fixed' as const,
+        amount: { currency: 'AUD' as const, units: '18000', exponent: 2 },
+        unit: 'job' as const,
+        taxTreatment: 'inclusive' as const,
+      },
+      sourceHash: 'catalog-source:suppression-runtime:v1',
+    },
+  } as const
+  const accessPath = {
+    accessPathRef: 'access:suppression-runtime:emergency-pipe-repair',
+    businessId: source.businessId,
+    offeringRef: source.offering.offeringRef,
+    offeringRevision: source.offering.revision,
+    offeringSourceHash: source.offering.sourceHash,
+    status: 'published' as const,
+    descriptor: {
+      kind: 'external_operation' as const,
+      name: source.offering.name,
+      summary: source.offering.summary,
+      url: 'https://suppression-runtime.example.test/quote',
+      method: 'POST',
+      authenticationSummary: 'AE resolves the provider connection server-side.',
+      pricingSummary: source.offering.pricingSummary,
+      provenance: 'business_declared' as const,
+    },
+    sourceHash: 'catalog-access-path:suppression-runtime:v1',
+    createdAt: 5,
+    updatedAt: 5,
+  } as const
+  const readiness = {
+    observedAt: 1_700_000_000_000,
+    validUntil: 4_102_444_800_000,
+  } as const
+
   db.seed('businesses', {
-    _id: 'businesses:1',
+    _id: source.businessId,
     _creationTime: 3,
     ownerId: 'owners:1',
-    slug: 'parramatta-emergency-plumbing',
-    name: 'Parramatta Emergency Plumbing',
-    normalizedName: 'parramatta emergency plumbing',
-    category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
+    slug: source.slug,
+    name: source.name,
+    normalizedName: source.normalizedName,
+    category: source.category,
+    businessContext: source.businessContext,
     publicStatus: 'published',
     trustTier: 'claimed',
     claimStatus: 'published',
-    sourceHash: 'source:business:v1',
+    sourceHash: source.businessSourceHash,
     createdAt: 3,
     updatedAt: 3,
   })
   db.seed('businessContexts', {
     _id: 'businessContexts:1',
     _creationTime: 4,
-    businessId: 'businesses:1',
-    category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
-    sourceRefs: [{ label: 'Owner intake', evidenceRef: 'private:evidence:source', sourceHash: 'source:owner:v1' }],
-    sourceHash: 'source:business:v1',
+    businessId: source.businessId,
+    category: source.category,
+    businessContext: source.businessContext,
+    sourceRefs: [{
+      label: 'Owner intake',
+      evidenceRef: 'private:evidence:source',
+      sourceHash: source.businessSourceHash,
+    }],
+    sourceHash: source.businessSourceHash,
     approvedAt: 4,
+  })
+  db.seed('businessOfferings', {
+    _id: 'businessOfferings:1',
+    _creationTime: 5,
+    businessId: source.businessId,
+    offeringRef: source.offering.offeringRef,
+    currentRevision: source.offering.revision,
+    status: 'published',
+    createdAt: 5,
+    updatedAt: 5,
+  })
+  db.seed('businessOfferingRevisions', {
+    _id: 'businessOfferingRevisions:1',
+    _creationTime: 6,
+    businessId: source.businessId,
+    offeringRef: source.offering.offeringRef,
+    revision: source.offering.revision,
+    name: source.offering.name,
+    category: source.offering.category,
+    summary: source.offering.summary,
+    serviceAreaSummary: source.offering.serviceAreaSummary,
+    availabilitySummary: source.offering.availabilitySummary,
+    pricingSummary: source.offering.pricingSummary,
+    price: source.offering.price,
+    sourceHash: source.offering.sourceHash,
+    createdAt: 6,
+  })
+  db.seed('offeringAccessPaths', {
+    _id: 'offeringAccessPaths:1',
+    _creationTime: 7,
+    ...accessPath,
   })
   db.seed('businessSupplyProjectionSnapshots', {
     _id: 'businessSupplyProjectionSnapshots:1',
-    _creationTime: 7,
-    businessId: 'businesses:1',
+    _creationTime: 8,
+    businessId: source.businessId,
     sourceRevision: 1,
-    sourceDigest: 'source:projection:v1',
-    observedAt: 7,
+    sourceDigest: 'catalog-projection:suppression-runtime:v1',
+    observedAt: 8,
     disposition: 'current',
     status: 'current',
-    updatedAt: 7,
+    updatedAt: 8,
     projection: {
       business: {
-        businessId: 'businesses:1',
-        slug: 'parramatta-emergency-plumbing',
-        name: 'Parramatta Emergency Plumbing',
-        category: 'Emergency plumbing',
-        suburb: 'Parramatta',
-        stateTerritory: 'NSW',
-        publicUrl: '/parramatta-emergency-plumbing',
+        businessId: source.businessId,
+        slug: source.slug,
+        name: source.name,
+        category: source.category,
+        businessContext: source.businessContext,
+        publicUrl: `/${source.slug}`,
         trustTier: 'claimed',
       },
       offerings: [{
         offering: {
-          offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
-          revision: 1,
-          name: 'Emergency pipe repair',
-          category: 'Emergency plumbing',
-          summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
-          serviceAreaSummary: 'Parramatta and nearby suburbs',
-          availabilitySummary: 'Hours supplied by owner',
+          offeringRef: source.offering.offeringRef,
+          revision: source.offering.revision,
+          name: source.offering.name,
+          category: source.offering.category,
+          summary: source.offering.summary,
+          serviceAreaSummary: source.offering.serviceAreaSummary,
+          availabilitySummary: source.offering.availabilitySummary,
+          pricingSummary: source.offering.pricingSummary,
+          price: source.offering.price,
         },
-        accessPaths: [],
-        support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+        accessPaths: [{
+          accessPathRef: accessPath.accessPathRef,
+          offeringRevision: accessPath.offeringRevision,
+          offeringSourceHash: accessPath.offeringSourceHash,
+          sourceHash: accessPath.sourceHash,
+          descriptor: accessPath.descriptor,
+        }],
+        support: {
+          integrated: true,
+          routeable: true,
+          reasons: [],
+          observedAt: readiness.observedAt,
+          validUntil: readiness.validUntil,
+        },
       }],
       sourceRevision: 1,
-      sourceDigest: 'source:projection:v1',
-      observedAt: 7,
+      sourceDigest: 'catalog-projection:suppression-runtime:v1',
+      observedAt: 8,
       disposition: 'current',
     },
   })
-  return db
 }
+
 
 function authCtx(db: Db, identity: UserIdentity | null): RuntimeCtx {
   return {
@@ -362,10 +465,10 @@ function support(): UserIdentity {
   return { tokenIdentifier: 'clerk|user_support', subject: 'user_support', issuer: 'https://clerk.example.test' }
 }
 
-function suppressionArgs(key: string): SuppressionArgs {
-  return withSourceWrite('admin_operator', {
+async function suppressionArgs(key: string, reasonCode = 'privacy_removal_requested'): Promise<SuppressionArgs> {
+  return await withSourceWrite('admin_operator', {
     businessId: 'businesses:1',
-    reasonCode: 'privacy_removal_requested',
+    reasonCode,
     evidenceRefs: ['private:evidence:suppression'],
     csrfToken: `csrf-${key}`,
     csrfCookie: `csrf-${key}`,
@@ -374,8 +477,8 @@ function suppressionArgs(key: string): SuppressionArgs {
   })
 }
 
-function openDisputeArgs(key: string): OpenDisputeArgs {
-  return withSourceWrite('removal_dispute', {
+async function openDisputeArgs(key: string): Promise<OpenDisputeArgs> {
+  return await withSourceWrite('removal_dispute', {
     businessId: 'businesses:1',
     targetType: 'business',
     targetRef: 'businesses:1',
@@ -399,9 +502,9 @@ function openDisputeArgs(key: string): OpenDisputeArgs {
   })
 }
 
-function closeDisputeArgs(key: string): CloseDisputeArgs {
-  return withSourceWrite('admin_operator', {
-    disputeId: 'disputes:1',
+async function closeDisputeArgs(key: string, disputeId: string): Promise<CloseDisputeArgs> {
+  return await withSourceWrite('admin_operator', {
+    disputeId,
     reasonCode: 'removal_resolved',
     evidenceRefs: ['private:evidence:close-dispute'],
     operationKey: `op:dispute:close:${key}`,

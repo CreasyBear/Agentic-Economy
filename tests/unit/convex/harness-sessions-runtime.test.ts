@@ -81,8 +81,8 @@ const adminReadHandler = (readAdminHarnessSessionEntries as unknown as {
 describe('Convex harness session journal source', () => {
   it('appends entries into separate session and entry tables without unbounded arrays', async () => {
     const db = new FakeDb({})
-    const first = await appendHandler(authCtx(db, null), admittedEntryArgs({ entryId: 'entry-1' }))
-    const second = await appendHandler(authCtx(db, null), admittedEntryArgs({
+    const first = await appendHandler(authCtx(db, null), await admittedEntryArgs({ entryId: 'entry-1' }))
+    const second = await appendHandler(authCtx(db, null), await admittedEntryArgs({
       entryId: 'entry-2',
       kind: 'tool.started',
       idempotencyKey: 'idem-2',
@@ -117,9 +117,9 @@ describe('Convex harness session journal source', () => {
 
   it('replays duplicate idempotency keys with matching request hashes and rejects drift', async () => {
     const db = new FakeDb({})
-    const args = admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
-    const replayArgs = admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
-    const driftArgs = admittedEntryArgs({
+    const args = await admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
+    const replayArgs = await admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
+    const driftArgs = await admittedEntryArgs({
       entryId: 'entry-drift',
       idempotencyKey: 'same-key',
       payloadJson: '{"changed":true}',
@@ -144,9 +144,9 @@ describe('Convex harness session journal source', () => {
 
   it('rejects parent mismatches without advancing the active leaf', async () => {
     const db = new FakeDb({})
-    await appendHandler(authCtx(db, null), admittedEntryArgs({ entryId: 'entry-1' }))
+    await appendHandler(authCtx(db, null), await admittedEntryArgs({ entryId: 'entry-1' }))
 
-    const conflict = await appendHandler(authCtx(db, null), admittedEntryArgs({
+    const conflict = await appendHandler(authCtx(db, null), await admittedEntryArgs({
       entryId: 'entry-2',
       parentEntryId: 'entry-missing',
       idempotencyKey: 'bad-parent',
@@ -181,7 +181,7 @@ describe('Convex harness session journal source', () => {
 
   it('returns bounded public session and run reads without raw payloads', async () => {
     const db = new FakeDb({})
-    await appendHandler(authCtx(db, null), admittedEntryArgs({
+    await appendHandler(authCtx(db, null), await admittedEntryArgs({
       entryId: 'entry-1',
       payloadJson: '{"raw":"secret payload"}',
       privatePayloadJson: '{"provider":"secret private payload"}',
@@ -216,12 +216,12 @@ describe('Convex harness session journal source', () => {
 
   it('keeps admitted idempotent append replay behavior', async () => {
     const db = new FakeDb({})
-    const args = admittedEntryArgs({
+    const args = await admittedEntryArgs({
       entryId: 'entry-admitted',
       idempotencyKey: 'admitted-idempotent',
       payloadJson: '{"phase":"persist"}',
     })
-    const replayArgs = admittedEntryArgs({
+    const replayArgs = await admittedEntryArgs({
       entryId: 'entry-admitted',
       idempotencyKey: 'admitted-idempotent',
       payloadJson: '{"phase":"persist"}',
@@ -252,7 +252,7 @@ describe('Convex harness session journal source', () => {
         },
       ],
     })
-    await appendHandler(authCtx(db, null), admittedEntryArgs({
+    await appendHandler(authCtx(db, null), await admittedEntryArgs({
       entryId: 'entry-1',
       payloadJson: '{"raw":"secret payload"}',
       privatePayloadJson: '{"provider":"secret private payload"}',
@@ -419,9 +419,9 @@ function entryArgs(overrides: Partial<AppendArgs> = {}): AppendArgs {
   }
 }
 
-function admittedEntryArgs(overrides: Partial<AppendArgs> = {}): AppendArgs {
+async function admittedEntryArgs(overrides: Partial<AppendArgs> = {}): Promise<AppendArgs> {
   const args = entryArgs(overrides)
-  return withSourceWrite('harness_session', args)
+  return await withSourceWrite('harness_session', args)
 }
 
 function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {

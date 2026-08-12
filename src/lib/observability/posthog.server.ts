@@ -2,6 +2,7 @@ import { PostHog } from 'posthog-node'
 
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
+import { sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 let client: PostHog | undefined
 
@@ -27,9 +28,9 @@ export function captureServerFunnelEvent(input: FunnelCaptureInput): void {
   }
 
   posthog.capture({
-    distinctId: input.pseudonymousSessionId,
-    event: input.eventType,
-    properties: buildFunnelEventProperties(input),
+    distinctId: String(sanitizeTelemetryValue(input.pseudonymousSessionId)),
+    event: String(sanitizeTelemetryValue(input.eventType)),
+    properties: sanitizeTelemetryValue(buildFunnelEventProperties(input)) as Record<string, string | number | boolean | null>,
   })
 }
 
@@ -42,7 +43,13 @@ export function captureServerEvent(
   if (posthog === undefined) {
     return
   }
-  posthog.capture({ distinctId, event, ...(properties === undefined ? {} : { properties }) })
+  posthog.capture({
+    distinctId: String(sanitizeTelemetryValue(distinctId)),
+    event: String(sanitizeTelemetryValue(event)),
+    ...(properties === undefined ? {} : {
+      properties: sanitizeTelemetryValue(properties) as Record<string, string | number | boolean | null>,
+    }),
+  })
 }
 
 export async function flushPostHogServer(): Promise<void> {

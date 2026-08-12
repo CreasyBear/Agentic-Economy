@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
-import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import { generateDeveloperDiscoveryExamples } from '@/modules/discovery/developer-discovery'
 import type { ReadDeveloperDiscoveryRouteOptions } from '@/modules/discovery/developer-discovery'
@@ -33,7 +32,7 @@ export async function handleDeveloperDiscoveryExamplesRequest(
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): Promise<Response> {
   const routeOptions = await readDeveloperDiscoveryRuntimeOptions(request, state, options)
-  const artifact = generateDeveloperDiscoveryExamples(state ?? createDefaultDiscoverySourceState(), routeOptions)
+  const artifact = generateDeveloperDiscoveryExamples(state, routeOptions)
   const fetchReadback = readDeveloperDiscoveryFetchReadback(
     'examples',
     '/api/discovery/examples',

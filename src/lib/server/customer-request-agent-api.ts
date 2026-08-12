@@ -1,4 +1,4 @@
-import { authenticateCustomerRequestAgent, type CustomerRequestAgentPrincipal } from '@/lib/server/customer-request-agent-auth'
+import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
 import { handleCustomerRequestFactsPost, type FactsResult } from '@/lib/server/customer-request-facts-api'
 import { handleCustomerRequestGet, type InspectResult } from '@/lib/server/customer-request-inspect-api'
@@ -13,6 +13,7 @@ import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { problem } from '@/lib/server/problem'
+import { readRequestCorrelationId } from '@/lib/server/request-correlation'
 import type {
   CustomerRequestEvidenceResult,
   CustomerRequestConnectedAssistantsResult,
@@ -21,6 +22,7 @@ import type {
   CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
 import {
+  CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestScopeForMode,
   type CustomerRequestAuthorityMode,
 } from '@/modules/customer-request/agent-contract'
@@ -44,7 +46,8 @@ import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modu
 import { withCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
 type HandlerOptions = Readonly<{
-  authenticate?: NonNullable<Parameters<typeof authenticateCustomerRequestAgent>[0]>['authenticate']
+  authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  resolvePrincipal?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['resolvePrincipal']
   callAction?: (name: string, args: Record<string, unknown>) => Promise<AgentActionResult>
   env?: Record<string, string | undefined>
   now?: () => number
@@ -261,21 +264,37 @@ export async function handleAgentCustomerRequestEvidenceGet(
     }))
 }
 
-export async function handleAgentCustomerRequestGet(requestRef: string, options: HandlerOptions = {}): Promise<Response> {
-  return await withCustomerRequestAgentAuth(undefined, options, undefined, async (principal) =>
+export async function handleAgentCustomerRequestGet(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  return await withCustomerRequestAgentAuth(request, options, undefined, async (principal) =>
     withCustomerRequestAgentNavigation(await handleCustomerRequestGet(requestRef, {
       inspect: async (args) => await callAsAgent<InspectResult>('customerRequestApplication:resume', 'resume', args, principal, options),
     })))
 }
 
 async function withCustomerRequestAgentAuth(
-  request: Request | undefined,
+  request: Request,
   options: HandlerOptions,
   requiredMode: CustomerRequestAuthorityMode | undefined,
-  handler: (principal: CustomerRequestAgentPrincipal) => Promise<Response>,
+  handler: (principal: AgentAccessPrincipal) => Promise<Response>,
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
+  const body = request.body === null ? '' : await request.clone().text()
+  const resolvePrincipal = options.resolvePrincipal
+    ?? (options.authenticate === undefined
+      ? resolveAgentAccessPrincipal(
+          request,
+          body,
+          readRequestCorrelationId(request),
+          options.env === undefined ? {} : { env: options.env },
+        )
+      : undefined)
+  const admitted = await authenticateAgentAccess({
+    requiredScope: CUSTOMER_REQUEST_AGENT_SCOPE,
     ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+    ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
     ...(requiredMode === undefined ? {} : { requiredMode }),
   })
   if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status, requiredMode, request)
@@ -287,7 +306,7 @@ async function callAsAgent<Result = SubmitResult>(
   operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply'
     | 'evidence' | 'resume' | 'allow_repeat' | 'use_repeat' | 'inspect_repeat' | 'revoke_repeat',
   command: Record<string, unknown>,
-  principal: CustomerRequestAgentPrincipal,
+  principal: AgentAccessPrincipal,
   options: HandlerOptions,
 ): Promise<Result> {
   const key = (options.env ?? process.env).AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()

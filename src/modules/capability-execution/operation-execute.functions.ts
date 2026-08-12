@@ -1,3 +1,4 @@
+import { defaultBodySerializer } from 'openapi-fetch'
 import { z } from 'zod'
 
 import type { BoundedRequestBody } from '@/lib/server/bounded-request-body'
@@ -5,7 +6,18 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { validateJsonSchema } from '@/modules/capability-contract/public'
-import { isPublicOperationRef, validPublicHttpsEndpoint } from '@/modules/capability-supply/public'
+import { exactAmountSchema } from '@/modules/money/public'
+import { prepareHttpJsonRequest, responseContentTypeMatches } from '@/modules/capability-supply/route-transport-runtime'
+import {
+  isAnonymousKeylessOperationEligible,
+  isPublicOperationRef,
+  validPublicHttpsEndpoint,
+  type AnonymousKeylessOperationEffect,
+  type HttpJsonHeaderParameterMapping,
+  type HttpJsonPathParameterMapping,
+  type HttpJsonQueryParameterMapping,
+  type PublicOperationPrice,
+} from '@/modules/capability-supply/public'
 
 /**
  * Keyless operation execution, fully DB-driven.
@@ -20,15 +32,10 @@ import { isPublicOperationRef, validPublicHttpsEndpoint } from '@/modules/capabi
  * validates the caller's input against the DB-held input schema, makes ONE
  * bounded, SSRF-safe HTTP request built from the DB descriptor, and returns a
  * validated projection plus an evidence hash.
- *
- * Honesty guards (RULES.MD): nothing is fabricated; a refused/error result is
- * returned, never thrown to the model as success; the caller never supplies a
- * URL or host (the endpoint comes from the DB and is re-validated as HTTPS);
- * only http-json GET keyless operations are executable today.
+ * only http-json keyless operations are executable today.
  */
 
 const HTTP_JSON_ADAPTER = 'http-json:v1'
-const EXECUTABLE_METHODS = ['GET'] as const
 const MAX_RESPONSE_BYTES = 512 * 1024
 const DEFAULT_USER_AGENT = 'AgenticEconomyOperationExecutor/0.1'
 
@@ -45,13 +52,84 @@ export type OperationExecutableDescriptor = {
   authority: { kind: 'keyless' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string }
   adapterId: string
   method: 'GET' | 'POST'
-  query?: readonly { inputPointer: string; parameter: string }[]
+  price: PublicOperationPrice
+  effects: readonly AnonymousKeylessOperationEffect[]
+  query?: readonly HttpJsonQueryParameterMapping[]
+  path?: readonly HttpJsonPathParameterMapping[]
+  headers?: readonly HttpJsonHeaderParameterMapping[]
   fixedQuery?: readonly { parameter: string; value: string }[]
+  requestContentType?: string
+  responseContentType?: string
+  responseStatus?: number
   requestTimeoutMs: number
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
   provenance: { publisher: string; sourceKind: string }
 }
+function isExecutableDescriptorMaterial(value: unknown): value is OperationExecutableDescriptor {
+  if (!isRecord(value)
+    || !isPublicOperationRef(value.operationRef)
+    || typeof value.capabilityId !== 'string'
+    || typeof value.name !== 'string'
+    || typeof value.endpointUrl !== 'string'
+    || !isRecord(value.authority)
+    || typeof value.authority.kind !== 'string'
+    || typeof value.adapterId !== 'string'
+    || (value.method !== 'GET' && value.method !== 'POST')
+    || !isRecord(value.price)
+    || typeof value.price.kind !== 'string'
+    || !Array.isArray(value.effects)
+    || !value.effects.every((effect) =>
+      isRecord(effect)
+      && typeof effect.class === 'string'
+      && typeof effect.authority === 'string')
+    || typeof value.requestTimeoutMs !== 'number'
+    || !Number.isSafeInteger(value.requestTimeoutMs)
+    || value.requestTimeoutMs <= 0
+    || !isRecord(value.inputSchema)
+    || (value.outputSchema !== undefined && !isRecord(value.outputSchema))
+    || !isRecord(value.provenance)
+    || typeof value.provenance.publisher !== 'string'
+    || typeof value.provenance.sourceKind !== 'string') {
+    return false
+  }
+  if (value.price.kind === 'on_request') return true
+  if (value.price.kind === 'fixed') {
+    return exactAmountSchema.safeParse(value.price.amount).success
+  }
+  return value.price.kind === 'range'
+    && exactAmountSchema.safeParse(value.price.minimum).success
+    && exactAmountSchema.safeParse(value.price.maximum).success
+}
+
+export function operationExecutionBindingDigest(
+  descriptor: OperationExecutableDescriptor,
+): string {
+  const material = {
+    operationRef: descriptor.operationRef,
+    capabilityId: descriptor.capabilityId,
+    name: descriptor.name,
+    endpointUrl: descriptor.endpointUrl,
+    authority: descriptor.authority,
+    adapterId: descriptor.adapterId,
+    method: descriptor.method,
+    price: descriptor.price,
+    effects: descriptor.effects,
+    ...(descriptor.query === undefined ? {} : { query: descriptor.query }),
+    ...(descriptor.path === undefined ? {} : { path: descriptor.path }),
+    ...(descriptor.headers === undefined ? {} : { headers: descriptor.headers }),
+    ...(descriptor.fixedQuery === undefined ? {} : { fixedQuery: descriptor.fixedQuery }),
+    ...(descriptor.requestContentType === undefined ? {} : { requestContentType: descriptor.requestContentType }),
+    ...(descriptor.responseContentType === undefined ? {} : { responseContentType: descriptor.responseContentType }),
+    ...(descriptor.responseStatus === undefined ? {} : { responseStatus: descriptor.responseStatus }),
+    requestTimeoutMs: descriptor.requestTimeoutMs,
+    inputSchema: descriptor.inputSchema,
+    ...(descriptor.outputSchema === undefined ? {} : { outputSchema: descriptor.outputSchema }),
+    provenance: descriptor.provenance,
+  }
+  return canonicalDigest(material).toString()
+}
+
 
 export type OperationExecuteResult =
   | {
@@ -75,7 +153,7 @@ export type OperationExecuteDeps = {
   readDescriptor: (operationRef: string) => Promise<OperationExecutableDescriptor | null>
   isPublicTarget: (url: URL) => Promise<boolean>
   fetchImpl: (
-    input: URL | RequestInfo,
+    input: URL | string | Request,
     init?: RequestInit,
   ) => Promise<BoundedRequestBody & Readonly<{ status: number; ok: boolean }>>
   now?: () => number
@@ -84,6 +162,7 @@ export type OperationExecuteDeps = {
 export async function executeOperation(
   input: OperationExecuteInput,
   deps: OperationExecuteDeps,
+  expectedExecutionBindingDigest?: string,
 ): Promise<OperationExecuteResult> {
   if (!isPublicOperationRef(input.operationRef)) {
     return { kind: 'refused', operationRef: input.operationRef, reason: 'operation_not_found' }
@@ -106,19 +185,30 @@ export async function executeOperation(
     || descriptor.operationRef !== input.operationRef) {
     return { kind: 'refused', operationRef: input.operationRef, reason: 'operation_not_found' }
   }
-
-  // Fail-closed by construction: only DB-described keyless GET http-json
-  // operations are executable, and an observed listing or any other provenance
-  // that is not a real AE-runnable keyless op is refused. The DB reader should
-  // already only emit such descriptors; this re-check is defence in depth.
-  if (descriptor.authority.kind !== 'keyless'
-    || descriptor.adapterId !== HTTP_JSON_ADAPTER
-    || descriptor.method !== 'GET'
-    || (descriptor.method === 'GET' && !EXECUTABLE_METHODS.includes(descriptor.method))) {
-    return { kind: 'refused', operationRef: input.operationRef, reason: 'operation_not_keyless' }
-  }
-  if (descriptor.provenance.sourceKind === 'x402') {
+  if (!isExecutableDescriptorMaterial(descriptor)) {
     return { kind: 'refused', operationRef: input.operationRef, reason: 'operation_not_executable' }
+  }
+  if (expectedExecutionBindingDigest !== undefined
+    && operationExecutionBindingDigest(descriptor) !== expectedExecutionBindingDigest) {
+    return { kind: 'refused', operationRef: input.operationRef, reason: 'operation_not_executable' }
+  }
+
+
+  // Fail-closed by construction: only descriptors accepted by the canonical
+  // anonymous-keyless predicate may reach the transport. Keep the refusal
+  // distinction for callers while leaving eligibility to that predicate.
+  if (!isAnonymousKeylessOperationEligible({
+    authority: descriptor.authority,
+    adapterId: descriptor.adapterId,
+    method: descriptor.method,
+    sourceKind: descriptor.provenance.sourceKind,
+    price: descriptor.price,
+    effects: descriptor.effects,
+  })) {
+    const reason = descriptor.authority.kind === 'keyless' && descriptor.adapterId === HTTP_JSON_ADAPTER
+      ? 'operation_not_executable'
+      : 'operation_not_keyless'
+    return { kind: 'refused', operationRef: input.operationRef, reason }
   }
 
   // Validate the caller's input against the DB-held input schema before any
@@ -140,28 +230,42 @@ export async function executeOperation(
     return { kind: 'refused', operationRef: input.operationRef, reason: 'endpoint_invalid' }
   }
 
-  // Build the request exactly as the DB descriptor dictates (input->query
-  // mapping + fixed query), mirroring the repo's transport request-target
-  // logic. The host is the DB endpoint; the caller never supplies it.
-  const target = buildRequestTarget(
-    endpoint,
-    descriptor.method,
-    descriptor.query ?? [],
-    descriptor.fixedQuery ?? [],
-    input.input,
-  )
-  if (target === undefined) {
+  // Build the request through the same guarded HTTP adapter used by registered
+  // route transport. The host is the DB endpoint; the caller never supplies it.
+  const prepared = prepareHttpJsonRequest(endpoint, {
+    method: descriptor.method,
+    ...(descriptor.query === undefined ? {} : { query: descriptor.query }),
+    ...(descriptor.path === undefined ? {} : { path: descriptor.path }),
+    ...(descriptor.headers === undefined ? {} : { headers: descriptor.headers }),
+    ...(descriptor.fixedQuery === undefined ? {} : { fixedQuery: descriptor.fixedQuery }),
+    ...(descriptor.requestContentType === undefined ? {} : { requestContentType: descriptor.requestContentType }),
+    ...(descriptor.responseContentType === undefined ? {} : { responseContentType: descriptor.responseContentType }),
+    ...(descriptor.responseStatus === undefined ? {} : { responseStatus: descriptor.responseStatus }),
+    requestTimeoutMs: descriptor.requestTimeoutMs,
+    credential: { kind: 'none' as const },
+  }, defaultBodySerializer(input.input))
+  if (prepared.kind === 'refused') {
     return { kind: 'refused', operationRef: input.operationRef, reason: 'input_invalid' }
   }
-
+  const requestHeaders = {
+    ...(prepared.headers ?? {}),
+    Accept: descriptor.responseContentType ?? 'application/json',
+    'User-Agent': DEFAULT_USER_AGENT,
+    ...(descriptor.method === 'POST' && descriptor.requestContentType !== undefined
+      ? { 'Content-Type': descriptor.requestContentType }
+      : {}),
+  }
   const startedAt = (deps.now ?? Date.now)()
   let response: BoundedRequestBody & Readonly<{ status: number; ok: boolean }>
   try {
-    response = await deps.fetchImpl(target, {
-      method: 'GET',
+    response = await deps.fetchImpl(prepared.target, {
+      method: descriptor.method,
       redirect: 'manual',
       signal: AbortSignal.timeout(descriptor.requestTimeoutMs),
-      headers: { Accept: 'application/json', 'User-Agent': DEFAULT_USER_AGENT },
+      ...(descriptor.method === 'POST' && descriptor.requestContentType !== undefined
+        ? { body: defaultBodySerializer(input.input) }
+        : {}),
+      headers: requestHeaders,
     })
   } catch (error) {
     const aborted = error instanceof Error
@@ -185,14 +289,25 @@ export async function executeOperation(
     }
   }
 
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!contentType.includes('application/json') && !contentType.includes('json')) {
+  if (descriptor.responseStatus !== undefined && response.status !== descriptor.responseStatus) {
     return {
       kind: 'error',
       operationRef: input.operationRef,
       code: 'response_invalid',
       retryable: false,
-      reason: 'The operation did not return JSON.',
+      reason: `The operation returned HTTP ${response.status}; expected HTTP ${descriptor.responseStatus}.`,
+    }
+  }
+
+  const expectedContentType = descriptor.responseContentType ?? 'application/json'
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!responseContentTypeMatches(expectedContentType, contentType)) {
+    return {
+      kind: 'error',
+      operationRef: input.operationRef,
+      code: 'response_invalid',
+      retryable: false,
+      reason: `The operation did not return ${expectedContentType}.`,
     }
   }
 
@@ -261,42 +376,6 @@ export async function executeOperation(
 }
 
 
-function buildRequestTarget(
-  endpoint: URL,
-  method: 'GET' | 'POST',
-  query: readonly { inputPointer: string; parameter: string }[],
-  fixedQuery: readonly { parameter: string; value: string }[],
-  input: Record<string, unknown>,
-): URL | undefined {
-  if (method === 'POST') return new URL(endpoint)
-  const url = new URL(endpoint)
-  for (const mapping of query) {
-    const value = resolveInputPointer(input, mapping.inputPointer)
-    // Schema validation (above) already guarantees required inputs are present,
-    // so a missing mapped param is an OPTIONAL one the caller simply did not
-    // supply — skip it rather than failing the whole request.
-    if (value === undefined) continue
-    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    url.searchParams.set(mapping.parameter, String(value))
-  }
-  for (const fixed of fixedQuery) {
-    url.searchParams.set(fixed.parameter, fixed.value)
-  }
-  return url
-}
-
-function resolveInputPointer(input: Record<string, unknown>, pointer: string): unknown {
-  // Pointers are /foo/bar JSON-Pointers (no ~0/~1 decoding needed for these).
-  if (!pointer.startsWith('/')) return undefined
-  const parts = pointer.split('/').slice(1)
-  let current: unknown = input
-  for (const part of parts) {
-    if (!isRecord(current)) return undefined
-    if (!Object.prototype.hasOwnProperty.call(current, part)) return undefined
-    current = current[part]
-  }
-  return current
-}
 
 /** Mirror of the module's input shape, kept in step with the action schema. */
 export const operationExecuteInputSchema = z.strictObject({

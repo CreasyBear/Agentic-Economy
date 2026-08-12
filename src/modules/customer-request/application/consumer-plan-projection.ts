@@ -49,7 +49,7 @@ export type ConsumerPlanOption = Readonly<{
   nextAction: ConsumerNextAction
   evidence: Readonly<{
     observedAt?: number
-    source: 'business_published' | 'ae_sandbox'
+    source: 'business_published'
   }>
 }>
 
@@ -98,7 +98,7 @@ export type ConsumerSupplyOption = Readonly<{
   nextAction: ConsumerNextAction
   evidence: Readonly<{
     observedAt?: number
-    source: 'business_published' | 'ae_sandbox'
+    source: 'business_published'
   }>
 }>
 

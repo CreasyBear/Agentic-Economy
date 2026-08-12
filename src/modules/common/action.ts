@@ -1,7 +1,11 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
-import type { JsonValue } from '@/modules/capability-contract/public'
+import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
+import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
+import type { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
+import type { JsonValue } from '@/modules/capability-contract/public'
 /**
  * Agent-native action contract for AE.
  *
@@ -26,12 +30,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 
 export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread' | 'cli' | 'mcp'
 
-export type ActionSourceWriteRequest = {
-  method: string
-  origin: string
-  pathname: string
-  bodyDigest: string
-}
+export type ActionSourceWriteRequest = SourceWriteAdmissionRequest
 
 export type ActionTimingSink = {
   record: (
@@ -44,6 +43,12 @@ export type ActionTimingSink = {
 export type ActionHarnessApprovalContext = {
   authority?: 'owner' | 'admin'
 }
+
+export type ActionAgentAccessPrincipal = AgentAccessPrincipal
+export type ActionCredentialAdmission = Readonly<{
+  scope: typeof MARKET_OPERATIONS_INVOKE_SCOPE
+  authority: 'descriptor_classified'
+}>
 
 export type ActionAgentIdentity = {
   kind: 'identity'
@@ -114,7 +119,15 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
   developmentOnlySuppliedQuoteNow?: () => number
+  /** Full server-derived agent-access principal; never caller-supplied authority. */
+  agentAccessPrincipal?: ActionAgentAccessPrincipal
+  /** Correlation identity propagated by the transport into the application service. */
+  correlationId?: string
+  /** One injected operation application service shared by HTTP and MCP adapters. */
+  operationInvokeService?: OperationInvokeService
 }
+ 
+
 
 export type ActionRunArgs<Input> = {
   data: Input
@@ -219,6 +232,8 @@ export type ActionDefinition<
   Result extends ActionResult,
 > = {
   readonly id: string
+  readonly credentialAdmission?: ActionCredentialAdmission
+
   readonly name: string
   readonly summary: string
   readonly boundaries: readonly string[]
@@ -262,6 +277,8 @@ export type AgentToolDescriptor = {
   readOnly: boolean
   effect: ActionEffectMetadata
   parameters: readonly ActionParameter[]
+  credentialAdmission?: ActionCredentialAdmission
+
   inputJsonSchema?: JSONSchema
   outputJsonSchema?: JSONSchema
   hasOutputSchema: true
@@ -272,6 +289,7 @@ export function describeActionForAgent(action: AnyAction): AgentToolDescriptor {
   const outputJsonSchema = convertSchemaToJsonSchema(action.outputSchema)
 
   return {
+    ...(action.credentialAdmission === undefined ? {} : { credentialAdmission: action.credentialAdmission }),
     id: action.id,
     name: action.name,
     summary: action.summary,

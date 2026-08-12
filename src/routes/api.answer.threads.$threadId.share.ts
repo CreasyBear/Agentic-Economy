@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { jsonResponse } from './api.businesses'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
@@ -8,6 +9,7 @@ import {
   readAnswerSessionId,
   revokeAnswerThreadShare,
 } from '@/modules/answer-thread/public'
+const MAX_ANSWER_THREAD_WRITE_BODY_BYTES = 4 * 1024
 
 export const Route = createFileRoute('/api/answer/threads/$threadId/share')({
   server: {
@@ -27,6 +29,11 @@ export const Route = createFileRoute('/api/answer/threads/$threadId/share')({
 })
 
 export async function handleIssueAnswerThreadShareRequest(request: Request, threadId: string): Promise<Response> {
+  const boundedBody = await readBoundedRequestText(request, MAX_ANSWER_THREAD_WRITE_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: boundedBody.code })
+  }
+
   const pseudonymousSessionId = readAnswerSessionId(request)
   if (pseudonymousSessionId === undefined) {
     return problem({ kind: 'NOT_FOUND', code: 'thread_not_found' })
@@ -37,6 +44,7 @@ export async function handleIssueAnswerThreadShareRequest(request: Request, thre
       threadId,
       pseudonymousSessionId,
       sourceWriteRequest: request,
+      sourceWriteBody: boundedBody.text,
     })
     return jsonResponse({ sharePath: `/s/${result.shareToken}` })
   } catch (error) {
@@ -45,6 +53,11 @@ export async function handleIssueAnswerThreadShareRequest(request: Request, thre
 }
 
 export async function handleRevokeAnswerThreadShareRequest(request: Request, threadId: string): Promise<Response> {
+  const boundedBody = await readBoundedRequestText(request, MAX_ANSWER_THREAD_WRITE_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: boundedBody.code })
+  }
+
   const pseudonymousSessionId = readAnswerSessionId(request)
   if (pseudonymousSessionId === undefined) {
     return problem({ kind: 'NOT_FOUND', code: 'thread_not_found' })
@@ -55,6 +68,7 @@ export async function handleRevokeAnswerThreadShareRequest(request: Request, thr
       threadId,
       pseudonymousSessionId,
       sourceWriteRequest: request,
+      sourceWriteBody: boundedBody.text,
     })
     return jsonResponse({ threadId: result.threadId, revoked: result.revoked })
   } catch (error) {

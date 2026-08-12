@@ -29,6 +29,7 @@ export type OfferingSourceOperation = Readonly<{
   operationKey: string
   requestHash: SourceHash
   resultRef: string
+  resultHash?: SourceHash
 }>
 
 export type OfferingFactsInput = Readonly<{
@@ -99,7 +100,7 @@ export function createOfferingInState(state: OfferingSourceState, command: Reado
     sourceHash, createdAt: command.now,
   }
   return succeed(state, 'created', offering, [...state.offerings, offering], [...state.revisions, revision], state.accessPaths,
-    operation(command.authority.ownerRef, 'createOffering', command.operationKey, requestHash, command.offeringRef))
+    operation(command.authority.ownerRef, 'createOffering', command.operationKey, requestHash, command.offeringRef, revision.revision))
 }
 
 export function reviseOfferingInState(state: OfferingSourceState, command: Readonly<{
@@ -128,7 +129,7 @@ export function reviseOfferingInState(state: OfferingSourceState, command: Reado
     offeringRef: current.offeringRef, businessId: current.businessId, revision: revisionNumber, ...facts, sourceHash, createdAt: command.now,
   }
   return succeed(state, 'revised', offering, replaceOffering(state.offerings, offering), [...state.revisions, revision], state.accessPaths,
-    operation(command.authority.ownerRef, 'reviseOffering', command.operationKey, requestHash, command.offeringRef))
+    operation(command.authority.ownerRef, 'reviseOffering', command.operationKey, requestHash, command.offeringRef, revision.revision))
 }
 
 export function changeOfferingStatusInState(state: OfferingSourceState, command: Readonly<{
@@ -150,7 +151,7 @@ export function changeOfferingStatusInState(state: OfferingSourceState, command:
   if (current.currentRevision !== command.expectedRevision) return fail(state, 'revision_conflict', 'Offering changed since it was loaded.')
   const offering = { ...current, status: command.status, updatedAt: command.now }
   return succeed(state, 'status_changed', offering, replaceOffering(state.offerings, offering), state.revisions, state.accessPaths,
-    operation(command.authority.ownerRef, 'changeOfferingStatus', command.operationKey, requestHash, command.offeringRef))
+    operation(command.authority.ownerRef, 'changeOfferingStatus', command.operationKey, requestHash, command.offeringRef, current.currentRevision))
 }
 
 export function upsertAccessPathInState(state: OfferingSourceState, command: Readonly<{
@@ -190,7 +191,7 @@ export function upsertAccessPathInState(state: OfferingSourceState, command: Rea
   }
   const paths = existing ? state.accessPaths.map((item) => item.accessPathRef === path.accessPathRef ? path : item) : [...state.accessPaths, path]
   return succeed(state, 'access_path_upserted', path, state.offerings, state.revisions, paths,
-    operation(command.authority.ownerRef, 'upsertAccessPath', command.operationKey, requestHash, command.accessPathRef))
+    operation(command.authority.ownerRef, 'upsertAccessPath', command.operationKey, requestHash, command.accessPathRef, offering.currentRevision))
 }
 
 export function withdrawAccessPathInState(state: OfferingSourceState, command: Readonly<{
@@ -214,7 +215,7 @@ export function withdrawAccessPathInState(state: OfferingSourceState, command: R
   const withdrawn = { ...path, status: 'withdrawn' as const, updatedAt: command.now }
   return succeed(state, 'access_path_withdrawn', withdrawn, state.offerings, state.revisions,
     state.accessPaths.map((item) => item.accessPathRef === path.accessPathRef ? withdrawn : item),
-    operation(command.authority.ownerRef, 'withdrawAccessPath', command.operationKey, requestHash, command.accessPathRef))
+    operation(command.authority.ownerRef, 'withdrawAccessPath', command.operationKey, requestHash, command.accessPathRef, offering.currentRevision))
 }
 
 function authorize(state: OfferingSourceState, authority: Authority): OfferingSourceResult<never> | undefined {
@@ -248,16 +249,39 @@ function hash(command: unknown): SourceHash {
   const { now: _now, ...stableCommand } = command as Record<string, unknown>
   return canonicalDigest(stableCommand as never) as SourceHash
 }
-function operation(actorRef: string, operationName: string, operationKey: string, requestHash: SourceHash, resultRef: string): OfferingSourceOperation {
-  return { actorRef, operationName, operationKey, requestHash, resultRef }
+function operation(actorRef: string, operationName: string, operationKey: string, requestHash: SourceHash, resultRef: string, resultRevision: number): OfferingSourceOperation {
+  return {
+    actorRef,
+    operationName,
+    operationKey,
+    requestHash,
+    resultRef,
+    resultHash: canonicalDigest({ resultRef, revision: resultRevision }) as SourceHash,
+  }
 }
 function replayOperation(state: OfferingSourceState, actorRef: string, operationName: string, operationKey: string, requestHash: SourceHash): OfferingSourceResult<unknown> | undefined {
   const existing = state.operations.find((item) => item.actorRef === actorRef && item.operationName === operationName && item.operationKey === operationKey)
   if (!existing) return undefined
   if (existing.requestHash !== requestHash) return fail(state, 'operation_conflict', 'Operation key was already used for another request.')
+  const currentRevision = resultRevision(state, existing.resultRef)
+  if (
+    existing.resultHash === undefined
+    || currentRevision === undefined
+    || existing.resultHash !== canonicalDigest({ resultRef: existing.resultRef, revision: currentRevision })
+  ) {
+    return fail(state, 'revision_conflict', 'Offering changed since the operation was committed.')
+  }
   const value = state.offerings.find((item) => item.offeringRef === existing.resultRef)
     ?? state.accessPaths.find((item) => item.accessPathRef === existing.resultRef)
   return value ? { kind: 'ok', code: 'replayed', value, state } : fail(state, 'operation_conflict', 'Operation replay target is unavailable.')
+}
+function resultRevision(state: OfferingSourceState, resultRef: string): number | undefined {
+  const offering = state.offerings.find((item) => item.offeringRef === resultRef)
+  if (offering !== undefined) return offering.currentRevision
+  const path = state.accessPaths.find((item) => item.accessPathRef === resultRef)
+  return path === undefined
+    ? undefined
+    : state.offerings.find((item) => item.offeringRef === path.offeringRef)?.currentRevision
 }
 function replaceOffering(items: readonly BusinessOfferingRecord[], value: BusinessOfferingRecord) { return items.map((item) => item.offeringRef === value.offeringRef ? value : item) }
 function fail(state: OfferingSourceState, code: OfferingSourceErrorCode, reason: string): OfferingSourceResult<never> { return { kind: 'error', code, reason, state } }

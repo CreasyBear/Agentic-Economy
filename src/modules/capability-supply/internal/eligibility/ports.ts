@@ -4,6 +4,10 @@ import type { PublicOperationRef } from '../../public'
 import type { ProviderConnection } from '../../provider-connection'
 import type { CapabilityContractRef, CapabilityOfferingRow } from '../offering'
 import type { CapabilityPublicationLifecycleRow } from '../publication'
+import type {
+  SuppliedCandidateQualification,
+  SuppliedCandidateRef,
+} from '../graph'
 export type EligiblePublishedBusiness = Readonly<{
   businessId: string
 }>
@@ -52,6 +56,10 @@ export type EligibleSupplyPorts = Readonly<{
   getActiveExactCapabilityContract: (
     ref: CapabilityContractRef,
   ) => Promise<ActiveExactCapabilityContractResult>
+  qualifySuppliedCandidate: (
+    candidate: SuppliedCandidateRef,
+    now: number,
+  ) => Promise<SuppliedCandidateQualification>
   loadCurrentPublicationByBindingId: (
     bindingId: string,
   ) => Promise<EligiblePublicationRow | null>

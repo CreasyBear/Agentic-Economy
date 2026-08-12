@@ -8,6 +8,7 @@
  * `boundary-prose.ts` without an LLM call.
  */
 
+export type { AnswerToolUseAgentCheckpoint } from './internal/answer-tool-use-agent'
 export {
   runAnswerGate,
   type AnswerGateResult,
@@ -23,14 +24,18 @@ export {
 } from './internal/copy-guard-patterns'
 export { neutralizeBidiFormattingControls } from './projection'
 export {
-  assembleAnswerEvidence,
-  type AssembledAnswerEvidence,
-} from './internal/evidence-assembler'
-export {
+  ANSWER_OPERATION_INPUT_MAX_BYTES,
   filterKeylessDataAskCandidates,
+  keylessDataAskFromCandidates,
   resolveKeylessDataAsk,
+  resolveKeylessDataAskSelection,
+  parseAnswerOperationSelectionInput,
+  type KeylessDataAskDecision,
+  type KeylessDataAskDecisionCandidate,
   type KeylessDataAskResolution,
+  type AnswerOperationSelectionInput,
 } from './internal/keyless-data-ask'
+export { answerOperationCandidateFromPublicDescriptor } from './internal/operation-artifacts'
 export {
   AnswerProseSchema,
   type AnswerProse,
@@ -131,12 +136,18 @@ export {
 export {
   AnswerArtifactKindValues,
   AnswerArtifactSchema,
-  AnswerCompareFieldSchema,
+  AnswerOperationCandidateSchema,
+  AnswerOperationOutcomeSchema,
+  AnswerOperationSelectionSchema,
+  answerOperationCandidateSetDigest,
   AnswerSourceSchema,
   AeAnswerArtifactsSchema,
   WebDiscoveryClaimSchema,
   type AnswerArtifact,
   type AnswerCompareField,
+  type AnswerOperationCandidate,
+  type AnswerOperationOutcome,
+  type AnswerOperationSelection,
   type AeAnswerArtifacts,
 } from './answer-schema'
 

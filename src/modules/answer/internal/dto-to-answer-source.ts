@@ -35,6 +35,10 @@ export function toAnswerSource(
   dto: PublicBusinessCatalogApiV2Dto,
   citationIndex: number,
 ) {
+  const localHumanContext = dto.businessContext.kind === 'local_human'
+    ? dto.businessContext
+    : undefined
+
   // V1 `firstRequest.mode === 'inquiry_available'` ⟷ an AE-inquiry human request
   // path. Any other human request path (phone / website) is still a published
   // first-contact route, just not one AE hosts.
@@ -60,8 +64,8 @@ export function toAnswerSource(
     slug: dto.slug,
     name: dto.name,
     category: dto.category,
-    suburb: dto.suburb,
-    stateTerritory: dto.stateTerritory,
+    suburb: localHumanContext?.suburb ?? '',
+    stateTerritory: localHumanContext?.stateTerritory ?? '',
     serviceArea: serviceArea ?? '',
     hoursLabel: plainHoursLabel(availabilitySummary ?? dto.offerings[0]?.availabilitySummary),
     availabilityLabel: plainAvailabilityLabel({
@@ -78,7 +82,7 @@ export function toAnswerSource(
         : { responseTimeMinutes: dto.responseTimeMinutes }),
     }),
     ...(primaryPhoto === undefined ? {} : { photoUrl: primaryPhoto.url }),
-    ...(dto.publishedPhone === undefined ? {} : { publishedPhone: dto.publishedPhone }),
+    ...(localHumanContext?.publishedPhone === undefined ? {} : { publishedPhone: localHumanContext.publishedPhone }),
     ...(pricingSummary === undefined ? {} : { pricingSummary }),
     ...(availabilitySummary === undefined ? {} : { availabilitySummary }),
     freshnessLabel: plainFreshnessLabel(dto.observedAt),

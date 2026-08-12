@@ -5,16 +5,29 @@ import type {
   AnswerSnapshot,
 } from '@/modules/answer/public'
 import type { AeSearchContext } from '@/modules/answer/search-context'
-import type { AnswerTurnReservationRecord } from '@/modules/answer-thread/answer-thread.schema'
-import { answerTurnRequestDigest, streamAnswerTurn } from '@/modules/answer-thread/server'
-import { reserveAnswerTurn } from '@/modules/answer-thread/answer-thread.functions'
-import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
+import type {
+  KeylessExecutableSourcePort,
+  KeylessExecutableToolDescriptor,
+  OperationExecutableDescriptor,
+} from '@/modules/capability-execution'
 import {
   setAnswerHarnessFinalizerForTests,
-  type AnswerHarnessFinalizerInput,
 } from '@/modules/answer-thread/testing'
+import {
+  answerTurnRequestDigest,
+  reserveAnswerTurn,
+  streamAnswerTurn,
+} from '@/modules/answer-thread/server'
 import type { AnswerToolCallRecord, FrozenTurnEvidence } from '@/modules/answer-thread/harness'
+import type { AnswerTurnReservationRecord } from '@/modules/answer-thread/answer-thread.schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  getPublicBusinessOfferingSupplyBySlug,
+  listPublicBusinessOfferingSupply,
+  resolvePublishedInquiryTarget,
+  searchPublicBusinessOfferingSupply,
+} from '@/modules/registry/public'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import {
   buildHarnessRunReport,
   HarnessRunPhaseValues,
@@ -26,6 +39,8 @@ import {
 } from '@/modules/answer-thread/internal/answer-turn-finalization'
 import { runAnswerHarnessOperation } from '@/modules/answer-thread/internal/answer-harness-operation'
 import { createAnswerThreadTestStore, installAnswerThreadTestPort } from '../../helpers/answer-thread-test-port'
+import { createLocalE2eRegistrySourceState } from '../../helpers/registry-local-e2e'
+import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
@@ -192,23 +207,7 @@ describe('answer harness operation persistence bridge', () => {
     }
     store.reservations.set(reservation.reservationKey, reservation)
     resets.push(installAnswerThreadTestPort(store))
-    const finalizationWrites: AnswerHarnessFinalizerInput[] = []
-    resets.push(setAnswerHarnessFinalizerForTests(async (write) => {
-      finalizationWrites.push(write)
-      const turn = store.turns.get(write.turnId)
-      if (turn !== undefined) {
-        store.turns.set(write.turnId, { ...turn, evidenceJson: write.evidenceJson, status: write.finalStatus })
-      }
-      const activeLeafEntryId = write.entries.at(-1)?.entryId
-      return {
-        status: 'accepted',
-        turnId: write.turnId,
-        finalizationHash: write.finalizationHash,
-        entriesAccepted: write.entries.length,
-        entriesReplayed: 0,
-        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
-      }
-    }))
+    const finalizationWrites = store.finalizationWrites
 
     const persistInput = {
       sessionId: 'session-live',
@@ -218,12 +217,12 @@ describe('answer harness operation persistence bridge', () => {
       reservationKey: 'reservation-live',
       createdAt: 1_000,
       requestDigest: 'digest-live',
+      expectedGeneration: 0,
       turnId: 'turn-live',
       turnSeq: 1,
       query: 'plumber Preston',
       intent: 'refine_search' as const,
       captured: answerSnapshot(),
-      errorCopyId: undefined,
       toolCalls: [
         toolCall('tc-search', 1, 'registry.search', 'complete', canonicalDigest('search')),
       ],
@@ -250,6 +249,7 @@ describe('answer harness operation persistence bridge', () => {
         method: 'POST',
         headers: { 'X-AE-Turn-Key': 'harness:persist-live' },
       }),
+      sourceWriteBody: '',
     }
     const persisted = await persistAnswerTurnWithResult(persistInput)
     expect(persisted.ok).toBe(true)
@@ -259,11 +259,18 @@ describe('answer harness operation persistence bridge', () => {
       harnessRun: persisted.harnessRun,
     })
     expect(finalization.status).toBe('accepted')
-    const conflictingPersist = await persistAnswerTurnWithResult({
+    const conflictingInput = {
       ...persistInput,
       captured: { ...answerSnapshot(), summary: 'Materially changed answer.' },
+    }
+    const conflictingPersist = await persistAnswerTurnWithResult(conflictingInput)
+    expect(conflictingPersist.ok).toBe(true)
+    const conflictingFinalization = await finalizePersistedAnswerTurnHarnessRun({
+      input: conflictingInput,
+      persistResult: conflictingPersist,
+      harnessRun: conflictingPersist.harnessRun,
     })
-    expect(conflictingPersist).toMatchObject({ ok: false, failure: 'conflict' })
+    expect(conflictingFinalization).toMatchObject({ status: 'conflict' })
 
     const stored = store.turns.get('turn-live')
     expect(stored).toBeDefined()
@@ -297,7 +304,7 @@ describe('answer harness operation persistence bridge', () => {
       'turn.persisted',
       'run.reported',
     ])
-    expect(finalizationWrites.every((write) => write.request.method === 'POST')).toBe(true)
+    expect(finalizationWrites.every((write) => write.sourceWriteRequest?.method === 'POST')).toBe(true)
 
     const publicSummaries = JSON.stringify(journalEntries.map((entry) => entry.publicSummaryJson))
     expect(publicSummaries).not.toContain('registry.search')
@@ -311,29 +318,16 @@ describe('answer harness operation persistence bridge', () => {
   it('streams answer turns through the live harness loop and journals runtime events directly', async () => {
     const store = createAnswerThreadTestStore()
     const turns = store.turns
-    const finalizationWrites: AnswerHarnessFinalizerInput[] = []
+    const finalizationWrites = store.finalizationWrites
     const events: AnswerEvent[] = []
 
     resets.push(installAnswerThreadTestPort(store))
-    resets.push(setAnswerHarnessFinalizerForTests(async (write) => {
-      finalizationWrites.push(write)
-      const turn = turns.get(write.turnId)
-      if (turn !== undefined) {
-        turns.set(write.turnId, {
-          ...turn,
-          evidenceJson: write.evidenceJson,
-          status: write.finalStatus,
-        })
-      }
-      const activeLeafEntryId = write.entries.at(-1)?.entryId
-      return {
-        status: 'accepted',
-        turnId: write.turnId,
-        finalizationHash: write.finalizationHash,
-        entriesAccepted: write.entries.length,
-        entriesReplayed: 0,
-        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
-      }
+    const registryState = createLocalE2eRegistrySourceState()
+    resets.push(setPublicRegistrySourcePortForTests({
+      list: (input) => Promise.resolve(listPublicBusinessOfferingSupply(registryState, input)),
+      search: (input) => Promise.resolve(searchPublicBusinessOfferingSupply(registryState, input)),
+      detail: (input) => Promise.resolve(getPublicBusinessOfferingSupplyBySlug(registryState, input)),
+      resolveInquiryTarget: (input) => Promise.resolve(resolvePublishedInquiryTarget(registryState, input)),
     }))
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [
@@ -377,6 +371,7 @@ describe('answer harness operation persistence bridge', () => {
             method: 'POST',
             headers: { 'X-AE-Turn-Key': 'harness:stream-live' },
           }),
+          sourceWriteBody: '',
           keylessExecutableSource: emptyKeylessSource,
         },
         ({ event }) => events.push(event),
@@ -415,8 +410,8 @@ describe('answer harness operation persistence bridge', () => {
     const reportedReport = JSON.parse(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson ?? '{}').harnessRun
     expect(reportedReport?.summary.run.status).toBe('ok')
     expect(reportedReport?.summary.tools.byName['registry.search']).toMatchObject({
-      total: 2,
-      ok: 2,
+      total: 1,
+      ok: 1,
     })
     // The safety preflight is the first model request; the agent then performs
     // one tool round and one tool-less prose round.
@@ -448,8 +443,6 @@ describe('answer harness operation persistence bridge', () => {
       'intent.routed',
       'tool.started',
       'tool.completed',
-      'tool.started',
-      'tool.completed',
       'gate.evaluated',
       'turn.persisted',
       'run.reported',
@@ -457,8 +450,8 @@ describe('answer harness operation persistence bridge', () => {
     expect(journalKinds.filter((kind) => kind === 'model.started')).toHaveLength(1)
     expect(journalKinds.filter((kind) => kind === 'model.completed')).toHaveLength(1)
     expect(journalKinds.filter((kind) => kind === 'intent.routed')).toHaveLength(2)
-    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(2)
-    expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(2)
+    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(1)
+    expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(1)
     expect(journalKinds).not.toContain('tool.failed')
     expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
     expect(finalizationWrites[0]?.finalizationHash).toMatch(/^sha256:[0-9a-f]{64}$/)
@@ -484,14 +477,57 @@ describe('answer harness operation persistence bridge', () => {
       reason: 'foreign_origin',
       message: 'forced finalization denial',
     })))
+    const query = 'what is the current test value for Sydney?'
+    const operationRef = `operation:v1:${'f'.repeat(64)}`
+    const descriptor: KeylessExecutableToolDescriptor = {
+      operationRef,
+      capabilityId: 'test.current-value',
+      name: 'Test current value',
+      summary: 'Return the current test value for a city.',
+      searchTerms: ['current test value', 'test value'],
+      inputExamples: [{ label: 'Sydney', input: { city: 'Sydney' } }],
+      inputSchema: {
+        type: 'object',
+        properties: { city: { type: 'string' } },
+        required: ['city'],
+        additionalProperties: false,
+      },
+    }
+    const executable: OperationExecutableDescriptor = {
+      operationRef,
+      capabilityId: descriptor.capabilityId,
+      name: descriptor.name,
+      endpointUrl: 'https://api.example.test/current',
+      authority: { kind: 'keyless' },
+      adapterId: 'http-json:v1',
+      price: {
+        kind: 'fixed',
+        amount: { currency: 'USD', units: '0', exponent: 2 },
+      },
+      effects: [],
+      method: 'GET',
+      query: [{ inputPointer: '/city', parameter: 'city' }],
+      requestTimeoutMs: 5_000,
+      inputSchema: descriptor.inputSchema,
+      provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+    }
+    const source: KeylessExecutableSourcePort = {
+      list: async () => [descriptor],
+      read: async () => executable,
+      search: async () => [operationRef],
+    }
+    const operationToolName = openRouterToolName(`capability.${operationRef}`)
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [
-        { toolId: 'registry.search', input: { query: 'parramatta', limit: 3 } },
+        {
+          toolId: operationToolName,
+          input: { city: 'Sydney' },
+        },
       ],
       prose: {
-        oneLine: 'One listed business matches.',
-        summary: 'Parramatta Emergency Plumbing publishes emergency plumbing services. Scope, price, and current availability still need confirmation.',
-        whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
+        oneLine: 'The current test value for Sydney is 42.',
+        summary: 'The successful operation returned the current test value.',
+        whatToDoNow: 'Use the returned value.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -502,15 +538,20 @@ describe('answer harness operation persistence bridge', () => {
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
     const requestDigest = answerTurnRequestDigest({
-      query: 'parramatta plumber',
+      query,
       searchContext: { mode: 'whole_catalogue', allowOutsideArea: true },
     })
+    const fetchImpl = async () =>
+      new Response(JSON.stringify({ value: '42' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
     const admission = await reserveAnswerTurn({
       sessionId: 'session-stream-finalization-fail',
-      query: 'parramatta plumber',
+      query,
       requestDigest,
       reservationKey: 'harness:stream-finalization-fail',
-      title: 'parramatta plumber',
+      title: query,
     })
     if (admission.kind !== 'reserved') throw new Error(`fixture reservation ${admission.kind}`)
 
@@ -518,7 +559,7 @@ describe('answer harness operation persistence bridge', () => {
       await streamAnswerTurn(
         {
           sessionId: 'session-stream-finalization-fail',
-          query: 'parramatta plumber',
+          query,
           requestDigest,
           admission,
           searchContext: { mode: 'whole_catalogue', allowOutsideArea: true },
@@ -526,7 +567,9 @@ describe('answer harness operation persistence bridge', () => {
             method: 'POST',
             headers: { 'X-AE-Turn-Key': 'harness:stream-finalization-fail' },
           }),
-          keylessExecutableSource: emptyKeylessSource,
+          sourceWriteBody: '',
+          keylessExecutableSource: source,
+          operationExecuteDeps: { isPublicTarget: async () => true, fetchImpl },
         },
         ({ event }) => events.push(event),
       )
@@ -557,12 +600,20 @@ describe('answer harness operation persistence bridge', () => {
     const reservationRow = store.reservations.get(admission.reservationKey)
     expect(stored?.status).toBe('error')
     expect(reservationRow).toMatchObject({ state: 'finalized', finalStatus: 'error' })
+    const persistedEvidence = JSON.parse(stored?.evidenceJson ?? '{}') as {
+      operationCandidates?: unknown
+      operationOutcome?: unknown
+      operationSelection?: unknown
+    }
+    expect(persistedEvidence.operationCandidates).toEqual(expect.any(Array))
+    expect(persistedEvidence.operationOutcome).toEqual(expect.any(Object))
+    expect(persistedEvidence.operationSelection).toEqual(expect.any(Object))
     const replay = await reserveAnswerTurn({
       sessionId: 'session-stream-finalization-fail',
-      query: 'parramatta plumber',
+      query,
       requestDigest,
       reservationKey: 'harness:stream-finalization-fail',
-      title: 'parramatta plumber',
+      title: query,
     })
     expect(replay).toMatchObject({ kind: 'replayed', state: 'finalized', finalStatus: 'error' })
   })
@@ -633,6 +684,7 @@ describe('answer harness operation persistence bridge', () => {
             method: 'POST',
             headers: { 'X-AE-Turn-Key': 'harness:transient-persist' },
           }),
+          sourceWriteBody: '',
           keylessExecutableSource: emptyKeylessSource,
         },
         ({ event }) => events.push(event),
@@ -712,6 +764,7 @@ describe('answer harness operation persistence bridge', () => {
             method: 'POST',
             headers: { 'X-AE-Turn-Key': 'harness:stream-phase-failure' },
           }),
+          sourceWriteBody: '',
           keylessExecutableSource: emptyKeylessSource,
         },
         ({ event }) => {

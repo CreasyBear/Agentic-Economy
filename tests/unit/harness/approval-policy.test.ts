@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { SOURCE_WRITE_NO_BODY_DIGEST } from '@/modules/security/source-write-admission'
+
 import {
   HarnessApprovalModeValues,
   resolveHarnessApprovalPolicy,
@@ -209,9 +211,11 @@ function sourceWriteContext() {
   return {
     sourceWriteRequest: {
       method: 'POST',
-      origin: 'https://ae.example',
-      pathname: '/v1/route',
-      bodyDigest: 'none',
+      initiatorOrigin: 'https://ae.example',
+      targetOrigin: 'https://ae.example',
+      targetPath: '/v1/route',
+      targetQuery: '',
+      bodyDigest: SOURCE_WRITE_NO_BODY_DIGEST,
     },
     agentToolAdmission: {
       toolId: 'inquiry.submit',

@@ -2,22 +2,29 @@ import { describe, expect, it, vi } from 'vitest'
 
 const sourceMocks = vi.hoisted(() => ({
   callPublicSourceQuery: vi.fn(),
+  createConvexServerFunctionAssertion: vi.fn(async () => ({
+    principalId: 'ae:server-function',
+    ownerId: 'ae:server-function',
+    credentialId: 'ae:server-function',
+    scopes: ['capability_supply:read_executable'],
+    issuedAt: 1,
+    signature: 'test-signature',
+  })),
 }))
 
 vi.mock('@/lib/server/convex-source', () => ({
   callPublicSourceQuery: sourceMocks.callPublicSourceQuery,
+  createConvexServerFunctionAssertion: sourceMocks.createConvexServerFunctionAssertion,
   sourceQuery: (name: string) => ({ name }),
 }))
 
 import {
   executeOperation,
+  operationExecutionBindingDigest,
   type OperationExecutableDescriptor,
   type OperationExecuteResult,
 } from '@/modules/capability-execution/operation-execute.functions'
-import {
-  convexKeylessExecutableSource,
-  seedKeylessExecutableSource,
-} from '@/modules/capability-execution/operation-execute.actions'
+import { convexKeylessExecutableSource } from '@/modules/capability-execution/operation-execute.actions'
 import {
   CURATED_PROVIDER_PUBLICATIONS,
   isPublicOperationRef,
@@ -27,7 +34,8 @@ import {
   deriveKeylessDescriptors,
   seededDescriptorFor,
   seededKeylessSeeds,
-} from '@/modules/capability-execution/seed-supply'
+  seedKeylessExecutableSource,
+} from '../../helpers/keyless-seed-source'
 
 const FX = {
   operationRef: 'operation:v1:' + 'a'.repeat(64),
@@ -37,9 +45,11 @@ const FX = {
   authority: { kind: 'keyless' },
   adapterId: 'http-json:v1',
   method: 'GET',
+  price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
+  effects: [],
   query: [
-    { inputPointer: '/from', parameter: 'from' },
-    { inputPointer: '/to', parameter: 'to' },
+    { inputPointer: '/from', parameter: 'from', required: true, style: 'form', explode: false },
+    { inputPointer: '/to', parameter: 'to', required: true, style: 'form', explode: false },
   ],
   requestTimeoutMs: 10_000,
   inputSchema: {
@@ -90,6 +100,58 @@ describe('operation.execute executor (pure, DB-driven)', () => {
     expect(lastUrl).toContain('from=EUR')
     expect(lastUrl).toContain('to=USD')
   })
+  it('refuses a paid keyless descriptor before network access', async () => {
+    const paid: OperationExecutableDescriptor = {
+      ...FX,
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
+    }
+    const fetch = vi.fn()
+    const { result } = await run(paid, { from: 'EUR', to: 'USD' }, fetch as unknown as FetchFn)
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_executable',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('enforces the DB response status before exact base media and body validation', async () => {
+    const descriptor: OperationExecutableDescriptor = {
+      ...FX,
+      responseStatus: 201,
+      responseContentType: 'application/json',
+    }
+    const wrongStatus = await run(descriptor, { from: 'EUR', to: 'USD' }, () => Promise.resolve(
+      new Response('not-json', {
+        status: 200,
+        headers: { 'content-type': 'application/json-invalid' },
+      }),
+    ))
+    expect(wrongStatus.result).toMatchObject({
+      kind: 'error',
+      code: 'response_invalid',
+      reason: 'The operation returned HTTP 200; expected HTTP 201.',
+    })
+
+    const accepted = await run(descriptor, { from: 'EUR', to: 'USD' }, () => Promise.resolve(
+      new Response(JSON.stringify({ base: 'EUR', date: '2026-01-01', rates: { USD: 1.08 } }), {
+        status: 201,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      }),
+    ))
+    expect(accepted.result.kind).toBe('ok')
+
+    const wrongMedia = await run(descriptor, { from: 'EUR', to: 'USD' }, () => Promise.resolve(
+      new Response(JSON.stringify({ base: 'EUR', date: '2026-01-01', rates: { USD: 1.08 } }), {
+        status: 201,
+        headers: { 'content-type': 'application/json-invalid' },
+      }),
+    ))
+    expect(wrongMedia.result).toMatchObject({
+      kind: 'error',
+      code: 'response_invalid',
+      reason: 'The operation did not return application/json.',
+    })
+  })
 
   it('refuses a readable operation ref before reading the descriptor or network', async () => {
     const readDescriptorPort = vi.fn()
@@ -120,6 +182,60 @@ describe('operation.execute executor (pure, DB-driven)', () => {
     )
 
     expect(result).toEqual({ kind: 'refused', operationRef: FX.operationRef, reason: 'operation_not_found' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('refuses a binding changed after selection before provider dispatch', async () => {
+    const replacement: OperationExecutableDescriptor = {
+      ...FX,
+      endpointUrl: 'https://replacement.example.test/current',
+      inputSchema: {
+        ...FX.inputSchema,
+        properties: { from: { type: 'string' }, to: { type: 'number' } },
+      },
+    }
+    let current: OperationExecutableDescriptor = FX
+    const readDescriptor = vi.fn(async () => current)
+    const selected = await readDescriptor()
+    const expectedExecutionBindingDigest = operationExecutionBindingDigest(selected)
+    current = replacement
+    const fetch = vi.fn()
+    const isPublicTarget = vi.fn(async () => true)
+
+    const result = await executeOperation(
+      { operationRef: FX.operationRef, input: { from: 'EUR', to: 'USD' } },
+      { readDescriptor, isPublicTarget, fetchImpl: fetch as unknown as FetchFn },
+      expectedExecutionBindingDigest,
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_executable',
+    })
+    expect(readDescriptor).toHaveBeenCalledTimes(2)
+    expect(isPublicTarget).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('refuses malformed executable material before digest or provider dispatch', async () => {
+    const malformed = { ...FX, price: undefined } as unknown as OperationExecutableDescriptor
+    const fetch = vi.fn()
+    const isPublicTarget = vi.fn(async () => true)
+
+    const result = await executeOperation(
+      { operationRef: FX.operationRef, input: { from: 'EUR', to: 'USD' } },
+      {
+        readDescriptor: async () => malformed,
+        isPublicTarget,
+        fetchImpl: fetch as unknown as FetchFn,
+      },
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_executable',
+    })
+    expect(isPublicTarget).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -224,8 +340,8 @@ describe('operation.execute executor (pure, DB-driven)', () => {
       },
     }
     let lastUrl: URL | undefined
-    const fetch = (url: URL | RequestInfo) => {
-      lastUrl = new URL(String(url))
+    const fetch: FetchFn = (input, _init) => {
+      lastUrl = new URL(String(input))
       return Promise.resolve(new Response(JSON.stringify({ ip: '203.0.113.5' }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -234,6 +350,58 @@ describe('operation.execute executor (pure, DB-driven)', () => {
     const { result } = await run(ipify, {}, fetch)
     expect(result.kind).toBe('ok')
     expect(lastUrl?.searchParams.get('format')).toBe('json')
+  })
+  it('executes a safe keyless POST descriptor with mapped query parameters', async () => {
+    const descriptor: OperationExecutableDescriptor = {
+      ...FX,
+      method: 'POST',
+      endpointUrl: 'https://api.example.test/query-only',
+      query: [{ inputPointer: '/query', parameter: 'query', required: true, style: 'form', explode: true }],
+      inputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    }
+    const fetch = vi.fn(async (input: URL | string, init?: RequestInit) => {
+      expect(new URL(String(input)).searchParams.get('query')).toBe('hello')
+      expect(init?.method).toBe('POST')
+      expect(init?.body).toBeUndefined()
+      return new Response(JSON.stringify({ result: 'safe' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      })
+    })
+    const { result } = await run(descriptor, { query: 'hello' }, fetch as unknown as FetchFn)
+
+    expect(result.kind).toBe('ok')
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('refuses a consequential keyless POST descriptor before network access', async () => {
+    const descriptor: OperationExecutableDescriptor = {
+      ...FX,
+      method: 'POST',
+      effects: [{ class: 'external_state_change', authority: 'mandate_or_explicit' }],
+    }
+    const fetch = vi.fn()
+    const { result } = await run(descriptor, { from: 'EUR', to: 'USD' }, fetch as unknown as FetchFn)
+
+    expect(result).toMatchObject({ kind: 'refused', reason: 'operation_not_executable' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('refuses an effectful GET descriptor before network access', async () => {
+    const descriptor: OperationExecutableDescriptor = {
+      ...FX,
+      effects: [{ class: 'external_state_change', authority: 'mandate_or_explicit' }],
+    }
+    const fetch = vi.fn()
+    const { result } = await run(descriptor, { from: 'EUR', to: 'USD' }, fetch as unknown as FetchFn)
+
+    expect(result).toMatchObject({ kind: 'refused', reason: 'operation_not_executable' })
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
 
@@ -333,8 +501,8 @@ describe('canonical seed operation references', () => {
       operationRef: expect.stringMatching(/^operation:v1:[0-9a-f]{64}$/),
       capabilityId: 'frankfurter.single-rate',
       query: [
-        { inputPointer: '/base', parameter: 'base' },
-        { inputPointer: '/quote', parameter: 'quotes' },
+        { inputPointer: '/base', parameter: 'base', required: true, style: 'form', explode: true },
+        { inputPointer: '/quote', parameter: 'quotes', required: true, style: 'form', explode: true },
       ],
       inputSchema: {
         properties: { base: expect.any(Object), quote: expect.any(Object) },
@@ -394,6 +562,7 @@ describe('canonical seed operation references', () => {
 
   it('accepts canonical DB identities and hides noncanonical DB rows', async () => {
     sourceMocks.callPublicSourceQuery.mockReset()
+    sourceMocks.createConvexServerFunctionAssertion.mockClear()
     const descriptors = await deriveKeylessDescriptors()
     const descriptor = descriptors[0]!
     const noncanonicalRef = `operation:v1:${descriptor.capabilityId}`
@@ -409,6 +578,11 @@ describe('canonical seed operation references', () => {
       ...(outputSchema === undefined ? {} : { outputSchemaJson: JSON.stringify(outputSchema) }),
     })
     await expect(convexKeylessExecutableSource.read(descriptor.operationRef)).resolves.toEqual(descriptor)
+    expect(sourceMocks.createConvexServerFunctionAssertion).toHaveBeenCalledWith({
+      operation: 'capabilitySupplyOperations:readKeylessExecutable',
+      scope: 'capability_supply:read_executable',
+      command: { operationRef: descriptor.operationRef },
+    })
 
     sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({
       ...wireDescriptor,

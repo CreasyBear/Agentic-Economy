@@ -43,7 +43,7 @@ const obsoleteComparison = {
 } as const
 
 const currentProjection = (businessId: Id<'businesses'>, slug: string) => ({
-  business: { businessId, slug, name: 'Legacy-compatible business', category: 'Emergency plumbing', suburb: 'Perth', stateTerritory: 'WA', publicUrl: `/${slug}`, trustTier: 'listed' as const },
+  business: { businessId, slug, name: 'Legacy-compatible business', category: 'Emergency plumbing', businessContext: { kind: 'local_human' as const, suburb: 'Perth', stateTerritory: 'WA' }, publicUrl: `/${slug}`, trustTier: 'listed' as const },
   offerings: [{ offering: { offeringRef: 'offering:legacy:pipe', revision: 1, name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'Emergency plumbing help.' }, accessPaths: [], support: { integrated: false, routeable: false, reasons: [] } }],
   sourceRevision: 1,
   sourceDigest: 'digest:projection',
@@ -603,7 +603,7 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
       await ctx.db.insert('discoveryManifests', legacyDiscoveryManifestRow(businessId, 'legacy-discovery-replace'))
     })
 
-    const generated = await owner.mutation(api.discovery.regenerateDiscoveryManifest, withSourceWrite('discovery_repair', {
+    const generated = await owner.mutation(api.discovery.regenerateDiscoveryManifest, await withSourceWrite('discovery_repair', {
       businessId,
       canonicalBaseUrl: 'https://ae.example',
       operationKey: 'op:discovery:legacy-replace',
@@ -619,7 +619,7 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
         sourceVersion: 'public-catalog:v1',
       },
     })
-    const replayed = await owner.mutation(api.discovery.regenerateDiscoveryManifest, withSourceWrite('discovery_repair', {
+    const replayed = await owner.mutation(api.discovery.regenerateDiscoveryManifest, await withSourceWrite('discovery_repair', {
       businessId,
       canonicalBaseUrl: 'https://ae.example',
       operationKey: 'op:discovery:legacy-replace:replay',
@@ -659,7 +659,7 @@ describe('catalog, registry, and discovery legacy supply compatibility', () => {
 
     await backend.run((ctx) => ctx.db.insert('discoveryManifests', legacyDiscoveryManifestRow(businessId, 'legacy-discovery-invalidate')))
 
-    const invalidated = await owner.mutation(api.discovery.invalidateDiscoveryManifest, withSourceWrite('discovery_repair', {
+    const invalidated = await owner.mutation(api.discovery.invalidateDiscoveryManifest, await withSourceWrite('discovery_repair', {
       businessId,
       reasonCode: 'owner-requested-removal',
       operationKey: 'op:discovery:legacy-invalidate',
@@ -891,8 +891,7 @@ async function publishedReplayFixture(): Promise<{
       facts: {
         name: 'Legacy Replay Business',
         category: 'Emergency plumbing',
-        suburb: 'Perth',
-        stateTerritory: 'WA',
+        businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
         requestedSlug: slug,
         sourceRefs: [{ label: 'compatibility fixture', evidenceRef: 'test:legacy-replay' }],
       },

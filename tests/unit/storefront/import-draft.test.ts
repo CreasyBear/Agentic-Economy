@@ -98,7 +98,13 @@ const literalNonPublicUrls = [
   'http://169.254.169.254/latest/meta-data/',
   'http://[::1]/',
   'http://[fc00::1]/',
+  'http://[::ffff:127.0.0.1]/',
+  'http://[::ffff:7f00:1]/',
+  'http://[::ffff:10.0.0.1]/',
+  'http://[::ffff:172.16.0.1]/',
   'http://[::ffff:192.168.0.1]/',
+  'http://[::ffff:169.254.169.254]/',
+  'http://[::ffff:a9fe:a9fe]/',
   'http://printer.local/',
 ] as const
 
@@ -154,6 +160,27 @@ describe('storefront import draft', () => {
       expect(result.address).toBe('')
     }
   )
+
+  it.each([
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '::ffff:10.0.0.1',
+    '::ffff:a00:1',
+    '::ffff:172.16.0.1',
+    '::ffff:ac10:1',
+    '::ffff:192.168.0.1',
+    '::ffff:c0a8:1',
+    '::ffff:169.254.169.254',
+    '::ffff:a9fe:a9fe',
+  ])('refuses mapped non-public address %s in guarded lookup', async (address) => {
+    const mappedDns = privateDns(address)
+
+    await expect(isPublicHttpTarget(new URL('https://mapped.example/'), mappedDns)).resolves.toBe(false)
+    const result = await runGuardedLookup(mappedDns)
+
+    expect(result.err).toMatchObject({ code: 'ECONNREFUSED' })
+    expect(result.address).toBe('')
+  })
 
   it('refuses a private address in the guarded connect lookup', async () => {
     const result = await runGuardedLookup(privateDns('10.0.0.5'))
@@ -289,6 +316,7 @@ describe('storefront import draft', () => {
   it.each(literalNonPublicUrls)('rejects non-public literal target %s before fetching', async (websiteUrl) => {
     const fetchMock = vi.fn(async () => new Response(fixtureHtml, { status: 200, headers: { 'content-type': 'text/html' } }))
 
+    await expect(isPublicHttpTarget(new URL(websiteUrl), publicDns)).resolves.toBe(false)
     await expectFetchRejected(websiteUrl, { fetch: fetchMock })
 
     expect(fetchMock).not.toHaveBeenCalled()

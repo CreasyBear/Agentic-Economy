@@ -10,6 +10,7 @@ import {
   handleAgentCustomerRequestRunPost,
   handleAgentCustomerRequestCancelPost,
 } from '@/lib/server/customer-request-agent-api'
+import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
 import { handleCustomerRequestFactsPost } from '@/lib/server/customer-request-facts-api'
 import { handleCustomerRequestGet } from '@/lib/server/customer-request-inspect-api'
@@ -87,14 +88,11 @@ const projection = {
   },
 }
 const authenticate = async () => ({
-  isAuthenticated: true as const,
-  tokenType: 'api_key' as const,
-  id: 'ak_parity',
-  subject: 'user_parity',
-  userId: 'user_parity',
-  orgId: null,
+  isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_parity', subject: 'user_parity',
+  userId: 'user_parity', orgId: null,
   scopes: ['customer_requests:create', customerRequestScopeForMode('approve_each')],
 })
+const resolvePrincipal = async (principal: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => principal
 
 type Capture = (args: Record<string, unknown>) => Promise<typeof projection>
 type AgentCall = (name: string, args: Record<string, unknown>) => Promise<typeof projection>
@@ -194,7 +192,11 @@ const cases: readonly ParityCase[] = [
     operation: 'resume',
     actionName: 'customerRequestApplication:resume',
     human: async (inspect) => await handleCustomerRequestGet(requestRef, { inspect }),
-    agent: async (callAction) => await handleAgentCustomerRequestGet(requestRef, agentOptions(callAction)),
+    agent: async (callAction: AgentCall) => await handleAgentCustomerRequestGet(
+      get(`/api/v1/requests/${encodeURIComponent(requestRef)}`),
+      requestRef,
+      agentOptions(callAction),
+    ),
   },
 ]
 
@@ -279,12 +281,18 @@ describe('human and external-agent Request entrypoint parity', () => {
 })
 
 function agentOptions(callAction: AgentCall) {
-  return { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 }
+  return { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 }
 }
 
 function withoutDelegatedPrincipal(command: Record<string, unknown>): Record<string, unknown> {
   const { delegatedAgentId: _delegatedAgentId, ...semanticCommand } = command
   return semanticCommand
+}
+
+function get(path: string): Request {
+  return new Request(`https://ae.test${path}`, {
+    headers: { Authorization: 'Bearer ak_test_secret' },
+  })
 }
 
 function post(path: string, body: unknown): Request {

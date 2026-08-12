@@ -10,6 +10,7 @@ import {
   OfferingPriceUnitValues,
   PublicFirstRequestChannelValues,
 } from '@/modules/catalog/schema-values'
+import { businessContext } from '@/modules/business/public'
 import {
   DiscoveryAttemptStatusValues,
   DiscoveryManifestRouteKindValues,
@@ -151,9 +152,7 @@ const currentDiscoveryManifest = v.object({
   slug: v.string(),
   businessName: v.string(),
   category: v.string(),
-  suburb: v.string(),
-  stateTerritory: v.string(),
-  postcode: v.optional(v.string()),
+  businessContext,
   publicUrl: v.string(),
   manifestUrl: v.string(),
   ucpVersion: v.string(),
@@ -171,7 +170,6 @@ const currentDiscoveryManifest = v.object({
   routes: v.array(discoveryManifestRoute),
   offerings: v.optional(v.array(discoveryManifestOffering)),
 })
-
 const legacyDiscoveryManifest = v.object({
   schemaVersion: v.string(),
   businessId: v.id('businesses'),

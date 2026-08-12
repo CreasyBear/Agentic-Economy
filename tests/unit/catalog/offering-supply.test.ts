@@ -38,7 +38,7 @@ const revision: BusinessOfferingRevisionRecord = {
 describe('integrated Offering supply projection', () => {
   it('keeps a public business visible with zero Offerings', () => {
     const result = buildBusinessSupplyProjection({
-      business: { businessId, slug: 'meridian-labs', name: 'Meridian Labs', category: 'Data', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/meridian-labs', trustTier: 'claimed' },
+      business: { businessId, slug: 'meridian-labs', name: 'Meridian Labs', category: 'Data', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' }, publicUrl: '/meridian-labs', trustTier: 'claimed' },
       businessIsPublic: true,
       offerings: [],
       sourceRevision: 1,

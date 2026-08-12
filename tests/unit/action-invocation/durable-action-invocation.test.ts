@@ -501,6 +501,7 @@ describe('durable Action Invocation control', () => {
     if (releaseStarted === undefined) throw new Error('Expected persisted release fence.')
     const cancelled = await cold.cancel({
       invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:release-fence`,
       expectedInvocationVersion: releaseStarted.invocationVersion,
       actor, origin,
     })
@@ -775,12 +776,36 @@ describe('durable Action Invocation control', () => {
     })
     const cancelled = await freshProcess.cancel({
       invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:pre-release`,
       expectedInvocationVersion: noRelease.view.invocationVersion,
       actor,
       origin,
     })
     expect(cancelled).toMatchObject({
       kind: 'accepted',
+      view: { control: { state: 'cancelled', effect: 'not_released' } },
+    })
+
+    const replayedProcess = await freshProcess.coldResume(prepared.invocationRef)
+    await expect(replayedProcess.cancel({
+      invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:pre-release`,
+      expectedInvocationVersion: cancelled.kind === 'accepted' ? cancelled.view.invocationVersion : 0,
+      actor,
+      origin,
+    })).resolves.toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'cancelled', effect: 'not_released' } },
+    })
+    await expect(replayedProcess.cancel({
+      invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:different`,
+      expectedInvocationVersion: cancelled.kind === 'accepted' ? cancelled.view.invocationVersion : 0,
+      actor,
+      origin,
+    })).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'command_identity_conflict',
       view: { control: { state: 'cancelled', effect: 'not_released' } },
     })
 
@@ -795,6 +820,14 @@ describe('durable Action Invocation control', () => {
     for (const row of await port.readHistory(prepared.invocationRef, 0, 20)) {
       expect(row.commandDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
     }
+    const cancellationHistory = (await port.readHistory(prepared.invocationRef, 0, 20))
+      .find((history) => history.kind === 'cancel')
+    expect(cancellationHistory?.commandId).toBe(`${prepared.invocationRef}:cancel`)
+    expect(cancellationHistory?.commandDigest).toBe(canonicalDigest({
+      format: 'action-invocation-cancel:v1',
+      invocationRef: prepared.invocationRef,
+      idempotencyKey: `cancel:${prepared.invocationRef}:pre-release`,
+    }))
     if (origin.kind === 'request_owned') {
       expect(await readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({})))
         .toEqual({ kind: 'refused', code: 'request_owned_refused' })

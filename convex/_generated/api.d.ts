@@ -9,12 +9,18 @@
  */
 
 import type * as actionInvocationControl from "../actionInvocationControl.js";
+import type * as agentAccessOAuth from "../agentAccessOAuth.js";
+import type * as agentAccessPolicy from "../agentAccessPolicy.js";
+import type * as agentAccessPrincipals from "../agentAccessPrincipals.js";
 import type * as answerThreads from "../answerThreads.js";
 import type * as authz from "../authz.js";
 import type * as business from "../business.js";
 import type * as businessSupplyProjectionSnapshot from "../businessSupplyProjectionSnapshot.js";
 import type * as capabilityContractDocuments from "../capabilityContractDocuments.js";
+import type * as capabilityOperationInvocationWorker from "../capabilityOperationInvocationWorker.js";
+import type * as capabilityOperationInvocations from "../capabilityOperationInvocations.js";
 import type * as capabilityProviderApprovals from "../capabilityProviderApprovals.js";
+import type * as capabilityProviderConnectionCleanup from "../capabilityProviderConnectionCleanup.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
@@ -33,7 +39,6 @@ import type * as catalog from "../catalog.js";
 import type * as catalogRuntimeQueries from "../catalogRuntimeQueries.js";
 import type * as crons from "../crons.js";
 import type * as curatedProviders from "../curatedProviders.js";
-import type * as customerRequestAgentOAuth from "../customerRequestAgentOAuth.js";
 import type * as customerRequestApplication from "../customerRequestApplication.js";
 import type * as customerRequestAuthorizePreparationPorts from "../customerRequestAuthorizePreparationPorts.js";
 import type * as customerRequestCompareResumePorts from "../customerRequestCompareResumePorts.js";
@@ -41,7 +46,6 @@ import type * as customerRequestConfirmRoutePorts from "../customerRequestConfir
 import type * as customerRequestDiscoveryPort from "../customerRequestDiscoveryPort.js";
 import type * as customerRequestEvaluationBindings from "../customerRequestEvaluationBindings.js";
 import type * as customerRequestEvidenceLoadPorts from "../customerRequestEvidenceLoadPorts.js";
-import type * as customerRequestPrincipals from "../customerRequestPrincipals.js";
 import type * as customerRequestProblemRoutePorts from "../customerRequestProblemRoutePorts.js";
 import type * as customerRequestProvideFactsPorts from "../customerRequestProvideFactsPorts.js";
 import type * as customerRequestRefinePorts from "../customerRequestRefinePorts.js";
@@ -98,7 +102,6 @@ import type * as projectSpine from "../projectSpine.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as registry from "../registry.js";
 import type * as routingKernelV1History from "../routingKernelV1History.js";
-import type * as sandboxAcceptanceSupply from "../sandboxAcceptanceSupply.js";
 import type * as searchGap from "../searchGap.js";
 import type * as security from "../security.js";
 import type * as settings from "../settings.js";
@@ -116,12 +119,18 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   actionInvocationControl: typeof actionInvocationControl;
+  agentAccessOAuth: typeof agentAccessOAuth;
+  agentAccessPolicy: typeof agentAccessPolicy;
+  agentAccessPrincipals: typeof agentAccessPrincipals;
   answerThreads: typeof answerThreads;
   authz: typeof authz;
   business: typeof business;
   businessSupplyProjectionSnapshot: typeof businessSupplyProjectionSnapshot;
   capabilityContractDocuments: typeof capabilityContractDocuments;
+  capabilityOperationInvocationWorker: typeof capabilityOperationInvocationWorker;
+  capabilityOperationInvocations: typeof capabilityOperationInvocations;
   capabilityProviderApprovals: typeof capabilityProviderApprovals;
+  capabilityProviderConnectionCleanup: typeof capabilityProviderConnectionCleanup;
   capabilityProviderConnections: typeof capabilityProviderConnections;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
@@ -140,7 +149,6 @@ declare const fullApi: ApiFromModules<{
   catalogRuntimeQueries: typeof catalogRuntimeQueries;
   crons: typeof crons;
   curatedProviders: typeof curatedProviders;
-  customerRequestAgentOAuth: typeof customerRequestAgentOAuth;
   customerRequestApplication: typeof customerRequestApplication;
   customerRequestAuthorizePreparationPorts: typeof customerRequestAuthorizePreparationPorts;
   customerRequestCompareResumePorts: typeof customerRequestCompareResumePorts;
@@ -148,7 +156,6 @@ declare const fullApi: ApiFromModules<{
   customerRequestDiscoveryPort: typeof customerRequestDiscoveryPort;
   customerRequestEvaluationBindings: typeof customerRequestEvaluationBindings;
   customerRequestEvidenceLoadPorts: typeof customerRequestEvidenceLoadPorts;
-  customerRequestPrincipals: typeof customerRequestPrincipals;
   customerRequestProblemRoutePorts: typeof customerRequestProblemRoutePorts;
   customerRequestProvideFactsPorts: typeof customerRequestProvideFactsPorts;
   customerRequestRefinePorts: typeof customerRequestRefinePorts;
@@ -205,7 +212,6 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   registry: typeof registry;
   routingKernelV1History: typeof routingKernelV1History;
-  sandboxAcceptanceSupply: typeof sandboxAcceptanceSupply;
   searchGap: typeof searchGap;
   security: typeof security;
   settings: typeof settings;

@@ -13,6 +13,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
 import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation'
+import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 
 describe('paid operation application service', () => {
   it('authorizes reads, fences versions, exposes semantic continuations, and projects one truth', async () => {
@@ -235,6 +236,7 @@ function adapterFixture() {
     now: () => fixture.operation.readiness.observedAt + 1_000,
     nextInvocationRef: () => `invocation:paid-service:${Math.random()}`,
     nextAuthorityRef: () => `authority:paid-service:${Math.random()}`,
+    paymentAttemptPort: createInMemoryX402PaymentAttemptPort(),
     nextAttemptRef: () => `attempt:paid-service:${Math.random()}`,
     durablePort: createDevelopmentDurablePort(durableState),
     developmentSnapshot: durableState,

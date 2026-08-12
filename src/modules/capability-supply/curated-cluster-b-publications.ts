@@ -39,8 +39,8 @@ const OPENWEATHER_SOURCE_EVIDENCE = [
 ] as const
 
 const TAVILY_SOURCE_EVIDENCE = [
-  'https://docs.tavily.com',
-  'https://app.tavily.com/.well-known/openapi.json',
+  'https://docs.tavily.com/documentation/api-reference/introduction',
+  'https://docs.tavily.com/documentation/api-reference/endpoint/search',
 ] as const
 
 const SERPAPI_SOURCE_EVIDENCE = [

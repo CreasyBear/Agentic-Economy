@@ -13,8 +13,55 @@ describe('Offering source commands', () => {
     const first = createOfferingInState(empty, { authority, operationKey: 'op:1', businessId, offeringRef, facts, now: 10 })
     expect(first.kind).toBe('ok')
     if (first.kind !== 'ok') return
-    expect(createOfferingInState(first.state, { authority, operationKey: 'op:1', businessId, offeringRef, facts, now: 10 })).toMatchObject({ kind: 'ok', code: 'replayed' })
+    const replay = createOfferingInState(first.state, { authority, operationKey: 'op:1', businessId, offeringRef, facts, now: 10 })
+    expect(replay).toMatchObject({ kind: 'ok', code: 'replayed', value: first.value })
     expect(createOfferingInState(first.state, { authority, operationKey: 'op:1', businessId, offeringRef, facts: { ...facts, name: 'Changed' }, now: 11 })).toMatchObject({ kind: 'error', code: 'operation_conflict' })
+  })
+
+  it('refuses a response-lost details replay after a newer revision before any later step can advance', () => {
+    const created = createOfferingInState(empty, { authority, operationKey: 'baseline', businessId, offeringRef, facts, now: 1 })
+    if (created.kind !== 'ok') throw new Error('fixture')
+    const first = reviseOfferingInState(created.state, {
+      authority,
+      operationKey: 'request-a:details',
+      offeringRef,
+      expectedRevision: 1,
+      facts: { ...facts, name: 'Request A details' },
+      now: 2,
+    })
+    if (first.kind !== 'ok') throw new Error('fixture')
+    const newer = reviseOfferingInState(first.state, {
+      authority,
+      operationKey: 'request-b:details',
+      offeringRef,
+      expectedRevision: 2,
+      facts: { ...facts, name: 'Request B details' },
+      now: 3,
+    })
+    if (newer.kind !== 'ok') throw new Error('fixture')
+    const paused = changeOfferingStatusInState(newer.state, {
+      authority,
+      operationKey: 'request-b:status',
+      offeringRef,
+      expectedRevision: 3,
+      status: 'paused',
+      now: 4,
+    })
+    if (paused.kind !== 'ok') throw new Error('fixture')
+
+    const replay = reviseOfferingInState(paused.state, {
+      authority,
+      operationKey: 'request-a:details',
+      offeringRef,
+      expectedRevision: 1,
+      facts: { ...facts, name: 'Request A details' },
+      now: 5,
+    })
+
+    expect(replay).toMatchObject({ kind: 'error', code: 'revision_conflict' })
+    expect(replay.state).toBe(paused.state)
+    expect(replay.state.offerings).toContainEqual(expect.objectContaining({ offeringRef, currentRevision: 3, status: 'paused' }))
+    expect(replay.state.operations).toHaveLength(paused.state.operations.length)
   })
 
   it('requires source-bound authority and exact revisions', () => {

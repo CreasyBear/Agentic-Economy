@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
-} from '@/modules/discovery/public'
+import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
+import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   createDeveloperDiscoverySupportRecord,
@@ -78,7 +76,7 @@ describe('developer discovery support records and kill controls', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createDefaultDiscoverySourceState()
+  const state = createFixtureDiscoverySourceState()
   const business = state.businesses.at(0)
 
   if (business === undefined) {

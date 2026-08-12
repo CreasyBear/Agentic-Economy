@@ -293,6 +293,18 @@ describe('human root WorkTree loop', () => {
     expect(received[1]?.idempotencyKey).toBe(received[0]?.idempotencyKey)
     expect(result.receipt).toEqual(receipt)
     expect(result.readback).toMatchObject({ kind: 'ready', projectId, revision: 4 })
+    const uncertain = await decideRootWorkTree({
+      projectId,
+      nodeId: 'decision',
+      kind: 'lock',
+      expectedGeneration: 1,
+      expectedRevision: 4,
+      nowMs,
+    }, {
+      ...port,
+      decide: async () => ({ kind: 'unknown' }),
+    })
+    expect(uncertain.receipt).toEqual({ kind: 'unknown' })
   })
 
 })

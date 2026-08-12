@@ -1,12 +1,12 @@
 import { z } from 'zod'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import type {
   PublishedOperation,
   RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
+import type { ExactAmount, MoneyAcceptedInvocationCharge } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
@@ -33,8 +33,8 @@ export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
   paymentProof?: string
   paymentChallengeDigest?: string
   failureCode?: string
+  usage?: Pick<MoneyAcceptedInvocationCharge, 'usageRef' | 'observedAt' | 'chargeState' | 'amount' | 'priceDigest' | 'transactionRef'>
 }>
-
 export function buildDynamicPublishedInput(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
@@ -45,25 +45,32 @@ export function buildDynamicPublishedInput(input: Readonly<{
   }
   assertExactDescriptor(input.operation, input.descriptor)
   const inputDigest = canonicalDigest(input.value)
-  const target: StableHashValue = {
-    operationId: input.operation.operationId,
-    operationVersion: input.descriptor.version,
-    invocationGeneration: 1,
-    source: {
-      ...input.operation.identity,
+  const target: StableHashValue = Object.assign(
+    {
+      operationId: input.operation.operationId,
+      operationVersion: input.descriptor.version,
+      invocationGeneration: 1,
       materialDigest: input.operation.materialDigest,
-      readiness: input.operation.readiness,
     },
-    effect: {
-      amount: executableFixedPrice(input.operation),
-      payment: input.operation.identity.payment,
-      data: input.descriptor.dataUse.map((use) => ({
-        inputPointer: use.inputPointer,
-        recipient: use.recipient.kind,
-        purposes: [...use.purposes],
-      })),
+    stablePublishedOperationIdentity(input.operation.identity),
+    {
+      readiness: {
+        observedAt: input.operation.readiness.observedAt,
+        validUntil: input.operation.readiness.validUntil,
+        qualificationDigest: input.operation.readiness.qualificationDigest,
+        evidenceRefs: [...input.operation.readiness.evidenceRefs],
+      },
+      effect: {
+        amount: { ...executableFixedPrice(input.operation) },
+        payment: stablePayment(input.operation.identity.payment),
+        data: input.descriptor.dataUse.map((use) => ({
+          inputPointer: use.inputPointer,
+          recipient: use.recipient.kind,
+          purposes: [...use.purposes],
+        })),
+      },
     },
-  }
+  )
   const sourceSnapshotDigest = dynamicPublishedSourceDigest(input.operation, input.descriptor)
   const operationKey = canonicalDigest({
     operationId: input.operation.operationId,
@@ -84,26 +91,12 @@ export function dynamicPublishedSourceDigest(
   operation: PublishedOperation,
   descriptor: RuntimePublishedOperationDescriptor,
 ): string {
+  const descriptorMaterial = Object.fromEntries(
+    Object.entries(descriptor).filter(([key]) => key !== 'validateInput' && key !== 'validateOutput'),
+  )
   return canonicalDigest({
     operation,
-    descriptor: {
-      id: descriptor.id,
-      version: descriptor.version,
-      name: descriptor.name,
-      summary: descriptor.summary,
-      inputSchema: descriptor.inputSchema,
-      outputSchema: descriptor.outputSchema,
-      consequenceClass: descriptor.consequenceClass,
-      authorityRequirement: descriptor.authorityRequirement,
-      retryClass: descriptor.retryClass,
-      materialInputPointers: descriptor.materialInputPointers,
-      dataUse: descriptor.dataUse,
-      effects: descriptor.effects,
-      evidence: descriptor.evidence,
-      safeContinuations: descriptor.safeContinuations,
-      price: descriptor.price,
-      target: descriptor.target,
-    },
+    descriptor: descriptorMaterial,
   })
 }
 
@@ -215,13 +208,76 @@ export function createDynamicPublishedAction(input: Readonly<{
 export function executableFixedPrice(
   operation: PublishedOperation,
 ): ExactAmount {
-  const price = operation.identity.price
-  if (price.kind !== 'fixed') {
-    throw new Error('published_operation_price_not_fixed')
+  return operation.pricingConfig.paidAmount
+}
+function stablePublishedOperationIdentity(
+  identity: PublishedOperation['identity'],
+): Readonly<Record<string, StableHashValue>> {
+  const connectionAuthority = identity.connectionAuthority
+  return {
+    businessId: identity.businessId,
+    publicationRef: identity.publicationRef,
+    publicationRevision: identity.publicationRevision,
+    publicationDigest: identity.publicationDigest,
+    contractId: identity.contractId,
+    contractVersion: identity.contractVersion,
+    contractDigest: identity.contractDigest,
+    offeringId: identity.offeringId,
+    offeringDigest: identity.offeringDigest,
+    bindingId: identity.bindingId,
+    bindingDigest: identity.bindingDigest,
+    adapterId: identity.adapterId,
+    transportConfigDigest: identity.transportConfigDigest,
+    endpoint: { ...identity.endpoint },
+    payment: stablePayment(identity.payment),
+    paymentRecipient: identity.paymentRecipient,
+    pricingConfig: stablePricingConfig(identity.pricingConfig),
+    priceDigest: identity.priceDigest,
+    price: stablePrice(identity.price),
+    materialTerms: identity.materialTerms.map((term) => ({ ...term })),
+    evidenceDigest: identity.evidenceDigest,
+    ...(connectionAuthority === undefined ? {} : {
+      connectionAuthority: {
+        connectionRef: connectionAuthority.connectionRef,
+        providerRef: connectionAuthority.providerRef,
+        adapterId: connectionAuthority.adapterId,
+        authorityGeneration: connectionAuthority.authorityGeneration,
+        authorityDigest: connectionAuthority.authorityDigest,
+        operationRef: connectionAuthority.operationRef,
+        grantedScopes: [...connectionAuthority.grantedScopes],
+        grantedResources: [...connectionAuthority.grantedResources],
+      },
+    }),
   }
-  const parsed = exactAmountSchema.safeParse(price.amount)
-  if (!parsed.success) {
-    throw new Error('published_operation_price_not_fixed')
+}
+
+function stablePayment(payment: PublishedOperation['identity']['payment']): StableHashValue {
+  return payment.kind === 'none'
+    ? { kind: 'none' }
+    : {
+        kind: 'x402',
+        network: payment.network,
+        asset: payment.asset,
+        payTo: payment.payTo,
+        currency: payment.currency,
+        routeAmountExponent: payment.routeAmountExponent,
+        assetAmountExponent: payment.assetAmountExponent,
+      }
+}
+
+function stablePricingConfig(config: PublishedOperation['pricingConfig']): StableHashValue {
+  return {
+    version: config.version,
+    unit: config.unit,
+    paidAmount: { ...config.paidAmount },
+    ...(config.freeTier === undefined ? {} : { freeTier: { ...config.freeTier } }),
   }
-  return parsed.data
+}
+
+function stablePrice(price: PublishedOperation['identity']['price']): StableHashValue {
+  return price.kind === 'fixed'
+    ? { kind: 'fixed', amount: { ...price.amount } }
+    : price.kind === 'range'
+      ? { kind: 'range', minimum: { ...price.minimum }, maximum: { ...price.maximum } }
+      : { kind: 'on_request' }
 }

@@ -115,7 +115,19 @@ export function publishBusinessCatalog(
       summary: service.summary,
     })),
   })
-  const operationStore = new ArrayOperationKeyStore(state.operationKeys)
+  const candidateState = clonePublishState(state)
+  const candidateBusiness = candidateState.businesses.find((item) => item.businessId === business.businessId)
+  const candidateClaim = candidateState.claims.find((item) => item.claimId === claim.claimId)
+  if (candidateBusiness === undefined || candidateClaim === undefined) {
+    return {
+      kind: 'error',
+      code: 'catalog_publish_claim_not_found',
+      retryable: false,
+      reason: 'Claim source state is incomplete.',
+    }
+  }
+
+  const operationStore = new ArrayOperationKeyStore(candidateState.operationKeys)
   const operationInput: OperationKeyInput = {
     scope: 'catalog',
     actorKind: 'owner',
@@ -138,15 +150,25 @@ export function publishBusinessCatalog(
   const replayed = operationDecision.code === 'operation_replayed'
 
   if (!replayed) {
-    applyPublishState(state, business, claim, serviceValidation.services, command.operationKey, command.now)
+    applyPublishState(candidateState, candidateBusiness, candidateClaim, serviceValidation.services, command.operationKey, command.now)
+  }
+
+  const candidateContext = candidateState.businessContexts.find((item) => item.businessId === candidateBusiness.businessId)
+  if (candidateContext === undefined) {
+    return {
+      kind: 'error',
+      code: 'catalog_publish_claim_not_found',
+      retryable: false,
+      reason: 'Claim source state is incomplete.',
+    }
   }
 
   const projection = buildOfferingSupplyProjection({
-    business,
-    context,
-    offerings: state.offerings.filter((offering) => offering.businessId === business.businessId),
-    revisions: state.revisions.filter((revision) => revision.businessId === business.businessId),
-    accessPaths: state.accessPaths.filter((path) => path.businessId === business.businessId),
+    business: candidateBusiness,
+    context: candidateContext,
+    offerings: candidateState.offerings.filter((offering) => offering.businessId === candidateBusiness.businessId),
+    revisions: candidateState.revisions.filter((revision) => revision.businessId === candidateBusiness.businessId),
+    accessPaths: candidateState.accessPaths.filter((path) => path.businessId === candidateBusiness.businessId),
     indexStatus: 'queued',
     discoveryStatus: 'degraded',
     observedAt: command.now,
@@ -161,16 +183,16 @@ export function publishBusinessCatalog(
   }
   const catalog = projectBusinessSupplyToPublicApi(projection, command.now)
 
-  const auditEvent = ensurePublishAuditEvent(state, business, command, replayed)
-  const registryAttempts = ensureRegistryAttempts(state, business.businessId, business.sourceHash, command.now)
-  const discoveryAttempts = ensureDiscoveryAttempts(state, business.businessId, business.sourceHash, command.now)
+  const auditEvent = ensurePublishAuditEvent(candidateState, candidateBusiness, command, replayed)
+  const registryAttempts = ensureRegistryAttempts(candidateState, candidateBusiness.businessId, candidateBusiness.sourceHash, command.now)
+  const discoveryAttempts = ensureDiscoveryAttempts(candidateState, candidateBusiness.businessId, candidateBusiness.sourceHash, command.now)
 
   if (!replayed) {
     const resultHash = canonicalDigest({
       auditEventId: auditEvent.eventId,
-      businessId: business.businessId,
+      businessId: candidateBusiness.businessId,
       registryAttempts: registryAttempts.map((attempt) => attempt.logicalKey),
-      slug: business.slug,
+      slug: candidateBusiness.slug,
     })
     const succeeded = markOperationSucceeded(
       operationDecision.record,
@@ -185,16 +207,54 @@ export function publishBusinessCatalog(
     operationStore.save(succeeded)
   }
 
+  commitPublishState(state, candidateState)
+
   return {
     kind: 'ok',
     code: replayed ? 'catalog_publish_replayed' : 'catalog_published',
-    business,
-    claim,
+    business: state.businesses.find((item) => item.businessId === business.businessId) ?? business,
+    claim: state.claims.find((item) => item.claimId === claim.claimId) ?? claim,
     catalog,
     auditEvent,
     registryProjectionAttempts: registryAttempts,
     discoveryManifestAttempts: discoveryAttempts,
   }
+}
+
+function clonePublishState(state: PublishBusinessCatalogState): PublishBusinessCatalogState {
+  return {
+    ...state,
+    owners: [...state.owners],
+    businesses: state.businesses.map((business) => ({ ...business })),
+    businessContexts: [...state.businessContexts],
+    claims: state.claims.map((claim) => ({ ...claim })),
+    claimFingerprints: state.claimFingerprints.map((fingerprint) => ({ ...fingerprint })),
+    offerings: [...state.offerings],
+    revisions: [...state.revisions],
+    accessPaths: [...state.accessPaths],
+    operationKeys: state.operationKeys.map((record) => ({ ...record, effectRefs: [...record.effectRefs] })),
+    auditEvents: [...state.auditEvents],
+    registryProjectionAttempts: [...state.registryProjectionAttempts],
+    discoveryManifestAttempts: [...state.discoveryManifestAttempts],
+  }
+}
+
+function commitPublishState(state: PublishBusinessCatalogState, candidate: PublishBusinessCatalogState): void {
+  for (const nextBusiness of candidate.businesses) {
+    const currentBusiness = state.businesses.find((business) => business.businessId === nextBusiness.businessId)
+    if (currentBusiness !== undefined) Object.assign(currentBusiness, nextBusiness)
+  }
+  for (const nextClaim of candidate.claims) {
+    const currentClaim = state.claims.find((claim) => claim.claimId === nextClaim.claimId)
+    if (currentClaim !== undefined) Object.assign(currentClaim, nextClaim)
+  }
+  state.offerings.splice(0, state.offerings.length, ...candidate.offerings)
+  state.revisions.splice(0, state.revisions.length, ...candidate.revisions)
+  state.accessPaths.splice(0, state.accessPaths.length, ...candidate.accessPaths)
+  state.operationKeys.splice(0, state.operationKeys.length, ...candidate.operationKeys)
+  state.auditEvents.splice(0, state.auditEvents.length, ...candidate.auditEvents)
+  state.registryProjectionAttempts.splice(0, state.registryProjectionAttempts.length, ...candidate.registryProjectionAttempts)
+  state.discoveryManifestAttempts.splice(0, state.discoveryManifestAttempts.length, ...candidate.discoveryManifestAttempts)
 }
 
 function applyPublishState(

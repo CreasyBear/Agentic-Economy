@@ -11,6 +11,7 @@ import {
   type DynamicPublishedInvocationResult,
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
+import { createDevelopmentScenarioX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { presentDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
@@ -20,10 +21,11 @@ import {
 import {
   buildDevelopmentAlternatePublishedOperationEvidence,
 } from './development-alternate-published-operation-evidence'
-import { projectDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
 import {
   buildDevelopmentPublishedOperationEvidence,
+  createDevelopmentProviderLeaseIssuer,
 } from './development-published-operation-evidence'
+import { projectDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
 import type { PublishedOperation } from './public'
 import type {
   RouteTransportRuntime,
@@ -155,12 +157,14 @@ async function runSelected(
     operation,
     source: createDevelopmentDynamicPublishedSource([operation]),
     runtime,
+    issueProviderLease: createDevelopmentProviderLeaseIssuer(operation, clock),
     now: () => clock,
     nextInvocationRef: () => `invocation:${scope}:${++invocationSequence}`,
     nextAuthorityRef: () => `authority:${scope}:${++authoritySequence}`,
     nextAttemptRef: () => `attempt:${scope}:${++attemptSequence}`,
     verifyPaymentReconciliationEvidence: () => true,
     durablePort,
+    paymentAttemptPort: createDevelopmentScenarioX402PaymentAttemptPort(),
     developmentSnapshot: durableState,
   })
   const application = createInvocationApplication({
@@ -294,6 +298,7 @@ function paymentRuntime(
   }>()
   return {
     resolveCredential: () => `mock:credential:${operation.identity.businessId}`,
+    readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     readProviderConnectionCredentialRef: (request) => {
       const authority = operation.connectionAuthority
       if (authority === undefined
@@ -306,6 +311,17 @@ function paymentRuntime(
       return request.authorityDigest === authority.authorityDigest
         ? { kind: 'resolved' as const, credentialRef: authority.connectionRef }
         : { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    },
+    validateProviderConnectionAuthority: (input) => {
+      const authority = operation.connectionAuthority
+      return authority !== undefined
+        && input.connectionRef === authority.connectionRef
+        && input.providerRef === authority.providerRef
+        && input.adapterId === authority.adapterId
+        && input.authorityGeneration === authority.authorityGeneration
+        && input.authorityDigest === authority.authorityDigest
+        ? { kind: 'valid' as const }
+        : { kind: 'unavailable' as const, reason: 'stale_generation' as const }
     },
     x402PaymentSigningAvailable: () => true,
     prepareX402PaymentAuthorization: async (request) => {

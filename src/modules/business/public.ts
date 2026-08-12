@@ -1,3 +1,5 @@
+import { v } from 'convex/values'
+
 import type { BusinessId, ClaimId, CorrelationId, OperationKey, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
 import type { ModuleResult } from '@/modules/common/result'
 import type {
@@ -23,6 +25,78 @@ export function normalizeTrustTier(value: unknown): TrustTier {
     : 'claimed'
 }
 
+export const BusinessContextKindValues = ['local_human', 'programmable_provider'] as const
+export type BusinessContextKind = (typeof BusinessContextKindValues)[number]
+
+export type LocalHumanBusinessContext = {
+  kind: 'local_human'
+  suburb: string
+  stateTerritory: string
+  postcode?: string
+  publishedPhone?: string
+}
+
+export type ProgrammableProviderBusinessContext = {
+  kind: 'programmable_provider'
+  website: string
+  providerIdentifier: string
+}
+
+export type BusinessContext = LocalHumanBusinessContext | ProgrammableProviderBusinessContext
+const localHumanBusinessContext = v.object({
+  kind: v.literal('local_human'),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publishedPhone: v.optional(v.string()),
+})
+
+const programmableProviderBusinessContext = v.object({
+  kind: v.literal('programmable_provider'),
+  website: v.string(),
+  providerIdentifier: v.string(),
+})
+
+export const businessContext = v.union(localHumanBusinessContext, programmableProviderBusinessContext)
+
+
+export function canonicalProviderWebsite(value: string): string | undefined {
+  try {
+    const url = new URL(value.trim())
+    if (
+      url.protocol !== 'https:'
+      || url.username !== ''
+      || url.password !== ''
+      || url.search !== ''
+      || url.hash !== ''
+      || url.hostname.length === 0
+    ) {
+      return undefined
+    }
+    const pathname = url.pathname.replace(/\/+$/, '') || '/'
+    return `${url.origin.toLowerCase()}${pathname}`
+  } catch {
+    return undefined
+  }
+}
+
+export function canonicalProviderIdentifier(value: string): string | undefined {
+  const normalized = value.trim().normalize('NFKC').replace(/\s+/g, ' ')
+  return normalized.length === 0 ? undefined : normalized.slice(0, 240)
+}
+
+export function isLocalHumanBusinessContext(
+  context: BusinessContext,
+): context is LocalHumanBusinessContext {
+  return context.kind === 'local_human'
+}
+
+export function isProgrammableProviderBusinessContext(
+  context: BusinessContext,
+): context is ProgrammableProviderBusinessContext {
+  return context.kind === 'programmable_provider'
+}
+
 export { validateOwnerPublishedPhone } from './internal/published-phone'
 
 export const VisibilityTargetTypeValues = ['business', 'service', 'capability'] as const
@@ -34,8 +108,7 @@ export type BusinessIdentity = {
   slug: Slug
   name: string
   category: string
-  suburb: string
-  publishedPhone?: string
+  businessContext: BusinessContext
   publicStatus: PublicStatus
   trustTier: TrustTier
   sourceHash: SourceHash
@@ -59,9 +132,7 @@ export type BusinessSourceRef = {
 export type BusinessContextRecord = {
   businessId: BusinessId
   category: string
-  suburb: string
-  stateTerritory: string
-  postcode?: string
+  businessContext: BusinessContext
   ownerMessage?: string
   photos?: readonly PublicBusinessPhoto[]
   responseTimeMinutes?: number
@@ -82,9 +153,7 @@ export type BusinessRecord = {
   name: string
   normalizedName: string
   category: string
-  suburb: string
-  stateTerritory: string
-  publishedPhone?: string
+  businessContext: BusinessContext
   publicStatus: PublicStatus
   trustTier: TrustTier
   claimStatus: ClaimStatus
@@ -144,10 +213,8 @@ export type BusinessMutationActor =
 export type ClaimBusinessFacts = {
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
+  businessContext: BusinessContext
   requestedSlug: string
-  publishedPhone?: string
   ownerMessage?: string
   photos?: readonly PublicBusinessPhoto[]
   responseTimeMinutes?: number

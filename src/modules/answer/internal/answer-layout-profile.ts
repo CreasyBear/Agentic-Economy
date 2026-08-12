@@ -63,6 +63,12 @@ export function inferLayoutProfileFromArtifacts(input: {
   if (input.layoutProfile !== undefined) {
     return input.layoutProfile
   }
+  if (input.artifacts.some((artifact) => artifact.kind === 'operation-outcome')) {
+    return 'data_answer'
+  }
+  if (input.artifacts.some((artifact) => artifact.kind === 'operation-candidates')) {
+    return 'clarification'
+  }
 
   const providerCards = input.artifacts.find((artifact) => artifact.kind === 'provider-cards')
   const providerCount =

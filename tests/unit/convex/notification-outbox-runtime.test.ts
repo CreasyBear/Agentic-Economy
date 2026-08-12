@@ -15,7 +15,7 @@ import {
   withSourceWrite,
   withoutSourceWrite,
 } from '../../helpers/source-write-admission'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -93,11 +93,21 @@ const readSystemSendHandler = (readNotificationDispatchForSystemSend as unknown 
 const readHandler = (readCurrentOwnerNotificationDispatchReadback as unknown as {
   _handler: (ctx: AuthCtx, args: { dispatchId: string }) => Promise<unknown>
 })._handler
+type NotificationRepairArgs = {
+  dispatchId: string
+  operationKey: string
+  correlationId: string
+  sourceWriteRequest?: SourceWriteAdmissionRequest
+  sourceWrite?: SourceWriteAdmission
+}
+type RetryNotificationArgs = NotificationRepairArgs & { retryAfter: number }
+type NoRepairNotificationArgs = NotificationRepairArgs & { reason: string }
+
 const retryHandler = (retryNotificationDispatchAsOperator as unknown as {
-  _handler: (ctx: AuthCtx, args: ReturnType<typeof retryArgs>) => Promise<unknown>
+  _handler: (ctx: AuthCtx, args: RetryNotificationArgs) => Promise<unknown>
 })._handler
 const noRepairHandler = (markNotificationDispatchNoRepairAsOperator as unknown as {
-  _handler: (ctx: AuthCtx, args: ReturnType<typeof noRepairArgs>) => Promise<unknown>
+  _handler: (ctx: AuthCtx, args: NoRepairNotificationArgs) => Promise<unknown>
 })._handler
 
 const systemKey = 'test-notification-outbox-secret'
@@ -345,20 +355,20 @@ describe('Convex notification outbox runtime bridge', () => {
       correlationId: 'correlation:notification:operator',
     })
 
-    const noAuthRetry = await retryHandler(authCtx(db, null), retryArgs(queued.dispatch.dispatchId, 'no-auth'))
+    const noAuthRetry = await retryHandler(authCtx(db, null), await retryArgs(queued.dispatch.dispatchId, 'no-auth'))
     expect(noAuthRetry).toMatchObject({ kind: 'error', code: 'notification_operator_denied' })
 
-    const supportRetry = await retryHandler(authCtx(db, support()), retryArgs(queued.dispatch.dispatchId, 'support'))
+    const supportRetry = await retryHandler(authCtx(db, support()), await retryArgs(queued.dispatch.dispatchId, 'support'))
     expect(supportRetry).toMatchObject({
       kind: 'ok',
       code: 'notification_retry_scheduled',
       dispatch: { status: 'retry_scheduled', retryCount: 1 },
     })
 
-    const supportNoRepair = await noRepairHandler(authCtx(db, support()), noRepairArgs(queued.dispatch.dispatchId, 'support'))
+    const supportNoRepair = await noRepairHandler(authCtx(db, support()), await noRepairArgs(queued.dispatch.dispatchId, 'support'))
     expect(supportNoRepair).toMatchObject({ kind: 'error', code: 'notification_operator_denied' })
 
-    const adminNoRepair = await noRepairHandler(authCtx(db, admin()), noRepairArgs(queued.dispatch.dispatchId, 'admin'))
+    const adminNoRepair = await noRepairHandler(authCtx(db, admin()), await noRepairArgs(queued.dispatch.dispatchId, 'admin'))
     expect(adminNoRepair).toMatchObject({
       kind: 'ok',
       code: 'notification_no_repair_marked',
@@ -381,10 +391,10 @@ describe('Convex notification outbox runtime bridge', () => {
     const beforeRetryState = { ...db.dump('notificationDispatches')[0] }
 
     await expect(
-      retryHandler(authCtx(db, support()), withoutCsrf(retryArgs(queued.dispatch.dispatchId, 'missing-csrf')))
+      retryHandler(authCtx(db, support()), withoutSourceWriteAdmission(await retryArgs(queued.dispatch.dispatchId, 'missing-source-write')))
     ).resolves.toMatchObject({ kind: 'error', code: 'notification_csrf_rejected' })
     await expect(
-      noRepairHandler(authCtx(db, admin()), withoutCsrf(noRepairArgs(queued.dispatch.dispatchId, 'missing-csrf')))
+      noRepairHandler(authCtx(db, admin()), withoutSourceWriteAdmission(await noRepairArgs(queued.dispatch.dispatchId, 'missing-source-write')))
     ).resolves.toMatchObject({ kind: 'error', code: 'notification_csrf_rejected' })
 
     expect(db.dump('notificationDispatches')[0]).toEqual(beforeRetryState)
@@ -402,10 +412,10 @@ describe('Convex notification outbox runtime bridge', () => {
       correlationId: 'correlation:notification:origin-operator',
     })
     await expect(
-      retryHandler(authCtx(db, support()), withOriginOnly(retryArgs(queued.dispatch.dispatchId, 'origin')))
+      retryHandler(authCtx(db, support()), withTamperedRequest(await retryArgs(queued.dispatch.dispatchId, 'request')))
     ).resolves.toMatchObject({ kind: 'error', code: 'notification_csrf_rejected' })
     await expect(
-      noRepairHandler(authCtx(db, admin()), withOriginOnly(noRepairArgs(queued.dispatch.dispatchId, 'origin')))
+      noRepairHandler(authCtx(db, admin()), withTamperedRequest(await noRepairArgs(queued.dispatch.dispatchId, 'request')))
     ).resolves.toMatchObject({ kind: 'error', code: 'notification_csrf_rejected' })
     expect(db.dump('operationKeys').map((operation) => operation.operationName)).not.toContain('retryNotificationDispatch')
     expect(db.dump('operationKeys').map((operation) => operation.operationName)).not.toContain('markNotificationNoRepair')
@@ -709,52 +719,47 @@ function webhookArgs(overrides: Partial<WebhookArgs> = {}): WebhookArgs {
   }
 }
 
-function retryArgs(dispatchId: string, key: string, overrides: CsrfOverride = {}) {
-  return withSourceWrite('notification_repair', {
+async function retryArgs(dispatchId: string, key: string, overrides: SourceWriteOverride = {}) {
+  return await withSourceWrite('notification_repair', {
     dispatchId,
     retryAfter: Date.now() + 60_000,
-    ...csrfEvidence(),
     operationKey: `notification:retry:${key}`,
     correlationId: `correlation:notification:retry:${key}`,
     ...overrides,
   })
 }
 
-function noRepairArgs(dispatchId: string, key: string, overrides: CsrfOverride = {}) {
-  return withSourceWrite('notification_repair', {
+async function noRepairArgs(dispatchId: string, key: string, overrides: SourceWriteOverride = {}) {
+  return await withSourceWrite('notification_repair', {
     dispatchId,
     reason: 'Provider evidence exhausted; preserve inquiry truth.',
-    ...csrfEvidence(),
     operationKey: `notification:no-repair:${key}`,
     correlationId: `correlation:notification:no-repair:${key}`,
     ...overrides,
   })
 }
 
-function csrfEvidence() {
-  return {
-    csrfToken: 'csrf-notification',
-    csrfCookie: 'csrf-notification',
-  }
-}
-
-function withoutCsrf<T extends { csrfToken?: string; csrfCookie?: string; origin?: string; sourceWrite?: SourceWriteAdmission }>(args: T): T {
-  const { csrfToken: _csrfToken, csrfCookie: _csrfCookie, origin: _origin, ...rest } = withoutSourceWrite(args)
-  return rest as T
-}
-
-function withOriginOnly<T extends { csrfToken?: string; csrfCookie?: string; origin?: string; sourceWrite?: SourceWriteAdmission }>(args: T): T {
-  return {
-    ...withoutCsrf(args),
-    origin: 'https://ae.example',
-  }
-}
-
-type CsrfOverride = {
-  csrfToken?: string
-  csrfCookie?: string
-  origin?: string
+function withoutSourceWriteAdmission<T extends {
   sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
+}>(args: T): Omit<T, 'sourceWrite' | 'sourceWriteRequest'> {
+  return withoutSourceWrite(args)
+}
+
+function withTamperedRequest<T extends { sourceWriteRequest?: SourceWriteAdmissionRequest }>(args: T): T {
+  if (args.sourceWriteRequest === undefined) return args
+  return {
+    ...args,
+    sourceWriteRequest: {
+      ...args.sourceWriteRequest,
+      initiatorOrigin: 'https://evil.example',
+    },
+  }
+}
+
+type SourceWriteOverride = {
+  sourceWrite?: SourceWriteAdmission
+  sourceWriteRequest?: SourceWriteAdmissionRequest
 }
 
 function requireEnqueueOk(value: unknown): EnqueueOk {

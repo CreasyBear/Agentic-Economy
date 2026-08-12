@@ -137,9 +137,7 @@ async function upsertBusiness(
     name: business.name,
     normalizedName: business.normalizedName,
     category: business.category,
-    suburb: business.suburb,
-    stateTerritory: business.stateTerritory,
-    ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
+    businessContext: business.businessContext,
     publicStatus: business.publicStatus,
     trustTier: business.trustTier,
     claimStatus: business.claimStatus,
@@ -168,15 +166,14 @@ async function upsertBusinessContext(
   const patch = {
     businessId,
     category: context.category,
-    suburb: context.suburb,
-    stateTerritory: context.stateTerritory,
-    ...(context.postcode === undefined ? {} : { postcode: context.postcode }),
+    businessContext: context.businessContext,
     ...(context.ownerMessage === undefined ? {} : { ownerMessage: context.ownerMessage }),
-    sourceRefs: [...context.sourceRefs],
+    ...(context.photos === undefined ? {} : { photos: [...context.photos] }),
+    ...(context.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: context.responseTimeMinutes }),
+    sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
     sourceHash: context.sourceHash,
     approvedAt: context.approvedAt,
   }
-
   if (existing === null) {
     await db.insert('businessContexts', patch)
     return

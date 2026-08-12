@@ -4,6 +4,7 @@ import type { AnyRouter } from '@tanstack/react-router'
 import { readObservabilityClientConfig } from '@/lib/observability/config'
 import {
   isTelemetryAllowedForCurrentRoute,
+  sanitizeTelemetryError,
   sanitizeTelemetryEvent,
   securePrivateRecordLocation,
 } from '@/lib/observability/private-route-safety'
@@ -43,14 +44,13 @@ export function initSentryClient(router?: AnyRouter): boolean {
   initialized = true
   return true
 }
-
 export function captureClientException(error: unknown): void {
   if (!isTelemetryAllowedForCurrentRoute()) return
   if (!initialized) {
     initSentryClient()
   }
 
-  Sentry.captureException(error)
+  Sentry.captureException(sanitizeTelemetryError(error))
 }
 
 export { Sentry }

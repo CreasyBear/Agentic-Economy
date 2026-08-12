@@ -42,6 +42,37 @@ export async function assertAdmission(
   return await rateLimiter.limit(ctx, input.name, { key: input.key })
 }
 
+export async function assertAgentAccessRateAdmission(
+  ctx: RunMutationCtx,
+  input: Readonly<{
+    applicationRef: string
+    credentialId: string
+    maximumCallsPerMinute: number
+    maximumCallsPerHour: number
+  }>,
+): Promise<RateLimitReturns> {
+  const key = `agent-access:${input.applicationRef}:${input.credentialId}`
+  const hour = await rateLimiter.limit(ctx, 'agent-access-hour', {
+    key,
+    config: {
+      kind: 'token bucket',
+      rate: Math.min(input.maximumCallsPerHour, 300),
+      period: HOUR,
+      capacity: Math.min(input.maximumCallsPerHour, 300),
+    },
+  })
+  if (!hour.ok) return hour
+  return await rateLimiter.limit(ctx, 'agent-access-minute', {
+    key,
+    config: {
+      kind: 'token bucket',
+      rate: Math.min(input.maximumCallsPerMinute, 60),
+      period: MINUTE,
+      capacity: Math.min(input.maximumCallsPerMinute, 60),
+    },
+  })
+}
+
 export async function admissionKey(
   ctx: Pick<MutationCtx, 'auth'>,
   fallback = 'anonymous',

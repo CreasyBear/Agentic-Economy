@@ -57,7 +57,7 @@ describe('Offering-shaped public business API', () => {
           validUntil: 200,
         },
       }],
-    }))
+    }), 101)
 
     expect(dto.offerings[0]).toMatchObject({
       accessPaths: [{ kind: 'external_operation', provenance: 'business_declared' }],
@@ -119,6 +119,25 @@ describe('Offering-shaped public business API', () => {
     expect(conflict.offerings[0]?.accessPaths).toEqual([])
   })
 
+
+  it('uses the live clock by default instead of stored projection observation time', () => {
+    const now = Date.now()
+    const dto = projectBusinessSupplyToPublicApi(projection({
+      observedAt: now - 1_000,
+      offerings: [{
+        ...supplyOffering({}),
+        support: {
+          integrated: true,
+          routeable: true,
+          reasons: [],
+          observedAt: now - 1_000,
+          validUntil: now - 1,
+        },
+      }],
+    }))
+
+    expect(dto.offerings[0]?.support.aeSupportedAction).toBe(false)
+  })
 
   it('removes an AE-supported action at readiness expiry without waiting for a rebuild', () => {
     const dto = projectBusinessSupplyToPublicApi(projection({
@@ -224,8 +243,11 @@ function projection(
       slug: 'meridian-engineering',
       name: 'Meridian Engineering',
       category: 'Engineering',
-      suburb: 'Perth',
-      stateTerritory: 'WA',
+      businessContext: {
+        kind: 'local_human',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+      },
       publicUrl: '/meridian-engineering',
       trustTier: 'claimed',
       publicStatus: 'published',

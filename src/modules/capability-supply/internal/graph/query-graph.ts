@@ -1,7 +1,7 @@
 import type { CapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import type { CapabilityBindingRow } from '../binding/registration'
@@ -13,18 +13,14 @@ import { MAX_ELIGIBLE_SUPPLY } from '../eligibility/list'
 import { contractRefFromRow } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import type { CapabilityOfferingRow } from '../offering/registration'
-import {
-  publicationLifecycle,
-  type PublicationLifecycle,
-} from '../publication/lifecycle'
 import { MAX_CONTEXT_VALUE_LENGTH, boundedTrimmed } from '../shared/command-envelope'
 
+import { qualifySuppliedCandidate } from './qualify-candidate'
 import type {
   CapabilityGraphPorts,
   GraphPublicationRow,
   GraphPublishedBusiness,
 } from './ports'
-
 export type CapabilityGraphNode = Readonly<{
   publicationRef: string
   revision: number
@@ -128,9 +124,6 @@ export async function queryCapabilityGraph(
     const contract = await ports.getExactRegisteredCapabilityContract(
       contractRefFromRow(publication),
     )
-    const currentConnection = binding?.authority.kind === 'provider_connection'
-      ? await ports.loadProviderConnection(binding.authority.connectionRef)
-      : undefined
     if (
       offering === null
       || binding === null
@@ -143,8 +136,19 @@ export async function queryCapabilityGraph(
     ) {
       return { kind: 'unavailable' as const, reason: 'graph_integrity_failure' as const }
     }
-    const lifecycle = publicationLifecycle(publication, offering, binding, now, currentConnection)
-    if (!args.includeInactive && lifecycle.state !== 'active') continue
+    const qualification = await qualifySuppliedCandidate(ports, {
+      candidate: {
+        publicationRef: publication.publicationRef,
+        revision: publication.revision,
+        networkId: args.networkId,
+        businessId: publication.businessId,
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: contractRefFromRow(binding),
+      },
+      now,
+    })
+    if (!args.includeInactive && qualification.status !== 'eligible') continue
     nodes.push(projectGraphNode({
       publication,
       offering,
@@ -152,12 +156,11 @@ export async function queryCapabilityGraph(
       contract: contract.contract,
       business,
       now,
-      lifecycle,
+      qualification,
     }))
   }
   return { kind: 'available' as const, nodes, edges: projectGraphEdges(nodes) }
 }
-
 function projectGraphNode(input: Readonly<{
   publication: GraphPublicationRow
   offering: CapabilityOfferingRow
@@ -165,9 +168,9 @@ function projectGraphNode(input: Readonly<{
   contract: CapabilityContract
   business: GraphPublishedBusiness
   now: number
-  lifecycle: PublicationLifecycle
+  qualification: Awaited<ReturnType<typeof qualifySuppliedCandidate>>
 }>): CapabilityGraphNode {
-  const { publication, offering, binding, contract, business, now, lifecycle } = input
+  const { publication, offering, binding, contract, business, now, qualification } = input
   return {
     publicationRef: publication.publicationRef,
     revision: publication.revision,
@@ -223,7 +226,10 @@ function projectGraphNode(input: Readonly<{
       stale: publication.readinessValidUntil !== undefined
         && publication.readinessValidUntil < now,
     },
-    routability: { eligible: lifecycle.state === 'active', reasons: lifecycle.reasons },
+    routability: {
+      eligible: qualification.status === 'eligible',
+      reasons: qualification.reasons,
+    },
     evidenceRefs: uniqueSorted([
       ...publication.registrationEvidenceRefs,
       ...publication.readinessEvidenceRefs,

@@ -66,6 +66,7 @@ export type RouteMandateStep = Readonly<{
   publicationRevision: number
   inputScopeDigest: string
   price: RouteStep['price']
+  priceDigest: RouteStep['priceDigest']
   dataScope: readonly RouteMandateDataScope[]
   effects: RouteStep['effects']
   evidence: RouteStep['evidence']
@@ -335,6 +336,7 @@ function routeAuthorityMaterial(
       deferredInputs: step.deferredInputs,
     } as StableHashValue),
     price: { ...step.price },
+    priceDigest: step.priceDigest,
     dataScope: step.dataUse.map((declaration) => ({
       effectId: declaration.effectId,
       inputPointer: declaration.inputPointer,

@@ -126,6 +126,11 @@ describe('x402 payment reconciliation evidence', () => {
         evidenceRefs: [evidence.evidenceRef, ...evidence.evidenceRefs],
       },
     })
+    const restartedAdapter = createAdapter(createDevelopmentFileX402PaymentAttemptPort(file))
+    expect(await restartedAdapter.reconcilePayment({ evidence })).toMatchObject({
+      kind: 'accepted',
+      attempt: { state: resolution },
+    })
     expect(createDevelopmentFileX402PaymentAttemptPort(file).list()).toEqual([
       expect.objectContaining({
         paymentIdentifier: attempt.paymentIdentifier,
@@ -166,6 +171,7 @@ describe('x402 payment reconciliation evidence', () => {
         }
         return { kind: 'resolved' as const, credentialRef: 'test:connection:x402' }
       },
+      validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
       prepareX402PaymentAuthorization: async () => {
         prepareCount += 1
         return {

@@ -98,6 +98,7 @@ export const securityTables = {
     scope: literalUnion(SourceWriteAdmissionScopeValues),
     operationKey: v.string(),
     correlationId: v.string(),
+    commandDigest: v.optional(v.string()),
     bodyDigest: v.string(),
     issuedAt: v.number(),
     consumedAt: v.number(),

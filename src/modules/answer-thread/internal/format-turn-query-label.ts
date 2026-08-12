@@ -1,6 +1,7 @@
 import { neutralizeBidiFormattingControls } from '@/modules/answer/projection'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import { isNarrowToChipQuery, parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
+import { isRecord } from '@/modules/common/is-record'
 
 export type TurnQueryLabelRole = 'need' | 'follow-up'
 
@@ -15,6 +16,16 @@ export function formatTurnQueryLabel(input: {
   seq: number
 }): TurnQueryLabel {
   const query = neutralizeBidiFormattingControls(input.query)
+  if (query.startsWith('{"operationRef"')) {
+    try {
+      const selection: unknown = JSON.parse(query)
+      if (isRecord(selection) && typeof selection.operationRef === 'string' && isRecord(selection.input)) {
+        return { text: '→ Run selected operation', role: 'follow-up' }
+      }
+    } catch {
+      return { text: '→ Invalid operation input', role: 'follow-up' }
+    }
+  }
   if (input.seq <= 1) {
     return { text: query, role: 'need' }
   }

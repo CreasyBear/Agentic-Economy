@@ -224,8 +224,15 @@ describe('keyless weather input composition', () => {
     expect(result.toolCalls[0]).toMatchObject({ status: 'error' })
     expect(JSON.parse(result.toolCalls[0]!.resultJson)).toMatchObject({
       kind: 'error',
+      operationRef: forecastDescriptor.operationRef,
       code: 'response_invalid',
+      composition: {
+        stage: 'geocoding',
+        place: 'Melbourne',
+        providerResult: { operationRef: geocodingDescriptor.operationRef },
+      },
     })
+    expect(result.snapshot.operationSelection?.operationRef).toBe(forecastDescriptor.operationRef)
     expect(result.snapshot.oneLine).not.toContain('clarify your location')
   })
 
@@ -250,7 +257,7 @@ describe('keyless weather input composition', () => {
     const result = await runWeatherQuery(
       'What is the weather like in Melbourne right now?',
       { latitude: 0, longitude: 0, current_weather: true },
-      'The weather provider rejected the request for the supplied Melbourne place (HTTP 400).',
+      'Melbourne is 14.2°C with light cloud.',
     )
 
     expect(executionMocks.executeKeylessOperation).toHaveBeenCalledTimes(2)
@@ -258,11 +265,18 @@ describe('keyless weather input composition', () => {
     expect(result.toolCalls[1]).toMatchObject({ status: 'error' })
     expect(JSON.parse(result.toolCalls[1]!.resultJson)).toMatchObject({
       kind: 'error',
+      operationRef: forecastDescriptor.operationRef,
       code: 'provider_error',
       reason: 'The operation returned HTTP 400.',
-      composition: { place: 'Melbourne' },
+      composition: {
+        place: 'Melbourne',
+        geocoding: {
+          operationRef: geocodingDescriptor.operationRef,
+        },
+      },
     })
-    expect(result.snapshot.oneLine).not.toContain('clarify your location')
+    expect(result.snapshot.oneLine).toContain("couldn't complete the live lookup for Melbourne")
+    expect(result.snapshot.oneLine).not.toContain('14.2')
   })
 
   it('executes direct numeric-coordinate forecasts without a geocoding attempt', async () => {

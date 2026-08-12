@@ -1,5 +1,10 @@
 import { claimBusiness, createEmptyBusinessSourceState, validateOwnerPublishedPhone } from '@/modules/business/public'
-import type { BusinessMutationActor } from '@/modules/business/public'
+import type { BusinessContext, BusinessMutationActor, BusinessRecord } from '@/modules/business/public'
+import {
+  BusinessContextKindValues,
+  canonicalProviderIdentifier,
+  canonicalProviderWebsite,
+} from '@/modules/business/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { CorrelationId, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
 import { normalizeSlug } from '@/modules/common/normalize-slug'
@@ -18,12 +23,10 @@ import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 const PublicOwnerClaimFieldValues = [
+  'businessContext',
   'businessName',
   'category',
-  'suburb',
-  'stateTerritory',
   'requestedSlug',
-  'publishedPhone',
   'ownerMessage',
   'sourceLabel',
   'serviceName',
@@ -41,12 +44,10 @@ const PublicOwnerClaimFieldValues = [
 export type PublicOwnerClaimField = (typeof PublicOwnerClaimFieldValues)[number]
 
 export type PublicOwnerClaimFlowInput = {
+  businessContext: BusinessContext
   businessName: string
   category: string
-  suburb: string
-  stateTerritory: string
   requestedSlug: string
-  publishedPhone: string
   ownerMessage: string
   sourceLabel: string
   serviceName: string
@@ -60,6 +61,7 @@ export type PublicOwnerClaimFlowInput = {
   publicDisclosure: string
   noContactReason: string
 }
+
 
 export type PublicOwnerClaimValidationError = {
   field: PublicOwnerClaimField
@@ -92,6 +94,12 @@ export type PublicOwnerClaimFlowResult =
       readback: PublicOwnerStatusReadback
     }
   | {
+      kind: 'provider_claimed'
+      code: 'claim_flow_provider_claimed'
+      business: Pick<BusinessRecord, 'businessId' | 'slug' | 'businessContext'>
+      claimId: string
+    }
+  | {
       kind: 'error'
       code: 'claim_flow_invalid' | 'claim_flow_claim_rejected' | 'claim_flow_publish_rejected'
       retryable: boolean
@@ -99,20 +107,20 @@ export type PublicOwnerClaimFlowResult =
       errors?: readonly PublicOwnerClaimValidationError[]
     }
 export type PublicBusinessPageNotFoundReason = 'no_such_business' | 'not_public'
-
-
 export type PublicBusinessPageReadbackResult =
   | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
-  | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
+
 
 export const publicOwnerDefaultClaimInput = {
+  businessContext: {
+    kind: 'local_human',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+  },
   businessName: 'Parramatta Emergency Plumbing',
   category: 'Emergency plumbing',
-  suburb: 'Parramatta',
-  stateTerritory: 'NSW',
   requestedSlug: 'parramatta-emergency-plumbing',
-  publishedPhone: '',
   ownerMessage: 'Owner supplied emergency plumbing facts for the public service page.',
   sourceLabel: 'Owner supplied service facts',
   serviceName: 'Emergency pipe repair',
@@ -133,23 +141,21 @@ const firstRequestModes = new Set<FirstRequestMode>([
   'not_available_yet',
 ])
 
-const requiredFieldLabels = {
+const commonRequiredFieldLabels = {
   businessName: 'Business name',
   category: 'Business category',
-  suburb: 'Suburb',
-  stateTerritory: 'State or territory',
   requestedSlug: 'Public page slug',
   sourceLabel: 'Fact note',
+} satisfies Record<'businessName' | 'category' | 'requestedSlug' | 'sourceLabel', string>
+
+const localRequiredFieldLabels = {
   serviceName: 'Service name',
   serviceCategory: 'Service category',
   serviceSummary: 'Service summary',
   serviceArea: 'Service area',
   hoursOrUnknown: 'Hours or unknown',
 } satisfies Record<
-  Exclude<
-    PublicOwnerClaimField,
-    'ownerMessage' | 'publishedPhone' | 'firstRequestMode' | 'publicDisclosure' | 'noContactReason' | 'photoUrl' | 'responseTimeMinutes'
-  >,
+  'serviceName' | 'serviceCategory' | 'serviceSummary' | 'serviceArea' | 'hoursOrUnknown',
   string
 >
 
@@ -168,9 +174,17 @@ export function validatePublicOwnerClaimFlowInput(
 ): PublicOwnerClaimValidationResult {
   const normalized = normalizeInput(input)
   const errors: PublicOwnerClaimValidationError[] = []
+  const context = normalized.businessContext
+  const requiredFields = context.kind === 'local_human'
+    ? { ...commonRequiredFieldLabels, ...localRequiredFieldLabels }
+    : commonRequiredFieldLabels
 
-  for (const [field, label] of Object.entries(requiredFieldLabels) as readonly [
-    keyof typeof requiredFieldLabels,
+  if (!BusinessContextKindValues.includes(context.kind)) {
+    errors.push({ field: 'businessContext', message: 'Choose whether this is a local human service or programmable provider.' })
+  }
+
+  for (const [field, label] of Object.entries(requiredFields) as readonly [
+    keyof typeof requiredFields,
     string,
   ][]) {
     if (normalized[field].length === 0) {
@@ -178,20 +192,36 @@ export function validatePublicOwnerClaimFlowInput(
     }
   }
 
-  if (!firstRequestModes.has(input.firstRequestMode)) {
-    errors.push({ field: 'firstRequestMode', message: 'Choose what the first safe request can show.' })
-  }
-
-  if (normalized.firstRequestMode === 'not_available_yet') {
-    if (normalized.noContactReason.length === 0) {
-      errors.push({ field: 'noContactReason', message: 'Explain why no request path is published.' })
+  if (context.kind === 'programmable_provider') {
+    if (canonicalProviderWebsite(context.website) === undefined) {
+      errors.push({ field: 'businessContext', message: 'Enter a canonical HTTPS provider website.' })
     }
-  } else if (normalized.publicDisclosure.length === 0) {
-    errors.push({ field: 'publicDisclosure', message: 'Describe the public first-request instruction.' })
-  }
+    if (canonicalProviderIdentifier(context.providerIdentifier) === undefined) {
+      errors.push({ field: 'businessContext', message: 'Enter a stable provider identifier.' })
+    }
+  } else if (context.kind === 'local_human') {
+    if (context.suburb.length === 0) {
+      errors.push({ field: 'businessContext', message: 'Suburb is required.' })
+    }
+    if (context.stateTerritory.length === 0) {
+      errors.push({ field: 'businessContext', message: 'State or territory is required.' })
+    }
 
-  if (validateOwnerPublishedPhone(normalized.publishedPhone).kind === 'invalid') {
-    errors.push({ field: 'publishedPhone', message: 'Enter a valid Australian phone number.' })
+    if (!firstRequestModes.has(input.firstRequestMode)) {
+      errors.push({ field: 'firstRequestMode', message: 'Choose what the first safe request can show.' })
+    }
+
+    if (normalized.firstRequestMode === 'not_available_yet') {
+      if (normalized.noContactReason.length === 0) {
+        errors.push({ field: 'noContactReason', message: 'Explain why no request path is published.' })
+      }
+    } else if (normalized.publicDisclosure.length === 0) {
+      errors.push({ field: 'publicDisclosure', message: 'Describe the public first-request instruction.' })
+    }
+
+    if (validateOwnerPublishedPhone(context.publishedPhone).kind === 'invalid') {
+      errors.push({ field: 'businessContext', message: 'Enter a valid Australian phone number.' })
+    }
   }
 
   if (errors.length > 0) {
@@ -199,6 +229,26 @@ export function validatePublicOwnerClaimFlowInput(
   }
 
   return { kind: 'valid', input: normalized }
+}
+
+export function toBusinessContext(input: PublicOwnerClaimFlowInput): BusinessContext {
+  if (input.businessContext.kind === 'programmable_provider') {
+    return {
+      kind: 'programmable_provider',
+      website: canonicalProviderWebsite(input.businessContext.website) ?? input.businessContext.website.trim(),
+      providerIdentifier: canonicalProviderIdentifier(input.businessContext.providerIdentifier) ?? input.businessContext.providerIdentifier.trim(),
+    }
+  }
+
+  const phone = validateOwnerPublishedPhone(input.businessContext.publishedPhone)
+  const postcode = input.businessContext.postcode?.trim()
+  return {
+    kind: 'local_human',
+    suburb: input.businessContext.suburb,
+    stateTerritory: input.businessContext.stateTerritory,
+    ...(postcode === undefined || postcode.length === 0 ? {} : { postcode }),
+    ...(phone.kind === 'valid' ? { publishedPhone: phone.value } : {}),
+  }
 }
 
 export function submitPublicOwnerClaimFlow(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowResult {
@@ -241,13 +291,11 @@ function submitPublicOwnerClaimFlowWithState(
     facts: {
       name: validation.input.businessName,
       category: validation.input.category,
-      suburb: validation.input.suburb,
-      stateTerritory: validation.input.stateTerritory,
+      businessContext: toBusinessContext(validation.input),
       requestedSlug: validation.input.requestedSlug,
-      ...(validation.input.publishedPhone.length === 0 ? {} : { publishedPhone: validation.input.publishedPhone }),
       ...(validation.input.ownerMessage.length === 0 ? {} : { ownerMessage: validation.input.ownerMessage }),
-      ...(photos.length === 0 ? {} : { photos }),
-      ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
+      ...(validation.input.businessContext.kind === 'local_human' && photos.length > 0 ? { photos } : {}),
+      ...(validation.input.businessContext.kind === 'local_human' && responseTimeMinutes !== undefined ? { responseTimeMinutes } : {}),
       sourceRefs: [
         {
           label: validation.input.sourceLabel,
@@ -270,6 +318,19 @@ function submitPublicOwnerClaimFlowWithState(
       code: 'claim_flow_claim_rejected',
       retryable: claim.retryable,
       reason: claim.reason,
+    }
+  }
+
+  if (validation.input.businessContext.kind === 'programmable_provider') {
+    return {
+      kind: 'provider_claimed',
+      code: 'claim_flow_provider_claimed',
+      business: {
+        businessId: claim.business.businessId,
+        slug: claim.business.slug,
+        businessContext: claim.business.businessContext,
+      },
+      claimId: claim.claim.claimId,
     }
   }
 
@@ -302,11 +363,15 @@ function submitPublicOwnerClaimFlowWithState(
 
 export function getDefaultPublicOwnerStatusReadback(): PublicOwnerStatusReadback {
   const result = submitPublicOwnerClaimFlow(publicOwnerDefaultClaimInput)
-  if (result.kind === 'error') {
-    throw new Error(`Default public owner readback failed: ${result.reason}`)
+  if (result.kind === 'ok') {
+    return result.readback
   }
 
-  return result.readback
+  throw new Error(
+    result.kind === 'error'
+      ? `Default public owner readback failed: ${result.reason}`
+      : 'Default public owner readback cannot represent a provider claim.',
+  )
 }
 
 export function getPublicBusinessPageReadback(slug: string): PublicBusinessPageReadbackResult {
@@ -432,13 +497,26 @@ function ownerNextAction(catalog: PublicBusinessCatalogApiV2Dto): string {
 }
 
 function normalizeInput(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowInput {
+  const context = input.businessContext
+  const businessContext: BusinessContext = context.kind === 'programmable_provider'
+    ? {
+        kind: 'programmable_provider',
+        website: cleanText(context.website),
+        providerIdentifier: cleanText(context.providerIdentifier),
+      }
+    : {
+        kind: 'local_human',
+        suburb: cleanText(context.suburb),
+        stateTerritory: cleanText(context.stateTerritory),
+        ...(context.postcode === undefined || cleanText(context.postcode).length === 0 ? {} : { postcode: cleanText(context.postcode) }),
+        ...(context.publishedPhone === undefined ? {} : { publishedPhone: cleanText(context.publishedPhone) }),
+      }
+
   return {
+    businessContext,
     businessName: cleanText(input.businessName),
     category: cleanText(input.category),
-    suburb: cleanText(input.suburb),
-    stateTerritory: cleanText(input.stateTerritory),
     requestedSlug: normalizeSlug(input.requestedSlug),
-    publishedPhone: cleanText(input.publishedPhone),
     ownerMessage: cleanText(input.ownerMessage),
     sourceLabel: cleanText(input.sourceLabel),
     serviceName: cleanText(input.serviceName),

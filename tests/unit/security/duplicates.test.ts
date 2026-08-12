@@ -21,8 +21,11 @@ describe('duplicate claim controls', () => {
       {
         name: 'Parramatta Emergency Plumbing',
         category: 'Emergency Plumbing',
-        suburb: 'Parramatta',
-        stateTerritory: 'NSW',
+        businessContext: {
+          kind: 'local_human',
+          suburb: 'Parramatta',
+          stateTerritory: 'NSW',
+        },
       },
       brandNonEmpty('owner:2', 'OwnerId')
     )

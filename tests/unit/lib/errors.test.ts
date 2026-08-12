@@ -5,7 +5,9 @@ import {
   buildAnswerTurnProblem,
   buildProblem,
   defaultTitle,
+  gatewayFailureToProblem,
   kindForStatus,
+  operationInvokeResultToProblem,
   operationResultToProblem,
   parseAnswerTurnProblem,
   parseAnswerTurnProblemStrict,
@@ -198,6 +200,52 @@ describe('operationResultToProblem', () => {
     // provider_error with retryable:false must NOT map to UNAVAILABLE.
     expect(operationResultToProblem({ kind: 'error', operationRef: 'r', code: 'provider_error', retryable: false, reason: 'declined' }))
       .toMatchObject({ kind: 'INTERNAL', code: 'provider_error', retryable: false })
+  })
+})
+
+describe('gateway failure projection', () => {
+  it('maps auth, budget, provider, and unknown failures through canonical kinds', () => {
+    expect(gatewayFailureToProblem({ code: 'authentication_required', kind: 'refused' }))
+      .toEqual({ kind: 'UNAUTHENTICATED', code: 'authentication_required' })
+    expect(gatewayFailureToProblem({ code: 'budget_exhausted', kind: 'refused' }))
+      .toEqual({ kind: 'RESOURCE_EXHAUSTED', code: 'budget_exhausted' })
+    expect(gatewayFailureToProblem({ code: 'provider_unavailable', kind: 'error', retryable: true }))
+      .toEqual({ kind: 'UNAVAILABLE', code: 'provider_unavailable', retryable: true })
+    expect(gatewayFailureToProblem({ code: 'private provider response', kind: 'error' }))
+      .toEqual({ kind: 'INTERNAL', code: 'operation_invoke_failed' })
+  })
+  it('maps grant, idempotency, rate, and reconciliation refusals by cause', () => {
+    expect(gatewayFailureToProblem({ code: 'grant_revoked', kind: 'refused' }))
+      .toEqual({ kind: 'PERMISSION_DENIED', code: 'grant_revoked' })
+    expect(gatewayFailureToProblem({ code: 'authority_denied', kind: 'refused' }))
+      .toEqual({ kind: 'PERMISSION_DENIED', code: 'authority_denied' })
+    expect(gatewayFailureToProblem({ code: 'idempotency_conflict', kind: 'refused' }))
+      .toEqual({ kind: 'ALREADY_EXISTS', code: 'idempotency_conflict' })
+    expect(gatewayFailureToProblem({ code: 'concurrency_limited', kind: 'refused', retryable: true }))
+      .toEqual({ kind: 'RESOURCE_EXHAUSTED', code: 'concurrency_limited', retryable: true })
+    expect(gatewayFailureToProblem({ code: 'source_unavailable', kind: 'error', retryable: true }))
+      .toEqual({ kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true })
+    expect(gatewayFailureToProblem({ code: 'result_invalid', kind: 'error', retryable: false }))
+      .toEqual({ kind: 'INTERNAL', code: 'result_invalid', retryable: false })
+  })
+
+  it('keeps domain outcomes typed while projecting only refusal/error variants', () => {
+    expect(operationInvokeResultToProblem({
+      kind: 'completed',
+      invocationRef: 'invocation:1',
+      operationRef: 'operation:1',
+      output: {},
+    })).toBeNull()
+    expect(operationInvokeResultToProblem({
+      kind: 'pending',
+      invocationRef: 'invocation:1',
+      operationRef: 'operation:1',
+      retryAfterMs: 100,
+    })).toBeNull()
+    expect(operationInvokeResultToProblem({ kind: 'refused', code: 'rate_limited', retryable: true }))
+      .toEqual({ kind: 'RESOURCE_EXHAUSTED', code: 'rate_limited', retryable: true })
+    expect(operationInvokeResultToProblem({ kind: 'error', code: 'provider_unavailable', retryable: true, reason: 'secret upstream body' }))
+      .toEqual({ kind: 'UNAVAILABLE', code: 'provider_unavailable', retryable: true })
   })
 })
 

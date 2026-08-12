@@ -1,7 +1,24 @@
+import { z } from 'zod'
+import {
+  ANSWER_OPERATION_CANDIDATE_LIMIT,
+  AnswerOperationCandidateSchema,
+  AnswerOperationOutcomeSchema,
+  AnswerOperationSelectionSchema,
+  answerOperationCandidateSetDigest,
+  AnswerSourceSchema,
+  WebDiscoveryClaimSchema,
+} from '@/modules/answer/answer-schema'
+import {
+  AnswerLayoutProfileValues,
+  AnswerWorkStepSchema,
+  isValidFrozenAnswerOperationArtifacts,
+} from '@/modules/answer/answer-event-schema'
 import {
   buildArtifactsFromSnapshot,
   type AnswerSnapshot,
 } from '@/modules/answer/projection'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { MAX_ANSWER_TURN_CHECKPOINT_BYTES } from './answer-turn-checkpoint'
 import { parseAnswerTurnProblemStrict, redactAnswerTurnProblem } from '@/lib/errors'
 import { isRecord } from '@/modules/common/is-record'
 
@@ -10,37 +27,194 @@ import type {
   AnswerTurnReservationRecord,
   AnswerThreadRecord,
   FrozenTurnEvidence,
-  FrozenTurnProse,
   PublicThreadProjection,
   PublicThreadTurn,
 } from '../answer-thread.schema'
 import { buildPublicAnswerCheckSummary } from './answer-run-summary'
 import { publicWorkLog } from './public-worklog'
 
+const frozenToolCallSchema = z.strictObject({
+  toolCallId: z.string().min(1),
+  turnId: z.string().min(1),
+  seq: z.number().finite().int().nonnegative(),
+  toolId: z.string().min(1),
+  inputJson: z.string(),
+  resultSummaryJson: z.string(),
+  resultJson: z.string(),
+  resultHash: z.string().min(1),
+  status: z.enum(['complete', 'error', 'refused']),
+  createdAt: z.number().finite(),
+})
+
+const frozenHarnessFinalizationSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  status: z.enum(['accepted', 'replayed']),
+  finalizationHash: z.string().min(1),
+  journalEntryCount: z.number().finite().int().nonnegative(),
+  finalizedAt: z.number().finite(),
+})
+const frozenTurnProseSchema = z.strictObject({
+  oneLine: z.string(),
+  summary: z.string(),
+  nextStep: z.string(),
+  compactLayout: z.boolean().exactOptional(),
+  layoutProfile: z.enum(AnswerLayoutProfileValues).exactOptional(),
+})
 function isCurrentFrozenEvidence(value: unknown): value is FrozenTurnEvidence {
-  if (!isRecord(value)) {
-    return false
-  }
+  if (!isRecord(value)) return false
   if (
-    !Array.isArray(value.providers) ||
-    !Array.isArray(value.allowedSlugs) ||
-    typeof value.agentJsonUrl !== 'string' ||
-    !Array.isArray(value.toolCalls) ||
-    !Array.isArray(value.timings) ||
-    !Array.isArray(value.workLog) ||
-    !isRecord(value.answerRun)
+    !Array.isArray(value.providers)
+    || !Array.isArray(value.allowedSlugs)
+    || typeof value.agentJsonUrl !== 'string'
+    || !Array.isArray(value.toolCalls)
+    || !Array.isArray(value.timings)
+    || !Array.isArray(value.workLog)
+    || !isRecord(value.answerRun)
+    || (value.harnessRunRef !== undefined && (typeof value.harnessRunRef !== 'string' || value.harnessRunRef.length === 0))
+    || (value.harnessRun !== undefined && !isRecord(value.harnessRun))
   ) {
     return false
   }
+
+  const providers = z.array(AnswerSourceSchema).safeParse(value.providers)
+  const toolCalls = z.array(frozenToolCallSchema).safeParse(value.toolCalls)
+  const workLog = z.array(AnswerWorkStepSchema).safeParse(value.workLog)
+  if (!providers.success
+    || !value.allowedSlugs.every((slug) => typeof slug === 'string' && slug.length > 0)
+    || !toolCalls.success
+    || !workLog.success
+    || !value.timings.every((timing) => isRecord(timing)
+      && typeof timing.name === 'string'
+      && typeof timing.durationMs === 'number'
+      && Number.isFinite(timing.durationMs)
+      && typeof timing.atMs === 'number'
+      && Number.isFinite(timing.atMs))
+    || hasForbiddenReplayKey(value.toolCalls)) {
+    return false
+  }
+  for (const call of toolCalls.data) {
+    for (const field of ['inputJson', 'resultSummaryJson', 'resultJson'] as const) {
+      const encoded = call[field]
+      try {
+        if (hasForbiddenReplayKey(JSON.parse(encoded))) return false
+      } catch {
+        return false
+      }
+    }
+  }
+  if (value.importedClaims !== undefined
+    && !z.array(WebDiscoveryClaimSchema).max(5).safeParse(value.importedClaims).success) {
+    return false
+  }
+
+  const parsedCandidates = value.operationCandidates === undefined
+    ? undefined
+    : z.array(AnswerOperationCandidateSchema).max(ANSWER_OPERATION_CANDIDATE_LIMIT).safeParse(value.operationCandidates)
+  if (value.operationCandidates !== undefined
+    && (parsedCandidates === undefined || !parsedCandidates.success)) {
+    return false
+  }
+  if (parsedCandidates?.success) {
+    if (typeof value.operationCandidatesDigest !== 'string'
+      || answerOperationCandidateSetDigest(parsedCandidates.data) !== value.operationCandidatesDigest) {
+      return false
+    }
+    for (const candidate of parsedCandidates.data) {
+      if (candidate.inputJsonSchema !== undefined
+        && new TextEncoder().encode(JSON.stringify(candidate.inputJsonSchema)).byteLength
+          > MAX_ANSWER_TURN_CHECKPOINT_BYTES) {
+        return false
+      }
+    }
+  } else if (value.operationCandidatesDigest !== undefined) {
+    return false
+  }
+  const operationCandidates = parsedCandidates?.success ? parsedCandidates.data : undefined
+  const parsedOutcome = value.operationOutcome === undefined
+    ? undefined
+    : AnswerOperationOutcomeSchema.safeParse(value.operationOutcome)
+  if (value.operationOutcome !== undefined && (parsedOutcome === undefined || !parsedOutcome.success)) {
+    return false
+  }
+  const operationOutcome = parsedOutcome?.success ? parsedOutcome.data : undefined
+  const parsedSelection = value.operationSelection === undefined
+    ? undefined
+    : AnswerOperationSelectionSchema.safeParse(value.operationSelection)
+  if (value.operationSelection !== undefined && (parsedSelection === undefined || !parsedSelection.success)) {
+    return false
+  }
+  const operationSelection = parsedSelection?.success ? parsedSelection.data : undefined
+  if (!isValidFrozenAnswerOperationArtifacts({
+    candidates: operationCandidates,
+    candidateSetDigest: value.operationCandidatesDigest,
+    selection: operationSelection,
+    outcome: operationOutcome,
+    toolCalls: toolCalls.data,
+    requireToolEvidence: operationOutcome !== undefined,
+  })) {
+    return false
+  }
+  if (operationOutcome !== undefined && operationSelection !== undefined
+    && (
+      operationOutcome.operationRef !== operationSelection.operationRef
+      || operationOutcome.toolId !== operationSelection.toolId
+      || operationOutcome.resultDigest !== operationSelection.resultDigest
+    )) {
+    return false
+  }
+  if (operationSelection !== undefined) {
+    if (value.operationCandidatesDigest !== undefined
+      && operationSelection.candidateSetDigest !== value.operationCandidatesDigest) {
+      return false
+    }
+    if (operationOutcome !== undefined
+      && (operationSelection.operationRef !== operationOutcome.operationRef
+        || operationSelection.toolId !== operationOutcome.toolId
+        || operationSelection.resultDigest !== operationOutcome.resultDigest)) {
+      return false
+    }
+  }
+  if (operationSelection?.candidateSetDigest !== undefined
+    && operationCandidates !== undefined
+    && answerOperationCandidateSetDigest(operationCandidates) !== operationSelection.candidateSetDigest) {
+    return false
+  }
+
   const summary = value.answerRun.summary
   const coverage = value.answerRun.coverage
-  return isRecord(summary) &&
-    isRecord(summary.tools) &&
-    isRecord(summary.evidence) &&
-    isRecord(summary.workLog) &&
-    isRecord(summary.timings) &&
-    isRecord(summary.gates) &&
-    isRecord(coverage)
+  if (
+    !isRecord(summary)
+    || summary.schemaVersion !== 1
+    || !isRecord(summary.turn)
+    || !isRecord(summary.tools)
+    || !isRecord(summary.evidence)
+    || !isRecord(summary.workLog)
+    || !isRecord(summary.timings)
+    || !isRecord(summary.gates)
+    || !isRecord(coverage)
+    || hasForbiddenReplayKey(value.answerRun)
+  ) {
+    return false
+  }
+  if (value.harnessFinalization !== undefined
+    && !frozenHarnessFinalizationSchema.safeParse(value.harnessFinalization).success) {
+    return false
+  }
+  return true
+}
+
+function hasForbiddenReplayKey(value: unknown, seen = new Set<object>()): boolean {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return true
+    seen.add(value)
+    return value.some((item) => hasForbiddenReplayKey(item, seen))
+  }
+  if (!isRecord(value)) return false
+  if (seen.has(value)) return true
+  seen.add(value)
+  return Object.entries(value).some(([key, nested]) =>
+    /(?:api[_-]?key|authorization|bearer|credential|password|private[_-]?key|secret|token)/i.test(key)
+    || hasForbiddenReplayKey(nested, seen))
 }
 
 
@@ -63,11 +237,7 @@ export function countAnswerThreadTurns(
     count += 1
   }
   for (const reservation of rows.reservations) {
-    if (
-      reservation.state !== 'reserved' &&
-      reservation.state !== 'answer_persisted' &&
-      reservation.state !== 'stopped'
-    ) {
+    if (reservation.state !== 'reserved' && reservation.state !== 'stopped') {
       continue
     }
     if (seenTurnIds.has(reservation.turnId) || seenSeqs.has(reservation.seq)) continue
@@ -108,7 +278,6 @@ export function buildPublicThreadProjectionWithReservations(
     turns: turns.slice(0, limit),
   }
 }
-
 export function toThreadRecord(row: Record<string, unknown>): AnswerThreadRecord {
   return {
     threadId: String(row.threadId),
@@ -180,7 +349,7 @@ export function buildPublicReservationTurn(
 ): PublicThreadTurn | undefined {
   const status = reservation.state === 'stopped'
     ? 'stopped'
-    : reservation.state === 'reserved' || reservation.state === 'answer_persisted'
+    : reservation.state === 'reserved'
       ? 'pending'
       : undefined
   if (status === undefined) {
@@ -220,12 +389,23 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
 
   try {
     const evidence = parseFrozenEvidence(turn.evidenceJson)
-    const prose = JSON.parse(turn.proseJson) as FrozenTurnProse
+    const proseValue: unknown = JSON.parse(turn.proseJson)
+    const parsedProse = frozenTurnProseSchema.safeParse(proseValue)
+    if (!parsedProse.success) {
+      throw new Error('answer_prose_invalid')
+    }
+    const prose = parsedProse.data
     const snapshot: AnswerSnapshot = {
       query: turn.query,
       oneLine: prose.oneLine,
       providers: evidence.providers,
       ...(evidence.importedClaims === undefined ? {} : { importedClaims: evidence.importedClaims }),
+      ...(evidence.operationCandidates === undefined ? {} : { operationCandidates: evidence.operationCandidates }),
+      ...(evidence.operationCandidatesDigest === undefined
+        ? {}
+        : { operationCandidatesDigest: evidence.operationCandidatesDigest }),
+      ...(evidence.operationOutcome === undefined ? {} : { operationOutcome: evidence.operationOutcome }),
+      ...(evidence.operationSelection === undefined ? {} : { operationSelection: evidence.operationSelection }),
       ...(turn.intent === 'inquiry_handoff' && evidence.providers.length === 1
         ? { selectedProvider: evidence.providers[0] }
         : {}),

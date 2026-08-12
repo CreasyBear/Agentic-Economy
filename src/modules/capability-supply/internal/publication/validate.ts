@@ -6,7 +6,12 @@ import {
 } from '../publication-importers'
 import type { SchemaDereferencer } from '../admit-provider-schema'
 import type { CapabilityPublicationAdmissionSource } from './admit'
-import { decodeConvexPublicationSource } from './source'
+import {
+  decodeConvexPublicationSource,
+  publicationSourceDescriptorJson,
+  publicationSourceDigest,
+  publicationSourceSelector,
+} from './source'
 
 /**
  * Read-only acceptance pre-flight for a capability publication.
@@ -61,10 +66,23 @@ export async function validateCapabilityPublication(
       fix: publicationValidationFix(normalized.reason),
     }
   }
-  return {
-    kind: 'accepted',
-    normalized: normalized.draft,
-    sourceDigest: normalized.draft.source.descriptorDigest,
+  try {
+    const descriptorJson = publicationSourceDescriptorJson(importSource as CapabilityPublicationImport)
+    return {
+      kind: 'accepted',
+      normalized: normalized.draft,
+      sourceDigest: publicationSourceDigest({
+        sourceKind: normalized.draft.source.kind,
+        selector: publicationSourceSelector(normalized.draft),
+        descriptorJson,
+      }),
+    }
+  } catch {
+    return {
+      kind: 'refused',
+      reason: 'source_invalid',
+      fix: publicationValidationFix('source_invalid'),
+    }
   }
 }
 
@@ -89,8 +107,30 @@ export function publicationValidationFix(reason: CapabilityPublicationImportRefu
       return 'The selected operation does not exist in the source. Choose a path + method the document actually defines.'
     case 'schema_missing':
       return 'The operation has no resolvable input and/or output JSON schema, or no unique 2xx response. Provide a single 2xx response with a JSON content schema.'
+    case 'openapi_query_parameter_definition_unsupported':
+      return 'The OpenAPI query parameter definition is unsupported. Use a query parameter with a direct schema and omit Parameter.content.'
+    case 'openapi_query_parameter_serialization_unsupported':
+      return 'The OpenAPI query parameter serialization is unsupported. Use style=form with a boolean explode value and set allowReserved=false.'
+    case 'openapi_query_parameter_schema_unsupported':
+      return 'The OpenAPI query parameter schema is unsupported. Use a scalar or a one-dimensional scalar array with supported form serialization.'
+    case 'openapi_path_parameter_required':
+      return 'Every OpenAPI path parameter must be declared with required=true and have a matching {name} path template.'
+    case 'openapi_path_parameter_serialization_unsupported':
+      return 'The OpenAPI path parameter uses an unsupported style or schema. Use a scalar/simple or one-dimensional scalar path value.'
+    case 'openapi_header_parameter_unsafe':
+      return 'The OpenAPI header is reserved for credentials or AE transport identity. Remove it or declare a supported security scheme.'
+    case 'openapi_header_parameter_serialization_unsupported':
+      return 'The OpenAPI header uses an unsupported content or serialization shape. Use a non-secret simple scalar or scalar array header.'
+    case 'openapi_media_type_unsupported':
+      return 'Use application/json or an application +json request/response media type so the guarded JSON adapter can preserve and validate it.'
+    case 'openapi_request_body_parameter_mix_unsupported':
+      return 'Separate the JSON request body from query, path, or header parameters. The guarded adapter supports a JSON POST body or parameter mappings, not a composite body-plus-parameter request.'
+    case 'openapi_response_status_unsupported':
+      return 'Declare exactly one explicit 2xx response with a JSON content schema so the adapter has one unambiguous success shape.'
+    case 'openapi_operation_unsupported':
+      return 'This OpenAPI operation uses a shape outside the guarded adapter. Select a GET query/path/header operation or a JSON POST body.'
     case 'schema_profile_unsupported':
-      return 'The schema uses constructs the deterministic normalizer cannot handle (remote $ref, unsupported reference shape, or a non-canonical output pointer). Inline all references and wrap dynamic-keyed outputs under a guaranteed required key.'
+      return 'The schema uses constructs the deterministic normalizer cannot handle (unsupported reference shape or a non-canonical output pointer). Resolve supported references through the admission dereferencer and wrap dynamic-keyed outputs under a guaranteed required key.'
     case 'admit_schema_circular_reference':
       return 'The schema has a circular $ref chain. Break the cycle: inline the definition once without referring back to itself.'
     case 'admit_schema_reference_unresolvable':

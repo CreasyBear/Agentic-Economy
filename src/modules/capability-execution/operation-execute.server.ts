@@ -1,7 +1,7 @@
 import { Agent, fetch as guardedFetch } from 'undici'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import {
-  defaultKeylessExecutableSource,
+  convexKeylessExecutableSource,
   type KeylessExecutableSourcePort,
 } from './operation-execute.actions'
 import {
@@ -13,8 +13,9 @@ import {
 
 export async function executeKeylessOperation(
   input: OperationExecuteInput,
-  source: KeylessExecutableSourcePort = defaultKeylessExecutableSource,
+  source: KeylessExecutableSourcePort = convexKeylessExecutableSource,
   operationExecuteDeps?: Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl'>,
+  expectedExecutionBindingDigest?: string,
 ): Promise<OperationExecuteResult> {
   const dispatcher = operationExecuteDeps?.fetchImpl === undefined
     ? new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
@@ -31,7 +32,7 @@ export async function executeKeylessOperation(
       readDescriptor: (operationRef) => source.read(operationRef),
       isPublicTarget,
       fetchImpl,
-    })
+    }, expectedExecutionBindingDigest)
   } finally {
     if (dispatcher !== undefined) await dispatcher.close().catch(() => undefined)
   }

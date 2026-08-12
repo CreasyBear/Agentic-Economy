@@ -1,4 +1,5 @@
 import type { BusinessId, CorrelationId, OfferingRef, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
+import type { BusinessContext } from '@/modules/business/public'
 import type { ConsumerSupplyOption } from '@/modules/customer-request/application/public'
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
 import type { FirstRequestMode, PublicCatalogReadState } from '@/modules/catalog/public'
@@ -119,15 +120,14 @@ export type {
 } from './internal/service-projection'
 
 export function toConsumerSupplyOption(service: ServiceDto): ConsumerSupplyOption {
-  const location = [service.ae.suburb, service.ae.stateTerritory]
-    .filter((part): part is string => part !== undefined && part.length > 0)
-    .join(', ')
+  const location = service.ae.businessContext.kind === 'local_human'
+    ? [service.ae.businessContext.suburb, service.ae.businessContext.stateTerritory]
+      .filter((part): part is string => part.length > 0)
+      .join(', ')
+    : ''
   const firstOffer = service.ae.offerings[0]
   const firstPricedOffering = service.ae.offerings.find((offering) => offering.price !== undefined)
-  const quoteEndpoint = service.endpoints.find((endpoint) => endpoint.ae.access === 'open')
-  const nextAction = quoteEndpoint === undefined
-    ? { kind: 'inspect' as const, label: 'See business details', href: `/${service.id}` }
-    : { kind: 'quote' as const, label: 'Check an example quote', href: quoteEndpoint.url }
+  const nextAction = { kind: 'inspect' as const, label: 'See business details', href: `/${service.id}` }
   const priceSummary = catalogPriceSummaryText(service.priceSummary)
   const price = firstPricedOffering?.price === undefined
     ? {
@@ -258,9 +258,7 @@ export type RegistrySearchDocumentContract = {
   name: string
   category: string
   categoryKey: string
-  suburb: string
-  stateTerritory: string
-  postcode?: string
+  businessContext: BusinessContext
   publicStatus: Extract<PublicStatus, 'published'>
   trustTier: TrustTier
   firstRequestMode: FirstRequestMode
@@ -357,7 +355,6 @@ export {
 
 export {
   createDefaultRegistrySourceState,
-  createLocalE2eRegistrySourceState,
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
   getPublicBusinessOfferingSupplyBySlug,

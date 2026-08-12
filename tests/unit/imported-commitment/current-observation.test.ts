@@ -24,6 +24,7 @@ const contractRef = {
 const provider: SuppliedCandidateRef = {
   publicationRef: 'publication:mock:provider',
   revision: 2,
+  networkId: 'network:development',
   businessId: 'business:mock:provider',
   offeringId: 'offering:mock:observation',
   bindingId: 'binding:mock:admitted-adapter',

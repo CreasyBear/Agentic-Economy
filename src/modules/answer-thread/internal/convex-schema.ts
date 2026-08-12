@@ -9,7 +9,7 @@ import {
   AnswerToolCallStatusValues,
   AnswerToolIdValues,
   FollowUpIntentValues,
-} from '../answer-thread.schema'
+} from '../answer-thread.values'
 
 export const answerThreadTables = {
   answerThreads: defineTable({
@@ -50,6 +50,11 @@ export const answerThreadTables = {
     seq: v.number(),
     query: v.string(),
     searchContextJson: v.optional(v.string()),
+    generation: v.number(),
+    checkpointGeneration: v.optional(v.number()),
+    checkpointStep: v.optional(v.number()),
+    checkpointDigest: v.optional(v.string()),
+    checkpointJson: v.optional(v.string()),
     state: literalUnion(AnswerTurnReservationStateValues),
     finalStatus: v.optional(v.union(v.literal('complete'), v.literal('error'))),
     answerDigest: v.optional(v.string()),

@@ -6,29 +6,15 @@ import {
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { formatExactAmount } from '@/modules/money/public'
 import {
   applyWorkTreeThroughSource,
-  inspectWorkTreeThroughSource,
   type WorkTreeApplyResult,
-  type WorkTreeInspectResult,
 } from '@/modules/work-tree/work-tree.functions'
-import {
-  makeJournalEvent,
-  runStudy,
-  type StudyRunResult,
-} from './internal/pipeline'
-import {
-  studyArtifactSchema,
-  type StudyArtifact,
-  type StudyCharter,
-  type StudyRegistryService,
-  type StudyWebClaim,
-} from './internal/contract'
-import type { StudyJournalEvent } from './internal/rfx-machine'
+import { studyArtifactSchema, type StudyCharter } from './internal/contract'
+import { studyJournalEventSchema, type StudyJournalEvent } from './internal/rfx-machine'
+import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 
 const createStudyMutation = sourceMutation<Record<string, unknown>, unknown>('studies:create')
-const recordStudyResultMutation = sourceMutation<Record<string, unknown>, unknown>('studies:recordResult')
 const readStudyQuery = sourceQuery<Record<string, unknown>, StudyReadbackResult>('studies:getById')
 
 export type StudyReadback = Readonly<{
@@ -41,11 +27,13 @@ export type StudyReadback = Readonly<{
 
 export type StudyReadbackResult = StudyReadback | Readonly<{ kind: 'not_found' }>
 
-type StudyWorkTreeResult = WorkTreeApplyResult | WorkTreeInspectResult
-
-function workTreeRefusalCode(result: StudyWorkTreeResult): string | undefined {
+function workTreeRefusalCode(result: WorkTreeApplyResult): string | undefined {
   if (result.kind !== 'refused' && result.kind !== 'unknown') return undefined
-  return 'reason' in result ? result.reason : result.code
+  return result.reason
+}
+
+function makeJournalEvent(input: Omit<StudyJournalEvent, 'digest'>): StudyJournalEvent {
+  return studyJournalEventSchema.parse({ ...input, digest: canonicalDigest(input) })
 }
 
 
@@ -64,7 +52,7 @@ export type StudyStartInput = Readonly<{
   expectedRevision: number
   proposalDigest: string
   requestedAt?: number
-  context?: unknown
+  context: unknown
 }>
 
 export type StudyStartResult = Readonly<{
@@ -80,16 +68,6 @@ export type StudyStartResult = Readonly<{
   study?: unknown
 }>
 
-export type StudyCompletionResult = Readonly<{
-  kind: 'accepted' | 'replayed' | 'refused' | 'unknown'
-  studyId: string
-  projectId: string
-  artifact?: StudyArtifact
-  workTree?: StudyWorkTreeResult
-  study?: unknown
-  refusalCode?: string
-  result?: StudyRunResult
-}>
 
 export async function inspectStudyThroughSource(input: Readonly<{
   studyId: string
@@ -172,15 +150,7 @@ export async function startStudyThroughSource(input: StudyStartInput): Promise<S
     timestamp: requestedAt,
     evidenceClass: 'published_price',
   })
-  const sourceWrite = input.context === undefined
-    ? undefined
-    : await sourceWriteAdmissionFromContext({
-        context: input.context,
-        scope: 'study',
-        operationKey: input.operationKey,
-        correlationId: input.correlationId,
-      })
-  const created = await callSourceMutation(createStudyMutation, {
+  const command = {
     studyId: input.studyId,
     projectId: input.projectId,
     treeId,
@@ -193,7 +163,18 @@ export async function startStudyThroughSource(input: StudyStartInput): Promise<S
     journalEventJson: JSON.stringify(journalEvent),
     createdAt: requestedAt,
     updatedAt: requestedAt,
-    ...(sourceWrite === undefined ? {} : { sourceWrite }),
+  }
+  const sourceWrite = await sourceWriteAdmissionFromContext({
+    context: input.context,
+    command,
+    scope: 'study',
+    operationKey: input.operationKey,
+    correlationId: input.correlationId,
+  })
+  const created = await callSourceMutation(createStudyMutation, {
+    ...command,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
   })
   return {
     kind: workTree.kind,
@@ -206,103 +187,5 @@ export async function startStudyThroughSource(input: StudyStartInput): Promise<S
     workTree,
     study: created,
   }
-}
-
-export async function completeStudyThroughSource(input: Readonly<{
-  studyId: string
-  projectId: string
-  studyNodeId: string
-  targetDecisionNodeId: string
-  generation: number
-  treeRevision: number
-  expectedStudyRevision: number
-  operationKey: string
-  correlationId: string
-  charter: StudyCharter
-  registryServices: readonly StudyRegistryService[]
-  webClaims?: readonly StudyWebClaim[]
-  requestedAt: number
-  treeId?: string
-  context?: unknown
-}>): Promise<StudyCompletionResult> {
-  const latest = await inspectWorkTreeThroughSource({ projectId: input.projectId })
-  if (latest.kind === 'refused') {
-    return {
-      kind: latest.kind,
-      studyId: input.studyId,
-      projectId: input.projectId,
-      workTree: latest,
-      refusalCode: workTreeRefusalCode(latest) ?? 'work_tree_unavailable',
-    }
-  }
-  const tree = latest.readback.tree
-  if (tree.generation !== input.generation || tree.revision !== input.treeRevision) {
-    return { kind: 'refused', studyId: input.studyId, projectId: input.projectId, workTree: latest, refusalCode: 'stale_fence' }
-  }
-  if (input.treeId !== undefined && input.treeId !== tree.treeId) {
-    return { kind: 'refused', studyId: input.studyId, projectId: input.projectId, workTree: latest, refusalCode: 'tree_identity_mismatch' }
-  }
-  const decision = tree.nodes.find((node) => node.nodeId === input.targetDecisionNodeId)
-  if (decision?.kind !== 'decision') {
-    return { kind: 'refused', studyId: input.studyId, projectId: input.projectId, workTree: latest, refusalCode: 'decision_target_invalid' }
-  }
-  const result = runStudy({
-    studyId: input.studyId,
-    projectId: input.projectId,
-    treeId: tree.treeId,
-    nodeId: input.studyNodeId,
-    charter: input.charter,
-    registryServices: input.registryServices,
-    ...(input.webClaims === undefined ? {} : { webClaims: input.webClaims }),
-    requestedAt: input.requestedAt,
-    revision: input.expectedStudyRevision + 1,
-    generation: tree.generation,
-    treeRevision: tree.revision,
-  })
-  if (result.kind !== 'completed') {
-    return { kind: 'refused', studyId: input.studyId, projectId: input.projectId, result, refusalCode: result.code }
-  }
-  const sourceWrite = input.context === undefined
-    ? undefined
-    : await sourceWriteAdmissionFromContext({ context: input.context, scope: 'study', operationKey: input.operationKey, correlationId: input.correlationId })
-  const recorded = await callSourceMutation(recordStudyResultMutation, {
-    studyId: input.studyId,
-    projectId: input.projectId,
-    treeId: tree.treeId,
-    nodeId: input.studyNodeId,
-    generation: tree.generation,
-    treeRevision: tree.revision,
-    expectedRevision: input.expectedStudyRevision,
-    operationKey: input.operationKey,
-    correlationId: input.correlationId,
-    artifactJson: JSON.stringify(result.artifact),
-    journalEventsJson: JSON.stringify(result.events),
-    at: input.requestedAt,
-    ...(sourceWrite === undefined ? {} : { sourceWrite }),
-  })
-  const options = result.artifact.quotes.slice(0, 4).map((quote) => ({
-    optionId: quote.providerSlug,
-    label: quote.providerName,
-    summary: `${quote.service}: ${quote.price.amount.currency} ${formatExactAmount(quote.price.amount) ?? '—'}`,
-  }))
-  const recommendation = result.artifact.recommendation?.alternativeId
-  const unsignedVerb = {
-    kind: 'propose_decision' as const,
-    targetNodeId: input.targetDecisionNodeId,
-    expectedGeneration: tree.generation,
-    expectedRevision: tree.revision,
-    options,
-    ...(recommendation === undefined ? {} : { recommendation }),
-  }
-  const proposal = await applyWorkTreeThroughSource({
-    projectId: input.projectId,
-    operationKey: `${input.operationKey}:proposal`,
-    correlationId: input.correlationId,
-    verb: { ...unsignedVerb, proposalDigest: canonicalDigest(unsignedVerb) },
-  })
-  if (proposal.kind === 'refused' || proposal.kind === 'unknown') {
-    return { kind: proposal.kind, studyId: input.studyId, projectId: input.projectId, artifact: result.artifact, study: recorded, result, workTree: proposal, refusalCode: workTreeRefusalCode(proposal) ?? 'proposal_refused' }
-  }
-  return { kind: proposal.kind, studyId: input.studyId, projectId: input.projectId, artifact: result.artifact, study: recorded, result, workTree: proposal }
 }
 

@@ -30,7 +30,7 @@ describe('dev seed Convex store', () => {
     ]))
     expect(seededBusinesses.find((row) => row.slug === 'frankfurter-ecb-rates')).toBeDefined()
     // None of the curated external listings publishes a phone number.
-    expect(seededBusinesses.every((row) => row.publishedPhone === undefined)).toBe(true)
+    expect(seededBusinesses.every((row) => row.businessContext.kind === 'programmable_provider')).toBe(true)
     expect(persisted.offerings).toHaveLength(bundle.state.offerings.length)
     expect(persisted.revisions).toHaveLength(bundle.state.revisions.length)
     expect(persisted.accessPaths).toHaveLength(bundle.state.accessPaths.length)

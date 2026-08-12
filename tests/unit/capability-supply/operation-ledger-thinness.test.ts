@@ -30,7 +30,7 @@ describe('capability-supply operation-ledger thinness', () => {
   })
 
   it('keeps thin (db, command, now) command re-exports via portsFor', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
     expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     expect(convexHost).toContain('capabilitySupplyOperationPorts')
     expect(convexHost).toContain('function portsFor')
@@ -38,10 +38,10 @@ describe('capability-supply operation-ledger thinness', () => {
     expect(convexHost).toMatch(/export async function registerCapabilityBindingCommand\s*\(/)
     expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibilityCommand\s*\(/)
     expect(convexHost).toMatch(/export async function quarantineCapabilityBindingCommand\s*\(/)
-    expect(convexHost).toContain('runRegisterOfferingCommand(portsFor(db)')
-    expect(convexHost).toContain('runRegisterBindingCommand(portsFor(db)')
-    expect(convexHost).toContain('runSetEligibilityCommand(portsFor(db)')
-    expect(convexHost).toContain('runQuarantineCommand(portsFor(db)')
+    expect(convexHost).toMatch(/runRegisterOfferingCommand\(\s*portsFor\(db\)/)
+    expect(convexHost).toMatch(/runRegisterBindingCommand\(\s*portsFor\(db\)/)
+    expect(convexHost).toMatch(/runSetEligibilityCommand\(\s*portsFor\(db\)/)
+    expect(convexHost).toMatch(/runQuarantineCommand\(\s*portsFor\(db\)/)
   })
 
   it('leaves thin writer wrappers in the host and delegates listIntegrated via ports', () => {
@@ -50,8 +50,9 @@ describe('capability-supply operation-ledger thinness', () => {
     expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
     expect(convexHost).toContain('capabilitySupplyWriterPorts')
     expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
-    expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule(eligibleSupplyPorts(db)')
-    expect(convexHost).toMatch(/export const publishCapability\s*=/)
+    expect(convexHost).toMatch(/listIntegratedCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
+    expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
+    expect(convexHost).not.toMatch(/export const publishCapability\s*=/)
   })
 
   it('keeps operation-ledger free of Convex runtime imports', () => {

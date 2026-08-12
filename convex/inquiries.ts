@@ -16,7 +16,6 @@ import {
 } from './inquirySourceStatePersist'
 import { enqueueInquiryNotificationDispatches } from './inquiryNotificationBridge'
 import { serializeOperatorReconstructionReadback } from './inquirySerializeOperator'
-import { csrfArgs } from './notificationOutbox'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { admissionKey, assertAdmission } from './lib/rateLimit'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
@@ -707,7 +706,7 @@ export const submitPublicInquiry = mutationGeneric({
     contact: publicInquiryContact,
     inquiryOrigin: v.optional(inquiryOrigin),
     pseudonymousSessionId: v.string(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     expectedDigest: v.string(),
     correlationId: v.string(),
@@ -1109,7 +1108,7 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
   args: {
     threadId: v.string(),
     expectedVersion: v.number(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
@@ -1153,7 +1152,7 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
   args: {
     threadId: v.string(),
     reasonCode: v.string(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
@@ -1233,7 +1232,7 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
     threadId: v.string(),
     expectedVersion: v.number(),
     body: v.string(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
@@ -1285,7 +1284,7 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
   args: {
     threadId: v.string(),
     expectedVersion: v.number(),
-    ...csrfArgs,
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },

@@ -118,6 +118,7 @@ const routeMandateStep = v.object({
   publicationRevision: v.number(),
   inputScopeDigest: v.string(),
   price: registeredPrice,
+  priceDigest: v.string(),
   dataScope: v.array(routeMandateDataScope),
   effects: v.array(routeMandateEffect),
   evidence: v.array(routeMandateEvidence),
@@ -744,6 +745,8 @@ export const customerRequestRouteMandateTables = {
     dispatchRef: v.string(),
     attemptRef: v.string(),
     effectGeneration: v.number(),
+    operationRef: v.optional(v.string()),
+    inputDigest: v.optional(v.string()),
     paymentIdentifier: v.string(),
     operationKeyDigest: v.string(),
     challengeDigest: v.string(),
@@ -769,6 +772,16 @@ export const customerRequestRouteMandateTables = {
     preparedAt: v.number(),
     submissionStartedAt: v.optional(v.number()),
     observedAt: v.optional(v.number()),
+    transportObservationDigest: v.optional(v.string()),
+    transportRequestDigest: v.optional(v.string()),
+    paymentObservationDigest: v.optional(v.string()),
+    paymentResolution: v.optional(v.union(
+      v.literal('not_released'),
+      v.literal('released'),
+      v.literal('unknown'),
+    )),
+    reconciliationEvidenceRef: v.optional(v.string()),
+    reconciliationEvidenceDigest: v.optional(v.string()),
     evidenceRefs: v.array(v.string()),
   })
     .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])

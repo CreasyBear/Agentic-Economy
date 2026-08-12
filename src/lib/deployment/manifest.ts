@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { OPERATION_INVOKE_ACTION_ID, OPERATION_INVOKE_HTTP_PATH } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   SourceWriteAdmissionScopeValues,
   resolveActiveSourceWriteSigningKey,
@@ -23,7 +24,7 @@ export type DeploymentValidationResult = Readonly<{
   readinessProbes: typeof DEPLOYMENT_MANIFEST.readinessProbes
 }>
 
-type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'answer-mode' }>
+type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'answer-mode' | 'credential-ref'; target?: string }>
 type RequirementGroup = Readonly<{ scope: string; code: string; names: readonly string[]; mode: 'all' | 'one-of'; trigger?: readonly string[] }>
 
 export const SOURCE_WRITE_FAMILIES = ['inquiry', 'billing', 'protected', 'claim', 'operator', 'repair', 'session'] as const
@@ -45,6 +46,7 @@ const forbiddenProductionNames = Object.freeze([
   'AE_DEV_WBA_SIGNATURE_AGENT',
   'AE_LOCAL_DEV_VITE_ARGS',
   'CONVEX_SELF_HOSTED_ADMIN_KEY',
+  'AE_API_KEY',
 ])
 
 const requiredProduction: readonly RequirementGroup[] = [
@@ -54,7 +56,33 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
   { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY'], mode: 'all' },
+  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
 ]
+
+const liveGatewaySmokeNames = [
+  'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND',
+  'AE_GATEWAY_SMOKE_RUN_ID',
+  'AE_GATEWAY_SMOKE_BASE_URL',
+  'AE_GATEWAY_SMOKE_JOB_QUERY',
+  'AE_GATEWAY_SMOKE_OWNER_QUERY',
+  'AE_GATEWAY_SMOKE_INPUT_JSON',
+  'AE_GATEWAY_SMOKE_API_KEY',
+  'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
+  'AE_RELEASE_SOURCE_REVISION',
+  'AE_RELEASE_DEPLOYMENT_ID',
+  'AE_RELEASE_CONVEX_DEPLOYMENT_ID',
+  'AE_RELEASE_CONVEX_URL',
+  'AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON',
+  'AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH',
+  'AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD',
+  'AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID',
+  'AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID',
+  'AE_GATEWAY_SMOKE_CONTROL_BUSINESS_ID',
+  'AE_GATEWAY_SMOKE_CREDENTIAL_ID',
+  'AE_GATEWAY_SMOKE_TOPUP_AMOUNT_JSON',
+  'CLERK_SECRET_KEY',
+] as const
 
 const conditional: readonly RequirementGroup[] = [
   {
@@ -99,6 +127,13 @@ const conditional: readonly RequirementGroup[] = [
     scope: 'observability:build', code: 'sentry_build_configuration_partial', names: ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT'], mode: 'all',
     trigger: ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT'],
   },
+  {
+    scope: 'release:live-gateway-smoke',
+    code: 'live_gateway_smoke_configuration_incomplete',
+    names: liveGatewaySmokeNames,
+    mode: 'all',
+    trigger: ['AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND', 'AE_GATEWAY_SMOKE_RUN_ID'],
+  },
 ]
 
 const optionalNames = Object.freeze([
@@ -108,12 +143,17 @@ const optionalNames = Object.freeze([
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL', 'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS',
+  'AE_CLI_BASE_URL',
+  'AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID', 'AE_CUSTOMER_REQUEST_CLERK_SUBJECT',
 ])
 
 const fieldRules: readonly FieldRule[] = [
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
+  { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
+  { name: 'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND', kind: 'boolean' },
   { name: 'AE_OPENROUTER_API_BASE_URL', kind: 'url' }, { name: 'SITE_URL', kind: 'url' }, { name: 'AE_SITE_URL', kind: 'url' },
+  { name: 'AE_X402_PAYMENT_CREDENTIAL_REF', kind: 'credential-ref', target: 'AE_X402_PAYMENT_PRIVATE_KEY' },
   { name: 'AE_ROUTING_PUBLIC_BASE_URL', kind: 'url' }, { name: 'AE_SANDBOX_PROVIDER_ORIGIN', kind: 'url' },
   { name: 'AE_SANDBOX_ROUTE_RESOLVER_ORIGIN', kind: 'url' }, { name: 'AE_SANDBOX_ROUTE_QUOTER_ORIGIN', kind: 'url' },
   { name: 'AE_SANDBOX_WORKFLOW_ORIGIN', kind: 'url' }, { name: 'VITE_POSTHOG_HOST', kind: 'url' }, { name: 'POSTHOG_HOST', kind: 'url' },
@@ -130,12 +170,13 @@ const fieldRules: readonly FieldRule[] = [
 const knownNames = Object.freeze([
   'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_LLM_MODEL', 'AE_LLM_MODELS',
   'AE_ANSWER_EVAL_PASSED', 'AE_SOURCE_WRITE_SECRET', 'AE_NOTIFICATION_OUTBOX_SECRET', 'AE_SANDBOX_PROVIDER_KEY',
-  'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_ANSWER_THREAD_SHARE_KEY_ID', 'AE_INQUIRY_ACCESS_KEY_ID',
+  'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_PRIVATE_KEY', 'AE_ANSWER_THREAD_SHARE_KEY_ID', 'AE_INQUIRY_ACCESS_KEY_ID',
   'AE_GOVERNED_SEND_INTEGRITY_KEY_ID', 'AE_INQUIRY_RECEIPT_KEK_ID', 'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
   'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_POSTHOG_KEY',
-  'POSTHOG_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID',
+  'POSTHOG_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
   'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL', 'AE_BRAINTRUST_PROJECT', 'AE_BRAINTRUST_DATASET',
+  'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY',
   'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET', 'NOVU_SECRET_KEY', 'NOVU_WORKFLOW_INQUIRY_OWNER', 'NOVU_WORKFLOW_INQUIRY_CUSTOMER',
 ])
 
@@ -149,6 +190,9 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   resources: Object.freeze([
     Object.freeze({ id: 'web-server', kind: 'vercel-node-runtime', declaration: 'nitro.vercel.entryFormat=node' }),
     Object.freeze({ id: 'convex-components', kind: 'convex-component-set', components: Object.freeze(['workflow', 'workpool', 'rate-limiter', 'aggregate:ownerActivationByStage']) }),
+    Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
+    Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
+    Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
     Object.freeze({ id: 'convex-scheduled-jobs', kind: 'convex-cron-set', jobs: Object.freeze(['refresh capability supply readiness', 'cleanup expired inquiry abuse buckets', 'cleanup expired source write nonces', 'cleanup expired OAuth grants']) }),
   ]),
   readinessProbes: Object.freeze([
@@ -226,7 +270,19 @@ export function deploymentConfigFingerprint(environment: DeploymentEnvironmentIn
     if ('components' in resource) {
       return { id: resource.id, kind: resource.kind, components: resource.components.map((component) => component) }
     }
-    return { id: resource.id, kind: resource.kind, jobs: resource.jobs.map((job) => job) }
+    if ('action' in resource) {
+      return {
+        id: resource.id,
+        kind: resource.kind,
+        action: resource.action,
+        httpPath: resource.httpPath,
+        mcpPath: resource.mcpPath,
+      }
+    }
+    if ('jobs' in resource) {
+      return { id: resource.id, kind: resource.kind, jobs: resource.jobs.map((job) => job) }
+    }
+    throw new Error('deployment_manifest_resource_unrecognized')
   })
   const readinessProbes: readonly StableHashValue[] = DEPLOYMENT_MANIFEST.readinessProbes.map((probe) => ({
     id: probe.id,
@@ -295,6 +351,7 @@ function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule,
   add('malformed', code, [rule.name], rule.name.startsWith('AE_') ? 'ae-config' : 'configuration')
 }
 function isMalformed(rule: FieldRule, value: string, production: boolean): boolean {
+  if (rule.kind === 'credential-ref') return rule.target === undefined || value !== `env:${rule.target}`
   if (rule.kind === 'url') return !validUrl(value, production)
   if (rule.kind === 'host-list') return !value.split(',').every((entry) => validHost(entry.trim()))
   if (rule.kind === 'boolean') return value !== 'true' && value !== 'false' && !(rule.name === 'AE_CSP_REPORT_ONLY' && ['0', '1'].includes(value))
@@ -328,8 +385,10 @@ function isSecretDeploymentName(name: string): boolean {
     || name === 'VITE_GOOGLE_MAPS_API_KEY'
     || name === 'VITE_SENTRY_DSN'
     || name === 'VITE_POSTHOG_KEY'
+    || name === 'VITE_STRIPE_PUBLISHABLE_KEY'
   ) return false
-  return name.startsWith('AE_SOURCE_WRITE_KEY_')
+  return name === 'STRIPE_WEBHOOK_SECRET'
+    || name.startsWith('AE_SOURCE_WRITE_KEY_')
     || name.startsWith('AE_SOURCE_WRITE_PREVIOUS_KEYS_')
     || name.includes('TOKEN')
     || name.includes('PASSWORD')

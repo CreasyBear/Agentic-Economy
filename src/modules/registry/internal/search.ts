@@ -1,4 +1,3 @@
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 import {
   claimBusiness,
   createEmptyBusinessSourceState,
@@ -6,8 +5,9 @@ import {
 import {
   createEmptyCatalogSourceState,
   getPublicBusinessCatalog,
+  publicOwnerDefaultClaimInput,
+  toBusinessContext,
 } from '@/modules/catalog/public'
-import { publicOwnerDefaultClaimInput } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { matchingCsrf } from '@/modules/common/matching-csrf'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -105,12 +105,18 @@ export function searchPublicBusinessOfferingSupply(
 }
 
 function matchesNativeSearch(item: PublicBusinessCatalogApiV2Dto, token: string): boolean {
+  const contextTerms = item.businessContext.kind === 'programmable_provider'
+    ? [item.businessContext.website, item.businessContext.providerIdentifier]
+    : [
+        item.businessContext.suburb,
+        item.businessContext.stateTerritory,
+        item.businessContext.postcode ?? '',
+      ]
   return normalizeSearchText([
     item.slug,
     item.name,
     item.category,
-    item.suburb,
-    item.stateTerritory,
+    ...contextTerms,
     ...item.offerings.flatMap((offering) => [
       offering.name,
       offering.category,
@@ -120,11 +126,13 @@ function matchesNativeSearch(item: PublicBusinessCatalogApiV2Dto, token: string)
   ].join(' ')).includes(token)
 }
 function matchesSearchLocation(item: PublicBusinessCatalogApiV2Dto, location: string): boolean {
+  if (item.businessContext.kind !== 'local_human') return false
   const normalized = normalizeSearchText(location)
   if (normalized.length === 0) return false
   const searchable = normalizeSearchText([
-    item.suburb,
-    item.stateTerritory,
+    item.businessContext.suburb,
+    item.businessContext.stateTerritory,
+    item.businessContext.postcode ?? '',
     ...item.offerings.map((offering) => offering.serviceAreaSummary ?? ''),
   ].join(' '))
   return normalized.split(' ').every((token) => searchable.includes(token))
@@ -194,8 +202,7 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     facts: {
       name: publicOwnerDefaultClaimInput.businessName,
       category: publicOwnerDefaultClaimInput.category,
-      suburb: publicOwnerDefaultClaimInput.suburb,
-      stateTerritory: publicOwnerDefaultClaimInput.stateTerritory,
+      businessContext: toBusinessContext(publicOwnerDefaultClaimInput),
       requestedSlug: publicOwnerDefaultClaimInput.requestedSlug,
       ownerMessage: publicOwnerDefaultClaimInput.ownerMessage,
       sourceRefs: [
@@ -240,73 +247,6 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
   return state
 }
 
-export function createLocalE2eRegistrySourceState(): RegistrySourceState {
-  const state = createDefaultRegistrySourceState()
-
-  for (const fixture of LOCAL_E2E_BUSINESS_FIXTURES) {
-    const offering = fixture.offerings[0]
-    if (offering === undefined) {
-      throw new Error(`Local e2e fixture offering missing for ${fixture.requestedSlug}`)
-    }
-    const actor = {
-      kind: 'authenticated_owner' as const,
-      clerkUserId: `owner:${fixture.requestedSlug}`,
-      displayName: `${fixture.businessName} Owner`,
-    }
-    const publishedAt = Date.now()
-    const claim = claimBusiness(state, {
-      actor,
-      facts: {
-        name: fixture.businessName,
-        category: fixture.category,
-        suburb: fixture.suburb,
-        stateTerritory: fixture.stateTerritory,
-        requestedSlug: fixture.requestedSlug,
-        ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
-        ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
-        ownerMessage: 'Local e2e owner-supplied Offering facts.',
-        sourceRefs: [{
-          label: 'Local e2e Offering facts',
-          evidenceRef: `private:evidence:${fixture.requestedSlug}`,
-          sourceHash: canonicalDigest(`source:${fixture.requestedSlug}`),
-        }],
-      },
-      security: {
-        csrf: matchingCsrf(`local-e2e-claim:${fixture.requestedSlug}`),
-      },
-      operationKey: operationKey(`local-e2e-claim:${fixture.requestedSlug}`),
-      correlationId: correlationId(`local-e2e-claim:${fixture.requestedSlug}`),
-      now: publishedAt - 1,
-    })
-    if (claim.kind === 'error') {
-      throw new Error(`Local e2e registry claim failed for ${fixture.requestedSlug}: ${claim.reason}`)
-    }
-
-    claim.business.publicStatus = 'published'
-    claim.business.claimStatus = 'published'
-    claim.business.updatedAt = publishedAt
-    claim.claim.status = 'published'
-    claim.claim.updatedAt = publishedAt
-
-    const offeringSlug = normalizeSearchText(offering.name).replaceAll(' ', '-')
-    appendPublishedOffering(state, {
-      businessId: claim.business.businessId,
-      offeringRef: brandNonEmpty(`offering:${claim.business.businessId}:${offeringSlug}`, 'OfferingRef'),
-      facts: {
-        name: offering.name,
-        category: offering.category,
-        summary: offering.summary,
-        serviceAreaSummary: offering.serviceAreaSummary,
-        ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: offering.availabilitySummary }),
-        ...(offering.pricingSummary === undefined ? {} : { pricingSummary: offering.pricingSummary }),
-      },
-      accessPaths: offering.accessPaths,
-      now: publishedAt,
-    })
-  }
-
-  return state
-}
 
 function readPublicCatalogs(state: RegistrySourceState): readonly PublicBusinessCatalogApiV2Dto[] {
   const catalogs: PublicBusinessCatalogApiV2Dto[] = []

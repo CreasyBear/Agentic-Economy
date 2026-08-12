@@ -1,235 +1,145 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api, internal } from '../../../convex/_generated/api'
+import { internal } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { defineCapabilityContract } from '@/modules/capability-contract/public'
-import {
-  capabilityOfferingRegistrationHash,
-  CURATED_PROVIDER_PUBLICATIONS,
-  defineCapabilityOfferingRegistration,
-  normalizeCapabilityPublication,
-} from '@/modules/capability-supply/public'
 import schema from '../../../convex/schema'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 type CuratedSeedPublication = Pick<Doc<'capabilityPublications'>, 'capabilityId' | 'publicationRef'>
 
-// The canonical seed (devSeed:seedDevCatalog -> internal.curatedProviders.seed)
-// must be idempotent across the SOURCE's own drift: when the source content for
-// a curated capabilityId+version changes, the seed retires the stale
-// source-owned stored state and re-admits the current source-authoritative
-// content, instead of bouncing on contract_identity_conflict. This test
-// corrupts the stored contract/offering/binding digests to simulate an earlier
-// source revision and asserts the reseed self-heals back to the source.
 describe('curated seed idempotency across source drift', () => {
-  it('retires stale curated state and re-admits the current source content', async () => {
+  it('keeps an unchanged seed idempotent with 20 current publications', async () => {
     const backend = convexTest(schema, modules)
 
-    const first = await backend.mutation(internal.curatedProviders.seed, {})
+    const first = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
+    expect(first.kind).toBe('seeded')
+    expect(first.sourceDrift).toEqual([])
     expect(first.publications).toHaveLength(20)
-    // The 20-op catalog is uniquely identified by capabilityId.
-    const firstCapabilityIds = first.publications.map((publication: CuratedSeedPublication) => publication.capabilityId).sort()
+
+    const firstCapabilityIds = first.publications
+      .map((publication: CuratedSeedPublication) => publication.capabilityId)
+      .sort()
     expect(new Set(firstCapabilityIds).size).toBe(20)
 
-    // Current source-authoritative digests for the two contracts we will drift.
-    const sourceDigests = new Map<string, string>()
-    for (const entry of CURATED_PROVIDER_PUBLICATIONS) {
-      const normalized = await normalizeCapabilityPublication(entry.publication)
-      if (normalized.kind !== 'normalized') throw new Error(`curated_digest_normalization_${normalized.reason}`)
-      const contract = defineCapabilityContract(JSON.parse(normalized.draft.documentJson))
-      sourceDigests.set(contract.ref.capabilityId, contract.ref.contractDigest)
-    }
-    const exaSearchDigest = sourceDigests.get('exa.search')
-    const frankfurterDigest = sourceDigests.get('frankfurter.single-rate')
-    if (exaSearchDigest === undefined || frankfurterDigest === undefined) {
-      throw new Error('curated_digest_source_missing')
-    }
+    const second = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
+    expect(second.kind).toBe('seeded')
+    expect(second.sourceDrift).toEqual([])
+    expect(second.publications).toHaveLength(20)
+    expect(second.publications
+      .map((publication: CuratedSeedPublication) => publication.capabilityId)
+      .sort()).toEqual(firstCapabilityIds)
 
-    // Simulate an earlier seed revision that registered DIFFERENT contract
-    // content for exa.search and frankfurter: corrupt the stored contract,
-    // offering, binding, and publication digests so the stored state no longer
-    // matches what the current source produces.
-    const bogus = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
-    const driftTargets = [
-      { capabilityId: 'exa.search', version: 2, offeringId: 'offering:agentic-market-exa:search:v2', bindingId: 'binding:agentic-market-exa:search:api-key:v2' },
-      { capabilityId: 'frankfurter.single-rate', version: 1, offeringId: 'offering:frankfurter-ecb-rates:single-rate:v1', bindingId: 'binding:frankfurter-ecb-rates:single-rate:v1' },
-    ] as const
-    await backend.run(async (ctx) => {
-      for (const target of driftTargets) {
-        const contractDoc = await ctx.db.query('capabilityContractDocuments')
-          .withIndex('by_capabilityId_and_version', (q) => (
-            q.eq('capabilityId', target.capabilityId).eq('version', target.version)
-          )).unique()
-        if (contractDoc !== null) await ctx.db.patch(contractDoc._id, { contractDigest: bogus })
-        const offering = await ctx.db.query('capabilityOfferings')
-          .withIndex('by_offeringId', (q) => q.eq('offeringId', target.offeringId)).unique()
-        if (offering !== null) await ctx.db.patch(offering._id, { contractDigest: bogus })
-        const binding = await ctx.db.query('capabilityTransportBindings')
-          .withIndex('by_bindingId', (q) => q.eq('bindingId', target.bindingId)).unique()
-        if (binding !== null) await ctx.db.patch(binding._id, { contractDigest: bogus })
-        const publication = await ctx.db.query('capabilityPublications')
-          .withIndex('by_publicationRef_and_revision', (q) => (
-            q.eq('publicationRef', target.offeringId).eq('revision', 1)
-          )).unique()
-        if (publication !== null) await ctx.db.patch(publication._id, {
-          contractDigest: bogus,
-          sourceDigest: bogus,
-        })
-      }
-      // The earlier source revision also wrote supply-audit events for the
-      // purged operations; corrupt the exa.search publish audit to model the
-      // real drift (stale payload written by the older revision).
-      const exaSearchPublishAuditId = `audit:capability_supply:${canonicalDigest({
-        action: 'publish_capability',
-        eventType: 'capability_publication.published',
-        targetType: 'capability_publication',
-        targetRef: 'offering:agentic-market-exa:search:v2',
-        actorKind: 'system',
-        actorRef: 'system:curated-provider-bootstrap',
-        operationKey: 'curated-provider:publish:offering:agentic-market-exa:search:v2',
-      })}`
-      const staleAudit = await ctx.db.query('auditEvents')
-        .withIndex('by_eventId', (q) => q.eq('eventId', exaSearchPublishAuditId))
-        .unique()
-      if (staleAudit !== null) {
-        await ctx.db.patch(staleAudit._id, { redactedPayloadJson: bogus, payloadHash: bogus })
-      }
-    })
-
-    // The reseed must self-heal: retire the stale curated state and re-admit
-    // the current source content rather than throwing contract_identity_conflict.
-    const reseeded = await backend.mutation(internal.curatedProviders.seed, {})
-    expect(reseeded.publications).toHaveLength(20)
-    expect(new Set(reseeded.publications.map((publication: CuratedSeedPublication) => publication.capabilityId)).size).toBe(20)
-
-    // A capabilityId+version still maps to exactly one (source-authoritative)
-    // content: the exa.search and frankfurter contracts are re-registered with
-    // the current source digests, and exa.contents (never drifted) is untouched.
-    const registered = await backend.run(async (ctx) => ({
-      contracts: await ctx.db.query('capabilityContractDocuments').collect(),
-      offerings: await ctx.db.query('capabilityOfferings').collect(),
-      bindings: await ctx.db.query('capabilityTransportBindings').collect(),
-      publications: await ctx.db.query('capabilityPublications').collect(),
-    }))
-    const contractByCapability = new Map(
-      registered.contracts.map((row) => [row.capabilityId, row]),
-    )
-    expect(contractByCapability.get('exa.search')?.contractDigest).toBe(exaSearchDigest)
-    expect(contractByCapability.get('frankfurter.single-rate')?.contractDigest).toBe(frankfurterDigest)
-    expect(contractByCapability.get('exa.contents')?.contractDigest).not.toBe(bogus)
-    // Every op in the 20-op catalog has exactly one source-authoritative contract.
-    expect(registered.contracts).toHaveLength(20)
-    expect(registered.contracts.every((row) => row.contractDigest !== bogus)).toBe(true)
-    // No stale current publication remains for the drifted ops, and the
-    // re-admitted ones carry the source digests.
-    expect(registered.publications.filter((row) => row.disposition === 'current')).toHaveLength(20)
-    expect(registered.offerings.filter((row) => row.contractDigest === bogus)).toHaveLength(0)
-    expect(registered.bindings.filter((row) => row.contractDigest === bogus)).toHaveLength(0)
-
-    // The stale publish audit for exa.search was retired and rewritten with the
-    // current source payload (no bogus audit rows remain).
-    const rewrittenAudit = await backend.run(async (ctx) => {
-      const row = await ctx.db.query('auditEvents')
-        .withIndex('by_eventId', (q) => q.eq('eventId', `audit:capability_supply:${canonicalDigest({
-          action: 'publish_capability',
-          eventType: 'capability_publication.published',
-          targetType: 'capability_publication',
-          targetRef: 'offering:agentic-market-exa:search:v2',
-          actorKind: 'system',
-          actorRef: 'system:curated-provider-bootstrap',
-          operationKey: 'curated-provider:publish:offering:agentic-market-exa:search:v2',
-        })}`))
-          .unique()
-      return row
-    })
-    expect(rewrittenAudit).not.toBeNull()
-    expect(rewrittenAudit?.payloadHash).not.toBe(bogus)
-    expect(rewrittenAudit?.payloadHash).toMatch(/^sha256:/)
-
-    // The whole thing is idempotent: running the seed a third time is a no-op.
-    const third = await backend.mutation(internal.curatedProviders.seed, {})
-    expect(third.publications).toHaveLength(20)
-
-    // The re-admitted ops are discoverable through the live registry search.
-    const exa = await backend.query(api.capabilitySupplyOperations.search, {
-      query: 'Research the latest official guidance on AI agent payments and summarize the sources',
-      limit: 10,
-    })
-    expect(exa).toMatchObject({ kind: 'ok', items: expect.arrayContaining([
-      expect.objectContaining({ contract: expect.objectContaining({ capabilityId: 'exa.search' }) }),
-    ]) })
+    const currentCapabilityIds = await backend.run(async (ctx) => (
+      (await ctx.db.query('capabilityPublications')
+        .withIndex('by_networkId_and_disposition', (query) => (
+          query.eq('networkId', 'ae:public').eq('disposition', 'current')
+        ))
+        .take(100))
+        .map((publication) => publication.capabilityId)
+        .sort()
+    ))
+    expect(currentCapabilityIds).toHaveLength(20)
+    expect(new Set(currentCapabilityIds).size).toBe(20)
+    expect(currentCapabilityIds).toEqual(firstCapabilityIds)
   })
 
-  it('self-heals a drifted curated OFFERING (registrationHash) and is a no-op on a third seed', async () => {
+  it('withdraws drifted source-owned supply without replacing historical rows', async () => {
     const backend = convexTest(schema, modules)
 
-    const first = await backend.mutation(internal.curatedProviders.seed, {})
+    const first = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
     expect(first.publications).toHaveLength(20)
 
-    // Capture the source-authoritative registrationHash and identity of one
-    // curated offering (e.g. coingecko/open-meteo whose searchTerms were
-    // enriched to make the engine resolve natural-language queries).
-    const capture = await backend.run(async (ctx) => {
-      const target = (await ctx.db.query('capabilityOfferings').collect())[0]
-      if (target === undefined) throw new Error('curated_seed_drift_test_no_offering')
+    const captured = await backend.run(async (ctx) => {
+      const publication = (await ctx.db.query('capabilityPublications')
+        .withIndex('by_networkId_and_disposition', (query) => (
+          query.eq('networkId', 'ae:public').eq('disposition', 'current')
+        ))
+        .take(100))
+        .find((row) => row.capabilityId === 'exa.search')
+      if (publication === undefined) throw new Error('curated_drift_publication_missing')
+      if (publication.publisherRef !== 'system:curated-provider-bootstrap') {
+        throw new Error('curated_drift_publication_not_source_owned')
+      }
+
+      const [business, contract, offering, binding] = await Promise.all([
+        ctx.db.get(publication.businessId),
+        ctx.db.query('capabilityContractDocuments')
+          .withIndex('by_capabilityId_and_version', (query) => (
+            query.eq('capabilityId', publication.capabilityId).eq('version', publication.version)
+          ))
+          .unique(),
+        ctx.db.query('capabilityOfferings')
+          .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
+          .unique(),
+        ctx.db.query('capabilityTransportBindings')
+          .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId))
+          .unique(),
+      ])
+      if (business === null || contract === null || offering === null || binding === null) {
+        throw new Error('curated_drift_referenced_row_missing')
+      }
+
       return {
-        offeringId: target.offeringId,
-        sourceHash: target.registrationHash,
+        businessSlug: business.slug,
+        publisherRef: publication.publisherRef,
+        publicationId: publication._id,
+        publicationRef: publication.publicationRef,
+        capabilityId: publication.capabilityId,
+        version: publication.version,
+        bindingId: publication.bindingId,
+        contractRowId: contract._id,
+        offeringRowId: offering._id,
+        bindingRowId: binding._id,
       } as const
     })
 
-    // Simulate an earlier seed revision that registered the SAME offeringId with
-    // DIFFERENT searchTerms: patch the stored offering so its registrationHash
-    // remains integrity-valid but no longer matches what current source
-    // produces. This is the pre-condition for offering_identity_conflict.
-    const driftedSearchTerms = ['__drifted-offering-search-term__']
+    const bogus = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
     await backend.run(async (ctx) => {
-      const row = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (q) => q.eq('offeringId', capture.offeringId)).unique()
-      if (row === null) throw new Error('curated_drift_offering_missing')
-      const drifted = defineCapabilityOfferingRegistration({
-        offeringId: row.offeringId,
-        businessId: row.businessId,
-        networkId: row.networkId,
-        contractRef: {
-          capabilityId: row.capabilityId,
-          version: row.version,
-          contractDigest: row.contractDigest,
-        },
-        presentation: row.presentation,
-        ...(row.origin === undefined ? {} : { origin: row.origin }),
-        searchTerms: driftedSearchTerms,
-        registrationEvidenceRefs: row.registrationEvidenceRefs,
-      })
-      await ctx.db.patch(row._id, {
-        searchTerms: driftedSearchTerms,
-        registrationHash: capabilityOfferingRegistrationHash(drifted),
-      })
+      await ctx.db.patch(captured.publicationId, { sourceDigest: bogus })
     })
 
-    // The reseed must self-heal (retire-and-replace the stale offering via
-    // offering_identity_conflict) rather than bounce.
-    const reseeded = await backend.mutation(internal.curatedProviders.seed, {})
-    expect(reseeded.publications).toHaveLength(20)
-    expect(new Set(reseeded.publications.map((publication: CuratedSeedPublication) => publication.capabilityId)).size).toBe(20)
+    const reseeded = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
+    expect(reseeded.kind).toBe('source_drift_requires_migration')
+    expect(reseeded.sourceDrift).toEqual([
+      `${captured.businessSlug}:${captured.publicationRef}:offering_identity_conflict`,
+    ])
+    expect(reseeded.publications).toEqual([])
 
-    // The offering registrationHash is restored to the source-authoritative value.
-    const healed = await backend.run(async (ctx) => {
-      return await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (q) => q.eq('offeringId', capture.offeringId)).unique()
+    const retained = await backend.run(async (ctx) => {
+      const [publication, contract, offering, binding] = await Promise.all([
+        ctx.db.get(captured.publicationId),
+        ctx.db.get(captured.contractRowId),
+        ctx.db.get(captured.offeringRowId),
+        ctx.db.get(captured.bindingRowId),
+      ])
+      const currentCollisions = (await ctx.db.query('capabilityPublications')
+        .withIndex('by_networkId_and_disposition', (query) => (
+          query.eq('networkId', 'ae:public').eq('disposition', 'current')
+        ))
+        .take(1000))
+        .filter((row) => (
+          row.publisherRef === captured.publisherRef
+          && (
+            (row.capabilityId === captured.capabilityId && row.version === captured.version)
+            || row.publicationRef === captured.publicationRef
+            || row.bindingId === captured.bindingId
+          )
+        ))
+      return { publication, contract, offering, binding, currentCollisions }
     })
-    expect(healed?.registrationHash).toBe(capture.sourceHash)
-    expect(healed?.searchTerms).not.toEqual(driftedSearchTerms)
 
-    // A third seed is a no-op: the offering stays at the source hash.
-    const third = await backend.mutation(internal.curatedProviders.seed, {})
-    expect(third.publications).toHaveLength(20)
-    const still = await backend.run(async (ctx) => {
-      return await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (q) => q.eq('offeringId', capture.offeringId)).unique()
-    })
-    expect(still?.registrationHash).toBe(capture.sourceHash)
+    expect(retained.publication).not.toBeNull()
+    expect(retained.publication?._id).toBe(captured.publicationId)
+    expect(retained.publication?.disposition).toBe('withdrawn')
+    expect(retained.publication?.sourceDigest).toBe(bogus)
+
+    expect(retained.contract).not.toBeNull()
+    expect(retained.contract?._id).toBe(captured.contractRowId)
+    expect(retained.offering).not.toBeNull()
+    expect(retained.offering?._id).toBe(captured.offeringRowId)
+    expect(retained.binding).not.toBeNull()
+    expect(retained.binding?._id).toBe(captured.bindingRowId)
+    expect(retained.currentCollisions).toHaveLength(0)
   })
 })
