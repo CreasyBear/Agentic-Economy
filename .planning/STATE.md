@@ -2,18 +2,17 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
-status: wayfinder_real_catalog_deployed; hosted+external proof remains open
-stopped_at: Engine NL->discovery->plan works live on real 20-op registry; tiered admission (validate + provenance tri-state + observed->real promotion) landed source-green; #204-opposed</option> hosted registry-to-engine harness + real keyless invocation evidence still open
-last_updated: "2026-08-09T00:00:00Z"
+status: remediation_open; seven_workstreams_focused_verified; source_gate_green; payout_period_policy_blocked; hosted_certification_blocked
+stopped_at: 2026-08-12 post-remediation verification: seven workstreams focused-verified and Node 22 post-codegen source gate green; remediation remains open because payout-period lifecycle lacks a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked
+last_updated: "2026-08-12"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
   completed_plans: 0
   percent: 17
-current_phase: 05
-current_phase_name: consumer-decision-support
----
+current_phase: 06
+current_phase_name: single-key-capability-gateway
 
 # Current state
 
@@ -54,7 +53,68 @@ must be deliberately reset and reseeded before it can accept the clean schema.
   only. They are not current category, ICP, wedge, or roadmap authority; older
   local-trades, Australian-SMB, and human-service framing is superseded/historical.
 
-Branch `main`, revision `b1b105b1`. Working tree dirty: 137 modified, 11 deleted, 45 untracked (193 files) as of 2026-07-29 — uncommitted work in progress, not shipped behaviour.
+
+## Single-Key Capability Gateway — current status — 2026-08-12
+
+**Status:** remediation campaign open; seven workstreams focused-verified; Node 22 post-codegen source gate green; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked  
+**Decision:** [`ADR-035`](adr/ADR-035-single-key-capability-gateway.md)  
+**Plan:** [`research/2026-08-09-single-key-capability-gateway-implementation-plan.md`](research/2026-08-09-single-key-capability-gateway-implementation-plan.md)
+**Historical closeout:** [`research/2026-08-11-goblin-source-remediation-plan.md`](research/2026-08-11-goblin-source-remediation-plan.md)
+
+The 2026-08-11 remediation closeout and its source/local gate claims are historical evidence for that dated snapshot, superseded for current status by the 2026-08-12 post-remediation re-audit recorded in `PAPERCUTS.md`.
+
+The accepted gateway architecture and W0-W8 contract remain the scope. The
+2026-08-11 source-completion/local-gate claims are historical; the
+2026-08-12 re-audit leaves the remediation campaign open. Seven workstreams are
+focused-verified, but the payout-period lifecycle remains blocked because no
+trusted server-owned nonzero minimum-payout policy is available. The canonical
+protected action is
+`operation.invoke:v1` at `POST /api/v1/operations/execute`; MCP, CLI, and
+Answer are adapters over one application service. Existing
+`operation.execute:v1` remains public/keyless/read-only.
+
+The current sequence is:
+
+- `W0` architecture/ownership freeze and no-handroll record;
+- `W1` clean-cutover generalization of Customer Request key/principal/OAuth;
+- `W2` per-key grant, budget, rate, concurrency, and mandate admission;
+- `W3` authenticated HTTP/MCP action projection;
+- `W4` durable standalone invocation service over Action Invocation, supply,
+  transport, money, and evidence;
+- `W5` generation-bound provider connection leases and credential custody;
+- `W6` recovery, cancellation, reconciliation, correlation, redaction, and
+  observability;
+- `W7` one-question first-use and separate consumer/supplier settings;
+- `W8` discovery/docs/CLI/Answer projections and hosted release proof.
+
+The work reuses the existing Clerk auth/OAuth, action/MCP, keyless executor,
+capability-supply publication/binding/readiness/provider-connection,
+Action Invocation, route transport, money, `convex/lib/rateLimit.ts`,
+canonical digest/stable serialization, RFC 9457, Convex, workflow/workpool,
+and MCP SDK seams. No second token verifier, registry, ledger, transport, or
+execution state machine is allowed; the exact reuse and package evidence are
+in ADR-035 and the implementation plan.
+
+The 2026-08-09 gate report and 2026-08-11 closeout are historical evidence for
+their dated source snapshots. A complete current Node 22 post-codegen source
+gate passed on 2026-08-12: lint, typecheck, kernel-retirement verification,
+unit and integration release suites, type/import/TypeScript/SEO/UI-contract
+checks, the 13-case/15-turn Answer evaluation, and production build. The outer
+`test:release:source` gate still fails closed before conformance/codegen because
+the production deployment manifest lacks or rejects operator-owned canonical,
+Clerk, Convex, model, Stripe, x402-custody, and source-write configuration. No
+strict hosted gateway receipt exists in `output/release/`.
+
+The exit gate is positive, not refusal-only: the same real Clerk-issued key
+must invoke two real operations from distinct admitted suppliers/connection
+modes on a configured hosted deployment, with current approval/budget,
+server-only supplier credentials, durable terminal/recovery state,
+usage/evidence readback, and revoke→refused replay. Fixtures, mocks,
+refusals, synthetic local identities, source-only OAuth, and unavailable
+Convex are not production proof. Until that sequence runs, hosted proof stays
+uncertified.
+
+Checked-out base `6639c106f540f3cf08dc236f0ee6c053b3b60883`; later source is staged in the current index and concurrent owner work remains uncommitted in the working tree; neither is shipped or revision-bound evidence.
 
 The 2026-08-02 WorkTree parity program (T44–T53) is landed and verified at the source + local-smoke evidence boundary: `output/release/final-gate-2.log` records `npm run test:release:source` exit 0 with 2,687 unit, 244 integration, eval 12/12 and build; `output/release/work-tree-smoke.json.log` records the labelled-local sequence `outcome → create → elaborate → study → propose → inbox → lock → receipt → reload_readback`. This does not upgrade evidence: T45 claim rotation, T51 hosted setup seam + deployment/evidence, T52 counsel sign-offs (**LIVE MONEY: REFUSED**), and T53 recruitment/external run remain open; `.planning/research/2026-08-02-hosted-parity-attempt.md` records Ready preview `dpl_F83yP9wsudjvVqrLQjB6Z65iVbYp` behind HTTP 401 protection, expired `VERCEL_OIDC_TOKEN`, no hosted Convex ID after anonymous/local dry-run refusal, and Playwright `No tests found` before the spec body; see `.planning/wayfinder/tickets/T45-project-identity-and-source-initialization.md`, `.planning/wayfinder/tickets/T51-hosted-parity-release-proof.md`, `.planning/wayfinder/tickets/T52-compliance-and-first-dollar-gate.md` and `.planning/wayfinder/tickets/T53-bas-wedge-external-kill-gate.md`.
 
@@ -149,8 +209,8 @@ was not deleted: `cfebb919` stripped the banned-copy register from it and the
 file remains in source as the architecture scanner behind nine guard tests.
 `PRODUCT.md` and `DESIGN.md` were removed (`ba263c10`, recoverable at
 `8dbef716`); `PROJECT.md` now owns the product destination. `AGENTS.md` was
-removed in that commit but has since been re-created on disk and is the
-operating contract agents read; it is currently untracked.
+removed in that commit but has since been re-created and is tracked as the
+operating contract agents read.
 
 Public copy is an owner judgement, not a machine-enforced ceiling. Internal
 evidence classes still apply: this document must not upgrade a source or
@@ -176,15 +236,21 @@ fixture result into hosted, provider, or customer evidence.
 
 ## Next transition
 
-Source verification is complete. The remaining transition is evidence, not
-repository repair: run the hosted readback, provider, browser, demand, and
-customer evidence paths without upgrading local or fixture results into those
-evidence classes.
+The current gateway transition remains remediation, not only externally
+configured evidence. Seven workstreams are focused-verified and the complete
+Node 22 post-codegen source gate is green, but the payout-period lifecycle is
+blocked for lack of a trusted server-owned nonzero minimum-payout policy.
+Hosted transition still requires a valid production deployment manifest, the
+exact source revision, the approved strict hosted
+discovery/invoke/replay/meter/revoke/withdraw receipt, independent parsing, and
+the hard-capped live top-up/charge/payout block. Missing production
+configuration blocks certification; it does not close the remediation campaign.
 
 ## Remaining evidence gaps
 
-- `P5-AGENT` is unimplemented: no `POST /api/compare`, no registered
-  inspect-only comparison action.
+- `P5-AGENT` is met in integrated source: anonymous `POST
+  /api/v1/market-operations/compare` invokes the registered inspect-only
+  `registry.operations.compare` action.
 - `P5-COMPARE` and `P5-HUMAN` are partial: shortlisting exists only in the
   answer surface; no URL shortlist or dedicated accessible comparison route.
 - `P5-EVIDENCE` is unmet: no hosted readback, no frozen evidence packet.
@@ -193,9 +259,9 @@ evidence classes.
 
 ## Session
 
-**Last session:** 2026-08-05T00:00:00Z
-**Stopped at:** Engine natural-language→discovery→plan verified live on a real 20-operation curated registry; tiered admission (pre-flight validate + provenance tri-state + observed→real promotion) landed source-green; remaining open items are #204 hosted registry-to-engine proof + one real keyless invocation evidence.
-**Resume file:** `.planning/ROADMAP.md`
+**Last session:** 2026-08-12  
+**Stopped at:** Post-remediation verification; seven workstreams focused-verified and Node 22 post-codegen source gate green; remediation remains open because payout-period lifecycle lacks a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked.  
+**Resume file:** `.planning/research/2026-08-12-p0-p1-architectural-remediation-plan.md`
 
 ### 2026-08-05 delta (Wayfinder journey)
 

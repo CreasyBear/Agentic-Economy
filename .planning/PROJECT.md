@@ -35,9 +35,65 @@ authority.
 Phase 1 — Action Invocation foundation                 complete
 Phase 2 — One action plane across human/agent hosts    accepted_narrowed
 Phase 3 — Paid-operation product conversion            complete in declared evidence classes
-Phase 4 — Business Account and routeable supply        planning accepted; implementation pending
+Phase 4 — Business Account and routeable supply        source complete; hosted proof uncertified
 Phase 5 — Public Offering decision loop                source landed on main
+Phase 6 — Single-Key Capability Gateway                remediation open; seven workstreams focused-verified; payout-period policy blocked; hosted certification blocked
 ```
+
+## Single-Key Capability Gateway — current workstream
+
+**Status:** remediation campaign open; seven workstreams focused-verified; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; Node 22 post-codegen source gate green; production manifest and hosted certification blocked  
+**ADR:** [`ADR-035`](adr/ADR-035-single-key-capability-gateway.md)  
+**Plan:** [`2026-08-09 implementation plan`](research/2026-08-09-single-key-capability-gateway-implementation-plan.md)
+**Historical closeout:** [`2026-08-11 goblin source remediation outcome`](research/2026-08-11-goblin-source-remediation-plan.md)
+
+The 2026-08-11 remediation closeout and its source/local gate claims are
+historical evidence for that dated snapshot, superseded for current status by
+the 2026-08-12 post-remediation re-audit recorded in `PAPERCUTS.md`.
+
+The approved gateway gives one Clerk-issued AE bearer key access to many
+admitted Market Operations while keeping supplier credentials server-side.
+Clerk remains credential issuer/revocation authority; AE owns the
+`AgentAccessPrincipal`, grant, operation policy, invocation, money, evidence,
+and recovery. The canonical protected action is `operation.invoke:v1`, the
+canonical HTTP contract is `POST /api/v1/operations/execute`, and MCP, CLI,
+and Answer are adapters over the same application service. Existing
+`operation.execute:v1` remains public/keyless/read-only.
+
+The work is sequenced W0→W8:
+
+- **W0 — architecture freeze:** record the split, canonical route/action,
+  source owners, no-handroll commitments, and proof ceiling.
+- **W1 — generalized access:** move the Customer Request verifier,
+  principal, OAuth/device-code, and grant contracts into
+  `src/modules/agent-access/` with a clean caller cutover.
+- **W2 — policy admission:** add server-owned per-key grant, budget, rate,
+  concurrency, and standing-mandate admission over existing money/rate seams.
+- **W3 — protected contract:** expose `operation.invoke:v1` through the HTTP
+  route and registered MCP action with shared identity/idempotency semantics.
+- **W4 — invocation service:** bind operation/publication/binding/provider/
+  authority/money/evidence identity to the existing durable Action Invocation
+  and transport kernels.
+- **W5 — provider authority:** add generation-bound provider connection leases,
+  final authority checks, and server-only credential custody.
+- **W6 — recovery/evidence:** add bounded read/cancel/reconcile, correlation,
+  redacted observability, and durable unknown-outcome handling.
+- **W7 — first use/settings:** ask only the authority question and separate
+  consumer-key settings from supplier connection management.
+- **W8 — release proof:** publish one HTTP and one MCP contract, make CLI and
+  Answer clients of the application service, and run exact-revision hosted
+  proof with two real operations before claiming production capability.
+
+The implementation reuses the existing Clerk auth/OAuth, action registry and
+MCP, keyless operation executor, capability-supply admission/readiness and
+provider-connection, Action Invocation, route transport, money, rate limiter,
+canonical digest/stable serialization, RFC 9457, and Convex transaction seams.
+No second token verifier, registry, billing ledger, transport, or execution
+state machine is permitted. `RULES.MD` gates remain absolute: no weakened
+validators, proof-class inflation, fixture/mock/refusal-as-live claims,
+hard-coded demo paths, tautological tests, dependency smuggling, or
+refusal-only close.
+
 
 ADR-009 and ADR-010 establish the control plane. ADR-019 establishes the
 authority-mode destination. ADR-020 narrows the first product projection to one
@@ -63,10 +119,23 @@ remain deferred.
 
 ## Current evidence
 
-`main` at `b1b105b1` is the current evidence revision. `tsc --noEmit` is clean
-and `npm run test:unit` reports 2431 passed / 6 failed across 341 files. The
-Phase 5 Offering supply graph, the callable priced capability on catalog and
-registry surfaces, and the answer-first consumer surfaces are integrated there.
+The checked-out base is `6639c106f540f3cf08dc236f0ee6c053b3b60883`; later source is staged in the current index
+and concurrent owner work remains uncommitted in the working tree; neither is a
+revision-bound release. The 2026-08-11 source closeout record is historical
+source/local evidence: it passed Node 22 typecheck, Convex codegen dry-run, lint,
+production build, the 45-file/312-test integration release suite, and the
+13-case/15-turn Answer evaluation, plus focused gateway, recovery, money,
+receipt, and UI-contract checks. No strict hosted gateway receipt exists in
+`output/release/`; production proof still requires the validated exact-revision
+receipt and approved live-money block.
+
+Current status is not source-remediation complete: seven workstreams are
+focused-verified, the remediation campaign remains open, and the payout-period
+lifecycle is blocked for lack of a trusted server-owned nonzero minimum-payout
+policy. The complete Node 22 post-codegen source gate passed on 2026-08-12.
+The outer production release gate fails closed at deployment-manifest validation
+because operator-owned production configuration is absent or malformed. Hosted
+certification remains blocked.
 
 On 2026-07-25 the owner removed the public-claim ceiling: the `contract-scans`
 banned-copy register, the `claims-register`, `phase1-banned-copy`,

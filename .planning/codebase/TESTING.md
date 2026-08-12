@@ -10,7 +10,7 @@
 - Common commands from the current `package.json` are:
   - `npm test` — cleanup-wrapped full Vitest discovery.
   - `npm run test:unit` — cleanup-wrapped `vitest run tests/unit`.
-  - `npm run test:integration` — cleanup-wrapped integration suite plus `convex/customerRequestRouteMandate.test.ts`, with `--no-file-parallelism`.
+  - `npm run test:integration` — cleanup-wrapped integration suite plus the full `convex` test root, with `--no-file-parallelism`.
   - `npm run test:e2e` and `npm run test:e2e:a11y` — cleanup-wrapped Playwright suites.
   - `npm run test:types`, `npm run test:seo`, and `npm run test:ui-contract` — focused contract suites.
   - `npm run test:conformance` — the named source conformance files in `package.json`.

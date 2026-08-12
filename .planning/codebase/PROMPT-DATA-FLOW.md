@@ -1,650 +1,269 @@
 # PROMPT-DATA-FLOW — prompting, data-flow, and AI harness map
 
-**Analysis date: 2026-08-09** (revision basis: current dirty-tree re-walk of prompt/model/tool/stream/eval/runtime seams, Customer Request recovery, keyless execution, service-endpoint projection, W7/W8 behavior, and answer-route server bundle isolation).
-This is a current-source map of prompt assembly, model
-boundaries, answer persistence, Customer Request execution, evaluation, and evidence. It does not
-claim hosted, provider, payment, or customer success unless a named packet or receipt establishes
-that class. No credential value, private URL, environment value, prompt secret, or raw provider
-payload is recorded.
+**Analysis date: 2026-08-12**
 
-Companion maps: [ARCHITECTURE.md](ARCHITECTURE.md) defines the system boundary and maintenance rule; [IA-DATA-FLOW.md](IA-DATA-FLOW.md) covers the information architecture, schemas, and persona routes.
+This map covers the current prompt, model, tool, stream, evaluation, and runtime seams in the dirty tree. It is intentionally narrower than the general architecture and information-architecture maps: it follows data and authority from an Answer turn or Customer Request through proposal, execution, evidence, and readback. Current source is the authority; historical map text and absent files are not current callsites.
 
-## Reading contract and evidence ceilings
+## Maintenance contract and evidence ceiling
 
-- **Source-shape evidence** is checked-in TypeScript, Convex schema/function source, deployment
-  configuration, or installed-package source. It establishes a boundary and the code's intended
-  behavior, not that a deployment, provider, payment rail, or customer accepted a request
-  (`src/modules/model-gateway/public.ts:4-11`; `src/modules/answer/internal/answer-tool-use-agent.ts:229-381`).
-- **Fixture evidence** is an in-process port, captured provider, deterministic seed, or source-level
-  test contract. It establishes local protocol behavior and invariants only; an unexecuted test
-  file is not execution evidence (`tests/helpers/answer-thread-test-port.ts:6-18,104-133`;
-  `tests/helpers/openrouter-contract-server.ts:141-180`; `tests/unit/answer-thread/tool-runner.test.ts:275-291`).
-- **Packet evidence** is a named output artifact whose recorded result can be inspected. It proves
-  only the run and fields recorded in that packet; it does not generalize to a current deployment,
-  provider, or customer population (`output/eval/answer-suite-report.json:1-83`;
-  `output/release/playwright-answer-runtime-smoke.json:67-126`;
-  `output/release/playwright-deploy-smoke.json:68-125`).
-- **Hosted evidence** requires an executed deployment smoke against a real base URL, terminal
-  response, receipt, and fresh durable readback. The smoke source defines this ceiling; a source
-  file, report schema, or local fixture does not (`tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100,191-217,334-411`).
-- **Provider evidence** requires a real provider response with request outcome, usage/finish data,
-  and cost or an explicit unavailable reason. OpenRouter metadata can omit cost; `undefined` is
-  not zero (`src/modules/model-gateway/public.ts:127-139`;
-  `src/modules/answer/internal/answer-tool-use-agent.ts:278-300,444-470`).
-- **Customer evidence** requires an observed human or external-agent journey and customer-value
-  measure. A score, source map, provider receipt, or local eval does not upgrade itself to customer
-  value (`eval/answer/lib/scoring.ts:14-50`; `src/modules/study/internal/pipeline.ts:253-429`).
-- **Evidence ceiling:** source and fixture claims remain local; packet claims remain packet-scoped;
-  hosted/provider/payment/customer claims require the corresponding executed receipt/readback or
-  study packet. README prose and generated Convex guidance do not lift any ceiling
-  (`eval/answer/README.md:1-12,126-153`; `convex/_generated/ai/guidelines.md:320-323`).
+- Convex durable state and deterministic module/kernel seams own identity, validation, authority, dispatch, persistence, budgets, money, settlement, and evidence. Routes, browser code, CLI/MCP adapters, and model providers are projections or observations.
+- A model may propose typed semantics, tool inputs, or prose. It cannot create a provider, price, credential, approval, spend authority, route release, cancellation result, output validity, or payment settlement. Provider responses and browser frames are observations until accepted by a durable source-owned seam.
+- Evidence classes do not upgrade one another:
 
-## Current stack and compatibility truth
-
-| dependency/runtime | current declared or installed fact | ownership consequence |
+| class | establishes | does not establish |
 |---|---|---|
-| Production AI SDK | Root `ai@7.0.44`, provider-utils `5.0.16`, Node `>=22`; the root package is ESM (`package.json:60-63,90-123,153-156`; `package-lock.json:152-169`; `node_modules/ai/package.json:1-10,44-48`) | Production generation uses the installed v7 API (`instructions`, `output`, `prepareStep`, `stopWhen`, `onStepEnd`); do not copy v6 or newer online examples into runtime code (`src/modules/answer/internal/answer-tool-use-agent.ts:316-380`; `node_modules/ai/docs/03-agents/04-loop-control.mdx:8-21,147-229`). |
-| Promptfoo compatibility layer | Promptfoo is dev-only; it carries nested `ai@6.0.216` and provider-utils `4.0.33` (`package.json:125-144`; `package-lock.json:21435-21451,21688-21705`; `node_modules/promptfoo/package.json:42-47,319-344`) | Promptfoo's nested AI SDK v6 is evaluation tooling, not the production AI SDK. Its provider process invokes the eval runner; it does not define the runtime API (`eval/answer/providers/gate.mjs:10-24`). |
-| OpenRouter generation adapter | `@openrouter/ai-sdk-provider@3.0.0` peers on AI SDK `^7` (`package.json:60-73`; `package-lock.json:4510-4530`; `node_modules/@openrouter/ai-sdk-provider/package.json:1-49`) | Four production generation families use the AE gateway; the SDK owns provider encoding/retry/abort/structured-output mechanics while AE owns credential gates, budgets, validation, evidence, and customer policy (`src/modules/model-gateway/public.ts:4-11,94-124`). |
-| Convex | `convex@1.42.0` (`package.json:90-97`; `package-lock.json:12389-12420`; `node_modules/convex/package.json:1-10`) | Convex rows/functions are the durable source of truth; source-write, authority, revision, and readback contracts stay in AE (`convex/schema.ts:1-49`). |
-| Workflow | `@convex-dev/workflow@0.4.4` (`package.json:64-67`; `package-lock.json:1982-2010`) | Project Spine uses installed Workflow waits/events/sleeps/replay/cancel mechanics; Workflow history is not Customer Request authority or answer evidence (`convex/projectSpine.ts:1-104,142-164,339-360`; `node_modules/@convex-dev/workflow/src/client/index.ts:159-306`). |
-| Workpool | `@convex-dev/workpool@0.4.9` (`package.json:64-67`; `package-lock.json:1982-2010`) | Route transport/cancellation owns queue, retry, concurrency, and completion mechanics; AE owns release, output validation, outcome, and recovery. Running cancellation finishes the item and suppresses retry; installed status is only pending/running/finished and has no `statusTtl` (`convex/customerRequestRouteWorkpool.ts:1-10`; `convex/customerRequestRouteExecutionJournalPorts.ts:110-153`; `node_modules/@convex-dev/workpool/src/client/index.ts:235-277,264-278,371-400`). |
-| TanStack AI | `@tanstack/ai@0.38.0` (`package.json:83-84`) | Used for schema-to-JSON conversion in action/harness descriptors, business-tool descriptors, and sandbox workflow discovery; it is not an execution or authority runtime (`src/modules/common/action.ts:244-284`; `src/modules/harness/tool-contract.ts:239-256`; `src/modules/business-tools/discovery.ts:1-49`; `src/lib/server/sandbox-capability-provider.ts:680-691`). |
-| Agent component | No `@convex-dev/agent` declaration, lock entry used by the app, installed directory, or application import (`package.json:60-123`; `node_modules/@convex-dev`; `convex/_generated/ai/guidelines.md:320-323`) | Adoption is deferred, not installed-but-unused. Generic agent threads cannot become AE identity, source-write, evidence, projection, or recovery truth. |
-| Runtime source/output | Nitro Vercel functions pin `nodejs22.x`; generated Nitro output dated 2026-08-04 also pins `nodejs22.x` (`vite.config.ts:57-67`; `.vercel/output/nitro.json:1-26`) | Source/build runtime matches the root AI SDK engine. |
-| Project metadata | `.vercel/project.json` still declares `nodeVersion: 24.x` (`.vercel/project.json:5-15`) | This is a deployment configuration discrepancy to reconcile, not proof that source functions run on Node 24. |
+| source-integrated | checked-in contracts, guards, bounds, and ownership | that a provider, customer, payment, or hosted deployment actually succeeded |
+| config-gated | a path can be enabled when required credentials/configuration exist | that the configuration exists or that a live call was made |
+| local fixture | deterministic protocol behavior in test ports, contract servers, or convex-test | hosted Convex, real provider, customer value, payment, or settlement |
+| named packet | the fields and outcomes recorded in that packet | a different revision, environment, provider, or stronger proof class |
+| hosted/live-certified | only a current revision-bound executed receipt plus durable readback can establish this class | anything not included in that receipt/readback |
 
-## Maintenance contract
+- The source register at the end is the claim-to-source index. Credential values, private URLs, prompt secrets, and raw provider payloads are intentionally omitted.
+- USE follows Brendan Gregg’s method: inventory resources first, then ask utilization, saturation, and errors separately. `?` means the current source/telemetry does not expose that observation; it is not zero, idle, or healthy. USE supplements latency, workload, correctness, authority, provenance, and security analysis; it does not replace them.
 
-- When a maintainer changes prompt assembly, model call, tool membership/schema, route/gate,
-  stream frame, durable journal, scheduler hop, projection, or package/runtime target, update this
-  map in the same change (`.planning/codebase/ARCHITECTURE.md:1-139`).
-- Every stage row records **input → processing → output → owner/evidence ceiling**. `lib` is an
-  installed SDK/Convex primitive; `domain` is AE policy, authority, validation, evidence, or
-  customer semantics; `base` is replaceable glue only after parity proof (`src/modules/common/action.ts:4-24`).
-- AI SDK tools, approvals, UI frames, threads, and provider traces are mechanics. They are not AE
-  identity, spend authority, mandate, prepared effect, commit, evidence, public projection, or
-  recovery truth (`src/modules/common/action.ts:76-115,164-187`; `src/modules/answer-thread/internal/tool-runner.ts:68-127`).
+## Functional block diagrams
 
-## Flow A — owner-private answer turn: reserve → plan → answer → durable replay
+### Answer turn: reservation-bound model/tool loop
 
 ```mermaid
 flowchart TD
-  SSR["owner-cookie SSR /t/:threadId projection"] --> UI["AeChat + typed turn state"]
-  SHARE["opaque /s/:shareToken read-only projection"] --> UI
-  UI --> HTTP["POST /api/answer/turn + required X-AE-Turn-Key"]
-  HTTP --> ADMIT["bounded parse + rate admission"]
-  ADMIT --> RESERVE["Convex reserve: key + request digest + server turnId/seq"]
-  RESERVE --> LOOP["HarnessRunLoop"]
-  LOOP --> CTX["context"] --> ROUTE["intent + route + plan"]
-  ROUTE --> RET["retrieval-first"]
-  RET -->|direct hit / qualifying empty| SNAP["deterministic snapshot"]
-  RET -->|non-qualifying empty| AGENT["AI SDK v7 generateText loop"]
-  ROUTE -->|boundary / frozen / inquiry| DET["deterministic path"]
-  AGENT --> TOOLS["five discovery reads + one selected strict per-op capability tool"] --> AGENT
-  TOOLS -->|"selected canonical operationRef / forced toolChoice"| EXEC["operation.execute evidence record -> guarded keyless fetch"]
-  EXEC --> AGENT
-  AGENT --> GATE["sanitize + grounding + safety gate"]
-  SNAP --> GATE
-  DET --> GATE
-  GATE --> ASM["typed answer events"] --> PERSIST["reservation-bound answer + tool rows"]
-  PERSIST --> FINAL["atomic harness finalization + reservation terminal state"]
-  FINAL --> SSE["AI SDK UI stream terminal frame"]
-  RESERVE --> STOP["POST /api/answer/turn/stop → durable stopped"]
-  FINAL --> GET["owner GET/SSR projection"]
-  STOP --> GET
-  SSE --> MERGE["one reducer + durable projection convergence"]
-  GET --> MERGE
+  B[Owner browser] -->|bounded JSON + x-ae-turn-key| R[POST /api/answer/turn]
+  R --> A[rate/admission + request digest]
+  A --> C[(Convex answerTurnReservations)]
+  C -->|owner/session + generation lease| H[HarnessRunLoop]
+  H --> S[query safety model]
+  S --> I[deterministic intent/route]
+  I --> D[registry retrieval / operation discovery]
+  D --> M[AI SDK v7 + OpenRouter model loop]
+  M --> T[read tools + strict descriptor-bound capability tool]
+  T -->|catalog read| G[tool/action schema + evidence hash]
+  T -->|keyless| X[fail-closed operation.execute executor]
+  T -->|authenticated| Y[operation.invoke service + principal]
+  G --> Q[answer gate + source-derived snapshot]
+  X --> Q
+  Y --> Q
+  Q --> P[Convex turn persistence]
+  P --> F[exact harness finalization + journal/readback]
+  H -. transient typed frames .-> E[AI SDK UI/SSE]
+  E --> B
+  B -->|durable projection/readback| F
+  C -. authority .-> H
+  F -. authoritative replay .-> B
 ```
 
-| stage | source evidence | input → processing → output | owner/evidence ceiling |
-|---|---|---|---|
-| SSR/readback entry | `src/routes/t.$threadId.tsx`; `src/modules/answer-thread/thread-route.ts`; `src/routes/api.answer.threads.$threadId.ts`; `convex/answerThreads.ts` | bare thread route plus owner session cookie → owner-checked Convex projection and SEO readback → redacted projection or concealed 404/unavailable; the bare URL grants no access | domain projection + base router; source-shape |
-| browser stream/replay seam | `src/components/ae/chat/AeThreadTurnStreamSection.tsx`; `src/components/ae/chat/use-answer-turn-lifecycle.ts`; `src/components/ae/chat/answer-turn-state.ts`; `src/components/ae/chat/turn-stream-session.ts`; `src/components/ae/chat/thread-readback.ts` | query/thread/searchContext plus one stable client turn key → one lifecycle hook owns exhaustive typed frame validation, sequence-aware reducer updates, Stop ordering, and durable owner readback; a transient network/retryable readback failure gets one bounded GET retry without restarting model/tool work, then owner projection replaces optimistic state; remount retains the same key and server replay returns the reservation lifecycle or terminal turn without a second model run | base browser transport + domain reducer + durable projection; source-shape |
-| request/session | `src/routes/api.answer.turn.ts`; `src/components/ae/chat/answer-stream.ts`; `src/components/ae/chat/AeChat.tsx` | body `{query, threadId?, searchContext?}`, owner cookie, and required bounded `X-AE-Turn-Key` → resolve pseudonymous owner and canonical request digest → reserved/replayed admission or typed RFC 9457 refusal; the initial route ask keeps one opaque random key in browser session storage across route promotion/remount, clears it after settlement or New question, and every later submission mints a fresh random key | base + domain; source-shape |
-| bounded body | `src/routes/api.answer.turn.ts`; `src/lib/server/bounded-request-body.ts`; `src/modules/answer-thread/answer-thread.schema.ts` | raw request → 16 KiB declared/streamed byte bound, JSON parse, Zod validation, and 1–128-character turn-key bound → normalized request or 413/400 | base; source-shape |
-| durable reservation/access | `src/routes/api.answer.turn.ts`; `src/modules/answer-thread/internal/turn-digests.ts`; `src/modules/answer-thread/answer-thread.functions.ts`; `convex/answerThreads.ts`; `src/lib/server/rate-limit.ts` | session, requested thread/new scope, client key, request digest → Convex owner/25-slot checks over persisted turns plus reservations and atomic server `threadId`/`turnId`/monotonic `seq` allocation before model/tool cost; same identity+digest replays, changed material input conflicts → reserved/replayed admission or 403/404/409/429 | Convex durable authority + domain digest; source-shape |
-| UI framing | `src/routes/api.answer.turn.ts`; `src/modules/answer/answer-ui-stream.ts`; `src/modules/answer/answer-event-schema.ts` | durable admission + abort signal → `createUIMessageStream` writes transient `data-answer-event` progress; exhaustive variant/payload and contiguous-sequence validation rejects malformed SDK chunks as typed protocol errors, while terminal truth comes from owner readback → no-store SSE response plus durable projection | AI SDK v7 framing + AE persistence; source-shape |
-| live harness | `src/modules/answer-thread/internal/turn-orchestrator.ts:125-222`; `src/modules/answer-thread/internal/answer-harness-operation.ts:81-108`; `src/modules/harness/harness.schema.ts:21-31`; `src/modules/harness/run-loop.ts:158-205` | query/access → run identity and phases `context → intent → route → retrieval → model → gate → assemble → persist → report`; all phases except report are guarded and report is attempted after failure → mutable runtime state, runtime events, private report | AE harness domain + installed loop; fixture/source until persisted |
-| context | `src/modules/answer-thread/internal/turn-orchestrator.ts:236-245` | preloaded complete turns or bounded durable read → prior turns/count and frozen provider/slugs → bounded context state | domain; source-shape |
-| intent/route | `src/modules/answer-thread/internal/turn-orchestrator.ts:246-313,314-388`; `src/modules/answer-thread/internal/intent-router.ts:14-45` | query/history/searchContext → classify six intents (`refine_search`, `filter_known`, `compare_known`, `inquiry_handoff`, `explain_boundary`, `unsupported`) and select exhaustive route → deterministic boundary/frozen/inquiry path or tool search | domain; source-shape |
-| response plan | `src/modules/answer-thread/internal/answer-response-planner.ts:15-72,88-160` | query/prior count/searchContext → clarification, provider/artifact budgets, and one-call policy → typed plan | domain; source-shape |
-| retrieval-first | `src/modules/answer-thread/internal/turns/retrieval-first.ts:44-183,265-323,354-389`; `src/modules/registry/registry.actions.ts:397-468`; `convex/registry.ts:188-239` | plan/query/context → canonical read-only `registry.search` first; direct hit becomes snapshot; qualifying location/service empty may call one `web.discover` and preserve imported claims separately; non-qualifying empty invokes `registry.operations.search` recovery before the model path → snapshot, operation/provider tool records, timings, imported web claims, or no snapshot | domain + action/Convex base; source-shape |
-| model dispatch | `src/modules/answer-thread/internal/turn-orchestrator.ts:314-387`; `src/modules/answer-thread/internal/turns/boundary.ts:21-44,78-88`; `src/modules/answer-thread/internal/turns/frozen-known.ts:1-81`; `src/modules/answer-thread/internal/turns/inquiry-handoff.ts:1-130` | route/retrieval → deterministic boundary/frozen/inquiry/clarification branches avoid model calls; unresolved `tool_search` enters agent path → path result or model input | domain; source-shape |
-| prompt assembly | `src/modules/answer/internal/answer-llm-prompts.ts:9-115`; `src/modules/answer/internal/action-to-tool-spec.ts:35-78`; `src/modules/answer/internal/capability-tool-examples.ts:11-29` | query, searchContext, intent, prior public providers, tool policy, and one resolved descriptor snapshot → versioned instructions/user payload with sanitized inert catalog facts, model-safe action aliases, worked per-op descriptions, and live-data steering for the selected strict per-op tool; credentials, authority, mandate, spend, and raw DB documents are absent | domain; source-shape |
-| AI SDK v7 model loop | `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-629` | gateway model, prompts, five discovery tool specs, at most one selected strict per-op tool, abort → `generateText` + `Output.object`, `prepareStep`, `stopWhen`, `onStepEnd`, `maxRetries: 0`, `parallelToolCalls: false`, and a serial AE tool queue; a selected capability is forced on step 0 and every later step is tool-less, while no selection keeps the bounded auto-tool loop → typed `AnswerProse`, tool records, model observations | AI SDK mechanics + AE budgets/schema/gate; source-shape |
-| model accounting | `src/modules/answer/internal/answer-tool-use-agent.ts:278-307,444-470`; `src/modules/answer-thread/internal/turns/agent.ts:78-90`; `src/modules/storefront/internal/business-enrichment.ts:261-318` | each provider SDK step or web-discovery action → one model observation with status, usage, cost or unavailable reason; direct agent callback feeds the live collector without an outer duplicate → private harness model summary | domain collector + SDK callback; source-shape |
-| read-tool admission | `src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-31`; `src/modules/answer-thread/internal/tool-runner.ts:62-161,265-313`; `src/modules/answer/internal/answer-tool-use-agent.ts:307-335,474-547` | model alias/input or deterministic call → the five discovery aliases resolve to read-only strict actions through `runAnswerToolCall`; the selected per-op closure binds one canonical operation reference, validates its strict model input through the source descriptor, then calls the guarded executor and hashes one `operation.execute` record → `complete`, `error`, or `refused` tool evidence | domain runner/executor + action/Convex base; source-shape |
-| gates | `src/modules/answer/internal/answer-gate.ts:25-58,61-106`; `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`; `src/modules/answer-thread/internal/turn-orchestrator.ts:389-431` | snapshot/prose/allowed slugs → sanitization, slug grounding, location, epistemic-vocabulary, injection-upgrade, provider-overclaim, and verbatim published price/availability checks → accepted snapshot + gate summary or typed error/copy ID | domain; source-shape |
-| assembly/frames | `src/modules/answer/internal/emit-snapshot-events.ts:31-107`; `src/modules/answer-thread/internal/turn-orchestrator.ts:432-447,614-660` | accepted snapshot → ordered plan/work/thinking/one-line/sources/artifacts/next-step/summary deltas; deferred assembly omits `complete` → transient typed event sequence | domain event contract + AI SDK framing; source-shape |
-| durable answer persistence | `src/modules/answer-thread/internal/turn-orchestrator.ts`; `src/modules/answer-thread/internal/answer-turn-finalization.ts`; `src/modules/answer-thread/answer-thread.functions.ts`; `convex/answerThreads.ts` | immutable reservation admission plus snapshot/error, evidence, and ordered tool rows → reservation-bound identity plus full answer digest validation and idempotent persistence; deterministic conflicts remain conflicts, while only an unknown/transport persistence outcome is probed and retried as a redacted durable error → durable `answerTurns`/`answerToolCalls` without caller-generated sequence or append bypass | domain + Convex base; source-shape |
-| private summary versus journal | `src/modules/answer-thread/internal/answer-turn-finalization.ts`; `src/modules/answer/internal/answer-tool-use-agent.ts`; `tests/unit/answer-thread/answer-harness-operation.test.ts` | model callbacks → private harness summary counts/usage/cost; public projection retains only sanitized work log/check summary/prose/artifacts → private model telemetry plus redacted ordered journal | AE evidence boundary; fixture test is not execution proof |
-| atomic harness finalization | `src/modules/answer-thread/internal/turn-orchestrator.ts`; `src/modules/answer-thread/internal/answer-turn-finalization.ts`; `convex/harnessSessions.ts`; `convex/answerThreads.ts` | reservation-bound terminal result plus harness finalization hash/journal entries → one harness mutation verifies the parent thread/owner, every journal entry's session/run/turn identity, and the persisted snapshot before inserting journal evidence, patching the answer turn, and transitioning the reservation to finalized; answer and harness digests are separate; a source-available finalizer failure performs an idempotent redacted durable-error transition without overwriting a stopped/finalized winner → exactly one terminal `complete`/`error`/`stopped` frame after durable convergence | domain + Convex transaction; source-shape |
-| owner and shared projections | `src/modules/answer-thread/internal/public-projection.ts`; `src/routes/api.answer.threads.$threadId.ts`; `src/routes/t.$threadId.tsx`; `src/routes/s.$shareToken.tsx`; `convex/answerThreads.ts` | persisted turns plus reservation-only lifecycle rows → owner-cookie projection or HMAC-verified opaque share-token projection; the bounded query transcript is included, raw evidence/tool payloads/hashes/private harness/session data are omitted, and malformed terminal evidence fails closed as a typed error rather than a blank complete answer; revoked/deleted/invalid tokens are existence-hiding → private owner transcript or read-only shared transcript | domain projection + Convex/token authority; source-shape |
-| client convergence | `src/components/ae/chat/use-answer-turn-lifecycle.ts`; `src/components/ae/chat/answer-turn-state.ts`; `src/components/ae/chat/projection-merge.ts`; `src/components/ae/chat/thread-readback.ts`; `src/components/ae/chat/AeThreadTurnStreamSection.tsx`; `src/components/ae/chat/AeChat.tsx` | validated frames beginning at sequence zero, stop acknowledgement, and owner projection → one lifecycle hook and sequence-aware reducer; server turn IDs, reservation-only pending/stopped rows, and terminal projection win while thinking remains transient; one automatic bounded readback retry covers only network or typed retryable failures and never restarts execution; a null SSR projection performs one owner readback, while a genuine concealed 404 stays unavailable → reload/remount/reconnect-safe transcript | base React + domain state machine; source-shape |
-| durable Stop boundary | `src/components/ae/chat/turn-stop.ts`; `src/components/ae/chat/AeThreadTurnReplaySection.tsx`; `src/components/ae/chat/AeThreadTurnCollapsed.tsx`; `src/routes/api.answer.turn.stop.ts`; `src/modules/answer-thread/answer-thread.functions.ts`; `convex/answerThreads.ts` | owner session + server thread/turn IDs → stop mutation atomically transitions the reservation/turn to `stopped` unless already terminal or deleted; browser keeps Stop available through streaming/settling/pending, aborts only after acknowledgement, and clears requested/failed Stop copy as soon as durable status is no longer pending → replayable `stopped` or `already_settled` without stale pending claims | Convex durable lifecycle + typed browser transport; source-shape |
+`src/routes/api.answer.turn.ts:36-231` owns bounded request admission, reservation identity, and the UI stream boundary. `src/modules/answer-thread/internal/turn-orchestrator.ts:639-905` owns the lease-bound run and `HarnessRunLoop` phases. `src/modules/answer/internal/answer-tool-use-agent.ts:546-1460` owns model/tool selection and model accounting; `src/modules/answer-thread/internal/tool-runner.ts:29-225` turns read-tool outcomes into buffered evidence. The dotted edges are authority/readback edges, not model claims.
 
-**Flow A invariants.** Direct registry hits and qualifying empty states can complete without answer-agent
-model requests; a qualifying empty has at most one separate `web.discover` action/model call
-(`src/modules/answer-thread/internal/turns/retrieval-first.ts:44-183`; `eval/answer/lib/cases.ts:204-313`).
-The direct answer read set is exactly five discovery IDs: `registry.search`, `registry.detail`,
-`sandbox.checkup_quote`, `web.discover`, and `registry.operations.search` (the operation-level
-discovery tool, also used on the recovery path) (`src/modules/answer-thread/answer-thread.schema.ts:27-41`;
-`src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-31`).
-Writes never enter that action-derived set (`src/modules/answer-thread/internal/tool-runner.ts:68-82`;
-`src/modules/common/action.ts:139-187`). The answer agent additionally exposes one strict
-operation-bound capability tool for the selected descriptor only; `operation.execute` is the
-durable record id behind that closure, not a model-facing executor. The closure binds the canonical
-operation reference and the model supplies only that operation's strict schema input, so a completed
-capability call is kept out of `buildNoMatchesProse` and renders as a plain live answer
-(`src/modules/answer/internal/answer-tool-use-agent.ts:337-344,561-618`).
-The in-memory answer test port mirrors reservation, parent-owner, entry-identity, and transient
-persistence-failure guards but intentionally omits production Convex journal/session durability;
-production remains authoritative for the full transactional contract
-(`tests/helpers/answer-thread-test-port.ts`; `convex/answerThreads.ts`; `convex/harnessSessions.ts`).
+### Customer Request: proposal to executable route and readback
 
-## Flow A′ — keyless capability execution seam (operation.execute)
+```mermaid
+flowchart LR
+  U[Browser or authenticated agent] --> N[bounded/authenticated submit]
+  N --> V[(Convex V2 submission shell)]
+  V --> G[routeable graph: exact contracts + admitted operations + current price/readiness]
+  G --> O[registry.operations.search <= 20]
+  O --> K[focused descriptor pool]
+  K --> L[OpenRouter JSON proposal]
+  K --> D[deterministic interpreter/recovery]
+  L --> Z[domain/grounding settlement]
+  D --> Z
+  Z --> C[deterministic compiler + digests]
+  C --> W[OCC aggregate/head/route-generation commit]
+  W --> PV[inspect-only preview]
+  PV --> CF[fresh confirmation]
+  CF --> MD[mandate + attenuated step grant]
+  MD --> ST[start/resume run]
+  ST --> Q[(attempt + dispatch outbox)]
+  Q --> WP[Workpool: bounded queue/retry]
+  WP --> CL[canonical claim + pre-release checks/fence]
+  CL --> X[guarded HTTP/MCP/x402 transport]
+  X --> OBS[bounded untrusted observation]
+  OBS --> EV[output/evidence validation]
+  EV --> T[canonical terminal outcome]
+  T --> RB[Convex projection/readback]
+  RB --> U
+  CF -. only this edge creates effect authority .-> MD
+  CL -. release fence before provider effect .-> X
+```
+
+`src/modules/customer-request/application/interpret-compile/graph.ts:34-234`, `src/modules/customer-request/application/interpret-compile/discover.ts:9-68`, `src/modules/customer-request/application/interpret-compile/interpreter.ts:41-177`, `src/modules/customer-request/application/interpret-compile/compile.ts` (compile wrapper), and `src/modules/customer-request/compiler.ts:243-441` (active compiler) establish the proposal/compile path. `src/modules/customer-request/application/confirm-route/confirm.ts`, `src/modules/customer-request/route-mandate-admission.ts`, and `src/modules/customer-request/route-execution/machines/start-or-resume.ts` are the authority transitions. `convex/customerRequestRouteExecutionJournalPorts.ts:133-149` schedules; `convex/customerRequestRouteTransportWorker.ts:81-305` claims, fences, transports, and records; `src/modules/customer-request/route-execution/machines/record-outcome.ts` validates readback. Workpool mechanics and provider observations are never execution truth by themselves.
+
+## Flow A — Answer request, route selection, and execution
+
+### A1. Admission, reservation, and route selection
+
+1. The browser posts JSON to `/api/answer/turn`. The route requires `Content-Type: application/json`, bounds the body to 16 KiB, requires a 1–128 character `x-ae-turn-key`, applies rate admission, and computes canonical `requestDigest` and `reservationKey` (`src/routes/api.answer.turn.ts:52-165`; `src/modules/answer-thread/internal/turn-digests.ts`). An `Authorization` header may add an authenticated `OperationInvokeContext`; this does not make the model an authority.
+2. `convex/answerThreads.ts:225-418` idempotently creates or replays the owner/session-bound thread reservation. It rejects identity or digest conflicts, denies another session, caps a thread at 25 turns, and uses a 30-second generation-fenced execution lease (`src/modules/answer-thread/answer-thread.schema.ts:65-66`). `renewAnswerTurnLease` checks reservation identity, state, request digest, and generation (`convex/answerThreads.ts:419-470`).
+3. `streamAnswerTurn` resumes a valid checkpoint or renews the lease before creating a run. Its phases are context, intent, retrieval, model, gate/assembly, persistence, and report; a finalized/stopped reservation replays durable state instead of recomputing it (`src/modules/answer-thread/internal/turn-orchestrator.ts:639-905`).
+4. The context phase calls `classifyAnswerQuerySafety` before lookup, provider search, capability selection, or execution. The classifier is a structured OpenRouter call capped at 8 output tokens, with `maxRetries: 0`; missing key, non-stop completion, or request failure is a typed refusal (`src/modules/answer/internal/answer-query-safety.ts:12-95`). The model request is recorded even for refusal (`turn-orchestrator.ts` context phase).
+5. Intent/route selection is deterministic and context-aware. `planAnswerTurn` emits clarification, answer, compare, filter, empty, boundary, unsupported, or error modes; answer search/visible provider budget is 3, compare visible budget is 2, filter visible budget is 3, and the local registry search policy allows one call (`src/modules/answer-thread/internal/answer-response-planner.ts:17-105`). Frozen compare/filter paths do not expose catalogue tools (`src/modules/answer/internal/answer-tool-use-agent.ts:1179-1197`).
+6. Retrieval-first uses the read-only registry/source ports before model prose. For specific live-data requests, `resolveKeylessDataAsk` and the registry operation-search tool narrow current admitted operation descriptors; candidates are bounded to four and are rebound from a checkpoint only when candidate, descriptor, selection, tool, and execution-binding digests still match (`src/modules/answer/internal/keyless-data-ask.ts`; `src/modules/answer/internal/answer-tool-use-agent.ts:436-543`).
+
+### A2. Model, tool, and executable capability seams
+
+- The only model provider seam is `openRouterModel` in `src/modules/model-gateway/public.ts:1-139`. It uses the installed AI SDK 7 package (`package.json:70-103`) and OpenRouter, requests usage, enables strict structured output when requested, supports bounded web results, and treats absent provider cost metadata as `undefined`, never as zero. The default model is `deepseek/deepseek-v4-flash`.
+- Current Answer model callsites are in `src/modules/answer/internal/answer-tool-use-agent.ts:546-1460`: resumed prose (`generateText` with `Output.object`), normal prose/tool rounds, one schema-repair call, one registry-operation recovery round, one forced selected-capability round, and grounded/final prose. Every call sets `maxRetries: 0`; `recordStep` stores provider/model/stop reason/usage/cost or an explicit unavailable reason. `MAX_ROUNDS=4`, prose output is capped at 1,024 tokens, model-visible tool results at 64 KiB, and the tool queue serializes recorded tool-call ordering (`answer-tool-use-agent.ts:136-139,633-809,882-928,1378-1459`).
+- `runToolCall` checks the normalized per-turn `maxToolCalls` before execution and records `budget_exceeded` as a refusal; when the round/budget boundary is reached, the SDK receives one final tool-less prose step rather than an unbounded extra round (`answer-tool-use-agent.ts:715-809,1378-1445`). No global model context-token ceiling is exposed by current source: `?`.
+- The model-facing tool object contains the four fixed read IDs (`registry.search`, `registry.detail`, `web.discover`, `registry.operations.search`) plus up to four strict capability tools bound to selected operation descriptors (`src/modules/answer-thread/answer-thread.schema.ts:70-77`; `answer-tool-use-agent.ts:810-828`). `operation.execute` is not a free-form model tool. It is the shared evidence-record executor selected by dynamic per-operation tools; authenticated turns route the same intent through `operation.invoke` with the authenticated principal/service (`answer-tool-use-agent.ts:721-765`; `src/modules/capability-execution/operation-execute.functions.ts`).
+- `runAnswerToolCall` resolves only registered read actions, enforces read-only and strict input/output schemas, executes via the harness action-tool seam, and returns a buffered `AnswerToolCallRecord` with input/result summaries and a canonical result hash. Refused, blocked, timeout, transport, and schema errors are evidence records rather than model-uncaught failures (`src/modules/answer-thread/internal/tool-runner.ts:29-155`).
+- Keyless operation execution is fail-closed: the descriptor’s public operation reference and strict input are validated, the request is guarded, the response is bounded to 512 KiB and schema-checked, and output is returned with evidence. Invalid response is non-retryable; unreachable transport is retryable; no credential is passed to the model (`src/modules/capability-execution/operation-execute.functions.ts`, `src/modules/capability-execution/operation-execute.actions.ts`). Authenticated operation invocation is a separate service boundary, not a keyless fallback.
+- Other current model seams are separate from the Answer turn: optional follow-up chips in `src/modules/answer-thread/internal/llm-follow-up-chips.ts`, Customer Request JSON interpretation in `src/modules/customer-request/openrouter-transport.ts`, and storefront business enrichment in `src/modules/storefront/internal/business-enrichment.ts`. They use the shared gateway or its explicit transport adapter; they do not share Answer reservation/finalization authority.
+
+### A3. Checkpoints, finalization, replay, and evidence
+
+- A tool-bearing intermediate step is checkpointed with replay messages, model requests, tool calls, providers, allowed slugs, operation candidates, selection, and outcome. `serializeAnswerTurnCheckpoint` canonical-digest checks the object, enforces a 256 KiB JSON cap, rejects replay-secret keys (`api_key`, authorization, credential, password, private key, secret, token), and bounds calls/digests/model requests to 16, providers to 25, candidates to 4, and replay messages to 32 (`src/modules/answer-thread/internal/answer-turn-checkpoint.ts:21-75,78-180`; `answer-thread.schema.ts:142-170`).
+- Convex checkpoint persistence checks generation, step sequence, parent digest, reservation/request/turn identity, and the 16-step turn cap before writing (`convex/answerThreads.ts:493-600`; `convex/answerThreads.ts:42-46`). A resumed checkpoint is not trusted merely because it parses: operation candidate, descriptor, selection, and execution-binding digests are rebound before tool construction (`answer-tool-use-agent.ts:436-543`).
+- The gate and snapshot are built from tool-derived providers/allowed slugs, not model-supplied provider claims. `finalizeAnswerTurnSnapshot` rejects unsupported copy or grounding; `persistAnswerTurnWithResult` freezes evidence, answer-run summary, model/tool timings, operation artifacts, and tool hashes (`src/modules/answer-thread/internal/turn-orchestrator.ts:1199-1428`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:139-287`).
+- Harness finalization builds private journal entries and a finalization hash, then calls the source-owned finalizer. `convex/harnessSessions.ts` validates exact reservation, turn, tool-call, evidence, journal, and finalization identity before atomically inserting/settling the turn. A retry may replay an already accepted finalization; it cannot replace it with a different digest (`src/modules/answer-thread/internal/answer-turn-finalization.ts:289-371`; `convex/harnessSessions.ts:483-658`).
+- The durable answer/tool/session rows are the replay source. A transient stream frame is never treated as durable completion (`src/modules/answer/answer-ui-stream.ts:29-37`; `src/modules/answer-thread/internal/answer-turn-finalization.ts`).
+
+### A4. SSE/UI and owner readback
+
+- The route emits AI SDK UI data parts named `data-answer-event`; frames are transient and carry `{seq,event}`. The server stops sending after request abort and marks complete/pending/stopped/error as terminal (`src/routes/api.answer.turn.ts:179-230`).
+- The SDK owns SSE framing; `readAnswerTurnFrames` validates the Answer payload, requires sequence numbers starting at zero and contiguous, rejects duplicate/late terminal frames, and rejects empty or unterminated streams (`src/modules/answer/answer-ui-stream.ts:29-93`).
+- `turn-stream-session.ts` shares a stable client-key session, deduplicates frames by sequence, replays non-thinking frames to late subscribers, and removes completed sessions with no subscribers. Its `frames` array has no source-visible count/byte cap and `writer.write` is not awaited by the route: backpressure/queue depth `?` (`src/components/ae/chat/turn-stream-session.ts:15-125`; `src/routes/api.answer.turn.ts:179-209`).
+- `useAnswerTurnLifecycle` fences updates by mount and generation, reads the durable thread projection after terminal/pending/stopped outcomes, retries a retryable/network readback once after 250 ms, and only aborts local transport after a durable Stop acknowledgement (`src/components/ae/chat/use-answer-turn-lifecycle.ts:34-66,155-243,245-305`; `src/components/ae/chat/turn-stream-session.ts:116-125`). The browser is therefore a reducer/readback adapter, not the authority for completion.
+
+## Flow B — Customer Request semantic proposal, compile, and execution
+
+### B1. Input, graph, discovery, and proposal
+
+- Authenticated and guest surfaces are adapters over the same bounded application seam. `src/lib/server/customer-request-api.ts` bounds submit bodies to 32 KiB and applies strict submit/sensitive-input checks; `src/lib/server/customer-request-route-action-api.ts` bounds run/cancel bodies to 4 KiB; `src/lib/server/customer-request-browser-api.ts` and `src/lib/server/customer-request-agent-api.ts` provide guest-cookie or scoped-agent identity and route lifecycle commands. `convex/customerRequestApplication.ts` owns preview admission, shell reservation, interpret/compile, confirmation, run, cancellation, and projections.
+- `loadRequestGraph` reads current routeable supply and exact active contracts, then verifies admitted operation/publication/binding identity, readiness, price digests, and registration hashes before constructing descriptors, models, bindings, mappings, and a registry snapshot digest (`src/modules/customer-request/application/interpret-compile/graph.ts:34-193`). Current graph limits include 512,000 descriptor bytes and 256,000 projected input-schema bytes (`convex/customerRequestApplication.ts:71-72`); routeable supply is bounded by the eligibility read (current source limit 256, submit path asks 64, in `src/modules/capability-supply/internal/eligible-supply.ts` and `convex/customerRequestV2.ts`).
+- `discoverAndFilterDescriptors` runs deterministic `registry.operations.search` with limit 20 and keeps only graph descriptors whose public operation references were returned. No-match/unavailable discovery falls back to the graph descriptor set; discovery order is preserved and the interpreter never invents a descriptor (`src/modules/customer-request/application/interpret-compile/discover.ts:9-68`).
+- `createConfiguredRequestInterpreter` always returns an interpreter. Without an OpenRouter key it is deterministic; with a key it uses a structured JSON model plus deterministic fallback. Domain curation prevents crypto/fiat or other obvious mismatches; model selections are revalidated, ungrounded/no-selection proposals recover through deterministic matching or become typed `needs_information` (`src/modules/customer-request/application/interpret-compile/interpreter.ts:23-177,193-295`). The deterministic interpreter never grabs an arbitrary pool item and caps recovery selections at two (`src/modules/customer-request/application/interpret-compile/deterministic-interpreter.ts`). Geocoding composition is an explicit prior step when the registered mapping supports it.
+- The Customer Request OpenRouter adapter uses the shared `openRouterModel` with strict structured output, a 1,000,000-byte request cap, 20-second default attempt timeout, default one retry, and caller-supplied completion/reasoning limits (`src/modules/customer-request/openrouter-transport.ts:22-118`). The configured semantic interpreter bounds descriptor payloads, response bytes to 64,000, and its timeout to 45 seconds (`src/modules/customer-request/application/interpret-compile/interpreter.ts:41-56`). A failed first proposal is retried once; an exhausted model/provider failure becomes deterministic recovery or typed refusal, not a fabricated plan.
+
+### B2. Compile, preview, and authority transition
+
+- `proposeThenCompile` records the proposal/interpreter identity and passes it to `compileProposal`; the compiler checks exact public operation refs, contract models, facts, bindings, graph digests, effects, cancellation, and evidence. It derives actions, dependency mappings, price/maximum-cost posture, route-plan generations, plan/aggregate digests, and never grants execution authority in a proposal (`src/modules/customer-request/application/interpret-compile/interpret.ts:82-130`; `src/modules/customer-request/compiler.ts:299-441`).
+- Compiler caps are 64 selections, 128 facts, 256 route plans, and a 700,000-byte aggregate (`src/modules/customer-request/compiler.ts:51-55,428-435`). Rejections are typed (`unsafe_interpretation` or `capability_graph_invalid`); model output cannot bypass them.
+- `previewCustomerRequest` truncates customer job/network inputs, loads the graph, runs a two-attempt propose/compile ladder, and returns `needs_information`, `unavailable`, or an inspect-only preview. Preview is capped at 32 steps and 5-minute validity; raw offering refs are bounded to 64 per step (`src/modules/customer-request/application/interpret-compile/preview.ts:24-171`). The customer-safe projection reduces options to three per step and 120 KiB (`src/modules/customer-request/application/consumer-plan-projection.ts`).
+- Confirmation checks principal, revision, freshness, route generation, and known-cost posture (`src/modules/customer-request/application/confirm-route/confirm.ts`). Only mandate/grant code creates spend/effect authority: `route-mandate-mutation/issue.ts` persists an authenticated mandate, and `route-mandate-admission.ts` attenuates it per step with exact operation/contract/digest/expiry/cumulative-spend checks. A model proposal or preview cannot run a provider.
+
+### B3. Queue, guarded provider effect, and readback
+
+- `start-or-resume.ts` idempotently creates a run, attempt, and dispatch outbox after active mandate/grant admission. `journalMutationPorts` persists those records and enqueues the action through `customerRequestRouteWorkpool` with a completion callback (`src/modules/customer-request/route-execution/machines/start-or-resume.ts`; `convex/customerRequestRouteExecutionJournalPorts.ts:133-149`).
+- The route Workpool owns scheduling mechanics only: `maxParallelism=32`, retries enabled, max three attempts, initial backoff 1,000 ms, exponential base 2 (`convex/customerRequestRouteWorkpool.ts:1-10`). Queue depth, wait time, and slot utilization are not exposed: `?`.
+- `customerRequestRouteTransportWorker.run` opens the current dispatch, claims the canonical invocation, checks authority expiry and provider-connection authority, signs the call, prepares the adapter, writes the canonical release fence, marks dispatch, verifies a public target/DNS guard, invokes guarded HTTP/MCP/x402, then persists a canonical terminal outcome and route projection (`convex/customerRequestRouteTransportWorker.ts:81-305`). A release fence precedes provider effect; a provider observation cannot rewrite authority.
+- `route-transport-runtime.ts` bounds adapter configuration to 65,536 bytes, request timeout to 100–120,000 ms, response/body and persisted observation fields to 512 KiB, MCP listing to 32 pages/4,096 tools, and x402 payment/challenge fields. It distinguishes succeeded, refused, partial, unknown, released, not-released, and unknown release states; x402 custody can remain reconciliation-required (`src/modules/capability-supply/internal/transport-adapters.ts`; `src/modules/capability-supply/route-transport-runtime.ts:62-126,1134-1213,1378-1380`).
+- `record-outcome.ts` validates current attempt/route integrity, output schema, evidence, and dependency/input mapping before advancing or projecting succeeded, partial, failed, unknown, or cancelled. `customerRequestRouteExecution.ts` owns durable dispatch completion, terminal outcome, and x402 custody mutations. Cancellation uses an explicit current-attempt machine and a separate canonical cancellation worker; it is not inferred from a browser abort (`src/modules/customer-request/route-execution/machines/record-outcome.ts`; `src/modules/customer-request/route-execution/machines/cancel-current.ts`; `convex/customerRequestRouteCancellationWorker.ts`).
+
+## Flow C — evaluation, contract servers, and fixture boundaries
 
 ```mermaid
 flowchart TD
-  AGT["answer agent selects one capability.<canonical-ref> tool or no capability tool"] --> BIND["closure binds canonical operationRef; model supplies strict input only"]
-  BIND --> EXEC["runOperationToolCall -> executeKeylessOperation(input, source)"]
-  EXEC --> VAL["input validated against source descriptor inputSchema (@cfworker/json-schema)"]
-  VAL -->|invalid| R1["refused input_invalid"]
-  VAL --> GATE["fail-closed keyless gate: credential 'none', http-json GET, not x402"]
-  GATE -->|fails| R2["refused operation_not_keyless / operation_not_executable"]
-  GATE --> TARGET["validPublicHttpsEndpoint + guarded DNS/private-target preflight"]
-  TARGET -->|fail| R3["refused endpoint_invalid"]
-  TARGET --> FETCH["guarded Undici fetch + bounded upstream body (512 KiB)"]
-  FETCH --> OUT["output validated against descriptor outputSchema"]
-  OUT -->|bad| E["error response_invalid / provider_error"]
-  OUT --> LIMIT["sanitized JSON result ≤64 KiB for model and persisted evidence"]
-  LIMIT -->|over| R4["refused result_too_large with full-result digest"]
-  LIMIT --> REC["operation.execute evidence record (complete)"]
+  Y[promptfooconfig.yaml] --> P[providers/gate.mjs]
+  P --> C[eval/answer/scripts/run-case.ts]
+  C --> E[evaluateCaseAsync]
+  E --> D1[pure gate/chip/injection/parity/tool-use]
+  E --> D2[answer-turn/thread route evaluator]
+  D1 -. bypasses .-> NO1[Answer route/persistence]
+  D2 --> R[handleAnswerTurnRequest]
+  R --> TP[in-memory answer-thread test port]
+  R --> OR[OpenRouter contract HTTP server]
+  R --> LS[local registry + seed-only keyless source]
+  R --> Q[typed frames/evidence/readback assertions]
+  Q --> J[output/eval/answer-suite-report.json]
 ```
 
-| stage | source evidence | input → processing → output | owner/evidence ceiling |
+- `eval/answer/promptfooconfig.yaml` contains direct gate/chip/injection/parity/tool-use rows and answer-turn/thread rows. `eval/answer/providers/gate.mjs` launches `eval/answer/scripts/run-case.ts`, which forwards variables to `evaluateCaseAsync` (`eval/answer/providers/gate.mjs:1-25`; `eval/answer/scripts/run-case.ts:1-6`).
+- Pure modes intentionally bypass the production route and persistence: gate uses `runAnswerGate`, chips use chip validation, parity reads the local registry, and tool-use installs a deterministic model plan while running the real tool agent/gate. They prove only the direct function seam (`eval/answer/lib/evaluators.ts:363-455,1364-1490`).
+- Answer-turn/thread cases use `handleAnswerTurnRequest`, an in-memory `AnswerThreadTestStore`, a local registry source, an optional seed-only keyless source, and `startOpenRouterContractServer`. The contract server scripts safety, tool-call, and prose responses; unexpected or unserved requests throw (`eval/answer/lib/evaluators.ts:458-840`; `tests/helpers/answer-thread-test-port.ts`; `tests/helpers/openrouter-contract-server.ts:41-235`; `tests/helpers/registry-local-e2e.ts`; `tests/helpers/keyless-seed-source.ts`). These are deterministic local fixtures, not hosted Convex or real provider evidence.
+- The named packet `output/eval/answer-suite-report.json` is an answer-eval v3 report: 13 cases, 15 turns, 19 model requests, 12 tool runs, 1 complete capability-tool record, 1,244 total tokens, and cost-unavailable reasons `price_table_missing` and `provider_metadata_missing` (`output/eval/answer-suite-report.json:1-61`). Those are packet fields only; they do not establish live latency, hosted success, customer value, provider settlement, or payment.
+- `eval/answer/lib/cases.ts` is the contract catalog for expected statuses, tool IDs/inputs, evidence, model requests, timing, and capability operation-reference dialects. `eval/answer/lib/suite.ts` aggregates model/tool/timing/usage/cost fields and marks cost unavailable rather than silently using zero (`eval/answer/lib/cases.ts`; `eval/answer/lib/suite.ts:40-250`).
+
+## Current callsite inventory
+
+| seam | current source/symbol | input → output | authority/evidence ceiling |
 |---|---|---|---|
-| selected per-op capability tool | `src/modules/answer/internal/answer-tool-use-agent.ts:294-344,561-618`; `src/modules/answer/internal/keyless-data-ask.ts:18-55`; `src/modules/capability-execution/operation-execute.actions.ts:9-91`; `convex/capabilitySupplyOperations.ts:583-671` | one descriptor snapshot from the selected source → invalid schemas are dropped, duplicate canonical refs are unavailable, and only the selected descriptor becomes one strict operation-bound tool; the model supplies no operation reference, while `operation.execute` remains the durable record id → AI SDK tool whose closure carries the canonical ref | domain tool builder + Convex/explicit local seed source; source-shape |
-| executor | `src/modules/capability-execution/operation-execute.functions.ts:1-259`; `src/modules/capability-execution/operation-execute.server.ts:1-38` | closure-bound `{operationRef, input}` + source descriptor → fail-closed keyless gate, input validation, `validPublicHttpsEndpoint`, guarded DNS/private-target preflight, guarded Undici fetch, and bounded response body (512 KiB); sanitized model/persisted result JSON has a separate 64 KiB ceiling → typed `ok`/`refused`/`error` result + canonical-digest evidence hash | AE executor + guarded server adapter; source-shape |
-| record seam | `src/modules/answer/internal/answer-tool-use-agent.ts:474-547`; `src/modules/answer-thread/answer-thread.schema.ts:31-41` | selected per-op closure → `runOperationToolCall` → one `operation.execute` `AnswerToolCallRecord` (`complete`/`refused`/`error`) so coverage/prose/persistence key on one id; private input evidence retains the canonical ref, but the model sees only strict schema input and typed result → durable evidence row | domain + Convex base; source-shape |
-| descriptor readers | `convex/capabilitySupplyOperations.ts:577-753`; `src/modules/capability-execution/operation-execute.actions.ts:27-91`; `src/modules/capability-execution/seed-supply.ts:110-173` | Convex `list`/`read` is the production source and enforces published/admitted/conformant/current/ready keyless HTTP-JSON GET supply; the seed source is selected only for the explicit local-E2E bypass when both Convex URLs are absent, and derives the same canonical `operation:v1:<64-hex>` refs → descriptor or null/[]; production does not switch to seed data when Convex is unavailable | domain + Convex/explicit local seed adapter; source-shape |
+| HTTP Answer admission | `src/routes/api.answer.turn.ts:handleAnswerTurnRequest` | bounded JSON/key → reservation + UI stream | route boundary only; Convex reservation owns identity |
+| Reservation/lease | `convex/answerThreads.ts:reserveAnswerTurn`, `renewAnswerTurnLease`, `stopAnswerTurn` | session/key/digest → generation-fenced durable state | Convex lifecycle authority |
+| Answer orchestration | `src/modules/answer-thread/internal/turn-orchestrator.ts:streamAnswerTurn`, `buildStreamAnswerTurnPhases` | reservation → route/retrieval/model/gate/persist phases | deterministic orchestration; model remains untrusted |
+| Query safety | `src/modules/answer/internal/answer-query-safety.ts:classifyAnswerQuerySafety` | query → allow/refuse + model request record | safety decision is typed source input, not provider fact |
+| Answer model/tool loop | `src/modules/answer/internal/answer-tool-use-agent.ts:runRealToolUseAgent` | prompt/checkpoint → tool calls + prose + model telemetry | AI SDK/OpenRouter observation; AE owns tool validation/evidence |
+| Read tool runner | `src/modules/answer-thread/internal/tool-runner.ts:runAnswerToolCall` | action/input → buffered result hash + provider slugs | action schema/read-only boundary |
+| Operation tool boundary | `src/modules/answer/internal/answer-tool-use-agent.ts:runOperationToolCall`; `src/modules/capability-execution/operation-execute.functions.ts:executeOperation` | strict op ref/input → bounded output/error | fail-closed keyless executor; authenticated calls use `operation.invoke` |
+| Checkpoint | `src/modules/answer-thread/internal/answer-turn-checkpoint.ts` + `convex/answerThreads.ts` | replay state → canonical bounded checkpoint | digest/generation/secret rejection |
+| Finalization | `src/modules/answer-thread/internal/answer-turn-finalization.ts` + `convex/harnessSessions.ts:finalizeReservedAnswerTurn` | frozen evidence/journal → atomic settled turn | durable harness/source-write authority |
+| UI stream | `src/modules/answer/answer-ui-stream.ts:readAnswerTurnFrames` | SDK chunks → contiguous typed frames | wire observations; durable readback wins |
+| Browser lifecycle | `src/components/ae/chat/turn-stream-session.ts`, `use-answer-turn-lifecycle.ts` | frames/result/stop → reducer + projection | client adapter; no completion authority |
+| Customer Request model | `src/modules/customer-request/openrouter-transport.ts:createOpenRouterJsonTransport` | graph/prompt → typed semantic proposal | model proposal only; deterministic fallback/compile gate |
+| Customer Request compiler | `src/modules/customer-request/compiler.ts:compileCustomerRequest` | proposal + graph → digested plan/route generation | deterministic contract/price/effect authority |
+| Route scheduler | `convex/customerRequestRouteWorkpool.ts`; `convex/customerRequestRouteExecutionJournalPorts.ts:enqueueRouteTransport` | dispatch outbox → retryable action | queue mechanics only |
+| Provider worker | `convex/customerRequestRouteTransportWorker.ts:run` | current dispatch → bounded observation + terminal mutation | canonical claim/release/fence + guarded transport |
+| Promptfoo/eval bridge | `eval/answer/providers/gate.mjs`, `scripts/run-case.ts`, `lib/evaluators.ts` | vars → direct or route-fixture result | local fixture/packet only |
 
-**Flow A′ invariants.** No keyed, x402, or non-`http-json`-GET descriptor is offered by the
-Convex source or explicit local seed source, or executed; the endpoint/credential/config/schema
-comes from that source descriptor and the model supplies no host or operation reference. Admission
-performs synchronous HTTPS/credential/private-literal validation, while the server adapter performs
-DNS/private-target preflight and guarded Undici connection (`src/modules/capability-execution/operation-execute.functions.ts:86-173`;
-`src/modules/capability-execution/operation-execute.server.ts:14-38`;
-`src/modules/network-guard/public.ts:1-154`). Every descriptor uses the canonical
-`operation:v1:<64-lowercase-hex>` identity, including explicit local seed descriptors; bare
-capability IDs and noncanonical refs do not resolve or execute
-(`src/modules/capability-supply/public.ts:61-80`;
-`src/modules/capability-execution/seed-supply.ts:140-168`;
-`src/modules/answer/internal/keyless-data-ask.ts:18-55`;
-`src/modules/capability-execution/operation-execute.actions.ts:37-91`).
-The upstream response bound is 512 KiB; the answer layer separately refuses sanitized result JSON
-above 64 KiB before model return or persistence, retaining only a typed refusal and full-result digest
-(`src/modules/capability-execution/operation-execute.functions.ts:29-34,197-218`;
-`src/modules/answer/internal/answer-tool-use-agent.ts:499-514`).
-An unexecuted test is not execution proof (`tests/unit/capability-execution/operation-execute.test.ts:1-125`).
-A live keyless result observed in-session is provider data for that call, not a named provider
-receipt, so it stays below the provider-evidence ceiling in this map.
+## Resource-first USE checklist
 
-## Flow B — Customer Request V2: intake → interpretation → plan → execution → projection
+All rows below are software resources confirmed in current source. Runtime utilization and saturation are not inferred from configured capacity. The packet observation in Flow C is not a hosted metric.
 
-```mermaid
-flowchart TD
-  HOME["static home: ask + categories + examples"] -->|q without project| NEW["/t/new -> AeChat initialQuery"]
-  HOME -->|project present| TREE["RootWorkTreeLoop / project readback"]
-  TREE --> SHELL["project work-tree shell"]
-  NEW --> SHELL
-  AGENT["browser / authenticated agent POST"] --> ADMIT["bounded body + identity/rate/idempotency"] --> DURABLE_SHELL["durable submission shell"] --> GRAPH["routeable capability graph"] --> DISCOVER["provider discovery"]
-  DISCOVER --> PROPOSAL["model/deterministic proposal"] --> VALIDATE["strict semantic validation"]
-  VALIDATE --> COMPILE["deterministic compiler"] --> COMMIT["revision/head/command commit"]
-  COMMIT --> DECISION["customer-safe decision"] --> CONFIRM["exact route confirmation"]
-  CONFIRM --> MANDATE["bounded mandate / repeat permission"] --> GRANT["step grant + spend/data reservation"]
-  GRANT --> JOURNAL["run/head/attempt/outbox"] --> POOL["Workpool queue/retry"]
-  POOL --> RELEASE["readiness/release gate"] --> TRANSPORT["HTTP/MCP/x402 observation"]
-  TRANSPORT --> OUTCOME["registered output/evidence validation"]
-  OUTCOME -->|next step| GRANT
-  OUTCOME -->|terminal/unknown| RUNPROJ["customer run projection"]
-  JOURNAL -. cancellation .-> CANCEL["pre-release or adapter cancellation"] --> RUNPROJ
-```
+| resource | capacity/bound | utilization observation | saturation observation | errors | current observability | owner/seam |
+|---|---|---|---|---|---|---|
+| Answer model rounds/output/context | `MAX_ROUNDS=4`; prose `maxOutputTokens=1024`; tool result `64 KiB`; no global context cap (`?`) (`src/modules/answer/internal/answer-tool-use-agent.ts:136-139,1378-1459`) | `?` live model busy time/tokens; named local packet reports 19 requests/1,244 tokens only (`output/eval/answer-suite-report.json:13-27`) | `?` context-window wait/overflow; round cap yields final prose step | ? (no live window/count/rate exposed; local packet reports 19 model requests but no error/recovery/retry counts); taxonomy: `prose_failed`, `tool_unavailable`, `budget_exceeded`; model calls use `maxRetries:0` | `HarnessModelRequestRecord` usage, stop reason, duration, cost/unavailable reason | `openRouterModel` + `runRealToolUseAgent` |
+| Query-safety model | structured choice; 8 output tokens; no retry (`src/modules/answer/internal/answer-query-safety.ts:12-61`) | `?` request rate/latency outside packet | `?` provider wait or classifier capacity | ? (no live window/count/rate exposed; no failure/recovery/retry counts); taxonomy: `unsafe_request`, `classifier_unavailable`, `answer_query_safety_unavailable`; no retry | model request record includes status, usage, duration, cost-unavailable reason | `classifyAnswerQuerySafety` |
+| Answer tool-call budget | normalized `maxToolCalls`; fixed read tools plus max four capability tools; registry search policy one; model result 64 KiB (`answer-tool-use-agent.ts:633-809`; `answer-thread/internal/answer-response-planner.ts:33-37`) | `?` calls per live turn; packet reports 12 tool runs | `?` queued tool work; serial `toolQueue` is observable only in code | ? (no live window/count/rate exposed; packet reports 12 tool runs, not error/recovery/retry counts); taxonomy: `tool_not_known`, schema/refusal, transport/error, `budget_exceeded` recorded as tool evidence | `AnswerToolCallRecord`, timings, result hash, tool counters | `tool-runner.ts`, `answer-tool-use-agent.ts` |
+| Operation catalogue/discovery | registry search default 20/max 50; Answer candidate limit 4; Customer discovery limit 20 (`src/modules/registry/internal/search.ts:42-65`; `answer/answer-schema.ts`; `customer-request/application/interpret-compile/discover.ts:17-67`) | `?` catalog reads and candidate occupancy | `?` page wait, result truncation, or discovery queue | ? (no live window/count/rate exposed; no failed/recovered/retried discovery counts); taxonomy: typed no-match/unavailable/invalid operation; no-match falls back without fabrication | search result ranks and operation candidate digests | registry operation search + `resolveKeylessDataAsk` |
+| Answer reservation/lease | request body 16 KiB; key 128; lease 30 s; renewal interval ≤10 s; thread 25 turns (`api.answer.turn.ts:52-99`; `answer-thread.schema.ts:65-66`; `convex/answerThreads.ts:42-46`) | `?` active reservations/lease occupancy | `?` in-progress contention, lease wait, read/write latency | ? (no live window/count/rate exposed; no conflict/recovery/retry counts); taxonomy: identity/digest conflict, `in_progress`, `thread_turn_limit`, generation/stopped/settled conflict | Convex reservation state, generation, updatedAt, typed result | `convex/answerThreads.ts` |
+| Checkpoint/replay persistence | JSON 256 KiB; max 16 tool calls/digests/model requests, 25 providers, 32 messages, 4 candidates, 16 steps (`answer-turn-checkpoint.ts:21-29`; `convex/answerThreads.ts:42-46`) | `?` bytes/rows written per turn | `?` write contention/read wait; no queue-depth metric | ? (no live window/count/rate exposed; no failed/recovered/retried persistence counts); taxonomy: checkpoint shape/digest/secret/parent/generation conflicts | checkpoint digest, step, generation, canonical replay validation | `answer-turn-checkpoint.ts` + Convex checkpoint mutations |
+| Final turn/harness journal persistence | Convex fields are bounded by validators but no final-turn byte cap is exposed (`?`); finalization/tool identity digests required (`answer-turn-finalization.ts`; `src/modules/harness/internal/convex-schema.ts`) | `?` bytes/rows and transaction time | `?` transaction contention or journal backlog | ? (no live window/count/rate exposed; no failed/recovered/retried finalization counts); taxonomy: source-write failure, identity mismatch, replay/conflict, stopped | persisted turn/evidence/tool rows and harness report; packet/fixture only unless hosted readback | `convex/harnessSessions.ts:finalizeReservedAnswerTurn` |
+| SSE/UI stream and client buffer | Answer request 16 KiB; contiguous seq/terminal required; client `frames[]` has no count/byte cap (`answer-ui-stream.ts:60-93`; `turn-stream-session.ts:15-25`) | `?` bytes/sec, frames/sec, active subscribers | `?` backpressure/blocked writer; route does not await `writer.write` | ? (no live window/count/rate exposed; no failed/recovered/retried stream counts); taxonomy: malformed/empty/missing terminal, abort, transport problem | parser errors, seq, terminal event, client session result | AI SDK UI stream + `turn-stream-session.ts` |
+| Harness phase/tool scheduler | optional run/tool timeout; shared tools can run concurrently, exclusive tools wait behind shared work; no default timeout/queue cap (`src/modules/harness/run-loop.ts:33-46,300-333,543-598`) | `?` phase/tool occupancy and concurrency | `?` waiting shared/exclusive tasks | ? (no live window/count/rate exposed; no failed/recovered/retried scheduler counts); taxonomy: aborted, timeout, refused/blocked/error/failed tool statuses | runtime events, phase/tool durations, collector counters | `HarnessRunLoop` + `run-collector.ts` |
+| Customer Request model payload/completion | request 1,000,000 bytes; default attempt timeout 20 s; default retry 1; configured interpreter timeout 45 s/response 64 KiB (`openrouter-transport.ts:22-118`; `interpreter.ts:41-56`) | `?` live request/token rate; no hosted observation | `?` provider wait/retry occupancy | ? (no live window/count/rate exposed; configured retry=1 is a bound, not an observed count; failed/recovered/retried attempts unobserved); taxonomy: typed timeout, provider 4xx/5xx/unavailable, invalid/no-content/length | proposal interpreter ID, retry/failure code, model output schema validation | `createOpenRouterJsonTransport` + configured interpreter |
+| Customer Request graph/compiler/preview | graph descriptor 512 KiB/schema 256 KiB; selections 64/facts 128/routes 256/aggregate 700 KiB; preview 32 steps/64 raw refs/5 min (`customerRequestApplication.ts:71-72`; `src/modules/customer-request/compiler.ts:51-55`; `preview.ts:141-171`) | `?` graph bytes/actions/route generation occupancy | `?` graph read/compile wait or option truncation pressure | ? (no live window/count/rate exposed; two-attempt proposal/compile ladder is a bound, not an observed error/recovery count); taxonomy: graph unreadable, unsafe interpretation, graph invalid, preview unavailable/options changed | digests, typed refusal, preview expiry; no live workload counters | graph/interpret/compile/preview modules |
+| Customer Request Workpool queue | `maxParallelism=32`, retry max 3, backoff 1 s base 2 (`convex/customerRequestRouteWorkpool.ts:5-10`) | `?` active slots/actions; configuration is not utilization | `?` queue depth/wait time/retry backlog | ? (no live window/count/rate exposed; retry max 3 is a bound, not an observed count; failed/recovered/retried actions unobserved); taxonomy: action failed after retry, completion callback/refusal paths | Workpool dispatch state/work ID and journal callback | `customerRequestRouteExecutionJournalPorts.ts` + Workpool |
+| Provider HTTP/MCP/x402 transport | adapter config 65,536 bytes; request timeout 100–120,000 ms; body/response/observation 512 KiB; MCP 32 pages/4,096 tools (`route-transport-runtime.ts:62-126`; `transport-adapters.ts`) | `?` provider request occupancy/bytes | `?` provider connection wait or guarded-fetch queue | ? (no live window/count/rate exposed; failed/recovered/retried transport counts unobserved); taxonomy: timeout, unreachable, 4xx/5xx, redirect, invalid/oversize response, credential/payment/refusal, unknown | bounded `RouteTransportObservation`, disposition/release states, request/response digests | `route-transport-runtime.ts` + Node transport worker |
+| Keyless operation executor | response cap 512 KiB; descriptor request timeout; manual redirects/guarded public target (`operation-execute.functions.ts`; `route-transport-runtime.ts`) | `?` executed calls/bytes in live host; packet has 1 capability record | `?` credential/transport wait; no queue metric | ? (no live window/count/rate exposed; packet reports 1 capability record, not error/recovery/retry counts); taxonomy: `response_invalid`, retryable `fetch_failed`, fail-closed schema/target refusal | `OperationExecuteResult` and evidence hash; no provider/customer proof without receipt | `executeOperation` / operation tool call |
+| Readiness probes | refresh lead 90 s; batch 20; bounded timeout/512 KiB response (`convex/capabilitySupply.ts`; `src/modules/capability-supply/internal/readiness-probe.ts`) | `?` probes per interval and provider busy time | `?` batch backlog/slot pressure; no probe retry counter | ? (no live window/count/rate exposed; refresh/batch bounds are not observations; failed/recovered/retried probe counts unobserved); taxonomy: credential unavailable/rejected, unreachable, 4xx/5xx, redirect, invalid/too-large | readiness status, validity, failure code, digest; hosted current counts `?` | capability supply readiness seam |
+| HTTP/rate admission | token buckets: public-read 120/min, public-mutation 5/min, OAuth 5/min, Answer submit 30/hour, chips 60/hour, stream 30/hour, inquiry 5/min, dispute 3/min; agent access ≤300/hour/60/min (`convex/lib/rateLimit.ts:20-72`) | `?` bucket consumption by principal | `?` rejection pressure/queue wait | ? (no live window/count/rate exposed; bucket limits and `retryAfter` are bounds/state, not aggregate counts; rejected/recovered/retried request counts unobserved); taxonomy: typed rate-limited responses with retry-after | bucket state/retryAfter per admission; no aggregate live dashboard | Convex rate limiter + `src/lib/server/rate-limit.ts` |
+| Spend/credential/lease authority | durable policy has per-invocation/daily/monthly/concurrent spend and call limits; provider lease ≤30 s and refuses <100 ms remaining (`src/modules/agent-access/internal/convex-schema.ts:14-24`; capability invocation worker) | `?` spend/credit/concurrent invocation utilization | `?` credit or concurrency saturation in hosted runtime | ? (no live window/count/rate exposed; durable caps and lease are bounds, not aggregate counts; failed/recovered/retried invocation counts unobserved); taxonomy: insufficient credit, outcome_unknown, credential unavailable/rejected, reconciliation_required | exact money/price digest/charge state and authority expiry in durable rows; no live totals | agent-access, money, operation-invocation, route mandate seams |
 
-There is **no separate live Agent Engine plan runtime**. Dedicated `enginePlans`, decision-map,
-`plan-proposal`, and `AePlanWork` hosts are retired by a source-level retirement contract, and the
-current Convex schema composes Customer Request V2 tables instead (`tests/imports/legacy-engine-retirement.test.ts:7-48`; `convex/schema.ts:1-49`; `src/modules/customer-request/internal/convex-v2-schema.ts:669-734`).
-The root route is now static unless an explicit project is present: non-empty `q` without `project`
-redirects before loading to `/t/new`, while `project` loads only the source-backed work tree. It no
-longer runs services, plan-preview, or web-discovery loaders, and the Home shell does not mount
-`AeServiceList` or `AeConsumerPlan` (`src/routes/index.tsx:18-85,88-189`; `src/routes/t.new.tsx:1-36`).
-Customer Request preview remains a separate inspect-only application path; it does not create a
-Request or effect (`src/modules/customer-request/plan-preview.actions.ts:46-82`; `convex/customerRequestApplication.ts:648-697`).
-The curated provider seed enumerates Exa/Frankfurter, six keyless operations, four keyed operations,
-and seven observed x402 listings; the dev fixture module remains the source bundle filtered by that
-list rather than evidence that every fixture is live (`convex/curatedProviders.ts:34-57,87-91`;
-`src/modules/dev/internal/dev-seed-business-fixtures.ts:44-91`).
+## Invariants, reachable gaps, and proof ceilings
 
-| Home/project route | `src/routes/index.tsx:18-85,88-189`; `src/routes/t.new.tsx:1-36`; `src/modules/work-tree/human-root.functions.ts:1-120` | static Home ask/category/example shell → non-empty `q` without `project` redirects to `/t/new`; an explicit `project` alone loads `readRootWorkTreeServer`/`RootWorkTreeLoop` → chat navigation or project work-tree readback; no services/plan-preview/web-discovery readback | domain route + base router; source-shape |
-| preview composition/projection | `src/modules/customer-request/application/interpret-compile/preview.ts:9-139,57,90,97-139`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`; `src/modules/customer-request/plan-preview.actions.ts:46-82`; `src/components/ae/services/AeServiceList.tsx:13-50`; `src/components/ae/plan/AeConsumerPlan.tsx:22-65` | authenticated Customer Request preview → bounded graph, deterministic provider discovery narrows the descriptor pool, then a bounded attempt ladder calls `proposeThenCompile(finalAttempt: false)` and retries once with `finalAttempt: true` on a transient propose failure, max 32 steps/64 refs/5-minute expiry, public-supply join capped at three options per step → consumer-neutral frontier/queued/attention plan or typed `needs_information`; it is not mounted by Home and cannot create authority/effects | domain application + base route; source-shape, not durable Request evidence |
-| public transports | `src/routes/api.requests.ts:1-6`; `src/routes/api.v1.requests.ts:1-6`; `src/lib/server/customer-request-browser-api.ts:42-154`; `src/lib/server/customer-request-agent-api.ts:45-124,264-313` | browser or authenticated agent → browser session/service assertion or principal-authenticated agent API → common application command | base transport + domain identity; source-shape |
-| admission | `src/lib/server/customer-request-api.ts:19-47`; `src/lib/server/customer-request-route-action-api.ts:43-124` | raw submit/refinement/route-action body → 32 KiB submit or 4 KiB route-action bound, strict schema, sensitive-input refusal, identity/rate/idempotency checks → admitted input or typed refusal | base + domain; source-shape |
-| durable shell | `convex/customerRequestApplication.ts:701-769`; `convex/customerRequestV2.ts:145-300` | command/authority/digest → rate-limited authenticated caller, replay/conflict check, durable reservation before provider work → shell, replay, or refusal | domain + Convex; source-shape |
-| routeable capability graph | `convex/customerRequestApplication.ts:1708-1791`; `src/modules/customer-request/application/interpret-compile/graph.ts:22-169` | network → exact active contracts, routeable supply, mappings, decision models/bindings, bounded descriptors and registry snapshot digest → graph snapshot, loaded unfiltered with the descriptor pool narrowed by the downstream provider-discovery step (`src/modules/customer-request/application/interpret-compile/discover.ts:35-46`) | domain; source-shape |
-| provider discovery | `src/modules/customer-request/application/interpret-compile/discover.ts:15-46`; `convex/customerRequestDiscoveryPort.ts:16-24`; `src/modules/customer-request/application/interpret-compile/preview.ts:57,90`; `src/modules/customer-request/application/interpret-compile/interpret.ts:57,110,182` | natural-language customer job/network → deterministic read-only `registry.operations.search` on the job via the Convex-native `discoverCapabilitiesPort` (`ctx.runQuery` on `capabilitySupplyOperations:search`), keeping only `graph.descriptors` whose operation refs were returned; fall back to the full descriptor set on empty/generic/no-match or unavailable; only the candidate pool narrows (models/bindings/mappings/registrySnapshotDigest stay whole so the digest/replay invariant holds) → filtered descriptor set for `propose` | domain deterministic read; source-shape (mirrors answer-engine Flow A retrieval-first discovery) |
-| proposal ladder | `src/modules/customer-request/application/interpret-compile/interpret.ts:57,76-118,110,120-203,182`; `src/modules/customer-request/application/interpret-compile/interpreter.ts:22-62` | intent/amendment/graph + discovery-narrowed `capabilities` set (omitted → whole `graph.descriptors`) → submit proposal once non-final then final; no provider key uses deterministic token matching with deterministic-token fallback labels; keyed path uses OpenRouter and, on zero/unrecoverable selection over a routeable/domain-appropriate pool, recovers through `recoverFromPool` (domain guard + identity dedupe, `MAXIMUM_SELECTIONS` 2, geocode-prior-step compose) or a typed `needs_information` ask; selection is bounded to the discovered or full set → model/deterministic proposal or refusal | domain interpreter; source-shape |
-| semantic transport/validation | `src/modules/customer-request/openrouter-transport.ts:34-118`; `src/modules/customer-request/semantic-interpreter.ts:140-220,256-325,937-950` | public descriptor payload (now carrying `inputExamples`) + versioned instruction → AI SDK v7 `generateText`/`Output.object`, bounded timeout/response, one provider retry, tolerant wire normalization, strict domain schema and input/output digests → typed proposal and interpretation evidence | SDK transport + AE semantic validation; source-shape |
-| deterministic compile | `src/modules/customer-request/compiler.ts:67-166,234-426,600-746,784-809` | proposal + exact models/bindings/facts → derive actions, dependencies, routes, prices, data use, effects, recovery, cancellation, evidence, and digests; refuse unknown/on-request cost route generation → aggregate/plan/generation or refusal | AE domain; source-shape |
-| revision/head commit | `src/modules/customer-request/application/interpret-compile/compile.ts:34-153`; `convex/customerRequestV2.ts:145-300` | compiled aggregate + expected lineage/command → replay/conflict/stale graph checks and OCC-style commit → persisted V2 revision/head/route generation/command | domain + Convex; source-shape |
-| customer decision projection | `src/modules/customer-request/customer-projection.ts:129-168,395-431,493-605`; `src/modules/customer-request/application/consumer-plan-projection.ts:121-211` | stored aggregate/preview → bounded criteria, options, decision, recovery, available actions; deterministic fallback is labeled `keyword_match`; raw model/binding/credential docs remain private → customer-safe decision/consumer plan | domain projection; source-shape |
-| confirmation/mandate | `src/modules/customer-request/application/confirm-route/confirm.ts:11-74`; `src/modules/customer-request/route-mandate-mutation/issue.ts:11-170`; `convex/customerRequestApplication.ts:878-899` | exact displayed revision/generation/route + authenticated principal → freshness/current graph/known maximum cost/authority checks; persist command-idempotent route mandate without starting work → confirmation receipt + bounded mandate | domain authority; source-shape |
-| standing repeat permission | `convex/customerRequestApplication.ts:901-1045`; `src/modules/customer-request/route-mandate.ts:95-190` | authenticated owner/agent + exact route, occurrences, cumulative spend, expiry → list/allow/use/inspect/revoke bounded standing permission → attenuated authority or refusal | domain authority; source-shape |
-| per-step grant | `convex/customerRequestRouteMandateAdmission.ts:60-263`; `src/modules/customer-request/route-mandate-admission.ts:62-246` | mandate + exact step/supply/contract → verify mandate/supply digests, attenuate scope, reserve cumulative spend and data/effect use → admitted/replayed grant | domain authority; source-shape |
-| run journal/outbox | `convex/customerRequestApplication.ts:1047-1078`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`; `convex/customerRequestRouteExecutionJournalPorts.ts:279-373` | active mandate/principal/key → replay/resume/cancel-prior checks, materialize input, write run/head/queued attempt/pending outbox/command → pending dispatch | domain + Convex; source-shape |
-| Workpool seam | `convex/customerRequestRouteWorkpool.ts:1-10`; `convex/customerRequestRouteExecutionJournalPorts.ts:110-153`; `node_modules/@convex-dev/workpool/src/client/index.ts:83-108,235-277,371-400` | committed dispatch ref → max parallelism 32, action retry max 3/backoff, completion mutation → transport/cancellation worker | installed queue mechanics; source-shape |
-| release/readiness/transport | `src/modules/customer-request/route-execution/machines/mark-dispatched.ts:7-77`; `convex/customerRequestRouteTransportWorker.ts:66-198`; `src/modules/capability-supply/route-transport-runtime.ts:397-540,566-653` | pending attempt/grant/mandate → recheck current supply/publication, credential/health/readiness, bind call identity, invoke HTTP JSON or MCP JSON-RPC (including bounded JSON/SSE parsing) → bounded untrusted observation | AE release gate + transport adapter; source-shape |
-| x402 custody/payment boundary | `src/modules/capability-supply/route-transport-runtime.ts:655-776`; `convex/customerRequestRouteExecution.ts:418-604`; `src/modules/customer-request/internal/route-mandate-convex-schema.ts:745-776` | 402 challenge + exact spend/credential authority → validate currency/exponents/ceiling/expiry, persist opaque prepared custody, mark possibly submitted before send, observe provider proof or reconciliation-required → payment attempt state plus transport observation; source does not prove settlement or money-ledger reconciliation | domain payment boundary + Convex custody; source-shape only |
-| outcome/next-step | `src/modules/customer-request/route-execution/machines/record-outcome.ts:8-93`; `convex/customerRequestRouteExecutionJournalPorts.ts:389-473,646-783` | released observation + registered output/evidence → validate disposition/output; malformed/stale output becomes unknown; commit success/partial/failure/cancellation race or re-admit dependency-mapped next step → terminal, advanced, unknown, failed, or replayed run | domain; source-shape |
-| cancellation | `src/modules/customer-request/route-execution/machines/cancel-current.ts:16-86`; `src/modules/customer-request/route-execution/machines/cancel-resolve-attempt.ts:7-50`; `convex/customerRequestRouteExecutionCancelPorts.ts:89-188`; `convex/customerRequestRouteCancellationWorker.ts:13-74` | request/principal/key/mode → queued unreleased work cancels directly; active adapter cancellation uses native scheduler worker; accepted/rejected/unknown/too-late is explicit → cancelled/pending/too-late/replayed | domain + scheduler base; source-shape |
-| run readback | `src/modules/customer-request/application/route-plan-projection/project-run.ts:15-149`; `convex/customerRequestRouteExecution.ts:120-180,568-579` | durable run/aggregate → preserve queued/leased/dispatched/accepted/succeeded/failed/outcome_unknown/cancelled, progress, evidence, and attention state; duplicate start refuses across leased/released states → bounded customer action status/result | domain projection; source-shape |
+### Current invariants
 
-**Flow B authority invariant.** A model/deterministic proposal may select opaque registered operations
-and customer facts, but cannot construct routes, provider choices, approvals, effects, authority,
-completion evidence, or payment. The compiler, confirmation, mandate, grant, release, transport,
-and outcome seams do that deterministically (`src/modules/customer-request/semantic-interpreter.ts:222-248`; `src/modules/customer-request/compiler.ts:234-426`; `src/modules/common/action.ts:164-187`).
-A discovered capability must still be admitted/routeable to compile; discovery sources candidates
-ONLY from `registry.operations.search` output (never external catalog prose) per the no-handroll rule
-(`src/modules/customer-request/application/interpret-compile/discover.ts:15-46`; `convex/customerRequestDiscoveryPort.ts:16-24`).
-On recovery the composite keeps that honesty: a routeable/domain-appropriate pool with no matching
-selection surfaces a typed `needs_information` ask rather than an opaque refusal or a wrong-capability
-claim, while a genuine multi-step request composes at most two domain-coherent selections via the
-domain guard (`src/modules/customer-request/application/interpret-compile/interpreter.ts:84-155,201-223`;
-`src/modules/customer-request/application/interpret-compile/deterministic-interpreter.ts:104-118`).
+1. Reservation keys, request digests, generation leases, checkpoint digests, finalization hashes, and tool result hashes make Answer retries/replays identity-bound (`src/modules/answer-thread/internal/turn-digests.ts`; `convex/answerThreads.ts`; `answer-turn-finalization.ts`).
+2. Answer providers/allowed slugs are extracted from validated tool results; prose is gated against frozen source evidence (`src/modules/answer-thread/internal/tool-runner.ts`; `src/modules/answer/internal/catalog-grounding.ts`; `src/modules/answer-thread/internal/turn-orchestrator.ts`).
+3. The model can select among surfaced operations but cannot introduce an operation, free-form executable schema, provider credential, price, or effect. Dynamic capability tools bind exact admitted descriptor schemas; authenticated operation invocation is explicit (`answer-tool-use-agent.ts`; `operation-execute.functions.ts`).
+4. Customer Request model/deterministic proposals are narrowed to current routeable graph descriptors and must pass exact compiler, price, effect, cancellation, evidence, size, and digest checks. Preview is inspect-only; confirmation and mandate/grant are the effect-authority transition (`graph.ts`; `src/modules/customer-request/compiler.ts`; `confirm-route`; `route-mandate-admission.ts`).
+5. Workpool/SDK/browser scheduling only moves work or observations. Canonical Convex claim/release/terminal fences, output validation, and readback own executable outcome (`customerRequestRouteWorkpool.ts`; `customerRequestRouteTransportWorker.ts`; `record-outcome.ts`).
+6. Source, fixture, packet, and hosted evidence are separate trust domains. The local eval packet’s pass/latency/token/cost fields remain a named packet, not a hosted/provider/customer/payment claim.
 
-## Service endpoint projection and operation identity
+### Reachable gaps and unknowns
 
-The public registry now has one canonical `ServiceDto` per business with a flat
-`endpoints[]` array, nested `ae.offerings[]`, decimal endpoint pricing, aggregate `priceSummary`,
-`networks[]`, and endpoint detail navigation. Each endpoint can carry the current auth,
-execution, authority, source-kind, provenance, parameters, and `operationRef` fields; the producer
-enriches those operation fields only when the DB origin map proves one exact integrated operation
-for that offering. Unlinked or ambiguous offerings remain un-enriched rather than fabricated
-(`src/modules/registry/internal/service-projection.ts:4-20,23-111`;
-`src/modules/registry/internal/services-api-projection.ts:88-163,165-211`;
-`convex/capabilitySupplyOperations.ts:398-454`).
+- Current source does not expose live utilization, saturation, queue depth, backpressure, active lease occupancy, model context-window usage, provider busy time, readiness batch pressure, or spend/credit/concurrency totals: `?` for each in the USE table.
+- The browser frame cache has no source-visible size bound, and the route does not await `writer.write`; parser correctness is covered, but backpressure behavior under load is not measured (`turn-stream-session.ts`; `api.answer.turn.ts`).
+- OpenRouter cost metadata can be absent and is explicitly reported unavailable. The named packet has both `price_table_missing` and `provider_metadata_missing`; neither is evidence of zero cost (`model-gateway/public.ts`; `output/eval/answer-suite-report.json`).
+- Source shape and local fixtures do not prove a current hosted Convex transaction, real provider response, customer value, payment submission/settlement, or reconciliation receipt. Those remain `?` until a current revision-bound executed packet and durable readback are named.
+- Historical/absent paths are intentionally not mapped as current authority. In particular, references to removed seed-supply/feed/run files or old W-stage narratives are not evidence of a live seam.
 
-`Service.networks` is the sorted unique set of endpoint pricing payment networks; keyless
-operations and the `ae:public` registry partition do not become networks. Endpoint settlement
-support is currently `catalog_only` only for a linked payment-currency mismatch and otherwise
-`executable`, so an endpoint `operationRef` is not a routeability or readiness proof. Offering
-routeability is separately derived from active admitted/conformant supply plus current readiness
-(`src/modules/registry/internal/services-api-projection.ts:165-251`;
-`convex/capabilitySupplyProjection.ts:163-221`;
-`src/modules/registry/internal/offering-api-projection.ts:130-145`).
-`priceSummary` rescales exact integer amounts with `BigInt` and emits decimal strings; the current
-public Service type has no `subCent` field (`src/modules/registry/internal/services-api-projection.ts:254-356`;
-`src/modules/registry/internal/service-projection.ts:23-30,52-58`).
+## Primary source register
 
-Canonical operation identity is now consistent across publication, registry, Customer Request,
-answer, and CLI paths: every executable ref is `operation:v1:<64-lowercase-hex>`, and the explicit
-local seed adapter derives the same publication identity rather than an alias. Production/default
-descriptor selection is Convex-only; seed data is available only when the existing local-E2E bypass
-is enabled and both `CONVEX_URL` and `VITE_CONVEX_URL` are absent. CLI feed IDs are those canonical
-operation refs; capability IDs remain display/search metadata, and bare/noncanonical aliases never
-resolve (`src/modules/capability-supply/public.ts:61-80`;
-`src/modules/capability-supply/internal/publication/publish.ts:146-159`;
-`convex/capabilitySupplyOperations.ts:577-753`;
-`src/modules/customer-request/application/interpret-compile/graph.ts:72-126`;
-`src/modules/capability-execution/seed-supply.ts:140-173`;
-`tools/ae/lib/feeds.ts:1-63`; `tools/ae/commands/run.ts:54-70`).
+- `src/routes/api.answer.turn.ts` — Answer HTTP admission, body/key limits, reservation handoff, AI SDK stream.
+- `src/modules/answer-thread/internal/turn-orchestrator.ts` — reservation-bound phases, route selection, retrieval, gate, persistence, finalization recovery.
+- `convex/answerThreads.ts` — durable Answer reservations, lease/generation, checkpoint and thread-turn bounds.
+- `src/modules/answer-thread/answer-thread.schema.ts` — Answer tool IDs, checkpoint shape, lease constant, turn records.
+- `src/modules/answer/internal/answer-query-safety.ts` — pre-lookup structured safety model call and typed refusal.
+- `src/modules/answer/internal/answer-tool-use-agent.ts` — AI SDK tool loop, recovery, dynamic operation tools, budgets, accounting.
+- `src/modules/answer/internal/keyless-data-ask.ts` — operation candidate resolution/rebinding and clarification.
+- `src/modules/answer-thread/internal/tool-runner.ts` — action schema/transport execution, result hashing, buffered tool evidence.
+- `src/modules/answer-thread/internal/answer-turn-checkpoint.ts` — canonical checkpoint validation, size/secret/replay caps.
+- `src/modules/answer-thread/internal/answer-turn-finalization.ts` — frozen evidence, journal and finalization digest construction.
+- `convex/harnessSessions.ts` — source-owned finalization identity/replay checks and durable writes.
+- `src/modules/model-gateway/public.ts` — sole OpenRouter/AI SDK model seam and cost-unknown semantics.
+- `src/modules/answer/answer-ui-stream.ts` — typed transient frame protocol and SSE sequence/terminal validation.
+- `src/components/ae/chat/turn-stream-session.ts` and `use-answer-turn-lifecycle.ts` — shared browser stream, generation fences, stop/readback convergence.
+- `src/modules/customer-request/application/interpret-compile/graph.ts`, `discover.ts`, `interpreter.ts`, `interpret.ts` — current graph, discovery, model/deterministic proposal, and compile orchestration.
+- `src/modules/customer-request/compiler.ts` — deterministic plan/action/route derivation and hard compiler caps.
+- `src/modules/customer-request/application/interpret-compile/preview.ts` and `consumer-plan-projection.ts` — inspect-only preview and customer-safe projection limits.
+- `src/modules/customer-request/openrouter-transport.ts` — structured Customer Request model transport caps and typed failures.
+- `src/modules/customer-request/application/confirm-route/confirm.ts`, `route-mandate-admission.ts`, `route-execution/machines/start-or-resume.ts` — authority transition from preview to grant/run.
+- `convex/customerRequestRouteWorkpool.ts`, `customerRequestRouteExecutionJournalPorts.ts` — queue/retry and durable dispatch outbox.
+- `convex/customerRequestRouteTransportWorker.ts` and `src/modules/capability-supply/route-transport-runtime.ts` — canonical claim/fence, guarded provider transport, bounded observations and payment branches.
+- `src/modules/customer-request/route-execution/machines/record-outcome.ts` — output/evidence validation and deterministic outcome transitions.
+- `eval/answer/promptfooconfig.yaml`, `providers/gate.mjs`, `scripts/run-case.ts`, `lib/evaluators.ts`, `lib/cases.ts`, `lib/suite.ts` — eval dispatch, fixture/route distinction, and report aggregation.
+- `tests/helpers/openrouter-contract-server.ts`, `answer-thread-test-port.ts`, `registry-local-e2e.ts`, `keyless-seed-source.ts` — deterministic model/persistence/registry/capability fixtures.
+- `output/eval/answer-suite-report.json` — named local answer-eval v3 packet; packet evidence only.
+- `src/modules/harness/run-loop.ts`, `run-collector.ts`, and `src/modules/agent-access/internal/convex-schema.ts` — runtime guards/telemetry and durable budget policy fields.
+- `src/modules/capability-execution/operation-execute.functions.ts` and `src/modules/capability-supply/internal/readiness-probe.ts` — executable keyless boundary and readiness error taxonomy.
 
-
-## Flow C — eval, Promptfoo probe, study, and external-run protocols
-
-```mermaid
-flowchart TD
-  CASES["shared answer cases"] --> EVAL["route evaluator"] --> V3["sanitized answer-eval v3 report"]
-  V3 --> PACKET["named output packet"]
-  PFOO["Promptfoo dev probe / nested AI v6"] --> DIRECT["direct agent/gate/chip evaluator"]
-  DIRECT -. bypasses .-> NO["route + harness + persistence"]
-  SMOKE["executed deploy-smoke classes"] --> RECEIPT["terminal/readback receipt"]
-  STUDY["Study/RFX"] --> JOURNAL["event journal"] --> TOPSIS["qualification/quote/TOPSIS"] --> PROPOSAL["proposal-only WorkTree"]
-  MANIFEST["frozen ExternalRun manifest"] --> STARTS["admitted starts"] --> EVIDENCE["classed integrity evidence"] --> GATE["PASS or FAIL/KILL"]
-```
-
-| stage | source evidence | input → processing → output | owner/evidence ceiling |
-|---|---|---|---|
-| shared v3 case catalog | `eval/answer/lib/cases.ts:142-186,204-313`; `eval/answer/lib/evaluators.ts:127-151,463-628,759-845` | turn/thread/harness cases + deterministic registry → route evaluator checks persisted evidence, timing, model/tool counts, copy, artifacts, and safe next step → case result | fixture/source unless runner packet is named |
-| broad seed | `eval/answer/lib/registry-seed.ts:21-25,27-38,40-138` | eval-only fixture composition → 100 businesses across 10 industries and 10 Australian locales → broad-catalog case supply | fixture only |
-| coverage/synchronization | `eval/answer/lib/coverage.ts:60-150,152-207`; `eval/answer/scripts/audit-coverage.ts:8-38` | shared cases + Promptfoo YAML → duplicate/missing/unknown/mode-mismatch, required-tag, broad-seed, and shape audit → JSON success or nonzero process status | source contract; execution only when a named packet records it |
-| scoring/report | `eval/answer/lib/scoring.ts:14-50,87-116`; `eval/answer/lib/evaluators.ts:127-151,463-628,759-845,1100-1218`; `eval/answer/scripts/run-suite.ts:5-41`; `eval/answer/README.md:126-173` | evaluator results → 7 dimensions, score/rank, `userOutcome`, 9/10 threshold, aggregate usage/cost availability and p95/max route clocks, plus capability-only `capabilityToolCounts`, canonical/readable/invalid/missing `capabilityOperationRefDialects`, and `capabilityEvidenceCompleteTurnCount` → `answer-eval-suite-report:v3` JSON | local eval/fixture; `output/eval/answer-suite-report.json:1-47` is a historical successful packet (12 cases/14 turns) whose case list predates the current capability-tool case; not hosted/provider/customer proof |
-| Promptfoo | `eval/answer/promptfooconfig.yaml:7-9,152-310`; `eval/answer/providers/gate.mjs:10-24`; `eval/answer/lib/evaluators.ts:1008-1068` | vars + dev fixture/captured provider and explicit local descriptor source → direct `runAnswerToolUseAgent` or gate/chip assertion; answer-turn/thread modes use the in-process evaluator, while all modes bypass live deployment/Convex persistence/public readback → model/tool/gate fixture result | Promptfoo fixture only; nested AI SDK v6 is eval-only and cannot establish hosted/provider/customer evidence |
-| answer runtime smoke | `tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100,191-217,334-411`; `tests/deploy-smoke/answer-runtime-production-smoke-selection.ts:20-63` | deployed public catalog → paginate all rows, exclude development/eval slugs, choose reproducible unique subject, exercise direct and literal-miss recovery via public UI/API, reload and GET readback → packet-scoped hosted terminal/readback receipt when executed | hosted/provider boundary for what receipt records; `output/release/playwright-answer-runtime-smoke.json:67-126` is a named passed packet with a receipt, but does not expose private model counts or provider cost |
-| Phase 1 deployment smoke | `tests/deploy-smoke/phase1-deploy-smoke.spec.ts:33-174` | deployed base/config → public routes/APIs/discovery files, security headers, private/admin isolation, explicit Convex reachability → route/readback contract result | hosted packet only when executed |
-| cold human Customer Request smoke | `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts:19-88,90-157` | cold browser + disclosed choice → preview/options, pre-approval disclosures, confirmation, start, completion or unknown recovery, reload parity, evidence readback → `AE_HUMAN_REQUEST_OBSERVATION` packet | customer/hosted observation only for a named run; `output/release/playwright-deploy-smoke.json:68-125` records a historical failed attempt (`hosted_human_journey_did_not_reach_choice`), not a passed observation |
-| provider dispatch smokes | `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts:12-48`; `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts:12-45` | guarded deployment dispatch ID + outbox authority → real provider trigger/already-recorded readback, transaction/message ID, redacted response → provider packet if executed | provider evidence only for named receipt; source files alone are not execution |
-| Study/RFX | `src/modules/study/internal/pipeline.ts:39-87,253-429`; `src/modules/study/internal/rfx-machine.ts:15-24,40-104,204-283`; `convex/studies.ts:164-283`; `tests/unit/study-rfx-journal.test.ts:91-154` | fenced study/registry material → qualification, fresh quote/refusal/unknown/expiry events, deterministic score/TOPSIS, replayable journal/artifact → StudyArtifact/journal or refusal and proposal-only WorkTree decision | source/fixture; no provider/customer transfer without executed study packet |
-| ExternalRun | `src/modules/external-run/internal/gate.ts:133-160,259-298`; `convex/externalRuns.ts:66-98,134-250,252-357`; `tests/unit/external-run/external-run.test.ts:58-135` | frozen manifest + authorized starts + integrity-checked evidence classes → denominator/reconciliation, independent-provider/customer/payment metrics, deterministic gates → `PASS` or `FAIL/KILL` | source/fixture until durable external-run receipt is named |
-
-**Flow C protocol invariant.** Eval `ok`/score, Promptfoo pass, Study recommendation/refusal, hosted
-smoke result, provider dispatch result, customer observation, and ExternalRun `PASS | FAIL/KILL` are
-separate trust domains. They do not convert into one another (`eval/answer/lib/scoring.ts:44-50`;
-`src/modules/study/internal/pipeline.ts:253-429`; `src/modules/external-run/internal/gate.ts:259-298`).
-The v3 report's model/tool counts are sanitized private-summary counts, not proof of hosted provider
-calls (`eval/answer/README.md:64-107,126-153`).
-
-## Direct model, prompt, tool, and stream callsite inventory
-
-| callsite | prompt/input assembly | installed primitive | boundary and evidence |
-|---|---|---|---|
-| answer agent | `buildToolUseAgentSystemPrompt`/`buildToolUseAgentUserPrompt`; five action-derived read aliases plus at most one selected strict per-op capability tool; the operation reference is closure-bound and absent from model input (`src/modules/answer/internal/answer-llm-prompts.ts:44-115`; `src/modules/answer/internal/action-to-tool-spec.ts:35-72`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-618`) | Production AI SDK v7 `generateText`, `Output.object`, `tool`, `prepareStep`, `stopWhen`, `onStepEnd`, serial tool queue, `parallelToolCalls: false`, and `maxRetries: 0` (`src/modules/answer/internal/answer-tool-use-agent.ts:384-451`) | typed tool input is evidence, not authority; descriptor selection is deterministic, operation execution is guarded/bounded, `operation.execute` is the durable record id, and final prose is tool-less |
-| follow-up chips | query + public provider facts (`src/modules/answer/internal/answer-llm-prompts.ts:115-133`) | v7 `generateText` + `Output.object`, maxRetries 0 (`src/modules/answer-thread/internal/llm-follow-up-chips.ts:46-78`) | optional feature gate requires eval pass and API key; no-key/error returns empty; unpersisted and outside turn harness (`src/modules/answer/internal/llm-config.ts:1-10`) |
-| Customer Request semantic interpreter | versioned v12 instruction + bounded public descriptors/opaque keys; `publicDescriptor` now projects `inputExamples` onto the model-facing descriptor while `searchTerms`/`domain` stay server-side (`src/modules/customer-request/semantic-interpreter.ts:222-250,270-325,937-950`) | v7 `generateText` + `Output.object`, timeout, one SDK retry (`src/modules/customer-request/openrouter-transport.ts:64-117`) | tolerant wire output is normalized and strict-validated; compiler owns routes/effects/authority (`src/modules/customer-request/compiler.ts:234-426`) |
-| semantic interpreter configuration | env model/key/site plumbing + deterministic recovery (`src/modules/customer-request/application/interpret-compile/interpreter.ts:22-62`; `convex/customerRequestApplication.ts:686-695,1748-1753`) | AE configuration around the shared gateway | no key selects deterministic token matching; keyed path uses OpenRouter first, and when a routeable/domain-appropriate pool exists but the model returns zero or unrecoverable selections, `recoverFromPool` falls through to the deterministic interpreter with a bounded multi-step compose (domain guard + identity dedupe, `MAXIMUM_SELECTIONS` 2, geocode-prior-step) or a typed `needs_information` ask; source-shape only |
-| storefront enrichment/discovery | versioned web-grounding instructions and bounded business/query prompts (`src/modules/storefront/internal/business-enrichment.ts:27-35,94-118,155-255`) | v7 `generateText` with OpenRouter JSON mode/web plugin capped at five and one retry (`src/modules/storefront/internal/business-enrichment.ts:261-318`) | citation URL membership, bounded manual JSON/Zod parsing, `draft_unconfirmed`, imported claims, and cost-unavailable observations remain AE-owned (`src/modules/storefront/internal/business-enrichment.ts:229-255,382-445`) |
-| direct model catalog | no model prompt; bounded authenticated GET `/api/v1/models` (`src/modules/answer/internal/openrouter-models.ts:22-25,173-209`) | direct `fetch` with timeout/cache/whitelist/fallback, not `openRouterModel` generation | separate provider HTTP path; model-selector context is intentionally disabled/no live caller (`src/components/ae/chat/AeAnswerModelContext.tsx:1-39`) |
-| answer HTTP stream | no model prompt; only transient typed AE data part (`src/routes/api.answer.turn.ts:115-156`) | v7 `createUIMessageStream`/`createUIMessageStreamResponse` plus provider-utils `parseJsonEventStream` (`src/modules/answer/answer-ui-stream.ts:1-68`) | SDK owns framing; AE owns payload, abort, admission, persistence, and terminal gating |
-| external MCP response stream | registered route input/authority, not an answer prompt (`src/modules/capability-supply/route-transport-runtime.ts:566-649`) | provider-utils `parseJsonEventStream` for bounded `text/event-stream`, JSON-RPC ID matching, or bounded JSON fallback (`src/modules/capability-supply/route-transport-runtime.ts:892-927`) | transport observation is untrusted until release/output/evidence validation; source-shape |
-| answer read tools + capability tools | action metadata and strict schema conversion (`src/modules/harness/tool-contract.ts:239-256`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-23`) | AI SDK `tool` wrapper with AE runner for the five discovery tools; only the selected descriptor becomes a strict operation-bound capability tool, whose closure supplies the canonical ref and whose model input contains only that operation's schema fields; the shared `operation.execute` id is evidence-only (`src/modules/answer/internal/answer-tool-use-agent.ts:561-618`) | the five direct discovery IDs are `registry.search`, `registry.detail`, `sandbox.checkup_quote`, `web.discover`, and `registry.operations.search`; writes remain outside the answer set |
-| schema conversion | canonical action/harness schemas; business prepare/invoke schemas; sandbox workflow input schema (`src/modules/common/action.ts:269-284`; `src/modules/harness/tool-contract.ts:239-256`; `src/modules/business-tools/discovery.ts:16-49`; `src/lib/server/sandbox-capability-provider.ts:680-691`) | `@tanstack/ai` `convertSchemaToJsonSchema` | conversion only; canonical IDs, effect metadata, authority, execution, and source-write gates remain AE-owned |
-| Promptfoo direct probe | vars/config rows (`eval/answer/promptfooconfig.yaml:152-310`) | dev-only Promptfoo provider process + `tsx` eval runner (`eval/answer/providers/gate.mjs:10-24`) | nested AI SDK v6 is eval-only; route/harness/persistence are intentionally bypassed |
-
-**Callsite completeness check.** Current source has four production `generateText` families: answer
-agent, follow-up chips, Customer Request semantic transport, and storefront enrichment/discovery
-(`src/modules/answer/internal/answer-tool-use-agent.ts:1-12`; `src/modules/answer-thread/internal/llm-follow-up-chips.ts:1-2`; `src/modules/customer-request/openrouter-transport.ts:1-14`; `src/modules/storefront/internal/business-enrichment.ts:1-7`).
-The answer agent has a tool loop and final prose step; this does not make a fifth family, and the
-dynamic per-op capability tools ride the SAME answer-agent `generateText` (their execution is a
-guarded keyless fetch through `executeKeylessOperation`, not a model call, so it adds no generation
-family) (`src/modules/capability-execution/operation-execute.server.ts:14-38`). No
-production import uses `streamText`, `ToolLoopAgent`, `createAgentUIStream`, `generateObject`, SDK
-telemetry, SDK `toolApproval`, or `@convex-dev/agent` (`src/routes/api.answer.turn.ts:1-8`; `src/modules/answer/answer-ui-stream.ts:1-2`; `package.json:60-123`). Direct model-list GET and external MCP SSE parsing are separate provider/stream-adjacent seams, not generation families.
-
-## Library-adoption matrix
-
-Dependency-baseline pointer: §3 of the 2026-08-05 reference architecture
-(`.planning/research/2026-08-05-reference-architecture.md`) resolves the same question — ADOPT
-`ai@7.0.44` (already installed) + `@convex-dev/workflow@0.4.4` + `@convex-dev/workpool@0.4.9`;
-DEFER `@convex-dev/agent@0.6.4` (peers `ai ^6`); REJECT Temporal/Restate/Inngest/Trigger and
-LangGraph/other agent frameworks. The adoption rows below are this map's current-source statement of
-that verdict.
-
-| mechanism | verdict | retain/replace boundary | source proof |
-|---|---|---|---|
-| v7 model/provider transport | **retain library** | AI SDK/OpenRouter own request encoding, structured output, retries, abort, usage, and typed errors; AE keeps gateway config, credential refusal, model policy, and cost taxonomy | `src/modules/model-gateway/public.ts:94-139`; `node_modules/ai/package.json:1-10,44-48` |
-| v7 structured output | **retain library, retain AE validation** | `Output.object` parses a generated object; AE still normalizes tolerant Customer Request wire data, enforces strict domain schemas, digests, and proposal compile | `node_modules/ai/docs/03-ai-sdk-core/10-generating-structured-data.mdx:11-56`; `src/modules/customer-request/semantic-interpreter.ts:287-325` |
-| answer tool loop + capability tools | **retain current seam** | `generateText` mechanics, `prepareStep`, `stopWhen`, and `onStepEnd` remain the loop primitives; AE retains five-tool discovery membership, one selected strict operation-bound tool, serial evidence, `parallelToolCalls: false`, budgets, final tool-less step, gate, and harness accounting. The descriptor source and guarded executor are explicit seams; no generic model-facing executor is registered | `src/modules/answer/internal/answer-tool-use-agent.ts:294-451`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-31`; `src/modules/answer-thread/internal/tool-runner.ts:62-161`; `src/modules/capability-execution/operation-execute.actions.ts:9-91`; `src/modules/capability-execution/operation-execute.server.ts:1-38` |
-| `ToolLoopAgent` | **defer** | Installed v7 source offers reusable loop defaults, but parity is missing for AE run IDs, ordered records, budget/refusal, final-step tool removal, abort, and report/finalization | `node_modules/ai/src/agent/tool-loop-agent.ts:34-68,120-180`; `src/modules/answer/internal/answer-tool-use-agent.ts:351-380,444-470` |
-| SDK `toolApproval` | **defer for answer reads; not authority** | Read tools are public-read actions. Approval/mandate/payment/source-write authority belongs to AE Customer Request gates, not an SDK model-call protocol | `node_modules/ai/docs/03-ai-sdk-core/15-tools-and-tool-calling.mdx:159-168,243-265`; `convex/customerRequestRouteMandateAdmission.ts:60-263` |
-| UI stream framing | **retain library** | AI SDK owns SSE/UI lifecycle framing and provider-utils parsing; AE owns transient `data-answer-event`, redaction, abort, and terminal-complete semantics | `src/modules/answer/answer-ui-stream.ts:1-68`; `src/routes/api.answer.turn.ts:115-156` |
-| provider-utils event parser | **retain at bounded stream seams** | Use for answer frames and external MCP SSE/JSON-RPC parsing; AE bounds bytes, matches IDs, and validates observations | `src/modules/capability-supply/route-transport-runtime.ts:892-927`; `src/modules/answer/answer-ui-stream.ts:1-68` |
-| model lifecycle telemetry | **simplify** | `onStepEnd` + harness collector provide one private model observation per provider step; do not add OTel until redaction/identity/deployment trace parity is required | `src/modules/answer/internal/answer-tool-use-agent.ts:278-307`; `src/modules/harness/run-collector.ts:86-157` |
-| `@tanstack/ai` schema conversion | **retain conversion only** | Convert Zod schemas to provider JSON schemas; do not move action registry, effect metadata, execution, or source-write authority into the conversion library | `src/modules/common/action.ts:244-284`; `src/modules/business-tools/discovery.ts:1-49`; `src/lib/server/sandbox-capability-provider.ts:680-691` |
-| direct model catalog GET | **retain as separate adapter** | Bounded/cacheable OpenRouter `/models` fetch is not a generation gateway and must not be mistaken for a model call or provider evidence | `src/modules/answer/internal/openrouter-models.ts:173-209` |
-| semantic model transport | **retain library mechanics** | AI SDK call/timeout/retry; AE owns tolerant wire normalization, strict proposal schema, evidence digests, the bounded attempt ladder + `recoverFromPool` deterministic recovery (domain guard, identity dedupe, `MAXIMUM_SELECTIONS` 2), and typed `needs_information` honesty | `src/modules/customer-request/openrouter-transport.ts:64-117`; `src/modules/customer-request/application/interpret-compile/interpret.ts:120-203`; `src/modules/customer-request/application/interpret-compile/interpreter.ts:84-155` |
-| Workflow | **retain at durable wait seam** | Workflow manages Project Spine define/event/sleep/replay/cancel mechanics; AE keeps Customer Request revision/mandate/evidence and answer finalization | `convex/projectSpine.ts:53-104,142-164`; `node_modules/@convex-dev/workflow/src/client/index.ts:218-306` |
-| Workpool | **retain at async dispatch seam** | Queue/retry/concurrency/completion only; AE keeps outbox release, provider attribution, output validation, unknown outcome, and next-step admission | `convex/customerRequestRouteExecutionJournalPorts.ts:110-153,389-473`; `node_modules/@convex-dev/workpool/src/client/index.ts:235-277` |
-| native scheduler | **retain domain adapter** | Cancellation/readiness use different action/mutation guarantees; do not infer exactly-once transport from scheduled mutation semantics | `node_modules/convex/src/server/scheduler.ts:17-29,125-147`; `convex/customerRequestRouteExecutionCancelPorts.ts:89-188` |
-| `@convex-dev/agent` | **defer** | Absent from manifest/install/import; no AI SDK v7, durable public projection, source-write authority, evidence, or recovery parity | `package.json:60-123`; `node_modules/@convex-dev`; `tests/imports/legacy-engine-retirement.test.ts:7-48` |
-| Promptfoo nested AI SDK v6 | **retain dev-only probe boundary** | Promptfoo may use its own v6 dependency; production code must not adopt that API or treat its pass as route/provider/customer proof | `package-lock.json:21435-21451,21688-21705`; `eval/answer/providers/gate.mjs:10-24` |
-
-## Target seams and ownership boundaries
-
-| target seam | library/base side | AE-owned side | parity/evidence gate |
-|---|---|---|---|
-| model gateway | OpenRouter factory, SDK request encoding/errors/abort/usage (`src/modules/model-gateway/public.ts:1-11,94-139`) | model selection, credential refusal, gateway-only generation boundary, cost-unavailable reasons | captured provider fixture plus a named redacted provider receipt; source alone remains source-shape |
-| prompt/input | v7 accepts instructions/prompt/tools/output schema (`node_modules/ai/src/generate-text/generate-text.ts:299-491`) | versioned instructions, bounded/inert payload, searchContext, public copy, `inputExamples` teaching surface (server-side `searchTerms`/`domain` excluded), no authority/credential facts (`src/modules/answer/internal/answer-llm-prompts.ts:44-112`; `src/modules/customer-request/semantic-interpreter.ts:222-248,937-950`) | prompt snapshot/injection cases; fixture until executed |
-| actions/tools | AI SDK `tool` wrapper and `@tanstack/ai` schema conversion (`src/modules/answer/internal/answer-tool-use-agent.ts:561-618`; `src/modules/common/action.ts:269-284`) | canonical registry, five discovery read IDs, one selected strict per-op capability tool, one `operation.execute` record seam, effect/authority metadata, strict input/output/evidence, source-write boundaries (`src/modules/common/action.ts:139-187,216-284`; `src/modules/actions/index.ts:52-120`; `src/modules/capability-execution/operation-execute.functions.ts:1-259`) | unknown/malformed/write/refused tool cases plus membership parity; operation identity and source selection are canonical |
-| answer harness | AI SDK callbacks + collector private model records (`src/modules/answer/internal/answer-tool-use-agent.ts:278-307`; `src/modules/harness/run-collector.ts:86-157`) | run identity/phases/status dominance, private summary, redacted journal, finalization hash, public projection (`src/modules/harness/run-loop.ts:158-205`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:256-325`) | one summary record per SDK step and separate journal-kind contract |
-| answer browser/SSR replay | React fetch/SSE, SSR loader, Convex query (`src/components/ae/chat/turn-stream-session.ts`; `src/components/ae/chat/AeThreadTurnStreamSection.tsx`; `src/routes/t.$threadId.tsx`; `convex/answerThreads.ts`) | owner-cookie projection, reservation-only pending/stopped replay, server-wins merge, durable Stop through settling, ordinary unmount detach only, and no share-token telemetry; shared reads require the HMAC bearer while owner reads require the session cookie | seq-zero/dedupe/remount, reservation reload, Stop/readback, owner concealment, and share-token redaction tests |
-| Customer Request durable workflow | Convex transactions, Workflow/Workpool/scheduler mechanics (`convex/customerRequestRouteWorkpool.ts:1-10`; `convex/projectSpine.ts:53-104`) | caller identity, graph lineage, proposal-only compiler, revision/head, mandate/grant, effects, output/evidence, cancellation/recovery (`src/modules/customer-request/compiler.ts:234-426`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`) | Convex restart/cancel/replay and source-write gates |
-| async dispatch | Workpool enqueue/retry/status/cancel (`node_modules/@convex-dev/workpool/src/client/index.ts:235-277`) | committed outbox, release readiness, provider invocation attribution, outcome/unknown, next-step admission (`src/modules/customer-request/route-execution/machines/mark-dispatched.ts:7-77`; `src/modules/customer-request/route-execution/machines/record-outcome.ts:8-93`) | duplicate provider-result and stale-release fixtures |
-| x402 payment | provider challenge/signature transport (`src/modules/capability-supply/route-transport-runtime.ts:655-776`) | exact spend/exponent authority, prepared custody, possibly-submitted/reconciliation state, evidence/settlement distinction (`convex/customerRequestRouteExecution.ts:418-604`; `src/modules/customer-request/internal/route-mandate-convex-schema.ts:745-776`) | no payment or settlement claim without named receipt and ledger reconciliation |
-| public projection | Convex query/reactive read mechanics (`convex/answerThreads.ts`; `convex/customerRequestRouteExecution.ts:568-579`) | redaction, provenance, bounded answer query transcript, reservation lifecycle projection, customer copy, and consumer plan; no raw model/tool/evidence/session/route documents (`src/modules/answer-thread/internal/public-projection.ts`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`) | forbidden-field scan and hosted reload/readback; answer owner GET is cookie-gated and explicit `/s/:shareToken` is read-only bearer access, while Request readback remains domain-gated |
-| evaluation/proof | Vitest/Promptfoo/Playwright runner mechanics (`package.json:41-44`; `eval/answer/providers/gate.mjs:10-24`) | case catalog, v3 count semantics, evidence classes, score/userOutcome, packet interpretation (`eval/answer/lib/scoring.ts:14-50`; `eval/answer/README.md:64-153`) | named output packet; no test execution claim from source alone |
-
-## Justified hand-rolling register
-
-1. **Answer route taxonomy and retrieval-first policy.** Product semantics decide clarification,
-   search, frozen, boundary, inquiry, and unsupported paths; a generic agent cannot know the AE
-   catalog or copy contract (`src/modules/answer-thread/internal/answer-response-planner.ts:88-160`;
-   `src/modules/answer-thread/internal/intent-router.ts:14-45`; `src/modules/answer-thread/internal/turns/retrieval-first.ts:44-183`).
-2. **Canonical action registry and authority metadata.** One action declaration fans out across UI,
-   HTTP, agent, MCP, and answer surfaces; effect and source-write authority remain transport-bound
-   (`src/modules/common/action.ts:4-24,216-284`; `src/modules/actions/index.ts:1-12,52-120`).
-3. **Deterministic Customer Request compiler and route gates.** Model output is untrusted; exact
-   opaque refs, graph lineage, costs, dependencies, mandates, grants, release, and evidence are
-   customer safety policy (`src/modules/customer-request/compiler.ts:234-426`;
-   `convex/customerRequestRouteMandateAdmission.ts:60-263`).
-4. **Inspect-only preview and consumer projection.** The Home preview intentionally exposes bounded
-   choices before durable Request creation; generic agent planning cannot replace its expiry, public
-   supply join, three-option cap, or inspect-only authority (`src/modules/customer-request/application/interpret-compile/preview.ts:54-138`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`).
-5. **Harness evidence/finalization.** One provider-step model observation, status dominance, private
-   summaries, canonical hashes, redacted journal, and public readback are AE's audit contract
-   (`src/modules/harness/harness.schema.ts:93-108,195-200`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:150-193,256-325`).
-6. **Prepared effects, commits, payment custody, and recovery.** Workpool/Workflow can schedule or
-   retry but cannot decide whether an effect is authorized, released, reconciled, or customer-visible
-   (`src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`;
-   `src/modules/capability-supply/route-transport-runtime.ts:704-776`).
-7. **Public projections and customer copy.** Projection builders reconstruct redacted artifacts from
-   frozen evidence; generic messages or model histories are not customer truth (`src/modules/answer-thread/internal/public-projection.ts:45-101`; `src/modules/customer-request/customer-projection.ts:395-605`).
-8. **Protocol-specific evaluation gates.** v3 answer scoring, RFX journal replay, and ExternalRun
-   PASS/FAIL/KILL each have distinct denominators and evidence classes; no single library can safely
-   collapse them (`eval/answer/lib/scoring.ts:87-116`; `src/modules/study/internal/rfx-machine.ts:204-283`; `src/modules/external-run/internal/gate.ts:160-298`).
-9. **Keyless capability executor.** `operation.execute` is the durable evidence-record id behind a
-closure-bound keyless operation; the pure `executeOperation` path validates source-held schema and
-constructs one bounded fetch (keyless-only, `validPublicHttpsEndpoint`, 512 KiB upstream body), while
-the server adapter adds DNS/private-target preflight and guarded Undici transport. The answer layer
-keeps a separate 64 KiB sanitized JSON ceiling for model return and persisted evidence, refusing
-oversize results with a full-result digest rather than truncating. It remains separate from paid
-`route-transport` invocation because the chat surface is read-only and must not pull in
-prepared-ref/release/authority/money custody (`src/modules/capability-execution/operation-execute.functions.ts:29-34,75-218`;
-`src/modules/capability-execution/operation-execute.server.ts:14-38`;
-`src/modules/network-guard/public.ts:1-154`). Input/output validation reuses the repo-canonical
-`@cfworker/json-schema` `Validator` from `capability-contract`.
-
-## Deletion and simplification candidates
-
-These are bounded candidates, not edits performed by this map refresh.
-
-| candidate | why it can be deleted/simplified | guard before deletion |
-|---|---|---|
-| legacy answer read fallback | `answer-thread.functions` still carries a missing-public-function compatibility read path beside current optimized source functions (`src/modules/answer-thread/answer-thread.functions.ts:237-301,394-416`) | remove only after all hosted environments retire the legacy function |
-| duplicate `AnswerSynthesizer` surface | ordered orchestrator/turn paths assemble snapshots while legacy type/event names remain (`src/modules/answer/answer-synthesizer.ts:7-33,119-171`; `src/modules/answer-thread/internal/turn-orchestrator.ts:432-447`) | migrate exported callers and preserve public event/projection types |
-| bespoke answer loop after SDK parity | current loop carries serial evidence, final tool removal, AE budgets, callback accounting, and abort semantics (`src/modules/answer/internal/answer-tool-use-agent.ts:244-380,444-470`) | replace only after exact ToolLoopAgent parity fixtures |
-| local answer persistence port | in-memory port intentionally omits Convex three-row durability (`tests/helpers/answer-thread-test-port.ts:6-18,104-133`) | retain until an equivalent deterministic Convex seam covers route/harness assertions |
-| semantic JSON salvage | `NoObjectGeneratedError.text` salvage preserves a known semantic failure taxonomy (`src/modules/customer-request/semantic-interpreter.ts:287-308`) | remove only after provider/version fixtures prove no usable response is lost |
-| flat OpenRouter parameter projection | provider flat schema and server Zod schema have different contracts (`src/modules/answer/internal/action-to-tool-spec.ts:35-72`) | retain until schema parity proves refusals and boundaries unchanged |
-| duplicated discovery membership | the five discovery IDs remain repeated in answer schema, harness exposure, and registry; the capability closure is now built from one descriptor snapshot and selected deterministically, so there is no second model-facing executor or alternate operation identity (`src/modules/answer-thread/answer-thread.schema.ts:27-41`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-20`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-344,561-618`) | derive the five discovery IDs once when their public contracts permit; keep operation.execute as the evidence seam and preserve the explicit source/guarded transport boundaries |
-
-## Proposed SLOs (release targets, not current measurements)
-
-All values below are **[PROPOSED]** targets derived from hard source bounds and eval contracts; no
-row is an observed production metric (`src/routes/api.answer.turn.ts:34-72`; `eval/answer/lib/cases.ts:204-313`; `eval/answer/lib/scoring.ts:14-50`).
-
-| SLO | proposed target | measurement/evidence |
-|---|---|---|
-| answer admission | 100% reject invalid/over-bound bodies; body ≤16 KiB; an existing durable client turn identity never re-admits, while changed material conflicts | route/body/reservation source and concurrency/replay tests (`src/lib/server/bounded-request-body.ts:7-75`; `src/modules/answer-thread/internal/turn-digests.ts`; `convex/answerThreads.ts`) |
-| direct answer cost | deterministic direct-hit cases use zero answer-agent model requests; qualifying empty adds at most one discovery action/model call | case expected counts and retrieval-first source (`eval/answer/lib/cases.ts:204-313`; `src/modules/answer-thread/internal/turns/retrieval-first.ts:44-183`) |
-| answer model loop | configured round/tool caps hold; final prose has no active tools; provider failures become private harness evidence | `src/modules/answer/internal/answer-tool-use-agent.ts:351-380,444-470`; `src/modules/harness/harness.schema.ts:93-108` |
-| answer integrity | every accepted snapshot passes grounding/safety; public projection contains only the bounded query transcript plus sanitized answer fields—never raw evidence, tool/model/provider payloads, session IDs, digests, or share tokens | `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`; `src/modules/answer-thread/internal/public-projection.ts` |
-| persistence/finalization | terminal complete follows successful answer persistence and accepted/replayed source-write finalization; deterministic digest conflicts are never recovery-finalized, unknown persistence outcomes converge by proving the original write or persisting one redacted finalized error | `src/modules/answer-thread/internal/turn-orchestrator.ts`; `src/modules/answer-thread/internal/answer-turn-finalization.ts`; `convex/harnessSessions.ts` |
-| Customer Request authority | 0 released attempts without current mandate/grant/readiness; 0 model-selected direct effects | `src/modules/customer-request/route-execution/machines/mark-dispatched.ts:27-77`; `src/modules/common/action.ts:164-187` |
-| x402 uncertainty | no retry after possibly-submitted without reconciliation; payment proof/settlement remains explicit rather than inferred | `src/modules/capability-supply/route-transport-runtime.ts:722-776`; `convex/customerRequestRouteExecution.ts:535-604` |
-| cancellation | queued unreleased work cancels deterministically; active adapter result is accepted/rejected/unknown/too-late; no provider interruption claim without adapter evidence | `convex/customerRequestRouteExecutionCancelPorts.ts:89-188`; `convex/customerRequestRouteCancellationWorker.ts:13-74` |
-| eval v3 score | every case reaches score ≥9/10; p95/max request clocks remain descriptive until transfer design | `eval/answer/lib/scoring.ts:14-50`; `eval/answer/README.md:126-153` |
-
-## Evaluation ladder
-
-1. **Static source shape:** verify production generation callsites use the gateway, root AI SDK is v7,
-   Promptfoo's nested v6 stays dev-only, the five answer discovery tools resolve canonical read-only
-   actions, dynamic capability tools strict-shaped from one resolved descriptor snapshot, and the
-   selected closure bound to a canonical operation ref; `operation.execute` is evidence-only, no
-   write action enters the answer set, no separate Agent Engine plan runtime exists, and citations
-   resolve (`src/modules/model-gateway/public.ts:4-11`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-22`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-618`; `tests/imports/legacy-engine-retirement.test.ts:7-48`).
-2. **Schema/prompt fixtures:** malformed model JSON, unknown opaque keys, prompt injection in
-   descriptors/catalog data, invalid tool inputs/outputs, unsupported preview, and ungrounded prose
-   refuse without effects (`src/modules/customer-request/semantic-interpreter.ts:222-248,287-325`; `src/modules/answer-thread/internal/tool-runner.ts:68-91`; `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`).
-3. **Model-loop fixtures:** direct zero-call, visible typo recovery exact counts, final structured
-   prose, abort/timeout/error accounting, web-discovery unavailable/error classification, and
-   explicit cost-unavailable reasons (`eval/answer/lib/cases.ts:204-313`; `src/modules/answer/internal/answer-tool-use-agent.ts:278-307,444-470`; `src/modules/answer-thread/internal/tool-runner.ts:284-313`).
-4. **Route/harness integration:** exercise bounded request → stream → answer/tool persistence →
-   private summary/journal finalization → SSR/API readback; assert private-model-summary versus
-   model-free live-journal boundary (`src/modules/answer-thread/internal/turn-orchestrator.ts:225-525`; `tests/unit/answer-thread/answer-harness-operation.test.ts:263-291`).
-5. **Convex durability/recovery:** exercise duplicate commands, revision conflicts, release/output
-   mismatch, next-step admission, x402 reconciliation, cancellation, and projection readback
-   against Convex functions (`convex/customerRequestRouteExecutionJournalPorts.ts:141-153,389-473,646-783`; `convex/customerRequestRouteExecution.ts:418-604`).
-6. **Provider evidence:** record real OpenRouter/provider response, usage, finish reason, and cost or
-   explicit unavailable reason; captured servers prove fixture behavior only (`src/modules/model-gateway/public.ts:127-139`; `tests/helpers/openrouter-contract-server.ts:141-180`).
-7. **Hosted transfer:** execute the complete smoke inventory—answer direct/recovery, Phase 1
-   public/readback/security, cold human Customer Request, and guarded Novu/Resend provider dispatch;
-   require named receipt/readback packets and keep development fixtures excluded (`tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100`; `tests/deploy-smoke/phase1-deploy-smoke.spec.ts:140-174`; `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts:19-88`; `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts:17-48`).
-8. **Customer value:** instrument completion, correction, inquiry handoff, cancellation, customer
-   acceptance, provider/customer completion, and transfer studies through Study/ExternalRun; do not
-   convert eval score, packet pass, or provider latency into customer value (`src/modules/study/internal/pipeline.ts:253-429`; `src/modules/external-run/internal/gate.ts:202-298`).
-
-A test source file is not an execution claim. This map cites execution only where a named output packet
-records it (`output/eval/answer-suite-report.json:1-83`; `output/release/playwright-answer-runtime-smoke.json:67-126`; `output/release/playwright-deploy-smoke.json:68-125`).
-
-## Migration sequence
-
-1. **Freeze the inventory:** keep four production generation families, the direct model-list GET,
-   external MCP SSE parser, five discovery answer read tools, the selected strict per-op capability
-   tool, SSR project readback, and browser stream-session replay seam explicit; reconcile source/output
-   Node 22 with project metadata Node 24 (`src/modules/answer/internal/openrouter-models.ts:173-209`;
-   `src/modules/capability-supply/route-transport-runtime.ts:892-927`;
-   `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,561-618`; `vite.config.ts:57-67`;
-   `.vercel/project.json:5-15`).
-2. **Harden shared seams:** preserve the gateway, v7 structured output, action registry, bounded
-   requests, private model summaries, model-free live journal kinds, source-write finalization, and
-   public redaction; add parity checks for duplicated five-tool discovery membership (`src/modules/answer-thread/internal/answer-turn-finalization.ts:150-193,455-560`; `src/modules/harness/tool-contract.ts:26-31`; `src/modules/answer-thread/internal/answer-tool-registry.ts:8-20`).
-3. **Keep answer execution mechanical:** do not introduce `@convex-dev/agent` or `ToolLoopAgent`
-   without exact v7 callback/order/abort/accounting/projection parity, and do not revive a separate
-   Agent Engine plan runtime (`node_modules/ai/src/agent/tool-loop-agent.ts:120-180`; `tests/imports/legacy-engine-retirement.test.ts:7-48`).
-4. **Preserve preview-to-durable separation:** Home `planPreview` is inspect-only and expires; only
-   authenticated submit creates the durable Customer Request shell, revision, mandate, and effect
-   path (`src/modules/customer-request/plan-preview.actions.ts:46-82`; `convex/customerRequestApplication.ts:701-769`).
-5. **Retain Workpool and x402 boundaries:** committed outbox → release checks → adapter observation →
-   outcome/reconciliation; never let queue retries bypass authority, idempotency, custody, or unknown
-   outcomes (`convex/customerRequestRouteExecutionJournalPorts.ts:110-153`; `src/modules/capability-supply/route-transport-runtime.ts:704-776`).
-6. **Add evidence transfer in order:** source/fixture gates, then named hosted/readback packets, then
-   real provider receipts and guarded dispatch packets, then customer/ExternalRun study; revise SLOs
-   only from the matching evidence class (`eval/answer/README.md:126-153`; `src/modules/external-run/internal/gate.ts:259-298`).
-7. **Measure customer value:** after hosted parity, use the existing Study/RFX journal and ExternalRun
-   gate for completion, correction, independent-provider, and customer-acceptance outcomes; no library
-   primitive substitutes for this transfer design (`src/modules/study/internal/rfx-machine.ts:204-283`; `src/modules/external-run/internal/gate.ts:202-298`).
-
-## Rejected alternatives
-
-| alternative | rejection reason |
-|---|---|
-| install `@convex-dev/agent` now | absent from manifest/install/import and lacks v7, AE projection, source-write authority, evidence, and recovery parity (`package.json:60-123`; `node_modules/@convex-dev`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:256-325`) |
-| replace answer loop with `ToolLoopAgent` immediately | would change loop defaults/callback surface and could hide serial tool evidence, final tool-less step, budgets, abort, and failure/replay semantics (`node_modules/ai/src/agent/tool-loop-agent.ts:34-68,120-180`; `src/modules/answer/internal/answer-tool-use-agent.ts:244-380`) |
-| use SDK `toolApproval` as mandate/payment authority | SDK approval is a model-call protocol, not principal validation, spend reservation, prepared effect, release, reconciliation, or customer confirmation (`node_modules/ai/docs/03-ai-sdk-core/15-tools-and-tool-calling.mdx:243-265`; `convex/customerRequestRouteMandateAdmission.ts:60-263`) |
-| revive a separate Agent Engine plan runtime | retired engine-plan/decision-map paths are absent; current live planning is inspect-only preview plus Customer Request V2, not a second durable runtime (`tests/imports/legacy-engine-retirement.test.ts:7-48`; `src/routes/index.tsx:196-221`; `convex/schema.ts:1-49`) |
-| treat Home preview as a Request | preview action declares `inspect_only`, no authority, and no effect; durable submit has separate authentication/shell/commit gates (`src/modules/customer-request/plan-preview.actions.ts:46-81`; `convex/customerRequestApplication.ts:701-769`) |
-| move all async work to native scheduler | scheduled action/mutation guarantees differ; route transport needs Workpool bounded retry/concurrency while cancellation/readiness use distinct scheduler seams (`node_modules/convex/src/server/scheduler.ts:17-29,125-147`; `node_modules/@convex-dev/workpool/src/client/index.ts:235-277`) |
-| use generic public threads as durable authority | answer public projection is redacted and source-write/finalization binds hashes; generic model messages do not supply AE gates (`src/modules/answer-thread/internal/public-projection.ts:45-101`; `convex/harnessSessions.ts:338-445`) |
-| claim local eval/Promptfoo proves hosted/provider/customer success | local ports, captured providers, Promptfoo, and v3 reports are fixture/report evidence; only matching executed smoke/provider/customer packets lift their own ceilings (`eval/answer/providers/gate.mjs:10-24`; `eval/answer/README.md:126-153`; `tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100`) |
-| send direct wallet/provider calls outside route runtime | bypasses registered capability identity, mandate/grant, prepared custody, effect generation, release, output validation, and reconciliation (`src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`; `src/modules/capability-supply/route-transport-runtime.ts:397-540,655-776`) |
-
-## Entropy ledger — dissipative structures to eliminate or justify
-
-| id | finding | current status and action | evidence |
-|---|---|---|---|
-| A1 | retrieval may search registry before model recovery searches again | **accepted deterministic-first policy**; initial registry search and model recovery are separate evidence calls; qualifying empty may add one web-discovery call | `src/modules/answer-thread/internal/turns/retrieval-first.ts:59-183`; `src/modules/answer-thread/internal/turns/agent.ts:31-177` |
-| A2 | response-plan tool policy and assembly budgets can be derived in different places | **split status:** tool-call policy is passed once into `agentTurnPath`; final assembly budgets remain a drift seam until one canonical plan is consumed | `src/modules/answer-thread/internal/turn-orchestrator.ts:291-313,370-380`; `src/modules/answer-thread/internal/turns/agent.ts:31-46`; `src/modules/answer/internal/emit-snapshot-events.ts:129-175` |
-| A3 | prose is checked by model gate, safety adapter, and orchestrator | **accepted defense in depth**; retain until equivalent invariant proof | `src/modules/answer/internal/answer-gate.ts:17-49`; `src/modules/answer-thread/internal/answer-turn-safety.ts:17-49`; `src/modules/answer-thread/internal/turn-orchestrator.ts:389-431` |
-| A4 | prompt/tool registry can drift | **resolved for current capability execution:** the five discovery IDs remain repeated by their public contracts, but each turn resolves one descriptor snapshot, filters strict schemas, selects at most one canonical operation, and derives its sole capability tool from that descriptor; `operation.execute` is only the evidence-record id. Keep a parity check for the fixed discovery set and selected closure | `src/modules/answer/internal/keyless-data-ask.ts:18-55`; `src/modules/answer/internal/answer-tool-use-agent.ts:294-344,561-618`; `src/modules/answer-thread/answer-thread.schema.ts:27-41` |
-| A5 | optimized answer writes coexist with compatibility reads | **accepted compatibility path**; remove read fallback only after host retirement | `src/modules/answer-thread/answer-thread.functions.ts:237-301,394-416`; `convex/answerThreads.ts:240-338` |
-| A6 | live reducer and durable projection both assemble artifacts | **accepted dual representation**; durable server turn IDs win on readback and pending optimistic turns are merged only when absent | `src/components/ae/chat/answer-turn-state.ts:40-176`; `src/modules/answer-thread/internal/public-projection.ts:45-101`; `src/components/ae/chat/AeChat.tsx:630-668` |
-| A7 | `AnswerSynthesizer` names remain beside ordered paths | **open deletion candidate**, not removed; preserve public event/projection types during migration | `src/modules/answer/answer-synthesizer.ts:7-33,119-171`; `src/modules/answer-thread/internal/turn-orchestrator.ts:432-447` |
-| A8 | unsupported route can be projected as boundary | **resolved behavior**; keep intent/route/layout unions exhaustive | `src/modules/answer-thread/internal/turns/boundary.ts:21-44,78-88`; `src/modules/answer-thread/internal/intent-router.ts:14-45` |
-| A9 | route preload and orchestrator fallback can race | **accepted bounded context fork:** preload may be empty for history-independent boundary or remount recovery; orchestrator performs bounded read when needed | `src/routes/api.answer.turn.ts:74-96`; `src/modules/answer-thread/internal/turn-orchestrator.ts:236-245` |
-| A10 | a rejected provider-overclaim can add one model request | **accepted bounded repair:** only `unsupported_provider_claim` gets one evidence-pinned rewrite; a second rejection becomes deterministic prose assembled from published provider fields, so unsafe or unavailable model output cannot erase an otherwise grounded shortlist | `src/modules/answer/internal/answer-tool-use-agent.ts:312-344,615-659`; `src/modules/answer/internal/answer-gate.ts:50-106`; `tests/unit/answer/answer-tool-use-agent.test.ts:501-568` |
-| B1 | notification outbox has no V2 run-outcome edge | **product gap**, not a library replacement | `src/modules/notification-outbox/internal/commands.ts:28-56`; `convex/notificationOutbox.ts:316-346` |
-| B2 | historical `accepted` attempt state has no live producer | **compatibility read remains**; remove literal only when historical rows are impossible | `src/modules/customer-request/internal/route-mandate-convex-schema.ts:706-710`; `src/modules/customer-request/route-execution/machines/mark-dispatched.ts:18-25` |
-| B3 | refresh uses final-attempt semantics twice | **deliberate split:** submit has non-final/final provider ladder; refresh retries graph/context compilation but calls each interpreter attempt `finalAttempt: true` for immediate deterministic fallback | `src/modules/customer-request/application/compare-resume/refresh.ts:57-107`; `src/modules/customer-request/application/interpret-compile/interpret.ts:128-196` |
-| B4 | route generation omitted for zero/unknown/on-request-cost routes | **customer safety policy**; retain until preparation-price policy changes | `src/modules/customer-request/compiler.ts:407-410,784-809` |
-| B5 | Workpool transport and native cancellation/readiness scheduler seams differ | **justified split** by execution guarantees and active-adapter cancellation semantics | `convex/customerRequestRouteExecutionJournalPorts.ts:110-126`; `convex/customerRequestRouteExecutionCancelPorts.ts:89-188`; `node_modules/convex/src/server/scheduler.ts:21-29` |
-| B6 | historical `leased` state crosses current projections | **resolved as explicit compatibility:** customer/support/evidence projections preserve leased, while start/resume refuses a second run before release | `src/modules/customer-request/application/route-plan-projection/project-run.ts:15-60`; `convex/customerRequestApplication.ts:471-510`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:46-105` |
-| C1 | Promptfoo bypasses route/harness/persistence | **accepted model/gate probe boundary**; nested AI SDK v6 is dev-only and must never be presented as production runtime | `eval/answer/providers/gate.mjs:10-24`; `package-lock.json:21688-21705`; `eval/answer/lib/evaluators.ts:1008-1068` |
-| C2 | outer harness accounting could collapse multi-step SDK calls | **resolved for answer agent:** `onStepEnd` records one private model observation per SDK provider step and `agent.ts` feeds the same record to the collector; web-discovery observations are action callbacks | `src/modules/answer/internal/answer-tool-use-agent.ts:278-307`; `src/modules/answer-thread/internal/turns/agent.ts:83-90`; `src/modules/storefront/internal/business-enrichment.ts:261-318` |
-| C3 | live and fallback harness report/journal builders can diverge | **accepted fallback:** live loop snapshot is preferred; finalization/report builder falls back only on operation failure; add parity check on first mismatch | `src/modules/answer-thread/internal/answer-turn-finalization.ts:172-193`; `src/modules/answer-thread/internal/answer-harness-operation.ts:111-118` |
-| C4 | eval/study/external verdict protocols do not convert | **accepted distinct trust domains**; require explicit transfer contract | `eval/answer/lib/scoring.ts:44-50`; `src/modules/study/internal/pipeline.ts:253-429`; `src/modules/external-run/internal/gate.ts:259-298` |
-| C5 | request wall-clock and internal harness timing have different boundaries | **deliberate split:** v3 request-to-first-progress/completion clocks remain distinct from internal span/total timing | `eval/answer/README.md:126-153`; `eval/answer/lib/evaluators.ts:463-572`; `eval/answer/lib/suite.ts:325-398` |
-| C6 | local captures can be mistaken for hosted/provider proof | **explicit evidence ceiling:** only matching executed smoke/receipt/readback/provider/customer packet lifts its own class | `tests/helpers/answer-thread-test-port.ts:18-133`; `tests/helpers/openrouter-contract-server.ts:141-180`; `tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100` |
-| C7 | semantic web-discovery failure status and hash could diverge between live harness and durable answer record | **status parity resolved before harness emission; hash reuse claim corrected:** `classifyWebDiscoveryResult` changes semantic unavailable/error status and computes a harness result hash, while `recordResult` independently recomputes the durable `resultHash` from persisted `toolId`, input, summary, result JSON, and status; the hashes are not copied/reused as one value | `src/modules/answer-thread/internal/tool-runner.ts:103-161,265-313`; `tests/unit/answer-thread/tool-runner.test.ts:275-291` |
-
-## Primary-source register
-
-- Runtime/package truth: `package.json:60-158`; `package-lock.json:11-98,152-169,21435-21451,21688-21705`; `node_modules/ai/package.json:1-10,44-48`; `node_modules/@ai-sdk/provider-utils/package.json:1-49`; `node_modules/@openrouter/ai-sdk-provider/package.json:1-49`; `node_modules/promptfoo/package.json:42-47,319-344`.
-- Runtime/deployment metadata: `vite.config.ts:57-67`; `.vercel/output/nitro.json:1-26`; `.vercel/project.json:5-15`.
-- Gateway and production generation: `src/modules/model-gateway/public.ts:1-139`; `src/modules/answer/internal/answer-tool-use-agent.ts:1-12,279-629`; `src/modules/answer-thread/internal/llm-follow-up-chips.ts:1-78`; `src/modules/customer-request/openrouter-transport.ts:1-118`; `src/modules/storefront/internal/business-enrichment.ts:1-318`.
-- Capability execution/source/guard seam: `src/modules/capability-execution/operation-execute.functions.ts:1-310`; `src/modules/capability-execution/operation-execute.server.ts:1-38`; `src/modules/capability-execution/operation-execute.actions.ts:1-91`; `src/modules/capability-execution/seed-supply.ts:110-173`; `src/modules/capability-execution/public.ts:1-16`; `src/modules/capability-supply/public.ts:61-80`; `src/modules/network-guard/public.ts:1-154`; `convex/capabilitySupplyOperations.ts:577-753`; `tests/unit/capability-execution/operation-execute.test.ts:1-125`; `tests/unit/answer/answer-tool-dynamic-ops.test.ts:1-60`.
-- Answer prompt/tools/stream/persistence: `src/modules/answer/internal/answer-llm-prompts.ts:1-133`; `src/modules/answer/internal/action-to-tool-spec.ts:1-72`; `src/modules/answer-thread/answer-thread.schema.ts:1-120`; `src/modules/harness/tool-contract.ts:1-83,239-256`; `src/modules/answer-thread/internal/tool-runner.ts:62-313`; `src/modules/answer/answer-ui-stream.ts:1-68`; `src/routes/api.answer.turn.ts:46-143`; `src/modules/answer-thread/internal/answer-turn-finalization.ts:150-325,431-769`; `convex/answerThreads.ts:240-338,598-621`; `convex/harnessSessions.ts:186-445`.
-- Answer SSR/browser seams: `src/routes/t.$threadId.tsx:29-40,54-69`; `src/components/ae/chat/answer-stream.ts:62-93`; `src/components/ae/chat/turn-stream-session.ts:24-98`; `src/components/ae/chat/AeThreadTurnStreamSection.tsx:34-130`; `src/components/ae/chat/AeChat.tsx:127-166,208-235,630-668`.
-- Customer Request/Home preview/compile/authority: `src/routes/index.tsx:18-85,88-189`; `src/modules/customer-request/plan-preview.actions.ts:46-82`; `src/modules/customer-request/application/interpret-compile/preview.ts:9-138`; `src/modules/customer-request/application/consumer-plan-projection.ts:152-211`; `src/modules/customer-request/application/interpret-compile/interpret.ts:76-203`; `src/modules/customer-request/application/compare-resume/refresh.ts:57-107`; `src/modules/customer-request/compiler.ts:234-426`; `convex/customerRequestApplication.ts:648-769,878-1078,1708-1791`.
-- Customer Request execution/payment: `src/modules/customer-request/route-mandate-admission.ts:62-246`; `convex/customerRequestRouteMandateAdmission.ts:60-263`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:7-187`; `src/modules/customer-request/route-execution/machines/mark-dispatched.ts:7-77`; `src/modules/customer-request/route-execution/machines/record-outcome.ts:8-93`; `convex/customerRequestRouteExecutionJournalPorts.ts:110-153,389-473,646-783`; `src/modules/capability-supply/route-transport-runtime.ts:397-540,566-653,655-776,892-927`; `convex/customerRequestRouteExecution.ts:418-604`; `src/modules/customer-request/internal/route-mandate-convex-schema.ts:745-776`.
-- Agent Engine retirement/schema: `tests/imports/legacy-engine-retirement.test.ts:7-48`; `convex/schema.ts:1-49`; `src/modules/customer-request/internal/convex-v2-schema.ts:669-734`.
-- Eval/Promptfoo/v3: `eval/answer/README.md:1-12,64-107,126-173`; `eval/answer/lib/cases.ts:142-186,204-313`; `eval/answer/lib/coverage.ts:60-207`; `eval/answer/lib/scoring.ts:14-50,87-116`; `eval/answer/lib/registry-seed.ts:21-25,27-138`; `eval/answer/scripts/audit-coverage.ts:8-38`; `eval/answer/scripts/run-suite.ts:5-41`; `eval/answer/promptfooconfig.yaml:7-9,152-303`; `eval/answer/providers/gate.mjs:10-24`.
-- Study/ExternalRun protocols: `src/modules/study/internal/rfx-machine.ts:15-24,40-104,204-283`; `convex/studies.ts:164-283`; `src/modules/external-run/internal/gate.ts:133-160,259-298`; `convex/externalRuns.ts:66-98,134-357`; `tests/unit/external-run/external-run.test.ts:58-135`.
-- Deployment/smoke inventory and named packets: `tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:39-100,191-217`; `tests/deploy-smoke/phase1-deploy-smoke.spec.ts:33-174`; `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts:19-157`; `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts:12-48`; `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts:12-45`; `output/eval/answer-suite-report.json:1-83`; `output/release/playwright-answer-runtime-smoke.json:67-126`; `output/release/playwright-deploy-smoke.json:68-125`; `eval/parity/program.md:1-52`; `eval/parity/check-parity.mjs:1-222`.
-
-## Verification record
-
-- **2026-08-09 current-tree refresh:** re-walked the maintained prompt/model/tool/stream/eval/runtime,
-  Customer Request recovery/compile, canonical keyless execution, Service endpoint projection, W7/W8,
-  study, ExternalRun, deployment-smoke, and output-packet seams cited in this map. This refresh ran no
-  formatter, linter, build, test, package-manager, or git command; source-level tests remain
-  contracts unless a named packet below records execution.
-- **2026-08-08 answer execution finding:** the answer agent now resolves one descriptor snapshot from
-  the same source used for execution. It exposes the five discovery reads plus at most one strict,
-  operation-bound capability tool; `operation.execute` is only the durable evidence-record id.
-  Step 0 can force the selected tool, later steps remove tools, the tool queue is serial, and
-  `parallelToolCalls` is false. The model supplies only strict schema inputs; the canonical ref is
-  closure/private evidence. Refused/error/oversized results stay in the same loop, with a separate
-  64 KiB sanitized model/persisted-result ceiling (`src/modules/answer/internal/keyless-data-ask.ts:18-55`;
-  `src/modules/answer/internal/answer-tool-use-agent.ts:294-451,474-547,561-618`).
-- **2026-08-08 keyless/W8 finding:** publication, registry, Customer Request, answer, and CLI paths
-  use canonical `operation:v1:<64-lowercase-hex>` refs. Convex is the production/default descriptor
-  source; the curated seed adapter is selected only for the explicit local-E2E bypass with both
-  Convex URLs absent, and derives publication-identical refs. Bare/noncanonical refs do not execute.
-  The pure executor validates HTTPS/private literals, while the server adapter adds guarded DNS and
-  Undici private-target protection; upstream responses are capped at 512 KiB, separately from the
-  answer layer's 64 KiB model/persisted-result cap (`src/modules/capability-execution/operation-execute.actions.ts:27-91`;
-  `src/modules/capability-execution/operation-execute.server.ts:14-38`;
-  `src/modules/capability-execution/operation-execute.functions.ts:29-34,75-218`;
-  `src/modules/capability-execution/seed-supply.ts:140-173`).
-- **2026-08-08 Customer Request/Home finding:** Home is a static ask/category/example shell unless
-  `project` is present. A non-empty `q` without `project` redirects to `/t/new`; `project` loads only
-  the source-backed work tree. Customer Request preview remains a separate inspect-only path and
-  cannot create authority/effects (`src/routes/index.tsx:18-85,88-189`;
-  `src/modules/customer-request/plan-preview.actions.ts:46-82`).
-- **2026-08-08 eval/evidence finding:** current source has 10 answer-turn cases plus 2 thread
-  cases, including `turn-capability-tool-executes`, and Promptfoo mirrors that row. The named
-  `output/eval/answer-suite-report.json:1-47` packet is an older successful 12-case/14-turn
-  report whose required tags/case list predate that capability case. The named answer-runtime
-  packet passed historically on 2026-08-02; the only current cold-human deploy packet is a failed
-  2026-08-04 attempt ending `hosted_human_journey_did_not_reach_choice`, not a passed observation
-  (`eval/answer/lib/cases.ts:204-313,589-640`;
-  `eval/answer/lib/coverage.ts:60-207`; `eval/answer/promptfooconfig.yaml:286-303`;
-  `output/release/playwright-answer-runtime-smoke.json:67-126`;
-  `output/release/playwright-deploy-smoke.json:68-125`).
-- **2026-08-08 runtime/adoption finding:** production generation remains AI SDK v7 through the
-  AE gateway; Promptfoo's nested AI SDK v6 remains dev/eval-only; Convex remains durable truth;
-  Workflow/Workpool/native scheduler remain bounded mechanics; `@tanstack/ai` remains schema
-  conversion only; `@convex-dev/agent` remains absent from manifest, lockfile, installed
-  components, and application imports (`package.json:60-123,158-161`;
-  `src/modules/model-gateway/public.ts:4-11,94-139`; `vite.config.ts:57-67`;
-  `convex/convex.config.ts:1-23`; `convex/_generated/ai/guidelines.md:320-323`).
-- **Current architecture conclusion:** production model transport is AI SDK v7/OpenRouter through
-  the AE gateway; deterministic retrieval, Customer Request compile, route/mandate/release/outcome,
-  answer evidence/finalization, public redaction, and payment/reconciliation remain AE-owned.
-  Fixed discovery tools and at most one selected strict per-op capability tool are distinct model
-  memberships; `operation.execute` is the shared evidence-record ID only. Home is static/project
-  work-tree routing; Customer Request V2 owns durable paid execution; private model summaries and
-  live journal entries have different contracts; C7 status parity does not imply shared hash reuse.
-- **Evidence conclusion:** source shape, fixtures, named packets, hosted/provider/customer
-  observations, and ExternalRun verdicts remain separate trust domains. No claim in this map
-  upgrades one class into another without a matching receipt, readback, or study artifact.
+The map is complete only at the source/fixture/packet ceiling above. Live utilization, saturation, hosted/provider/customer/payment outcomes, and any stronger proof class remain `?` until their named observation and readback seams are available.

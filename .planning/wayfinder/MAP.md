@@ -2,6 +2,7 @@
 
 Label: `wayfinder:map` (active category/destination map; local-markdown tracker fallback; `gh` token is invalid — see ticket T1).
 Charted: 2026-08-08 against the current working tree (dirty).
+Reconciled: 2026-08-12 after the post-remediation re-audit; the 2026-08-11 closeout is historical and hosted receipt remains unproduced.
 
 ## Destination
 
@@ -25,6 +26,64 @@ The **Market Operation** is the admitted, versioned third-party operation and co
 - Standing preference: do not overcomplicate. Projection over new stores. One semantic supply object across human and agent hosts.
 - Ground-truth harness: `eval/parity/check-parity.mjs` (autoresearch-style loop in `eval/parity/program.md`). The harness is not modified to make scores improve.
 - Evidence classes never silently upgrade: sandbox callability is labelled `ae_sandbox_provider`; it proves the contract, not real supply.
+
+
+## Current gateway workstream — 2026-08-12
+
+**Status:** remediation campaign open; seven workstreams focused-verified; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; full post-codegen source release gate not green and no later complete rerun; hosted proof blocked  
+**Decision:** [ADR-035 — Single-Key Capability Gateway](../adr/ADR-035-single-key-capability-gateway.md)  
+**Implementation plan:** [2026-08-09 gateway plan](../research/2026-08-09-single-key-capability-gateway-implementation-plan.md)  
+**Historical remediation closeout:** [2026-08-11 goblin source closeout](../research/2026-08-11-goblin-source-remediation-plan.md)
+
+The 2026-08-11 source-completion/local-gate claims are dated historical
+evidence, superseded for current status by the 2026-08-12 post-remediation
+re-audit recorded in `PAPERCUTS.md`.
+
+The consuming-agent boundary is one Clerk-issued AE bearer key over many
+admitted Market Operations. Clerk is the credential issuer/revocation
+authority; AE owns the `AgentAccessPrincipal`, grant/policy, invocation,
+money, evidence, and recovery. The canonical protected action is
+`operation.invoke:v1`; the canonical HTTP route is
+`POST /api/v1/operations/execute`; `/mcp`, CLI, and Answer adapt the same
+application service. Existing `operation.execute:v1` remains
+public/keyless/read-only. Supplier credentials stay inside the server-side
+provider connection/transport boundary.
+
+The fixed W0→W8 map is:
+
+| Wave | Discoverable contract |
+| --- | --- |
+| W0 | Freeze Clerk/AE ownership, canonical route/action, reused seams, no-handroll decisions, and proof ceiling. |
+| W1 | Generalize Customer Request key/principal/OAuth through `src/modules/agent-access/`; no aliases or second verifier. |
+| W2 | Add grant, budget, rate, concurrency, and standing-mandate admission through current money/rate seams. |
+| W3 | Expose authenticated `operation.invoke:v1` over HTTP and registered MCP with shared idempotency identity. |
+| W4 | Bind exact operation/publication/binding/provider/authority/money/evidence identity to Action Invocation and transport. |
+| W5 | Add generation-bound provider connection leases and final server-only credential checks. |
+| W6 | Add bounded read/cancel/reconcile, correlation, redaction, and durable unknown-outcome recovery. |
+| W7 | Ask one first-use authority question and keep consumer keys separate from supplier connections. |
+| W8 | Publish HTTP/MCP/CLI/Answer projections and run the exact hosted positive proof. |
+
+The gateway reuses the existing Clerk auth/OAuth, action registry/MCP,
+keyless executor, capability-supply publication/binding/readiness and
+provider-connection, Action Invocation, route transport, money,
+`convex/lib/rateLimit.ts`, canonical digest/stable serialization, RFC 9457,
+Convex, workflow/workpool, and MCP SDK seams. No parallel token verifier,
+registry, ledger, transport, or execution state machine is permitted. The
+package and no-handroll evidence is maintained in ADR-035 and the linked
+plan.
+
+Positive proof requires the same real Clerk-issued key to invoke two real
+operations from distinct admitted suppliers/connection modes on the exact
+hosted revision, with current approval/budget, server-only credentials,
+durable outcome/recovery, exact usage/evidence readback, same-key zero-meter
+replay, revoke/withdraw refusal, and one hard-capped live
+top-up/charge/payout with zero-movement replay. CI must independently parse
+the strict receipt. Fixtures, mocks, refusals, synthetic local identities,
+source-only OAuth, and unavailable Convex are not proof. Until that gate runs,
+hosted and live-money proof remain uncertified. The full post-codegen source
+release gate is not green and no later complete rerun exists; the payout-period
+lifecycle remains blocked for lack of a trusted server-owned nonzero
+minimum-payout policy.
 
 ## Decisions so far
 

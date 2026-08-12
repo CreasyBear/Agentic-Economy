@@ -1,7 +1,14 @@
 # Codebase Concerns
 **Analysis Date:** 2026-08-12
 
-The source tree is currently reported as source-complete and locally verified, but it is not hosted-certified: `.planning/PROJECT.md:116-135` and `.planning/STATE.md:231-238` both keep that proof ceiling, and `output/release/` contains no strict hosted gateway receipt. The concerns below do not turn local fixtures or source checks into hosted, provider, customer, or live-money evidence.
+The 2026-08-11 source-remediation closeout is historical and superseded for
+current status by the 2026-08-12 post-remediation re-audit. The remediation
+campaign remains open: seven workstreams are focused-verified, the
+payout-period lifecycle is blocked for lack of a trusted server-owned nonzero
+minimum-payout policy, the full post-codegen source release gate is not green
+with no later complete rerun, and hosted certification is blocked. The concerns
+below do not turn local fixtures or source checks into hosted, provider,
+customer, or live-money evidence.
 
 ## Tech Debt
 
@@ -15,7 +22,7 @@ The source tree is currently reported as source-complete and locally verified, b
 
 ## Security Considerations
 
-- **Production security and custody controls have source gates but no deployment proof.** Evidence: `src/lib/deployment/manifest.ts:52-85` requires canonical/Convex auth, Clerk, OpenRouter, seven source-write families, x402 custody, Stripe, and a separate live-gateway smoke configuration; `.planning/STATE.md:94-109,231-238` says the local/source gates passed but no strict hosted receipt or live-money block exists. Impact: source review demonstrates intended fail-closed behavior, not that the deployed revision used the expected secret custody, revocation, source-write authority, provider call, or money readback. Remediation: run the exact configured hosted receipt against a revision-bound deployment, independently parse its digest/readback, and keep certification blocked when any authority or custody prerequisite is absent; do not add a production bypass.
+- **Production security and custody controls have source gates but no deployment proof.** Evidence: `src/lib/deployment/manifest.ts:52-85` requires canonical/Convex auth, Clerk, OpenRouter, seven source-write families, x402 custody, Stripe, and a separate live-gateway smoke configuration; current status remains remediation-open with seven focused-verified workstreams, no green full post-codegen source release gate or later complete rerun, and no strict hosted receipt or live-money block. Impact: source review demonstrates intended fail-closed behavior, not that the deployed revision is secure or that provider/payment value exchange works. Remediation: configure and execute the exact hosted gate; keep live money disabled until the economic ordering and payout-policy blockers close.
 
 ## Performance Bottlenecks
 
@@ -41,7 +48,7 @@ The source tree is currently reported as source-complete and locally verified, b
 
 ## Missing Critical Features
 
-- **There is no exact-revision hosted gateway/live-money evidence packet yet.** Evidence: `src/lib/deployment/manifest.ts:63-85` defines the required smoke identity and spend inputs, but `output/release/` has no strict operation-gateway receipt; `.planning/STATE.md:231-238` and `.planning/research/2026-08-11-goblin-source-remediation-plan.md:626-639` explicitly keep hosted certification blocked. Impact: the product cannot claim hosted provider fulfilment, exact usage/metering, Stripe top-up/charge/payout conservation, or revocation replay. Remediation: provision the production authorities and approved fixtures, run the hard-capped exact-revision gateway plus live-money block, independently validate the immutable receipt, and retain the source-complete/hosted-uncertified distinction until it passes.
+- **There is no exact-revision hosted gateway/live-money evidence packet yet.** Evidence: `src/lib/deployment/manifest.ts:63-85` defines the required smoke identity and spend inputs, but `output/release/` has no strict operation-gateway receipt; current status is remediation-open with seven focused-verified workstreams, payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy, and full post-codegen source release gate not green with no later complete rerun. Impact: the product cannot claim hosted provider fulfilment, exact usage/metering, Stripe top-up/charge/payout conservation, or revocation replay. Remediation: provision the production authorities and approved fixtures, run the hard-capped exact-revision gateway plus live-money block, independently validate the immutable receipt, and retain the source/local-versus-hosted proof ceiling.
 
 - **The public human URL-shortlist/dedicated accessible comparison loop is still incomplete.** Evidence: `.planning/ROADMAP.md:160-168,181-187` records the remaining URL-shortlist and dedicated comparison requirement; current source has the Answer shortlist (`src/components/ae/chat/AeShortlistTerminal.tsx`) and the namespaced API compare route (`src/routes/api.v1.market-operations.compare.ts`), but no separate human comparison route in `src/routes/`. Impact: [INFERENCE] visitors who do not use the Answer thread or API lack a durable, linkable comparison destination. Remediation: add a route only if this remains in the current product authority, reusing the existing comparison projection and validators; otherwise retire the stale requirement instead of leaving contradictory roadmap text.
 

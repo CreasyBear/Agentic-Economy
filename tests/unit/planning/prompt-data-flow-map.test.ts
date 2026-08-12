@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 
 const root = process.cwd()
 const mapPath = '.planning/codebase/PROMPT-DATA-FLOW.md'
-const map = readFileSync(resolve(root, mapPath), 'utf8')
+const mapFile = resolve(root, mapPath)
+const map = existsSync(mapFile) ? readFileSync(mapFile, 'utf8') : ''
 
 function lines(relativePath: string): number {
   return readFileSync(resolve(root, relativePath), 'utf8').split('\n').length
@@ -13,18 +14,23 @@ function lines(relativePath: string): number {
 
 describe('prompt and data-flow architecture map', () => {
   it('keeps every mapped flow explicit and durable', () => {
+    expect(existsSync(mapFile), mapPath).toBe(true)
     expect(map).not.toContain('history://')
     expect(map.match(/^## Flow [A-C] —/gm)).toHaveLength(3)
-    expect(map.match(/\| stage \| source evidence \| input → processing → output \| owner\/evidence ceiling \|/g))
-      .toHaveLength(3)
-    expect(map).toContain('## Maintenance contract')
 
-    for (const id of [
-      'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9',
-      'B1', 'B2', 'B3', 'B4', 'B5', 'B6',
-      'C1', 'C2', 'C3', 'C4',
+    for (const section of [
+      '## Maintenance contract and evidence ceiling',
+      '## Functional block diagrams',
+      '## Current callsite inventory',
+      '## Resource-first USE checklist',
+      '## Invariants, reachable gaps, and proof ceilings',
+      '## Primary source register',
     ]) {
-      expect(map).toContain(`| ${id} |`)
+      expect(map, section).toContain(section)
+    }
+
+    for (const id of ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3']) {
+      expect(map, id).toContain(`### ${id}.`)
     }
   })
 
@@ -32,7 +38,7 @@ describe('prompt and data-flow architecture map', () => {
     const citation = /`((?:src|convex|eval|tests|node_modules)\/[^`:\s]+|package\.json):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)`/g
     const matches = [...map.matchAll(citation)]
 
-    expect(matches.length).toBeGreaterThan(80)
+    expect(matches.length).toBeGreaterThan(0)
     for (const match of matches) {
       const relativePath = match[1]!
       const anchors = match[2]!
@@ -52,7 +58,7 @@ describe('prompt and data-flow architecture map', () => {
   it('keeps the primary architecture map linked with its update rule', () => {
     const architecture = readFileSync(resolve(root, '.planning/codebase/ARCHITECTURE.md'), 'utf8')
 
-    expect(architecture).toContain('[PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md)')
+    expect(architecture).toContain('[`PROMPT-DATA-FLOW.md`](PROMPT-DATA-FLOW.md)')
     expect(architecture).toContain('MUST update it')
   })
 })

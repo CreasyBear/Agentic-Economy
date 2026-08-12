@@ -1,20 +1,26 @@
-> **SUPERSESSION BANNER — 2026-08-08.** This roadmap retains historical phase
+> **SUPERSESSION BANNER — 2026-08-09.** This roadmap retains historical phase
 > mechanics and implementation evidence, but its earlier category, ICP, wedge,
 > and broad-supply framing is superseded. It is not current category authority.
 >
 > Current authority is [`PROJECT.md`](PROJECT.md),
 > [`VISION-conceptual-map.md`](VISION-conceptual-map.md),
 > [`wayfinder/MAP.md`](wayfinder/MAP.md), [`D-013`](records/PROJECT-RECORDS.md),
-> and the [Agent Services Market category thesis](research/2026-08-08-agent-services-market-category-thesis.md).
+> the [Agent Services Market category thesis](research/2026-08-08-agent-services-market-category-thesis.md),
+> and accepted [`ADR-035`](adr/ADR-035-single-key-capability-gateway.md).
+> The 2026-08-11 source-remediation outcome is a historical closeout record,
+> superseded for current status by the 2026-08-12 post-remediation re-audit in
+> `PAPERCUTS.md`.
 > The current product is the market and controlled transaction layer for
-> supplier-hosted Market Operations; V1 is closed to one family and proof is
-> not yet earned. Do not infer from historical phases that local trades,
-> Australian SMBs, BAS, or a human-service wedge is current direction.
+> supplier-hosted Market Operations. The remediation campaign remains open:
+> seven workstreams are focused-verified and the Node 22 post-codegen source
+> gate is green, but the payout-period lifecycle lacks a trusted server-owned
+> nonzero minimum-payout policy; production manifest validation and hosted
+> certification remain blocked. Do not infer from source/local fixtures that
+> keyed provider execution, production settlement, or customer value is proven.
 
-# Agentic Economy — Current Product Roadmap
+**Status:** active; remediation open; seven workstreams focused-verified; Node 22 post-codegen source gate green; payout-period policy, production manifest, and hosted certification blocked  
 
-**Status:** active
-**Rebaselined:** 2026-07-25
+**Rebaselined:** 2026-08-09  
 **Authority:** `PROJECT.md` → accepted ADRs → this roadmap
 
 ## Roadmap rule
@@ -32,9 +38,11 @@ Phase 2 — One action plane (accepted_narrowed)
                          ↓
 Phase 3 — Protocol/kernel → product conversion (complete)
                          ↓
-Phase 4 — Business Account and routeable-supply maturity (planning accepted)
+Phase 4 — Business Account and routeable-supply maturity (source complete; hosted proof uncertified)
                          ↓
 Phase 5 — Public Offering decision loop (source landed on main)
+                         ↓
+Phase 6 — Single-Key Capability Gateway (remediation open; seven workstreams focused-verified; payout-period policy blocked; hosted certification blocked)
 ```
 
 ## Phase 1 — Action Invocation foundation
@@ -95,7 +103,7 @@ effect lineage. Evidence remains local/mock only.
 
 ## Phase 4 — Business Account and routeable-supply maturity
 
-**Status:** planning accepted; source implementation pending
+**Status:** source implementation complete at focused/local evidence boundary; hosted proof uncertified
 **ADRs:** ADR-024, ADR-025
 **Goal:** make the complete Business Account operating loop real in source:
 onboard a business and team, establish Commercial and Usage truth, publish one
@@ -156,9 +164,10 @@ dispatching and claiming fulfilment remain out of this phase.
   defaults unranked and orders only by inspectable stated-priority lexicography.
 - `P5-HUMAN`: public Astryx routes cover browse, Offering detail, URL shortlist
   and accessible comparison states without inquiry or effect controls.
-- `P5-AGENT`: fixed public anonymous `POST /api/compare` executes only the
-  registered inspect-only comparison action, consumes the same semantic object
-  as the actual human loader and passes zero-effect vertical/horizontal evals.
+- `P5-AGENT`: fixed public anonymous `POST
+  /api/v1/market-operations/compare` executes only the registered inspect-only
+  comparison action, consumes the same semantic object as the actual human
+  loader and passes zero-effect vertical/horizontal evals.
 - `P5-EVIDENCE`: one authenticated exact-revision hosted readback over labelled
   demonstration data produces a frozen independently verified evidence packet.
 
@@ -177,14 +186,69 @@ missing. Against the requirements above:
   surface (`src/components/ae/chat/AeShortlistTerminal.tsx`,
   `shortlist-projection.ts`); the specced URL-shortlist and dedicated
   accessible comparison route do not exist.
-- `P5-AGENT` — not met. There is no `POST /api/compare` route and no registered
-  inspect-only comparison action.
+- `P5-AGENT` — met in integrated source. Anonymous `POST
+  /api/v1/market-operations/compare` invokes the registered inspect-only
+  `registry.operations.compare` action.
 - `P5-EVIDENCE` — not met. No hosted readback or frozen evidence packet exists.
 
 Historical Phase 4B three-quote and Phase 4C quote-to-close proposals remain
 research provenance only. Quote/request/inquiry, close/start, independently
 operated supply, real-customer evidence, sales tactics, incentives, liquidity
 and retention mechanisms are deferred beyond this phase.
+
+## Phase 6 — Single-Key Capability Gateway
+
+**Status:** remediation campaign open; seven workstreams focused-verified; Node 22 post-codegen source gate green; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked  
+**ADR:** [ADR-035](adr/ADR-035-single-key-capability-gateway.md)  
+**Plan:** [single-key capability gateway implementation plan](research/2026-08-09-single-key-capability-gateway-implementation-plan.md)
+**Historical closeout:** [2026-08-11 goblin source remediation outcome](research/2026-08-11-goblin-source-remediation-plan.md)
+
+The 2026-08-11 closeout is preserved as dated source/local evidence and is
+superseded for current status by the 2026-08-12 post-remediation re-audit in
+`PAPERCUTS.md`.
+
+**Goal:** give one Clerk-issued AE bearer key access to many admitted Market
+Operations while keeping supplier credentials server-side and preserving AE's
+authorization, policy, invocation, money, evidence, and recovery boundary.
+
+The canonical protected action is `operation.invoke:v1`; the canonical
+customer route is `POST /api/v1/operations/execute`; `/mcp`, CLI, and Answer
+are adapters over the same application service. Existing
+`operation.execute:v1` remains public/keyless/read-only. Clerk issues and
+revokes credentials; AE resolves grants, operation/publication/binding,
+provider authority, budget, approval/mandate, transport, and evidence.
+
+**Work sequence:**
+
+- `W0` — freeze the Clerk/AE split, canonical route/action, reused seams,
+  no-handroll decisions, and proof ceiling.
+- `W1` — generalize the Customer Request Clerk verifier, principal, OAuth,
+  and grant contracts into `src/modules/agent-access/` with no compatibility
+  alias.
+- `W2` — add per-key grant, budget, rate, concurrency, and standing-mandate
+  admission through existing money and `@convex-dev/rate-limiter` seams.
+- `W3` — expose `operation.invoke:v1` through HTTP and registered MCP with
+  shared principal and idempotency identity.
+- `W4` — bind exact operation/publication/binding/provider/authority/money/
+  evidence identity to existing Action Invocation and transport state.
+- `W5` — close provider authority with generation-bound leases and final
+  server-only credential checks.
+- `W6` — add bounded read/cancel/reconcile, correlation, redaction, and
+  durable unknown-outcome recovery.
+- `W7` — ship the one-question first-use/settings experience, distinct from
+  supplier connection management.
+- `W8` — publish HTTP/MCP contracts, make CLI/Answer clients of the service,
+  and run the exact hosted positive proof.
+
+**Exit gate:** the same real Clerk-issued key invokes two real operations from
+distinct admitted suppliers/connection modes on the exact configured hosted
+revision; budget/approval, server-only credentials, durable terminal/recovery
+state, exact usage/evidence readback, same-key zero-meter replay,
+revoke/withdraw refusal, and one hard-capped live top-up/charge/payout with
+zero-movement replay all hold in one strict receipt. CI independently parses
+that exact object. Source/local tests, fixtures, mocks, refusals, or generated
+manifests cannot satisfy this gate. Until exercised, hosted and live-money
+proof remain uncertified.
 
 ## Deferred decisions
 

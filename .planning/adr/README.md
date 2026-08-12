@@ -1,6 +1,6 @@
 # ADR register
 
-This register is reconciled against the files on disk (2026-08-08). ADR
+This register is reconciled against the files on disk (2026-08-09). ADR
 numbers are historical identifiers, not a single-file sequence: ADR-002 and
 ADR-004 each have two durable records, and both records are retained. New ADRs
 must use the next unused number.
@@ -13,6 +13,8 @@ must use the next unused number.
 | ADR-010 | accepted_narrowed | One action plane; Gate 10 payoff rejected for the measured class |
 | ADR-019 | accepted | Inspect only, Approve each, Bounded mandate and Full autonomy destination |
 | ADR-020 | Accepted; Phase 3A and Phase 3B closed at labelled local/mock evidence boundary | One reliable paid operation as the first product projection |
+| ADR-035 | accepted | Single-Key Capability Gateway; one Clerk-issued key over many admitted operations |
+
 
 ## Filesystem inventory
 
@@ -55,6 +57,8 @@ file's status declaration; the filename disambiguates duplicate numbers.
 | ADR-032 | `ADR-032-founder-category-and-ownership.md` | Accepted |
 | ADR-033 | `ADR-033-durable-answer-turn-lifecycle.md` | Accepted; implemented at source/local verification boundary |
 | ADR-034 | `ADR-034-supplier-usage-qualified-use-and-payout-spine.md` | Accepted; owner readback implemented at source/local verification boundary, remaining sequence documented |
+| ADR-035 | `ADR-035-single-key-capability-gateway.md` | Accepted; source implementation complete and locally verified; hosted certification blocked |
+
 
 ## Reconciled gaps and discrepancies
 
