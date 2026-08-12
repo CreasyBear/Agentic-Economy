@@ -1,74 +1,89 @@
 # AE CLI
 
-Exercise AE the way an external agent would: over the public machine surfaces,
-and in-process over the real action registry.
+Exercise AE the way an external agent would through the canonical Operation
+market loop.
 
-```
+```sh
 npm run -s ae -- <command> [args] [flags]
 ```
 
-## Commands
+## Canonical Operation commands
 
 | Command | Transport | What it proves |
 | --- | --- | --- |
-| `search <query> [--location X] [--mode near_me\|whole_catalogue]` | `GET /api/businesses/search` | A cold caller can find published businesses. |
-| `business <slug>` | `GET /api/businesses/<slug>` | The detail record carries a service and a what-to-do-now path. |
-| `discover` | discovery + request-contract schemas | What a caller can learn without a human. |
-| `import <websiteUrl>` | `POST /api/storefront/import-draft` | Website import drafts facts and keeps them unconfirmed. |
-| `enrich "<name>" [--suburb X]` | `POST /api/storefront/enrich` | One web-search-grounded call drafts a profile with source URLs. |
-| `ask "<question>"` | `POST /api/answer/turn` (SSE) | The answer surface responds. |
-| `request create\|get\|options\|confirm` | `/api/v1/requests` lifecycle | The authority boundary is legible from the refusal itself. |
-| `actions` | in-process | Every registered action with its declared surfaces and contract. |
-| `action <id> ['<json>']` | in-process | Generic dispatch by name; no server, no per-action code. |
-| `journey "<query>"` | chained HTTP | Whether each next call is derivable from the previous body. |
+| `npm run -s ae -- manifest` | in-process descriptors | The exact public Operation routes, action schemas, outcomes, recovery contracts, and command vocabulary. |
+| `npm run -s ae -- search "<job>"` | `POST /api/v1/market-operations/search` | An anonymous caller can find current Operations for a job. |
+| `npm run -s ae -- inspect <operationRef>` | `POST /api/v1/market-operations/detail` | One exact current Operation exposes inputs, terms, readiness, and consequences before authentication. |
+| `npm run -s ae -- compare <operationRef> <operationRef> [...]` | `POST /api/v1/market-operations/compare` | Exact references are compared without selecting or authorizing one. |
+| `npm run -s ae -- connect` | OAuth device flow plus authenticated validation | One owner-approved AE credential is issued, or an existing key is validated by the gateway. |
+| `npm run -s ae -- invoke <operationRef> '<json>' --idempotency-key <key>` | `POST /api/v1/operations/execute` | One AE key invokes through the canonical gateway with a required body replay identity. |
+| `npm run -s ae -- status <invocationRef>` | `GET /api/v1/operations/<invocationRef>` | The same caller reads durable state, exact refs, usage, evidence, and the typed next action. |
+| `npm run -s ae -- recover <invocationRef> '<evidence-json>' --idempotency-key <key>` | `POST /api/v1/operations/<invocationRef>/reconcile` | An uncertain invocation is recovered with canonical evidence and the same stable identity. |
 
-## Market-terminal commands (in-process; live keyless execution, no server)
+Cold path:
 
-Built around the `operation.execute` capability-execution seam. The feed catalog
-is **fully derived from what is onboard** — never hardcoded. Source of truth is
-Convex (`listKeylessExecutable`) when reachable; otherwise it projects the
-curated seed through the same admission machinery (`normalizeCapabilityPublication`),
-keeping only keyless `http-json:v1` GET operations and excluding x402 listings.
-Adding or removing an onboard keyless GET operation changes what the terminal
-sees with no CLI edit. Execution returns real provider data where the feed is
-keyless-executable.
+```text
+manifest → search → inspect/compare → connect → invoke → status/recover
+```
 
-| Command | What it does |
-| --- | --- |
-| `manifest [--json]` | Machine-readable self-description: commands, the live feed catalog, the registered-action toolset, and the evidence ceilings. The external-agent handshake (Hermes/Claude/Codex/DeepSeek read this first). |
-| `feeds [--json]` | List the onboard keyless data feeds the agentic economy can serve live, with keyless/executable status and provenance. |
-| `run <feed-id> [key=value ...]` | Execute an onboard keyless feed live → a verifiable value + `sha256` evidence hash. Fail-closed: keyed/x402/non-HTTPS/invalid-input refuse without a network hit. |
-| `compare [--feeds=a,b] [k=v ...]` | Pull the same inputs across several feeds in parallel and table live results side by side. |
-| `study "<question>" [k=v ...]` | Research workflow: find relevant feeds, execute them, attribute each finding to a feed + evidence hash, mark unknowns, and refuse honestly when nothing is relevant. |
-| `policy [test\|refine\|fidelity]` | Capability-admission governance, modeled on Amazon Bedrock Automated Reasoning policy refinement: `test` runs the suite (VALID/INVALID/TRANSLATION_AMBIGUOUS), `refine` diagnoses failures and proposes rule edits through a **human review gate** (`--apply` is commit authority — the engine only suggests), `fidelity` scores coverage/accuracy/per-rule grounding. |
+## Demand commands
 
-The policy is persisted to `.ae-cli/policy.json` (defaults to the fail-closed
-keyless-only policy when absent).
+Existing demand-side workflows have no root aliases:
+
+```sh
+npm run -s ae -- demand ask "<question>"
+npm run -s ae -- demand ask --thread-id <thread-id> --operation-ref <operation-ref> --candidate-digest <digest> '<input-json>'
+npm run -s ae -- demand business <slug>
+npm run -s ae -- demand discover
+npm run -s ae -- demand enrich "<business name>" [--suburb X]
+npm run -s ae -- demand import <websiteUrl>
+npm run -s ae -- demand journey "<query>"
+npm run -s ae -- demand request create "<text>"
+npm run -s ae -- demand request get <requestRef>
+npm run -s ae -- demand request options <requestRef>
+npm run -s ae -- demand request confirm <requestRef> <optionRef>
+```
+
+## Advanced/operator commands
+
+Operator and development commands are not part of the root cold path:
+
+```sh
+npm run -s ae -- advanced action <id> ['<json>'] [--allow-write]
+npm run -s ae -- advanced actions
+npm run -s ae -- advanced cancel <invocationRef> --idempotency-key <key>
+npm run -s ae -- advanced doctor
+npm run -s ae -- advanced eval ...
+npm run -s ae -- advanced policy [test|refine|fidelity]
+```
 
 ## Flags
 
-- `--base-url <url>` target server, default `http://127.0.0.1:3000` (env `AE_CLI_BASE_URL`)
-- `--json` machine-readable output
-- `--allow-write` required before a non read-only action runs
-- `--feeds=a,b` feed subset for `compare`
-- `--apply` commit authority for `policy refine` (review gate)
-- `--help`
-
-## Write safety
-
-`ae action` refuses any action whose `readOnly` is false unless `--allow-write`
-is passed, and prints the action's declared boundaries, consequence class, and
-authority requirement before it runs anything.
+- `--base-url <url>` targets the server; default `https://agentic-economy-phi.vercel.app` (env `AE_CLI_BASE_URL` or `AE_CANONICAL_BASE_URL`). Anonymous reads may use any valid HTTP(S) override.
+- `AE_API_KEY` is the reusable caller credential for `invoke`, `status`, `recover`, and `advanced cancel`.
+- `AE_API_KEY_ORIGIN` is required whenever `AE_API_KEY` is used and must be the exact origin of `--base-url`; credentialed requests require HTTPS except loopback `localhost`, `127.0.0.1`, or `::1` HTTP development.
+- `--idempotency-key <key>` is required for `invoke`, `recover`, and advanced cancel; the CLI never generates or rotates one, and sends the key only in each request JSON body.
+- `--wait` performs bounded invoke polling; timeout preserves the invocation reference and status continuation.
+- `--json` emits the canonical result or typed problem envelope without a presentation wrapper.
+- `--allow-write` is required before a non-read-only advanced action runs.
+- `--apply` is commit authority for `advanced policy refine`.
+- `--help` prints the complete root and grouped vocabulary.
 
 ## Authenticated routes
 
-`enrich` (and `import`) are Clerk gated because they spend real budget. Against
-a plain local server they return `401`. For local testing only, set
-`VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true` (see
-`src/lib/server/local-e2e-bypass.ts`, which throws if the flag is set while
-`NODE_ENV=production`). `enrich` also needs `OPENROUTER_API_KEY` on the server;
-without it the route returns a discriminated `unavailable` result rather than
-failing.
+`connect` uses the existing public OAuth registration/device authorization/token
+endpoints. If `AE_API_KEY` is already set, it first validates the key against
+the configured server only after checking `AE_API_KEY_ORIGIN`; a missing,
+malformed, mismatched, or insecure origin is rejected locally before fetch.
+With no existing key, connect may start against any valid base URL and its
+issued credential output includes both `AE_API_KEY` and the exact
+`AE_API_KEY_ORIGIN` to save.
+
+`invoke`, `status`, `recover`, and `advanced cancel` require both
+environment variables. AE resolves the provider, endpoint, supplier credential,
+price, authority, and evidence server-side. Pending and terminal results
+preserve the canonical invocation reference, idempotency key, usage, evidence,
+and next command.
 
 ## Evidence class
 

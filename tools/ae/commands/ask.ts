@@ -5,7 +5,11 @@ import {
   AnswerTurnProtocolError,
   readAnswerTurnFrames,
   type AnswerEvent,
+  type AnswerOperationCandidate,
+  type AnswerOperationOutcome,
+  type AnswerOperationSelection,
 } from '@/modules/answer/public'
+import { isRecord } from '@/modules/common/is-record'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, heading, line, printJson, readHttpOutcome } from '../lib/output'
@@ -30,6 +34,10 @@ type AskResult = Readonly<{
   oneLine?: string
   summary?: string
   nextStep?: string
+  operationCandidates?: readonly AnswerOperationCandidate[]
+  operationCandidatesDigest?: string
+  operationOutcome?: AnswerOperationOutcome
+  operationSelection?: AnswerOperationSelection
 }>
 
 type AskProjection = Readonly<{
@@ -42,10 +50,71 @@ type AskProjection = Readonly<{
   result?: AskResult
 }>
 
+type AskRequest = Readonly<{
+  query: string
+  threadId?: string
+}>
+
+function buildAskRequest(args: readonly string[], options: CliOptions): AskRequest {
+  const hasSelectionInput =
+    options.threadId !== undefined
+    || options.operationRef !== undefined
+    || options.candidateDigest !== undefined
+  if (!hasSelectionInput) {
+    const query = args.join(' ').trim()
+    if (query.length === 0) {
+      throw new CliFailure('Usage: npm run -s ae -- demand ask "<question>"', {
+        kind: 'INVALID_ARGUMENT',
+        code: 'ask-usage',
+      })
+    }
+    return { query }
+  }
+
+  const threadId = options.threadId?.trim()
+  const operationRef = options.operationRef?.trim()
+  const candidateSetDigest = options.candidateDigest?.trim()
+  if (threadId === undefined || threadId.length === 0
+    || operationRef === undefined || operationRef.length === 0
+    || candidateSetDigest === undefined || candidateSetDigest.length === 0) {
+    throw new CliFailure(
+      'Follow-up selection requires --thread-id, --operation-ref, and --candidate-digest together.',
+      { kind: 'INVALID_ARGUMENT', code: 'ask-selection-args' },
+    )
+  }
+  if (args.length !== 1 || args[0]!.trim().length === 0) {
+    throw new CliFailure(
+      'Follow-up selection requires one JSON input object after the selection flags.',
+      { kind: 'INVALID_ARGUMENT', code: 'ask-selection-input' },
+    )
+  }
+
+  let input: unknown
+  try {
+    input = JSON.parse(args[0]!)
+  } catch {
+    throw new CliFailure('Follow-up selection input must be valid JSON.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'ask-selection-input',
+    })
+  }
+  if (!isRecord(input)) {
+    throw new CliFailure('Follow-up selection input must be one JSON object.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'ask-selection-input',
+    })
+  }
+
+  return {
+    threadId,
+    query: JSON.stringify({ operationRef, input, candidateSetDigest }),
+  }
+}
+
 /** /api/answer/turn streams AI SDK UI message chunks rather than a JSON document. */
 export async function runAskCommand(args: readonly string[], options: CliOptions): Promise<void> {
-  const query = args.join(' ').trim()
-  if (query.length === 0) throw new CliFailure('Usage: ae ask "<question>"', { kind: 'INVALID_ARGUMENT', code: 'ask-usage' })
+  const request = buildAskRequest(args, options)
+  const { query } = request
 
   const startedAt = Date.now()
   let response: Response
@@ -57,7 +126,10 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
         Accept: 'text/event-stream',
         'X-AE-Turn-Key': randomUUID(),
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({
+        ...(request.threadId === undefined ? {} : { threadId: request.threadId }),
+        query,
+      }),
     })
   } catch {
     const problem = buildAnswerTurnProblem('unavailable')
@@ -111,8 +183,8 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
     return
   }
 
-  printHumanProjection(projection)
   if (projection.problem !== undefined) throw cliFailureForProblem(projection.problem)
+  printHumanProjection(projection)
 }
 
 function projectAnswerEvents(
@@ -147,8 +219,23 @@ function projectAnswerEvents(
         break
       }
       case 'complete': {
-        const { oneLine, summary, nextStep } = event.answer
-        if (oneLine === undefined && summary === undefined && nextStep === undefined) {
+        const {
+          oneLine,
+          summary,
+          nextStep,
+          operationCandidates,
+          operationCandidatesDigest,
+          operationOutcome,
+          operationSelection,
+        } = event.answer
+        if (
+          oneLine === undefined
+          && summary === undefined
+          && nextStep === undefined
+          && operationCandidates === undefined
+          && operationOutcome === undefined
+          && operationSelection === undefined
+        ) {
           result = undefined
           status = 'error'
           problem = buildAnswerTurnProblem('answer_turn_failed')
@@ -158,6 +245,10 @@ function projectAnswerEvents(
           ...(oneLine === undefined ? {} : { oneLine }),
           ...(summary === undefined ? {} : { summary }),
           ...(nextStep === undefined ? {} : { nextStep }),
+          ...(operationCandidates === undefined ? {} : { operationCandidates }),
+          ...(operationCandidatesDigest === undefined ? {} : { operationCandidatesDigest }),
+          ...(operationOutcome === undefined ? {} : { operationOutcome }),
+          ...(operationSelection === undefined ? {} : { operationSelection }),
         }
         status = 'complete'
         problem = undefined
@@ -207,6 +298,26 @@ function printHumanProjection(projection: AskProjection): void {
     if (projection.result.oneLine !== undefined) line(`  result: ${projection.result.oneLine}`)
     if (projection.result.summary !== undefined) line(`  summary: ${projection.result.summary}`)
     if (projection.result.nextStep !== undefined) line(`  next step: ${projection.result.nextStep}`)
+    if (projection.result.operationCandidatesDigest !== undefined) {
+      line(`  candidate digest: ${projection.result.operationCandidatesDigest}`)
+    }
+    if (projection.result.operationCandidates !== undefined) {
+      for (const candidate of projection.result.operationCandidates) {
+        line(`  candidate ${candidate.rank}: ${candidate.operationRef} · ${candidate.business.name} · ${candidate.operationId}`)
+      }
+    }
+    if (projection.result.operationOutcome !== undefined) {
+      const outcome = projection.result.operationOutcome
+      line(`  outcome: ${outcome.result.kind} · ${outcome.operationRef}`)
+      line(`  outcome digest: ${outcome.resultDigest}`)
+    }
+    if (projection.result.operationSelection !== undefined) {
+      const selection = projection.result.operationSelection
+      line(`  selection: ${selection.operationRef} · ${selection.toolId}`)
+      if (selection.candidateSetDigest !== undefined) {
+        line(`  selection candidate digest: ${selection.candidateSetDigest}`)
+      }
+    }
   }
   if (projection.problem !== undefined) line(`  problem: ${describeError(projection.problem)}`)
 }

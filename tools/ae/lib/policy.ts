@@ -260,7 +260,7 @@ export type FidelityReport = {
   perRuleGrounding: readonly { rule: PolicyRuleId; grounding: string }[]
 }
 
-/** Compare the policy against ground-truth facts (the feed catalog) and score fidelity. */
+/** Compare the policy against ground-truth Operation facts and score fidelity. */
 export function fidelityReport(policy: Policy, facts: readonly PolicyScenario[]): FidelityReport {
   const rules: PolicyRuleId[] = ['keyless_only', 'allowed_adapters', 'allowed_methods', 'block_provenance', 'https_only', 'max_result_bytes']
   const perRuleGrounding = rules.map((rule) => ({ rule, grounding: policy.ruleNotes[rule] }))

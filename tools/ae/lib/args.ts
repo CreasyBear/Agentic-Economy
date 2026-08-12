@@ -2,16 +2,17 @@ import { parseArgs as parseNodeArgs } from 'node:util'
 import { trimTrailingSlashes } from '../../../src/modules/common/trim-trailing-slashes'
 
 export type CliOptions = {
-
   baseUrl: string
   json: boolean
   help: boolean
   allowWrite: boolean
-  location?: string
-  mode?: string
   suburb?: string
-  feeds?: string
+  threadId?: string
+  operationRef?: string
+  candidateDigest?: string
   apply?: boolean
+  idempotencyKey?: string
+  wait?: boolean
   turnIds?: readonly string[]
   manifest?: string
   project?: string
@@ -26,7 +27,8 @@ export type ParsedArgs = {
   options: CliOptions
 }
 
-const DEFAULT_BASE_URL = 'http://127.0.0.1:3000'
+const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+const CLI_ENTRYPOINT = 'npm run -s ae --'
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const parsed = parseNodeArgs({
@@ -34,13 +36,15 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     options: {
       'base-url': { type: 'string' },
       json: { type: 'boolean' },
+      help: { type: 'boolean' },
       'allow-write': { type: 'boolean' },
-      help: { type: 'boolean', short: 'h' },
-      location: { type: 'string' },
-      mode: { type: 'string' },
-      suburb: { type: 'string' },
-      feeds: { type: 'string' },
       apply: { type: 'boolean' },
+      suburb: { type: 'string' },
+      'thread-id': { type: 'string' },
+      'operation-ref': { type: 'string' },
+      'candidate-digest': { type: 'string' },
+      'idempotency-key': { type: 'string' },
+      wait: { type: 'boolean' },
       'turn-id': { type: 'string', multiple: true },
       manifest: { type: 'string' },
       project: { type: 'string' },
@@ -49,9 +53,19 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'update-snapshot': { type: 'boolean' },
     },
     allowPositionals: true,
+    tokens: true,
   })
+  const seenLongOptions = new Set<string>()
+  for (const token of parsed.tokens) {
+    if (token.kind !== 'option' || !token.rawName.startsWith('--') || token.name === 'turn-id') continue
+    if (seenLongOptions.has(token.name)) {
+      throw new TypeError(`Option --${token.name} cannot be repeated`)
+    }
+    seenLongOptions.add(token.name)
+  }
+  const configuredBaseUrl = process.env.AE_CLI_BASE_URL?.trim() || process.env.AE_CANONICAL_BASE_URL?.trim()
   const baseUrl = parsed.values['base-url'] === undefined
-    ? process.env.AE_CLI_BASE_URL?.trim() || DEFAULT_BASE_URL
+    ? trimTrailingSlashes(configuredBaseUrl || DEFAULT_BASE_URL)
     : trimTrailingSlashes(parsed.values['base-url'])
   try {
     const url = new URL(baseUrl)
@@ -67,10 +81,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     help: parsed.values.help ?? false,
     allowWrite: parsed.values['allow-write'] ?? false,
     apply: parsed.values.apply ?? false,
-    ...(parsed.values.location === undefined ? {} : { location: parsed.values.location }),
-    ...(parsed.values.mode === undefined ? {} : { mode: parsed.values.mode }),
     ...(parsed.values.suburb === undefined ? {} : { suburb: parsed.values.suburb }),
-    ...(parsed.values.feeds === undefined ? {} : { feeds: parsed.values.feeds }),
+    ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
+    ...(parsed.values['operation-ref'] === undefined ? {} : { operationRef: parsed.values['operation-ref'] }),
+    ...(parsed.values['candidate-digest'] === undefined ? {} : { candidateDigest: parsed.values['candidate-digest'] }),
+    wait: parsed.values.wait ?? false,
+    ...(parsed.values['idempotency-key'] === undefined ? {} : { idempotencyKey: parsed.values['idempotency-key'] }),
     ...(parsed.values['turn-id'] === undefined ? {} : { turnIds: parsed.values['turn-id'] }),
     ...(parsed.values.manifest === undefined ? {} : { manifest: parsed.values.manifest }),
     ...(parsed.values.project === undefined ? {} : { project: parsed.values.project }),
@@ -85,37 +101,47 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 export function printUsage(): void {
   process.stdout.write(`AE CLI - exercise AE the way an external agent would.
 
-Usage: npm run ae -- <command> [args] [flags]
+Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
-HTTP commands (need a running server; default ${DEFAULT_BASE_URL}):
-  search <query> [--location X] [--mode near_me|whole_catalogue]
-  business <slug>
-  discover
-  import <websiteUrl>
-  enrich "<business name>" [--suburb X]
-  ask "<question>"
-  request create "<text>" | request get <ref> | request options <ref> | request confirm <ref> <optionRef>
-  journey "<query>"                 chained search -> business -> discover friction report
+Canonical Operation commands (need a running server; default ${DEFAULT_BASE_URL}):
+  ${CLI_ENTRYPOINT} manifest
+  ${CLI_ENTRYPOINT} search "<job>"
+  ${CLI_ENTRYPOINT} inspect <operation-ref>
+  ${CLI_ENTRYPOINT} compare <ref> <ref> [...]
+  ${CLI_ENTRYPOINT} connect
+  ${CLI_ENTRYPOINT} invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]
+  ${CLI_ENTRYPOINT} status <invocation-ref>
+  ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
 
-In-process commands (no server needed; run over the real action registry):
-  actions                           list every registered action
-  action <id> ['<json>']            run one action; writes need --allow-write
-  doctor                            names-only local runtime/provider readiness
+Demand commands:
+  ${CLI_ENTRYPOINT} demand ask "<question>" [--thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>']
+  ${CLI_ENTRYPOINT} demand business <slug>
+  ${CLI_ENTRYPOINT} demand discover
+  ${CLI_ENTRYPOINT} demand enrich "<business name>" [--suburb X]
+  ${CLI_ENTRYPOINT} demand import <websiteUrl>
+  ${CLI_ENTRYPOINT} demand journey "<query>"
+  ${CLI_ENTRYPOINT} demand request create "<text>" | request get <ref> | request options <ref> | request confirm <ref> <optionRef>
 
-Market-terminal commands (in-process; live keyless execution, no server needed):
-  manifest                          machine-readable self-description (external-agent handshake)
-  feeds [--json]                    list the keyless data feeds the agentic economy can serve live
-  run <feed-id> [key=value...]      execute a keyless feed live -> verifiable value
-  compare [--feeds=a,b] [k=v...]    pull the same inputs across feeds and compare live results
-  study "<question>" [k=v...]       research: discover feeds, execute, attribute findings + unknowns
-  eval export --turn-id <id> [--turn-id <id> ...] [--manifest path] [--allow-write]
-  eval snapshot --dataset <name> --snapshot-name <name> --allow-write
-  policy [test|refine|fidelity]     admission-policy governance (test / propose / review gate / fidelity)
+Advanced/operator commands:
+  ${CLI_ENTRYPOINT} advanced action <id> ['<json>'] [--allow-write]
+  ${CLI_ENTRYPOINT} advanced actions
+  ${CLI_ENTRYPOINT} advanced cancel <invocation-ref> --idempotency-key <key>
+  ${CLI_ENTRYPOINT} advanced doctor
+  ${CLI_ENTRYPOINT} advanced eval ...
+  ${CLI_ENTRYPOINT} advanced policy [test|refine|fidelity]
 
 Flags:
-  --base-url <url>   server to call (env: AE_CLI_BASE_URL)
+  --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
+  Credentials:
+  AE_API_KEY <token>          reusable caller credential for credentialed commands
+  AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
   --allow-write      permit a non read-only action or explicit Braintrust export
+  --idempotency-key <key>  stable replay identity for invoke/recovery (required; never generated)
+  --wait                   bounded invoke wait; timeout returns durable recovery detail
+  --thread-id <id>     ask follow-up thread (requires --operation-ref and --candidate-digest)
+  --operation-ref <ref> exact operation to select (requires --thread-id and --candidate-digest)
+  --candidate-digest <digest> frozen candidate set digest (requires --thread-id and --operation-ref)
   --turn-id <id>     explicit finalized answer turn id (repeatable; max 25)
   --manifest <path>  explicit JSON manifest with bounded turnIds
   --project <name>   Braintrust project (env: AE_BRAINTRUST_PROJECT)

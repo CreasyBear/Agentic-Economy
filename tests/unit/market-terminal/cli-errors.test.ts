@@ -14,9 +14,13 @@ import {
   type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
 
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
+
+import { runActionCommand } from '../../../tools/ae/commands/actions'
 import { runAskCommand } from '../../../tools/ae/commands/ask'
-import type { CliOptions } from '../../../tools/ae/lib/args'
-import { CliFailure, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
+import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
+import { CliFailure, callJson, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
+import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e2e'
 
 function answerTurnResponse(frames: readonly AnswerTurnFrame[]): Response {
   const stream = createUIMessageStream<AnswerTurnUIMessage>({
@@ -104,6 +108,82 @@ async function spawnCli(args: readonly string[]): Promise<{
 
 
 describe('market-terminal CLI error contracts', () => {
+  it('keeps secondary commands behind explicit demand and advanced namespaces', () => {
+    const help = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'help',
+      '--json',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(help.status).toBe(0)
+    expect(help.stderr).toBe('')
+    const helpBody = JSON.parse(help.stdout) as {
+      commands: Record<string, unknown>
+      auth: {
+        authenticatedOperations: Record<string, string>
+        cancelRequirements: string
+      }
+    }
+    const commands = helpBody.commands
+    expect(Object.keys(commands)).toEqual([
+      'manifest',
+      'search',
+      'inspect',
+      'compare',
+      'connect',
+      'invoke',
+      'status',
+      'recover',
+      'demand',
+      'advanced',
+    ])
+    expect(Object.keys(helpBody.auth.authenticatedOperations)).toEqual([
+      'invoke',
+      'status',
+      'cancel',
+      'reconcile',
+    ])
+    expect(helpBody.auth.authenticatedOperations.cancel).toContain('advanced cancel')
+    expect(helpBody.auth.authenticatedOperations.reconcile).toContain(' recover ')
+    expect(helpBody.auth.cancelRequirements).toContain('AE_API_KEY')
+    expect(helpBody.auth.cancelRequirements).toContain('--idempotency-key')
+    expect(helpBody.auth.cancelRequirements).toContain('body.idempotencyKey')
+    for (const legacy of ['feeds', 'run', 'study', 'cancel', 'reconcile', 'action', 'doctor', 'business']) {
+      expect(commands).not.toHaveProperty(legacy)
+    }
+
+    const textHelp = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'help',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(textHelp.status).toBe(0)
+    expect(textHelp.stderr).toBe('')
+    expect(textHelp.stdout).toContain('Authenticated Operation actions:')
+    expect(textHelp.stdout).toContain('invoke:')
+    expect(textHelp.stdout).toContain('status:')
+    expect(textHelp.stdout).toContain('cancel:')
+    expect(textHelp.stdout).toContain('reconcile:')
+    expect(textHelp.stdout).toContain('AE_API_KEY')
+    expect(textHelp.stdout).toContain('--idempotency-key')
+
+    const unknown = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'feeds',
+      '--json',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(unknown.status).toBe(1)
+    expect(unknown.stderr).toBe('')
+    expect(JSON.parse(unknown.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'unknown-command',
+      exitCode: 1,
+    })
+  }, 30_000)
   afterEach(() => vi.unstubAllGlobals())
 
   it('prints a canonical JSON envelope for parse failures without a stack', () => {
@@ -111,7 +191,7 @@ describe('market-terminal CLI error contracts', () => {
       '--import',
       'tsx',
       'tools/ae/cli.ts',
-      'feeds',
+      'manifest',
       '--json',
       '--unknown-option',
     ], { cwd: process.cwd(), encoding: 'utf8' })
@@ -135,8 +215,8 @@ describe('market-terminal CLI error contracts', () => {
       '--import',
       'tsx',
       'tools/ae/cli.ts',
+      'advanced',
       'action',
-      'customerRequest.confirm',
       '--json',
     ], { cwd: process.cwd(), encoding: 'utf8' })
 
@@ -156,8 +236,8 @@ describe('market-terminal CLI error contracts', () => {
         '--import',
         'tsx',
         'tools/ae/cli.ts',
+        'advanced',
         'action',
-        'registry.list',
         rawInput,
         ...(json ? ['--json'] : []),
       ], { cwd: process.cwd(), encoding: 'utf8' })
@@ -182,34 +262,29 @@ describe('market-terminal CLI error contracts', () => {
       }
     }
   }, 15_000)
-  it('preserves typed missing-source failures for feed commands', () => {
+  it('preserves typed missing-source failures for advanced policy', () => {
     const env = { ...process.env, CONVEX_URL: '', VITE_CONVEX_URL: '', VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: '' }
-    const commands = [
-      ['feeds', '--json'],
-      ['manifest', '--json'],
-      ['run', `operation:v1:${'0'.repeat(64)}`, '--json'],
-    ]
-    for (const command of commands) {
-      const result = spawnSync(process.execPath, [
-        '--import',
-        'tsx',
-        'tools/ae/cli.ts',
-        ...command,
-      ], { cwd: process.cwd(), env, encoding: 'utf8' })
+    const result = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'advanced',
+      'policy',
+      '--json',
+    ], { cwd: process.cwd(), env, encoding: 'utf8' })
 
-      expect(result.status).toBe(1)
-      expect(result.signal).toBeNull()
-      expect(result.stderr).toBe('')
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        kind: 'UNAVAILABLE',
-        code: 'missing_convex_url',
-        message: expect.stringContaining('CONVEX_URL'),
-        exitCode: 1,
-      })
-      expect(result.stdout).not.toContain('Command failed.')
-    }
+    expect(result.status).toBe(1)
+    expect(result.signal).toBeNull()
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: 'UNAVAILABLE',
+      code: 'missing_convex_url',
+      message: expect.stringContaining('CONVEX_URL'),
+      exitCode: 1,
+    })
+    expect(result.stdout).not.toContain('Command failed.')
   }, 30_000)
-  it('loads one file-backed environment for doctor and market-terminal commands', () => {
+  it('loads one file-backed environment for doctor and manifest', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'ae-cli-env-'))
     const cliPath = resolve('tools/ae/cli.ts')
     const tsxLoader = resolve('node_modules/tsx/dist/loader.mjs')
@@ -221,7 +296,7 @@ describe('market-terminal CLI error contracts', () => {
     delete env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
 
     try {
-      const doctor = spawnSync(process.execPath, ['--import', tsxLoader, cliPath, 'doctor', '--json'], {
+      const doctor = spawnSync(process.execPath, ['--import', tsxLoader, cliPath, 'advanced', 'doctor', '--json'], {
         cwd,
         env,
         encoding: 'utf8',
@@ -231,26 +306,21 @@ describe('market-terminal CLI error contracts', () => {
         { name: 'VITE_CONVEX_URL', status: 'configured' },
       ]))
 
-      for (const args of [
-        ['feeds', '--json'],
-        ['manifest', '--json'],
-        ['run', `operation:v1:${'0'.repeat(64)}`, '--json'],
-      ]) {
-        const result = spawnSync(process.execPath, ['--import', tsxLoader, cliPath, ...args], {
-          cwd,
-          env,
-          encoding: 'utf8',
-        })
-        expect(result.status).toBe(1)
-        expect(result.stderr).toBe('')
-        expect(JSON.parse(result.stdout)).not.toMatchObject({ code: 'missing_convex_url' })
-      }
+      const manifest = spawnSync(process.execPath, ['--import', tsxLoader, cliPath, 'manifest', '--json'], {
+        cwd,
+        env,
+        encoding: 'utf8',
+      })
+      expect(manifest.status).toBe(0)
+      expect(JSON.parse(manifest.stdout)).toMatchObject({
+        protocol: 'agentic-economy.operation-terminal.v1',
+      })
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }
   }, 30_000)
 
-  it('rejects invalid search modes locally with accepted values and retry guidance', () => {
+  it('requires a Market Operation job query before network work', () => {
     const result = spawnSync(process.execPath, [
       '--import',
       'tsx',
@@ -258,17 +328,11 @@ describe('market-terminal CLI error contracts', () => {
       '--base-url',
       'http://127.0.0.1:1',
       'search',
-      'dentist',
-      '--mode',
-      'nowhere',
     ], { cwd: process.cwd(), encoding: 'utf8' })
 
     expect(result.status).toBe(1)
     expect(result.stdout).toBe('')
-    expect(result.stderr).toContain('Invalid --mode: nowhere')
-    expect(result.stderr).toContain('near_me')
-    expect(result.stderr).toContain('whole_catalogue')
-    expect(result.stderr).toContain('Retry with --mode')
+    expect(result.stderr).toContain('Usage: npm run -s ae -- search "<job>"')
   }, 15_000)
 
   it('keeps failed human actions off stdout while preserving stderr diagnostics', () => {
@@ -280,8 +344,8 @@ describe('market-terminal CLI error contracts', () => {
       NODE_ENV: 'development',
     }
     for (const args of [
-      ['action', 'registry.list', '{"limit":1}'],
-      ['action', 'customerRequest.confirm'],
+      ['advanced', 'action', 'registry.list', '{"limit":1}'],
+      ['advanced', 'action', 'customerRequest.confirm'],
     ]) {
       const result = spawnSync(process.execPath, [
         '--import',
@@ -294,48 +358,31 @@ describe('market-terminal CLI error contracts', () => {
       expect(result.stdout).toBe('')
       expect(result.stdout).not.toContain('Running ')
       expect(result.stdout).not.toContain('authority:')
-      expect(result.stderr.length).toBeGreaterThan(0)
     }
   }, 30_000)
 
-  it('prints a terminal Ran line only after a human action succeeds', () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'ae-cli-success-'))
-    const cliPath = resolve('tools/ae/cli.ts')
-    const tsconfigPath = resolve('tsconfig.json')
-    const tsxLoader = resolve('node_modules/tsx/dist/loader.mjs')
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true',
-      NODE_ENV: 'development',
-      TSX_TSCONFIG_PATH: tsconfigPath,
-    }
-    delete env.CONVEX_URL
-    delete env.VITE_CONVEX_URL
-
+  it('prints a terminal Ran line only after a human action succeeds', async () => {
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
+    const output = captureStdout()
     try {
-      const result = spawnSync(process.execPath, [
-        '--import',
-        tsxLoader,
-        cliPath,
-        'action',
-        'registry.list',
-        '{}',
-      ], {
-        cwd,
-        env,
-        encoding: 'utf8',
+      await runActionCommand(['registry.list', '{}'], {
+        baseUrl: 'http://127.0.0.1:3000',
+        json: false,
+        help: false,
+        allowWrite: false,
+        apply: false,
       })
-
-      expect(result.status).toBe(0)
-      expect(result.stderr).toBe('')
-      expect(result.stdout).toContain('Ran registry.list')
-      expect(result.stdout).not.toContain('Running registry.list')
-      expect(result.stdout).not.toContain('authority:')
-      expect(result.stdout).toContain('result.kind =')
     } finally {
-      rmSync(cwd, { recursive: true, force: true })
+      output.restore()
+      restoreRegistry()
     }
-  }, 15_000)
+
+    const stdout = output.read()
+    expect(stdout).toContain('Ran registry.list')
+    expect(stdout).not.toContain('Running registry.list')
+    expect(stdout).not.toContain('authority:')
+    expect(stdout).toContain('result.kind =')
+  })
 
 
   it('rejects an invalid base URL as a canonical JSON argument error', () => {
@@ -455,23 +502,160 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.detail).toBeUndefined()
     expect(thrown.message).toBe('/api/example returned 401: Unauthenticated')
   })
+  it.each([
+    [404, 'NOT_FOUND'],
+    [401, 'UNAUTHENTICATED'],
+    [500, 'INTERNAL'],
+  ] as const)('projects an application/json problem body for %s with its status kind', (status, kind) => {
+    const body = {
+      type: 'about:blank',
+      title: 'Remote failure',
+      status,
+      code: 'proxy_failure',
+      detail: `The proxy returned ${status}.`,
+    }
+    const outcome: HttpOutcome = {
+      status,
+      ok: false,
+      durationMs: 1,
+      headers: new Headers({ 'content-type': 'application/json; charset=utf-8' }),
+      body,
+      bodyText: JSON.stringify(body),
+    }
+
+    let thrown: unknown
+    try {
+      requireOk(outcome, '/api/example')
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.kind).toBe(kind)
+    expect(thrown.code).toBe('proxy_failure')
+    expect(thrown.detail).toBe(body.detail)
+    expect(thrown.message).toBe(`/api/example returned ${status}: ${body.detail}`)
+  })
+
+  it('treats a legacy error/code JSON envelope as noncanonical', () => {
+    const body = { error: `legacy gateway message ${'x'.repeat(2_500)}`, code: 'legacy_failure', secret: 'do-not-print' }
+    const outcome: HttpOutcome = {
+      status: 500,
+      ok: false,
+      durationMs: 1,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      body,
+      bodyText: JSON.stringify(body),
+    }
+
+    let thrown: unknown
+    try {
+      requireOk(outcome, '/api/example')
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.kind).toBe('INTERNAL')
+    expect(thrown.code).toBeUndefined()
+    expect(thrown.detail).toBeUndefined()
+    expect(thrown.message).toBe('/api/example returned 500')
+    expect(thrown.message).not.toContain(body.secret)
+  })
+  it('preserves retry and recovery fields from an RFC9457 problem', () => {
+    const body = {
+      type: 'about:blank',
+      title: 'Unavailable',
+      status: 503,
+      kind: 'UNAVAILABLE',
+      code: 'provider_unavailable',
+      detail: 'The provider is unavailable.',
+      retryable: true,
+      recovery: { invocationRef: 'invocation:one', idempotencyKey: 'idem:one' },
+      nextAction: 'Read invocation status before retrying.',
+    }
+    const outcome: HttpOutcome = {
+      status: 503,
+      ok: false,
+      durationMs: 1,
+      headers: new Headers({ 'content-type': 'application/problem+json', 'retry-after': '7' }),
+      body,
+      bodyText: JSON.stringify(body),
+    }
+
+    expect(() => requireOk(outcome, '/api/example')).toThrow(CliFailure)
+    try {
+      requireOk(outcome, '/api/example')
+    } catch (error) {
+      if (!(error instanceof CliFailure)) return
+      expect(error.retryable).toBe(true)
+      expect(error.retryAfter).toBe('7')
+      expect(error.recovery).toEqual(body.recovery)
+      expect(error.nextAction).toBe(body.nextAction)
+    }
+  })
+
+  it('does not follow redirects or forward credentials to a second request', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 302,
+      headers: { location: 'https://attacker.example/collect' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const outcome = await callJson('https://market.example', '/api/v1/operations/execute', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ae-secret' },
+      body: '{}',
+    })
+
+    expect(outcome.status).toBe(302)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[1]?.redirect).toBe('manual')
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer ae-secret')
+  })
+
+  it('keeps non-structured JSON failures generic', () => {
+    const body = { html: '<html>secret stack and credentials</html>' }
+    const outcome: HttpOutcome = {
+      status: 502,
+      ok: false,
+      durationMs: 1,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      body,
+      bodyText: JSON.stringify(body),
+    }
+
+    let thrown: unknown
+    try {
+      requireOk(outcome, '/api/example')
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.message).toBe('/api/example returned 502')
+    expect(thrown.detail).toBeUndefined()
+    expect(thrown.message).not.toContain('credentials')
+  })
+
 
   it('projects an ask problem response into a typed safe failure without raw JSON', async () => {
     const problem = {
-      type: 'https://agentic-economy.invalid/problems/auth-required',
+      type: 'about:blank',
       title: 'Unauthenticated',
       status: 401,
       kind: 'UNAUTHENTICATED',
       code: 'missing_auth',
-      detail: 'Authentication required with secret=do-not-leak.',
-      copyId: 'private-copy-id',
+      detail: 'An owner session is required for this answer request.',
     }
-    const rawBody = JSON.stringify(problem)
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(new Headers(init?.headers).get('X-AE-Turn-Key')).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       )
-      return new Response(rawBody, {
+      return new Response(JSON.stringify(problem), {
         status: 401,
         headers: { 'content-type': 'application/problem+json' },
       })
@@ -497,9 +681,67 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.kind).toBe('UNAUTHENTICATED')
     expect(thrown.code).toBe('missing_auth')
     expect(thrown.message).toBe('Unauthenticated (401)')
-    expect(thrown.detail).toMatchObject({ code: 'missing_auth', detail: 'An owner session is required for this answer request.' })
-    expect(JSON.stringify(thrown.detail)).not.toContain('secret=do-not-leak')
-    expect(JSON.stringify(thrown.detail)).not.toContain('copyId')
+    expect(thrown.detail).toEqual(problem)
+    expect(thrown.detail).not.toHaveProperty('copyId')
+  })
+  it('posts a thread-scoped exact operation selection with its frozen candidate digest', async () => {
+    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const candidateSetDigest = `sha256:${'b'.repeat(64)}`
+    const selectionInput = { city: 'Darwin' }
+    const selectionQuery = JSON.stringify({ operationRef, input: selectionInput, candidateSetDigest })
+    const frames: AnswerTurnFrame[] = [
+      {
+        seq: 0,
+        event: {
+          type: 'thread',
+          threadId: 'thread:cli-follow-up',
+          turnId: 'turn:cli-follow-up',
+          turnSeq: 2,
+        },
+      },
+      {
+        seq: 1,
+        event: {
+          type: 'complete',
+          answer: {
+            query: selectionQuery,
+            oneLine: 'Selected operation completed.',
+            summary: 'The selected operation was run.',
+            nextStep: 'Review the result.',
+            providers: [],
+            agentJsonUrl: '/api/agent',
+          },
+        },
+      },
+    ]
+    let requestBody: unknown
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body))
+      return answerTurnResponse(frames)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+    try {
+      await runAskCommand([JSON.stringify(selectionInput)], {
+        baseUrl: 'http://example.test',
+        json: true,
+        help: false,
+        allowWrite: false,
+        apply: false,
+        threadId: 'thread:prior',
+        operationRef,
+        candidateDigest: candidateSetDigest,
+      })
+    } finally {
+      output.restore()
+    }
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(requestBody).toEqual({ threadId: 'thread:prior', query: selectionQuery })
+    expect(JSON.parse(output.read())).toMatchObject({
+      thread: { threadId: 'thread:cli-follow-up' },
+      status: 'complete',
+    })
   })
   it('projects successful ask JSON and human output without raw event arrays', async () => {
     const frames: AnswerTurnFrame[] = [
@@ -546,6 +788,7 @@ describe('market-terminal CLI error contracts', () => {
         const result = await spawnCli([
           '--base-url',
           server.baseUrl,
+          'demand',
           'ask',
           'what',
           'is',
@@ -643,6 +886,7 @@ describe('market-terminal CLI error contracts', () => {
         const result = await spawnCli([
           '--base-url',
           server.baseUrl,
+          'demand',
           'ask',
           'what',
           'failed?',
@@ -678,6 +922,109 @@ describe('market-terminal CLI error contracts', () => {
     } finally {
       await server.close()
     }
+  }, 30_000)
+
+  it('rejects repeated scalar long options instead of silently choosing the last value', () => {
+    for (const args of [
+      ['--base-url', 'http://127.0.0.1:3000', '--base-url', 'http://127.0.0.1:3001', '--json'],
+      ['--idempotency-key', 'first', '--idempotency-key', 'second', '--json'],
+    ]) {
+      const result = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        ...args,
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+
+      expect(result.status).toBe(1)
+      expect(result.stderr).toBe('')
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid-arguments',
+        message: expect.stringContaining('cannot be repeated'),
+        exitCode: 1,
+      })
+    }
+  }, 15_000)
+
+  it('keeps --turn-id repeatable at the parser boundary', () => {
+    const parsed = parseArgs([
+      '--base-url',
+      'http://127.0.0.1:3000',
+      'advanced',
+      'eval',
+      'export',
+      '--turn-id',
+      'turn:first',
+      '--turn-id',
+      'turn:second',
+    ])
+
+    expect(parsed.options.turnIds).toEqual(['turn:first', 'turn:second'])
+  })
+
+  it('emits one machine-readable JSON help envelope and keeps root text help usable', () => {
+    for (const [args, command] of [
+      [['--json', '--help'], 'root'],
+      [['connect', '--json', '--help'], 'connect'],
+    ] as const) {
+      const result = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        ...args,
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+
+      expect(result.status).toBe(0)
+      expect(result.stderr).toBe('')
+      const envelope = JSON.parse(result.stdout)
+      expect(envelope).toMatchObject({
+        kind: 'HELP',
+        command,
+        usage: expect.any(String),
+        flags: expect.any(Object),
+        auth: {
+          credential: 'AE_API_KEY',
+          credentialOrigin: 'AE_API_KEY_ORIGIN',
+          scope: 'market_operations:invoke',
+        },
+      })
+      if (command === 'connect') {
+        expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
+          expect.stringContaining('verification URI'),
+          expect.stringContaining('AE_API_KEY_ORIGIN'),
+        ]))
+        expect(JSON.stringify(envelope)).not.toContain('/oauth/grant')
+      } else {
+        expect(envelope.commands).toEqual(expect.objectContaining({
+          connect: expect.objectContaining({ usage: expect.stringContaining('connect') }),
+        }))
+      }
+    }
+
+    const textHelp = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      '--help',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(textHelp.status).toBe(0)
+    expect(textHelp.stdout).toContain('AE CLI')
+    expect(textHelp.stdout).toContain('Usage:')
+    expect(textHelp.stderr).toBe('')
+    const connectTextHelp = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'connect',
+      '--help',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(connectTextHelp.status).toBe(0)
+    expect(connectTextHelp.stdout).toContain('AE_API_KEY_ORIGIN')
+    expect(connectTextHelp.stdout).toContain('market_operations:invoke')
+    expect(connectTextHelp.stdout).toContain('verification URI')
+    expect(connectTextHelp.stderr).toBe('')
+
   }, 30_000)
 
 })

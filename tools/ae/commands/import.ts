@@ -8,7 +8,21 @@ import { CliFailure, callJson, heading, line, printJson, requireOk, table } from
  */
 export async function runImportCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const websiteUrl = args[0]?.trim()
-  if (websiteUrl === undefined || websiteUrl.length === 0) throw new CliFailure('Usage: ae import <websiteUrl>', { kind: 'INVALID_ARGUMENT', code: 'import-usage' })
+  if (args.length !== 1 || websiteUrl === undefined || websiteUrl.length === 0) {
+    throw new CliFailure('Usage: npm run -s ae -- demand import <websiteUrl>', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'import-usage',
+    })
+  }
+  try {
+    const parsedUrl = new URL(websiteUrl)
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') throw new TypeError()
+  } catch {
+    throw new CliFailure('Import requires an absolute http:// or https:// URL.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'import-url-invalid',
+    })
+  }
 
   const outcome = await callJson(options.baseUrl, '/api/storefront/import-draft', {
     method: 'POST',

@@ -46,7 +46,7 @@ export async function runEvalCommand(args: readonly string[], options: CliOption
     await runSnapshot(options)
     return
   }
-  throw new CliFailure('Usage: ae eval export --turn-id <turnId> [--turn-id <turnId> ...] | ae eval snapshot --snapshot-name <name>', {
+  throw new CliFailure('Usage: npm run -s ae -- advanced eval export --turn-id <turnId> [--turn-id <turnId> ...] | npm run -s ae -- advanced eval snapshot --snapshot-name <name>', {
     kind: 'INVALID_ARGUMENT',
     code: 'eval-usage',
   })

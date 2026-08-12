@@ -41,7 +41,7 @@ export function collectDoctorReport(
   }
 }
 
-/** `ae doctor [--json]` — inspect names only; never expose environment values. */
+/** `ae advanced doctor [--json]` — inspect names only; never expose environment values. */
 export async function runDoctorCommand(_args: readonly string[], options: CliOptions): Promise<void> {
   const report = collectDoctorReport()
   if (options.json) {

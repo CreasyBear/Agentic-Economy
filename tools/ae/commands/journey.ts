@@ -18,7 +18,7 @@ type JourneyStep = {
 
 export async function runJourneyCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
-  if (query.length === 0) throw new CliFailure('Usage: ae journey "<query>"', { kind: 'INVALID_ARGUMENT', code: 'journey-usage' })
+  if (query.length === 0) throw new CliFailure('Usage: npm run -s ae -- demand journey "<query>"', { kind: 'INVALID_ARGUMENT', code: 'journey-usage' })
 
   const steps: JourneyStep[] = []
 

@@ -24,6 +24,7 @@ function runDoctor(json: boolean) {
     '--import',
     'tsx',
     'tools/ae/cli.ts',
+    'advanced',
     'doctor',
     ...(json ? ['--json'] : []),
   ], {

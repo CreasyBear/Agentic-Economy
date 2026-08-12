@@ -21,7 +21,7 @@ export async function runRequestCommand(args: readonly string[], options: CliOpt
       return await confirmRequest(rest, options)
     default:
       throw new CliFailure(
-        'Usage: ae request create "<text>" | ae request get <ref> | ae request options <ref> | ae request confirm <ref> <optionRef>',
+        'Usage: npm run -s ae -- demand request create "<text>" | npm run -s ae -- demand request get <ref> | npm run -s ae -- demand request options <ref> | npm run -s ae -- demand request confirm <ref> <optionRef>',
         { kind: 'INVALID_ARGUMENT', code: 'request-usage' },
       )
   }
@@ -29,7 +29,7 @@ export async function runRequestCommand(args: readonly string[], options: CliOpt
 
 async function createRequest(args: readonly string[], options: CliOptions): Promise<void> {
   const text = args.join(' ').trim()
-  if (text.length === 0) throw new CliFailure('Usage: ae request create "<text>"', { kind: 'INVALID_ARGUMENT', code: 'request-usage' })
+  if (text.length === 0) throw new CliFailure('Usage: npm run -s ae -- demand request create "<text>"', { kind: 'INVALID_ARGUMENT', code: 'request-usage' })
 
   const requestRef = `request:cli:${randomUUID()}`
   const outcome = await callJson(options.baseUrl, '/api/v1/requests', {
@@ -48,7 +48,7 @@ async function createRequest(args: readonly string[], options: CliOptions): Prom
 
 async function readRequest(args: readonly string[], options: CliOptions, suffix: string): Promise<void> {
   const ref = args[0]?.trim()
-  if (ref === undefined || ref.length === 0) throw new CliFailure(`Usage: ae request ${suffix === '' ? 'get' : 'options'} <ref>`, { kind: 'INVALID_ARGUMENT', code: 'request-usage' })
+  if (ref === undefined || ref.length === 0) throw new CliFailure(`Usage: npm run -s ae -- demand request ${suffix === '' ? 'get' : 'options'} <ref>`, { kind: 'INVALID_ARGUMENT', code: 'request-usage' })
 
   const path = `/api/v1/requests/${encodeURIComponent(ref)}${suffix}`
   const outcome = await callJson(options.baseUrl, path)
@@ -57,7 +57,7 @@ async function readRequest(args: readonly string[], options: CliOptions, suffix:
 
 async function confirmRequest(args: readonly string[], options: CliOptions): Promise<void> {
   const [ref, optionRef] = args
-  if (ref === undefined || optionRef === undefined) throw new CliFailure('Usage: ae request confirm <ref> <optionRef>', { kind: 'INVALID_ARGUMENT', code: 'request-usage' })
+  if (ref === undefined || optionRef === undefined) throw new CliFailure('Usage: npm run -s ae -- demand request confirm <ref> <optionRef>', { kind: 'INVALID_ARGUMENT', code: 'request-usage' })
 
   const path = `/api/v1/requests/${encodeURIComponent(ref)}/confirmation`
   const outcome = await callJson(options.baseUrl, path, {

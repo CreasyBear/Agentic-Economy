@@ -2,7 +2,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { CliOptions } from '../lib/args'
 import { CliFailure, heading, line, printJson, table } from '../lib/output'
-import { defaultKeylessExecutableSource } from '@/modules/capability-execution'
+import { readRequiredConvexUrl } from '@/lib/server/convex-source'
+import { convexKeylessExecutableSource } from '@/modules/capability-execution'
 import {
   DEFAULT_POLICY,
   enforcePolicy,
@@ -32,11 +33,11 @@ function savePolicy(policy: Policy): void {
 }
 
 /** The canonical executable source, expressed as admission scenarios against the policy. */
-async function feedScenarios(): Promise<PolicyScenario[]> {
-  const listings = await defaultKeylessExecutableSource.list()
+async function operationScenarios(): Promise<PolicyScenario[]> {
+  const listings = await convexKeylessExecutableSource.list()
   const scenarios: PolicyScenario[] = []
   for (const listing of listings) {
-    const descriptor = await defaultKeylessExecutableSource.read(listing.operationRef)
+    const descriptor = await convexKeylessExecutableSource.read(listing.operationRef)
     if (descriptor === null) continue
     scenarios.push({
       capabilityId: descriptor.capabilityId,
@@ -52,52 +53,52 @@ async function feedScenarios(): Promise<PolicyScenario[]> {
 }
 
 async function policySuite(): Promise<PolicyTest[]> {
-  const feed = await feedScenarios()
+  const operations = await operationScenarios()
   return [
-    ...feed.map((scenario): PolicyTest => ({
-      name: `feed.${scenario.capabilityId}.admitted`,
+    ...operations.map((scenario): PolicyTest => ({
+      name: `operation.${scenario.capabilityId}.admitted`,
       scenario,
       expected: 'execute',
       failureClass: 'rule',
     })),
     // Adversarial governance cases.
-    feed.length > 0
+    operations.length > 0
       ? {
           name: 'keyed.op.refuses',
-          scenario: { ...feed[0]!, credentialRef: 'env:SOME_KEY', capabilityId: 'test.keyed' },
+          scenario: { ...operations[0]!, credentialRef: 'env:SOME_KEY', capabilityId: 'test.keyed' },
           expected: 'refuse',
           failureClass: 'rule',
         }
       : null,
-    feed.length > 0
+    operations.length > 0
       ? {
           name: 'x402.listings.blocked',
-          scenario: { ...feed[0]!, sourceKind: 'x402', capabilityId: 'test.x402' },
+          scenario: { ...operations[0]!, sourceKind: 'x402', capabilityId: 'test.x402' },
           expected: 'refuse',
           failureClass: 'rule',
         }
       : null,
-    feed.length > 0
+    operations.length > 0
       ? {
           name: 'nonhttps.refused',
-          scenario: { ...feed[0]!, endpointUrl: feed[0]!.endpointUrl.replace(/^https:/, 'http:'), capabilityId: 'test.http' },
+          scenario: { ...operations[0]!, endpointUrl: operations[0]!.endpointUrl.replace(/^https:/, 'http:'), capabilityId: 'test.http' },
           expected: 'refuse',
           failureClass: 'rule',
         }
       : null,
-    feed.length > 0
+    operations.length > 0
       ? {
           name: 'oversized.bounded',
-          scenario: { ...feed[0]!, expectedResultBytes: 2_000_000, capabilityId: 'test.big' },
+          scenario: { ...operations[0]!, expectedResultBytes: 2_000_000, capabilityId: 'test.big' },
           expected: 'refuse',
           failureClass: 'rule',
         }
       : null,
     // An ambiguous rule case: the keyless-only wording must admit a precise read.
-    feed.length > 0
+    operations.length > 0
       ? {
-          name: 'ambiguous.feeds.interpreted',
-          scenario: { ...feed[0]!, capabilityId: 'test.ambiguous' },
+          name: 'ambiguous.operations.interpreted',
+          scenario: { ...operations[0]!, capabilityId: 'test.ambiguous' },
           expected: 'execute',
           failureClass: 'ambiguous',
         }
@@ -105,15 +106,16 @@ async function policySuite(): Promise<PolicyTest[]> {
   ].filter((test): test is PolicyTest => test !== null)
 }
 
-/** `ae policy [test|refine|fidelity]` — capability-admission policy governance. */
+/** `ae advanced policy [test|refine|fidelity]` — capability-admission policy governance. */
 export async function runPolicyCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const sub = args[0]?.trim()
   if (sub === 'test') return runPolicyTestCommand(args.slice(1), options)
   if (sub === 'refine') return runPolicyRefineCommand(args.slice(1), options)
   if (sub === 'fidelity') return runPolicyFidelityCommand(args.slice(1), options)
   if (sub !== undefined && sub.length > 0) {
-    throw new CliFailure('Usage: ae policy [test|refine|fidelity]', { kind: 'INVALID_ARGUMENT', code: 'policy-usage' })
+    throw new CliFailure('Usage: npm run -s ae -- advanced policy [test|refine|fidelity]', { kind: 'INVALID_ARGUMENT', code: 'policy-usage' })
   }
+  readRequiredConvexUrl()
   const policy = loadPolicy()
   if (options.json) {
     printJson(policy)
@@ -134,7 +136,7 @@ export async function runPolicyCommand(args: readonly string[], options: CliOpti
   }
 }
 
-/** `ae policy test` — run the suite, report VALID/INVALID/TRANSLATION_AMBIGUOUS per case. */
+/** `ae advanced policy test` — run the suite, report VALID/INVALID/TRANSLATION_AMBIGUOUS per case. */
 export async function runPolicyTestCommand(_args: readonly string[], options: CliOptions): Promise<void> {
   const policy = loadPolicy()
   const suite = await policySuite()
@@ -150,7 +152,7 @@ export async function runPolicyTestCommand(_args: readonly string[], options: Cl
   }
 }
 
-/** `ae policy refine [--apply]` — diagnose failures, propose rule changes, open the human review gate. */
+/** `ae advanced policy refine [--apply]` — diagnose failures, propose rule changes, open the human review gate. */
 export async function runPolicyRefineCommand(_args: readonly string[], options: CliOptions): Promise<void> {
   const policy = loadPolicy()
   const suite = await policySuite()
@@ -185,10 +187,10 @@ export async function runPolicyRefineCommand(_args: readonly string[], options: 
   }
 }
 
-/** `ae policy fidelity` — coverage/accuracy/per-rule grounding against the live feed catalog. */
+/** `ae policy fidelity` — coverage/accuracy/per-rule grounding against admitted Operations. */
 export async function runPolicyFidelityCommand(_args: readonly string[], options: CliOptions): Promise<void> {
   const policy = loadPolicy()
-  const facts = await feedScenarios()
+  const facts = await operationScenarios()
   const report = fidelityReport(policy, facts)
   if (options.json) {
     printJson({ policy: policy.version, ...report })

@@ -1,23 +1,29 @@
 import type { CliOptions } from '../lib/args'
-import { isRecord } from '@/modules/common/is-record'
-import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { operationSearchInputSchema } from '@/modules/capability-supply/public'
+import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry'
 
+/** Search current public Market Operations without a caller credential. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
-  if (query.length === 0) throw new CliFailure('Usage: ae search <query> [--location X] [--mode near_me|whole_catalogue]', { kind: 'INVALID_ARGUMENT', code: 'search-usage' })
-  if (options.mode !== undefined && options.mode !== 'near_me' && options.mode !== 'whole_catalogue') {
-    throw new CliFailure(
-      `Invalid --mode: ${options.mode}. Accepted values: near_me, whole_catalogue. Retry with --mode near_me or --mode whole_catalogue.`,
-      { kind: 'INVALID_ARGUMENT', code: 'invalid-search-mode' },
-    )
+  if (query.length === 0) {
+    throw new CliFailure('Usage: npm run -s ae -- search "<job>"', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'search-usage',
+    })
+  }
+  if (!operationSearchInputSchema.safeParse({ query }).success) {
+    throw new CliFailure('Search query must be 200 characters or fewer.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'search-query-too-long',
+    })
   }
 
-  const params = new URLSearchParams({ q: query })
-  if (options.location !== undefined) params.set('location', options.location)
-  if (options.mode !== undefined) params.set('mode', options.mode)
-
-  const path = `/api/businesses/search?${params.toString()}`
-  const outcome = await callJson(options.baseUrl, path)
+  const path = OPERATION_MARKET_SEARCH_PATH
+  const outcome = await callJson(options.baseUrl, path, {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  })
   const body = requireOk(outcome, path)
 
   if (options.json) {
@@ -25,34 +31,6 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     return
   }
 
-  printSearchPage(body, query, outcome.durationMs)
-}
-
-export function printSearchPage(body: unknown, query: string, durationMs: number): void {
-  heading(`Search "${query}" (${durationMs}ms)`)
-  if (!isRecord(body) || !Array.isArray(body.items)) {
-    line('No item list in the response body.')
-    return
-  }
-
-  const pagination = isRecord(body.pagination) ? body.pagination : {}
-  line(`${body.items.length} shown, ${String(pagination.total ?? 'unknown')} total, hasMore=${String(pagination.hasMore ?? false)}`)
-
-  if (body.items.length === 0) {
-    line('No published businesses matched. The registry only searches published pages.')
-    return
-  }
-
-  for (const item of body.items) {
-    if (!isRecord(item)) continue
-    line('')
-    table([
-      ['name', String(item.name ?? '')],
-      ['slug', String(item.slug ?? '')],
-      ['category', String(item.category ?? '')],
-      ['where', `${String(item.suburb ?? '')} ${String(item.stateTerritory ?? '')}`.trim()],
-      ['page', String(item.publicUrl ?? `/${String(item.slug ?? '')}`)],
-      ['services', String(Array.isArray(item.services) ? item.services.length : 0)],
-    ])
-  }
+  heading(`Market Operations for "${query}" (${outcome.durationMs}ms)`)
+  if (body !== undefined) line(JSON.stringify(body, undefined, 2))
 }

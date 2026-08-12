@@ -10,7 +10,7 @@ import { printDraftOutcome } from './import'
  */
 export async function runEnrichCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const businessName = args.join(' ').trim()
-  if (businessName.length === 0) throw new CliFailure('Usage: ae enrich "<business name>" [--suburb X]', { kind: 'INVALID_ARGUMENT', code: 'enrich-usage' })
+  if (businessName.length === 0) throw new CliFailure('Usage: npm run -s ae -- demand enrich "<business name>" [--suburb X]', { kind: 'INVALID_ARGUMENT', code: 'enrich-usage' })
 
   const outcome = await callJson(options.baseUrl, '/api/storefront/enrich', {
     method: 'POST',

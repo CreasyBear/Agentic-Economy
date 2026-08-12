@@ -4,7 +4,7 @@ import { CliFailure, callJson, heading, line, printJson, requireOk, table } from
 
 export async function runBusinessCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const slug = args[0]?.trim()
-  if (slug === undefined || slug.length === 0) throw new CliFailure('Usage: ae business <slug>', { kind: 'INVALID_ARGUMENT', code: 'business-usage' })
+  if (slug === undefined || slug.length === 0) throw new CliFailure('Usage: npm run -s ae -- demand business <slug>', { kind: 'INVALID_ARGUMENT', code: 'business-usage' })
 
   const path = `/api/businesses/${encodeURIComponent(slug)}`
   const outcome = await callJson(options.baseUrl, path)

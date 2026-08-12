@@ -7,6 +7,10 @@ export type CliFailureOptions = {
   kind?: ProblemKind
   code?: string
   detail?: unknown
+  retryable?: boolean
+  retryAfter?: string
+  recovery?: unknown
+  nextAction?: unknown
 }
 
 export class CliFailure extends Error {
@@ -14,6 +18,10 @@ export class CliFailure extends Error {
   readonly kind: ProblemKind
   readonly code: string | undefined
   readonly detail: unknown | undefined
+  readonly retryable: boolean | undefined
+  readonly retryAfter: string | undefined
+  readonly recovery: unknown | undefined
+  readonly nextAction: unknown | undefined
 
   constructor(message: string, options: CliFailureOptions = {}) {
     super(message)
@@ -22,6 +30,10 @@ export class CliFailure extends Error {
     this.kind = options.kind ?? 'INTERNAL'
     this.code = options.code
     this.detail = options.detail
+    this.retryable = options.retryable
+    this.retryAfter = options.retryAfter
+    this.recovery = options.recovery
+    this.nextAction = options.nextAction
   }
 }
 
@@ -53,6 +65,7 @@ export async function callJson(
   const startedAt = Date.now()
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
+    redirect: 'manual',
     headers: {
       Accept: 'application/json',
       ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
@@ -75,26 +88,44 @@ export async function readHttpOutcome(response: Response, startedAt: number): Pr
 
   return { status: response.status, ok: response.ok, durationMs, headers: response.headers, body, bodyText }
 }
+const SAFE_FAILURE_CODE = /^[a-z][a-z0-9_:-]{0,95}$/u
+const MAX_FAILURE_TEXT_LENGTH = 2_000
+
+function boundedFailureText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return value.slice(0, MAX_FAILURE_TEXT_LENGTH)
+}
+
+function isStructuredFailureBody(body: unknown, contentType: string): body is Record<string, unknown> {
+  if (!isRecord(body)) return false
+  if (!contentType.includes('application/problem+json') && !contentType.includes('application/json')) return false
+  return ['type', 'title', 'kind', 'detail'].some((key) => key in body)
+}
 
 /** Non-2xx is a real failure for a single-shot command; journey reports it instead. */
 export function requireOk(outcome: HttpOutcome, path: string): unknown {
   if (outcome.ok) return outcome.body ?? outcome.bodyText
   const status = outcome.status
-  const contentType = outcome.headers.get('content-type') ?? ''
-  if (contentType.includes('application/problem+json') && isRecord(outcome.body)) {
+  const contentType = (outcome.headers.get('content-type') ?? '').toLowerCase()
+  if (isStructuredFailureBody(outcome.body, contentType)) {
     const body = outcome.body
     const kind = PROBLEM_KINDS.find((candidate) => candidate !== 'no_data' && candidate === body.kind) ?? kindForStatus(status)
-    const code = typeof body.code === 'string' ? body.code : String(status)
-    // One clean actionable line for humans; the parsed detail/code/kind ride the
-    // CliFailure for the --json envelope. Never dump the raw body to stderr.
-    const detail = typeof body.detail === 'string' ? body.detail : undefined
-    const title = typeof body.title === 'string' ? body.title : undefined
+    const code = typeof body.code === 'string' && SAFE_FAILURE_CODE.test(body.code) ? body.code : String(status)
+    const detail = boundedFailureText(body.detail)
+    const title = boundedFailureText(body.title)
+    const retryAfter = outcome.headers.get('retry-after')?.trim()
+    // One clean actionable line for humans; the parsed detail/code/kind and
+    // explicit retry/recovery fields ride the CliFailure for --json.
     const suffix = (detail ?? title ?? '').replace(/\s+/gu, ' ').trim()
     throw new CliFailure(`${path} returned ${status}${suffix ? `: ${suffix}` : ''}`, {
       exitCode: 1,
       kind,
       code,
       detail,
+      ...(typeof body.retryable === 'boolean' ? { retryable: body.retryable } : {}),
+      ...(retryAfter === undefined || retryAfter.length === 0 ? {} : { retryAfter }),
+      ...(body.recovery === undefined ? {} : { recovery: body.recovery }),
+      ...(body.nextAction === undefined ? {} : { nextAction: body.nextAction }),
     })
   }
   throw new CliFailure(`${path} returned ${status}`)
