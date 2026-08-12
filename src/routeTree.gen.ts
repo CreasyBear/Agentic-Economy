@@ -31,6 +31,7 @@ import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as SShareTokenRouteImport } from './routes/s.$shareToken'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
+import { Route as OperationsOperationRefRouteImport } from './routes/operations.$operationRef'
 import { Route as OauthTokenRouteImport } from './routes/oauth.token'
 import { Route as OauthRegisterRouteImport } from './routes/oauth.register'
 import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.device_authorization'
@@ -50,13 +51,13 @@ import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './rout
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
+import { Route as OperationsInvocationsInvocationRefRouteImport } from './routes/operations.invocations.$invocationRef'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
 import { Route as ApiV1RequestsRouteImport } from './routes/api.v1.requests'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiStorefrontEnrichRouteImport } from './routes/api.storefront.enrich'
-import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
 import { Route as ApiRequestsRequestRefRouteImport } from './routes/api.requests.$requestRef'
 import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
@@ -64,10 +65,7 @@ import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.n
 import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
 import { Route as ApiNotificationNovuDispatchRouteImport } from './routes/api.notification.novu-dispatch'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
-import { Route as ApiDiscoveryFixturesRouteImport } from './routes/api.discovery.fixtures'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
-import { Route as ApiDemoProviderQuoteRouteImport } from './routes/api.demo-provider.quote'
-import { Route as ApiDemoProviderHealthRouteImport } from './routes/api.demo-provider.health'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
@@ -94,10 +92,12 @@ import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.service
 import { Route as ApiV1ServicesServiceIdRouteImport } from './routes/api.v1.services.$serviceId'
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
-import { Route as ApiSandboxProvidersWorkflowRouteImport } from './routes/api.sandbox.providers.workflow'
-import { Route as ApiSandboxProvidersRouteResolverRouteImport } from './routes/api.sandbox.providers.route-resolver'
-import { Route as ApiSandboxProvidersRouteQuoterRouteImport } from './routes/api.sandbox.providers.route-quoter'
-import { Route as ApiSandboxSlugCheckupQuoteRouteImport } from './routes/api.sandbox.$slug.checkup-quote'
+import { Route as ApiV1OperationsExecuteRouteImport } from './routes/api.v1.operations.execute'
+import { Route as ApiV1OperationsInvocationRefRouteImport } from './routes/api.v1.operations.$invocationRef'
+import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1.market-operations.search'
+import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
+import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
+import { Route as ApiV1MarketOperationsCompareRouteImport } from './routes/api.v1.market-operations.compare'
 import { Route as ApiRequestsRequestRefRunRouteImport } from './routes/api.requests.$requestRef.run'
 import { Route as ApiRequestsRequestRefRepeatPermissionsRouteImport } from './routes/api.requests.$requestRef.repeat-permissions'
 import { Route as ApiRequestsRequestRefProblemsRouteImport } from './routes/api.requests.$requestRef.problems'
@@ -126,6 +126,8 @@ import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v
 import { Route as ApiV1RequestsRequestRefEvidenceRouteImport } from './routes/api.v1.requests.$requestRef.evidence'
 import { Route as ApiV1RequestsRequestRefConfirmationRouteImport } from './routes/api.v1.requests.$requestRef.confirmation'
 import { Route as ApiV1RequestsRequestRefCancellationRouteImport } from './routes/api.v1.requests.$requestRef.cancellation'
+import { Route as ApiV1OperationsInvocationRefReconcileRouteImport } from './routes/api.v1.operations.$invocationRef.reconcile'
+import { Route as ApiV1OperationsInvocationRefCancelRouteImport } from './routes/api.v1.operations.$invocationRef.cancel'
 import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef'
 import { Route as ApiAnswerThreadsThreadIdShareRouteImport } from './routes/api.answer.threads.$threadId.share'
 import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef'
@@ -245,6 +247,11 @@ const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
   path: '/remove-business',
   getParentRoute: () => PrivacyRoute,
 } as any)
+const OperationsOperationRefRoute = OperationsOperationRefRouteImport.update({
+  id: '/operations/$operationRef',
+  path: '/operations/$operationRef',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthTokenRoute = OauthTokenRouteImport.update({
   id: '/oauth/token',
   path: '/oauth/token',
@@ -344,6 +351,12 @@ const SlugInquiryRoute = SlugInquiryRouteImport.update({
   path: '/inquiry',
   getParentRoute: () => SlugRoute,
 } as any)
+const OperationsInvocationsInvocationRefRoute =
+  OperationsInvocationsInvocationRefRouteImport.update({
+    id: '/operations/invocations/$invocationRef',
+    path: '/operations/invocations/$invocationRef',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1ServicesRoute = ApiV1ServicesRouteImport.update({
   id: '/api/v1/services',
   path: '/api/v1/services',
@@ -373,11 +386,6 @@ const ApiStorefrontImportDraftRoute =
 const ApiStorefrontEnrichRoute = ApiStorefrontEnrichRouteImport.update({
   id: '/api/storefront/enrich',
   path: '/api/storefront/enrich',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSandboxCapabilityRoute = ApiSandboxCapabilityRouteImport.update({
-  id: '/api/sandbox/capability',
-  path: '/api/sandbox/capability',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRequestsRequestRefRoute = ApiRequestsRequestRefRouteImport.update({
@@ -419,24 +427,9 @@ const ApiDiscoverySchemaRoute = ApiDiscoverySchemaRouteImport.update({
   path: '/api/discovery/schema',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiDiscoveryFixturesRoute = ApiDiscoveryFixturesRouteImport.update({
-  id: '/api/discovery/fixtures',
-  path: '/api/discovery/fixtures',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
   id: '/api/discovery/examples',
   path: '/api/discovery/examples',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDemoProviderQuoteRoute = ApiDemoProviderQuoteRouteImport.update({
-  id: '/api/demo-provider/quote',
-  path: '/api/demo-provider/quote',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDemoProviderHealthRoute = ApiDemoProviderHealthRouteImport.update({
-  id: '/api/demo-provider/health',
-  path: '/api/demo-provider/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
@@ -574,28 +567,39 @@ const ApiV1RequestsRequestRefRoute = ApiV1RequestsRequestRefRouteImport.update({
   path: '/$requestRef',
   getParentRoute: () => ApiV1RequestsRoute,
 } as any)
-const ApiSandboxProvidersWorkflowRoute =
-  ApiSandboxProvidersWorkflowRouteImport.update({
-    id: '/api/sandbox/providers/workflow',
-    path: '/api/sandbox/providers/workflow',
+const ApiV1OperationsExecuteRoute = ApiV1OperationsExecuteRouteImport.update({
+  id: '/api/v1/operations/execute',
+  path: '/api/v1/operations/execute',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1OperationsInvocationRefRoute =
+  ApiV1OperationsInvocationRefRouteImport.update({
+    id: '/api/v1/operations/$invocationRef',
+    path: '/api/v1/operations/$invocationRef',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiSandboxProvidersRouteResolverRoute =
-  ApiSandboxProvidersRouteResolverRouteImport.update({
-    id: '/api/sandbox/providers/route-resolver',
-    path: '/api/sandbox/providers/route-resolver',
+const ApiV1MarketOperationsSearchRoute =
+  ApiV1MarketOperationsSearchRouteImport.update({
+    id: '/api/v1/market-operations/search',
+    path: '/api/v1/market-operations/search',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiSandboxProvidersRouteQuoterRoute =
-  ApiSandboxProvidersRouteQuoterRouteImport.update({
-    id: '/api/sandbox/providers/route-quoter',
-    path: '/api/sandbox/providers/route-quoter',
+const ApiV1MarketOperationsInspectPlanRoute =
+  ApiV1MarketOperationsInspectPlanRouteImport.update({
+    id: '/api/v1/market-operations/inspect-plan',
+    path: '/api/v1/market-operations/inspect-plan',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiSandboxSlugCheckupQuoteRoute =
-  ApiSandboxSlugCheckupQuoteRouteImport.update({
-    id: '/api/sandbox/$slug/checkup-quote',
-    path: '/api/sandbox/$slug/checkup-quote',
+const ApiV1MarketOperationsDetailRoute =
+  ApiV1MarketOperationsDetailRouteImport.update({
+    id: '/api/v1/market-operations/detail',
+    path: '/api/v1/market-operations/detail',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1MarketOperationsCompareRoute =
+  ApiV1MarketOperationsCompareRouteImport.update({
+    id: '/api/v1/market-operations/compare',
+    path: '/api/v1/market-operations/compare',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiRequestsRequestRefRunRoute =
@@ -763,6 +767,18 @@ const ApiV1RequestsRequestRefCancellationRoute =
     path: '/cancellation',
     getParentRoute: () => ApiV1RequestsRequestRefRoute,
   } as any)
+const ApiV1OperationsInvocationRefReconcileRoute =
+  ApiV1OperationsInvocationRefReconcileRouteImport.update({
+    id: '/reconcile',
+    path: '/reconcile',
+    getParentRoute: () => ApiV1OperationsInvocationRefRoute,
+  } as any)
+const ApiV1OperationsInvocationRefCancelRoute =
+  ApiV1OperationsInvocationRefCancelRouteImport.update({
+    id: '/cancel',
+    path: '/cancel',
+    getParentRoute: () => ApiV1OperationsInvocationRefRoute,
+  } as any)
 const ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute =
   ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport.update({
     id: '/$permissionRef',
@@ -861,6 +877,7 @@ export interface FileRoutesByFullPath {
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/token': typeof OauthTokenRoute
+  '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -888,10 +905,7 @@ export interface FileRoutesByFullPath {
   '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
-  '/api/demo-provider/health': typeof ApiDemoProviderHealthRoute
-  '/api/demo-provider/quote': typeof ApiDemoProviderQuoteRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
-  '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
@@ -899,13 +913,13 @@ export interface FileRoutesByFullPath {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
-  '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
+  '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
   '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -925,10 +939,12 @@ export interface FileRoutesByFullPath {
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
-  '/api/sandbox/$slug/checkup-quote': typeof ApiSandboxSlugCheckupQuoteRoute
-  '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
-  '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
-  '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
+  '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
+  '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
+  '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
+  '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
+  '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
+  '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
@@ -936,6 +952,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
   '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
+  '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
+  '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -988,6 +1006,7 @@ export interface FileRoutesByTo {
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/token': typeof OauthTokenRoute
+  '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -1015,10 +1034,7 @@ export interface FileRoutesByTo {
   '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
-  '/api/demo-provider/health': typeof ApiDemoProviderHealthRoute
-  '/api/demo-provider/quote': typeof ApiDemoProviderQuoteRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
-  '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
@@ -1026,13 +1042,13 @@ export interface FileRoutesByTo {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
-  '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
+  '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
   '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -1052,10 +1068,12 @@ export interface FileRoutesByTo {
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
-  '/api/sandbox/$slug/checkup-quote': typeof ApiSandboxSlugCheckupQuoteRoute
-  '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
-  '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
-  '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
+  '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
+  '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
+  '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
+  '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
+  '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
+  '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
@@ -1063,6 +1081,8 @@ export interface FileRoutesByTo {
   '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
   '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
+  '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
+  '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -1117,6 +1137,7 @@ export interface FileRoutesById {
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/token': typeof OauthTokenRoute
+  '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -1144,10 +1165,7 @@ export interface FileRoutesById {
   '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
-  '/api/demo-provider/health': typeof ApiDemoProviderHealthRoute
-  '/api/demo-provider/quote': typeof ApiDemoProviderQuoteRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
-  '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
@@ -1155,13 +1173,13 @@ export interface FileRoutesById {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
-  '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
+  '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
   '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -1181,10 +1199,12 @@ export interface FileRoutesById {
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
-  '/api/sandbox/$slug/checkup-quote': typeof ApiSandboxSlugCheckupQuoteRoute
-  '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
-  '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
-  '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
+  '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
+  '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
+  '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
+  '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
+  '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
+  '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
@@ -1192,6 +1212,8 @@ export interface FileRoutesById {
   '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
   '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
+  '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
+  '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -1246,6 +1268,7 @@ export interface FileRouteTypes {
     | '/oauth/device_authorization'
     | '/oauth/register'
     | '/oauth/token'
+    | '/operations/$operationRef'
     | '/privacy/remove-business'
     | '/s/$shareToken'
     | '/sign-in/$'
@@ -1273,10 +1296,7 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
-    | '/api/demo-provider/health'
-    | '/api/demo-provider/quote'
     | '/api/discovery/examples'
-    | '/api/discovery/fixtures'
     | '/api/discovery/schema'
     | '/api/notification/novu-dispatch'
     | '/api/notification/resend-dispatch'
@@ -1284,13 +1304,13 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/observability/funnel'
     | '/api/requests/$requestRef'
-    | '/api/sandbox/capability'
     | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
     | '/api/stripe/webhook'
     | '/api/v1/release'
     | '/api/v1/requests'
     | '/api/v1/services'
+    | '/operations/invocations/$invocationRef'
     | '/$slug/tools/$toolId/prepare'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
@@ -1310,10 +1330,12 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/repeat-permissions'
     | '/api/requests/$requestRef/run'
-    | '/api/sandbox/$slug/checkup-quote'
-    | '/api/sandbox/providers/route-quoter'
-    | '/api/sandbox/providers/route-resolver'
-    | '/api/sandbox/providers/workflow'
+    | '/api/v1/market-operations/compare'
+    | '/api/v1/market-operations/detail'
+    | '/api/v1/market-operations/inspect-plan'
+    | '/api/v1/market-operations/search'
+    | '/api/v1/operations/$invocationRef'
+    | '/api/v1/operations/execute'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/v1/services/$serviceId'
@@ -1321,6 +1343,8 @@ export interface FileRouteTypes {
     | '/api/v1/work-tree/$operation'
     | '/api/answer/threads/$threadId/share'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+    | '/api/v1/operations/$invocationRef/cancel'
+    | '/api/v1/operations/$invocationRef/reconcile'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1373,6 +1397,7 @@ export interface FileRouteTypes {
     | '/oauth/device_authorization'
     | '/oauth/register'
     | '/oauth/token'
+    | '/operations/$operationRef'
     | '/privacy/remove-business'
     | '/s/$shareToken'
     | '/sign-in/$'
@@ -1400,10 +1425,7 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
-    | '/api/demo-provider/health'
-    | '/api/demo-provider/quote'
     | '/api/discovery/examples'
-    | '/api/discovery/fixtures'
     | '/api/discovery/schema'
     | '/api/notification/novu-dispatch'
     | '/api/notification/resend-dispatch'
@@ -1411,13 +1433,13 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/observability/funnel'
     | '/api/requests/$requestRef'
-    | '/api/sandbox/capability'
     | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
     | '/api/stripe/webhook'
     | '/api/v1/release'
     | '/api/v1/requests'
     | '/api/v1/services'
+    | '/operations/invocations/$invocationRef'
     | '/$slug/tools/$toolId/prepare'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
@@ -1437,10 +1459,12 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/repeat-permissions'
     | '/api/requests/$requestRef/run'
-    | '/api/sandbox/$slug/checkup-quote'
-    | '/api/sandbox/providers/route-quoter'
-    | '/api/sandbox/providers/route-resolver'
-    | '/api/sandbox/providers/workflow'
+    | '/api/v1/market-operations/compare'
+    | '/api/v1/market-operations/detail'
+    | '/api/v1/market-operations/inspect-plan'
+    | '/api/v1/market-operations/search'
+    | '/api/v1/operations/$invocationRef'
+    | '/api/v1/operations/execute'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/v1/services/$serviceId'
@@ -1448,6 +1472,8 @@ export interface FileRouteTypes {
     | '/api/v1/work-tree/$operation'
     | '/api/answer/threads/$threadId/share'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+    | '/api/v1/operations/$invocationRef/cancel'
+    | '/api/v1/operations/$invocationRef/reconcile'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1501,6 +1527,7 @@ export interface FileRouteTypes {
     | '/oauth/device_authorization'
     | '/oauth/register'
     | '/oauth/token'
+    | '/operations/$operationRef'
     | '/privacy/remove-business'
     | '/s/$shareToken'
     | '/sign-in/$'
@@ -1528,10 +1555,7 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
-    | '/api/demo-provider/health'
-    | '/api/demo-provider/quote'
     | '/api/discovery/examples'
-    | '/api/discovery/fixtures'
     | '/api/discovery/schema'
     | '/api/notification/novu-dispatch'
     | '/api/notification/resend-dispatch'
@@ -1539,13 +1563,13 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/observability/funnel'
     | '/api/requests/$requestRef'
-    | '/api/sandbox/capability'
     | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
     | '/api/stripe/webhook'
     | '/api/v1/release'
     | '/api/v1/requests'
     | '/api/v1/services'
+    | '/operations/invocations/$invocationRef'
     | '/$slug/tools/$toolId/prepare'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
@@ -1565,10 +1589,12 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/repeat-permissions'
     | '/api/requests/$requestRef/run'
-    | '/api/sandbox/$slug/checkup-quote'
-    | '/api/sandbox/providers/route-quoter'
-    | '/api/sandbox/providers/route-resolver'
-    | '/api/sandbox/providers/workflow'
+    | '/api/v1/market-operations/compare'
+    | '/api/v1/market-operations/detail'
+    | '/api/v1/market-operations/inspect-plan'
+    | '/api/v1/market-operations/search'
+    | '/api/v1/operations/$invocationRef'
+    | '/api/v1/operations/execute'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/v1/services/$serviceId'
@@ -1576,6 +1602,8 @@ export interface FileRouteTypes {
     | '/api/v1/work-tree/$operation'
     | '/api/answer/threads/$threadId/share'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+    | '/api/v1/operations/$invocationRef/cancel'
+    | '/api/v1/operations/$invocationRef/reconcile'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1625,6 +1653,7 @@ export interface RootRouteChildren {
   OauthDevice_authorizationRoute: typeof OauthDevice_authorizationRoute
   OauthRegisterRoute: typeof OauthRegisterRoute
   OauthTokenRoute: typeof OauthTokenRoute
+  OperationsOperationRefRoute: typeof OperationsOperationRefRoute
   SShareTokenRoute: typeof SShareTokenRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
@@ -1634,27 +1663,26 @@ export interface RootRouteChildren {
   ApiAnswerFollowUpChipsRoute: typeof ApiAnswerFollowUpChipsRoute
   ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
   ApiAnswerTurnRoute: typeof ApiAnswerTurnRouteWithChildren
-  ApiDemoProviderHealthRoute: typeof ApiDemoProviderHealthRoute
-  ApiDemoProviderQuoteRoute: typeof ApiDemoProviderQuoteRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
-  ApiDiscoveryFixturesRoute: typeof ApiDiscoveryFixturesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
   ApiNotificationNovuDispatchRoute: typeof ApiNotificationNovuDispatchRoute
   ApiNotificationResendDispatchRoute: typeof ApiNotificationResendDispatchRoute
   ApiNotificationResendWebhookRoute: typeof ApiNotificationResendWebhookRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
-  ApiSandboxCapabilityRoute: typeof ApiSandboxCapabilityRoute
   ApiStorefrontEnrichRoute: typeof ApiStorefrontEnrichRoute
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
-  ApiSandboxSlugCheckupQuoteRoute: typeof ApiSandboxSlugCheckupQuoteRoute
-  ApiSandboxProvidersRouteQuoterRoute: typeof ApiSandboxProvidersRouteQuoterRoute
-  ApiSandboxProvidersRouteResolverRoute: typeof ApiSandboxProvidersRouteResolverRoute
-  ApiSandboxProvidersWorkflowRoute: typeof ApiSandboxProvidersWorkflowRoute
+  OperationsInvocationsInvocationRefRoute: typeof OperationsInvocationsInvocationRefRoute
+  ApiV1MarketOperationsCompareRoute: typeof ApiV1MarketOperationsCompareRoute
+  ApiV1MarketOperationsDetailRoute: typeof ApiV1MarketOperationsDetailRoute
+  ApiV1MarketOperationsInspectPlanRoute: typeof ApiV1MarketOperationsInspectPlanRoute
+  ApiV1MarketOperationsSearchRoute: typeof ApiV1MarketOperationsSearchRoute
+  ApiV1OperationsInvocationRefRoute: typeof ApiV1OperationsInvocationRefRouteWithChildren
+  ApiV1OperationsExecuteRoute: typeof ApiV1OperationsExecuteRoute
   ApiV1WorkTreeOperationRoute: typeof ApiV1WorkTreeOperationRoute
 }
 
@@ -1814,6 +1842,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRemoveBusinessRouteImport
       parentRoute: typeof PrivacyRoute
     }
+    '/operations/$operationRef': {
+      id: '/operations/$operationRef'
+      path: '/operations/$operationRef'
+      fullPath: '/operations/$operationRef'
+      preLoaderRoute: typeof OperationsOperationRefRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/token': {
       id: '/oauth/token'
       path: '/oauth/token'
@@ -1947,6 +1982,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SlugInquiryRouteImport
       parentRoute: typeof SlugRoute
     }
+    '/operations/invocations/$invocationRef': {
+      id: '/operations/invocations/$invocationRef'
+      path: '/operations/invocations/$invocationRef'
+      fullPath: '/operations/invocations/$invocationRef'
+      preLoaderRoute: typeof OperationsInvocationsInvocationRefRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/services': {
       id: '/api/v1/services'
       path: '/api/v1/services'
@@ -1987,13 +2029,6 @@ declare module '@tanstack/react-router' {
       path: '/api/storefront/enrich'
       fullPath: '/api/storefront/enrich'
       preLoaderRoute: typeof ApiStorefrontEnrichRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/sandbox/capability': {
-      id: '/api/sandbox/capability'
-      path: '/api/sandbox/capability'
-      fullPath: '/api/sandbox/capability'
-      preLoaderRoute: typeof ApiSandboxCapabilityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/requests/$requestRef': {
@@ -2045,32 +2080,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscoverySchemaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/discovery/fixtures': {
-      id: '/api/discovery/fixtures'
-      path: '/api/discovery/fixtures'
-      fullPath: '/api/discovery/fixtures'
-      preLoaderRoute: typeof ApiDiscoveryFixturesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/discovery/examples': {
       id: '/api/discovery/examples'
       path: '/api/discovery/examples'
       fullPath: '/api/discovery/examples'
       preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/demo-provider/quote': {
-      id: '/api/demo-provider/quote'
-      path: '/api/demo-provider/quote'
-      fullPath: '/api/demo-provider/quote'
-      preLoaderRoute: typeof ApiDemoProviderQuoteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/demo-provider/health': {
-      id: '/api/demo-provider/health'
-      path: '/api/demo-provider/health'
-      fullPath: '/api/demo-provider/health'
-      preLoaderRoute: typeof ApiDemoProviderHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/businesses/search': {
@@ -2255,32 +2269,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1RequestsRequestRefRouteImport
       parentRoute: typeof ApiV1RequestsRoute
     }
-    '/api/sandbox/providers/workflow': {
-      id: '/api/sandbox/providers/workflow'
-      path: '/api/sandbox/providers/workflow'
-      fullPath: '/api/sandbox/providers/workflow'
-      preLoaderRoute: typeof ApiSandboxProvidersWorkflowRouteImport
+    '/api/v1/operations/execute': {
+      id: '/api/v1/operations/execute'
+      path: '/api/v1/operations/execute'
+      fullPath: '/api/v1/operations/execute'
+      preLoaderRoute: typeof ApiV1OperationsExecuteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/sandbox/providers/route-resolver': {
-      id: '/api/sandbox/providers/route-resolver'
-      path: '/api/sandbox/providers/route-resolver'
-      fullPath: '/api/sandbox/providers/route-resolver'
-      preLoaderRoute: typeof ApiSandboxProvidersRouteResolverRouteImport
+    '/api/v1/operations/$invocationRef': {
+      id: '/api/v1/operations/$invocationRef'
+      path: '/api/v1/operations/$invocationRef'
+      fullPath: '/api/v1/operations/$invocationRef'
+      preLoaderRoute: typeof ApiV1OperationsInvocationRefRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/sandbox/providers/route-quoter': {
-      id: '/api/sandbox/providers/route-quoter'
-      path: '/api/sandbox/providers/route-quoter'
-      fullPath: '/api/sandbox/providers/route-quoter'
-      preLoaderRoute: typeof ApiSandboxProvidersRouteQuoterRouteImport
+    '/api/v1/market-operations/search': {
+      id: '/api/v1/market-operations/search'
+      path: '/api/v1/market-operations/search'
+      fullPath: '/api/v1/market-operations/search'
+      preLoaderRoute: typeof ApiV1MarketOperationsSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/sandbox/$slug/checkup-quote': {
-      id: '/api/sandbox/$slug/checkup-quote'
-      path: '/api/sandbox/$slug/checkup-quote'
-      fullPath: '/api/sandbox/$slug/checkup-quote'
-      preLoaderRoute: typeof ApiSandboxSlugCheckupQuoteRouteImport
+    '/api/v1/market-operations/inspect-plan': {
+      id: '/api/v1/market-operations/inspect-plan'
+      path: '/api/v1/market-operations/inspect-plan'
+      fullPath: '/api/v1/market-operations/inspect-plan'
+      preLoaderRoute: typeof ApiV1MarketOperationsInspectPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/market-operations/detail': {
+      id: '/api/v1/market-operations/detail'
+      path: '/api/v1/market-operations/detail'
+      fullPath: '/api/v1/market-operations/detail'
+      preLoaderRoute: typeof ApiV1MarketOperationsDetailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/market-operations/compare': {
+      id: '/api/v1/market-operations/compare'
+      path: '/api/v1/market-operations/compare'
+      fullPath: '/api/v1/market-operations/compare'
+      preLoaderRoute: typeof ApiV1MarketOperationsCompareRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/requests/$requestRef/run': {
@@ -2478,6 +2506,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/requests/$requestRef/cancellation'
       preLoaderRoute: typeof ApiV1RequestsRequestRefCancellationRouteImport
       parentRoute: typeof ApiV1RequestsRequestRefRoute
+    }
+    '/api/v1/operations/$invocationRef/reconcile': {
+      id: '/api/v1/operations/$invocationRef/reconcile'
+      path: '/reconcile'
+      fullPath: '/api/v1/operations/$invocationRef/reconcile'
+      preLoaderRoute: typeof ApiV1OperationsInvocationRefReconcileRouteImport
+      parentRoute: typeof ApiV1OperationsInvocationRefRoute
+    }
+    '/api/v1/operations/$invocationRef/cancel': {
+      id: '/api/v1/operations/$invocationRef/cancel'
+      path: '/cancel'
+      fullPath: '/api/v1/operations/$invocationRef/cancel'
+      preLoaderRoute: typeof ApiV1OperationsInvocationRefCancelRouteImport
+      parentRoute: typeof ApiV1OperationsInvocationRefRoute
     }
     '/api/requests/$requestRef/repeat-permissions/$permissionRef': {
       id: '/api/requests/$requestRef/repeat-permissions/$permissionRef'
@@ -2956,6 +2998,24 @@ const ApiV1ServicesRouteWithChildren = ApiV1ServicesRoute._addFileChildren(
   ApiV1ServicesRouteChildren,
 )
 
+interface ApiV1OperationsInvocationRefRouteChildren {
+  ApiV1OperationsInvocationRefCancelRoute: typeof ApiV1OperationsInvocationRefCancelRoute
+  ApiV1OperationsInvocationRefReconcileRoute: typeof ApiV1OperationsInvocationRefReconcileRoute
+}
+
+const ApiV1OperationsInvocationRefRouteChildren: ApiV1OperationsInvocationRefRouteChildren =
+  {
+    ApiV1OperationsInvocationRefCancelRoute:
+      ApiV1OperationsInvocationRefCancelRoute,
+    ApiV1OperationsInvocationRefReconcileRoute:
+      ApiV1OperationsInvocationRefReconcileRoute,
+  }
+
+const ApiV1OperationsInvocationRefRouteWithChildren =
+  ApiV1OperationsInvocationRefRoute._addFileChildren(
+    ApiV1OperationsInvocationRefRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
@@ -2990,6 +3050,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthDevice_authorizationRoute: OauthDevice_authorizationRoute,
   OauthRegisterRoute: OauthRegisterRoute,
   OauthTokenRoute: OauthTokenRoute,
+  OperationsOperationRefRoute: OperationsOperationRefRoute,
   SShareTokenRoute: SShareTokenRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
@@ -2999,27 +3060,28 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAnswerFollowUpChipsRoute: ApiAnswerFollowUpChipsRoute,
   ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
   ApiAnswerTurnRoute: ApiAnswerTurnRouteWithChildren,
-  ApiDemoProviderHealthRoute: ApiDemoProviderHealthRoute,
-  ApiDemoProviderQuoteRoute: ApiDemoProviderQuoteRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
-  ApiDiscoveryFixturesRoute: ApiDiscoveryFixturesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
   ApiNotificationNovuDispatchRoute: ApiNotificationNovuDispatchRoute,
   ApiNotificationResendDispatchRoute: ApiNotificationResendDispatchRoute,
   ApiNotificationResendWebhookRoute: ApiNotificationResendWebhookRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
-  ApiSandboxCapabilityRoute: ApiSandboxCapabilityRoute,
   ApiStorefrontEnrichRoute: ApiStorefrontEnrichRoute,
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
-  ApiSandboxSlugCheckupQuoteRoute: ApiSandboxSlugCheckupQuoteRoute,
-  ApiSandboxProvidersRouteQuoterRoute: ApiSandboxProvidersRouteQuoterRoute,
-  ApiSandboxProvidersRouteResolverRoute: ApiSandboxProvidersRouteResolverRoute,
-  ApiSandboxProvidersWorkflowRoute: ApiSandboxProvidersWorkflowRoute,
+  OperationsInvocationsInvocationRefRoute:
+    OperationsInvocationsInvocationRefRoute,
+  ApiV1MarketOperationsCompareRoute: ApiV1MarketOperationsCompareRoute,
+  ApiV1MarketOperationsDetailRoute: ApiV1MarketOperationsDetailRoute,
+  ApiV1MarketOperationsInspectPlanRoute: ApiV1MarketOperationsInspectPlanRoute,
+  ApiV1MarketOperationsSearchRoute: ApiV1MarketOperationsSearchRoute,
+  ApiV1OperationsInvocationRefRoute:
+    ApiV1OperationsInvocationRefRouteWithChildren,
+  ApiV1OperationsExecuteRoute: ApiV1OperationsExecuteRoute,
   ApiV1WorkTreeOperationRoute: ApiV1WorkTreeOperationRoute,
 }
 export const routeTree = rootRouteImport

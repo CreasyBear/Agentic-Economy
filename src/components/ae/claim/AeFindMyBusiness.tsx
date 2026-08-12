@@ -1,18 +1,17 @@
 import { Link } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
+import type { BusinessContext } from '@/modules/business/public'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { SearchIcon } from 'lucide-react'
 import { claimFormSearchFor } from './AeFindMyBusiness.exports'
-
 export type FoundBusiness = Readonly<{
   slug: string
   name: string
   category: string
-  suburb: string
-  stateTerritory: string
+  businessContext: BusinessContext
 }>
 
 export type FindMyBusinessSearch = (query: string) => Promise<readonly FoundBusiness[]>
@@ -20,10 +19,9 @@ export type FindMyBusinessSearch = (query: string) => Promise<readonly FoundBusi
 export type ClaimEnrichIntent = Readonly<{ businessName: string; suburb?: string }>
 
 export type ClaimFormSearch = Readonly<{
+  businessContext: BusinessContext
   businessName: string
   category: string
-  suburb: string
-  stateTerritory: string
   requestedSlug: string
   source?: 'supply'
 }>
@@ -45,6 +43,7 @@ export function AeFindMyBusiness({
   const [query, setQuery] = useState('')
   const [pending, setPending] = useState(false)
   const [results, setResults] = useState<readonly FoundBusiness[] | undefined>()
+  const [lookupError, setLookupError] = useState<string | undefined>()
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -52,8 +51,12 @@ export function AeFindMyBusiness({
     if (trimmed.length === 0 || pending) return
 
     setPending(true)
+    setResults(undefined)
+    setLookupError(undefined)
     try {
       setResults(await search(trimmed))
+    } catch {
+      setLookupError('We couldn’t search right now. Try again.')
     } finally {
       setPending(false)
     }
@@ -80,7 +83,10 @@ export function AeFindMyBusiness({
                   id="claim-business-name"
                   name="claim-business-name"
                   value={query}
-                  onChange={(event) => setQuery(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setQuery(event.currentTarget.value)
+                    setLookupError(undefined)
+                  }}
                   placeholder="Joondalup Emergency Plumbing"
                   disabled={pending}
                   aria-describedby="claim-business-name-description"
@@ -96,6 +102,7 @@ export function AeFindMyBusiness({
             </Button>
           </FieldGroup>
         </form>
+        {lookupError === undefined ? null : <p role="alert" className="text-sm text-red-vivid">{lookupError}</p>}
 
         {searched && results.length > 0 ? (
           <div className="grid gap-3" aria-label="Matching businesses">
@@ -104,7 +111,9 @@ export function AeFindMyBusiness({
                 <CardContent className="grid gap-2 p-4">
                   <p className="font-semibold text-foreground">{business.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {[business.category, business.suburb, business.stateTerritory].filter((part) => part.length > 0).join(' · ')}
+                    {business.businessContext.kind === 'local_human'
+                      ? [business.category, business.businessContext.suburb, business.businessContext.stateTerritory].filter((part) => part.length > 0).join(' · ')
+                      : [business.category, business.businessContext.providerIdentifier, business.businessContext.website].filter((part) => part.length > 0).join(' · ')}
                   </p>
                   <div>
                     <Button asChild variant="secondary" className="min-h-11">

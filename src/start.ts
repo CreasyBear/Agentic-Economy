@@ -9,6 +9,7 @@ import { apiRequestBoundaryResponse } from '@/lib/server/api-request-boundary'
 import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
 import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 const requestCorrelationMiddleware = createMiddleware().server(async (ctx) => {
   const { runWithRequestCorrelation, withRequestCorrelationHeader } = await import('@/lib/server/request-correlation')
@@ -40,14 +41,16 @@ export const observabilityRequestMiddleware = createMiddleware().server(async (c
   initSentryServer()
 
   return Sentry.withIsolationScope(async (scope) => {
-    scope.setTag('ae.path', url.pathname)
+    scope.setTag('ae.path', String(sanitizeTelemetryValue(url.pathname, 'ae.path')))
     const requestId = currentRequestCorrelationId()
-    if (requestId !== undefined) scope.setTag('ae.request_id', requestId)
+    if (requestId !== undefined) scope.setTag('ae.request_id', String(sanitizeTelemetryValue(requestId)))
 
     try {
       return await ctx.next()
     } catch (error) {
-      captureServerException(error, { 'ae.path': url.pathname })
+      captureServerException(sanitizeTelemetryError(error), {
+        'ae.path': String(sanitizeTelemetryValue(url.pathname, 'ae.path')),
+      })
       throw error
     } finally {
       await flushPostHogServer().catch(() => undefined)

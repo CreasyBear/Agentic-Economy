@@ -30,23 +30,26 @@ describe('services public route', () => {
     if (service === undefined) throw new Error('Expected a projected service.')
     expect(service.networks).toEqual([])
     expect(service.enriched).toBe(false)
-    expect(service.tags).toEqual([])
+    expect(service.tags).toEqual(['plumbing'])
     expect(service.ae.trustTier).toBe('listed')
-    expect(service.ae.suburb).toBe('Fremantle')
-    expect(service.ae.stateTerritory).toBe('WA')
+    expect(service.ae.businessContext).toEqual({
+      kind: 'local_human',
+      suburb: 'Fremantle',
+      stateTerritory: 'WA',
+    })
     expect(service.ae.publicUrl).toBe('https://acme.example')
 
     const endpoint = service.endpoints[0]
     if (endpoint === undefined) throw new Error('Expected a projected service endpoint.')
     expect(endpoint.description).toBe('Returns a sandbox quote.')
     expect(endpoint.parameters).toEqual([])
-    expect(endpoint.tags).toEqual([])
+    expect(endpoint.tags).toEqual(['plumbing'])
     expect(endpoint.quality).toBeNull()
     expect(endpoint.ae.offeringRef).toBe('offering-open')
     expect(endpoint.ae.provenance).toBe('business_declared')
-    expect(endpoint.ae.access).toBe('open')
-    expect(endpoint.ae.authentication).toEqual({ kind: 'keyless' })
-    expect(endpoint.ae.execution).toBe('request_route')
+    expect(endpoint.ae.access).toBe('external')
+    expect(endpoint.ae.authentication).toEqual({ kind: 'unknown' })
+    expect(endpoint.ae.execution).toBe('catalog_only')
     expect(endpoint.ae.settlementSupport).toBe('unpriced')
     for (const legacyField of ['summary', 'catalogPrice', 'offeringRef', 'operationRef'] as const) {
       expect(endpoint).not.toHaveProperty(legacyField)
@@ -140,8 +143,7 @@ function page(): PublicBusinessCatalogApiV2Page {
         slug: 'acme-plumbing',
         name: 'Acme Plumbing',
         category: 'plumbing',
-        suburb: 'Fremantle',
-        stateTerritory: 'WA',
+        businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
         publicUrl: 'https://acme.example',
         trustTier: 'listed',
         photos: [],

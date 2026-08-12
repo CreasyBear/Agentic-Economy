@@ -7,8 +7,15 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AGENT_PAGE } from '@/content/brand-copy'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
-import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
-import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
+import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import {
+  OPERATION_MARKET_ACTION_ENTRIES,
+  OPERATION_MARKET_COMPARE_PATH,
+  OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_SEARCH_PATH,
+} from '@/modules/registry/operation-entry'
 
 export const Route = createFileRoute('/for-agents')({
   loader: () => readCanonicalBaseUrlServer(),
@@ -21,53 +28,59 @@ export const Route = createFileRoute('/for-agents')({
   }),
   component: ForAgentsRoute,
 })
+function operationMarketRoute(path: string): string {
+  const route = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+  if (route === undefined) throw new Error(`Operation market route is not registered: ${path}`)
+  return `${route.method} ${route.pathTemplate}`
+}
 
-/**
- * The surfaces below are the ones AE already publishes and advertises in
- * `llms.txt` and the sitemap (`discovery/internal/discovery-files.ts`). This
- * page hands them to a human reading on an agent's behalf; it never describes
- * an endpoint the discovery documents do not already carry.
- */
-const readSurfaces = [
-  {
-    href: '/llms.txt',
-    title: 'llms.txt',
-    description: 'The entry document: published businesses, assistant setup, and the request recipe.',
-  },
-  {
-    href: '/SKILL.md',
-    title: 'SKILL.md',
-    description: 'The full procedure — relation-following, stop rules, and confirmation.',
-  },
-  {
-    href: '/api/businesses',
-    title: '/api/businesses',
-    description: 'Every published business page as JSON. Search with /api/businesses/search?q=.',
-  },
-  {
-    href: '/api/v1/services',
-    title: '/api/v1/services',
-    description: 'Canonical agent-native Services with flat endpoints. Search with /api/v1/services/search?q=.',
-  },
-  {
-    href: '/.well-known/ucp',
-    title: '/.well-known/ucp',
-    description: 'The Universal Commerce Protocol descriptor for this deployment.',
-  },
-] as const
+const CLI_ENTRYPOINT = 'npm run -s ae --'
 
-const callSurfaces = [
+function anonymousReads(canonicalBaseUrl: string) {
+  return [
+    {
+      command: `${CLI_ENTRYPOINT} search "<job>" --json`,
+      route: operationMarketRoute(OPERATION_MARKET_SEARCH_PATH),
+      description: 'Find current Operations for a natural-language job.',
+    },
+    {
+      command: `${CLI_ENTRYPOINT} inspect "<operationRef>" --json`,
+      route: operationMarketRoute(OPERATION_MARKET_DETAIL_PATH),
+      description: 'Read one exact Operation’s inputs, terms, price, effects, availability, and evidence.',
+    },
+    {
+      command: `${CLI_ENTRYPOINT} compare "<operationRef1>" "<operationRef2>" --json`,
+      route: operationMarketRoute(OPERATION_MARKET_COMPARE_PATH),
+      description: 'Compare exact current Operations without invoking them.',
+    },
+    {
+      command: `curl -fsSL ${canonicalBaseUrl}/.well-known/ucp`,
+      route: 'GET /.well-known/ucp',
+      description: 'Read the raw machine handshake before installing the repo-local CLI.',
+    },
+  ] as const
+}
+
+const authenticatedCalls = [
   {
-    title: `${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${ANSWER_THREAD_AGENT_ENTRYPOINT.path}`,
-    description: 'Ask a question and stream the answer. No credential needed.',
-    authentication: `No credential. Send ${Object.entries(ANSWER_THREAD_AGENT_ENTRYPOINT.requiredHeaders)
-      .map(([name, value]) => `${name}: ${value}`)
-      .join('; ')}.`,
+    command: `${CLI_ENTRYPOINT} connect --json`,
+    route: `POST ${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization} · POST ${AGENT_ACCESS_OAUTH_PATHS.token}`,
+    description: 'Obtain one owner-approved AE caller key through the OAuth device flow or validate the configured key against the gateway.',
   },
   {
-    title: `${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method} ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,
-    description: 'Open a Customer Request and carry it through comparison, approval, and execution.',
-    authentication: 'Needs an assistant key you approve',
+    command: `${CLI_ENTRYPOINT} invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "<key>" --json`,
+    route: `${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method} ${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path}`,
+    description: 'Invoke the inspected Operation with one explicit stable idempotency key.',
+  },
+  {
+    command: `${CLI_ENTRYPOINT} status "<invocationRef>" --json`,
+    route: `${OPERATION_INVOKE_ROUTE_CONTRACT.status.method} ${OPERATION_INVOKE_ROUTE_CONTRACT.status.path}`,
+    description: 'Read the durable state for the same invocation.',
+  },
+  {
+    command: `${CLI_ENTRYPOINT} recover "<invocationRef>" "$AE_EVIDENCE_JSON" --idempotency-key "<key>" --json`,
+    route: `${OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.method} ${OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.path}`,
+    description: 'Recover uncertain work using the original invocation and stable key.',
   },
 ] as const
 
@@ -82,62 +95,63 @@ function ForAgentsRoute() {
         description={AGENT_PAGE.subhead}
         actions={
           <>
-            <Button asChild variant="default" className="min-h-11"><a href="/llms.txt">Read llms.txt</a></Button>
-            <Button asChild variant="secondary" className="min-h-11"><a href="/SKILL.md">Read SKILL.md</a></Button>
+            <Button asChild variant="default" className="min-h-11"><a href="/SKILL.md">Read the Operation skill</a></Button>
+            <Button asChild variant="secondary" className="min-h-11"><a href="/.well-known/ucp">Open deployment manifest</a></Button>
           </>
         }
       />
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-16 md:px-6">
         <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
 
-        <section aria-labelledby="agent-read-surfaces" className="grid gap-4">
-          <div className="grid gap-1">
-            <h2 id="agent-read-surfaces" className="text-xl font-semibold text-foreground">What your agent can read</h2>
-            <p className="block max-w-3xl text-muted-foreground">
-              Every published fact is available as a document your agent can fetch without a key.
+        <section aria-labelledby="agent-contract" className="grid gap-5">
+          <div className="grid max-w-3xl gap-1">
+            <h2 id="agent-contract" className="text-xl font-semibold text-foreground">The boundary is visible before you connect</h2>
+            <p className="block text-muted-foreground">
+              Search, detail, compare, and plan inspection are anonymous reads. Invoke, status, and recovery require one revocable AE caller key.
             </p>
           </div>
-          <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
-            {readSurfaces.map((surface) => (
-              <li key={surface.href}>
-                <Card className="h-full">
-                  <CardHeader>
-                    <CardTitle className="font-mono text-base text-foreground">{surface.title}</CardTitle>
-                    <CardDescription>{surface.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button asChild variant="secondary" size="sm" className="min-h-11">
-                      <a href={surface.href}>Open {surface.title}</a>
-                    </Button>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </section>
 
-        <section aria-labelledby="agent-call-surfaces" className="grid gap-4">
-          <div className="grid gap-1">
-            <h2 id="agent-call-surfaces" className="text-xl font-semibold text-foreground">What your agent can call</h2>
-            <p className="block max-w-3xl text-muted-foreground">
-              Answers are open. Anything that commits a person stays behind access they approved and can revoke.
-            </p>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="gap-4">
+              <CardHeader>
+                <CardTitle>Anonymous reads</CardTitle>
+                <CardDescription>No account, caller key, provider credential, or execution authority.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-4">
+                  {anonymousReads(canonicalBaseUrl).map((surface) => (
+                    <div key={surface.route} className="grid gap-1 border-t border-border pt-4 first:border-t-0 first:pt-0">
+                      <dt className="font-mono text-sm font-semibold text-foreground">{surface.command}</dt>
+                      <dd className="grid gap-1 text-sm text-muted-foreground">
+                        <code>{surface.route}</code>
+                        <span>{surface.description}</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
+
+            <Card className="gap-4">
+              <CardHeader>
+                <CardTitle>Authenticated invoke and recovery</CardTitle>
+                <CardDescription>The AE key identifies the caller. AE keeps provider credentials separate and still enforces explicit authority.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-4">
+                  {authenticatedCalls.map((surface) => (
+                    <div key={surface.command} className="grid gap-1 border-t border-border pt-4 first:border-t-0 first:pt-0">
+                      <dt className="font-mono text-sm font-semibold text-foreground">{surface.command}</dt>
+                      <dd className="grid gap-1 text-sm text-muted-foreground">
+                        <code>{surface.route}</code>
+                        <span>{surface.description}</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
           </div>
-          <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
-            {callSurfaces.map((surface) => (
-              <li key={surface.title}>
-                <Card className="h-full">
-                  <CardHeader>
-                    <CardTitle className="font-mono text-base text-foreground">{surface.title}</CardTitle>
-                    <CardDescription>{surface.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="block text-sm text-muted-foreground">{surface.authentication}</p>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ul>
         </section>
 
         <section aria-labelledby="agent-next-step" className="grid gap-3 border-t border-border pt-6">

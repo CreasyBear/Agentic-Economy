@@ -1,8 +1,14 @@
 import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { CopyIcon, Link2OffIcon, PanelLeftIcon } from 'lucide-react'
+import { CopyIcon, EllipsisVerticalIcon, Link2OffIcon, PanelLeftIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { neutralizeBidiFormattingControls } from '@/modules/answer/public'
 import { toast } from '@/lib/ui/toast'
 import { announceShareFailure, copyAnswerThreadShareLink, revokeAnswerThreadShare } from './copy-thread-link'
@@ -46,8 +52,8 @@ export function AeThreadHeader({ title, threadId, showSidebarButton = false, sid
   }
 
   return (
-    <header className="sticky top-0 z-20 grid min-w-0 grid-cols-1 gap-2 border-b border-border bg-background px-4 py-2 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:px-6">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="sticky top-0 z-20 h-14 border-b border-border bg-background">
+      <div className="mx-auto flex h-full w-full max-w-2xl min-w-0 items-center gap-2 px-4 md:px-6">
         {showSidebarButton && onOpenSidebar !== undefined ? (
           <Button
             type="button"
@@ -62,49 +68,53 @@ export function AeThreadHeader({ title, threadId, showSidebarButton = false, sid
             <PanelLeftIcon aria-hidden="true" />
           </Button>
         ) : null}
-        <Link
-          to="/"
-          className="inline-flex min-h-11 shrink-0 items-center rounded-sm font-heading text-sm font-semibold text-foreground no-underline hover:text-brand"
+        <h1
+          dir="auto"
+          style={{ unicodeBidi: 'isolate' }}
+          className="min-w-0 flex-1 truncate font-heading text-sm text-foreground md:text-lg"
         >
-          Agentic Economy
-        </Link>
-        <span className="hidden h-4 w-px bg-border md:block" aria-hidden="true" />
-      </div>
-      <h1 dir="auto" style={{ unicodeBidi: 'isolate' }} className="col-start-1 row-start-2 min-w-0 truncate font-heading text-sm text-foreground md:col-start-2 md:col-span-1 md:row-start-1 md:text-lg">{displayTitle}</h1>
-      <div className="col-start-1 row-start-3 flex min-w-0 flex-wrap items-center gap-2 md:col-start-3 md:row-start-1 md:flex-nowrap">
+          {displayTitle}
+        </h1>
         {onNewQuestion === undefined ? (
-          <Button asChild variant="secondary" size="sm" className="min-h-11">
+          <Button asChild variant="secondary" size="sm">
             <a href="/">Ask another</a>
           </Button>
         ) : (
-          <Button type="button" variant="secondary" size="sm" className="min-h-11" onClick={onNewQuestion}>
+          <Button type="button" variant="secondary" size="sm" onClick={onNewQuestion}>
             Ask another
           </Button>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-11"
-          onClick={() => void copyShareLink()}
-          disabled={shareBusy !== null}
-          aria-busy={shareBusy === 'copy'}
-        >
-          <CopyIcon aria-hidden="true" />
-          {shareBusy === 'copy' ? 'Preparing…' : 'Copy share link'}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-11"
-          onClick={() => void revokeShareLink()}
-          disabled={shareBusy !== null || shareRevoked}
-          aria-busy={shareBusy === 'revoke'}
-        >
-          <Link2OffIcon aria-hidden="true" />
-          {shareBusy === 'revoke' ? 'Revoking…' : shareRevoked ? 'Share link revoked' : 'Revoke share link'}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Thread actions"
+              aria-busy={shareBusy !== null}
+            >
+              <EllipsisVerticalIcon aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onSelect={() => void copyShareLink()}
+                disabled={shareBusy !== null}
+              >
+                <CopyIcon aria-hidden="true" />
+                {shareBusy === 'copy' ? 'Preparing share link…' : 'Copy share link'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void revokeShareLink()}
+                disabled={shareBusy !== null || shareRevoked}
+              >
+                <Link2OffIcon aria-hidden="true" />
+                {shareBusy === 'revoke' ? 'Revoking share link…' : shareRevoked ? 'Share link revoked' : 'Revoke share link'}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )

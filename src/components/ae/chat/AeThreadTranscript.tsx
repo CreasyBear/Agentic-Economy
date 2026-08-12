@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { MessageScrollerItem } from '@/components/ui/message-scroller'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import type { StopAnswerTurnResult } from './turn-stop'
@@ -62,6 +63,11 @@ export function AeThreadTranscript({
   const liveGenerationRef = useRef<number | null>(null)
   const settledLiveTurnRef = useRef<TurnStatusSnapshot | null>(null)
   const announcedTerminalRef = useRef<string | null>(null)
+  const onOperationSelect = onFollowUp === undefined
+    ? undefined
+    : (operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => {
+        onFollowUp(JSON.stringify({ operationRef, input, candidateSetDigest }))
+      }
   const latestStatusSnapshot = latestProjectedTurn === undefined
     ? null
     : { turnId: latestProjectedTurn.turnId, status: latestProjectedTurn.status }
@@ -143,6 +149,7 @@ export function AeThreadTranscript({
         const turnKey = turnRenderKeys?.[turn.turnId] ?? turn.turnId
 
         const anchorThisTurn = liveTurn === null && isLastSettled
+        const canSelectOperations = liveTurn === null && isLastSettled
         const showsTerminal = isLastCompleted && turn.turnId === latestProjectedTurn?.turnId && liveTurn === null && terminal !== null
         const terminalProps = showsTerminal ? {
           ...terminal,
@@ -153,8 +160,10 @@ export function AeThreadTranscript({
         } : null
 
         return (
-          <div
+          <MessageScrollerItem
             key={turnKey}
+            messageId={turn.turnId}
+            scrollAnchor={anchorThisTurn}
             data-message-id={turn.turnId}
             {...(anchorThisTurn ? { 'data-scroll-anchor': 'true' } : {})}
           >
@@ -169,6 +178,7 @@ export function AeThreadTranscript({
                   {...(onStopPendingTurn === undefined || resolvedThreadId === undefined || turn.status !== 'pending'
                     ? {}
                     : { onStopPending: () => onStopPendingTurn(resolvedThreadId, turn.turnId) })}
+                  {...(onOperationSelect === undefined || !canSelectOperations ? {} : { onOperationSelect })}
                 />
               ) : (
                 <AeThreadTurnCollapsed
@@ -177,6 +187,7 @@ export function AeThreadTranscript({
                   {...(onStopPendingTurn === undefined || resolvedThreadId === undefined || turn.status !== 'pending'
                     ? {}
                     : { onStopPending: () => onStopPendingTurn(resolvedThreadId, turn.turnId) })}
+                  {...(onOperationSelect === undefined || !canSelectOperations ? {} : { onOperationSelect })}
                 />
               )}
               {terminalProps !== null && terminalProps.timing !== 'today' ? <AeShortlistTerminal {...terminalProps} /> : showsTerminal ? null : isLastCompleted && liveTurn === null ? (
@@ -190,13 +201,15 @@ export function AeThreadTranscript({
                 </>
               ) : null}
             </div>
-          </div>
+          </MessageScrollerItem>
         )
       })}
 
       {liveTurn !== null ? (
-        <div
+        <MessageScrollerItem
           key={`live-${liveTurn.generation}`}
+          messageId={`live-${liveTurn.generation}`}
+          scrollAnchor
           data-message-id={`live-${liveTurn.generation}`}
           data-scroll-anchor="true"
         >
@@ -213,9 +226,10 @@ export function AeThreadTranscript({
               {...(onStreamEnd === undefined ? {} : { onStreamEnd })}
               onSettledTurn={handleSettledTurn}
               {...(onRetry === undefined ? {} : { onRetry: () => onRetry(liveTurn.query) })}
+              {...(onOperationSelect === undefined ? {} : { onOperationSelect })}
             />
           </div>
-        </div>
+        </MessageScrollerItem>
       ) : null}
     </>
   )

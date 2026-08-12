@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { readAgentAccessMoneyReadback } from '@/modules/customer-request/agent-access-console'
-import type { CustomerRequestAgentKeyInventoryItem } from '@/modules/customer-request/agent-access'
+import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import {
   accountRefForOperator,
   createInMemoryMoneyQueryPort,
@@ -10,9 +10,11 @@ import {
   type MoneyUsageEvent,
 } from '@/modules/money/public'
 
-const key: CustomerRequestAgentKeyInventoryItem = {
+const key: AgentAccessKeyInventoryItem = {
   keyId: 'key_console_1',
   name: 'Console assistant',
+  applicationRef: 'agentic-economy',
+  environment: 'sandbox',
   authorityMode: 'inspect_only',
   scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
   revoked: false,

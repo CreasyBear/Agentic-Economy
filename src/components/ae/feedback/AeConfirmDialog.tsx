@@ -1,6 +1,6 @@
-import { useRef } from 'react'
+import { useRef, type RefObject } from "react";
 
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,19 +8,20 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 
 type AeConfirmDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  confirmLabel: string
-  cancelLabel?: string
-  confirmVariant?: 'default' | 'destructive'
-  pending?: boolean
-  onConfirm: () => void | Promise<void>
-}
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  confirmVariant?: "default" | "destructive";
+  pending?: boolean;
+  onConfirm: () => void | Promise<void>;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+};
 
 export function AeConfirmDialog({
   open,
@@ -28,27 +29,28 @@ export function AeConfirmDialog({
   title,
   description,
   confirmLabel,
-  cancelLabel = 'Cancel',
-  confirmVariant = 'default',
+  cancelLabel = "Cancel",
+  confirmVariant = "default",
   pending = false,
   onConfirm,
+  returnFocusRef,
 }: AeConfirmDialogProps) {
-  const cancelRef = useRef<HTMLButtonElement>(null)
-  const openerRef = useRef<HTMLElement | null>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
-      return
+      return;
     }
 
-    onOpenChange(nextOpen)
+    onOpenChange(nextOpen);
   }
 
   async function handleConfirm() {
     if (pending) {
-      return
+      return;
     }
-    await onConfirm()
+    await onConfirm();
   }
 
   return (
@@ -57,19 +59,21 @@ export function AeConfirmDialog({
         role="alertdialog"
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
-          event.preventDefault()
-          const activeElement = document.activeElement
-          openerRef.current = activeElement instanceof HTMLElement ? activeElement : null
-          cancelRef.current?.focus()
+          event.preventDefault();
+          const activeElement = document.activeElement;
+          openerRef.current =
+            activeElement instanceof HTMLElement ? activeElement : null;
+          cancelRef.current?.focus();
         }}
         onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          openerRef.current?.focus()
-          openerRef.current = null
+          event.preventDefault();
+          const focusTarget = returnFocusRef?.current ?? openerRef.current;
+          focusTarget?.focus();
+          openerRef.current = null;
         }}
         onEscapeKeyDown={(event) => {
           if (pending) {
-            event.preventDefault()
+            event.preventDefault();
           }
         }}
       >
@@ -84,17 +88,22 @@ export function AeConfirmDialog({
             variant="outline"
             onClick={() => {
               if (!pending) {
-                onOpenChange(false)
+                onOpenChange(false);
               }
             }}
           >
             {cancelLabel}
           </Button>
-          <Button type="button" variant={confirmVariant} disabled={pending} onClick={() => void handleConfirm()}>
-            {pending ? 'Working…' : confirmLabel}
+          <Button
+            type="button"
+            variant={confirmVariant}
+            disabled={pending}
+            onClick={() => void handleConfirm()}
+          >
+            {pending ? "Working…" : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

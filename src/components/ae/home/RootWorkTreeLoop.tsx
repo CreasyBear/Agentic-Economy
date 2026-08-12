@@ -10,10 +10,9 @@ import {
   claimRootWorkTreeServer,
   decideRootWorkTreeServer,
   type RootWorkTreeReadback,
-  type RootWorkTreeView,
-  type WorkTreeDecisionReceipt,
+  type WorkTreeDecisionResult,
 } from '@/modules/work-tree/human-root.functions'
-import type { DecisionInboxExit, DecisionInboxExitKind, DecisionInboxItem } from '@/modules/work-tree/public'
+import type { DecisionInboxExit, DecisionInboxExitKind } from '@/modules/work-tree/public'
 
 /**
  * The person-facing WorkTree loop. Component state holds only transient action
@@ -24,7 +23,7 @@ import type { DecisionInboxExit, DecisionInboxExitKind, DecisionInboxItem } from
 export function RootWorkTreeLoop({ readback }: Readonly<{ readback: RootWorkTreeReadback }>) {
   const router = useRouter()
   const [pendingExit, setPendingExit] = useState<DecisionInboxExitKind | undefined>(undefined)
-  const [decided, setDecided] = useState<WorkTreeDecisionReceipt | undefined>(undefined)
+  const [decided, setDecided] = useState<WorkTreeDecisionResult | undefined>(undefined)
   const view = readback.kind === 'ready' ? readback : undefined
   const claimWorkTree = useServerFn(claimRootWorkTreeServer)
   const [claimPending, setClaimPending] = useState(false)
@@ -55,7 +54,7 @@ export function RootWorkTreeLoop({ readback }: Readonly<{ readback: RootWorkTree
     }
   }, [claimWorkTree, router, view])
 
-  const decide = useCallback(async (kind: DecisionInboxExitKind, item: DecisionInboxItem, exit: DecisionInboxExit) => {
+  const decide = useCallback(async (kind: DecisionInboxExitKind, exit: DecisionInboxExit) => {
     if (view === undefined) return
     setPendingExit(kind)
     try {
@@ -73,7 +72,12 @@ export function RootWorkTreeLoop({ readback }: Readonly<{ readback: RootWorkTree
       setDecided(result.receipt)
       await router.invalidate()
     } catch {
-      setDecided(unknownReceipt(view, exit.nodeId, kind, item))
+      setDecided({ kind: 'unknown' })
+      try {
+        await router.invalidate()
+      } catch {
+        // The unknown result still requires a fresh inspect before retrying.
+      }
     } finally {
       setPendingExit(undefined)
     }
@@ -93,7 +97,7 @@ export function RootWorkTreeLoop({ readback }: Readonly<{ readback: RootWorkTree
     )
   }
 
-  const receipt = decided ?? view.receipts[view.receipts.length - 1]
+  const decisionResult = decided ?? view.receipts[view.receipts.length - 1]
   const canClaim = !view.events.some((event) => event.kind === 'claimed')
     && view.events.some((event) => event.kind === 'created' && event.actor?.source === 'browser_guest')
 
@@ -126,10 +130,10 @@ export function RootWorkTreeLoop({ readback }: Readonly<{ readback: RootWorkTree
       <AeDecisionInbox
         projection={view.inbox}
         {...(pendingExit === undefined ? {} : { pendingExit })}
-        {...(receipt === undefined ? {} : { status: receiptStatus(receipt) })}
-        onLock={(item, exit) => { void decide('lock', item, exit) }}
-        onAdjust={(item, exit) => { void decide('adjust', item, exit) }}
-        onPark={(item, exit) => { void decide('park', item, exit) }}
+        {...(decisionResult === undefined ? {} : { status: receiptStatus(decisionResult) })}
+        onLock={(_item, exit) => { void decide('lock', exit) }}
+        onAdjust={(_item, exit) => { void decide('adjust', exit) }}
+        onPark={(_item, exit) => { void decide('park', exit) }}
       />
 
       <AeWorkTreePanel tree={view.tree} />
@@ -151,51 +155,31 @@ const REFUSAL_COPY: Readonly<Record<string, string>> = {
   digest_mismatch: 'That decision didn’t match the one on record. Nothing changed.',
 }
 
-function receiptStatus(receipt: WorkTreeDecisionReceipt): AeDecisionInboxStatus {
-  if (receipt.kind === 'refused') {
-    if (!('decision' in receipt)) {
+function receiptStatus(result: WorkTreeDecisionResult): AeDecisionInboxStatus {
+  if (result.kind === 'unknown') {
+    return {
+      tone: 'unknown',
+      message: 'We can’t confirm that decision yet.',
+      detail: 'Inspect the current WorkTree and reconcile before deciding again.',
+    }
+  }
+  if (result.kind === 'refused') {
+    if ('code' in result) {
       return {
         tone: 'refusal',
         message: 'Authentication required.',
-        detail: REFUSAL_COPY[receipt.code] ?? 'Sign in before deciding this WorkTree item.',
+        detail: REFUSAL_COPY[result.code] ?? 'Sign in before deciding this WorkTree item.',
       }
     }
     return {
       tone: 'refusal',
-      message: `${DECISION_NOUN[receipt.decision]} was refused.`,
-      detail: REFUSAL_COPY[receipt.refusalCode ?? ''] ?? 'Nothing changed.',
-    }
-  }
-  if (receipt.kind === 'unknown') {
-    return {
-      tone: 'unknown',
-      message: `We can’t confirm ${DECISION_NOUN[receipt.decision].toLowerCase()} yet.`,
-      detail: 'The plan below is the current record. Re-read it before deciding again.',
+      message: `${DECISION_NOUN[result.decision]} was refused.`,
+      detail: REFUSAL_COPY[result.refusalCode] ?? 'Nothing changed.',
     }
   }
   return {
     tone: 'receipt',
-    message: `${DECISION_NOUN[receipt.decision]} — ${receipt.disposition}.`,
-    detail: `Receipt ${receipt.receiptId} at revision ${receipt.readback.revision}.`,
-  }
-}
-
-function unknownReceipt(
-  view: RootWorkTreeView,
-  nodeId: string,
-  kind: DecisionInboxExitKind,
-  item: DecisionInboxItem,
-): WorkTreeDecisionReceipt {
-  return {
-    kind: 'unknown',
-    decision: kind,
-    projectId: view.projectId,
-    nodeId,
-    receiptId: `unconfirmed:${item.treeId}:${nodeId}`,
-    generation: view.generation,
-    revision: view.revision,
-    disposition: 'unchanged',
-    occurredAt: Date.now(),
-    readback: { projectId: view.projectId, revision: view.revision },
+    message: `${DECISION_NOUN[result.decision]} — ${result.disposition}.`,
+    detail: `Receipt ${result.receiptId} at revision ${result.readback.revision}.`,
   }
 }

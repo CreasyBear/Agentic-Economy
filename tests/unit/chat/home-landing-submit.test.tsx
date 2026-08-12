@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { HOME } from '@/content/brand-copy'
+import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 
 const routeState = vi.hoisted(() => {
@@ -92,6 +92,34 @@ describe('plan-first home', () => {
     expect(screen.getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
     expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/claim')).toBe(true)
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()
+  })
+
+  it('uses semantic door headings and touch-sized category links', () => {
+    renderHomeRoute()
+
+    expect(screen.getByRole('heading', { level: 2, name: AGENT_DOOR.heading })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: BUSINESS_DOOR.heading })).toBeTruthy()
+    const categories = screen.getByRole('navigation', { name: 'Browse by category' })
+    for (const link of categories.querySelectorAll('a')) {
+      expect(link.classList.contains('min-h-11')).toBe(true)
+    }
+  })
+
+  it.each(['', '   '])('keeps an empty ask on home and announces the required message', (query) => {
+    renderHomeRoute()
+
+    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    fireEvent.change(searchbox, { target: { value: query } })
+    fireEvent.submit(screen.getByRole('search'))
+
+    expect(routeState.navigate).not.toHaveBeenCalled()
+    const message = screen.getByText('Enter what you need done before asking.')
+    expect(message.getAttribute('aria-live')).toBe('polite')
+    expect(searchbox.getAttribute('aria-invalid')).toBe('true')
+
+    fireEvent.change(searchbox, { target: { value: 'Find a local electrician' } })
+    expect(screen.queryByText('Enter what you need done before asking.')).toBeNull()
+    expect(searchbox.getAttribute('aria-invalid')).toBeNull()
   })
 
   it('keeps example asks available while a query is present', () => {

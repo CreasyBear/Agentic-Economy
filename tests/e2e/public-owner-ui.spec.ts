@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs'
 import slugify from '@sindresorhus/slugify'
 
 import { expect, test, type Page } from '@playwright/test'
-import { LOCAL_E2E_BUSINESS_FIXTURES, type LocalE2eBusinessFixture } from '../../src/lib/dev/local-e2e-business-fixtures'
+import { LOCAL_E2E_BUSINESS_FIXTURES, type LocalE2eBusinessFixture } from '../helpers/local-e2e-business-fixtures'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
 import { HOME } from '../../src/content/brand-copy'
 

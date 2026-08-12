@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   BotIcon,
@@ -16,12 +17,13 @@ import {
   StoreIcon,
 } from 'lucide-react'
 
-import { AeSelectField } from '@/components/ae/forms/AeSelectField'
 import { cn } from '@/lib/utils'
 import {
   OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
+  SUPPORTED_OFFERING_CURRENCIES,
+  isSupportedOfferingCurrency,
   normalizeOfferingPrice,
 } from '@/modules/catalog/public'
 import { formatExactAmount, parseDecimalExactAmount } from '@/modules/money/public'
@@ -337,16 +339,27 @@ export function AeOwnerOfferingEditor({
           <div className="grid gap-4 rounded-lg border border-border p-4">
             <div className="grid gap-1">
               <p className="font-semibold text-foreground">Price customers can compare</p>
-              <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Published in Australian dollars so people and assistants can compare it. Your note is never read to fill this in, and this never rewrites your note.</p>
+              <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so people and assistants can compare it. Your note is never read to fill this in, and this never rewrites your note.</p>
             </div>
+            <Field label="Currency" inputID="offering-price-currency" description="Choose the currency for this exact amount.">
+              <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : 'AUD' })}>
+                <SelectTrigger id="offering-price-currency" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                <SelectContent><SelectGroup>
+                  {SUPPORTED_OFFERING_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                </SelectGroup></SelectContent>
+              </Select>
+            </Field>
             <Field label="Price type" inputID="offering-price-kind" description="Leave unpublished to keep only the note above.">
-              <AeSelectField id="offering-price-kind" value={priceDraft.kind === '' ? unsetOptionValue : priceDraft.kind} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ kind: OfferingPriceKindValues.find((kind) => kind === chosen) ?? '' })} options={[
-                { value: unsetOptionValue, label: 'Not published' },
-                { value: 'fixed', label: 'Fixed price' },
-                { value: 'from', label: 'From' },
-                { value: 'range', label: 'Range' },
-                { value: 'quote_only', label: 'Quoted on request' },
-              ]} />
+              <Select value={priceDraft.kind === '' ? unsetOptionValue : priceDraft.kind} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ kind: OfferingPriceKindValues.find((kind) => kind === chosen) ?? '' })}>
+                <SelectTrigger id="offering-price-kind" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                <SelectContent><SelectGroup>
+                  <SelectItem value={unsetOptionValue}>Not published</SelectItem>
+                  <SelectItem value="fixed">Fixed price</SelectItem>
+                  <SelectItem value="from">From</SelectItem>
+                  <SelectItem value="range">Range</SelectItem>
+                  <SelectItem value="quote_only">Quoted on request</SelectItem>
+                </SelectGroup></SelectContent>
+              </Select>
             </Field>
             {priceDraft.kind === '' ? null : (
               <>
@@ -357,34 +370,44 @@ export function AeOwnerOfferingEditor({
                   <TextInput label="Maximum amount" value={priceDraft.maximumAmount} onChange={(maximumAmount) => updatePrice({ maximumAmount })} disabled={editorDisabled} inputMode="decimal" description="Highest price, in dollars." />
                 ) : null}
                 <Field label="Charged per" inputID="offering-price-unit" description="Optional">
-                  <AeSelectField id="offering-price-unit" value={priceDraft.unit === '' ? unsetOptionValue : priceDraft.unit} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ unit: OfferingPriceUnitValues.find((unit) => unit === chosen) ?? '' })} options={[
-                    { value: unsetOptionValue, label: 'Not per unit' },
-                    { value: 'job', label: 'Job' },
-                    { value: 'hour', label: 'Hour' },
-                    { value: 'visit', label: 'Visit' },
-                    { value: 'item', label: 'Item' },
-                    { value: 'day', label: 'Day' },
-                    { value: 'week', label: 'Week' },
-                    { value: 'month', label: 'Month' },
-                  ]} />
+                  <Select value={priceDraft.unit === '' ? unsetOptionValue : priceDraft.unit} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ unit: OfferingPriceUnitValues.find((unit) => unit === chosen) ?? '' })}>
+                    <SelectTrigger id="offering-price-unit" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value={unsetOptionValue}>Not per unit</SelectItem>
+                      <SelectItem value="call">Call</SelectItem>
+                      <SelectItem value="job">Job</SelectItem>
+                      <SelectItem value="hour">Hour</SelectItem>
+                      <SelectItem value="visit">Visit</SelectItem>
+                      <SelectItem value="item">Item</SelectItem>
+                      <SelectItem value="day">Day</SelectItem>
+                      <SelectItem value="week">Week</SelectItem>
+                      <SelectItem value="month">Month</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
                 </Field>
                 <Field label="Tax" inputID="offering-price-tax">
-                  <AeSelectField id="offering-price-tax" value={priceDraft.taxTreatment} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ taxTreatment: OfferingPriceTaxTreatmentValues.find((treatment) => treatment === chosen) ?? 'unstated' })} options={[
-                    { value: 'inclusive', label: 'Includes tax' },
-                    { value: 'exclusive', label: 'Excludes tax' },
-                    { value: 'unstated', label: 'Not stated' },
-                  ]} />
+                  <Select value={priceDraft.taxTreatment} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ taxTreatment: OfferingPriceTaxTreatmentValues.find((treatment) => treatment === chosen) ?? 'unstated' })}>
+                    <SelectTrigger id="offering-price-tax" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value="inclusive">Includes tax</SelectItem>
+                      <SelectItem value="exclusive">Excludes tax</SelectItem>
+                      <SelectItem value="unstated">Not stated</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
                 </Field>
               </>
             )}
           </div>
           <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired services are removed from the public page.">
-            <AeSelectField id="offering-status" value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })} options={[
-              { value: 'draft', label: 'Draft' },
-              { value: 'published', label: 'Published' },
-              { value: 'paused', label: 'Paused' },
-              { value: 'retired', label: 'Retired' },
-            ]} />
+            <Select value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })}>
+              <SelectTrigger id="offering-status" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+              <SelectContent><SelectGroup>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+                <SelectItem value="paused">Paused</SelectItem>
+                <SelectItem value="retired">Retired</SelectItem>
+              </SelectGroup></SelectContent>
+            </Select>
           </Field>
         </FieldGroup>
       </Card>
@@ -433,9 +456,15 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
       )}
       <FieldGroup className="gap-4 rounded-lg border border-border p-4">
         <Field label="Add a contact route" inputID="access-path-kind">
-          <AeSelectField id="access-path-kind" value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }} options={[
-            { value: 'phone', label: 'Call' }, { value: 'website', label: 'Website' }, { value: 'ae_inquiry', label: 'Send a message' }, { value: 'external_operation', label: 'Assistant request' },
-          ]} />
+          <Select value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }}>
+            <SelectTrigger id="access-path-kind" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+            <SelectContent><SelectGroup>
+              <SelectItem value="phone">Call</SelectItem>
+              <SelectItem value="website">Website</SelectItem>
+              <SelectItem value="ae_inquiry">Send a message</SelectItem>
+              <SelectItem value="external_operation">Assistant request</SelectItem>
+            </SelectGroup></SelectContent>
+          </Select>
         </Field>
         <TextAreaInput label={selectedKind === 'external_operation' ? 'What this request does' : 'Instructions for customers'} value={draftDetail} onChange={setDraftDetail} disabled={disabled} />
         {selectedKind === 'website' ? (
@@ -461,24 +490,30 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an assistant should call this. Left blank, it publishes as “Assistant request”." />
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
-                  <AeSelectField id="access-path-method" value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))} options={[
-                    { value: unsetOptionValue, label: 'Not stated' },
-                    { value: 'GET', label: 'GET' },
-                    { value: 'POST', label: 'POST' },
-                    { value: 'PUT', label: 'PUT' },
-                    { value: 'PATCH', label: 'PATCH' },
-                    { value: 'DELETE', label: 'DELETE' },
-                  ]} />
+                  <Select value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))}>
+                    <SelectTrigger id="access-path-method" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="PATCH">PATCH</SelectItem>
+                      <SelectItem value="DELETE">DELETE</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
                 </Field>
                 <TextInput label="Instructions URL" value={endpoint.documentationUrl} onChange={(documentationUrl) => setEndpoint((current) => ({ ...current, documentationUrl }))} disabled={disabled} inputMode="url" optional />
                 <Field label="Interface description" inputID="access-path-interface-format" description="Optional">
-                  <AeSelectField id="access-path-interface-format" value={endpoint.interfaceFormat === '' ? unsetOptionValue : endpoint.interfaceFormat} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, interfaceFormat: ownerInterfaceFormats.find((format) => format === chosen) ?? '' }))} options={[
-                    { value: unsetOptionValue, label: 'Not stated' },
-                    { value: 'OpenAPI', label: 'OpenAPI' },
-                    { value: 'JSON Schema', label: 'JSON Schema' },
-                    { value: 'MCP', label: 'MCP' },
-                    { value: 'Other', label: 'Other' },
-                  ]} />
+                  <Select value={endpoint.interfaceFormat === '' ? unsetOptionValue : endpoint.interfaceFormat} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, interfaceFormat: ownerInterfaceFormats.find((format) => format === chosen) ?? '' }))}>
+                    <SelectTrigger id="access-path-interface-format" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
+                      <SelectItem value="OpenAPI">OpenAPI</SelectItem>
+                      <SelectItem value="JSON Schema">JSON Schema</SelectItem>
+                      <SelectItem value="MCP">MCP</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
                 </Field>
                 {endpoint.interfaceFormat === '' ? null : (
                   <TextInput label="Interface description URL" value={endpoint.interfaceUrl} onChange={(interfaceUrl) => setEndpoint((current) => ({ ...current, interfaceUrl }))} disabled={disabled} inputMode="url" optional />
@@ -673,6 +708,7 @@ function isHttpsUrl(value: string): boolean {
  */
 type OwnerOfferingPriceDraft = Readonly<{
   kind: OfferingPriceKind | ''
+  currency: string
   amount: string
   maximumAmount: string
   unit: OfferingPriceUnit | ''
@@ -694,10 +730,7 @@ type OwnerEndpointDraft = Readonly<{
 /** The one select value that means "the owner has not chosen". */
 const unsetOptionValue = 'none'
 
-/** AE supply is Australian. The owner types dollars; the record keeps exact cents. */
-const ownerOfferingPriceCurrency = 'AUD'
-
-const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
+const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', currency: 'AUD', amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
 const emptyOwnerEndpointDraft: OwnerEndpointDraft = { name: '', url: '', method: '', documentationUrl: '', interfaceFormat: '', interfaceUrl: '', authenticationSummary: '', pricingSummary: '' }
 
 const ownerEndpointMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
@@ -709,6 +742,7 @@ function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPrice
   const maximumAmount = price.kind === 'range' ? price.maximum : undefined
   return {
     kind: price.kind,
+    currency: price.kind === 'quote_only' ? price.currency : amount?.currency ?? 'AUD',
     amount: amount === undefined ? '' : formatExactAmount(amount) ?? '',
     maximumAmount: maximumAmount === undefined ? '' : formatExactAmount(maximumAmount) ?? '',
     unit: price.unit ?? '',
@@ -716,25 +750,27 @@ function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPrice
   }
 }
 
-/** Dollars in, exact cents out, absent until the owner chooses a price type. */
+/** Decimal text in, exact minor units out; absence is preserved until publish. */
 function offeringPriceInputFromDraft(draft: OwnerOfferingPriceDraft): OfferingPriceInput | undefined {
   if (draft.kind === '') return undefined
+  const currency = draft.currency.trim().toUpperCase()
+  if (!isSupportedOfferingCurrency(currency)) return undefined
   const shared = {
     kind: draft.kind,
     taxTreatment: draft.taxTreatment,
     ...(draft.unit === '' ? {} : { unit: draft.unit }),
   }
-  if (draft.kind === 'quote_only') return { ...shared, currency: ownerOfferingPriceCurrency }
+  if (draft.kind === 'quote_only') return { ...shared, currency }
   if (draft.kind === 'range') {
-    const minimum = parseDecimalExactAmount(ownerOfferingPriceCurrency, draft.amount, 2)
-    const maximum = parseDecimalExactAmount(ownerOfferingPriceCurrency, draft.maximumAmount, 2)
+    const minimum = parseDecimalExactAmount(currency, draft.amount, 2)
+    const maximum = parseDecimalExactAmount(currency, draft.maximumAmount, 2)
     return {
       ...shared,
       ...(minimum === undefined ? {} : { minimum }),
       ...(maximum === undefined ? {} : { maximum }),
     }
   }
-  const amount = parseDecimalExactAmount(ownerOfferingPriceCurrency, draft.amount, 2)
+  const amount = parseDecimalExactAmount(currency, draft.amount, 2)
   return { ...shared, ...(amount === undefined ? {} : { amount }) }
 }
 

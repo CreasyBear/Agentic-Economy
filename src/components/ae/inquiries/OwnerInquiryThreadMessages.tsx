@@ -3,8 +3,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Conversation, ConversationContent } from '@/components/ai-elements/conversation'
-import { Message, MessageContent } from '@/components/ai-elements/message'
+import { Message, MessageContent } from '@/components/ui/message'
+import {
+  MessageScroller,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/components/ui/message-scroller'
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { notificationVariant } from '@/lib/ui/inquiry-notification'
@@ -22,37 +28,47 @@ export function ThreadMessages({ detail }: { detail: OwnerInquiryDetailReadback 
         <p className="text-sm text-muted-foreground">{detail.inquiry.preview}</p>
       </div>
       <div className="mt-4 grid gap-4">
-        <Conversation className="max-h-[min(32rem,60vh)] overflow-auto pr-3">
-          <ConversationContent className="grid gap-3 p-0 pb-1">
-            {detail.messages.map((message) => {
-              const isOwner = message.sender === 'owner'
-              const senderLabel = isOwner ? 'Owner' : 'Customer'
-              const sender = isOwner ? 'user' : 'assistant'
-              return (
-                <Message key={message.messageId} from={sender} className="grid max-w-full gap-2">
-                  <div className="flex items-start gap-2">
-                    <Avatar size="sm" aria-label={senderLabel}>
-                      <AvatarFallback>{senderLabel.slice(0, 1)}</AvatarFallback>
-                    </Avatar>
-                    <div className="grid min-w-0 gap-1">
-                      <div className="flex flex-wrap items-baseline gap-2">
-                        <span className="text-sm font-medium text-foreground">{senderLabel}</span>
-                        <span className="text-xs text-muted-foreground">
-                          <time dateTime={timestampIso(message.createdAt)} data-numeric>
-                            {formatTimestamp(message.createdAt)}
-                          </time>
-                        </span>
-                      </div>
-                      <MessageContent className="rounded-md border border-border bg-card px-3 py-2 text-foreground">
-                        {message.body}
-                      </MessageContent>
-                    </div>
-                  </div>
-                </Message>
-              )
-            })}
-          </ConversationContent>
-        </Conversation>
+        <MessageScrollerProvider defaultScrollPosition="end">
+          <MessageScroller
+            aria-label="Inquiry thread messages"
+            className="max-h-[min(32rem,60vh)]"
+          >
+            <MessageScrollerViewport className="pr-3">
+              <MessageScrollerContent className="gap-3 p-0 pb-1">
+                {detail.messages.map((message) => {
+                  const isOwner = message.sender === 'owner'
+                  const senderLabel = isOwner ? 'Owner' : 'Customer'
+                  const align = isOwner ? 'end' : 'start'
+                  return (
+                    <MessageScrollerItem key={message.messageId} messageId={message.messageId}>
+                      <Message align={align}>
+                        <Avatar size="sm" aria-label={senderLabel}>
+                          <AvatarFallback>{senderLabel.slice(0, 1)}</AvatarFallback>
+                        </Avatar>
+                        <MessageContent
+                          data-align={align}
+                          className="gap-1 data-[align=end]:items-end"
+                        >
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <span className="text-sm font-medium text-foreground">{senderLabel}</span>
+                            <span className="text-xs text-muted-foreground">
+                              <time dateTime={timestampIso(message.createdAt)} data-numeric>
+                                {formatTimestamp(message.createdAt)}
+                              </time>
+                            </span>
+                          </div>
+                          <div className="w-fit max-w-full rounded-md border border-border bg-card px-3 py-2 text-foreground">
+                            {message.body}
+                          </div>
+                        </MessageContent>
+                      </Message>
+                    </MessageScrollerItem>
+                  )
+                })}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+          </MessageScroller>
+        </MessageScrollerProvider>
         {detail.inquiry.status === 'closed' ? (
           <>
             <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">

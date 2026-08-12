@@ -33,10 +33,9 @@ export function clearClaimEnrichIntent(): void {
 
 export function claimFormSearchFor(business: FoundBusiness, source?: 'supply'): ClaimFormSearch {
   return {
+    businessContext: business.businessContext,
     businessName: business.name,
     category: business.category,
-    suburb: business.suburb,
-    stateTerritory: business.stateTerritory,
     requestedSlug: business.slug,
     ...(source === 'supply' ? { source } : {}),
   }

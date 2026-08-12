@@ -1,12 +1,40 @@
 import { useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Card } from '@/components/ui/card'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+
+type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
+
+const authorityOptions = [
+  {
+    value: 'inspect_only',
+    label: 'Browse only',
+    description: 'Discover, compare, and run free read-only operations.',
+  },
+  {
+    value: 'approve_each',
+    label: 'Ask each time',
+    description: 'Recommended. Paid or consequential work comes back to you first.',
+  },
+  {
+    value: 'bounded_mandate',
+    label: 'Work within limits',
+    description: 'Set spend, effect, and data limits before the assistant works independently.',
+  },
+] as const
+
+function canSelectAuthority(value: PublicAuthorityMode, ceiling: string | undefined): boolean {
+  if (value === 'inspect_only') return true
+  if (value === 'approve_each') return ceiling !== 'inspect_only'
+  return ceiling === 'bounded_mandate'
+}
 
 function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string }> {
   const document = new DOMParser().parseFromString(html, 'text/html')
@@ -21,13 +49,6 @@ function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientN
   }
 }
 
-function consentPermissionCopy(mode: string | undefined): Readonly<{ allowed: string; approval: string }> {
-  if (mode === 'inspect_only') return { allowed: 'browse and compare businesses', approval: 'Any work still waits for your approval.' }
-  if (mode === 'approve_each') return { allowed: 'bring each request to you', approval: 'You approve each request before it moves forward.' }
-  if (mode === 'bounded_mandate') return { allowed: 'work within the limits you set', approval: 'Anything outside those limits comes back to you for approval.' }
-  if (mode === 'full_yolo') return { allowed: 'carry out approved work on your behalf', approval: 'AE still asks for your approval where required.' }
-  return { allowed: 'show you available options', approval: 'The page will show what your assistant may do before you decide.' }
-}
 
 export const Route = createFileRoute('/_operator/agent-access/authorize')({
   ...operatorRouteOptions,
@@ -46,6 +67,7 @@ function AgentAccessAuthorizeRoute() {
   const [consentLoading, setConsentLoading] = useState(userCode !== undefined)
   const [clientName, setClientName] = useState<string>()
   const [mode, setMode] = useState<string>()
+  const [selectedMode, setSelectedMode] = useState<PublicAuthorityMode>('approve_each')
   const [grantRef, setGrantRef] = useState<string>()
 
   useEffect(() => {
@@ -73,6 +95,7 @@ function AgentAccessAuthorizeRoute() {
         setGrantRef(details.grantRef)
         setClientName(details.clientName)
         setMode(details.mode)
+        setSelectedMode(details.mode === 'inspect_only' ? 'inspect_only' : 'approve_each')
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.name === 'AbortError') return
@@ -92,7 +115,7 @@ function AgentAccessAuthorizeRoute() {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_ref: grantRef, decision }).toString(),
+        body: new URLSearchParams({ grant_ref: grantRef, decision, authority_mode: selectedMode }).toString(),
       })
       setStatus(response.ok ? (decision === 'approve' ? 'approved' : 'denied') : 'error')
     } catch {
@@ -102,7 +125,6 @@ function AgentAccessAuthorizeRoute() {
     }
   }
 
-  const permission = consentPermissionCopy(mode)
   const consentReady = grantRef !== undefined && clientName !== undefined && mode !== undefined
 
   return (
@@ -115,19 +137,50 @@ function AgentAccessAuthorizeRoute() {
         ) : status === 'idle' ? (
           <>
             <h2>{clientName === undefined ? 'Connect your assistant' : `Connect ${clientName}`}</h2>
-            <div id="consent-scope" className="grid gap-2 text-sm">
-              <p><span className="font-medium">Permission:</span> Your assistant may {permission.allowed}.</p>
-              <p className="text-muted-foreground">{permission.approval}</p>
+            <fieldset className="grid gap-3" disabled={pending}>
+              <legend className="text-base font-semibold text-foreground">How much may this agent do without asking you?</legend>
+              <RadioGroup
+                aria-describedby="consent-expiry"
+                value={selectedMode}
+                onValueChange={(value) => setSelectedMode(value as PublicAuthorityMode)}
+                className="grid gap-2"
+              >
+                {authorityOptions.map((option) => {
+                  const disabled = !canSelectAuthority(option.value, mode)
+                  return (
+                    <Label
+                      key={option.value}
+                      htmlFor={`authority-${option.value}`}
+                      className="grid min-h-11 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border border-border bg-card p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent"
+                    >
+                      <RadioGroupItem
+                        id={`authority-${option.value}`}
+                        value={option.value}
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                      <span className="grid gap-1">
+                        <span className="font-medium text-foreground">{option.label}</span>
+                        <span className="text-sm font-normal text-muted-foreground">
+                          {disabled ? 'Your assistant requested narrower access.' : option.description}
+                        </span>
+                      </span>
+                    </Label>
+                  )
+                })}
+              </RadioGroup>
+            </fieldset>
+            <div className="grid gap-1 text-sm text-muted-foreground">
+              <p>Application: {clientName ?? 'Your assistant'} · Development · Standard rate limits</p>
+              <p id="consent-expiry">Access expires in seven days. You can revoke it at any time from Assistant access.</p>
             </div>
-            <p className="text-muted-foreground">Request code: {userCode}</p>
-            <p id="consent-expiry" className="text-muted-foreground">Access expires in seven days. You can revoke it at any time from Assistant access.</p>
             <div className="flex flex-wrap gap-3">
-              <Button aria-describedby="consent-scope consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
-              <Button aria-describedby="consent-scope consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
+              <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
+              <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
           </>
         ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your assistant</AlertTitle><AlertDescription>Your assistant can now continue. Return to it to finish setup.</AlertDescription></Alert>
+          <Alert><AlertTitle>Access approved — return to your assistant</AlertTitle><AlertDescription>AE delivers the consumer key to that assistant once. It can now finish setup; supplier credentials are never included.</AlertDescription></Alert>
         ) : status === 'denied' ? (
           <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your assistant can start a new request if you want to try again.</AlertDescription></Alert>
         ) : (

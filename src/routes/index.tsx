@@ -94,7 +94,7 @@ function ServicesRoute() {
   const navigate = useNavigate()
   const hasAnswer = project !== undefined
   const [queryValue, setQueryValue] = useState(q ?? '')
-  const [queryError, setQueryError] = useState(false)
+  const [queryError, setQueryError] = useState<'required' | 'too-long' | undefined>()
   const queryTooLong = queryValue.length > QUERY_MAX_LENGTH
 
   function handleAskSubmit(event: FormEvent<HTMLFormElement>) {
@@ -103,12 +103,15 @@ function ServicesRoute() {
     const rawQuery = String(formData.get('q') ?? '')
     setQueryValue(rawQuery)
     if (rawQuery.length > QUERY_MAX_LENGTH) {
-      setQueryError(true)
+      setQueryError('too-long')
       return
     }
     const query = rawQuery.trim()
-    if (query.length === 0) return
-    setQueryError(false)
+    if (query.length === 0) {
+      setQueryError('required')
+      return
+    }
+    setQueryError(undefined)
     void navigate({ to: '/t/new', search: { q: query } })
   }
 
@@ -148,17 +151,18 @@ function ServicesRoute() {
                   type="search"
                   value={queryValue}
                   maxLength={QUERY_MAX_LENGTH}
+                  required
                   placeholder="e.g. Get a quote for solar installation, or the current price of bitcoin"
                   autoComplete="off"
                   aria-describedby="service-search-hint service-search-count"
-                  aria-invalid={queryError || queryTooLong ? 'true' : undefined}
+                  aria-invalid={queryError !== undefined || queryTooLong ? 'true' : undefined}
                   onChange={(event) => {
                     setQueryValue(event.currentTarget.value)
-                    setQueryError(false)
+                    setQueryError(undefined)
                   }}
                   onInvalid={(event) => {
                     event.preventDefault()
-                    setQueryError(true)
+                    setQueryError(event.currentTarget.validity.valueMissing ? 'required' : 'too-long')
                   }}
                   onPaste={(event) => {
                     const pasted = event.clipboardData?.getData('text') ?? ''
@@ -167,15 +171,22 @@ function ServicesRoute() {
                     const nextLength = queryValue.length - (end - start) + pasted.length
                     if (nextLength > QUERY_MAX_LENGTH) {
                       event.preventDefault()
-                      setQueryError(true)
+                      setQueryError('too-long')
                     }
                   }}
                   className="h-14 border-border bg-card px-4 py-3 text-base text-foreground max-sm:h-14 md:text-base"
                 />
-                <p id="service-search-hint" className="text-sm leading-snug text-muted-foreground">
-                  {queryError || queryTooLong
-                    ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
-                    : `Up to ${QUERY_MAX_LENGTH} characters.`}
+                <p
+                  id="service-search-hint"
+                  className="text-sm leading-snug text-muted-foreground"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {queryError === 'required'
+                    ? 'Enter what you need done before asking.'
+                    : queryError === 'too-long' || queryTooLong
+                      ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
+                      : `Up to ${QUERY_MAX_LENGTH} characters.`}
                 </p>
               </Field>
               <Button type="submit" variant="secondary" size="lg" className="min-h-14 w-full sm:w-auto">Ask</Button>
@@ -189,7 +200,7 @@ function ServicesRoute() {
                   key={chip.label}
                   to="/t/new"
                   search={{ q: chip.query }}
-                  className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                  className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
                 >
                   {chip.label}
                 </Link>
@@ -216,7 +227,7 @@ function ServicesRoute() {
             <div className="grid w-full gap-3 text-left sm:grid-cols-2">
               {[AGENT_DOOR, BUSINESS_DOOR].map((door) => (
                 <Card key={door.href} className="grid gap-1 border border-border bg-card p-5">
-                  <p className="block font-semibold text-foreground">{door.heading}</p>
+                  <h2 className="block font-semibold text-foreground">{door.heading}</h2>
                   <p className="block text-sm text-muted-foreground">
                     {door.body}
                   </p>

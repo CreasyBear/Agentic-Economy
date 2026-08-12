@@ -4,6 +4,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
+import { buildAnswerTurnProblem } from '@/lib/errors'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Resolved locally rather than via `dom-accessibility-api`, whose types are
@@ -25,15 +26,17 @@ const testState = vi.hoisted(() => {
     navigateCalls: [] as unknown[],
     navigateResult: undefined as unknown,
     observedClientTurnKeys: [] as string[],
+    newQuestionCallbacks: [] as Array<() => void | Promise<void>>,
     latestTranscriptProps: undefined as
       | {
           threadId?: string | null
           projection?: PublicThreadProjection | null
-          liveTurn?: { query: string; generation: number; intent: string; clientTurnKey: string } | null
-          onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
+          liveTurn?: { query: string; generation: number; intent: string; clientTurnKey: string; searchContext?: unknown } | null
           onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
+          onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
           onSettledTurn?: (turn: PublicThreadProjection['turns'][number], generation: number) => void
           onFollowUp?: (query: string) => void
+          onRetry?: (query: string) => void
           onChangeCriteria?: () => void
         }
       | undefined,
@@ -73,7 +76,12 @@ vi.mock('@/components/ae/chat/AeThreadScroller', () => ({
 }))
 
 vi.mock('@/components/ae/chat/AeThreadSidebar', () => ({
-  AeThreadSidebar: ({ visible }: { visible?: boolean }) => <aside data-testid="thread-sidebar" data-visible={visible === true ? 'true' : 'false'} />,
+  AeThreadSidebar: ({ visible, onNewQuestion }: { visible?: boolean; onNewQuestion?: () => void }) => {
+    if (onNewQuestion !== undefined) {
+      testState.newQuestionCallbacks.push(onNewQuestion)
+    }
+    return <aside data-testid="thread-sidebar" data-visible={visible === true ? 'true' : 'false'} />
+  },
 }))
 
 vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
@@ -111,10 +119,12 @@ describe('AeChat route promotion', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    window.sessionStorage.clear()
     testState.navigateCalls.length = 0
     testState.navigateResult = undefined
     testState.latestTranscriptProps = undefined
     testState.observedClientTurnKeys.length = 0
+    testState.newQuestionCallbacks.length = 0
   })
 
   it('keeps one initial turn identity across a route remount', () => {
@@ -128,6 +138,314 @@ describe('AeChat route promotion', () => {
     expect(firstKey).not.toContain('duplicate probe')
     expect(testState.observedClientTurnKeys.at(-1)).toBe(firstKey)
   })
+  it('restores a bare new-question draft with the same query and turn key after reload', async () => {
+    const first = render(<AeChat />)
+    await submitQuery('businesses in Perth')
+
+    const firstLiveTurn = testState.latestTranscriptProps?.liveTurn
+    const firstKey = firstLiveTurn?.clientTurnKey
+    expect(firstKey).toBeDefined()
+    await act(async () => {
+      testState.latestTranscriptProps?.onThreadCreated?.('thread-draft')
+      await Promise.resolve()
+    })
+    expect(readStoredDraft()).toMatchObject({
+      version: 1,
+      query: 'businesses in Perth',
+      clientTurnKey: firstKey,
+      threadId: 'thread-draft',
+    })
+
+    first.unmount()
+    render(<AeChat />)
+
+    await waitFor(() => {
+      expect(testState.latestTranscriptProps?.liveTurn?.query).toBe('businesses in Perth')
+    })
+    expect(testState.latestTranscriptProps?.liveTurn?.clientTurnKey).toBe(firstKey)
+    expect(testState.latestTranscriptProps?.liveTurn?.searchContext).toMatchObject({ timing: 'flexible' })
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-draft')
+  })
+
+  it('restores a draft on its exact thread route with the same turn identity', () => {
+    window.sessionStorage.setItem(PENDING_DRAFT_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      query: 'follow up on the Perth businesses',
+      clientTurnKey: 'matching-thread-key',
+      threadId: 'thread-draft',
+      savedAt: Date.now(),
+    }))
+
+    render(
+      <AeChat
+        threadId="thread-draft"
+        initialProjection={buildProjection('thread-draft', 'Earlier answer')}
+      />,
+    )
+
+    expect(testState.latestTranscriptProps?.liveTurn).toMatchObject({
+      query: 'follow up on the Perth businesses',
+      clientTurnKey: 'matching-thread-key',
+    })
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-draft')
+  })
+
+  it('rejects and clears a draft from a different thread route', () => {
+    window.sessionStorage.setItem(PENDING_DRAFT_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      query: 'follow up on another thread',
+      clientTurnKey: 'mismatched-thread-key',
+      threadId: 'thread-other',
+      savedAt: Date.now(),
+    }))
+
+    render(
+      <AeChat
+        threadId="thread-current"
+        initialProjection={buildProjection('thread-current', 'Current answer')}
+      />,
+    )
+
+    expect(testState.latestTranscriptProps?.liveTurn ?? null).toBeNull()
+    expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull()
+  })
+
+  it('retains the same draft identity after a transport interruption', async () => {
+    render(<AeChat />)
+    await submitQuery('businesses in Perth')
+    const interruptedKey = testState.latestTranscriptProps?.liveTurn?.clientTurnKey
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onStreamEnd?.('error')
+      testState.latestTranscriptProps?.onRetry?.('businesses in Perth')
+      await Promise.resolve()
+    })
+
+    expect(readStoredDraft()).toMatchObject({
+      query: 'businesses in Perth',
+      clientTurnKey: interruptedKey,
+    })
+    expect(testState.latestTranscriptProps?.liveTurn?.clientTurnKey).toBe(interruptedKey)
+  })
+
+  it('clears a durably failed draft so Retry starts a new turn identity', async () => {
+    render(<AeChat />)
+    await submitQuery('businesses in Perth')
+    const failedKey = testState.latestTranscriptProps?.liveTurn?.clientTurnKey
+    expect(failedKey).toBeDefined()
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onThreadCreated?.('thread-error')
+      testState.latestTranscriptProps?.onSettledTurn?.({
+        turnId: 'thread-error-turn-1',
+        seq: 1,
+        query: 'businesses in Perth',
+        intent: 'refine_search',
+        status: 'error',
+        problem: buildAnswerTurnProblem('answer_turn_failed'),
+        workLog: [],
+        artifacts: [],
+        oneLine: 'Failed answer',
+      }, 1)
+      testState.latestTranscriptProps?.onStreamEnd?.('error')
+      await Promise.resolve()
+    })
+
+    expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull()
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onRetry?.('businesses in Perth')
+      await Promise.resolve()
+    })
+
+    const retryKey = testState.latestTranscriptProps?.liveTurn?.clientTurnKey
+    expect(retryKey).toBeDefined()
+    expect(retryKey).not.toBe(failedKey)
+    expect(readStoredDraft()).toMatchObject({ clientTurnKey: retryKey })
+  })
+
+  it('clears the draft only after terminal readback and route promotion', async () => {
+    render(<AeChat />)
+    await submitQuery('businesses in Perth')
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onThreadCreated?.('thread-promoted-1')
+      testState.latestTranscriptProps?.onStreamEnd?.('complete')
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull())
+  })
+
+  it('lets the URL query replace a different stored draft', () => {
+    window.sessionStorage.setItem(PENDING_DRAFT_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      query: 'stored query',
+      clientTurnKey: 'stored-key-123',
+      savedAt: Date.now(),
+    }))
+
+    render(<AeChat initialQuery="url query" />)
+
+    expect(testState.latestTranscriptProps?.liveTurn?.query).toBe('url query')
+    expect(testState.latestTranscriptProps?.liveTurn?.clientTurnKey).not.toBe('stored-key-123')
+    expect(readStoredDraft()).toMatchObject({ query: 'url query' })
+  })
+
+  it.each([
+    'not-json',
+    JSON.stringify({
+      version: 1,
+      query: 'expired query',
+      clientTurnKey: 'expired-key-123',
+      savedAt: Date.now() - 2 * 24 * 60 * 60 * 1_000,
+    }),
+    JSON.stringify({
+      version: 1,
+      query: 'unknown field query',
+      clientTurnKey: 'unknown-field-key',
+      savedAt: Date.now(),
+      unexpected: true,
+    }),
+  ])('refuses malformed or expired stored drafts', (raw) => {
+    window.sessionStorage.setItem(PENDING_DRAFT_STORAGE_KEY, raw)
+
+    render(<AeChat />)
+
+    expect(testState.latestTranscriptProps?.liveTurn ?? null).toBeNull()
+    expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull()
+  })
+
+  it('clears a saved idle draft and navigates to the canonical new-question route', async () => {
+    render(<AeChat />)
+    await submitQuery('businesses in Perth')
+    expect(readStoredDraft()).toMatchObject({ query: 'businesses in Perth' })
+
+    const discard = testState.newQuestionCallbacks.at(-1)
+    expect(discard).toBeDefined()
+    await act(async () => {
+      await discard?.()
+    })
+
+    expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull()
+    expect(testState.navigateCalls).toContainEqual({ to: '/t/new' })
+  })
+
+  it('waits for durable Stop and refresh before navigating away from an active turn', async () => {
+    const stoppedResponse = Promise.withResolvers<Response>()
+    const calls: string[] = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/answer/turn/stop') {
+        calls.push('stop')
+        return stoppedResponse.promise
+      }
+      if (url.endsWith('/api/answer/threads/thread-active')) {
+        calls.push('refresh')
+        return Response.json(buildStatusProjection('thread-active', 'stopped'))
+      }
+      return Response.json({ threads: [] })
+    })
+    render(
+      <AeChat
+        threadId="thread-active"
+        initialProjection={buildStatusProjection('thread-active', 'pending')}
+      />,
+    )
+
+    const newQuestion = testState.newQuestionCallbacks.at(-1)
+    let navigation: void | Promise<void> = undefined
+    await act(async () => {
+      navigation = newQuestion?.()
+      await Promise.resolve()
+    })
+    expect(calls).toContain('stop')
+    expect(testState.navigateCalls).not.toContainEqual({ to: '/t/new' })
+
+    stoppedResponse.resolve(Response.json({
+      kind: 'stopped',
+      threadId: 'thread-active',
+      turnId: 'thread-active-turn-1',
+    }))
+    await act(async () => {
+      await navigation
+    })
+
+    expect(calls.indexOf('refresh')).toBeGreaterThan(calls.indexOf('stop'))
+    expect(testState.navigateCalls).toContainEqual({ to: '/t/new' })
+  })
+
+  it('navigates after Stop reports the active turn already settled', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/answer/turn/stop') {
+        return Response.json({
+          kind: 'already_settled',
+          threadId: 'thread-settled',
+          turnId: 'thread-settled-turn-1',
+          status: 'error',
+        })
+      }
+      if (url.endsWith('/api/answer/threads/thread-settled')) {
+        return Response.json(buildStatusProjection('thread-settled', 'error'))
+      }
+      return Response.json({ threads: [] })
+    })
+    render(
+      <AeChat
+        threadId="thread-settled"
+        initialProjection={buildStatusProjection('thread-settled', 'pending')}
+      />,
+    )
+
+    await act(async () => {
+      await testState.newQuestionCallbacks.at(-1)?.()
+    })
+
+    expect(testState.navigateCalls).toContainEqual({ to: '/t/new' })
+  })
+
+  it('keeps the active thread and recovery identity when Stop fails', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => (
+      String(input) === '/api/answer/turn/stop'
+        ? Response.json({}, { status: 503 })
+        : Response.json({ threads: [] })
+    ))
+    render(
+      <AeChat
+        threadId="thread-recoverable"
+        initialProjection={buildStatusProjection('thread-recoverable', 'pending')}
+      />,
+    )
+
+    await act(async () => {
+      await testState.newQuestionCallbacks.at(-1)?.()
+    })
+
+    expect(testState.navigateCalls).not.toContainEqual({ to: '/t/new' })
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-recoverable')
+    expect(testState.latestTranscriptProps?.projection?.turns.at(-1)).toMatchObject({
+      turnId: 'thread-recoverable-turn-1',
+      status: 'pending',
+    })
+  })
+  it('keeps a storage failure typed and does not start a second turn identity', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage blocked')
+    })
+    render(<AeChat />)
+
+    const input = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    fireEvent.change(input, { target: { value: 'businesses in Perth' } })
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    expect(testState.latestTranscriptProps?.liveTurn ?? null).toBeNull()
+    expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull()
+    setItem.mockRestore()
+  })
+
+
 
   it('gives an initial pending answer one focused heading landmark', () => {
     render(<AeChat initialQuery="duplicate probe" />)
@@ -249,30 +567,43 @@ describe('AeChat route promotion', () => {
       <AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke share link' }))
-    await screen.findByRole('button', { name: 'Share link revoked' })
+    const trigger = screen.getByRole('button', { name: 'Thread actions' })
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Revoke share link' }))
+    await waitFor(() => expect(trigger.getAttribute('aria-busy')).not.toBe('true'))
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    const revoked = screen.getByRole('menuitem', { name: 'Share link revoked' })
+    expect(revoked.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
 
     rerender(<AeChat threadId="thread-two" initialProjection={buildProjection('thread-two', 'Second answer')} />)
 
-    const revokeForSecondThread = screen.getByRole('button', { name: 'Revoke share link' })
-    expect((revokeForSecondThread as HTMLButtonElement).disabled).toBe(false)
+    const secondTrigger = screen.getByRole('button', { name: 'Thread actions' })
+    fireEvent.pointerDown(secondTrigger, { button: 0, ctrlKey: false })
+    const revokeForSecondThread = screen.getByRole('menuitem', { name: 'Revoke share link' })
+    expect(revokeForSecondThread.getAttribute('aria-disabled')).not.toBe('true')
   })
 
-  it('wraps all thread header actions at the narrow viewport without removing them from the tab order', () => {
-    const { container } = render(
+  it('keeps one compact header row with all actions accessible', () => {
+    render(
       <AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />,
     )
-    const header = container.querySelector('header')
-    const actions = header?.children.item(2)
 
-    expect(header?.className).toContain('grid-cols-1')
-    expect(actions?.className).toContain('flex-wrap')
-    for (const name of ['Ask another', 'Copy share link', 'Revoke share link']) {
-      const control = screen.getByRole('button', { name })
-      control.focus()
-      expect(document.activeElement).toBe(control)
-    }
+    const header = screen.getByRole('banner')
+    expect(within(header).getByRole('heading', { level: 1, name: 'First answer' })).toBeTruthy()
+    expect(within(header).getByRole('button', { name: 'Ask another' })).toBeTruthy()
+    const trigger = within(header).getByRole('button', { name: 'Thread actions' })
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Copy share link' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Revoke share link' })).toBeTruthy()
   })
+
 
   it('isolates the visible thread title without bidi formatting controls', () => {
     render(
@@ -367,7 +698,7 @@ describe('AeChat route promotion', () => {
     const composer = await screen.findByRole('searchbox') as HTMLTextAreaElement
     expect(composer.value).toBe('emergency plumber in Perth')
     await waitFor(() => expect(document.activeElement).toBe(composer))
-    expect(screen.getByRole('radio', { name: 'Today' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('combobox', { name: 'When do you need this?' }).textContent).toContain('Today')
     expect(screen.queryByTestId('live-turn')).toBeNull()
     expect(screen.getByTestId('no-live-turn')).toBeTruthy()
     expect(transcript.getAttribute('data-turn-count')).toBe(settledTurnCount)
@@ -531,7 +862,7 @@ describe('AeChat route promotion', () => {
 
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    expect(screen.getByRole('radio', { name: 'Today' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('combobox', { name: 'When do you need this?' }).textContent).toContain('Today')
   })
 
   it.each([
@@ -550,7 +881,7 @@ describe('AeChat route promotion', () => {
 
     const composer = screen.getByRole('searchbox', { name: 'What do you need done?' })
     expect(composer.getAttribute('placeholder')).toBe(placeholder)
-    expect(screen.queryByRole('radio')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'When do you need this?' })).toBeNull()
     expect(screen.queryByText('When do you need this?')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Change criteria' })).toBeNull()
     expect(screen.queryByText(/match is needed|selected business|contacting a business/i)).toBeNull()
@@ -566,7 +897,7 @@ describe('AeChat route promotion', () => {
 
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    expect(screen.getByRole('radio', { name: 'Flexible' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'When do you need this?' }).textContent).toContain('Flexible')
     expect(screen.getByRole('button', { name: 'Change criteria' })).toBeTruthy()
   })
 
@@ -617,6 +948,13 @@ describe('AeChat route promotion', () => {
   })
 })
 
+const PENDING_DRAFT_STORAGE_KEY = 'ae.answer.initial-turn-key.v1'
+
+function readStoredDraft(): Record<string, unknown> | null {
+  const raw = window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)
+  return raw === null ? null : JSON.parse(raw) as Record<string, unknown>
+}
+
 async function submitQuery(query: string, placeholder = 'What do you need done?') {
   const input = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
   await waitFor(() => {
@@ -657,6 +995,30 @@ function buildProjection(
         oneLine: title,
       },
     ],
+  }
+}
+
+function buildStatusProjection(
+  threadId: string,
+  status: 'pending' | 'stopped' | 'error',
+): PublicThreadProjection {
+  return {
+    threadId,
+    title: 'Active answer',
+    turns: [{
+      turnId: `${threadId}-turn-1`,
+      seq: 1,
+      query: 'businesses in Perth',
+      intent: 'refine_search',
+      status,
+      ...(status === 'error'
+        ? { problem: buildAnswerTurnProblem('answer_turn_failed') }
+        : {}),
+      workLog: [],
+      artifacts: [],
+      oneLine: '',
+      createdAt: 1,
+    }],
   }
 }
 

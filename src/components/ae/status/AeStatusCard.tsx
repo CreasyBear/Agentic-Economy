@@ -70,7 +70,9 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
           <div className="grid gap-1">
             <h2 className="block text-lg font-semibold text-foreground" id={titleId}>{readback.catalog.name}</h2>
             <p className="block text-sm text-muted-foreground">
-              {readback.catalog.category} in {readback.catalog.suburb}, {readback.catalog.stateTerritory}
+              {readback.catalog.businessContext.kind === 'local_human'
+                ? `${readback.catalog.category} in ${readback.catalog.businessContext.suburb}, ${readback.catalog.businessContext.stateTerritory}`
+                : `${readback.catalog.category} — ${readback.catalog.businessContext.website}`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

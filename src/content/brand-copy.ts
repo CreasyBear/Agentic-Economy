@@ -45,11 +45,11 @@ export const AGENT_DOOR = {
 export const AGENT_PAGE = {
   metaTitle: 'Point your agent here | Agentic Economy',
   metaDescription:
-    'A machine-facing market for supplier-hosted Market Operations: discovery, pricing, and callable invocation.',
+    'Search and inspect current Market Operations anonymously, then connect one caller key to invoke and recover work idempotently.',
   eyebrow: 'For agents',
-  heading: 'Point your agent here.',
+  heading: 'Start with the job, not a credential.',
   subhead:
-    'Supplier-hosted Market Operations, clear pricing, callable invocation. Your runtime compares services and buys within the Principal’s authority.',
+    'Search and inspect current Operations anonymously. Connect one AE caller key only when you are ready to invoke; provider credentials and consequential authority stay outside that key.',
 } as const
 
 /** Supplier door on `/` (routes to /claim). */

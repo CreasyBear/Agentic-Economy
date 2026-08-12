@@ -1,13 +1,7 @@
-import { type KeyboardEvent, type RefObject } from 'react'
+import { type FormEvent, type KeyboardEvent, type RefObject } from 'react'
+import { CornerDownLeftIcon } from 'lucide-react'
 
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  type PromptInputMessage,
-} from '@/components/ai-elements/prompt-input'
+import { Button } from '@/components/ui/button'
 import {
   Field,
   FieldDescription,
@@ -15,6 +9,12 @@ import {
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupTextarea,
+} from '@/components/ui/input-group'
+import { Spinner } from '@/components/ui/spinner'
 
 export type AeOwnerReplyComposerProps = {
   id?: string
@@ -27,8 +27,8 @@ export type AeOwnerReplyComposerProps = {
   onSubmit: () => void
 }
 
-// Adapter retained for the owner-reply field/error contract that PromptInput
-// does not provide. Its input and submit controls are official PromptInput parts.
+// Owner-reply field and keyboard behavior composed from the shared form
+// primitives.
 export function AeOwnerReplyComposer({
   id = 'ownerReply',
   value,
@@ -60,13 +60,8 @@ export function AeOwnerReplyComposer({
     insertLineBreak(event)
   }
 
-  function handlePromptSubmit({ text }: PromptInputMessage) {
-    // Files stay internal to PromptInput; owner replies expose only the text
-    // control through the existing no-argument callback.
-    const submittedText = text.length > 0 ? text : value
-    if (submittedText !== value) {
-      onChange(submittedText)
-    }
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     onSubmit()
   }
 
@@ -82,9 +77,9 @@ export function AeOwnerReplyComposer({
         {...(disabled ? { 'data-disabled': true } : {})}
       >
         <FieldLabel htmlFor={id}>Owner reply</FieldLabel>
-        <PromptInput className="w-full" onSubmit={handlePromptSubmit}>
-          <PromptInputBody>
-            <PromptInputTextarea
+        <form className="w-full" onSubmit={handleSubmit}>
+          <InputGroup className="overflow-hidden">
+            <InputGroupTextarea
               id={id}
               aria-describedby={describedBy}
               {...(invalid ? { 'aria-invalid': true } : {})}
@@ -98,15 +93,18 @@ export function AeOwnerReplyComposer({
               onChange={(event) => onChange(event.currentTarget.value)}
               onKeyDown={handleKeyDown}
             />
-          </PromptInputBody>
-          <PromptInputFooter className="pb-2">
-            <PromptInputSubmit
-              aria-label="Send reply"
-              disabled={disabled || pending}
-              status={pending ? 'submitted' : 'ready'}
-            />
-          </PromptInputFooter>
-        </PromptInput>
+            <InputGroupAddon align="block-end" className="justify-end pb-2">
+              <Button
+                type="submit"
+                size="icon-sm"
+                aria-label="Send reply"
+                disabled={disabled || pending}
+              >
+                {pending ? <Spinner /> : <CornerDownLeftIcon aria-hidden="true" />}
+              </Button>
+            </InputGroupAddon>
+          </InputGroup>
+        </form>
         <FieldDescription id={descriptionId}>{description}</FieldDescription>
         {invalid ? <FieldError id={statusId}>Reply body is required.</FieldError> : null}
       </Field>

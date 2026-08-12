@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,7 +16,6 @@ import { z } from 'zod'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { AeSelectField } from '@/components/ae/forms/AeSelectField'
 import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 
@@ -215,16 +215,25 @@ function RemoveBusinessRoute() {
             </Field>
             <Field>
               <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
-              <AeSelectField
-                id="reasonCode"
-                name="reasonCode"
+              <input type="hidden" name="reasonCode" value={value.reasonCode} />
+              <Select
                 value={value.reasonCode}
-                options={removalReasonOptions}
                 disabled={pending}
                 onValueChange={(nextValue) => {
                   setValue((current) => ({ ...current, reasonCode: toRemovalReason(nextValue) }))
                 }}
-              />
+              >
+                <SelectTrigger id="reasonCode" className="min-h-11 w-full">
+                  <SelectValue placeholder="Choose one" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {removalReasonOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             <Field {...(evidenceInvalid ? { 'data-invalid': true } : {})}>
               <FieldLabel htmlFor="evidenceSummary">What should change?</FieldLabel>

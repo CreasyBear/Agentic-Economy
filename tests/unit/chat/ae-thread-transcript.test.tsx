@@ -16,8 +16,14 @@ import '../../setup/jsdom-dialog'
 import { AeThreadTranscript } from '@/components/ae/chat/AeThreadTranscript'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { AeThreadScroller } from '@/components/ae/chat/AeThreadScroller'
-import type { AnswerSource } from '@/modules/answer/public'
+import type {
+  AnswerArtifact,
+  AnswerOperationCandidate,
+  AnswerSource,
+} from '@/modules/answer/public'
+import { answerOperationCandidateSetDigest } from '@/modules/answer/public'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 /**
  * The transcript renders provider cards, which link to business pages with
@@ -30,9 +36,11 @@ function render(ui: ReactElement) {
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/$slug' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/operations/invocations/$invocationRef' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/operations/$operationRef' }),
   ])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
-  return rtlRender(ui, {
+  return rtlRender(<AeThreadScroller>{ui}</AeThreadScroller>, {
     wrapper: ({ children }: { children: ReactNode }) => (
       <RouterContextProvider router={router}>{children}</RouterContextProvider>
     ),
@@ -371,7 +379,7 @@ describe('AeThreadTranscript', () => {
     }
     const { rerender } = render(<AeThreadTranscript projection={pendingProjection} />)
 
-    expect(screen.queryByRole('log')).toBeNull()
+    expect(screen.getAllByRole('log')).toHaveLength(1)
     expect(screen.getAllByRole('status')).toHaveLength(1)
     const status = screen.getByRole('status')
     expect(status.getAttribute('aria-live')).toBe('polite')
@@ -391,14 +399,14 @@ describe('AeThreadTranscript', () => {
         },
       ],
     }
-    rerender(<AeThreadTranscript projection={completeProjection} />)
+    rerender(<AeThreadScroller><AeThreadTranscript projection={completeProjection} /></AeThreadScroller>)
 
     expect(screen.getAllByRole('status')).toHaveLength(1)
     expect(screen.getByRole('status')).toBe(status)
     expect(status.textContent).toBe('Answer ready.')
     expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
 
-    rerender(<AeThreadTranscript projection={completeProjection} />)
+    rerender(<AeThreadScroller><AeThreadTranscript projection={completeProjection} /></AeThreadScroller>)
 
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
@@ -406,19 +414,374 @@ describe('AeThreadTranscript', () => {
     expect(document.querySelectorAll('[aria-live]')).toHaveLength(0)
   })
 
-  it('keeps the static transcript outside live-region ownership', () => {
+  it('renders all four bounded operation candidates as accessible one-shot choices and submits exact refs', () => {
+    const candidate = routeableWeatherCandidate()
+    const northCandidate: AnswerOperationCandidate = {
+      ...candidate,
+      rank: 2,
+      operationRef: `operation:v1:${'b'.repeat(64)}`,
+      business: { businessId: 'business:north-weather', slug: 'north-weather', name: '\u202eNorth Weather\u202c' },
+    }
+    const southCandidate: AnswerOperationCandidate = {
+      ...candidate,
+      rank: 3,
+      operationRef: `operation:v1:${'c'.repeat(64)}`,
+      business: { businessId: 'business:south-weather', slug: 'south-weather', name: '\u2066South Weather\u2069' },
+    }
+    const eastCandidate: AnswerOperationCandidate = {
+      ...candidate,
+      rank: 4,
+      operationRef: `operation:v1:${'d'.repeat(64)}`,
+      business: { businessId: 'business:east-weather', slug: 'east-weather', name: 'East Weather' },
+    }
+    const onOperationSelect = vi.fn()
+    const candidateSetDigest = answerOperationCandidateSetDigest([candidate, northCandidate, southCandidate, eastCandidate])
+    const artifacts: readonly AnswerArtifact[] = [{
+      kind: 'operation-candidates',
+      candidates: [candidate, northCandidate, southCandidate, eastCandidate],
+      operationCandidatesDigest: candidateSetDigest,
+      selection: {
+        operationRef: candidate.operationRef,
+        toolId: 'operation.execute',
+      },
+    }]
+
     render(
-      <AeThreadScroller showJumpButton={false}>
-        <AeGenerativeAnswer artifacts={[]} busy phase="streaming" query="Find a plumber near Parramatta" />
-      </AeThreadScroller>,
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="current weather"
+        onOperationSelect={onOperationSelect}
+      />,
     )
 
-    expect(screen.getByRole('region', { name: 'Chat' })).toBeTruthy()
-    expect(screen.queryByRole('log')).toBeNull()
-    expect(screen.queryAllByRole('status')).toHaveLength(0)
-    expect(screen.queryByText("Checking what's available")).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Operation candidates' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: /Review and use / })).toHaveLength(4)
+    const selected = screen.getByRole('button', {
+      name: 'Selected Weather Provider: Current weather · weather.current (option 1) from this answer',
+    })
+    expect(selected.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(selected)
+    expect(onOperationSelect).not.toHaveBeenCalled()
+
+    const north = screen.getByRole('button', {
+      name: 'Run North Weather: Current weather · weather.current (option 2) from this answer',
+    })
+    const south = screen.getByRole('button', {
+      name: 'Run South Weather: Current weather · weather.current (option 3) from this answer',
+    })
+    expect(north.getAttribute('aria-label')).not.toBe(south.getAttribute('aria-label'))
+    expect(screen.getAllByRole('button', { name: /Run .*Weather: Current weather/ })).toHaveLength(3)
+    expect(north.hasAttribute('disabled')).toBe(false)
+    expect(south.hasAttribute('disabled')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Run East Weather: Current weather · weather.current (option 4) from this answer',
+    }))
+    expect(screen.getAllByText('Optional inputs')).toHaveLength(4)
+    expect(screen.getAllByText(/units · Query · string · Allowed: metric, imperial · Style: Form · Explode: Yes/)).toHaveLength(4)
+    const input = screen.getByLabelText('Input JSON')
+    fireEvent.change(input, { target: { value: '{"city":' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Validate and run' }))
+    expect(screen.getByRole('alert').textContent).toContain('valid JSON')
+    expect(onOperationSelect).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: '{"city":"Darwin","units":"metric"}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Validate and run' }))
+    expect(onOperationSelect).toHaveBeenCalledOnce()
+    expect(onOperationSelect).toHaveBeenCalledWith(
+      eastCandidate.operationRef,
+      { city: 'Darwin', units: 'metric' },
+      candidateSetDigest,
+    )
+  })
+  it('re-enables the selected exact operation only after an explicitly retryable execute failure', () => {
+    const candidate = routeableWeatherCandidate()
+    const candidateSetDigest = answerOperationCandidateSetDigest([candidate])
+    const candidateArtifact: AnswerArtifact = {
+      kind: 'operation-candidates',
+      candidates: [candidate],
+      operationCandidatesDigest: candidateSetDigest,
+      selection: { operationRef: candidate.operationRef, toolId: 'operation.execute' },
+    }
+    const retryableResult = {
+      kind: 'error' as const,
+      operationRef: candidate.operationRef,
+      code: 'fetch_failed' as const,
+      retryable: true,
+      reason: 'The provider did not respond.',
+    }
+    const onOperationSelect = vi.fn()
+    const retryableArtifacts: readonly AnswerArtifact[] = [
+      candidateArtifact,
+      {
+        kind: 'operation-outcome',
+        outcome: {
+          toolId: 'operation.execute',
+          operationRef: candidate.operationRef,
+          resultDigest: canonicalDigest(retryableResult).toString(),
+          toolCallDigest: 'sha256:retryable-tool-record',
+          result: retryableResult,
+        },
+      },
+    ]
+
+    render(<AeGenerativeAnswer artifacts={retryableArtifacts} query="current weather" onOperationSelect={onOperationSelect} />)
+
+    const retry = screen.getByRole('button', {
+      name: 'Retry Weather Provider: Current weather · weather.current (option 1) from this answer',
+    })
+    expect(retry.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(retry)
+    fireEvent.change(screen.getByLabelText('Input JSON'), { target: { value: '{"city":"Darwin"}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Validate and run' }))
+    expect(onOperationSelect).toHaveBeenCalledOnce()
+    expect(onOperationSelect).toHaveBeenCalledWith(
+      candidate.operationRef,
+      { city: 'Darwin' },
+      candidateSetDigest,
+    )
+
+    cleanup()
+    const terminalResult = { ...retryableResult, retryable: false }
+    render(
+      <AeGenerativeAnswer
+        artifacts={[
+          candidateArtifact,
+          {
+            kind: 'operation-outcome',
+            outcome: {
+              toolId: 'operation.execute',
+              operationRef: candidate.operationRef,
+              resultDigest: canonicalDigest(terminalResult).toString(),
+              toolCallDigest: 'sha256:terminal-tool-record',
+              result: terminalResult,
+            },
+          },
+        ]}
+        query="current weather"
+        onOperationSelect={onOperationSelect}
+      />,
+    )
+
+    const selected = screen.getByRole('button', {
+      name: 'Selected Weather Provider: Current weather · weather.current (option 1) from this answer',
+    })
+    expect(selected.hasAttribute('disabled')).toBe(true)
+  })
+  it('disables operation controls for historical candidate cards', () => {
+    const candidate = routeableWeatherCandidate()
+    const candidateArtifact: AnswerArtifact = {
+      kind: 'operation-candidates',
+      candidates: [candidate],
+      operationCandidatesDigest: answerOperationCandidateSetDigest([candidate]),
+    }
+    const historicalArtifacts: readonly AnswerArtifact[] = [candidateArtifact]
+    cleanup()
+    const onFollowUp = vi.fn()
+    render(
+      <AeThreadTranscript
+        projection={{
+          threadId: 'thread-operation-history',
+          title: 'Operation history',
+          turns: [
+            {
+              turnId: 'turn-operation-history',
+              seq: 1,
+              query: 'Current weather',
+              intent: 'refine_search',
+              status: 'complete',
+              oneLine: 'Choose a weather operation.',
+              workLog: [],
+              artifacts: historicalArtifacts,
+            },
+            {
+              turnId: 'turn-current',
+              seq: 2,
+              query: 'Tell me more',
+              intent: 'explain_boundary',
+              status: 'complete',
+              oneLine: 'Here is the current answer.',
+              workLog: [],
+              artifacts: [{ kind: 'one-line', text: 'Here is the current answer.' }],
+            },
+          ],
+        }}
+        onFollowUp={onFollowUp}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Current weather.*Expand/ }))
+    const historicalRun = screen.getByRole('button', {
+      name: 'Run Weather Provider: Current weather · weather.current (option 1) from this answer',
+    })
+    expect(historicalRun.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(historicalRun)
+    expect(onFollowUp).not.toHaveBeenCalled()
+  })
+
+  it('keeps review available but disables answer execution for non-routeable availability', () => {
+    const operationRef = `operation:v1:${'e'.repeat(64)}`
+    const candidate: AnswerOperationCandidate = {
+      rank: 1,
+      operationRef,
+      operationId: 'weather.current',
+      descriptorDigest: 'descriptor-digest',
+      business: { businessId: 'business:weather', slug: 'weather', name: 'Weather Provider' },
+      offering: { offeringRef: 'offering:weather', revision: 1, label: 'Current weather', summary: 'Current weather by city.' },
+      matchReason: 'Matched weather request',
+      summary: 'Current weather by city.',
+      availability: { posture: 'unavailable', reason: 'publisher_withdrew' },
+      commercial: {
+        price: { kind: 'on_request' },
+        materialTerms: [],
+        relationship: { kind: 'none', summary: 'No published relationship.' },
+      },
+      requiredParameters: [],
+      optionalParameters: [],
+      inputSchemaDigest: 'schema-digest',
+      exactRebindRequired: true,
+      authority: {
+        publisher: 'provider_owned',
+        sourceKind: 'openapi_http',
+        authentication: { kind: 'x402' },
+      },
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+      navigation: [],
+    }
+    const onOperationSelect = vi.fn()
+    const artifacts: readonly AnswerArtifact[] = [{
+      kind: 'operation-candidates',
+      candidates: [candidate],
+      operationCandidatesDigest: answerOperationCandidateSetDigest([candidate]),
+    }]
+
+    render(
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="current weather"
+        onOperationSelect={onOperationSelect}
+      />,
+    )
+
+    const runButton = screen.getByRole('button', { name: /Not executable from this answer/ })
+    expect(runButton.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('Not executable from this answer: Publisher withdrew.')).toBeTruthy()
+    expect(screen.getByText(/x402 payment/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Review and use / })).toBeTruthy()
+    fireEvent.click(runButton)
+    expect(onOperationSelect).not.toHaveBeenCalled()
+  })
+
+  it('renders the frozen paid operation outcome and suppresses stale provider cards', () => {
+    const operationRef = `operation:v1:${'d'.repeat(64)}`
+    const result = {
+      kind: 'completed' as const,
+      invocationRef: 'invocation:weather',
+      operationRef,
+      output: { temperature: 24 },
+      evidenceHash: 'sha256:evidence',
+      usage: {
+        usageRef: 'usage:weather',
+        observedAt: Date.UTC(2026, 7, 11),
+        chargeState: 'paid' as const,
+        amount: { currency: 'AUD', units: '125', exponent: 2 },
+        priceDigest: 'sha256:price',
+        transactionRef: 'transaction:weather',
+        durationMs: 84,
+      },
+    }
+    const artifacts: readonly AnswerArtifact[] = [
+      { kind: 'provider-cards', providers: [provider()] },
+      {
+        kind: 'operation-outcome',
+        outcome: {
+          toolId: 'operation.invoke',
+          operationRef,
+          resultDigest: canonicalDigest(result).toString(),
+          toolCallDigest: 'sha256:tool-record',
+          result,
+        },
+      },
+    ]
+
+    render(<AeGenerativeAnswer artifacts={artifacts} query="weather" />)
+
+    const statusLink = screen.getByRole('link', { name: 'View current status' })
+    expect(statusLink.getAttribute('href')).toBe('/operations/invocations/invocation%3Aweather')
+    const operationLink = screen.getByRole('link', { name: operationRef })
+    expect(operationLink.getAttribute('href')).toBe(`/operations/${encodeURIComponent(operationRef)}`)
+    expect(screen.getByText('invocation:weather')).toBeTruthy()
+
+    expect(screen.getByRole('region', { name: 'Operation outcome' })).toBeTruthy()
+    expect(screen.getByText('AUD 1.25')).toBeTruthy()
+    expect(screen.getByText('usage:weather')).toBeTruthy()
+    expect(screen.getByText('transaction:weather')).toBeTruthy()
+    expect(screen.getByText('84 ms')).toBeTruthy()
+    expect(screen.getByText('sha256:price')).toBeTruthy()
+    expect(screen.getByText('sha256:tool-record')).toBeTruthy()
+    expect(screen.getByText('sha256:evidence')).toBeTruthy()
+    expect(screen.queryByText('Parramatta Emergency Plumbing')).toBeNull()
+  })
+
+  it('links the exact Operation without fabricating invocation status for a keyless outcome', () => {
+    const operationRef = `operation:v1:${'e'.repeat(64)}`
+    const result = {
+      kind: 'ok' as const,
+      operationRef,
+      capabilityId: 'weather.current',
+      name: 'Current weather',
+      output: { temperature: 24 },
+      evidenceHash: 'sha256:keyless-evidence',
+    }
+    const artifacts: readonly AnswerArtifact[] = [{
+      kind: 'operation-outcome',
+      outcome: {
+        toolId: 'operation.execute',
+        operationRef,
+        resultDigest: canonicalDigest(result).toString(),
+        toolCallDigest: 'sha256:keyless-tool-record',
+        result,
+      },
+    }]
+
+    render(<AeGenerativeAnswer artifacts={artifacts} query="weather" />)
+
+    const operationLink = screen.getByRole('link', { name: operationRef })
+    expect(operationLink.getAttribute('href')).toBe(`/operations/${encodeURIComponent(operationRef)}`)
+    expect(screen.queryByRole('link', { name: 'View current status' })).toBeNull()
+    expect(screen.getByText('Operation completed')).toBeTruthy()
   })
 })
+
+function routeableWeatherCandidate(): AnswerOperationCandidate {
+  return {
+    rank: 1,
+    operationRef: `operation:v1:${'a'.repeat(64)}`,
+    operationId: '\u200Eweather.current',
+    descriptorDigest: 'descriptor-digest',
+    business: { businessId: 'business:weather', slug: 'weather', name: '\u202eWeather Provider\u202c' },
+    offering: { offeringRef: 'offering:weather', revision: 1, label: '\u2066Current weather\u2069', summary: 'Current weather by city.' },
+    matchReason: 'Matched weather request',
+    summary: 'Current weather by city.',
+    availability: { posture: 'routeable' },
+    commercial: {
+      price: { kind: 'on_request' },
+      materialTerms: [],
+      relationship: { kind: 'none', summary: 'No published relationship.' },
+    },
+    requiredParameters: [{ group: 'query', name: 'city', type: 'string', required: true }],
+    optionalParameters: [{ group: 'query', name: 'units', type: 'string', enumValues: ['metric', 'imperial'], style: 'form', explode: true, required: false }],
+    inputSchemaDigest: 'schema-digest',
+    exactRebindRequired: true,
+    authority: { publisher: 'provider_owned', sourceKind: 'openapi_http', authentication: { kind: 'keyless' } },
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+    navigation: [],
+  }
+}
 
 function stubDeterministicChips() {
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ llmChipsEnabled: false })))

@@ -7,7 +7,6 @@ import type { ServiceDto } from '@/modules/registry/public'
 import { MagicNumber } from '@/components/ae/magic/MagicNumber'
 import { MagicTilt } from '@/components/ae/magic/MagicTilt'
 import { ProvenanceBadge } from '@/components/ae/status/ProvenanceBadge'
-import { AeInstantQuote } from './AeInstantQuote'
 import { formatPublishedPrice } from './money'
 
 export type AeServiceRowProps = Readonly<{
@@ -30,17 +29,14 @@ const rankLabel = cva('block text-sm font-semibold', {
  */
 export function AeServiceRow({ service, emphasized = false, answerRank }: AeServiceRowProps) {
   const businessHref = `/${service.id}`
-  const quoteEndpoint = service.endpoints.find((endpoint) => endpoint.ae.access === 'open')
-  const location = [
-    service.ae.suburb,
-    service.ae.stateTerritory,
-  ].filter((part): part is string => part !== undefined).join(', ')
-  const source = service.ae.source
+  const location = service.ae.businessContext.kind === 'local_human'
+    ? [service.ae.businessContext.suburb, service.ae.businessContext.stateTerritory].join(', ')
+    : ''
   const firstOffering = service.ae.offerings[0]
   const pricedOffering = service.ae.offerings.find((offering) => offering.price !== undefined)
   const price = pricedOffering?.price === undefined ? 'Not published' : formatPublishedPrice(pricedOffering.price)
-  const priceLabel = source === 'ae_sandbox' ? 'Price' : 'Published price'
-  const timing = quoteEndpoint === undefined ? 'Ask the business' : 'See the business for timing'
+  const priceLabel = 'Published price'
+  const timing = 'Ask the business'
 
   return (
     <li className={emphasized ? 'h-full lg:col-span-2' : 'h-full'}>
@@ -57,7 +53,7 @@ export function AeServiceRow({ service, emphasized = false, answerRank }: AeServ
               <h3 className="block text-lg font-semibold leading-snug text-foreground">{service.name}</h3>
               <p className="text-sm text-muted-foreground">
                 {firstOffering?.name ?? service.category}{location.length === 0 ? null : ` · ${location}`}
-                <span className="ml-2 inline-flex align-middle"><ProvenanceBadge source={source} /></span>
+                <span className="ml-2 inline-flex align-middle"><ProvenanceBadge /></span>
               </p>
             </div>
             <div className="min-w-0 sm:max-w-52 sm:text-right">
@@ -83,18 +79,9 @@ export function AeServiceRow({ service, emphasized = false, answerRank }: AeServ
             </div>
           </dl>
           <div className="mt-auto flex">
-            {quoteEndpoint === undefined ? (
-              <Button asChild variant={emphasized ? 'default' : 'secondary'} {...(emphasized ? { 'data-variant': 'primary' } : {})} size="default" className="min-h-11 w-full sm:w-auto">
-                <a href={businessHref}>See business details</a>
-              </Button>
-            ) : (
-              <AeInstantQuote
-                endpoint={quoteEndpoint}
-                businessName={service.name}
-                businessSlug={service.id}
-                emphasized={emphasized}
-              />
-            )}
+            <Button asChild variant={emphasized ? 'default' : 'secondary'} {...(emphasized ? { 'data-variant': 'primary' } : {})} size="default" className="min-h-11 w-full sm:w-auto">
+              <a href={businessHref}>See business details</a>
+            </Button>
           </div>
         </CardContent>
         </Card>

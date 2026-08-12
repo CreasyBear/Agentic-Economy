@@ -1,6 +1,6 @@
 import { expect, test, type Locator } from '@playwright/test'
 
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '../helpers/local-e2e-business-fixtures'
 
 const admittedBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
   (fixture) => fixture.inquiryAdmission === 'admitted',

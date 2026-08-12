@@ -101,7 +101,8 @@ describe('public semantic comfort', () => {
 
     const disclosure = screen.getByRole('button', { name: 'Searching for matches' })
     expect(disclosure.getAttribute('aria-expanded')).toBe('true')
-    expect(disclosure.classList.contains('min-h-11')).toBe(true)
+    const minimumHeightClass = [...disclosure.classList].find((className) => /^min-h-\d+$/.test(className))
+    expect(Number(minimumHeightClass?.slice('min-h-'.length))).toBeGreaterThanOrEqual(11)
     expect(disclosure.tagName).toBe('BUTTON')
     expect(disclosure.getAttribute('type')).toBe('button')
   })

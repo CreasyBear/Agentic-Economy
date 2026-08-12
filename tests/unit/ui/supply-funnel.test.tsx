@@ -1,200 +1,1395 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
-import type { ReactElement } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import '../../setup/jsdom-platform'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "../../setup/jsdom-platform";
+import "../../setup/jsdom-dialog";
 
-import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
-import { AeSupplyFunnel } from '@/components/ae/supply/AeSupplyFunnel'
-import { emptySupplyFunnelDraft, readSupplyFunnelDraft, writeSupplyFunnelDraft } from '@/components/ae/supply/AeSupplyFunnel.exports'
-import { AeSupplyEarningsCard } from '@/components/ae/supply/AeSupplyEarningsCard'
+import { AeSupplyLanding } from "@/components/ae/supply/AeSupplyLanding";
+import {
+  AeSupplyFunnel,
+  type SupplyFunnelCallbacks,
+} from "@/components/ae/supply/AeSupplyFunnel";
+import {
+  AeOwnerOperationFacts,
+  AeSupplyPublisherHome,
+} from "@/components/ae/supply/AeSupplyPublisherHome";
+import { AeSupplyEarningsCard } from "@/components/ae/supply/AeSupplyEarningsCard";
+import {
+  AeSupplyEndpointConfigStep,
+  type SupplyAuthorityOption,
+  type SupplyEndpointConfigValue,
+  type SupplyEndpointDocumentPreflightResult,
+  type SupplyPublicationImport,
+} from "@/components/ae/supply/AeSupplyEndpointConfigStep";
+import type { PreparedPublicationMaterial } from "@/modules/capability-supply/internal/publication";
 import type {
+  OwnerSupplyCommandResult,
+  OwnerSupplyOfferingReadback,
+  OwnerSupplyReadbackSource,
   SupplyFunnelStep,
-  SupplyFunnelStepCompletion,
+  SupplyFunnelStepState,
   SupplyLandingTool,
-} from '@/modules/capability-supply/supply-funnel.functions'
-import type { ServiceDto } from '@/modules/registry/public'
-import { emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings.exports'
+} from "@/modules/capability-supply/supply-funnel.functions";
+import type { ServiceDto } from "@/modules/registry/public";
+import {
+  pricingConfigDigest,
+  type PricingConfig,
+} from "@/modules/money/public";
+import { emptyOwnerOfferingEditorValue } from "@/components/ae/offerings/AeOwnerOfferings.exports";
+
+const moneyServerMocks = vi.hoisted(() => ({
+  beginOwnerPayoutTransferServer: vi.fn(),
+  createOwnerConnectAccountServer: vi.fn(),
+  createOwnerOnboardingLinkServer: vi.fn(),
+  readOwnerPayoutTransferServer: vi.fn(),
+  recoverOwnerPayoutTransferServer: vi.fn(),
+}));
+
+vi.mock("@/modules/money/server", () => moneyServerMocks);
 
 const tool: SupplyLandingTool = {
-  id: 'registry.services_list',
-  name: 'List published services',
-  summary: 'Read published services.',
-  boundaries: ['Read-only.'],
-}
+  id: "registry.services_list",
+  name: "List published services",
+  summary: "Read published services.",
+  boundaries: ["Read-only."],
+};
 const service: ServiceDto = {
-  id: 'example',
-  name: 'Quote API',
-  category: 'Data',
+  id: "example",
+  name: "Quote API",
+  category: "Data",
   networks: [],
   enriched: false,
-  integrationType: '3P',
-  serviceName: 'Quote API',
+  integrationType: "3P",
+  serviceName: "Quote API",
   tags: [],
   ae: {
-    publicUrl: '/example',
-    trustTier: 'claimed',
+    businessContext: {
+      kind: "local_human",
+      suburb: "Perth",
+      stateTerritory: "WA",
+    },
+    publicUrl: "/example",
+    trustTier: "claimed",
     photos: [],
     observedAt: 1,
-    disposition: 'current',
-    source: 'business_published',
-    offerings: [{
-      offeringRef: 'offering:one',
-      revision: 1,
-      name: 'Quote API',
-      category: 'Data',
-      summary: 'Returns a quote.',
-      price: { kind: 'fixed', amount: { currency: 'AUD', units: '0', exponent: 2 }, taxTreatment: 'inclusive' },
-      support: { integrated: false, routeable: false },
-    }],
-    links: { business: '/api/businesses/example', manifest: '/example/ucp' },
+    disposition: "current",
+    source: "business_published",
+    offerings: [
+      {
+        offeringRef: "offering:one",
+        revision: 1,
+        name: "Quote API",
+        category: "Data",
+        summary: "Returns a quote.",
+        price: {
+          kind: "fixed",
+          amount: { currency: "AUD", units: "0", exponent: 2 },
+          taxTreatment: "inclusive",
+        },
+        support: { integrated: false, routeable: false },
+      },
+    ],
+    links: { business: "/api/businesses/example", manifest: "/example/ucp" },
   },
-  endpoints: [{
-    url: 'https://example.test/quote',
-    description: 'Quote',
-    serviceName: 'Quote API',
-    tags: [],
-    parameters: [],
-    quality: null,
-    ae: {
-      offeringRef: 'offering:one',
-      provenance: 'business_declared',
-      access: 'external',
-      authentication: { kind: 'unknown' },
-      execution: 'catalog_only',
-      settlementSupport: 'unpriced',
+  endpoints: [
+    {
+      url: "https://example.test/quote",
+      description: "Quote",
+      serviceName: "Quote API",
+      tags: [],
+      parameters: [],
+      quality: null,
+      ae: {
+        offeringRef: "offering:one",
+        provenance: "business_declared",
+        access: "external",
+        authentication: { kind: "unknown" },
+        execution: "catalog_only",
+        settlementSupport: "unpriced",
+      },
     },
-  }],
-}
+  ],
+};
 
 beforeEach(() => {
-  window.sessionStorage.clear()
-})
-afterEach(() => { cleanup(); window.sessionStorage.clear() })
+  window.sessionStorage.clear();
+  vi.clearAllMocks();
+});
+afterEach(() => {
+  cleanup();
+  window.sessionStorage.clear();
+});
 
-describe('supply landing', () => {
-  it('leads with the business outcome and generated service rows', () => {
-    renderWithRouter(<AeSupplyLanding tools={[tool]} services={[service]} />)
-    expect(screen.getByRole('heading', { name: /AI assistants/i })).toBeDefined()
-    expect(screen.getByRole('link', { name: /start publishing your service/i }).getAttribute('href')).toBe('/claim?source=supply')
-    expect(screen.getByText(/agents bring you work/i)).toBeDefined()
-    expect(screen.getByText('Quote API')).toBeDefined()
-    expect(screen.queryByText(/\b[0-9]+ actions available/i)).toBeNull()
-    expect(screen.queryByText(/publisher console|money rail|machine surfaces/i)).toBeNull()
-  })
+describe("supply landing", () => {
+  it("leads with the business outcome and generated service rows", () => {
+    renderWithRouter(<AeSupplyLanding tools={[tool]} services={[service]} />);
+    expect(
+      screen.getByRole("heading", { name: /AI assistants/i }),
+    ).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: "Claim provider identity" })
+        .getAttribute("href"),
+    ).toBe("/claim/form?source=supply");
+    expect(screen.getByText(/agents bring you work/i)).toBeDefined();
+    expect(screen.getByText("Quote API")).toBeDefined();
+    expect(screen.queryByText(/\b[0-9]+ actions available/i)).toBeNull();
+    expect(
+      screen.queryByText(/publisher console|money rail|machine surfaces/i),
+    ).toBeNull();
+  });
 
-  it('renders the honest empty state', () => {
-    renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />)
-    expect(screen.getByText('No services are listed yet.')).toBeDefined()
-  })
-})
+  it("renders the honest empty state", () => {
+    renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />);
+    expect(screen.getByText("No services are listed yet.")).toBeDefined();
+  });
+});
+describe("current supply funnel", () => {
+  it("renders only the describe frontier first", () => {
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering: async (value) => ({
+        kind: "saved",
+        value,
+        message: "Saved.",
+      }),
+      preflight: async () => ({
+        kind: "refused",
+        reason: "not_used",
+        fix: "Not used in this step.",
+      }),
+      admit: async () => ({ step: "admission", state: "completed" }),
+      runReadiness: async () => ({ step: "readiness", state: "completed" }),
+      runTest: async () => ({ step: "test", state: "completed" }),
+    };
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("describe")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={callbacks}
+      />,
+    );
+    expect(screen.getByText("Service details")).toBeDefined();
+    expect(
+      screen.queryByRole("heading", { name: "Check that it works" }),
+    ).toBeNull();
+  });
 
-describe('resumable supply draft', () => {
-  it('round-trips the bounded six-step state', () => {
-    const draft = emptySupplyFunnelDraft('business:one', 'offering:one')
-    writeSupplyFunnelDraft(draft)
-    expect(readSupplyFunnelDraft()?.version).toBe('supply-funnel:v1')
-    expect(readSupplyFunnelDraft()?.states.publish).toBe('not_started')
-  })
+  it("moves through save, admission, readiness, and test effects", async () => {
+    const savedValue = {
+      ...emptyOwnerOfferingEditorValue,
+      expectedRevision: 1,
+      name: "Weather data",
+      category: "Data",
+      summary: "Returns a current weather report.",
+    };
+    const saveOfferingImplementation: SupplyFunnelCallbacks["saveOffering"] =
+      async () => ({ kind: "saved", value: savedValue, message: "Saved." });
+    const saveOffering = vi.fn(saveOfferingImplementation);
+    const preflightImplementation: SupplyFunnelCallbacks["preflight"] = async (
+      source,
+    ) => {
+      expect(source.sourceRevision).toBe("source:one");
+      return { kind: "prepared", prepared: preparedPublication };
+    };
+    const preflight = vi.fn(preflightImplementation);
+    const admitImplementation: SupplyFunnelCallbacks["admit"] = async () => {
+      return {
+        step: "admission",
+        state: "completed",
+        offeringRef: "offering:one",
+        revision: 1,
+        publicationRef: "publication:one",
+        operationRef: "operation:one",
+        message: "Admitted.",
+      };
+    };
+    const admit = vi.fn(admitImplementation);
+    const runReadinessImplementation: SupplyFunnelCallbacks["runReadiness"] =
+      async () => ({ step: "readiness", state: "completed" });
+    const runReadiness = vi.fn(runReadinessImplementation);
+    const runTestImplementation: SupplyFunnelCallbacks["runTest"] =
+      async () => ({ step: "test", state: "completed" });
+    const runTest = vi.fn(runTestImplementation);
+    let nextStep: SupplyFunnelStep = "admission";
+    let updateOffering: (step: SupplyFunnelStep) => void = () => undefined;
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering,
+      preflight,
+      admit,
+      runReadiness,
+      runTest,
+      onReload: async () => updateOffering(nextStep),
+    };
+    const view = render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("describe")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        initialSource={sourceValue}
+        callbacks={callbacks}
+      />,
+    );
+    updateOffering = (step) =>
+      view.rerender(
+        <AeSupplyFunnel
+          businessId="business:one"
+          offering={offeringAt(step)}
+          initialOffering={emptyOwnerOfferingEditorValue}
+          initialSource={sourceValue}
+          callbacks={callbacks}
+        />,
+      );
 
-  it('renders only the describe frontier first', () => {
-    render(<AeSupplyFunnel businessId="business:one" initialOffering={emptyOwnerOfferingEditorValue} callbacks={{ saveOffering: vi.fn(), advance: vi.fn(), runReadiness: vi.fn(), runTest: vi.fn(), publish: vi.fn() }} />)
-    expect(screen.getByText('Service details')).toBeDefined()
-    expect(screen.queryByRole('heading', { name: 'Check that it works' })).toBeNull()
-  })
-  it('moves through save, check, price, test, and publish effects', async () => {
-    const savedValue = { ...emptyOwnerOfferingEditorValue, expectedRevision: 1, name: 'Weather data', category: 'Data', summary: 'Returns a current weather report.' }
-    const expectedPricing = { version: 'pricing:v2', unit: 'call', paidAmount: { currency: 'AUD', units: '125', exponent: 2 } } as const
-    const saveOffering = vi.fn(async () => ({ kind: 'saved' as const, value: savedValue, message: 'Saved.' }))
-    const advance = vi.fn(async (step: SupplyFunnelStep): Promise<SupplyFunnelStepCompletion> => ({ step, state: 'completed' }))
-    const runReadiness = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => ({ step: 'readiness', state: 'completed' }))
-    const runTest = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => ({ step: 'test', state: 'completed' }))
-    const publish = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => ({ step: 'publish', state: 'completed' }))
-    render(<AeSupplyFunnel businessId="business:one" initialOffering={emptyOwnerOfferingEditorValue} callbacks={{ saveOffering, advance, runReadiness, runTest, publish }} />)
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Weather data" },
+    });
+    fireEvent.change(screen.getByLabelText("Category"), {
+      target: { value: "Data" },
+    });
+    fireEvent.change(screen.getByLabelText("Summary"), {
+      target: { value: "Returns a current weather report." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", {
+          name: "Tell AE where your service runs",
+        }),
+      ).toBeDefined(),
+    );
+    expect(saveOffering).toHaveBeenCalledOnce();
 
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Weather data' } })
-    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Data' } })
-    fireEvent.change(screen.getByLabelText('Summary'), { target: { value: 'Returns a current weather report.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Tell AE where your service runs' })).toBeDefined())
-    expect(saveOffering).toHaveBeenCalledOnce()
+    nextStep = "readiness";
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", {
+          name: "Check that the admitted operation works",
+        }),
+      ).toBeDefined(),
+    );
+    expect(preflight).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "openapi_http",
+        sourceRevision: "source:one",
+      }),
+    );
+    expect(admit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "openapi_http",
+        sourceRevision: "source:one",
+      }),
+    );
+    expect(admit.mock.calls[0]).toHaveLength(1);
 
-    fireEvent.change(screen.getByLabelText('Service or server URL'), { target: { value: 'https://example.test/quote' } })
+    nextStep = "test";
+    fireEvent.click(screen.getByRole("button", { name: "Check the service" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Run a real test" }),
+      ).toBeDefined(),
+    );
+    expect(runReadiness).toHaveBeenCalledWith(
+      expect.objectContaining({
+        offeringRef: "offering:one",
+        publicationRef: "publication:one",
+      }),
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check and continue' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Check that it works' })).toBeDefined())
-    expect(advance).toHaveBeenCalledWith('endpoint', expect.objectContaining({ sourceKind: 'openapi_http' }))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review and confirm the test" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Send the test" }),
+      ).toBeDefined(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send the test" }));
+    await waitFor(() =>
+      expect(runTest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offeringRef: "offering:one",
+          publicationRef: "publication:one",
+        }),
+      ),
+    );
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check the service' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose a price per call' })).toBeDefined())
-    expect(runReadiness).toHaveBeenCalledWith({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }) })
+  it("distinguishes an x402 readiness challenge from a paid fill", async () => {
+    const runTest = vi.fn(async () => ({
+      step: "test" as const,
+      state: "completed" as const,
+      message:
+        "The exact admitted operation returned a fresh valid x402 payment challenge. No payment was sent.",
+    }));
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering: async (value) => ({
+        kind: "saved",
+        value,
+        message: "Saved.",
+      }),
+      preflight: async () => ({
+        kind: "refused",
+        reason: "not_used",
+        fix: "Not used in this step.",
+      }),
+      admit: async () => ({ step: "admission", state: "completed" }),
+      runReadiness: async () => ({ step: "readiness", state: "completed" }),
+      runTest,
+    };
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={x402OfferingAtTest()}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={callbacks}
+      />,
+    );
 
+    expect(
+      screen.getByRole("button", {
+        name: "Check payment challenge (no payment sent).",
+      }),
+    ).toBeDefined();
+    expect(screen.getByText(/readiness only/i)).toBeDefined();
+    expect(
+      screen.getByText(
+        /not a paid fill, Qualified Use, earnings, settlement, or proof of live availability/i,
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText("Send the test")).toBeNull();
 
-    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '1.25' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save price' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Run a real test' })).toBeDefined())
-    expect(advance).toHaveBeenCalledWith('pricing', expectedPricing)
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Check payment challenge (no payment sent).",
+      }),
+    );
+    await waitFor(() => expect(runTest).toHaveBeenCalledOnce());
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review and confirm the test' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Send the test' })).toBeDefined())
-    fireEvent.click(screen.getByRole('button', { name: 'Send the test' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Go live' })).toBeDefined())
-    expect(runTest).toHaveBeenCalledWith(expect.objectContaining({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }), pricing: expectedPricing }))
+  it("rejects malformed source material before admission", async () => {
+    const preflightImplementation: SupplyFunnelCallbacks["preflight"] =
+      async () => ({ kind: "prepared", prepared: preparedPublication });
+    const preflight = vi.fn(preflightImplementation);
+    const admitImplementation: SupplyFunnelCallbacks["admit"] = async () => ({
+      step: "admission",
+      state: "completed",
+    });
+    const admit = vi.fn(admitImplementation);
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering: async (value) => ({
+        kind: "saved",
+        value,
+        message: "Saved.",
+      }),
+      preflight,
+      admit,
+      runReadiness: async () => ({ step: "readiness", state: "completed" }),
+      runTest: async () => ({ step: "test", state: "completed" }),
+    };
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("admission")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        initialSource={{ ...sourceValue, contract: {} }}
+        callbacks={callbacks}
+      />,
+    );
 
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /contract must declare at least one output evidence pointer/i,
+    );
+    expect(preflight).not.toHaveBeenCalled();
+    expect(admit).not.toHaveBeenCalled();
+  });
+  it("blocks an expired provider connection before source preflight", async () => {
+    const preflight = vi.fn(async () => ({
+      kind: "prepared" as const,
+      prepared: preparedPublication,
+    }));
+    const admit = vi.fn(async () => ({
+      step: "admission" as const,
+      state: "completed" as const,
+    }));
+    const authority: SupplyAuthorityOption = {
+      connectionRef: "connection:expired",
+      businessId: "business:one",
+      providerRef: "provider:weather",
+      providerAccountRef: "account:weather",
+      adapterId: "http-json:v1",
+      grantedScopes: [],
+      grantedResources: [],
+      authorityGeneration: 1,
+      authorityDigest: `sha256:${"a".repeat(64)}`,
+      lifecycle: "active",
+      available: false,
+      credentialConfigured: true,
+      observedAt: 1,
+      expiresAt: 2,
+      reasonCode: "credential_expired",
+      evidenceRefs: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("admission")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        initialSource={{
+          ...sourceValue,
+          authority: {
+            kind: "provider_connection",
+            connectionRef: authority.connectionRef,
+            providerRef: authority.providerRef,
+          },
+        }}
+        authorityOptions={[authority]}
+        callbacks={{
+          saveOffering: async (value) => ({
+            kind: "saved",
+            value,
+            message: "Saved.",
+          }),
+          preflight,
+          admit,
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Publish your service' }))
-    await waitFor(() => expect(publish).toHaveBeenCalledWith(expect.objectContaining({ endpoint: expect.objectContaining({ endpointUrl: 'https://example.test/quote' }), pricing: expectedPricing })))
-    expect(screen.getAllByText('Done').length).toBe(6)
-  })
-  it('does not advance with a malformed decimal price', async () => {
-    const initial = emptySupplyFunnelDraft('business:one')
-    const states = { ...initial.states, describe: 'completed' as const, endpoint: 'completed' as const, readiness: 'completed' as const }
-    writeSupplyFunnelDraft({ ...initial, states, completedSteps: ['describe', 'endpoint', 'readiness'] })
-    const advance = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => ({ step: 'pricing', state: 'completed' }))
-    render(<AeSupplyFunnel businessId="business:one" initialOffering={emptyOwnerOfferingEditorValue} callbacks={{ saveOffering: vi.fn(), advance, runReadiness: vi.fn(), runTest: vi.fn(), publish: vi.fn() }} />)
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    expect(
+      (await screen.findAllByText(/provider connection is unavailable/i))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(preflight).not.toHaveBeenCalled();
+    expect(admit).not.toHaveBeenCalled();
+  });
 
-    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '1.234' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save price' }))
-    await waitFor(() => expect(screen.getByText(/two decimal places/i)).toBeDefined())
-    expect(advance).not.toHaveBeenCalled()
-  })
-  it('marks downstream work fresh again and gives a refusal recovery action without fake earnings', async () => {
-    const initial = emptySupplyFunnelDraft('business:one', 'offering:one')
-    const states = { ...initial.states, describe: 'completed' as const, endpoint: 'in_progress' as const, readiness: 'completed' as const, pricing: 'completed' as const, test: 'completed' as const, publish: 'completed' as const }
-    writeSupplyFunnelDraft({ ...initial, states, completedSteps: ['describe', 'readiness', 'pricing', 'test', 'publish'] })
-    const advance = vi.fn(async (step: SupplyFunnelStep): Promise<SupplyFunnelStepCompletion> => ({ step, state: 'completed' }))
-    let readinessAttempt = 0
-    const runReadiness = vi.fn(async (): Promise<SupplyFunnelStepCompletion> => {
-      readinessAttempt += 1
-      return readinessAttempt === 1 ? { step: 'readiness', state: 'refused', refusal: 'source_unavailable' } : { step: 'readiness', state: 'completed' }
-    })
-    render(<AeSupplyFunnel businessId="business:one" initialOffering={emptyOwnerOfferingEditorValue} callbacks={{ saveOffering: vi.fn(), advance, runReadiness, runTest: vi.fn(), publish: vi.fn() }} />)
+  it("selects an available non-secret x402 provider connection", async () => {
+    const authority: SupplyAuthorityOption = {
+      connectionRef: "connection:x402",
+      businessId: "business:one",
+      providerRef: "provider:x402",
+      providerAccountRef: "account:x402",
+      adapterId: "x402-fetch:v2",
+      grantedScopes: [],
+      grantedResources: [],
+      authorityGeneration: 1,
+      authorityDigest: `sha256:${"b".repeat(64)}`,
+      lifecycle: "active",
+      available: true,
+      credentialConfigured: false,
+      observedAt: 1,
+      reasonCode: null,
+      evidenceRefs: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const preflight = vi.fn(async (source: SupplyPublicationImport) => {
+      expect(source).toMatchObject({
+        kind: "x402",
+        commercial: {
+          authority: {
+            kind: "provider_connection",
+            connectionRef: authority.connectionRef,
+            providerRef: authority.providerRef,
+          },
+        },
+      });
+      return { kind: "prepared" as const, prepared: preparedPublication };
+    });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check and continue' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Check that it works' })).toBeDefined())
-    expect(screen.getAllByText('Needs a fresh check').length).toBeGreaterThan(0)
-    expect(screen.queryByText('stale')).toBeNull()
+    render(
+      <AeSupplyEndpointConfigStep
+        initialValue={x402SourceValue}
+        authorityOptions={[authority]}
+        onPreflight={preflight}
+        onSubmit={async () => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: "Access authority" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: /provider:x402 · available/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check the service' }))
-    await waitFor(() => expect(screen.getByText(/could not reach the API document/i)).toBeDefined())
-    expect(screen.queryByText('source_unavailable')).toBeNull()
+    await waitFor(() => expect(preflight).toHaveBeenCalledOnce());
+  });
+  it("offers OpenAPI selection and renders document inspection outcomes", async () => {
+    const inspectDocument = vi.fn(
+      async (): Promise<SupplyEndpointDocumentPreflightResult> => ({
+        kind: "preflighted",
+        sourceDigest: sourceHash,
+        truncated: false,
+        outcomes: [
+          { selector: { path: "/quote", method: "post" }, kind: "executable" },
+          {
+            selector: { path: "/admin", method: "get" },
+            kind: "unsafe",
+            reason: "transport_unsupported",
+          },
+          {
+            selector: { path: "/secret", method: "get" },
+            kind: "credential_required",
+            credential: {
+              kind: "api_key",
+              location: "header",
+              name: "X-API-Key",
+            },
+          },
+        ],
+      }),
+    );
+    render(
+      <AeSupplyEndpointConfigStep
+        initialValue={x402SourceValue}
+        onPreflight={async () => ({
+          kind: "prepared",
+          prepared: preparedPublication,
+        })}
+        onPreflightDocument={inspectDocument}
+        onSubmit={async () => undefined}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check the service' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose a price per call' })).toBeDefined())
-    expect(runReadiness).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole("combobox", { name: "Connection type" }));
+    fireEvent.click(screen.getByRole("option", { name: "OpenAPI HTTP API" }));
+    const documentField = screen.getByLabelText("OpenAPI document (JSON)");
+    expect(documentField).toBeDefined();
+    fireEvent.change(documentField, {
+      target: { value: JSON.stringify(openApiDocument) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Inspect operations" }));
 
-    render(<AeSupplyEarningsCard readback={{ kind: 'not_found' }} />)
-    expect(screen.getByText(/Setup or test calls do not create earnings/i)).toBeDefined()
-  })
-})
+    await waitFor(() => expect(inspectDocument).toHaveBeenCalledOnce());
+    expect(
+      screen.getByRole("group", { name: "OpenAPI operation outcomes" }),
+    ).toBeDefined();
+    expect(screen.getByText("POST /quote")).toBeDefined();
+    expect(screen.getByText("transport_unsupported")).toBeDefined();
+    expect(
+      screen.getByText(/Credential: api_key · X-API-Key · header/),
+    ).toBeDefined();
+    expect(
+      screen.queryByRole("radio", { name: "Select GET /admin" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Select POST /quote" }));
+    expect(screen.getByDisplayValue("POST /quote")).toBeDefined();
+  });
+  it("allows credential-required OpenAPI selection only for an available compatible connection", async () => {
+    const credentialDocument = {
+      ...openApiDocument,
+      paths: {
+        "/private": {
+          get: {
+            responses: {
+              "200": {
+                content: { "application/json": { schema: { type: "object" } } },
+              },
+            },
+          },
+        },
+      },
+    };
+    const credentialPreflight: SupplyEndpointDocumentPreflightResult = {
+      kind: "preflighted",
+      sourceDigest: sourceHash,
+      truncated: false,
+      outcomes: [
+        {
+          selector: { path: "/private", method: "get" },
+          kind: "credential_required",
+          credential: {
+            kind: "api_key",
+            location: "header",
+            name: "X-API-Key",
+          },
+        },
+      ],
+    };
+    const preflight = vi.fn(async () => ({
+      kind: "prepared" as const,
+      prepared: preparedPublication,
+    }));
+    const keyedAuthority: SupplyAuthorityOption = {
+      connectionRef: "connection:api",
+      businessId: "business:one",
+      providerRef: "provider:api",
+      providerAccountRef: "account:api",
+      adapterId: "http-json:v1",
+      grantedScopes: [],
+      grantedResources: [],
+      authorityGeneration: 1,
+      authorityDigest: `sha256:${"c".repeat(64)}`,
+      lifecycle: "active",
+      available: true,
+      credentialConfigured: true,
+      observedAt: 1,
+      reasonCode: null,
+      evidenceRefs: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const credentialSource = {
+      ...sourceValue,
+      documentJson: JSON.stringify(credentialDocument),
+      operation: { path: "/private", method: "get" as const },
+    };
+    const view = render(
+      <AeSupplyEndpointConfigStep
+        initialValue={credentialSource}
+        initialDocumentPreflight={credentialPreflight}
+        onPreflightDocument={async () => credentialPreflight}
+        onPreflight={preflight}
+        onSubmit={async () => undefined}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("radio", { name: "Select GET /private" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    expect(
+      screen.getAllByText(/executable or credential-authorized GET or POST/i)
+        .length,
+    ).toBeGreaterThan(0);
+    expect(preflight).not.toHaveBeenCalled();
+
+    view.rerender(
+      <AeSupplyEndpointConfigStep
+        initialValue={{
+          ...credentialSource,
+          authority: {
+            kind: "provider_connection",
+            connectionRef: keyedAuthority.connectionRef,
+            providerRef: keyedAuthority.providerRef,
+          },
+        }}
+        initialDocumentPreflight={credentialPreflight}
+        onPreflightDocument={async () => credentialPreflight}
+        authorityOptions={[keyedAuthority]}
+        onPreflight={preflight}
+        onSubmit={async () => undefined}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("radio", { name: "Select GET /private" }),
+      ).toBeDefined(),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Select GET /private" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    await waitFor(() => expect(preflight).toHaveBeenCalledOnce());
+  });
+
+  it("keeps readiness refusal recovery honest and does not create earnings", async () => {
+    let attempt = 0;
+    let nextStep: SupplyFunnelStep = "readiness";
+    let updateOffering: (step: SupplyFunnelStep) => void = () => undefined;
+    const runReadinessImplementation: SupplyFunnelCallbacks["runReadiness"] =
+      async () => {
+        attempt += 1;
+        return attempt === 1
+          ? { step: "readiness", state: "refused", refusal: "health_unhealthy" }
+          : { step: "readiness", state: "completed" };
+      };
+    const runReadiness = vi.fn(runReadinessImplementation);
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering: async (value) => ({
+        kind: "saved",
+        value,
+        message: "Saved.",
+      }),
+      preflight: async () => ({
+        kind: "prepared",
+        prepared: preparedPublication,
+      }),
+      admit: async () => ({ step: "admission", state: "completed" }),
+      runReadiness,
+      runTest: async () => ({ step: "test", state: "completed" }),
+      onReload: async () => updateOffering(nextStep),
+    };
+    const view = render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("readiness")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={callbacks}
+      />,
+    );
+    updateOffering = (step) =>
+      view.rerender(
+        <AeSupplyFunnel
+          businessId="business:one"
+          offering={offeringAt(step)}
+          initialOffering={emptyOwnerOfferingEditorValue}
+          callbacks={callbacks}
+        />,
+      );
+
+    fireEvent.click(screen.getByRole("button", { name: "Check the service" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/endpoint returned an unhealthy result/i),
+      ).toBeDefined(),
+    );
+    expect(screen.queryByText("health_unhealthy")).toBeNull();
+    expect(screen.getByRole("alert").className).toContain("text-destructive");
+
+    nextStep = "test";
+    fireEvent.click(screen.getByRole("button", { name: "Check the service" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Run a real test" }),
+      ).toBeDefined(),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Check that it works is saved.")).toBeDefined(),
+    );
+    expect(screen.getByRole("alert").className).not.toContain(
+      "text-destructive",
+    );
+    expect(runReadiness).toHaveBeenCalledTimes(2);
+
+    render(<AeSupplyEarningsCard readback={{ kind: "not_found" }} />);
+    expect(
+      screen.getByText(/Setup or test calls do not create earnings/i),
+    ).toBeDefined();
+  });
+
+  it("requires one explicit confirmation before withdrawing a publication", async () => {
+    let resolveWithdraw!: (result: OwnerSupplyCommandResult) => void;
+    const withdraw = vi.fn(
+      () =>
+        new Promise<OwnerSupplyCommandResult>((resolve) => {
+          resolveWithdraw = resolve;
+        }),
+    );
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering: async (value) => ({
+        kind: "saved",
+        value,
+        message: "Saved.",
+      }),
+      preflight: async () => ({
+        kind: "prepared",
+        prepared: preparedPublication,
+      }),
+      admit: async () => ({ step: "admission", state: "completed" }),
+      runReadiness: async () => ({ step: "readiness", state: "completed" }),
+      runTest: async () => ({ step: "test", state: "completed" }),
+      withdraw,
+    };
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("test")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={callbacks}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Withdraw publication" }),
+    );
+    expect(withdraw).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(withdraw).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Withdraw publication" }),
+    );
+    const confirm = screen.getByRole("button", { name: "Confirm withdrawal" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(withdraw).toHaveBeenCalledOnce();
+
+    resolveWithdraw({
+      kind: "withdrawn",
+      publicationRef: "publication:one",
+      revision: 2,
+      lifecycle: { state: "withdrawn", reasons: ["owner_withdrew"] },
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText(/current publication is withdrawn/i),
+      ).toBeDefined(),
+    );
+    expect(screen.getByRole("alert").className).not.toContain(
+      "text-destructive",
+    );
+  });
+
+  it("shows source transfer identity and exact conservation evidence", () => {
+    const exact = { currency: "USD", units: "5000", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [
+            {
+              currency: "USD",
+              earnings: {
+                kind: "ok",
+                businessId: "business-1",
+                grossAccrual: exact,
+                rake: { ...exact, units: "500" },
+                providerNet: exact,
+                paidOut: exact,
+                held: { ...exact, units: "0" },
+                truncated: false,
+                evidence: "source",
+              },
+              payout: {
+                kind: "ok",
+                businessId: "business-1",
+                accountState: "ready",
+                payoutState: "paid",
+                payoutRef: "payout-1",
+                payoutCommandId: "command-1",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                stripeTransferId: "tr_1",
+                destinationAccountId: "acct_1",
+                transferStatus: "succeeded",
+                requestDigest: "sha256:request",
+                evidenceDigest: "sha256:evidence",
+                providerHeldBefore: exact,
+                providerHeldAfter: { ...exact, units: "0" },
+                providerPaidBefore: { ...exact, units: "0" },
+                providerPaidAfter: exact,
+                evidence: "source",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Durable transfer evidence")).toBeDefined();
+    expect(screen.getByText("tr_1")).toBeDefined();
+    expect(screen.getByText("sha256:evidence")).toBeDefined();
+    expect(screen.getByText("USD 50.00 → USD 0.00")).toBeDefined();
+    expect(screen.getByText("USD 0.00 → USD 50.00")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Start payout" })).toBeNull();
+  });
+
+  it("confirms the exact payout destination once and restores focus on cancellation", async () => {
+    const exact = { currency: "USD", units: "5000", exponent: 2 };
+    const payoutGate = Promise.withResolvers<{
+      kind: "refused";
+      code: "payout_not_ready";
+    }>();
+    moneyServerMocks.beginOwnerPayoutTransferServer.mockReturnValue(
+      payoutGate.promise,
+    );
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [
+            {
+              currency: "USD",
+              earnings: {
+                kind: "ok",
+                businessId: "business-1",
+                grossAccrual: exact,
+                rake: { ...exact, units: "500" },
+                providerNet: exact,
+                paidOut: { ...exact, units: "0" },
+                held: exact,
+                truncated: false,
+                evidence: "source",
+              },
+              payout: {
+                kind: "ok",
+                businessId: "business-1",
+                accountState: "ready",
+                payoutState: "held_threshold",
+                payoutRef: "payout-1",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                evidence: "source",
+              },
+            },
+          ],
+        }}
+        connect={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [
+            {
+              currency: "USD",
+              account: {
+                businessId: "business-1",
+                currency: "USD",
+                exponent: 2,
+                stripeAccountId: "acct_destination",
+                state: "ready",
+                detailsSubmitted: true,
+                recipientCapabilityActive: true,
+              },
+              payout: {
+                businessId: "business-1",
+                accountState: "ready",
+                payoutState: "held_threshold",
+                payoutRef: "payout-1",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                evidence: "source",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const startButton = screen.getByRole("button", { name: "Start payout" });
+    fireEvent.click(startButton);
+    expect(
+      screen.getByText(
+        /Transfer USD 50\.00 to Connect account acct_destination/,
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Durable payout reference: payout-1/),
+    ).toBeDefined();
+    expect(
+      moneyServerMocks.beginOwnerPayoutTransferServer,
+    ).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(document.activeElement).toBe(startButton);
+    });
+    expect(
+      moneyServerMocks.beginOwnerPayoutTransferServer,
+    ).not.toHaveBeenCalled();
+
+    fireEvent.click(startButton);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm payout" }));
+    await waitFor(() =>
+      expect(
+        moneyServerMocks.beginOwnerPayoutTransferServer,
+      ).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      screen.getByRole("button", { name: "Working…" }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("alertdialog")).toBeDefined();
+    expect(
+      moneyServerMocks.beginOwnerPayoutTransferServer,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      moneyServerMocks.beginOwnerPayoutTransferServer,
+    ).toHaveBeenCalledWith({
+      data: {
+        businessId: "business-1",
+        currency: "USD",
+        payoutRef: "payout-1",
+        amount: exact,
+        idempotencyKey: expect.stringMatching(/^owner-payout:/),
+      },
+    });
+
+    payoutGate.resolve({ kind: "refused", code: "payout_not_ready" });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("labels non-production operational observations with their environment", () => {
+    renderWithRouter(
+      <AeSupplyPublisherHome
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          business: { name: "Provider", slug: "provider" },
+          offerings: [],
+          callLog: [],
+          activityTruncated: true,
+          liquidity: {
+            fillCount: 2,
+            zeroCount: 1,
+            firstSuccessP50Ms: 120,
+            firstSuccessP95Ms: 240,
+            depthSamples: 3,
+            environment: "sandbox",
+          },
+        }}
+        earnings={{ kind: "not_found" }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Operational usage · sandbox" }),
+    ).toBeDefined();
+    expect(
+      screen.getByText("Environment").nextElementSibling?.textContent,
+    ).toBe("sandbox");
+    expect(
+      screen.getByText(/sandbox operational observations only/i),
+    ).toBeDefined();
+    expect(screen.getByText(/not production proof/i)).toBeDefined();
+    expect(screen.getByText("Showing the 50 most recent activity records.")).toBeDefined();
+  });
+  it("renders an incomplete owner readback as a repair state", () => {
+    renderWithRouter(
+      <AeSupplyPublisherHome
+        readback={{ kind: "incomplete" }}
+        earnings={{ kind: "not_found" }}
+      />,
+    );
+
+    expect(screen.getByText("Operations need repair")).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Reload services" }),
+    ).toBeDefined();
+    expect(screen.queryByText("No operations yet.")).toBeNull();
+  });
+});
+
+const pricingConfig: PricingConfig = {
+  version: "pricing:v2",
+  unit: "call",
+  paidAmount: { currency: "AUD", units: "125", exponent: 2 },
+};
+const priceDigest = pricingConfigDigest(pricingConfig);
+const sourceHash = `sha256:${"a".repeat(64)}`;
+const sourceReadback: OwnerSupplyReadbackSource = {
+  kind: "openapi_http",
+  selector: { path: "/quote", method: "post" },
+  revision: "source:one",
+  digest: sourceHash,
+};
+const preparedPublication: PreparedPublicationMaterial = {
+  sourceKind: "openapi_http",
+  sourceSelector: { path: "/quote", method: "post" },
+  sourceDescriptorJson: '{"openapi":"3.1.0"}',
+  sourceRevision: "source:one",
+  sourceDigest: sourceHash,
+  documentJson: '{"openapi":"3.1.0"}',
+  offering: {
+    offeringId: "offering:one",
+    networkId: "ae:public",
+    presentation: {
+      label: "Quote API",
+      summary: "Returns a quote.",
+      price: { kind: "fixed", amount: pricingConfig.paidAmount },
+      materialTerms: [],
+      commercialRelationship: {
+        kind: "none",
+        summary: "No commercial influence.",
+        influencesEligibility: false,
+        influencesInclusion: false,
+        influencesOrder: false,
+        evidenceRefs: ["evidence:commercial"],
+      },
+    },
+    searchTerms: ["quote"],
+    registrationEvidenceRefs: ["evidence:offering"],
+  },
+  binding: {
+    bindingId: "binding:one",
+    endpointUrl: "https://example.test/quote",
+    authority: { kind: "keyless" },
+    continuation: {
+      kind: "single_response",
+      evidenceRefs: ["evidence:continuation"],
+    },
+    cancellation: {
+      kind: "unsupported",
+      evidenceRefs: ["evidence:cancellation"],
+    },
+    adapter: {
+      adapterId: "http-json:v1",
+      config: { method: "POST", requestTimeoutMs: 5_000 },
+    },
+    registrationEvidenceRefs: ["evidence:binding"],
+  },
+  evidenceRefs: ["evidence:source"],
+  pricingConfigJson: JSON.stringify(pricingConfig),
+  priceDigest,
+};
+const openApiDocument = {
+  openapi: "3.1.0",
+  info: { title: "Quote API", version: "1.0.0" },
+  servers: [{ url: "https://example.test" }],
+  paths: {
+    "/quote": {
+      post: {
+        responses: {
+          "200": {
+            description: "OK",
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+        },
+      },
+    },
+  },
+};
+const sourceValue: SupplyEndpointConfigValue = {
+  sourceKind: "openapi_http",
+  sourceRevision: "source:one",
+  contract: {
+    contractFormat: "ae.capability-contract:v2",
+    capabilityId: "demo.quote",
+    version: 1,
+    name: "Quote API",
+    description: "Returns a quote.",
+    customerAnnotations: [
+      { document: "input", pointer: "/city", label: "City", role: "request" },
+    ],
+    dataUse: [],
+    effects: [],
+    evidence: [
+      { evidenceId: "quote", outputPointer: "/quote", purpose: "completion" },
+    ],
+    lifecycle: { idempotency: "required", recovery: "retry_safe" },
+  },
+  commercial: {
+    offering: preparedPublication.offering,
+    bindingId: "binding:one",
+  },
+  evidenceRefs: ["evidence:source"],
+  requestTimeoutMs: 5_000,
+  authority: { kind: "keyless" },
+  documentJson: JSON.stringify(openApiDocument),
+  operation: { path: "/quote", method: "post" },
+  fixedQuery: [],
+};
+
+const x402SourceValue: SupplyEndpointConfigValue = {
+  sourceKind: "x402",
+  sourceRevision: "source:x402",
+  contract: sourceValue.contract,
+  commercial: sourceValue.commercial,
+  evidenceRefs: sourceValue.evidenceRefs,
+  requestTimeoutMs: 5_000,
+  authority: { kind: "keyless" },
+  resourceJson: JSON.stringify({
+    resourceUrl: "https://example.test/paid-quote",
+    inputSchema: { type: "object", properties: {} },
+    outputSchema: { type: "object", properties: { quote: { type: "number" } } },
+    scheme: "exact",
+    network: "eip155:8453",
+    asset: "USDC",
+    payTo: "0x0000000000000000000000000000000000000000",
+  }),
+};
+
+function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback {
+  const stepStates: Readonly<Record<SupplyFunnelStep, SupplyFunnelStepState>> =
+    step === "describe"
+      ? {
+          describe: "in_progress",
+          admission: "not_started",
+          readiness: "not_started",
+          test: "not_started",
+        }
+      : step === "admission"
+        ? {
+            describe: "completed",
+            admission: "in_progress",
+            readiness: "not_started",
+            test: "not_started",
+          }
+        : step === "readiness"
+          ? {
+              describe: "completed",
+              admission: "completed",
+              readiness: "in_progress",
+              test: "not_started",
+            }
+          : {
+              describe: "completed",
+              admission: "completed",
+              readiness: "completed",
+              test: "completed",
+            };
+  const common = {
+    offeringRef: "offering:one",
+    revision: 1,
+    name: "Quote API",
+    summary: "Returns a quote.",
+    status: "draft",
+    admission: { state: "not_admitted" },
+    lifecycle: { state: "inactive", reasons: [] },
+    readiness: { outcome: "unobserved", evidenceRefs: [] },
+    live: { available: false, reason: "health_unobserved" },
+    currentStep: step,
+    stepStates,
+    accessPaths: [],
+  } satisfies OwnerSupplyOfferingReadback;
+  if (step === "describe") return common;
+  if (step === "admission")
+    return {
+      ...common,
+      sourceHash,
+      source: sourceReadback,
+    };
+  const publicationReadiness: NonNullable<
+    OwnerSupplyOfferingReadback["publication"]
+  >["readiness"] =
+    step === "test"
+      ? {
+          outcome: "healthy",
+          observedAt: 1_000,
+          validUntil: 2_000,
+          targetDigest: sourceHash,
+          requestDigest: sourceHash,
+          responseStatus: 200,
+          responseContentType: "application/json",
+          responseDigest: sourceHash,
+          evidenceRefs: ["evidence:readiness"],
+        }
+      : { outcome: "unobserved", evidenceRefs: [] };
+  const readiness: OwnerSupplyOfferingReadback["readiness"] =
+    step === "test"
+      ? {
+          outcome: "healthy",
+          observedAt: 1_000,
+          validUntil: 2_000,
+          evidenceRefs: ["evidence:readiness"],
+        }
+      : { outcome: "unobserved", evidenceRefs: [] };
+  return {
+    ...common,
+    sourceHash,
+    source: sourceReadback,
+    admission: { state: "admitted" },
+    pricing: { config: pricingConfig, priceDigest },
+    authority: { mode: "provider_owned", kind: "keyless" },
+    publication: {
+      state: "current",
+      publicationRef: "publication:one",
+      publicationRevision: 1,
+      operationRef: "operation:one",
+      authorityMode: "provider_owned",
+      contractRef: {
+        capabilityId: "demo.quote",
+        version: 1,
+        contractDigest: "contract:one",
+      },
+      source: sourceReadback,
+      pricing: { config: pricingConfig, priceDigest },
+      binding: {
+        bindingId: "binding:one",
+        bindingDigest: sourceHash,
+        endpointUrl: "https://example.test/quote",
+        adapterId: "http-json:v1",
+        admission: "admitted",
+        conformance: "conformant",
+        authority: { kind: "keyless" },
+      },
+      lifecycle: { state: "active", reasons: [] },
+      readiness: publicationReadiness,
+    },
+    readiness,
+    live:
+      step === "test"
+        ? { available: true }
+        : { available: false, reason: "health_unobserved" },
+  };
+}
+
+function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
+  const offering = offeringAt("test");
+  if (offering.publication === undefined)
+    throw new Error("x402_test_publication_missing");
+  const source: OwnerSupplyReadbackSource = {
+    kind: "x402",
+    selector: { resourceUrl: "https://example.test/paid-quote" },
+    revision: "source:x402",
+    digest: sourceHash,
+  };
+  return {
+    ...offering,
+    source,
+    authority: {
+      mode: "provider_owned",
+      kind: "provider_connection",
+      providerRef: "provider:x402",
+      authorityGeneration: 1,
+      authorityDigest: sourceHash,
+    },
+    publication: {
+      ...offering.publication,
+      source,
+      binding: {
+        ...offering.publication.binding,
+        endpointUrl: "https://example.test/paid-quote",
+        adapterId: "x402-fetch:v2",
+        authority: {
+          kind: "provider_connection",
+          providerRef: "provider:x402",
+        },
+      },
+    },
+  };
+}
+
+describe("owner operation control facts", () => {
+  it("shows canonical operation, source, binding, pricing, readiness, and live readback", () => {
+    render(<AeOwnerOperationFacts offering={offeringAt("test")} detail />);
+
+    expect(screen.getByText("operation:one")).toBeDefined();
+    expect(screen.getByText("publication:one · revision 1")).toBeDefined();
+    expect(screen.getByText("binding:one")).toBeDefined();
+    expect(screen.getByText("https://example.test/quote")).toBeDefined();
+    expect(screen.getByText(`openapi_http · source:one`)).toBeDefined();
+    expect(screen.getAllByText(sourceHash).length).toBeGreaterThan(0);
+    expect(screen.getByText("pricing:v2 · call")).toBeDefined();
+    expect(screen.getByText("AUD 1.25 · units 125 · exponent 2")).toBeDefined();
+    expect(screen.getByText(priceDigest)).toBeDefined();
+    expect(screen.getByText("evidence:readiness")).toBeDefined();
+    expect(screen.getByText("available")).toBeDefined();
+    expect(screen.queryByText(/credential|secret|token/i)).toBeNull();
+  });
+});
 
 function renderWithRouter(ui: ReactElement) {
-  const rootRoute = createRootRoute()
-  const claimRoute = createRoute({ getParentRoute: () => rootRoute, path: '/claim' })
-  const ownerSupplyRoute = createRoute({ getParentRoute: () => rootRoute, path: '/owner/supply' })
-  const routeTree = rootRoute.addChildren([claimRoute, ownerSupplyRoute])
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/claim'] }) })
-  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+  const rootRoute = createRootRoute();
+  const claimRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/claim",
+  });
+  const ownerSupplyRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/owner/supply",
+  });
+  const routeTree = rootRoute.addChildren([claimRoute, ownerSupplyRoute]);
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ["/claim"] }),
+  });
+  return render(
+    <RouterContextProvider router={router}>{ui}</RouterContextProvider>,
+  );
 }

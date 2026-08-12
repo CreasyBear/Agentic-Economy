@@ -175,8 +175,34 @@ function projectionFixture(): PublicOfferingSupplyProjection {
 function v2BusinessFixture() {
   return {
     schemaVersion: 'public-business-catalog-api:v2' as const,
-    businessId: 'business:v2', slug: 'v2-business', name: 'V2 Business', category: 'Data', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/v2-business', trustTier: 'claimed' as const, photos: [], observedAt: 1, disposition: 'current' as const,
-    offerings: [{ offeringRef: 'offering:v2', revision: 1, name: 'Data lookup', category: 'Data', summary: 'Look up public data.', accessPaths: [{ accessPathRef: 'access:v2:web', offeringRevision: 1, offeringSourceHash: canonicalDigest('offering-surfaces:v2'), sourceHash: canonicalDigest('offering-surfaces:access:v2:web'), kind: 'human_request' as const, channel: 'website' as const, disclosure: 'Start on the business website.', url: 'https://example.com/start' }], support: { integrated: false, aeSupportedAction: false } }],
+    businessId: 'business:v2',
+    slug: 'v2-business',
+    name: 'V2 Business',
+    category: 'Data',
+    businessContext: { kind: 'local_human' as const, suburb: 'Perth', stateTerritory: 'WA' },
+    publicUrl: '/v2-business',
+    trustTier: 'claimed' as const,
+    photos: [],
+    observedAt: 1,
+    disposition: 'current' as const,
+    offerings: [{
+      offeringRef: 'offering:v2',
+      revision: 1,
+      name: 'Data lookup',
+      category: 'Data',
+      summary: 'Look up public data.',
+      accessPaths: [{
+        accessPathRef: 'access:v2:web',
+        offeringRevision: 1,
+        offeringSourceHash: canonicalDigest('offering-surfaces:v2'),
+        sourceHash: canonicalDigest('offering-surfaces:access:v2:web'),
+        kind: 'human_request' as const,
+        channel: 'website' as const,
+        disclosure: 'Start on the business website.',
+        url: 'https://example.com/start',
+      }],
+      support: { integrated: false, aeSupportedAction: false },
+    }],
     accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
   }
 }

@@ -33,13 +33,15 @@ vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
   AeGenerativeAnswer: ({
     busy,
     errorMessage,
+    onOperationSelect,
     onStop,
   }: {
     busy?: boolean
     errorMessage?: React.ReactNode
+    onOperationSelect?: (...args: never[]) => void
     onStop?: () => void
   }) => (
-    <div data-testid="generic-answer">
+    <div data-testid="generic-answer" data-selection-enabled={onOperationSelect === undefined ? 'false' : 'true'}>
       {errorMessage}
       {onStop !== undefined ? (
         <button type="button" onClick={onStop} disabled={busy !== true}>Stop</button>
@@ -47,9 +49,11 @@ vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
     </div>
   ),
 }))
-vi.mock('@/components/ai-elements/message', () => ({
-  Message: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  MessageContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock('@/components/ui/message', () => ({
+  Message: ({ children, align, ...props }: React.HTMLAttributes<HTMLDivElement> & { align?: 'start' | 'end' }) => (
+    <div data-align={align} {...props}>{children}</div>
+  ),
+  MessageContent: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
 }))
 vi.mock('@/components/ae/chat/AeThreadTurnQueryHeader', () => ({ AeThreadTurnQueryHeader: () => <div /> }))
 vi.mock('@/components/ae/chat/AeTurnContextLine', () => ({ AeTurnContextLine: () => <div /> }))
@@ -126,6 +130,48 @@ describe('thread turn stream lifecycle', () => {
     firstAttachment.subscriber.onThread?.({ threadId: 'thread:late', turnId: 'turn:late', turnSeq: 2 })
     expect(freshThreadCreated).toHaveBeenCalledTimes(1)
   })
+  it('withholds operation selection until the current turn has durable completion', async () => {
+    const completeTurn = {
+      turnId: 'turn:selection',
+      seq: 1,
+      query: 'Find a plumber',
+      intent: 'refine_search',
+      status: 'complete',
+      workLog: [],
+      artifacts: [],
+      oneLine: 'A durable answer.',
+    } satisfies PublicThreadTurn
+    readbackState.request.mockResolvedValue({
+      kind: 'ok',
+      projection: { threadId: 'thread:selection', title: 'Find a plumber', turns: [completeTurn] },
+    })
+    const onOperationSelect = vi.fn()
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-selection"
+        generation={1}
+        onOperationSelect={onOperationSelect}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+    expect(screen.getByTestId('generic-answer').getAttribute('data-selection-enabled')).toBe('false')
+
+    await act(async () => {
+      attachment.subscriber.onFrame?.({
+        seq: 0,
+        event: { type: 'thread', threadId: 'thread:selection', turnId: 'turn:selection', turnSeq: 1 },
+      })
+      attachment.subscriber.onResult({ kind: 'complete' })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId('generic-answer').getAttribute('data-selection-enabled')).toBe('true')
+  })
+
   it('keeps the generic answer presenter for streamed answer events', () => {
     const view = render(
       <AeThreadTurnStreamSection
@@ -143,6 +189,8 @@ describe('thread turn stream lifecycle', () => {
     })
 
     expect(view.container.querySelector('[data-testid="generic-answer"]')).not.toBeNull()
+    expect(view.container.querySelector('[data-align="start"]')).not.toBeNull()
+    expect(view.container.querySelector('[data-slot="bubble"][data-align="start"][data-variant="ghost"]')).not.toBeNull()
   })
 
   it('keeps Stop actionable through pending settlement and aborts only after stop acknowledgement', async () => {

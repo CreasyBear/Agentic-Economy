@@ -34,8 +34,9 @@ select {
   font: inherit;
 }
 
-*:focus-visible {
-  outline: 0;
+html *:focus-visible {
+  outline: 2px solid var(--ae-ring);
+  outline-offset: 2px;
   box-shadow: var(--ae-focus-ring);
 }
 

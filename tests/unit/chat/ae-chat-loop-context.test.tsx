@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeWorkDisclosure } from '@/components/ae/chat/AeWorkDisclosure'
 import {
@@ -82,12 +82,7 @@ describe('turn context line', () => {
 })
 
 describe('AeWorkDisclosure', () => {
-  afterEach(() => {
-    cleanup()
-    vi.useRealTimers()
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
+  afterEach(cleanup)
 
   it('renders nothing when there is no work, thinking, or check summary', () => {
     const { container } = render(
@@ -96,81 +91,87 @@ describe('AeWorkDisclosure', () => {
     expect(container.textContent).toBe('')
   })
 
-  it('keeps completed work-log details behind the disclosure by default', () => {
-    const { getByText, getByRole, queryByText } = render(
+  it('keeps one durable work log collapsed until opened', () => {
+    const { container, getByText, getByRole, queryByText } = render(
       <AeWorkDisclosure isStreaming={false} workSteps={[workStep()]} thinkingSteps={[]} thinkingLabel="" />,
     )
 
-    // Header line is always visible; the step rows stay collapsed on a settled turn.
-    expect(getByRole('button', { name: /Ran 1 step/ })).toBeTruthy()
+    expect(container.querySelectorAll('[data-ae-work-disclosure]')).toHaveLength(1)
+    const trigger = getByRole('button', { name: /Ran 1 step/ })
+    expect(trigger.getAttribute('data-ae-work-trigger')).not.toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(queryByText('Searching for matches')).toBeNull()
-    expect(queryByText('2 matches found.')).toBeNull()
-    expect(queryByText('Results')).toBeNull()
 
-    fireEvent.click(getByRole('button', { name: /Ran 1 step/ }))
+    fireEvent.click(trigger)
 
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const row = container.querySelector('[data-ae-work-step][data-work-step="step-1"]')
+    expect(row).toBeTruthy()
+    expect(row?.getAttribute('data-status')).toBe('complete')
+    expect(row?.textContent).toContain('Complete')
+    expect(container.querySelector('[data-ae-work-details]')).toBeTruthy()
+    expect(container.querySelectorAll('[data-ae-work-detail]')).toHaveLength(1)
     expect(getByText('Searching for matches')).toBeTruthy()
     expect(getByText('2 matches found.')).toBeTruthy()
     expect(getByText('Results')).toBeTruthy()
   })
 
-  it('keeps a just-finished step visibly running for the pacing floor', () => {
-    vi.useFakeTimers()
-    stubMatchMedia(false)
-    const { getByRole, rerender } = render(
+  it('uses the current durable step as the active label', () => {
+    const { container, getByRole } = render(
       <AeWorkDisclosure
         isStreaming
-        workSteps={[workStep({ status: 'running', summary: '' })]}
+        workSteps={[workStep({
+          phase: 'read',
+          status: 'running',
+          title: 'Reading provider evidence',
+          summary: '',
+          detailRows: [],
+        })]}
         thinkingSteps={[]}
         thinkingLabel=""
       />,
     )
 
-    rerender(
-      <AeWorkDisclosure
-        isStreaming={false}
-        workSteps={[workStep({ startedAtMs: 0, completedAtMs: 0, durationMs: 0 })]}
-        thinkingSteps={[]}
-        thinkingLabel=""
-      />,
-    )
-
-    expect(getByRole('button', { name: /Working/ })).toBeTruthy()
-    act(() => {
-      vi.advanceTimersByTime(699)
-    })
-    expect(getByRole('button', { name: /Working/ })).toBeTruthy()
-    act(() => {
-      vi.advanceTimersByTime(1)
-    })
-    expect(getByRole('button', { name: /Ran 1 step/ })).toBeTruthy()
+    const trigger = getByRole('button', { name: /Reading provider evidence/ })
+    expect(trigger.getAttribute('data-ae-work-trigger')).not.toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const row = container.querySelector('[data-ae-work-step][data-work-step="step-1"]')
+    expect(row?.getAttribute('data-status')).toBe('running')
+    expect(row?.textContent).toContain('Running')
   })
 
-  it('skips pacing when reduced motion is requested', () => {
-    vi.useFakeTimers()
-    stubMatchMedia(true)
-    const { getByRole, rerender } = render(
+  it('shows truthful status badges for every durable work state', () => {
+    const states = [
+      ['running', 'Running'],
+      ['complete', 'Complete'],
+      ['error', 'Failed'],
+      ['stopped', 'Stopped'],
+      ['skipped', 'Skipped'],
+    ] as const
+    const { container, getByRole } = render(
       <AeWorkDisclosure
         isStreaming
-        workSteps={[workStep({ status: 'running', summary: '' })]}
+        workSteps={states.map(([status, label], index) => workStep({
+          id: `step-${index + 1}`,
+          status,
+          title: `${label} work`,
+          summary: status === 'running' ? '' : `${label} summary`,
+          detailRows: [],
+        }))}
         thinkingSteps={[]}
         thinkingLabel=""
       />,
     )
 
-    rerender(
-      <AeWorkDisclosure
-        isStreaming={false}
-        workSteps={[workStep({ startedAtMs: 0, completedAtMs: 0, durationMs: 0 })]}
-        thinkingSteps={[]}
-        thinkingLabel=""
-      />,
-    )
-
-    expect(getByRole('button', { name: /Ran 1 step/ })).toBeTruthy()
+    expect(getByRole('button', { name: /Running work/ })).toBeTruthy()
+    for (const [status, label] of states) {
+      const row = container.querySelector(`[data-ae-work-step][data-status="${status}"]`)
+      expect(row).toBeTruthy()
+      expect(row?.textContent).toContain(label)
+    }
   })
 
-  it('shows timing and step count in the settled header when durations exist', () => {
+  it('shows durable elapsed time in the settled header', () => {
     const { getByRole } = render(
       <AeWorkDisclosure
         isStreaming={false}
@@ -179,11 +180,11 @@ describe('AeWorkDisclosure', () => {
         thinkingLabel=""
       />,
     )
-    expect(getByRole('button', { name: /Worked for 1\.3s.*Ran 1 step/ })).toBeTruthy()
+    expect(getByRole('button', { name: /Worked for 1\.3s/ })).toBeTruthy()
   })
 
-  it('summarizes public check facts in the header and exposes the fact grid when expanded', () => {
-    const { getByText, getByRole } = render(
+  it('summarizes public check facts in the header and exposes them when expanded', () => {
+    const { container, getByText, getByRole } = render(
       <AeWorkDisclosure
         isStreaming={false}
         workSteps={[workStep()]}
@@ -193,23 +194,24 @@ describe('AeWorkDisclosure', () => {
           catalogSearches: 1,
           listingsRead: 2,
           listedBusinesses: 2,
-          checksPassed: 5,
           checksFailed: 0,
+          checksPassed: 5,
           elapsedMs: 1250,
         }}
       />,
     )
 
-    expect(getByRole('button', { name: /Worked for 1\.3s/ })).toBeTruthy()
+    const trigger = getByRole('button', { name: /Worked for 1\.3s/ })
     expect(getByText('compared 2 matches; checked 5 facts')).toBeTruthy()
-    fireEvent.click(getByRole('button', { name: /Worked for 1\.3s/ }))
+    fireEvent.click(trigger)
+    expect(container.querySelector('[data-ae-work-check-summary]')).toBeTruthy()
     expect(getByText('Searches')).toBeTruthy()
     expect(getByText('Details read')).toBeTruthy()
     expect(getByText('Checks')).toBeTruthy()
   })
 
   it('renders a summary-only disclosure for sparse saved turns', () => {
-    const { getByText } = render(
+    const { container, getByText } = render(
       <AeWorkDisclosure
         isStreaming={false}
         workSteps={[]}
@@ -226,33 +228,12 @@ describe('AeWorkDisclosure', () => {
       />,
     )
 
+    expect(container.querySelector('[data-ae-work-disclosure]')).toBeTruthy()
     expect(getByText('checked 1 fact')).toBeTruthy()
   })
 
-  it('keeps running and failed public work visible in the disclosure header', () => {
-    const { getByRole, getByText, rerender } = render(
-      <AeWorkDisclosure
-        isStreaming
-        workSteps={[
-          workStep(),
-          workStep({
-            id: 'step-2',
-            phase: 'read',
-            status: 'running',
-            title: 'Reading the details',
-            summary: '',
-            detailRows: [],
-          }),
-        ]}
-        thinkingSteps={[]}
-        thinkingLabel=""
-      />,
-    )
-
-    expect(getByRole('button', { name: /Working.*Ran 2 steps/ })).toBeTruthy()
-    expect(getByText('Reading the details')).toBeTruthy()
-
-    rerender(
+  it('keeps failed public work visible with its durable summary', () => {
+    const { container, getByRole, getByText } = render(
       <AeWorkDisclosure
         isStreaming={false}
         workSteps={[
@@ -271,12 +252,15 @@ describe('AeWorkDisclosure', () => {
       />,
     )
 
-    expect(getByText('Reading the details (failed)')).toBeTruthy()
+    expect(getByRole('button', { name: /Work failed/ })).toBeTruthy()
+    const row = container.querySelector('[data-ae-work-step][data-work-step="step-2"]')
+    expect(row?.getAttribute('data-status')).toBe('error')
+    expect(row?.textContent).toContain('Failed')
     expect(getByText('The details were not available.')).toBeTruthy()
   })
 
-  it('keeps the capability execution name in the visible work row', () => {
-    const { getByRole, getByText } = render(
+  it('renders each emitted detail row once under its durable work step', () => {
+    const { container, getByRole, getAllByText, getByText } = render(
       <AeWorkDisclosure
         isStreaming={false}
         workSteps={[{
@@ -297,14 +281,17 @@ describe('AeWorkDisclosure', () => {
     )
 
     fireEvent.click(getByRole('button', { name: /Ran 1 step/ }))
-    expect(getByText('Ran Current Bitcoin Price')).toBeTruthy()
-    expect(getByText('Data returned.')).toBeTruthy()
-    expect(getByText('Source')).toBeTruthy()
+    const row = container.querySelector('[data-ae-work-step][data-work-step="step-1"]')
+    expect(row?.getAttribute('data-status')).toBe('complete')
+    expect(container.querySelectorAll('[data-ae-work-detail]')).toHaveLength(2)
+    expect(getAllByText('Source')).toHaveLength(1)
     expect(getByText('operation:v1:coingecko.simple-price')).toBeTruthy()
+    expect(getAllByText('Result')).toHaveLength(1)
+    expect(getByText('Data returned')).toBeTruthy()
   })
 
-  it('shows the thinking phase trail while streaming before a work log arrives', () => {
-    const { getByRole, getByText, queryByText } = render(
+  it('shows the thinking trail while streaming before a work log arrives', () => {
+    const { container, getByRole, getByText } = render(
       <AeWorkDisclosure
         isStreaming
         workSteps={[]}
@@ -314,11 +301,11 @@ describe('AeWorkDisclosure', () => {
       />,
     )
 
-    expect(getByRole('button', { name: /Reading the details/ })).toBeTruthy()
-    // Thinking labels fold into the collapsed Thought cell, not the header.
+    const trigger = getByRole('button', { name: /Reading the details/ })
+    expect(trigger.getAttribute('data-ae-work-trigger')).not.toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('[data-ae-work-disclosure]')).toHaveLength(1)
     expect(getByText('Finding the right matches…')).toBeTruthy()
-    expect(getByText('Thought…')).toBeTruthy()
-    expect(queryByText('Thought')).toBeNull()
   })
 })
 
@@ -359,15 +346,3 @@ function workStep(overrides: Partial<AnswerWorkStep> = {}): AnswerWorkStep {
   }
 }
 
-function stubMatchMedia(matches: boolean): void {
-  vi.stubGlobal('matchMedia', vi.fn(() => ({
-    matches,
-    media: '(prefers-reduced-motion: reduce)',
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })))
-}

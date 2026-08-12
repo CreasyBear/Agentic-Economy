@@ -6,6 +6,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { notificationVariant } from '@/lib/ui/inquiry-notification'
@@ -181,31 +182,33 @@ function AeInquiryInboxRow({ inquiry }: { inquiry: OwnerInboxInquiryProjection }
   const needsDeliveryAttention = deliveryNeedsAttention(inquiry.notificationStatus)
 
   return (
-    <a href={href} className="grid gap-3 rounded-md border border-border bg-card p-4 text-foreground">
-      <div className="grid gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span>{inquiry.offeringName}</span>
-          <Badge variant={bucketVariant(inquiry.bucket)}>{bucketLabel(inquiry.bucket)}</Badge>
-          <Badge variant={notificationVariant(inquiry.notificationStatus, { held: 'secondary' })}>{inquiry.notificationLabel}</Badge>
-          {inquiry.origin === undefined ? null : <Badge variant="secondary">{inquiry.origin.label}</Badge>}
-          {needsDeliveryAttention ? <Badge variant="secondary">Delivery attention</Badge> : null}
-        </div>
-        <p className="line-clamp-2 text-sm text-foreground">{inquiry.preview}</p>
-        {inquiry.origin === undefined ? null : (
-          <p className="text-xs leading-snug text-muted-foreground">
-            Chat answer context: review the listed facts and limits before replying.
-          </p>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <span>{nextActionLabel(inquiry)}</span>
-        <span>{inquiry.messageCount} messages</span>
-        <span>{inquiry.status}</span>
-        <time dateTime={timestampIso(inquiry.updatedAt)} data-numeric>
-          {formatTimestamp(inquiry.updatedAt)}
-        </time>
-      </div>
-    </a>
+    <Item asChild variant="outline" className="grid gap-3 bg-card text-foreground">
+      <a href={href}>
+        <ItemContent className="gap-2">
+          <ItemTitle className="w-full flex-wrap">
+            <span>{inquiry.offeringName}</span>
+            <Badge variant={bucketVariant(inquiry.bucket)}>{bucketLabel(inquiry.bucket)}</Badge>
+            <Badge variant={notificationVariant(inquiry.notificationStatus, { held: 'secondary' })}>{inquiry.notificationLabel}</Badge>
+            {inquiry.origin === undefined ? null : <Badge variant="secondary">{inquiry.origin.label}</Badge>}
+            {needsDeliveryAttention ? <Badge variant="secondary">Delivery attention</Badge> : null}
+          </ItemTitle>
+          <ItemDescription className="text-foreground">{inquiry.preview}</ItemDescription>
+          {inquiry.origin === undefined ? null : (
+            <ItemDescription className="text-xs leading-snug text-muted-foreground">
+              Chat answer context: review the listed facts and limits before replying.
+            </ItemDescription>
+          )}
+        </ItemContent>
+        <ItemActions className="basis-full flex-wrap justify-start text-xs text-muted-foreground">
+          <span>{nextActionLabel(inquiry)}</span>
+          <span>{inquiry.messageCount} messages</span>
+          <span>{inquiry.status}</span>
+          <time dateTime={timestampIso(inquiry.updatedAt)} data-numeric>
+            {formatTimestamp(inquiry.updatedAt)}
+          </time>
+        </ItemActions>
+      </a>
+    </Item>
   )
 }
 

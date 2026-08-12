@@ -1,5 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
-
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { loadSupplyLandingReadbackServer } from '@/modules/capability-supply/supply-funnel.functions'
@@ -18,9 +17,20 @@ export const Route = createFileRoute('/for-providers')({
 
 function SupplyLandingRoute() {
   const readback = Route.useLoaderData()
+  const router = useRouter()
+  const recoveryProps = readback.kind === 'error'
+    ? {
+        sourceError: 'Supplier information is temporarily unavailable. Try again.',
+        onRetry: () => router.invalidate(),
+      }
+    : {}
   return (
     <AePublicShell>
-      <AeSupplyLanding tools={readback.tools} services={readback.services.services} />
+      <AeSupplyLanding
+        tools={readback.kind === 'available' ? readback.tools : []}
+        services={readback.kind === 'available' ? readback.services.services : []}
+        {...recoveryProps}
+      />
     </AePublicShell>
   )
 }

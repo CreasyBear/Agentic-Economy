@@ -3,12 +3,12 @@ import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
-import { Message, MessageContent } from '@/components/ai-elements/message'
+import { Bubble, BubbleContent } from '@/components/ui/bubble'
+import { Message, MessageContent } from '@/components/ui/message'
 import type { StopAnswerTurnResult } from './turn-stop'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
 import {
-  ANSWER_SECTION_CLASS,
   presenterPhaseForTurnStatus,
   turnStatusCopy,
   type ThreadTurnViewModel,
@@ -18,6 +18,7 @@ export type AeThreadTurnReplaySectionProps = ThreadTurnViewModel & {
   scrollTargetId?: string
   threadId?: string
   onRetry?: () => void
+  onOperationSelect?: (operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => void
   onStopPending?: () => Promise<StopAnswerTurnResult>
 }
 
@@ -25,6 +26,7 @@ export function AeThreadTurnReplaySection({
   scrollTargetId,
   threadId,
   onRetry,
+  onOperationSelect,
   onStopPending,
   ...turn
 }: AeThreadTurnReplaySectionProps) {
@@ -72,24 +74,28 @@ export function AeThreadTurnReplaySection({
       {...(turn.answerCheckSummary === undefined ? {} : { checkSummary: turn.answerCheckSummary })}
       {...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile })}
       {...(threadId === undefined ? {} : { threadId })}
+      {...(onOperationSelect === undefined ? {} : { onOperationSelect })}
     />
   )
   return (
     <div className="flex flex-col gap-2" data-turn-status={turn.status}>
       <AeThreadTurnQueryHeader query={turn.query} intent={turn.intent} seq={turn.seq} />
       <Message
-        from="assistant"
-        className={ANSWER_SECTION_CLASS}
+        align="start"
         {...(scrollTargetId === undefined ? {} : { 'data-ae-scroll-target': scrollTargetId })}
       >
-        <MessageContent className="w-full">
-          <AeTurnContextLine intent={turn.intent} seq={turn.seq} artifacts={turn.artifacts} />
-          {statusCopy === null || turn.status === 'stopped' ? null : (
-            <p className="text-sm text-muted-foreground">{statusCopy}</p>
-          )}
-          {turn.status === 'pending' && stopState === 'requested' ? <p className="text-sm text-muted-foreground">Stopping…</p> : null}
-          {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-red-vivid" role="alert">Stop was not confirmed. The answer is still pending; try Stop again.</p> : null}
-          {fallback}
+        <MessageContent>
+          <Bubble align="start" variant="ghost" className="w-full">
+            <BubbleContent className="flex w-full flex-col gap-2">
+              <AeTurnContextLine intent={turn.intent} seq={turn.seq} artifacts={turn.artifacts} />
+              {statusCopy === null || turn.status === 'stopped' ? null : (
+                <p className="text-sm text-muted-foreground">{statusCopy}</p>
+              )}
+              {turn.status === 'pending' && stopState === 'requested' ? <p className="text-sm text-muted-foreground">Stopping…</p> : null}
+              {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-red-vivid" role="alert">Stop was not confirmed. The answer is still pending; try Stop again.</p> : null}
+              {fallback}
+            </BubbleContent>
+          </Bubble>
         </MessageContent>
       </Message>
     </div>

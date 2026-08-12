@@ -1,19 +1,46 @@
-import type { ReactNode } from 'react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CheckIcon, SearchIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from '@/components/ui/item'
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 import {
+  answerOperationCandidateSetDigest,
   artifactsToMessageParts,
   inferLayoutProfileFromArtifacts,
   neutralizeBidiFormattingControls,
   type AnswerLayoutProfile,
   type AnswerMessagePart,
 } from '@/modules/answer/public'
-import type { AnswerArtifact, AnswerCompareField, AnswerSource, AnswerWorkStep } from '@/modules/answer/public'
+import type {
+  AnswerArtifact,
+  AnswerCompareField,
+  AnswerOperationCandidate,
+  AnswerOperationOutcome,
+  AnswerSource,
+  AnswerWorkStep,
+} from '@/modules/answer/public'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import type { PublicAnswerCheckSummary, ThinkingStep } from '@/modules/answer-thread/public'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
@@ -21,10 +48,13 @@ import { AeWorkDisclosure } from '@/components/ae/chat/AeWorkDisclosure'
 import { AeGenerativeMap } from './AeGenerativeMap'
 import { AeImportedClaims } from '@/components/ae/services/AeImportedClaims'
 import { cn } from '@/lib/utils'
+import { isRecord } from '@/modules/common/is-record'
 
 const EmptyWorkSteps: readonly AnswerWorkStep[] = []
 const EmptyThinkingSteps: readonly string[] = []
-
+const OPERATION_PARAMETER_PREVIEW_LIMIT = 6
+const OPERATION_EVIDENCE_PREVIEW_LIMIT = 3
+const OPERATION_JSON_MAX_BYTES = 256 * 1024
 // Calm fade-only reveal. Slide-from-bottom on every streamed part stacks into
 // jitter when several artifacts arrive in quick succession, so parts just fade.
 const PLAIN_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/iu
@@ -54,6 +84,7 @@ export type AeGenerativeAnswerProps = {
   busy?: boolean
   oneLineFallback?: string
   onStop?: () => void
+  onOperationSelect?: (operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => void
   phase?: AeGenerativeAnswerPhase
   errorMessage?: ReactNode | null
   /** Thread this answer belongs to, if one exists yet. Lets provider links carry a "back to answer" origin instead of always falling back to home. */
@@ -75,6 +106,7 @@ export function AeGenerativeAnswer({
   busy = false,
   oneLineFallback = '',
   onStop,
+  onOperationSelect,
   phase = 'idle',
   errorMessage = null,
   threadId,
@@ -91,6 +123,7 @@ export function AeGenerativeAnswer({
   })
 
   const parts = artifactsToMessageParts(artifacts, profile)
+  const retryableOperationRef = retryableExecutionOperationRef(parts)
   const oneLinePart = parts.find((part) => part.kind === 'one-line')
   const headline =
     oneLinePart?.kind === 'one-line'
@@ -186,6 +219,8 @@ export function AeGenerativeAnswer({
           phase={phase}
           threadId={threadId}
           hasAnswerFirstSummary={hasSummary}
+          onOperationSelect={onOperationSelect}
+          retryableOperationRef={retryableOperationRef}
         />
       )}
 
@@ -198,6 +233,8 @@ export function AeGenerativeAnswer({
           phase={phase}
           threadId={threadId}
           hasAnswerFirstSummary={hasSummary}
+          onOperationSelect={onOperationSelect}
+          retryableOperationRef={retryableOperationRef}
         />
       ]))}
 
@@ -242,6 +279,19 @@ function isProviderEvidencePart(part: AnswerMessagePart): boolean {
     default:
       return false
   }
+}
+
+function retryableExecutionOperationRef(parts: readonly AnswerMessagePart[]): string | undefined {
+  let operationRef: string | undefined
+  for (const part of parts) {
+    if (part.kind !== 'operation-outcome') continue
+    operationRef = part.outcome.toolId === 'operation.execute'
+      && part.outcome.result.kind === 'error'
+      && part.outcome.result.retryable
+      ? part.outcome.operationRef
+      : undefined
+  }
+  return operationRef
 }
 
 /** Flowing Perplexity-style body: split the streamed summary into a quiet reading column. */
@@ -474,6 +524,8 @@ function AnswerPartView({
   phase,
   threadId,
   hasAnswerFirstSummary,
+  onOperationSelect,
+  retryableOperationRef,
 }: {
   part: AnswerMessagePart
   query: string
@@ -481,6 +533,8 @@ function AnswerPartView({
   phase: AeGenerativeAnswerPhase
   threadId: string | undefined
   hasAnswerFirstSummary: boolean
+  onOperationSelect: ((operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => void) | undefined
+  retryableOperationRef: string | undefined
 }) {
   switch (part.kind) {
     case 'one-line':
@@ -489,6 +543,18 @@ function AnswerPartView({
       return <SelectedSource provider={part.provider} threadId={threadId} />
     case 'provider-cards':
       return <SourcesList providers={part.providers} threadId={threadId} />
+    case 'operation-candidates':
+      return (
+        <OperationCandidateList
+          candidates={part.candidates}
+          candidateSetDigest={part.operationCandidatesDigest ?? answerOperationCandidateSetDigest(part.candidates)}
+          selectedOperationRef={part.selection?.operationRef}
+          onOperationSelect={onOperationSelect}
+          retryableOperationRef={retryableOperationRef}
+        />
+      )
+    case 'operation-outcome':
+      return <OperationOutcome outcome={part.outcome} />
     case 'imported-claims':
       return <AeImportedClaims claims={part.claims} query={query} />
     case 'provider-compare-table':
@@ -550,6 +616,507 @@ function AnswerPartView({
       return null
     }
   }
+}
+
+function OperationCandidateList({
+  candidates,
+  candidateSetDigest,
+  selectedOperationRef,
+  onOperationSelect,
+  retryableOperationRef,
+}: {
+  candidates: readonly AnswerOperationCandidate[]
+  candidateSetDigest: string
+  selectedOperationRef: string | undefined
+  onOperationSelect: ((operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => void) | undefined
+  retryableOperationRef: string | undefined
+}) {
+  if (candidates.length === 0) {
+    return null
+  }
+
+  return (
+    <section className={cn(REVEAL_ENTER, 'grid gap-3')} aria-label="Operation candidates">
+      <header className="grid gap-0.5">
+        <h2 className="font-heading text-base font-semibold text-foreground">
+          Choose an operation
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Compare the published requirements and select the exact operation to continue.
+        </p>
+      </header>
+      <ul className="grid gap-3" aria-label="Matching operations">
+        {candidates.map((candidate) => (
+          <OperationCandidateCard
+            key={candidate.operationRef}
+            candidateSetDigest={candidateSetDigest}
+            candidate={candidate}
+            selected={candidate.operationRef === selectedOperationRef}
+            onOperationSelect={onOperationSelect}
+            retryable={candidate.operationRef === retryableOperationRef}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function OperationCandidateCard({
+  candidate,
+  candidateSetDigest,
+  selected,
+  onOperationSelect,
+  retryable,
+}: {
+  candidate: AnswerOperationCandidate
+  candidateSetDigest: string
+  selected: boolean
+  onOperationSelect: ((operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => void) | undefined
+  retryable: boolean
+}) {
+  const inputId = useId()
+  const errorId = `${inputId}-error`
+  const [composing, setComposing] = useState(false)
+  const [inputJson, setInputJson] = useState('{}')
+  const [inputError, setInputError] = useState<string | undefined>()
+  const businessName = neutralizeBidiFormattingControls(candidate.business.name)
+  const offeringLabel = neutralizeBidiFormattingControls(candidate.offering.label)
+  const operationId = neutralizeBidiFormattingControls(candidate.operationId)
+  const candidateLabel = `${businessName}: ${offeringLabel} · ${operationId} (option ${candidate.rank})`
+  const matchReason = neutralizeBidiFormattingControls(candidate.matchReason)
+  const summary = neutralizeBidiFormattingControls(candidate.summary || candidate.offering.summary)
+  const requiredParameters = candidate.requiredParameters.slice(0, OPERATION_PARAMETER_PREVIEW_LIMIT)
+  const optionalParameters = candidate.optionalParameters.slice(0, OPERATION_PARAMETER_PREVIEW_LIMIT)
+  const evidence = candidate.evidence.slice(0, OPERATION_EVIDENCE_PREVIEW_LIMIT)
+  const availability = [
+    formatMachineLabel(candidate.availability.posture),
+    candidate.availability.reason === undefined ? '' : formatMachineLabel(candidate.availability.reason),
+  ].filter(Boolean).join(' · ')
+  const authority = [
+    formatMachineLabel(candidate.authority.publisher),
+    formatMachineLabel(candidate.authority.sourceKind),
+    operationAuthenticationLabel(candidate.authority.authentication),
+  ].join(' · ')
+  const executionAvailabilityReason = operationExecutionAvailabilityReason(candidate.availability)
+  const selectionUnavailable = (selected && !retryable) || onOperationSelect === undefined || executionAvailabilityReason !== undefined
+  function submitOperation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const bytes = new TextEncoder().encode(inputJson).byteLength
+    if (bytes > OPERATION_JSON_MAX_BYTES) {
+      setInputError('Input must be 256 KiB or smaller.')
+      return
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(inputJson)
+    } catch {
+      setInputError('Enter valid JSON before running this operation.')
+      return
+    }
+    if (!isRecord(parsed)) {
+      setInputError('Operation input must be one JSON object.')
+      return
+    }
+    const envelopeBytes = new TextEncoder().encode(JSON.stringify({
+      operationRef: candidate.operationRef,
+      input: parsed,
+      candidateSetDigest,
+    })).byteLength
+    if (envelopeBytes > OPERATION_JSON_MAX_BYTES) {
+      setInputError('Operation reference, input, and candidate digest together must be 256 KiB or smaller.')
+      return
+    }
+    setInputError(undefined)
+    onOperationSelect?.(candidate.operationRef, parsed, candidateSetDigest)
+  }
+
+  return (
+    <li>
+      <Card className="grid gap-4 rounded-lg border-border p-4 shadow-none" data-selected={selected ? 'true' : 'false'}>
+        <header className="grid min-w-0 gap-1">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="grid min-w-0 gap-0.5">
+              <h3
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+                className="line-clamp-2 break-words font-heading text-base font-semibold text-foreground"
+              >
+                {businessName}
+              </h3>
+              <p
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+                className="line-clamp-2 break-words text-sm font-medium text-foreground"
+              >
+                {offeringLabel} · {operationId}
+              </p>
+            </div>
+            <Badge variant={selected ? 'default' : 'outline'} className="shrink-0">
+              {selected ? 'Selected' : `Match ${candidate.rank}`}
+            </Badge>
+          </div>
+          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="line-clamp-3 break-words text-sm leading-relaxed text-muted-foreground">
+            {summary}
+          </p>
+        </header>
+
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <CandidateFact label="Why it matches" value={matchReason} />
+          <CandidateFact label="Price" value={operationPriceLabel(candidate)} />
+          <CandidateFact label="Availability / readiness" value={availability} />
+          <CandidateFact label="Authority" value={authority} />
+        </dl>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CandidateList
+            label="Required inputs"
+            items={requiredParameters.map(parameterLabel)}
+            total={candidate.requiredParameters.length}
+            emptyLabel="No required inputs"
+          />
+          <CandidateList
+            label="Optional inputs"
+            items={optionalParameters.map(parameterLabel)}
+            total={candidate.optionalParameters.length}
+            emptyLabel="No optional inputs"
+          />
+          <CandidateList
+            label="Evidence"
+            items={evidence.map((item) => (
+              `${formatMachineLabel(item.purpose)} · ${neutralizeBidiFormattingControls(item.outputPointer)}`
+            ))}
+            total={candidate.evidence.length}
+            emptyLabel="No evidence summary provided"
+          />
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button asChild className="min-h-11 w-full sm:w-fit">
+            <Link
+              to="/operations/$operationRef"
+              params={{ operationRef: candidate.operationRef }}
+              aria-label={`Review and use ${candidateLabel}`}
+            >
+              Review and use
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            className="min-h-11 w-full sm:w-fit"
+            variant="secondary"
+            disabled={selectionUnavailable}
+            aria-expanded={selectionUnavailable ? undefined : composing}
+            aria-controls={selectionUnavailable ? undefined : inputId}
+            aria-label={
+              selected && retryable
+                ? `Retry ${candidateLabel} from this answer`
+                : selected
+                  ? `Selected ${candidateLabel} from this answer`
+                  : executionAvailabilityReason === undefined
+                    ? `Run ${candidateLabel} from this answer`
+                    : `Not executable from this answer: ${candidateLabel}`
+            }
+            onClick={selectionUnavailable ? undefined : () => setComposing((current) => !current)}
+          >
+            {selected && retryable
+              ? composing
+                ? 'Close retry input'
+                : 'Retry operation'
+              : selected
+                ? 'Selected operation'
+                : executionAvailabilityReason !== undefined
+                  ? 'Not executable from this answer'
+                  : onOperationSelect === undefined
+                    ? 'Run unavailable in replay'
+                    : composing
+                      ? 'Close input'
+                      : 'Run from this answer'}
+          </Button>
+        </div>
+        {executionAvailabilityReason === undefined ? null : (
+          <p className="text-sm text-muted-foreground" role="note">
+            {executionAvailabilityReason}
+          </p>
+        )}
+
+        {composing && !selectionUnavailable ? (
+          <form className="grid gap-3 border-t border-border pt-4" onSubmit={submitOperation}>
+            <div className="grid gap-1.5">
+              <label htmlFor={inputId} className="text-sm font-medium text-foreground">Input JSON</label>
+              <p className="text-xs text-muted-foreground">
+                {candidate.exactRebindRequired
+                  ? 'The server will re-read and validate the current published schema before execution.'
+                  : 'The server will re-read the operation and validate this object against the current published schema.'}
+              </p>
+              <Textarea
+                id={inputId}
+                value={inputJson}
+                spellCheck={false}
+                aria-invalid={inputError === undefined ? undefined : true}
+                aria-describedby={inputError === undefined ? undefined : errorId}
+                className="min-h-28 font-mono text-xs"
+                onChange={(event) => {
+                  setInputJson(event.target.value)
+                  setInputError(undefined)
+                }}
+              />
+              {inputError === undefined ? null : (
+                <p id={errorId} role="alert" className="text-sm text-red-vivid">{inputError}</p>
+              )}
+            </div>
+            <Button type="submit" className="min-h-11 w-full sm:w-fit">Validate and run</Button>
+          </form>
+        ) : null}
+      </Card>
+    </li>
+  )
+}
+
+function parameterLabel(parameter: AnswerOperationCandidate['requiredParameters'][number] | AnswerOperationCandidate['optionalParameters'][number]): string {
+  const metadata = [
+    neutralizeBidiFormattingControls(parameter.name),
+    formatMachineLabel(parameter.group),
+    neutralizeBidiFormattingControls(parameter.type),
+  ]
+  if (parameter.description !== undefined) {
+    metadata.push(neutralizeBidiFormattingControls(parameter.description))
+  }
+  if (parameter.example !== undefined) {
+    metadata.push(`Example: ${neutralizeBidiFormattingControls(JSON.stringify(parameter.example))}`)
+  }
+  if (parameter.enumValues !== undefined && parameter.enumValues.length > 0) {
+    metadata.push(`Allowed: ${parameter.enumValues.map(neutralizeBidiFormattingControls).join(', ')}`)
+  }
+  if (parameter.default !== undefined) {
+    metadata.push(`Default: ${neutralizeBidiFormattingControls(JSON.stringify(parameter.default))}`)
+  }
+  if (parameter.style !== undefined) {
+    metadata.push(`Style: ${formatMachineLabel(parameter.style)}`)
+  }
+  if (parameter.explode !== undefined) {
+    metadata.push(`Explode: ${parameter.explode ? 'Yes' : 'No'}`)
+  }
+  return metadata.join(' · ')
+}
+
+function CandidateFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-1">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words text-sm text-foreground">
+        {value}
+      </dd>
+    </div>
+  )
+}
+
+function CandidateList({
+  label,
+  items,
+  total,
+  emptyLabel,
+}: {
+  label: string
+  items: readonly string[]
+  total: number
+  emptyLabel: string
+}) {
+  return (
+    <section className="grid min-w-0 gap-1.5" aria-label={label}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {items.length === 0 ? (
+        <p className="text-sm text-foreground">{emptyLabel}</p>
+      ) : (
+        <ul className="grid gap-1 text-sm text-foreground">
+          {items.map((item, index) => (
+            <li key={`${index}-${item}`} dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words">
+              {item}
+            </li>
+          ))}
+          {total > items.length ? <li className="text-muted-foreground">+{total - items.length} more</li> : null}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function OperationOutcome({ outcome }: { outcome: AnswerOperationOutcome }) {
+  const result = outcome.result
+  const completed = result.kind === 'ok' || result.kind === 'completed'
+  const label = completed
+    ? 'Operation completed'
+    : result.kind === 'refused'
+      ? 'Operation not run'
+      : result.kind === 'pending'
+        ? 'Operation pending'
+        : result.kind === 'needs_authority'
+          ? 'Approval required'
+          : result.kind === 'reconciliation_required'
+            ? 'Reconciliation required'
+            : 'Operation failed'
+  const output = result.kind === 'ok' || result.kind === 'completed'
+    ? boundedOutcomeJson(result.output)
+    : undefined
+
+  return (
+    <section className={cn(REVEAL_ENTER, 'grid gap-4 rounded-md border border-border bg-card p-4')} aria-label="Operation outcome">
+      <header className="grid gap-1">
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+        <Link
+          to="/operations/$operationRef"
+          params={{ operationRef: outcome.operationRef }}
+          className="w-fit break-all text-xs text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <code dir="ltr" style={{ unicodeBidi: 'isolate' }}>{outcome.operationRef}</code>
+        </Link>
+      </header>
+
+      {'invocationRef' in result ? (
+        <div className="grid gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Invocation reference</p>
+          <code dir="ltr" style={{ unicodeBidi: 'isolate' }} className="break-all text-xs text-foreground">
+            {result.invocationRef}
+          </code>
+          <Link
+            to="/operations/invocations/$invocationRef"
+            params={{ invocationRef: result.invocationRef }}
+            className="w-fit text-sm font-semibold text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            View current status
+          </Link>
+        </div>
+      ) : null}
+
+      {output === undefined ? null : (
+        <div className="grid gap-1.5">
+          <p className="text-xs font-medium text-muted-foreground">Output</p>
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs text-foreground">
+            {output}
+          </pre>
+        </div>
+      )}
+
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        {result.kind === 'completed' ? (
+          <>
+            <OutcomeFact label="Charge state" value={formatMachineLabel(result.usage.chargeState)} />
+            <OutcomeFact label="Exact amount" value={formatCurrencyAmount(result.usage.amount)} />
+            <OutcomeFact label="Usage ref" value={result.usage.usageRef} />
+            <OutcomeFact label="Observed" value={formatObservedAt(result.usage.observedAt)} />
+            <OutcomeFact label="Price digest" value={result.usage.priceDigest} />
+            <OutcomeFact label="Transaction ref" value={result.usage.transactionRef ?? 'Not recorded'} />
+            <OutcomeFact label="Duration" value={result.usage.durationMs === undefined ? 'Not recorded' : `${result.usage.durationMs} ms`} />
+            <OutcomeFact label="Evidence hash" value={result.evidenceHash} />
+          </>
+        ) : result.kind === 'ok' ? (
+          <OutcomeFact label="Evidence hash" value={result.evidenceHash} />
+        ) : result.kind === 'pending' ? (
+          <>
+            <OutcomeFact label="Retry after" value={`${result.retryAfterMs} ms`} />
+          </>
+        ) : result.kind === 'needs_authority' ? (
+          <>
+            <OutcomeFact label="Consequence" value={formatMachineLabel(result.authorityRequest.consequence)} />
+            <OutcomeFact label="Retry class" value={formatMachineLabel(result.authorityRequest.retryClass)} />
+            <OutcomeFact label="Maximum spend" value={result.authorityRequest.maximumSpend === undefined ? 'Not specified' : formatCurrencyAmount(result.authorityRequest.maximumSpend)} />
+            <OutcomeFact label="Data fields" value={result.authorityRequest.dataFields.length === 0 ? 'None' : result.authorityRequest.dataFields.join(', ')} />
+            <OutcomeFact label="Authority expires" value={result.authorityRequest.expiresAt ?? 'Not specified'} />
+          </>
+        ) : result.kind === 'reconciliation_required' ? (
+          <>
+            <OutcomeFact label="Attempt ref" value={result.evidence.attemptRef} />
+            <OutcomeFact label="Effect generation" value={String(result.evidence.effectGeneration)} />
+            <OutcomeFact label="Required at" value={result.evidence.requiredAt} />
+            <OutcomeFact label="Retry policy" value={formatMachineLabel(result.evidence.retry)} />
+            <OutcomeFact label="Evidence source" value={result.evidence.evidenceSource} />
+          </>
+        ) : result.kind === 'error' ? (
+          <>
+            <OutcomeFact label="Code" value={formatMachineLabel(result.code)} />
+            <OutcomeFact label="Retryable" value={result.retryable ? 'Yes' : 'No'} />
+            <OutcomeFact label="Detail" value={result.reason} />
+            {result.composition === undefined ? null : <OutcomeFact label="Composition" value={JSON.stringify(result.composition)} />}
+          </>
+        ) : (
+          <>
+            <OutcomeFact label="Reason" value={formatMachineLabel('reason' in result ? result.reason : result.code)} />
+            {'retryable' in result ? <OutcomeFact label="Retryable" value={result.retryable ? 'Yes' : 'No'} /> : null}
+            {'nextAction' in result && result.nextAction !== undefined ? <OutcomeFact label="Next action" value={result.nextAction} /> : null}
+            {'composition' in result && result.composition !== undefined ? <OutcomeFact label="Composition" value={JSON.stringify(result.composition)} /> : null}
+          </>
+        )}
+        <OutcomeFact label="Canonical result digest" value={outcome.resultDigest} />
+        <OutcomeFact label="Tool record digest" value={outcome.toolCallDigest} />
+      </dl>
+    </section>
+  )
+}
+
+function OutcomeFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-1">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-all text-sm text-foreground">{neutralizeBidiFormattingControls(value)}</dd>
+    </div>
+  )
+}
+
+function boundedOutcomeJson(value: unknown): string {
+  const json = JSON.stringify(value, null, 2) ?? 'null'
+  return new TextEncoder().encode(json).byteLength <= OPERATION_JSON_MAX_BYTES
+    ? json
+    : 'Output exceeded the 256 KiB answer-artifact limit. Use the canonical result digest and recovery surface.'
+}
+
+function formatObservedAt(value: number): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString()
+}
+
+function operationPriceLabel(candidate: AnswerOperationCandidate): string {
+  switch (candidate.commercial.price.kind) {
+    case 'fixed':
+      return formatCurrencyAmount(candidate.commercial.price.amount)
+    case 'range':
+      return `${formatCurrencyAmount(candidate.commercial.price.minimum)} – ${formatCurrencyAmount(candidate.commercial.price.maximum)}`
+    case 'on_request':
+      return 'Price on request'
+  }
+}
+
+function operationAuthenticationLabel(authentication: AnswerOperationCandidate['authority']['authentication']): string {
+  switch (authentication.kind) {
+    case 'keyless':
+      return 'Keyless'
+    case 'platform_credential':
+      return authentication.scheme === 'api_key'
+        ? `Platform credential · API key (${formatMachineLabel(authentication.in)})`
+        : 'Platform credential · Bearer'
+    case 'x402':
+      return 'x402 payment'
+    case 'unknown':
+      return 'Authentication unknown'
+  }
+}
+
+function operationExecutionAvailabilityReason(
+  availability: AnswerOperationCandidate['availability'],
+): string | undefined {
+  switch (availability.posture) {
+    case 'routeable':
+      return undefined
+    case 'integrated':
+      return 'Not executable from this answer: integrated availability requires review on the operation page.'
+    case 'unavailable':
+      return `Not executable from this answer: ${formatMachineLabel(availability.reason ?? 'unavailable')}.`
+  }
+}
+
+function formatMachineLabel(value: string): string {
+  const label = neutralizeBidiFormattingControls(value)
+    .replaceAll('_', ' ')
+    .replace(/\b(?:ae|http|mcp)\b/giu, (part) => part.toUpperCase())
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 function SelectedSource({ provider, threadId }: { provider: AnswerSource; threadId: string | undefined }) {
@@ -691,34 +1258,46 @@ function SourceCard({
     .join(' · ')
   const sourceName = neutralizeBidiFormattingControls(source.name)
   const initial = sourceName.trim().charAt(0).toUpperCase() || '?'
-  const gridCls = 'grid items-center gap-3 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]'
   const content = (
     <>
-      <span
-        aria-hidden="true"
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted font-mono text-sm font-semibold text-muted-foreground"
-      >
+      <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-sm font-semibold text-muted-foreground">
         {initial}
-      </span>
-      <span className="grid min-w-0 gap-0.5">
-        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-sm font-medium text-foreground underline-offset-4">{sourceName}</span>
-        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-xs text-muted-foreground">{basis}</span>
-      </span>
-      <span className="hidden shrink-0 items-center justify-center rounded-full border border-border bg-card px-2 py-0.5 font-mono text-2xs tabular-nums text-muted-foreground sm:inline-flex">
-        {source.citationIndex}
-      </span>
+      </ItemMedia>
+      <ItemContent className="min-w-0">
+        <ItemTitle
+          dir="auto"
+          style={{ unicodeBidi: 'isolate' }}
+          className="truncate underline-offset-4"
+        >
+          {sourceName}
+        </ItemTitle>
+        <ItemDescription
+          dir="auto"
+          style={{ unicodeBidi: 'isolate' }}
+          className="truncate text-left text-xs"
+        >
+          {basis}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions className="hidden shrink-0 sm:flex">
+        <Badge variant="outline" className="font-mono text-2xs tabular-nums">
+          {source.citationIndex}
+        </Badge>
+      </ItemActions>
     </>
   )
 
   return (
-    <li className="rounded-lg border border-border bg-card transition-colors hover:bg-muted motion-safe:duration-fast motion-safe:ease-standard">
-      {detailIsInternal ? (
-        <Link to="/$slug" params={{ slug: source.slug }} search={search} className={gridCls}>
-          {content}
-        </Link>
-      ) : (
-        <a href={source.detailUrl} className={gridCls}>{content}</a>
-      )}
+    <li>
+      <Item asChild variant="outline" size="sm" className="bg-card">
+        {detailIsInternal ? (
+          <Link to="/$slug" params={{ slug: source.slug }} search={search}>
+            {content}
+          </Link>
+        ) : (
+          <a href={source.detailUrl}>{content}</a>
+        )}
+      </Item>
     </li>
   )
 }
@@ -750,35 +1329,33 @@ function ProviderCompareTable({
         </div>
         <p className="shrink-0 font-mono text-2xs text-muted-foreground">{listingCountLabel(providers.length)}</p>
       </header>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[44rem] border-collapse text-sm">
-          <caption className="sr-only">Comparison based on published business details.</caption>
-          <thead>
-            <tr>
-              <th
+      <Table className="min-w-[44rem] border-collapse">
+        <TableCaption className="sr-only">Comparison based on published business details.</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead
+              scope="col"
+              className="sticky left-0 z-10 h-auto w-[13.5rem] border-b border-border bg-card px-4 py-3 font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Business
+            </TableHead>
+            {fields.map((field) => (
+              <TableHead
+                key={field}
                 scope="col"
-                className="sticky left-0 z-10 w-[13.5rem] border-b border-border bg-card px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
+                className="h-auto border-b border-border px-4 py-3 font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
               >
-                Business
-              </th>
-              {fields.map((field) => (
-                <th
-                  key={field}
-                  scope="col"
-                  className="border-b border-border px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
-                >
-                  {compareFieldLabel(field)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {providers.map((provider) => (
-              <ProviderCompareRow key={provider.slug} provider={provider} fields={fields} threadId={threadId} />
+                {compareFieldLabel(field)}
+              </TableHead>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {providers.map((provider) => (
+            <ProviderCompareRow key={provider.slug} provider={provider} fields={fields} threadId={threadId} />
+          ))}
+        </TableBody>
+      </Table>
     </section>
   )
 }
@@ -797,8 +1374,8 @@ function ProviderCompareRow({
   const category = neutralizeBidiFormattingControls(provider.category)
 
   return (
-    <tr>
-      <th scope="row" className="sticky left-0 z-10 border-t border-border bg-card px-4 py-3 text-left align-top">
+    <TableRow>
+      <TableHead scope="row" className="sticky left-0 z-10 h-auto border-t border-border bg-card px-4 py-3 text-left align-top">
         <span className="grid gap-0.5">
           <Link
             to="/$slug"
@@ -812,18 +1389,18 @@ function ProviderCompareRow({
           </Link>
           <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-mono text-2xs text-muted-foreground">{category}</span>
         </span>
-      </th>
+      </TableHead>
       {fields.map((field) => (
-        <td
+        <TableCell
           key={`${provider.slug}-${field}`}
-          className={cn('border-t border-border px-4 py-3 align-top tabular-nums text-muted-foreground', field === 'freshness' && 'font-mono text-2xs tracking-wide')}
+          className={cn('border-t border-border px-4 py-3 align-top whitespace-normal tabular-nums text-muted-foreground', field === 'freshness' && 'font-mono text-2xs tracking-wide')}
           dir="auto"
           style={{ unicodeBidi: 'isolate' }}
         >
           {neutralizeBidiFormattingControls(compareFieldValue(provider, field))}
-        </td>
+        </TableCell>
       ))}
-    </tr>
+    </TableRow>
   )
 }
 

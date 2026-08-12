@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from '@/components/ui/item'
 
 
 import { telUri } from '@/lib/ui/tel-uri'
@@ -60,30 +68,32 @@ export function DirectoryFallback({ intent }: { intent: string }) {
               : 'None of these are in the area you named. They are listed on AE elsewhere in Australia and publish a phone number. AE is not arranging anything with them.'}
           </p>
         </div>
-        <ul className="grid gap-3">
+        <ItemGroup className="gap-3">
           {state.businesses.map((business) => (
-            <li key={business.slug} className="grid gap-2 rounded-md border border-border p-4">
-              <div className="grid gap-1">
-                <p className="block font-semibold">{business.name}</p>
-                <p className="block text-sm text-muted-foreground">
-                  {[business.offeringName, `${business.suburb}, ${business.stateTerritory}`]
-                    .filter((part): part is string => part !== undefined)
-                    .join(' · ')}
-                </p>
-                {business.availabilitySummary === undefined ? null : (
-                  <p className="block text-sm text-muted-foreground">{business.availabilitySummary}</p>
-                )}
-                {business.pricingSummary === undefined ? null : (
-                  <p className="block text-sm text-muted-foreground">{business.pricingSummary}</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <CallAction business={business} />
-                <Button asChild variant="ghost" size="sm" className="min-h-11"><a href={`/${business.slug}`}>View business</a></Button>
-              </div>
-            </li>
+            <Item asChild key={business.slug} variant="outline" className="grid gap-2">
+              <li>
+                <ItemContent>
+                  <ItemTitle>{business.name}</ItemTitle>
+                  <ItemDescription className="line-clamp-none text-left">
+                    {[business.offeringName, `${business.suburb}, ${business.stateTerritory}`]
+                      .filter((part): part is string => part !== undefined)
+                      .join(' · ')}
+                  </ItemDescription>
+                  {business.availabilitySummary === undefined ? null : (
+                    <ItemDescription className="line-clamp-none text-left">{business.availabilitySummary}</ItemDescription>
+                  )}
+                  {business.pricingSummary === undefined ? null : (
+                    <ItemDescription className="line-clamp-none text-left">{business.pricingSummary}</ItemDescription>
+                  )}
+                </ItemContent>
+                <ItemActions className="flex-wrap justify-start">
+                  <CallAction business={business} />
+                  <Button asChild variant="ghost" size="sm" className="min-h-11"><a href={`/${business.slug}`}>View business</a></Button>
+                </ItemActions>
+              </li>
+            </Item>
           ))}
-        </ul>
+        </ItemGroup>
       </div>
     </Card>
   )

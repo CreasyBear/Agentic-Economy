@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   }), { status: 503, headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' } })),
 }))
 
-vi.mock('@/lib/server/customer-request-agent-oauth-api', () => ({
+vi.mock('@/lib/server/agent-access-oauth-api', () => ({
   handleOAuthAuthorizeGet: mocks.authorizeGet,
   handleOAuthConsentPost: mocks.authorizePost,
   oauthAuthorizationUnavailableResponse: mocks.authorizationUnavailable,

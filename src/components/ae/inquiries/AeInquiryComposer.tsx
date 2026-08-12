@@ -1,13 +1,7 @@
-import { type KeyboardEvent, type RefObject } from 'react'
+import { type FormEvent, type KeyboardEvent, type RefObject } from 'react'
+import { CornerDownLeftIcon } from 'lucide-react'
 
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  type PromptInputMessage,
-} from '@/components/ai-elements/prompt-input'
+import { Button } from '@/components/ui/button'
 import {
   Field,
   FieldDescription,
@@ -15,6 +9,12 @@ import {
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupTextarea,
+} from '@/components/ui/input-group'
+import { Spinner } from '@/components/ui/spinner'
 
 export type AeInquiryComposerProps = {
   id?: string
@@ -32,8 +32,8 @@ export type AeInquiryComposerProps = {
   onSubmit?: () => void
 }
 
-// Adapter retained for the inquiry-specific field/error contract that PromptInput
-// does not provide. Its input and submit controls are official PromptInput parts.
+// Inquiry-specific field and keyboard behavior composed from the shared form
+// primitives.
 export function AeInquiryComposer({
   id = 'body',
   name = 'body',
@@ -74,13 +74,8 @@ export function AeInquiryComposer({
     insertLineBreak(event)
   }
 
-  function handlePromptSubmit({ text }: PromptInputMessage) {
-    // Files stay internal to PromptInput; inquiry submission keeps its existing
-    // no-argument callback contract and only exposes the text control.
-    const submittedText = text.length > 0 ? text : value
-    if (submittedText !== value) {
-      onChange(submittedText)
-    }
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     onSubmit?.()
   }
 
@@ -98,9 +93,9 @@ export function AeInquiryComposer({
         {...(disabled ? { 'data-disabled': true } : {})}
       >
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <PromptInput className="w-full" onSubmit={handlePromptSubmit}>
-          <PromptInputBody>
-            <PromptInputTextarea
+        <form className="w-full" onSubmit={handleSubmit}>
+          <InputGroup className="overflow-hidden">
+            <InputGroupTextarea
               id={id}
               {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
               {...(invalid ? { 'aria-invalid': true } : {})}
@@ -115,17 +110,20 @@ export function AeInquiryComposer({
               onChange={(event) => onChange(event.currentTarget.value)}
               onKeyDown={handleKeyDown}
             />
-          </PromptInputBody>
-          {onSubmit === undefined ? null : (
-            <PromptInputFooter className="pb-2">
-              <PromptInputSubmit
-                aria-label="Submit inquiry"
-                disabled={disabled || pending}
-                status={pending ? 'submitted' : 'ready'}
-              />
-            </PromptInputFooter>
-          )}
-        </PromptInput>
+            {onSubmit === undefined ? null : (
+              <InputGroupAddon align="block-end" className="justify-end pb-2">
+                <Button
+                  type="submit"
+                  size="icon-sm"
+                  aria-label="Submit inquiry"
+                  disabled={disabled || pending}
+                >
+                  {pending ? <Spinner /> : <CornerDownLeftIcon aria-hidden="true" />}
+                </Button>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+        </form>
         {description === undefined ? null : <FieldDescription id={descriptionId}>{description}</FieldDescription>}
         {invalid && errorMessage !== undefined ? <FieldError id={statusId}>{errorMessage}</FieldError> : null}
       </Field>

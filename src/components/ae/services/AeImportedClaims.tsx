@@ -48,7 +48,11 @@ export function AeImportedClaims({ claims, query }: AeImportedClaimsProps) {
                     to="/claim"
                     search={{
                       businessName: claim.businessName,
-                      suburb: claim.suburb,
+                      businessContext: {
+                        kind: 'local_human',
+                        suburb: claim.suburb,
+                        stateTerritory: '',
+                      },
                       ...(query === undefined ? {} : { category: query.slice(0, 120) }),
                     }}
                   >

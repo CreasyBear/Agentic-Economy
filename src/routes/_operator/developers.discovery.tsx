@@ -7,11 +7,11 @@ import { Card } from '@/components/ui/card'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOperatorStatusList } from '@/components/ae/operator/AeOperatorStatusList'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route'
+import { loadDeveloperDiscoveryRouteServer } from '@/modules/discovery/developer-discovery-route'
 
 export const Route = createFileRoute('/_operator/developers/discovery')({
   ...operatorRouteOptions,
-  loader: loadDeveloperDiscoveryRoute,
+  loader: () => loadDeveloperDiscoveryRouteServer(),
   head: () => ({
     meta: [
       { title: 'Builder readbacks | Agentic Economy' },
@@ -46,7 +46,7 @@ function DevelopersDiscoveryRoute() {
         </div>
       }
     >
-      <section className="grid w-full gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="grid w-full gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-6">
           <Card className="p-5">
             <div className="grid gap-1.5">
@@ -87,7 +87,9 @@ function DevelopersDiscoveryRoute() {
                       <li key={fact.slug} className="grid gap-2 rounded-md border border-border p-3">
                         <p className="font-heading text-base">{fact.name}</p>
                         <div className="grid gap-2">
-                          <p>{fact.category} in {fact.suburb}, {fact.stateTerritory}</p>
+                          <p>{fact.category} {fact.businessContext.kind === 'local_human'
+                            ? `in ${fact.businessContext.suburb}, ${fact.businessContext.stateTerritory}`
+                            : `from ${fact.businessContext.providerIdentifier}`}</p>
                           <dl className="grid gap-2 text-xs sm:grid-cols-2">
                             <div>
                               <dt className="font-medium text-muted-foreground">Disposition</dt>

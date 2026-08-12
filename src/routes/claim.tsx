@@ -5,23 +5,26 @@ import { ArrowRightIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Card } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
 import { AeReviewBlock } from '@/components/ae/forms/AeReviewBlock'
-import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { isRecord } from '@/modules/common/is-record'
-import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
 import {
   emptyPublicOwnerClaimInput,
-  hasClaimDraftContent,
   initialClaimDraftState,
+  hasClaimDraftContent,
+  readClaimTextField,
   reduceClaimDraft,
+  updateClaimTextField,
   snapshotClaimDraft,
+  type ClaimDraftField,
   type ClaimDraftSnapshot,
   type TextClaimField,
 } from '@/modules/catalog/claim-draft'
@@ -36,11 +39,14 @@ import {
 import { searchClaimableBusinessesServer } from '@/lib/claim/search-claimable-businesses'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
+import type { BusinessContext } from '@/modules/business/public'
 import type { StorefrontImportDraft } from '@/modules/storefront/public'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 
 
 const textClaimFields = [
+  'providerWebsite',
+  'providerIdentifier',
   'businessName',
   'category',
   'suburb',
@@ -60,8 +66,7 @@ const textClaimFields = [
   'noContactReason',
 ] as const satisfies readonly TextClaimField[]
 
-const claimFields = [...textClaimFields, 'firstRequestMode'] as const satisfies readonly PublicOwnerClaimField[]
-const claimFieldSet = new Set<PublicOwnerClaimField>(claimFields)
+const claimFields = [...textClaimFields, 'businessContext', 'firstRequestMode'] as const satisfies readonly ClaimDraftField[]
 
 const CLAIM_DRAFT_STORAGE_KEY = 'ae.claimFormDraft.v1'
 
@@ -105,47 +110,94 @@ function clearStoredClaimDraft() {
 }
 
 function normalizeStoredClaimInput(value: unknown): PublicOwnerClaimFlowInput {
-  const source = isRecord(value) ? value as Partial<Record<PublicOwnerClaimField, unknown>> : {}
-  const normalized: PublicOwnerClaimFlowInput = { ...emptyPublicOwnerClaimInput }
+  const source = isRecord(value) ? value : {}
+  const normalized: PublicOwnerClaimFlowInput = {
+    ...emptyPublicOwnerClaimInput,
+    businessContext: readStoredBusinessContext(source.businessContext),
+  }
 
+  let next = normalized
   for (const field of textClaimFields) {
-    const storedValue = source[field]
-    normalized[field] = typeof storedValue === 'string' ? storedValue : ''
+    const storedValue = readStoredClaimText(source, next.businessContext, field)
+    if (typeof storedValue === 'string') {
+      next = updateClaimTextField(next, field, storedValue)
+    }
   }
 
   const storedFirstRequestMode = source.firstRequestMode
-  normalized.firstRequestMode = typeof storedFirstRequestMode === 'string'
-    ? toFirstRequestMode(storedFirstRequestMode)
-    : emptyPublicOwnerClaimInput.firstRequestMode
-
-  return normalized
+  return {
+    ...next,
+    firstRequestMode: typeof storedFirstRequestMode === 'string'
+      ? toFirstRequestMode(storedFirstRequestMode)
+      : emptyPublicOwnerClaimInput.firstRequestMode,
+  }
 }
 
-function normalizeStoredDirtyFields(value: unknown): readonly PublicOwnerClaimField[] {
+function readStoredBusinessContext(value: unknown): BusinessContext {
+  if (!isRecord(value)) return emptyPublicOwnerClaimInput.businessContext
+  if (value.kind === 'programmable_provider') {
+    return {
+      kind: 'programmable_provider',
+      website: typeof value.website === 'string' ? value.website : '',
+      providerIdentifier: typeof value.providerIdentifier === 'string' ? value.providerIdentifier : '',
+    }
+  }
+  return {
+    kind: 'local_human',
+    suburb: typeof value.suburb === 'string' ? value.suburb : '',
+    stateTerritory: typeof value.stateTerritory === 'string' ? value.stateTerritory : '',
+    ...(typeof value.postcode === 'string' && value.postcode.length > 0 ? { postcode: value.postcode } : {}),
+    ...(typeof value.publishedPhone === 'string' && value.publishedPhone.length > 0 ? { publishedPhone: value.publishedPhone } : {}),
+  }
+}
+
+function readStoredClaimText(
+  source: Record<string, unknown>,
+  context: BusinessContext,
+  field: TextClaimField,
+): unknown {
+  if (field === 'providerWebsite') return context.kind === 'programmable_provider' ? context.website : undefined
+  if (field === 'providerIdentifier') return context.kind === 'programmable_provider' ? context.providerIdentifier : undefined
+  if (field === 'suburb') return context.kind === 'local_human' ? context.suburb : undefined
+  if (field === 'stateTerritory') return context.kind === 'local_human' ? context.stateTerritory : undefined
+  if (field === 'publishedPhone') return context.kind === 'local_human' ? context.publishedPhone : undefined
+  return source[field]
+}
+
+function normalizeStoredDirtyFields(value: unknown): readonly ClaimDraftField[] {
   if (!Array.isArray(value)) {
     return []
   }
-
-  return value.filter((field): field is PublicOwnerClaimField => claimFieldSet.has(field as PublicOwnerClaimField))
+  return value.filter((field): field is ClaimDraftField =>
+    typeof field === 'string' && claimFields.some((candidate) => candidate === field)
+  )
 }
 
 function readClaimInputWithStateFallback(
   form: HTMLFormElement,
   fallback: PublicOwnerClaimFlowInput,
-  dirtyFields: ReadonlySet<PublicOwnerClaimField>,
+  dirtyFields: ReadonlySet<ClaimDraftField>,
 ): PublicOwnerClaimFlowInput {
   const formValue = readClaimInput(form, fallback)
-  const next = { ...formValue }
+  let next = formValue
 
   for (const field of textClaimFields) {
-    const fallbackValue = fallback[field]
-    if (dirtyFields.has(field) && formValue[field].trim().length === 0 && fallbackValue.trim().length > 0) {
-      next[field] = fallbackValue
+    const fallbackValue = readClaimTextField(fallback, field)
+    const formValueText = readClaimTextField(formValue, field)
+    if (dirtyFields.has(field) && formValueText.trim().length === 0 && fallbackValue.trim().length > 0) {
+      next = updateClaimTextField(next, field, fallbackValue)
     }
+  }
+  if (
+    dirtyFields.has('businessContext')
+    && formValue.businessContext.kind === emptyPublicOwnerClaimInput.businessContext.kind
+    && fallback.businessContext.kind !== emptyPublicOwnerClaimInput.businessContext.kind
+  ) {
+    next = { ...next, businessContext: fallback.businessContext }
   }
 
   if (dirtyFields.has('firstRequestMode') && formValue.firstRequestMode === emptyPublicOwnerClaimInput.firstRequestMode) {
-    next.firstRequestMode = fallback.firstRequestMode
+    next = { ...next, firstRequestMode: fallback.firstRequestMode }
   }
 
   return next
@@ -156,25 +208,43 @@ function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInp
   const read = (field: TextClaimField) => {
     const control = form.elements.namedItem(field)
     if (
-      control instanceof HTMLInputElement ||
-      control instanceof HTMLTextAreaElement ||
-      control instanceof HTMLSelectElement
+      control instanceof HTMLInputElement
+      || control instanceof HTMLTextAreaElement
+      || control instanceof HTMLSelectElement
     ) {
       return control.value
     }
 
     const value = data.get(field)
-    return typeof value === 'string' ? value : fallback[field] ?? ''
+    return typeof value === 'string' ? value : readClaimTextField(fallback, field)
   }
+  const businessContextKindValue = data.get('businessContextKind')
   const firstRequestModeValue = data.get('firstRequestMode')
+  const businessContextKind = toBusinessContextKind(
+    typeof businessContextKindValue === 'string' ? businessContextKindValue : fallback.businessContext.kind,
+  )
+  const publishedPhone = read('publishedPhone')
+  const businessContext: BusinessContext = businessContextKind === 'programmable_provider'
+    ? {
+        kind: 'programmable_provider',
+        website: read('providerWebsite'),
+        providerIdentifier: read('providerIdentifier'),
+      }
+    : {
+        kind: 'local_human',
+        suburb: read('suburb'),
+        stateTerritory: read('stateTerritory'),
+        ...(fallback.businessContext.kind === 'local_human' && fallback.businessContext.postcode === undefined
+          ? {}
+          : fallback.businessContext.kind === 'local_human' ? { postcode: fallback.businessContext.postcode } : {}),
+        ...(publishedPhone.length === 0 ? {} : { publishedPhone }),
+      }
 
   return {
+    businessContext,
     businessName: read('businessName'),
     category: read('category'),
-    suburb: read('suburb'),
-    stateTerritory: read('stateTerritory'),
     requestedSlug: read('requestedSlug'),
-    publishedPhone: read('publishedPhone'),
     ownerMessage: read('ownerMessage'),
     sourceLabel: read('sourceLabel'),
     serviceName: read('serviceName'),
@@ -190,19 +260,24 @@ function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInp
   }
 }
 
-const submitClaimServer = submitOwnerClaimServer
-const importDraftServer = importStorefrontDraftServer
-const enrichDraftServer = enrichBusinessDraftServer
-
 /** Prefill carried from the find step. It never overrides a stored draft. */
-const prefillFields = ['businessName', 'category', 'suburb', 'stateTerritory', 'requestedSlug'] as const
+const prefillFields = ['businessName', 'category', 'requestedSlug'] as const
 
-type ClaimSearchParams = Partial<Record<(typeof prefillFields)[number], string>> & { source?: 'supply' }
+type ClaimSearchParams = Partial<Record<(typeof prefillFields)[number], string>> & {
+  businessContext?: BusinessContext
+  source?: 'supply'
+}
 
 function readClaimPrefill(search: Record<string, unknown>): ClaimSearchParams {
   const prefill: ClaimSearchParams = {}
   const source = search.source
-  if (source === 'supply') prefill.source = source
+  if (source === 'supply') {
+    prefill.source = source
+    prefill.businessContext = { kind: 'programmable_provider', website: '', providerIdentifier: '' }
+  }
+  if (isRecord(search.businessContext)) {
+    prefill.businessContext = readStoredBusinessContext(search.businessContext)
+  }
   for (const field of prefillFields) {
     const value = search[field]
     if (typeof value !== 'string') continue
@@ -237,56 +312,73 @@ function ClaimRoute() {
       <header className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-8 md:px-6 md:py-10">
         <div className="grid max-w-5xl gap-3">
           <h1 className="max-w-4xl text-4xl leading-tight tracking-tight md:text-5xl">
-            Get your business found — and quoted — by AI assistants and the people they work for.
+            {source === 'supply'
+              ? 'Publish an operation AI assistants can call.'
+              : 'Get your business found — and quoted — by AI assistants and the people they work for.'}
           </h1>
           <p className="block max-w-3xl text-lg text-muted-foreground">
-            When people ask their AI, your business is found and can answer with your real services and prices. You review every message before you confirm availability, price, and timing.
+            {source === 'supply'
+              ? 'Claim your programmable-provider identity, create an Offering with an exact per-call price, then admit and test its source.'
+              : 'When people ask their AI, your business is found and can answer with your real services and prices. You review every message before you confirm availability, price, and timing.'}
           </p>
         </div>
-        <div className="grid max-w-md gap-1">
-          <Button asChild variant="default" className="min-h-11 w-full sm:w-auto"><Link to="/claim/form" search={source === 'supply' ? { source: 'supply' } : {}}>List your business</Link></Button>
+        <div className="grid max-w-md gap-2">
+          <Button asChild variant="default" className="min-h-11 w-full sm:w-auto"><Link to="/claim/form" search={source === 'supply' ? { source: 'supply' } : {}}>{source === 'supply' ? 'Claim provider identity' : 'List your business'}</Link></Button>
           <p className="block text-sm text-muted-foreground">
-            Sign in first — then you’ll add your services and prices and publish your page.
+            {source === 'supply' ? 'After identity claim, continue through the existing Offering editor and source admission flow.' : 'Sign in first — then you’ll add your services and prices and publish your page.'}
           </p>
+          {source === 'supply' ? <Link to="/claim/form" className="min-h-11 w-fit py-3 text-sm font-semibold underline underline-offset-4">List a local human service instead</Link> : null}
         </div>
       </header>
       <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] md:px-6">
         <section aria-labelledby="claim-before-you-start" className="grid content-start gap-3 border-y border-border py-4">
           <h2 id="claim-before-you-start" className="text-lg font-semibold text-foreground">
-            What people get when they ask their AI
+            {source === 'supply' ? 'One identity, Offering, and admitted operation' : 'What people get when they ask their AI'}
           </h2>
           <ul className="m-0 grid list-none divide-y divide-border p-0 text-foreground">
-            <li className="grid gap-0.5 py-3 first:pt-1"><strong>Your business facts:</strong><span className="text-muted-foreground">People asking their AI can find the name, trade, suburb, and phone number you publish.</span></li>
-            <li className="grid gap-0.5 py-3"><strong>The services you offer:</strong><span className="text-muted-foreground">People can see the jobs you do, suburbs you cover, and hours you answer.</span></li>
-            <li className="grid gap-0.5 py-3"><strong>Your prices:</strong><span className="text-muted-foreground">Answers use your real price and its unit, or tell people when you quote first.</span></li>
-            <li className="grid gap-0.5 py-3"><strong>Messages to review:</strong><span className="text-muted-foreground">People can send a first message for you to review before you confirm the work.</span></li>
-            <li className="grid gap-0.5 py-3 last:pb-1"><strong>Customer next step:</strong><span className="text-muted-foreground">Choose the phone, website, or message route people can use now.</span></li>
+            {source === 'supply' ? (
+              <>
+                <li className="grid gap-0.5 py-3 first:pt-1"><strong>Provider identity:</strong><span className="text-muted-foreground">Claim the programmable provider that owns the operation.</span></li>
+                <li className="grid gap-0.5 py-3"><strong>Offering:</strong><span className="text-muted-foreground">Describe the operation and set its exact fixed price per call in the existing editor.</span></li>
+                <li className="grid gap-0.5 py-3"><strong>Source admission:</strong><span className="text-muted-foreground">Attach the operation source to that Offering, then admit it through the existing supply flow.</span></li>
+                <li className="grid gap-0.5 py-3 last:pb-1"><strong>Operation control:</strong><span className="text-muted-foreground">Read the canonical publication, binding, source, pricing, readiness, lifecycle, and live facts.</span></li>
+              </>
+            ) : (
+              <>
+                <li className="grid gap-0.5 py-3 first:pt-1"><strong>Your business facts:</strong><span className="text-muted-foreground">People asking their AI can find the name, trade, suburb, and phone number you publish.</span></li>
+                <li className="grid gap-0.5 py-3"><strong>The services you offer:</strong><span className="text-muted-foreground">People can see the jobs you do, suburbs you cover, and hours you answer.</span></li>
+                <li className="grid gap-0.5 py-3"><strong>Your prices:</strong><span className="text-muted-foreground">Answers use your real price and its unit, or tell people when you quote first.</span></li>
+                <li className="grid gap-0.5 py-3"><strong>Messages to review:</strong><span className="text-muted-foreground">People can send a first message for you to review before you confirm the work.</span></li>
+                <li className="grid gap-0.5 py-3 last:pb-1"><strong>Customer next step:</strong><span className="text-muted-foreground">Choose the phone, website, or message route people can use now.</span></li>
+              </>
+            )}
           </ul>
         </section>
         <section aria-labelledby="claim-control-title" className="grid content-start gap-3 rounded-lg border border-border bg-card p-5">
-          <h2 id="claim-control-title" className="text-lg font-semibold text-foreground">You stay in control</h2>
-          <p className="block text-muted-foreground">You review every public detail before anything appears.</p>
-          <p className="block text-muted-foreground">You confirm availability, price, and every request before work begins.</p>
-          <p className="block text-muted-foreground">Change a detail any time. Nothing starts until you confirm the request.</p>
+          <h2 id="claim-control-title" className="text-lg font-semibold text-foreground">{source === 'supply' ? 'You control each operation' : 'You stay in control'}</h2>
+          <p className="block text-muted-foreground">{source === 'supply' ? 'Your claimed identity, exact price, admitted source, and publication state remain explicit owner-controlled facts.' : 'You review every public detail before anything appears.'}</p>
+          <p className="block text-muted-foreground">{source === 'supply' ? 'Readiness is shown only from recorded observations for the exact admitted operation.' : 'You confirm availability, price, and every request before work begins.'}</p>
+          <p className="block text-muted-foreground">{source === 'supply' ? 'Withdraw, republish, refresh readiness, and test from the same operation control.' : 'Change a detail any time. Nothing starts until you confirm the request.'}</p>
         </section>
       </div>
-      <section aria-label="Find your business" className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:px-6">
-        <AeFindMyBusiness
-          search={async (query) => await searchBusinesses({ data: { query } })}
-          onBuildFromWeb={(businessName) => {
-            writeClaimEnrichIntent({ businessName })
-            void navigate({ to: '/claim/form', ...(source === 'supply' ? { search: { source: 'supply' } } : {}) })
-          }}
-          {...(source === undefined ? {} : { source })}
-        />
-      </section>
+      {source === 'supply' ? null : (
+        <section aria-label="Find your business" className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:px-6">
+          <AeFindMyBusiness
+            search={async (query) => await searchBusinesses({ data: { query } })}
+            onBuildFromWeb={(businessName) => {
+              writeClaimEnrichIntent({ businessName })
+              void navigate({ to: '/claim/form' })
+            }}
+          />
+        </section>
+      )}
     </AePublicShell>
   )
 }
 
 export function ClaimFormRoute() {
   const navigate = useNavigate()
-  const submitClaim = useServerFn(submitClaimServer)
+  const submitClaim = useServerFn(submitOwnerClaimServer)
   const hydrated = useClientMounted()
   const [draftState, dispatchDraft] = useReducer(reduceClaimDraft, initialClaimDraftState)
   const { value, factsConfirmed, dirtyFields } = draftState
@@ -295,12 +387,12 @@ export function ClaimFormRoute() {
   const [pending, setPending] = useState(false)
   const [draftNotice, setDraftNotice] = useState<string | undefined>()
   const persistedDraftRef = useRef<string>(undefined)
-  const importDraft = useServerFn(importDraftServer)
+  const importDraft = useServerFn(importStorefrontDraftServer)
   const [importWebsiteUrl, setImportWebsiteUrl] = useState('')
   const [importPending, setImportPending] = useState(false)
   const [importDraftResult, setImportDraftResult] = useState<StorefrontImportDraft | undefined>()
   const [importMessage, setImportMessage] = useState<string | undefined>()
-  const enrichDraft = useServerFn(enrichDraftServer)
+  const enrichDraft = useServerFn(enrichBusinessDraftServer)
   const [enrichPending, setEnrichPending] = useState(false)
   const [enrichMessage, setEnrichMessage] = useState<string | undefined>()
   const enrichAttemptedRef = useRef(false)
@@ -325,8 +417,15 @@ export function ClaimFormRoute() {
 
     dispatchDraft({ type: 'hydrate' })
     const prefilled = Object.entries(prefill).filter(([, entry]) => typeof entry === 'string' && entry.length > 0)
-    if (prefilled.length > 0) {
-      dispatchDraft({ type: 'import', value: { ...emptyPublicOwnerClaimInput, ...Object.fromEntries(prefilled) } })
+    if (prefilled.length > 0 || prefill.businessContext !== undefined) {
+      dispatchDraft({
+        type: 'import',
+        value: {
+          ...emptyPublicOwnerClaimInput,
+          ...Object.fromEntries(prefilled),
+          ...(prefill.businessContext === undefined ? {} : { businessContext: prefill.businessContext }),
+        },
+      })
     }
   }, [draftState.phase, hydrated, prefill])
 
@@ -392,6 +491,10 @@ export function ClaimFormRoute() {
     dispatchDraft({ type: 'edit_text', field, value: nextValue })
   }
 
+  function updateBusinessContextKind(nextValue: string) {
+    dispatchDraft({ type: 'edit_business_context_kind', value: toBusinessContextKind(nextValue) })
+  }
+
   async function handleImportDraft() {
     setImportMessage(undefined)
     setImportPending(true)
@@ -418,11 +521,14 @@ export function ClaimFormRoute() {
     event.preventDefault()
     setMessage(undefined)
     const nextValue = readClaimInputWithStateFallback(event.currentTarget, value, dirtyFields)
-    const submittedDirtyFields: PublicOwnerClaimField[] = []
+    const submittedDirtyFields: ClaimDraftField[] = []
     for (const field of textClaimFields) {
-      if (nextValue[field].trim().length > 0) {
+      if (readClaimTextField(nextValue, field).trim().length > 0) {
         submittedDirtyFields.push(field)
       }
+    }
+    if (nextValue.businessContext.kind !== emptyPublicOwnerClaimInput.businessContext.kind) {
+      submittedDirtyFields.push('businessContext')
     }
     if (nextValue.firstRequestMode !== emptyPublicOwnerClaimInput.firstRequestMode) {
       submittedDirtyFields.push('firstRequestMode')
@@ -438,6 +544,14 @@ export function ClaimFormRoute() {
     setPending(true)
     try {
       const result = await submitClaim({ data: { ...nextValue, ...(prefill.source === undefined ? {} : { source: prefill.source }) } })
+      if (result.kind === 'provider_claimed') {
+        clearStoredClaimDraft()
+        await navigate({
+          to: '/owner/offerings/new',
+          ...(prefill.source === undefined ? {} : { search: { next: 'supply' } }),
+        })
+        return
+      }
       if (result.kind === 'ok') {
         clearStoredClaimDraft()
         await navigate({ to: '/claim/success', search: { slug: result.catalog.slug, ...(prefill.source === undefined ? {} : { source: prefill.source }) } })
@@ -458,8 +572,10 @@ export function ClaimFormRoute() {
           made the two pages look like the same screen rendered twice. */}
       <AePageHeader
         density="operator"
-        title="Publish your business page"
-        description="Add your facts, services, and how customers can reach you. Nothing publishes until you confirm it."
+        title={value.businessContext.kind === 'programmable_provider' ? 'Claim your provider identity' : 'Publish your business page'}
+        description={value.businessContext.kind === 'programmable_provider'
+          ? 'Claim your provider identity first. After this step, create an Offering in the existing editor.'
+          : 'Add your facts, services, and how customers can reach you. Nothing publishes until you confirm it.'}
       />
       {!hydrated ? (
         <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-muted-foreground md:px-6" aria-live="polite">
@@ -469,55 +585,69 @@ export function ClaimFormRoute() {
         <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         {message === undefined ? null : (
           <Alert variant="destructive">
-            <AlertTitle>Your page was not published</AlertTitle>
+            <AlertTitle>{value.businessContext.kind === 'programmable_provider' ? 'Provider claim was not completed' : 'Your page was not published'}</AlertTitle>
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
         <Card className="grid gap-1.5 bg-brand p-5 text-on-brand">
-          <p className="block text-lg font-semibold text-on-brand">Free to claim. No lead fees.</p>
-          <p className="block text-on-brand/85">You choose the facts, price, and contact route people see. Nothing publishes until you confirm it.</p>
+          <p className="block text-lg font-semibold text-on-brand">{value.businessContext.kind === 'programmable_provider' ? 'Free provider identity claim.' : 'Free to claim. No lead fees.'}</p>
+          <p className="block text-on-brand/85">{value.businessContext.kind === 'programmable_provider' ? 'This step creates only your owned provider identity. Offering publication happens explicitly in the editor.' : 'You choose the facts, price, and contact route people see. Nothing publishes until you confirm it.'}</p>
         </Card>
-        {enrichMessage === undefined ? null : (
+        {value.businessContext.kind === 'programmable_provider' ? null : enrichMessage === undefined ? null : (
           <Alert variant={!enrichPending && importDraftResult === undefined ? 'destructive' : 'default'}>
             <AlertTitle>{enrichPending ? 'Gathering your public details' : importDraftResult === undefined ? 'We could not draft your page' : 'Details gathered for review'}</AlertTitle>
             <AlertDescription>{enrichMessage}</AlertDescription>
           </Alert>
         )}
-        <ImportDraftSection
-          websiteUrl={importWebsiteUrl}
-          draft={importDraftResult}
-          message={importMessage}
-          pending={importPending}
-          onWebsiteUrlChange={setImportWebsiteUrl}
-          onImport={handleImportDraft}
-        />
+        {value.businessContext.kind === 'programmable_provider' ? null : (
+          <ImportDraftSection
+            websiteUrl={importWebsiteUrl}
+            draft={importDraftResult}
+            message={importMessage}
+            pending={importPending}
+            onWebsiteUrlChange={setImportWebsiteUrl}
+            onImport={handleImportDraft}
+          />
+        )}
         <ClaimFormSections
           value={value}
           errorByField={errorByField}
           updateTextField={updateTextField}
           disabled={pending}
+          onBusinessContextKindChange={updateBusinessContextKind}
           onFirstRequestModeChange={(nextValue) => {
             dispatchDraft({ type: 'edit_first_request_mode', value: toFirstRequestMode(nextValue) })
           }}
         />
         <AeReviewBlock value={value} />
-        <AeCheckboxField
-          id="claimFactsConfirmed"
-          label="I confirm these public details are supplied by the business and ready to publish."
-          description="Review what will appear before continuing."
-          checked={factsConfirmed}
-          disabled={pending}
-          onCheckedChange={(nextValue) => dispatchDraft({ type: 'set_facts_confirmed', value: nextValue })}
-        />
+        <FieldGroup>
+          <Field orientation="horizontal" {...(pending ? { 'data-disabled': true } : {})}>
+            <Checkbox
+              id="claimFactsConfirmed"
+              checked={factsConfirmed}
+              disabled={pending}
+              aria-describedby="claimFactsConfirmed-description"
+              onCheckedChange={(nextValue) => dispatchDraft({ type: 'set_facts_confirmed', value: nextValue === true })}
+            />
+            <FieldContent>
+              <FieldLabel htmlFor="claimFactsConfirmed" className="min-h-11 items-center">
+                I confirm these public details are supplied by the business and ready to publish.
+              </FieldLabel>
+              <FieldDescription id="claimFactsConfirmed-description">Review what will appear before continuing.</FieldDescription>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <div className="flex flex-wrap items-center gap-3">
-          <AeActionButton
+          <Button
             type="submit"
-            state={pending ? 'loading' : 'idle'}
-            leadingIcon={<ArrowRightIcon />}
+            aria-label={value.businessContext.kind === 'programmable_provider' ? 'Claim provider identity' : 'Publish my service page'}
             disabled={pending || !factsConfirmed}
+            aria-busy={pending || undefined}
+            data-state={pending ? 'loading' : 'idle'}
           >
-            Publish my service page
-          </AeActionButton>
+            {pending ? <Spinner data-icon="inline-start" aria-label="Loading" /> : <ArrowRightIcon data-icon="inline-start" aria-hidden="true" />}
+            {value.businessContext.kind === 'programmable_provider' ? 'Claim provider identity' : 'Publish my service page'}
+          </Button>
           {previewButton(value.requestedSlug)}
           {draftNotice === undefined ? null : (
             <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{draftNotice} Nothing publishes until you submit.</p>
@@ -635,6 +765,10 @@ function focusFirstError(errors: readonly PublicOwnerClaimValidationError[]) {
   window.setTimeout(() => {
     document.querySelector<HTMLElement>(`[name="${first.field}"]`)?.focus()
   }, 0)
+}
+
+function toBusinessContextKind(value: string): BusinessContext['kind'] {
+  return value === 'programmable_provider' ? 'programmable_provider' : 'local_human'
 }
 
 function toFirstRequestMode(value: string): PublicOwnerClaimFlowInput['firstRequestMode'] {

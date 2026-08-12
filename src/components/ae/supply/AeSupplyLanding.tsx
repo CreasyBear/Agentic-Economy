@@ -12,9 +12,13 @@ export const SUPPLY_OFFER_SENTENCE = 'Publish what you do once. Assistants find 
 export function AeSupplyLanding({
   tools,
   services,
+  sourceError,
+  onRetry,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
   services: readonly ServiceDto[]
+  sourceError?: string
+  onRetry?: () => void
 }>) {
   return (
     <>
@@ -25,11 +29,20 @@ export function AeSupplyLanding({
           <p className="block max-w-3xl text-lg text-muted-foreground">
             {SUPPLY_OFFER_SENTENCE}
           </p>
+          {sourceError === undefined ? null : (
+            <div role="alert" className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-foreground">
+              <p>{sourceError}</p>
+              {onRetry === undefined ? null : (
+                <Button type="button" variant="secondary" className="min-h-11 w-fit" onClick={onRetry}>Try again</Button>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild variant="default" className="min-h-11">
-              <Link to="/claim" search={{ source: 'supply' }}>Start publishing your service</Link>
+              <Link to="/claim/form" search={{ source: 'supply' }}>Claim provider identity</Link>
             </Button>
-            <Link to="/owner/supply" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">Manage your service</Link>
+            <Link to="/claim/form" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">List a local human service</Link>
+            <Link to="/owner/supply" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">Manage operations</Link>
           </div>
         </div>
       </header>

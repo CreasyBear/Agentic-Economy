@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeftIcon, XIcon } from 'lucide-react'
+import { z } from 'zod'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import {
@@ -14,16 +21,20 @@ import {
   markJourneyViewedAfterReopenWindow,
 } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
+import { ANSWER_OPERATION_INPUT_MAX_BYTES } from '@/modules/answer/public'
 import { mergeThreadRecords, upsertOptimisticThread, useStoredThreadRecords, writeStoredThreadRecords } from './thread-records-store'
 import { mergeProjectionWithOptimisticTurns, type OptimisticTurnRecord } from './projection-merge'
 import { readAnswerThreadProjection } from './thread-readback'
 import { stopAnswerTurnRequest, type StopAnswerTurnResult } from './turn-stop'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
+  AeSearchContextSchema,
   aeSearchContextLocationLabel,
+  stableAeSearchContextKey,
   type AeSearchContext,
   type NeedTiming,
 } from '@/modules/answer/search-context'
+import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 import {
   classifyFollowUpIntent,
   type AnswerThreadRecord,
@@ -74,49 +85,104 @@ type ProjectionFetchState = {
 type ThreadRecordsUpdater =
   | readonly AnswerThreadRecord[]
   | ((current: readonly AnswerThreadRecord[]) => readonly AnswerThreadRecord[])
-const INITIAL_CLIENT_TURN_KEY_STORAGE = 'ae.answer.initial-turn-key.v1'
+
+export type PendingAnswerTurnDraft = Readonly<{
+  version: 1
+  query: string
+  clientTurnKey: string
+  searchContext?: AeSearchContext
+  threadId?: string
+}>
+
+export type PendingAnswerTurnDraftStorageError = Readonly<{
+  kind: 'storage_error'
+  operation: 'read' | 'write' | 'clear'
+  code: 'unavailable' | 'too_large'
+}>
+
+type DraftReadResult =
+  | Readonly<{ kind: 'missing' }>
+  | Readonly<{ kind: 'ok'; draft: PendingAnswerTurnDraft }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'storage_error'; error: PendingAnswerTurnDraftStorageError }>
+
+type DraftWriteResult =
+  | Readonly<{ kind: 'stored' }>
+  | Readonly<{ kind: 'storage_error'; error: PendingAnswerTurnDraftStorageError }>
+
+type InitialDraftResolution =
+  | Readonly<{ kind: 'missing' }>
+  | Readonly<{ kind: 'ready'; draft: PendingAnswerTurnDraft }>
+  | Readonly<{ kind: 'storage_error'; error: PendingAnswerTurnDraftStorageError }>
+
+const PENDING_ANSWER_TURN_DRAFT_STORAGE_KEY = 'ae.answer.initial-turn-key.v1'
+const PENDING_ANSWER_TURN_DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1_000
+const PENDING_ANSWER_TURN_DRAFT_MAX_BYTES = 8_192
+const CLIENT_TURN_KEY_PATTERN = /^[a-z0-9-]{8,128}$/iu
+const THREAD_ID_MAX_LENGTH = 160
+const pendingAnswerTurnDraftSchema = z.strictObject({
+  version: z.literal(1),
+  query: z.string().refine((query) => query.trim() === query && answerTurnQueryWithinLimit(query)),
+  clientTurnKey: z.string().regex(CLIENT_TURN_KEY_PATTERN),
+  searchContext: AeSearchContextSchema.optional(),
+  threadId: z.string()
+    .refine((threadId) => threadId.trim() === threadId)
+    .min(1)
+    .max(THREAD_ID_MAX_LENGTH)
+    .optional(),
+  savedAt: z.number().refine((savedAt) => {
+    const now = Date.now()
+    return Number.isFinite(savedAt)
+      && savedAt > 0
+      && savedAt <= now + 5 * 60 * 1_000
+      && now - savedAt <= PENDING_ANSWER_TURN_DRAFT_MAX_AGE_MS
+  }),
+}).transform(({ savedAt: _savedAt, searchContext, threadId, ...draft }) => ({
+  ...draft,
+  ...(searchContext === undefined ? {} : { searchContext }),
+  ...(threadId === undefined ? {} : { threadId }),
+} satisfies PendingAnswerTurnDraft))
 
 export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
   const navigate = useNavigate()
   const routeThreadId = threadId
-  const [newChatDraft, setNewChatDraft] = useState(false)
-  // 'New question' enters a blank-thread draft in place: while a fresh chat is
-  // composing/settling we behave as if the route were blank (transcript cleared,
-  // composer is the landing), so the new query creates and navigates to its own
-  // thread exactly like the true blank-thread path does.
-  const effectiveRouteThreadId = newChatDraft ? null : routeThreadId
+  const effectiveRouteThreadId = routeThreadId
   const initialRouteQuery = effectiveRouteThreadId === null ? (initialQuery?.trim() ?? '') : ''
+  const [initialDraftResolution] = useState<InitialDraftResolution>(() =>
+    resolveInitialDraft(initialRouteQuery, effectiveRouteThreadId),
+  )
+  const initialDraft = initialDraftResolution.kind === 'ready' ? initialDraftResolution.draft : null
   const initialLiveTurn =
-    initialRouteQuery.length > 0
-      ? ({
-          query: initialRouteQuery,
+    initialDraft === null
+      ? null
+      : ({
+          query: initialDraft.query,
           generation: 1,
-          clientTurnKey: readOrCreateInitialClientTurnKey(),
-          searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+          clientTurnKey: initialDraft.clientTurnKey,
+          searchContext: initialDraft.searchContext ?? DEFAULT_AE_SEARCH_CONTEXT,
           intent: 'refine_search',
         } satisfies LiveTurn)
-      : null
   const [fetchedProjection, setFetchedProjection] = useState<ProjectionFetchState | null>(null)
   const threads = useStoredThreadRecords()
   const threadsRef = useRef(threads)
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(initialLiveTurn)
   const generationRef = useRef(initialLiveTurn === null ? 0 : 1)
   const [streamingBusy, setStreamingBusy] = useState(initialLiveTurn !== null)
-  const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
+  const [sessionThreadId, setSessionThreadId] = useState<string | null>(initialDraft?.threadId ?? null)
   const [optimisticTurns, setOptimisticTurns] = useState<readonly OptimisticTurnRecord[]>([])
   const searchContext = DEFAULT_AE_SEARCH_CONTEXT
+  const [draftStorageError, setDraftStorageError] = useState<PendingAnswerTurnDraftStorageError | null>(
+    initialDraftResolution.kind === 'storage_error' ? initialDraftResolution.error : null,
+  )
   const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState<boolean | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [refinementComposerOpen, setRefinementComposerOpen] = useState(false)
-  const pendingThreadIdRef = useRef<string | null>(null)
+  const pendingThreadIdRef = useRef<string | null>(initialDraft?.threadId ?? null)
   const readbackSupportedTurnIdsRef = useRef(new Set<string>())
   const mobileSidebarOpenerRef = useRef<HTMLElement | null>(null)
   const routeFocusHeadingRef = useRef<HTMLHeadingElement | null>(null)
 
   useEffect(() => {
-    // A route change (coming back to a thread, or a fresh thread settling) ends
-    // any in-place blank-thread draft.
-    setNewChatDraft(false)
     setRefinementComposerOpen(false)
   }, [routeThreadId])
   useLayoutEffect(() => {
@@ -305,36 +371,72 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     query: string,
     context: AeSearchContext = searchContext,
     intent: FollowUpIntent = classifyFollowUpIntent(query, completedTurnCount),
-  ) {
-    clearInitialClientTurnKey()
+  ): boolean {
+    const draftThreadId = effectiveRouteThreadId ?? sessionThreadId ?? undefined
+    const stored = readPendingAnswerTurnDraft()
+    const reusableDraft =
+      stored.kind === 'ok' && draftMatchesTurn(stored.draft, query, context, draftThreadId)
+        ? stored.draft
+        : undefined
+    const draft = reusableDraft ?? {
+      version: 1 as const,
+      query,
+      clientTurnKey: createClientTurnKey(),
+      searchContext: context,
+      ...(draftThreadId === undefined ? {} : { threadId: draftThreadId }),
+    }
+    const saved = writePendingAnswerTurnDraft(draft)
+    if (saved.kind === 'storage_error') {
+      setDraftStorageError(saved.error)
+      return false
+    }
+    setDraftStorageError(null)
     setStreamingBusy(true)
     const nextGeneration = generationRef.current + 1
     generationRef.current = nextGeneration
     setLiveTurn({
       query,
       generation: nextGeneration,
-      clientTurnKey: createClientTurnKey(),
+      clientTurnKey: draft.clientTurnKey,
       searchContext: context,
       intent,
     })
+    return true
   }
 
   function handleSubmit(query: string, timing: NeedTiming = 'flexible', timingDate?: string) {
     setRefinementComposerOpen(false)
     const turnSearchContext = { ...searchContext, timing, ...(timingDate === undefined ? {} : { timingDate }) }
     const intent = classifyFollowUpIntent(query, completedTurnCount)
+    if (!startTurn(query, turnSearchContext, intent)) {
+      return
+    }
     captureClientProductEventOnClient('query_submitted', {
       query_length: query.length,
       search_mode: turnSearchContext.mode,
       search_location: aeSearchContextLocationLabel(turnSearchContext) ?? 'none',
     })
     emitChatFunnelEvents(buildChatSubmitFunnelEvents({ query, completedTurnCount }))
-    startTurn(query, turnSearchContext, intent)
   }
 
   function handleThreadCreated(id: string, turnMeta?: { turnId: string; turnSeq: number }) {
     pendingThreadIdRef.current = id
     setSessionThreadId(id)
+    const currentTurn = liveTurn
+    if (currentTurn !== null) {
+      const saved = writePendingAnswerTurnDraft({
+        version: 1,
+        query: currentTurn.query,
+        clientTurnKey: currentTurn.clientTurnKey,
+        searchContext: currentTurn.searchContext,
+        threadId: id,
+      })
+      if (saved.kind === 'storage_error') {
+        setDraftStorageError(saved.error)
+      } else {
+        setDraftStorageError(null)
+      }
+    }
     if (turnMeta !== undefined) {
       setLiveTurn((current) => {
         if (current === null || current.turnId === turnMeta.turnId) {
@@ -361,6 +463,9 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       return
     }
     readbackSupportedTurnIdsRef.current.add(turn.turnId)
+    if (turn.status === 'error' && liveTurn?.generation === generation) {
+      clearDraftAfterTerminal(liveTurn.clientTurnKey)
+    }
     setOptimisticTurns((current) => {
       const nextRecord = {
         threadId: threadIdForTurn,
@@ -404,22 +509,26 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       }
     }
 
-    if (
-      (outcome === 'complete' || outcome === 'stopped')
-      && effectiveRouteThreadId === null
-      && initialRouteQuery.length > 0
-    ) {
-      clearInitialClientTurnKey()
-    }
-
+    const settledClientTurnKey = liveTurn?.clientTurnKey
+    const terminalOutcome = outcome === 'complete' || outcome === 'stopped'
     const pendingId = pendingThreadIdRef.current
     if (effectiveRouteThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
-      void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })).finally(() => {
-        clearLiveTurnIfSettled(settledGeneration)
-        void refreshThreads()
-      })
+      void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true }))
+        .then(() => {
+          if (terminalOutcome) {
+            clearDraftAfterTerminal(settledClientTurnKey)
+          }
+        })
+        .finally(() => {
+          clearLiveTurnIfSettled(settledGeneration)
+          void refreshThreads()
+        })
       return
+    }
+
+    if (effectiveRouteThreadId !== null && terminalOutcome) {
+      clearDraftAfterTerminal(settledClientTurnKey)
     }
 
     clearLiveTurnIfSettled(settledGeneration)
@@ -427,6 +536,15 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
     if (effectiveRouteThreadId !== null) {
       void refreshProjection(effectiveRouteThreadId)
+    }
+  }
+
+  function clearDraftAfterTerminal(clientTurnKey: string | undefined): void {
+    const cleared = clearPendingAnswerTurnDraft(clientTurnKey)
+    if (cleared.kind === 'storage_error') {
+      setDraftStorageError(cleared.error)
+    } else {
+      setDraftStorageError(null)
     }
   }
 
@@ -457,12 +575,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     startTurn(query, retryContext, retryIntent)
   }
 
-  function handleNewQuestion() {
-    // Reset to a fresh blank thread in place (client-only): the route stays put,
-    // but the transcript, live turn, optimistic turns and composer are cleared so
-    // the next submitted query starts a brand-new thread and navigates to it.
-    clearInitialClientTurnKey()
-    setNewChatDraft(true)
+  async function handleNewQuestion(): Promise<void> {
+    const activeTurn = streamingThreadId === null
+      ? null
+      : liveTurn?.turnId !== undefined
+        ? { threadId: streamingThreadId, turnId: liveTurn.turnId }
+        : latestProjectedTurn?.status === 'pending'
+          ? { threadId: streamingThreadId, turnId: latestProjectedTurn.turnId }
+          : null
+    if (activeTurn !== null) {
+      const stopped = await handleStopPendingTurn(activeTurn.threadId, activeTurn.turnId)
+      if (stopped.kind !== 'stopped' && stopped.kind !== 'already_settled') {
+        return
+      }
+    }
+
+    const cleared = clearPendingAnswerTurnDraft()
+    setDraftStorageError(cleared.kind === 'storage_error' ? cleared.error : null)
     setStreamingBusy(false)
     generationRef.current = 0
     setLiveTurn(null)
@@ -472,6 +601,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setOptimisticTurns([])
     setRefinementComposerOpen(false)
     setMobileSidebarOpen(false)
+    await Promise.resolve(navigate({ to: '/t/new' }))
   }
 
   function handleDeleteThread(deletedThreadId: string) {
@@ -495,7 +625,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const scrollerKey = effectiveRouteThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
   const defaultScrollPosition =
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
-  const settleMessageId = liveTurn === null ? (completedTurns.at(-1)?.turnId ?? null) : null
   const followUpComposerCopy =
     showBusinessComposerControls || terminalLayoutProfile === 'data_answer'
       ? buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
@@ -514,7 +643,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     : 'lg:grid-cols-[0rem_minmax(0,1fr)]'
   const shell = (
     <div className={cn('grid h-full min-h-0 w-full bg-background motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard', sidebarGridCols)}>
-      <Dialog
+      <Sheet
         open={mobileSidebarOpen}
         onOpenChange={(isOpen) => {
           if (!isOpen) {
@@ -522,12 +651,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           }
         }}
       >
-        <DialogContent
+        <SheetContent
           id="ae-thread-mobile-sidebar"
-          className="h-dvh w-dvw max-w-none rounded-none border-0 bg-transparent p-0 shadow-none lg:hidden"
+          side="left"
+          className="h-dvh w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0 lg:hidden"
           showCloseButton={false}
-          inert={!mobileSidebarOpen}
-          aria-hidden={!mobileSidebarOpen}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             const opener = mobileSidebarOpenerRef.current
@@ -535,22 +663,9 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             if (opener?.isConnected) opener.focus()
           }}
         >
-        <div className="relative h-dvh w-dvw overflow-hidden">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute inset-0 size-auto rounded-none bg-primary/20 hover:bg-primary/20 dark:hover:bg-primary/20"
-            aria-label="Close recent questions panel"
-            tabIndex={-1}
-            onClick={closeMobileSidebar}
-          />
-        <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-background shadow-low">
-            <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4">
-              <DialogTitle className="font-heading text-base font-semibold text-foreground">
-                Recent questions
-              </DialogTitle>
-              <DialogDescription className="sr-only">Choose a recent question to reopen.</DialogDescription>
+          <SheetHeader className="border-b border-border">
+            <div className="flex min-h-11 items-center justify-between gap-3">
+              <SheetTitle className="font-heading text-base">Recent questions</SheetTitle>
               <Button
                 type="button"
                 variant="ghost"
@@ -563,23 +678,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 <XIcon aria-hidden="true" />
               </Button>
             </div>
-            <AeThreadSidebar
-              threads={threads}
-              activeThreadId={effectiveRouteThreadId}
-              visible
-              layout="mobile"
-              onDelete={handleDeleteThread}
-              onNavigate={closeMobileSidebar}
-              onNewQuestion={handleNewQuestion}
-            />
-          </div>
-        </div>
-        </DialogContent>
-      </Dialog>
+            <SheetDescription className="sr-only">Choose a recent question to reopen.</SheetDescription>
+          </SheetHeader>
+          <AeThreadSidebar
+            threads={threads}
+            activeThreadId={effectiveRouteThreadId}
+            visible
+            layout="mobile"
+            onDelete={handleDeleteThread}
+            onNavigate={closeMobileSidebar}
+            onNewQuestion={handleNewQuestion}
+          />
+        </SheetContent>
+      </Sheet>
       <AeThreadSidebar threads={threads} activeThreadId={effectiveRouteThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} onNewQuestion={handleNewQuestion} />
       <div className="flex h-full min-h-0 w-full flex-col bg-background lg:col-start-2">
         {showSidebarToggle ? (
-          <div className={cn('flex min-h-10 items-center px-4 pt-2 md:px-6', showThreadChrome && 'hidden lg:flex')}>
+          <div className={cn('mx-auto flex min-h-10 w-full max-w-2xl items-center px-4 pt-2 md:px-6', showThreadChrome && 'hidden lg:flex')}>
             <Button
               type="button"
               variant="ghost"
@@ -627,12 +742,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             key={scrollerKey}
             autoScroll={liveTurn !== null}
             defaultScrollPosition={defaultScrollPosition}
-            settleMessageId={settleMessageId}
             streaming={streamingBusy}
             showJumpButton={liveTurn !== null}
           >
             {showThreadUnavailable ? (
-              <div className="mx-auto my-12 w-full max-w-[36rem]">
+              <div className="my-12 w-full">
                 <Empty className="border border-border bg-card p-5">
                   <EmptyHeader>
                     <h1 className="text-lg font-medium tracking-tight">Thread unavailable</h1>
@@ -653,7 +767,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               </>
             ) : null}
             {hasNonAuthoritativeOptimisticTurn ? (
-              <p className="mx-auto w-full max-w-[56rem] px-4 pb-2 text-sm text-muted-foreground md:px-6" role="status">
+              <p className="w-full pb-2 text-sm text-muted-foreground" role="status">
                 Local answer preview — not authoritative until the saved answer is confirmed by readback.
               </p>
             ) : null}
@@ -671,7 +785,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               onRetry={handleRetry}
             />
             {showThreadChrome ? (
-              <div className="mx-auto w-full max-w-[56rem] px-4 pb-4 md:px-6" role="note" aria-label="Thread access and retention">
+              <div className="w-full pb-4" role="note" aria-label="Thread access and retention">
                 <p className="block text-sm text-muted-foreground">
                   Private to this browser by default. Explicit share links are read-only and remain active until revoked or this thread is deleted.
                 </p>
@@ -679,7 +793,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             ) : null}
           </AeThreadScroller>
           {!showWelcome && (terminalShortlist === null || refinementComposerOpen) ? (
-            <div className="mx-auto w-full max-w-[56rem] flex-none bg-background px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
+            <div className="mx-auto w-full max-w-2xl flex-none bg-background px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
+              {draftStorageError !== null ? (
+                <p role="alert" className="pb-2 text-sm text-red-vivid">
+                  This browser could not save the answer draft. Nothing was sent; try again.
+                </p>
+              ) : null}
               <AeQueryPanel
                 onSubmit={handleSubmit}
                 busy={streamingBusy}
@@ -700,15 +819,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               className={cn('absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-background px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard', !showWelcome && 'pointer-events-none invisible opacity-0')}
               aria-hidden={!showWelcome}
             >
-              <div className="mx-auto flex w-full min-w-0 max-w-[44rem] flex-col gap-8">
+              <div className="mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-8">
                 <AeChatWelcome />
                 {showWelcome ? (
-                  <AeQueryPanel
-                    onSubmit={handleSubmit}
-                    busy={streamingBusy}
-                    searchContext={searchContext}
-                    showExamples
-                  />
+                  <>
+                    {draftStorageError !== null ? (
+                      <p role="alert" className="text-sm text-red-vivid">
+                        This browser could not save the answer draft. Nothing was sent; try again.
+                      </p>
+                    ) : null}
+                    <AeQueryPanel
+                      onSubmit={handleSubmit}
+                      busy={streamingBusy}
+                      searchContext={searchContext}
+                      showExamples
+                      {...(initialRouteQuery.length === 0 ? {} : { defaultValue: initialRouteQuery })}
+                    />
+                  </>
                 ) : null}
               </div>
             </div>
@@ -743,31 +870,192 @@ function createClientTurnKey(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
-function readOrCreateInitialClientTurnKey(): string {
+function resolveInitialDraft(query: string, routeThreadId: string | null): InitialDraftResolution {
   if (typeof window === 'undefined') {
-    return createClientTurnKey()
+    return routeThreadId !== null || !answerTurnQueryWithinLimit(query)
+      ? { kind: 'missing' }
+      : {
+          kind: 'ready',
+          draft: {
+            version: 1,
+            query,
+            clientTurnKey: createClientTurnKey(),
+            searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+          },
+        }
   }
-  try {
-    const stored = window.sessionStorage.getItem(INITIAL_CLIENT_TURN_KEY_STORAGE)
-    if (stored !== null && /^[a-z0-9-]{8,128}$/iu.test(stored)) {
+  const stored = readPendingAnswerTurnDraft()
+  if (routeThreadId !== null) {
+    if (stored.kind === 'storage_error') {
       return stored
     }
-    const key = createClientTurnKey()
-    window.sessionStorage.setItem(INITIAL_CLIENT_TURN_KEY_STORAGE, key)
-    return key
+    if (stored.kind !== 'ok') {
+      return { kind: 'missing' }
+    }
+    if (stored.draft.threadId === routeThreadId) {
+      return { kind: 'ready', draft: stored.draft }
+    }
+    const cleared = clearPendingAnswerTurnDraft()
+    return cleared.kind === 'stored'
+      ? { kind: 'missing' }
+      : { kind: 'storage_error', error: cleared.error }
+  }
+  if (query.length === 0) {
+    return stored.kind === 'ok'
+      ? { kind: 'ready', draft: stored.draft }
+      : stored.kind === 'storage_error'
+        ? stored
+        : { kind: 'missing' }
+  }
+  if (!answerTurnQueryWithinLimit(query)) {
+    return { kind: 'missing' }
+  }
+  if (stored.kind === 'ok' && stored.draft.query === query) {
+    return { kind: 'ready', draft: stored.draft }
+  }
+
+  const draft: PendingAnswerTurnDraft = {
+    version: 1,
+    query,
+    clientTurnKey: createClientTurnKey(),
+    searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+  }
+  const saved = writePendingAnswerTurnDraft(draft)
+  return saved.kind === 'stored'
+    ? { kind: 'ready', draft }
+    : { kind: 'storage_error', error: saved.error }
+}
+
+function readPendingAnswerTurnDraft(): DraftReadResult {
+  const storage = browserSessionStorage()
+  if (storage === undefined) {
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'read', code: 'unavailable' },
+    }
+  }
+  let raw: string | null
+  try {
+    raw = storage.getItem(PENDING_ANSWER_TURN_DRAFT_STORAGE_KEY)
   } catch {
-    return createClientTurnKey()
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'read', code: 'unavailable' },
+    }
+  }
+  if (raw === null) {
+    return { kind: 'missing' }
+  }
+  if (raw.length > PENDING_ANSWER_TURN_DRAFT_MAX_BYTES) {
+    forgetPendingAnswerTurnDraft(storage)
+    return { kind: 'invalid' }
+  }
+
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    forgetPendingAnswerTurnDraft(storage)
+    return { kind: 'invalid' }
+  }
+  const parsed = pendingAnswerTurnDraftSchema.safeParse(value)
+  if (!parsed.success) {
+    forgetPendingAnswerTurnDraft(storage)
+    return { kind: 'invalid' }
+  }
+  return { kind: 'ok', draft: parsed.data }
+}
+
+function writePendingAnswerTurnDraft(draft: PendingAnswerTurnDraft): DraftWriteResult {
+  const storage = browserSessionStorage()
+  if (storage === undefined) {
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'write', code: 'unavailable' },
+    }
+  }
+  const record = { ...draft, savedAt: Date.now() }
+  const serialized = JSON.stringify(record)
+  if (serialized.length > PENDING_ANSWER_TURN_DRAFT_MAX_BYTES) {
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'write', code: 'too_large' },
+    }
+  }
+  try {
+    storage.setItem(PENDING_ANSWER_TURN_DRAFT_STORAGE_KEY, serialized)
+    return { kind: 'stored' }
+  } catch {
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'write', code: 'unavailable' },
+    }
   }
 }
 
-function clearInitialClientTurnKey(): void {
-  if (typeof window === 'undefined') {
-    return
+function clearPendingAnswerTurnDraft(expectedClientTurnKey?: string): DraftWriteResult {
+  const storage = browserSessionStorage()
+  if (storage === undefined) {
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'clear', code: 'unavailable' },
+    }
+  }
+  if (expectedClientTurnKey !== undefined) {
+    const stored = readPendingAnswerTurnDraft()
+    if (stored.kind === 'storage_error') {
+      return { kind: 'storage_error', error: stored.error }
+    }
+    if (stored.kind === 'ok' && stored.draft.clientTurnKey !== expectedClientTurnKey) {
+      return { kind: 'stored' }
+    }
   }
   try {
-    window.sessionStorage.removeItem(INITIAL_CLIENT_TURN_KEY_STORAGE)
+    storage.removeItem(PENDING_ANSWER_TURN_DRAFT_STORAGE_KEY)
+    return { kind: 'stored' }
   } catch {
-    // Continue without storage; the current in-memory submission still has its key.
+    return {
+      kind: 'storage_error',
+      error: { kind: 'storage_error', operation: 'clear', code: 'unavailable' },
+    }
+  }
+}
+
+function forgetPendingAnswerTurnDraft(storage: Storage): void {
+  try {
+    storage.removeItem(PENDING_ANSWER_TURN_DRAFT_STORAGE_KEY)
+  } catch {
+    // Refusing malformed state is still safe when browser storage cannot clear it.
+  }
+}
+
+function answerTurnQueryWithinLimit(query: string): boolean {
+  if (query.length === 0) return false
+  if (query.length <= QUERY_MAX_LENGTH) return true
+  return query.trimStart().startsWith('{"operationRef"')
+    && new TextEncoder().encode(query).byteLength <= ANSWER_OPERATION_INPUT_MAX_BYTES
+}
+
+function draftMatchesTurn(
+  draft: PendingAnswerTurnDraft,
+  query: string,
+  searchContext: AeSearchContext,
+  threadId: string | undefined,
+): boolean {
+  return draft.query === query
+    && (draft.threadId ?? undefined) === threadId
+    && stableAeSearchContextKey(draft.searchContext ?? DEFAULT_AE_SEARCH_CONTEXT) === stableAeSearchContextKey(searchContext)
+}
+
+
+function browserSessionStorage(): Storage | undefined {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+  try {
+    return window.sessionStorage
+  } catch {
+    return undefined
   }
 }
 

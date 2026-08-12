@@ -1,75 +1,575 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
-import { useRef } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { brandNonEmpty } from '@/modules/common/ids'
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useRef } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { brandNonEmpty } from "@/modules/common/ids";
+import { isRecord } from "@/modules/common/is-record";
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import type { OwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
-import { readOwnerOfferingSupplyServer, saveOwnerOfferingServer, type OwnerOfferingSupplyReadResult } from '@/components/ae/offerings/owner-offering.functions'
-import { AeSupplyFunnel } from '@/components/ae/supply/AeSupplyFunnel'
-import { advanceOwnerSupplyStepServer, publishOwnerCapabilityServer, readOwnerSupplyFunnelServer, runOwnerSupplyReadinessServer, runOwnerSupplyTestServer } from '@/modules/capability-supply/supply-funnel.functions'
-import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { AeOperatorShell } from "@/components/ae/layout/AeOperatorShell";
+import type { OwnerOfferingEditorValue } from "@/components/ae/offerings/AeOwnerOfferings";
+import {
+  readOwnerOfferingSupplyServer,
+  saveOwnerOfferingServer,
+  type OwnerOfferingSupplyReadResult,
+} from "@/components/ae/offerings/owner-offering.functions";
+import { AeSupplyFunnel } from "@/components/ae/supply/AeSupplyFunnel";
+import type {
+  SupplyEndpointConfigValue,
+  SupplyEndpointDocumentPreflight,
+  SupplyPublicationImport,
+} from "@/components/ae/supply/AeSupplyEndpointConfigStep";
+import {
+  filterOwnerSupplyAuthorityOptions,
+  admitOwnerCapabilityServer,
+  readOwnerSourceDraftServer,
+  readOwnerSupplyFunnelServer,
+  readOwnerProviderConnectionsServer,
+  ownerSupplyActionContext,
+  preflightOwnerOpenApiDocumentServer,
+  preflightOwnerCapabilityServer,
+  saveOwnerSourceDraftServer,
+  recheckOwnerCapabilityServer,
+  republishOwnerCapabilityServer,
+  runOwnerSupplyReadinessServer,
+  runOwnerSupplyTestServer,
+  withdrawOwnerCapabilityServer,
+  type OwnerSourceDraftReadback,
+  type OwnerSupplyAdmissionResult,
+  type OwnerSupplyCommandResult,
+  type OwnerSupplyMaintenanceInput,
+  type SupplyFunnelActionContext,
+  type SupplyFunnelRefusal,
+  type SupplyFunnelStepCompletion,
+} from "@/modules/capability-supply/supply-funnel.functions";
+import { operatorRouteOptions } from "@/lib/operator/route-options";
 
-export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
+export const Route = createFileRoute("/_operator/owner/supply/$offeringRef")({
   ...operatorRouteOptions,
   loader: async ({ params }) => {
-    const [supply, offerings] = await Promise.all([readOwnerSupplyFunnelServer(), readOwnerOfferingSupplyServer()])
-    const source = offerings.kind === 'available' ? offerings.offerings.find((item) => item.offeringRef === params.offeringRef) : undefined
-    return { supply, offerings, source }
+    const offerings = await readOwnerOfferingSupplyServer();
+    if (offerings.kind !== "available") {
+      return {
+        supply: offerings,
+        offerings,
+        source: undefined,
+        durableOffering: undefined,
+        authorityOptions: [],
+        sourceDraft: { kind: "not_found" as const },
+      };
+    }
+    const [supply, authorityOptions, sourceDraft] = await Promise.all([
+      readOwnerSupplyFunnelServer({
+        data: { businessId: offerings.businessId },
+      }),
+      readOwnerProviderConnectionsServer(),
+      readOwnerSourceDraftServer({
+        data: {
+          businessId: offerings.businessId,
+          offeringRef: params.offeringRef,
+        },
+      }),
+    ]);
+    const source = offerings.offerings.find(
+      (item) => item.offeringRef === params.offeringRef,
+    );
+    const durableOffering =
+      supply.kind === "available"
+        ? supply.offerings.find(
+            (item) => item.offeringRef === params.offeringRef,
+          )
+        : undefined;
+    return {
+      supply,
+      offerings,
+      source,
+      durableOffering,
+      authorityOptions,
+      sourceDraft,
+    };
   },
-  head: () => ({ meta: [{ title: 'Get your service ready | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({
+    meta: [
+      { title: "Get your service ready | Agentic Economy" },
+      { name: "robots", content: "noindex" },
+    ],
+  }),
   component: OwnerSupplyDetailRoute,
-})
-
+});
 function OwnerSupplyDetailRoute() {
-  const { offeringRef } = Route.useParams()
-  const result = Route.useLoaderData()
-  const requestKey = useRef<string | undefined>(undefined)
-  const save = useServerFn(saveOwnerOfferingServer)
-  const advance = useServerFn(advanceOwnerSupplyStepServer)
-  const readiness = useServerFn(runOwnerSupplyReadinessServer)
-  const test = useServerFn(runOwnerSupplyTestServer)
-  const publish = useServerFn(publishOwnerCapabilityServer)
-  const source = result.source
-  const offerings = result.offerings
-  if (result.supply.kind !== 'available' || offerings.kind !== 'available' || source === undefined || source.revision === undefined) {
-    return <AeOperatorShell operatorRole="owner" title="Get your service ready" description="We could not load this service. Return to your services and try again." currentPath="/owner/supply"><div className="grid gap-3"><Alert><AlertTitle>Service unavailable</AlertTitle><AlertDescription>We could not load this service. Return to your services and try again.</AlertDescription></Alert><Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/owner/supply">Return to your services</Link></Button></div></AeOperatorShell>
+  const result = Route.useLoaderData();
+  const router = useRouter();
+  const requestKey = useRef<string | undefined>(undefined);
+  const sourceDraftRevision = useRef(
+    result.sourceDraft.kind === "available" ? result.sourceDraft.revision : 0,
+  );
+  const sourceDraftDigest = useRef(
+    result.sourceDraft.kind === "available"
+      ? result.sourceDraft.sourceDigest
+      : undefined,
+  );
+  const preflightDocument = useServerFn(preflightOwnerOpenApiDocumentServer);
+  const preflight = useServerFn(preflightOwnerCapabilityServer);
+  const saveSourceDraft = useServerFn(saveOwnerSourceDraftServer);
+  const admit = useServerFn(admitOwnerCapabilityServer);
+  const readiness = useServerFn(runOwnerSupplyReadinessServer);
+  const test = useServerFn(runOwnerSupplyTestServer);
+  const recheck = useServerFn(recheckOwnerCapabilityServer);
+  const withdraw = useServerFn(withdrawOwnerCapabilityServer);
+  const republish = useServerFn(republishOwnerCapabilityServer);
+  const durableOffering = result.durableOffering;
+  const editorSource = result.source;
+  if (result.supply.kind === "incomplete") {
+    return (
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Get your service ready"
+        description="We could not load this service completely."
+        currentPath="/owner/supply"
+      >
+        <div className="grid gap-3">
+          <Alert>
+            <AlertTitle>Service readback needs repair</AlertTitle>
+            <AlertDescription>
+              The owner readback reached its bounded limit before this operation
+              could be joined. Return to services and reload.
+            </AlertDescription>
+          </Alert>
+          <Button
+            asChild
+            variant="secondary"
+            className="min-h-11 justify-self-start"
+          >
+            <Link to="/owner/supply">Return to your services</Link>
+          </Button>
+        </div>
+      </AeOperatorShell>
+    );
   }
-  const revision = source.revision
-  const initialOffering = toEditorValue(source)
+  if (
+    result.supply.kind !== "available" ||
+    result.offerings.kind !== "available" ||
+    durableOffering === undefined ||
+    durableOffering.sourceHash === undefined ||
+    editorSource === undefined ||
+    editorSource.revision === undefined
+  ) {
+    return (
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Get your service ready"
+        description="We could not load this service. Return to your services and try again."
+        currentPath="/owner/supply"
+      >
+        <div className="grid gap-3">
+          <Alert>
+            <AlertTitle>Service unavailable</AlertTitle>
+            <AlertDescription>
+              We could not load this service. Return to your services and try
+              again.
+            </AlertDescription>
+          </Alert>
+          <Button
+            asChild
+            variant="secondary"
+            className="min-h-11 justify-self-start"
+          >
+            <Link to="/owner/supply">Return to your services</Link>
+          </Button>
+        </div>
+      </AeOperatorShell>
+    );
+  }
+  const businessId = result.offerings.businessId;
+  const currentOfferingRef = durableOffering.offeringRef;
+  const offeringRevision = durableOffering.revision;
+  const initialOffering = toEditorValue(editorSource);
+  const initialSource = toEndpointConfigValue(result.sourceDraft);
+  const initialDocumentPreflight = toDocumentPreflight(result.sourceDraft);
+  const context = ownerSupplyActionContext(businessId, durableOffering);
+  const maintenance =
+    (
+      serverFn: (input: {
+        data: OwnerSupplyMaintenanceInput;
+      }) => Promise<OwnerSupplyCommandResult>,
+      reasonCode: string,
+    ) =>
+    async (actionContext: SupplyFunnelActionContext) =>
+      serverFn({
+        data: {
+          ...actionContext,
+          operationKey: `owner-supply:${reasonCode}:${crypto.randomUUID()}`,
+          correlationId: `owner-supply:${businessId}:${currentOfferingRef}`,
+          reasonCode,
+          evidenceRefs: ["owner-supply:funnel"],
+        },
+      });
   return (
-    <AeOperatorShell operatorRole="owner" title={source.revision.name} description="Describe what you do, set a price, test it, and go live." currentPath="/owner/supply">
+    <AeOperatorShell
+      operatorRole="owner"
+      title={durableOffering.name}
+      description="Describe your service, admit its API, check readiness, and run a contract test."
+      currentPath="/owner/supply"
+    >
       <AeSupplyFunnel
-        businessId={offerings.businessId}
-        offeringRef={offeringRef}
+        businessId={businessId}
+        offering={durableOffering}
+        {...(initialSource === undefined ? {} : { initialSource })}
+        {...(initialDocumentPreflight === undefined
+          ? {}
+          : { initialDocumentPreflight })}
         initialOffering={initialOffering}
+        authorityOptions={filterOwnerSupplyAuthorityOptions(
+          businessId,
+          result.authorityOptions,
+        )}
         callbacks={{
           saveOffering: async (value) => {
-            requestKey.current ??= crypto.randomUUID()
-            const saved = await save({ data: { businessId: offerings.businessId, requestKey: requestKey.current, value } })
-            if (saved.kind === 'saved') requestKey.current = undefined
-            return saved
+            requestKey.current ??= crypto.randomUUID();
+            const saved = await saveOwnerOfferingServer({
+              data: { businessId, requestKey: requestKey.current, value },
+            });
+            if (saved.kind === "saved") requestKey.current = undefined;
+            return saved;
           },
-          advance: async (step, value) => advance({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:${step}`, value: { step, ...value } } }),
-          runReadiness: async (value) => readiness({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:readiness`, value } }),
-          runTest: async (value) => test({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:test`, value } }),
-          publish: async (value) => publish({ data: { businessId: offerings.businessId, offeringRef, revision: source.currentRevision, sourceHash: revision.sourceHash, operationKey: `owner-supply:${offerings.businessId}:${offeringRef}:${source.currentRevision}:publish`, value } }),
+          saveSourceDraft: async (
+            publicationSource: SupplyPublicationImport,
+          ) => {
+            const saved = await saveSourceDraft({
+              data: {
+                businessId,
+                offeringRef: currentOfferingRef,
+                offeringRevision,
+                expectedRevision: sourceDraftRevision.current,
+                operationKey: `owner-supply:source-draft:${crypto.randomUUID()}`,
+                source: publicationSource,
+              },
+            });
+            if (saved.kind === "saved" || saved.kind === "replayed") {
+              sourceDraftRevision.current = saved.revision;
+              sourceDraftDigest.current = saved.sourceDigest;
+              return {
+                kind: saved.kind,
+                revision: saved.revision,
+                sourceDigest: saved.sourceDigest,
+              };
+            }
+            if (saved.kind === "revision_conflict") {
+              return {
+                kind: "refused",
+                reason: "revision_conflict",
+                fix: "This source draft changed elsewhere. Reload the latest endpoint details before continuing.",
+              };
+            }
+            if (saved.kind === "refused") {
+              return {
+                kind: "refused",
+                reason: saved.reason,
+                fix: preflightFix(saved.reason),
+              };
+            }
+            return {
+              kind: "refused",
+              reason: "source_unavailable",
+              fix: "The source draft response was incomplete. Reload and try again.",
+            };
+          },
+          preflightDocument: async (document) =>
+            preflightDocument({
+              data: {
+                businessId,
+                offeringRef: currentOfferingRef,
+                offeringRevision,
+                document,
+              },
+            }),
+          preflight: async () => {
+            const sourceDigest = sourceDraftDigest.current;
+            if (sourceDigest === undefined || sourceDraftRevision.current < 1) {
+              return {
+                kind: "refused",
+                reason: "source_draft_missing",
+                fix: preflightFix("source_draft_missing"),
+              };
+            }
+            const checked = await preflight({
+              data: {
+                businessId,
+                offeringRef: currentOfferingRef,
+                offeringRevision,
+                sourceDraftRevision: sourceDraftRevision.current,
+                sourceDigest,
+                evidenceRefs: ["owner-supply:funnel"],
+              },
+            });
+            if (checked.kind === "refused")
+              return {
+                kind: "refused",
+                reason: checked.reason,
+                fix: preflightFix(checked.reason),
+              };
+            return { kind: "prepared", prepared: checked.prepared };
+          },
+          admit: async () => {
+            const sourceDigest = sourceDraftDigest.current;
+            if (sourceDigest === undefined) {
+              return ownerAdmissionCompletion(
+                { kind: "refused", reason: "source_draft_unprepared" },
+                currentOfferingRef,
+                offeringRevision,
+              );
+            }
+            const admission = await admit({
+              data: {
+                businessId,
+                offeringRef: currentOfferingRef,
+                offeringRevision,
+                offeringSourceHash: durableOffering.sourceHash,
+                sourceDraftRevision: sourceDraftRevision.current,
+                sourceDigest,
+                operationKey: `owner-supply:admission:${crypto.randomUUID()}`,
+                correlationId: `owner-supply:${businessId}:${currentOfferingRef}`,
+                reasonCode: "owner_supply_admission",
+                evidenceRefs: ["owner-supply:funnel"],
+              },
+            });
+            return ownerAdmissionCompletion(
+              admission,
+              currentOfferingRef,
+              offeringRevision,
+            );
+          },
+          runReadiness: async (actionContext) =>
+            readiness({
+              data: {
+                ...actionContext,
+                operationKey: `owner-supply:readiness:${crypto.randomUUID()}`,
+              },
+            }),
+          runTest: async (actionContext) =>
+            test({
+              data: {
+                ...actionContext,
+                operationKey: `owner-supply:test:${crypto.randomUUID()}`,
+              },
+            }),
+          ...(context === undefined
+            ? {}
+            : {
+                recheck: maintenance(recheck, "owner_supply_recheck"),
+                withdraw: maintenance(withdraw, "owner_supply_withdraw"),
+                republish: maintenance(republish, "owner_supply_republish"),
+              }),
+          onReload: () => router.invalidate(),
         }}
       />
     </AeOperatorShell>
-  )
+  );
 }
 
-function toEditorValue(source: Extract<OwnerOfferingSupplyReadResult, { kind: 'available' }>['offerings'][number]): OwnerOfferingEditorValue {
-  if (source.revision === undefined) throw new Error('Offering revision missing')
-  return {
-    offeringRef: brandNonEmpty(source.offeringRef, 'OfferingRef'),
-    expectedRevision: source.currentRevision,
-    name: source.revision.name, category: source.revision.category, summary: source.revision.summary,
-    serviceAreaSummary: source.revision.serviceAreaSummary ?? '', availabilitySummary: source.revision.availabilitySummary ?? '', pricingSummary: source.revision.pricingSummary ?? '',
-    price: source.revision.price, status: source.status,
-    accessPaths: source.accessPaths.map((path) => ({ accessPathRef: path.accessPathRef, status: path.status, descriptor: path.descriptor })),
+function ownerAdmissionCompletion(
+  result: OwnerSupplyAdmissionResult,
+  offeringRef: string,
+  revision: number,
+): SupplyFunnelStepCompletion {
+  if (result.kind === "refused") {
+    return {
+      step: "admission",
+      state: "refused",
+      offeringRef,
+      revision,
+      refusal: mapAdmissionRefusal(result.reason),
+    };
   }
+  return {
+    step: "admission",
+    state: "completed",
+    offeringRef,
+    revision,
+    publicationRef: result.publicationRef,
+    operationRef: result.operationRef,
+    message:
+      result.kind === "replayed"
+        ? "The existing publication was admitted again."
+        : "The API source was admitted and linked to this catalog offering.",
+  };
+}
+
+function toEndpointConfigValue(
+  readback: OwnerSourceDraftReadback,
+): SupplyEndpointConfigValue | undefined {
+  if (readback.kind !== "available") return undefined;
+  let source: SupplyPublicationImport;
+  try {
+    const parsed: unknown = JSON.parse(readback.sourceJson);
+    if (!isRecord(parsed) || typeof parsed.kind !== "string") return undefined;
+    source = parsed as SupplyPublicationImport;
+  } catch {
+    return undefined;
+  }
+  if (source.kind === "ae_envelope") return undefined;
+  const common = {
+    sourceRevision: source.sourceRevision,
+    contract: source.contract,
+    commercial: source.commercial,
+    evidenceRefs: source.evidenceRefs,
+    requestTimeoutMs: source.commercial.requestTimeoutMs,
+    authority: source.commercial.authority,
+  };
+  if (source.kind === "openapi_http") {
+    return {
+      sourceKind: source.kind,
+      ...common,
+      documentJson: JSON.stringify(source.document, null, 2),
+      operation: source.operation,
+      fixedQuery: source.fixedQuery ?? [],
+    };
+  }
+  if (source.kind === "mcp") {
+    return {
+      sourceKind: source.kind,
+      ...common,
+      serverUrl: source.serverUrl,
+      toolJson: JSON.stringify(source.tool, null, 2),
+      protocolVersion: source.protocolVersion,
+    };
+  }
+  if (source.kind === "agent_plugin_mcp") {
+    return {
+      sourceKind: source.kind,
+      ...common,
+      manifestJson: JSON.stringify(source.manifest, null, 2),
+      serverName: source.serverName,
+      toolJson: JSON.stringify(source.tool, null, 2),
+      protocolVersion: source.protocolVersion,
+    };
+  }
+  return {
+    sourceKind: source.kind,
+    ...common,
+    resourceJson: JSON.stringify(source.resource, null, 2),
+  };
+}
+
+function toDocumentPreflight(
+  readback: OwnerSourceDraftReadback,
+): SupplyEndpointDocumentPreflight | undefined {
+  if (readback.kind !== "available" || readback.preflight.openApi === undefined)
+    return undefined;
+  return {
+    kind: "preflighted",
+    sourceDigest: readback.preflight.openApi.sourceDigest,
+    outcomes: readback.preflight.openApi.outcomes,
+    truncated: readback.preflight.openApi.truncated,
+  };
+}
+
+function preflightFix(reason: string): string {
+  switch (reason) {
+    case "source_invalid":
+      return "Provide a complete canonical source with valid JSON and source-specific fields.";
+    case "source_draft_missing":
+      return "Save the endpoint source before continuing.";
+    case "source_draft_stale":
+      return "This source changed elsewhere. Reload the latest endpoint details before continuing.";
+    case "source_draft_unprepared":
+      return "AE has not finished checking this source. Save it again and wait for the source check to complete.";
+    case "source_unavailable":
+      return "AE could not read the current source draft. Reload and try again.";
+    case "source_too_large":
+    case "contract_too_large":
+      return "Reduce the source or schema material below AE’s bounded size limit.";
+    case "source_revision_invalid":
+      return "Use a non-empty source revision with the supported length and characters.";
+    case "pricing_config_invalid":
+    case "price_unavailable":
+      return "Make the durable paid amount match the offering price exactly.";
+    case "contract_invalid":
+    case "schema_missing":
+      return "Provide complete request and response JSON schemas with output evidence.";
+    case "source_version_unsupported":
+      return "Use an OpenAPI 3.1 document or the protocol version supported by this source.";
+    case "selector_invalid":
+    case "operation_not_found":
+      return "Choose an operation path and method that exist in the submitted source.";
+    case "openapi_query_parameter_definition_unsupported":
+      return "Use direct scalar or scalar-array query parameters and omit OpenAPI Parameter.content.";
+    case "openapi_query_parameter_serialization_unsupported":
+      return "Use query style=form with boolean explode and allowReserved=false.";
+    case "openapi_query_parameter_schema_unsupported":
+      return "Use scalar or one-dimensional scalar-array query schemas with supported form serialization.";
+    case "openapi_path_parameter_required":
+      return "Declare every path parameter with required=true and a matching {name} path placeholder.";
+    case "openapi_path_parameter_serialization_unsupported":
+      return "Use simple scalar or one-dimensional scalar-array path serialization.";
+    case "openapi_header_parameter_unsafe":
+      return "Remove reserved credential/AE headers or declare a supported security scheme.";
+    case "openapi_header_parameter_serialization_unsupported":
+      return "Use non-secret simple scalar or scalar-array headers.";
+    case "openapi_request_body_parameter_mix_unsupported":
+      return "Use either a JSON POST body or guarded query/path/header mappings, not both.";
+    case "openapi_response_status_unsupported":
+      return "Declare one explicit 2xx JSON response for this operation.";
+    case "openapi_media_type_unsupported":
+      return "Use application/json or an application +json media type.";
+    case "openapi_operation_unsupported":
+      return "Select a guarded GET query/path/header operation or a JSON POST body.";
+    case "transport_unsupported":
+    case "target_not_public":
+      return "Use one public HTTPS endpoint without private or local addressing.";
+    case "commercial_metadata_inconsistent":
+      return "Correct the offering, binding, authority, timeout, and evidence metadata.";
+    case "payment_required_invalid":
+      return "Provide a valid x402 PaymentRequired challenge and exact payment metadata.";
+    default:
+      return `AE refused this source as ${reason}. Correct the named source rule and try again.`;
+  }
+}
+
+function mapAdmissionRefusal(reason: string): SupplyFunnelRefusal {
+  if (reason === "source_revision_invalid") return "revision_changed";
+  if (reason === "catalog_offering_invalid" || reason === "offering_invalid")
+    return "invalid_offering";
+  if (reason === "provenance_invalid") return "authorization_denied";
+  if (reason === "source_draft_missing") return "source_unavailable";
+  if (reason === "source_draft_stale") return "revision_changed";
+  if (reason === "source_draft_unprepared") return "source_invalid";
+  if (
+    reason === "contract_too_large" ||
+    reason === "contract_invalid" ||
+    reason === "contract_integrity_failure"
+  )
+    return "source_invalid";
+  if (reason === "binding_invalid" || reason === "binding_identity_conflict")
+    return "adapter_config_invalid";
+  if (reason === "connection_authority_stale") return "authority_stale";
+  if (reason === "registration_changed") return "incompatible_revision";
+  return reason as SupplyFunnelRefusal;
+}
+
+function toEditorValue(
+  source: Extract<
+    OwnerOfferingSupplyReadResult,
+    { kind: "available" }
+  >["offerings"][number],
+): OwnerOfferingEditorValue {
+  if (source.revision === undefined)
+    throw new Error("Offering revision missing");
+  return {
+    offeringRef: brandNonEmpty(source.offeringRef, "OfferingRef"),
+    expectedRevision: source.currentRevision,
+    name: source.revision.name,
+    category: source.revision.category,
+    summary: source.revision.summary,
+    serviceAreaSummary: source.revision.serviceAreaSummary ?? "",
+    availabilitySummary: source.revision.availabilitySummary ?? "",
+    pricingSummary: source.revision.pricingSummary ?? "",
+    price: source.revision.price,
+    status: source.status,
+    accessPaths: source.accessPaths.map((path) => ({
+      accessPathRef: path.accessPathRef,
+      status: path.status,
+      descriptor: path.descriptor,
+    })),
+  };
 }

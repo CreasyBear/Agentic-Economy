@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import {
   Dialog,
   DialogContent,
@@ -8,7 +10,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
 import {
   emitWave1JourneyEvent,
   getOrCreatePseudonymousJourneyId,
@@ -117,14 +118,21 @@ export function AeExportPreview({
         </div>
 
         <div className="grid gap-2 rounded-md border border-border bg-card p-3 print:hidden">
-          <AeCheckboxField
-            id="sanitized-share"
-            label="Sanitized share"
-            description="On by default. Private links, access details, and personal information stay out."
-            checked={preview.sanitized}
-            disabled
-            onCheckedChange={() => undefined}
-          />
+          <FieldGroup>
+            <Field orientation="horizontal" data-disabled>
+              <Checkbox
+                id="sanitized-share"
+                checked={preview.sanitized}
+                disabled
+                aria-describedby="sanitized-share-description"
+                onCheckedChange={() => undefined}
+              />
+              <FieldContent>
+                <FieldLabel htmlFor="sanitized-share" className="min-h-11 items-center">Sanitized share</FieldLabel>
+                <FieldDescription id="sanitized-share-description">On by default. Private links, access details, and personal information stay out.</FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
         </div>
 
         {current ? null : (
@@ -135,20 +143,26 @@ export function AeExportPreview({
           </div>
         )}
 
-        <fieldset className="grid gap-3 print:hidden" disabled={!current}>
-          <legend className="mb-1 font-heading text-base font-semibold text-foreground">Included fields</legend>
+        <FieldSet className="grid gap-3 print:hidden" disabled={!current}>
+          <FieldLegend className="mb-1 font-heading text-base font-semibold text-foreground">Included fields</FieldLegend>
           {preview.fields.map((field) => (
-            <AeCheckboxField
-              key={field.id}
-              id={field.id}
-              label={field.label}
-              description={field.value}
-              checked={field.selected}
-              disabled={!current}
-              onCheckedChange={(checked) => updateField(field.id, checked)}
-            />
+            <FieldGroup key={field.id}>
+              <Field orientation="horizontal" {...(!current ? { 'data-disabled': true } : {})}>
+                <Checkbox
+                  id={field.id}
+                  checked={field.selected}
+                  disabled={!current}
+                  aria-describedby={`${field.id}-description`}
+                  onCheckedChange={(checked) => updateField(field.id, checked === true)}
+                />
+                <FieldContent>
+                  <FieldLabel htmlFor={field.id} className="min-h-11 items-center">{field.label}</FieldLabel>
+                  <FieldDescription id={`${field.id}-description`}>{field.value}</FieldDescription>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
           ))}
-        </fieldset>
+        </FieldSet>
 
         <pre
           aria-label="Export preview text"

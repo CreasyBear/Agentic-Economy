@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
-import { Message, MessageContent } from '@/components/ai-elements/message'
+import { Bubble, BubbleContent } from '@/components/ui/bubble'
+import { Message, MessageContent } from '@/components/ui/message'
 import { neutralizeBidiFormattingControls } from '@/modules/answer/public'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import { formatTurnQueryLabel } from '@/modules/answer-thread/public'
@@ -17,11 +18,21 @@ export function AeThreadTurnQueryHeader({ query, intent, seq, actions }: AeThrea
   const displayLabel = neutralizeBidiFormattingControls(label.text)
 
   return (
-    <header className="flex justify-end">
-      <Message from="user" className="max-w-[min(36rem,92%)]">
+    <header>
+      <Message align="end">
         <MessageContent>
-          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-heading text-base font-semibold text-foreground">{displayLabel}</p>
-          {actions}
+          <Bubble align="end" variant="muted">
+            <BubbleContent>
+              <p
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+                className="whitespace-pre-wrap"
+              >
+                {displayLabel}
+              </p>
+              {actions}
+            </BubbleContent>
+          </Bubble>
         </MessageContent>
       </Message>
     </header>

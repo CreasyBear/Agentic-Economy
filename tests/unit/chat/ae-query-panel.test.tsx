@@ -43,7 +43,7 @@ describe('AeQueryPanel', () => {
 
     expect(screen.getByPlaceholderText('Ask a follow-up or try another live data lookup')).toBeTruthy()
     expect(screen.queryByText('When do you need this?')).toBeNull()
-    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'When do you need this?' })).toBeNull()
   })
 
   it('hides the timing choice during a turn and restores the prior selection when idle', async () => {
@@ -54,16 +54,18 @@ describe('AeQueryPanel', () => {
     const panel = (busy: boolean) => <AeQueryPanel onSubmit={onSubmit} showExamples={false} busy={busy} />
     const view = render(panel(false))
 
-    fireEvent.click(screen.getByRole('radio', { name: 'This week' }))
-    expect(screen.getByRole('radio', { name: 'This week' }).getAttribute('aria-checked')).toBe('true')
+    const timing = screen.getByRole('combobox', { name: 'When do you need this?' })
+    fireEvent.click(timing)
+    fireEvent.click(screen.getByRole('option', { name: 'This week' }))
+    expect(timing.textContent).toContain('This week')
 
     view.rerender(panel(true))
-    expect(screen.queryByRole('radiogroup')).toBeNull()
-    expect(screen.queryAllByRole('radio')).toEqual([])
+    expect(screen.queryByRole('combobox', { name: 'When do you need this?' })).toBeNull()
+    expect(screen.queryByRole('option')).toBeNull()
     expect(screen.queryByText('When do you need this?')).toBeNull()
 
     view.rerender(panel(false))
-    expect(screen.getByRole('radio', { name: 'This week' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('combobox', { name: 'When do you need this?' }).textContent).toContain('This week')
 
     const input = screen.getByRole('searchbox', { name: 'What do you need done?' })
     fireEvent.change(input, { target: { value: 'Emergency plumber Brunswick' } })
@@ -77,17 +79,20 @@ describe('AeQueryPanel', () => {
     const panel = (busy: boolean) => <AeQueryPanel onSubmit={() => undefined} showExamples={false} busy={busy} />
     const view = render(panel(false))
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Choose a date' }))
+    const timing = screen.getByRole('combobox', { name: 'When do you need this?' })
+    fireEvent.click(timing)
+    fireEvent.click(screen.getByRole('option', { name: 'Choose a date' }))
     const date = screen.getByLabelText('Date') as HTMLInputElement
     fireEvent.change(date, { target: { value: '2099-01-31' } })
     expect(date.value).toBe('2099-01-31')
 
     view.rerender(panel(true))
     expect(screen.queryByLabelText('Date')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'When do you need this?' })).toBeNull()
 
     view.rerender(panel(false))
     expect((screen.getByLabelText('Date') as HTMLInputElement).value).toBe('2099-01-31')
-    expect(screen.getByRole('radio', { name: 'Choose a date' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('combobox', { name: 'When do you need this?' }).textContent).toContain('Choose a date')
   })
 
   it.each([199, 200, 201])('enforces the shared %i-character query limit before submit', async (length) => {

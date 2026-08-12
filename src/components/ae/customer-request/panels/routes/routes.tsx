@@ -154,7 +154,6 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
     </div>
     <Card className="p-4">
       <p className="block text-muted-foreground">You decide before AE shares details or starts work.</p>
-      <p className="mt-2 block text-sm text-muted-foreground">{CUSTOMER_REQUEST_HUMAN_COMPREHENSION.sandboxBoundary}</p>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
   </section>

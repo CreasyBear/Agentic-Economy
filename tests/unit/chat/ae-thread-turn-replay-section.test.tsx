@@ -24,9 +24,11 @@ vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
     </div>
   ),
 }))
-vi.mock('@/components/ai-elements/message', () => ({
-  Message: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  MessageContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock('@/components/ui/message', () => ({
+  Message: ({ children, align, ...props }: React.HTMLAttributes<HTMLDivElement> & { align?: 'start' | 'end' }) => (
+    <div data-align={align} {...props}>{children}</div>
+  ),
+  MessageContent: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
 }))
 vi.mock('@/components/ae/chat/AeThreadTurnQueryHeader', () => ({ AeThreadTurnQueryHeader: () => null }))
 vi.mock('@/components/ae/chat/AeTurnContextLine', () => ({ AeTurnContextLine: () => null }))
@@ -135,6 +137,14 @@ describe('thread turn replay', () => {
     render(<AeThreadTurnReplaySection {...turn} status="pending" threadId="thread-1" />)
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
   })
+  it('keeps the durable status and scroll target on the assistant message', () => {
+    const { container } = render(
+      <AeThreadTurnReplaySection {...turn} status="complete" scrollTargetId="turn:1" />,
+    )
+
+    expect(container.querySelector('[data-turn-status="complete"]')).toBeTruthy()
+    expect(container.querySelector('[data-ae-scroll-target="turn:1"]')).toBeTruthy()
+  })
   it('isolates collapsed user-authored labels and summaries without bidi controls', () => {
     render(
       <AeThreadTurnCollapsed
@@ -151,9 +161,13 @@ describe('thread turn replay', () => {
       expect(text.style.unicodeBidi).toBe('isolate')
     }
   })
-  it('keeps a collapsed stopped row stopped when expanded', () => {
-    render(<AeThreadTurnCollapsed {...turn} status="stopped" />)
+  it('keeps a collapsed stopped row muted until expanded, then shows the ghost answer', () => {
+    const { container } = render(<AeThreadTurnCollapsed {...turn} status="stopped" />)
+    expect(container.querySelector('[data-align="end"]')).not.toBeNull()
+    expect(container.querySelector('[data-slot="bubble"][data-align="end"][data-variant="muted"]')).not.toBeNull()
+
     fireEvent.click(screen.getByRole('button', { name: /Expand/ }))
+    expect(container.querySelector('[data-slot="bubble"][data-align="start"][data-variant="ghost"]')).not.toBeNull()
     expect(screen.getByTestId('generic-answer').getAttribute('data-phase')).toBe('stopped')
     expect(screen.getByTestId('generic-answer').textContent).toBe('Answer stopped.')
     expect(screen.queryByRole('status')).toBeNull()

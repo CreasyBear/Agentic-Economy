@@ -15,7 +15,7 @@ export type AeOfferingCardProps = {
   actions?: ReactNode
   /** Extra layout classes for the card shell. */
   className?: string
-  /** Provenance source (`evidence.source`-style) driving a Preview/Verified badge. */
+  /** Optional evidence marker shown for catalog-backed offerings. */
   source?: string
   /** Short capability-type pill rendered next to the name (e.g. "Weather", "FX"). */
   tag?: string
@@ -48,7 +48,7 @@ export function AeOfferingCard({ offering, actions, className, source, tag }: Ae
             </CardTitle>
             <p className="block text-muted-foreground">{offering.summary}</p>
           </div>
-          {source === undefined ? null : <ProvenanceBadge source={source} />}
+          {source === undefined ? null : <ProvenanceBadge />}
         </div>
       </CardHeader>
       <CardContent className="grid gap-4 p-5 pt-0">

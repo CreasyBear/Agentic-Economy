@@ -7,7 +7,9 @@ import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admis
 import {
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
+  isSupportedOfferingCurrency,
   normalizeOfferingPrice,
+  supportedOfferingCurrencySchema,
 } from '@/modules/catalog/public'
 import type {
   BusinessOfferingRecord,
@@ -16,7 +18,11 @@ import type {
   OfferingPrice,
   OfferingPriceInput,
 } from '@/modules/catalog/public'
-import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
+  sourceWriteRequestFromAdmission,
+  type SourceWriteAdmission,
+  type SourceWriteAdmissionRequest,
+} from '@/modules/security/source-write-admission'
 import { publishGateRefusal } from './AeOwnerOfferings.exports'
 import type { OwnerOfferingEditorValue, OwnerOfferingSaveResult } from './AeOwnerOfferings'
 
@@ -45,12 +51,16 @@ type OfferingCommandResult =
   | Readonly<{ kind: 'ok'; code: string; resultRef?: string; currentRevision?: number }>
   | Readonly<{ kind: 'error'; code: string; reason: string }>
 
+type SourceWriteFields = Readonly<{
+  sourceWrite: SourceWriteAdmission
+  sourceWriteRequest: SourceWriteAdmissionRequest
+}>
+
 type SourceWriteArgs = Readonly<{
   businessId: string
   operationKey: string
   correlationId: string
-  sourceWrite: SourceWriteAdmission
-}>
+}> & SourceWriteFields
 
 const accessDescriptorSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -71,6 +81,9 @@ const accessDescriptorSchema = z.discriminatedUnion('kind', [
     provenance: z.enum(['business_declared', 'publicly_observed']),
   }),
 ])
+const supportedExactAmountSchema = exactAmountSchema.superRefine((amount, context) => {
+  if (!isSupportedOfferingCurrency(amount.currency)) context.addIssue({ code: 'custom', message: 'Unsupported offering price currency.' })
+})
 
 /**
  * The comparable price exactly as the client normalized it. The shape is
@@ -80,20 +93,20 @@ const accessDescriptorSchema = z.discriminatedUnion('kind', [
 const offeringPriceSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('quote_only'),
-    currency: z.string().regex(/^[A-Z]{3}$/u),
+    currency: supportedOfferingCurrencySchema,
     unit: z.enum(OfferingPriceUnitValues).optional(),
     taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
   }),
   z.strictObject({
     kind: z.union([z.literal('fixed'), z.literal('from')]),
-    amount: exactAmountSchema,
+    amount: supportedExactAmountSchema,
     unit: z.enum(OfferingPriceUnitValues).optional(),
     taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
   }),
   z.strictObject({
     kind: z.literal('range'),
-    minimum: exactAmountSchema,
-    maximum: exactAmountSchema,
+    minimum: supportedExactAmountSchema,
+    maximum: supportedExactAmountSchema,
     unit: z.enum(OfferingPriceUnitValues).optional(),
     taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
   }),
@@ -138,14 +151,50 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
     if (missing !== undefined) return { kind: 'invalid', field: missing.field, message: missing.message }
     const offeringRef = value.offeringRef ?? `offering:${data.businessId}:${data.requestKey}`
     const facts = compactFacts(value)
+    const correlationId = `owner-offering:${data.requestKey}`
     const first = value.offeringRef === undefined
-      ? await write(context, data.businessId, data.requestKey, 'create', (source) => callSourceMutation(createOfferingMutation, { ...source, offeringRef, facts }))
-      : await write(context, data.businessId, data.requestKey, 'revise', (source) => callSourceMutation(reviseOfferingMutation, { ...source, offeringRef, expectedRevision: value.expectedRevision, facts }))
+      ? await write(
+        context,
+        {
+          businessId: data.businessId,
+          offeringRef,
+          facts,
+          operationKey: `owner-offering:${data.requestKey}:create`,
+          correlationId,
+        },
+        (args) => callSourceMutation(createOfferingMutation, args),
+      )
+      : await write(
+        context,
+        {
+          businessId: data.businessId,
+          offeringRef,
+          expectedRevision: value.expectedRevision,
+          facts,
+          operationKey: `owner-offering:${data.requestKey}:revise`,
+          correlationId,
+        },
+        (args) => callSourceMutation(reviseOfferingMutation, args),
+      )
     if (first.kind === 'error') return toSaveError(first)
 
-    const currentRevision = first.currentRevision ?? Math.max(1, value.expectedRevision + (value.offeringRef === undefined ? 0 : 1))
     const completedSteps: string[] = ['details']
-    const status = await write(context, data.businessId, data.requestKey, 'status', (source) => callSourceMutation(changeStatusMutation, { ...source, offeringRef, expectedRevision: currentRevision, status: value.status }))
+    if (first.currentRevision === undefined) {
+      return partialRefusal('Service details were saved, but its revision could not be confirmed. Try again.', offeringRef, value.expectedRevision, completedSteps)
+    }
+    const currentRevision = first.currentRevision
+    const status = await write(
+      context,
+      {
+        businessId: data.businessId,
+        offeringRef,
+        expectedRevision: currentRevision,
+        status: value.status,
+        operationKey: `owner-offering:${data.requestKey}:status`,
+        correlationId,
+      },
+      (args) => callSourceMutation(changeStatusMutation, args),
+    )
     if (status.kind === 'error') return partialRefusal('Service details were saved, but its public state could not be changed. Try again.', offeringRef, currentRevision, completedSteps)
     completedSteps.push('public_state')
 
@@ -154,8 +203,31 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
       const pathResult = path.status === 'withdrawn'
         ? path.accessPathRef === undefined
           ? { kind: 'ok' as const, code: 'not_persisted' }
-          : await write(context, data.businessId, data.requestKey, `withdraw-${index}`, (source) => callSourceMutation(withdrawPathMutation, { ...source, accessPathRef, expectedRevision: currentRevision }))
-        : await write(context, data.businessId, data.requestKey, `path-${index}`, (source) => callSourceMutation(upsertPathMutation, { ...source, offeringRef, accessPathRef, expectedRevision: currentRevision, status: path.status as 'draft' | 'published', descriptor: path.descriptor }))
+          : await write(
+            context,
+            {
+              businessId: data.businessId,
+              accessPathRef,
+              expectedRevision: currentRevision,
+              operationKey: `owner-offering:${data.requestKey}:withdraw-${index}`,
+              correlationId,
+            },
+            (args) => callSourceMutation(withdrawPathMutation, args),
+          )
+        : await write(
+          context,
+          {
+            businessId: data.businessId,
+            offeringRef,
+            accessPathRef,
+            expectedRevision: currentRevision,
+            status: path.status as 'draft' | 'published',
+            descriptor: path.descriptor,
+            operationKey: `owner-offering:${data.requestKey}:path-${index}`,
+            correlationId,
+          },
+          (args) => callSourceMutation(upsertPathMutation, args),
+        )
       if (pathResult.kind === 'error') return partialRefusal('Service details were saved, but one way to start the service could not be saved. Try again.', offeringRef, currentRevision, completedSteps)
       completedSteps.push(`access_path_${index}`)
     }
@@ -167,18 +239,24 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
     }
   })
 
-async function write(
+async function write<T extends Record<string, unknown>>(
   context: unknown,
-  businessId: string,
-  requestKey: string,
-  step: string,
-  execute: (source: SourceWriteArgs) => Promise<OfferingCommandResult>,
+  command: T,
+  execute: (args: T & SourceWriteFields) => Promise<OfferingCommandResult>,
 ): Promise<OfferingCommandResult> {
-  const operationKey = `owner-offering:${requestKey}:${step}`
-  const correlationId = `owner-offering:${requestKey}`
   try {
-    const sourceWrite = await sourceWriteAdmissionFromContext({ context, scope: 'catalog_publish', operationKey, correlationId })
-    return await execute({ businessId, operationKey, correlationId, sourceWrite })
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: 'catalog_publish',
+      operationKey: String(command.operationKey),
+      correlationId: String(command.correlationId),
+    })
+    return await execute({
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    })
   } catch {
     return { kind: 'error', code: 'source_unavailable', reason: 'The service source did not answer. Try again.' }
   }

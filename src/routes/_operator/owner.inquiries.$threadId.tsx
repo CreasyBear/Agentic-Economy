@@ -178,7 +178,7 @@ function OwnerInquiryThreadRoute() {
       description="Review the customer message, reply through the saved contact path, then close the thread when follow-up is done."
       currentPath={detailPath}
     >
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-6">
           <ThreadMessages detail={readback.detail} />
           <OwnerReplyControls

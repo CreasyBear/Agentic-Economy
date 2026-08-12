@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -55,5 +55,29 @@ describe('/agent-access/authorize consent loading', () => {
     expect(await screen.findByRole('button', { name: 'Approve access' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
     expect(screen.queryByText('Loading access request')).toBeNull()
+  })
+
+  it('asks one authority question, defaults to ask each time, and submits the owner choice', async () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({ user_code: 'GOOD-CODE' })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        '<main data-ae-consent data-grant-ref="grant-1" data-client-name="Test assistant" data-authority-mode="bounded_mandate"></main>',
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Component />)
+
+    expect(await screen.findByText('How much may this agent do without asking you?')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /Ask each time/ }).getAttribute('data-state')).toBe('checked')
+    fireEvent.click(screen.getByRole('radio', { name: /Work within limits/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const request = fetchMock.mock.calls[1]?.[1]
+    expect(String(request?.body)).toContain('decision=approve')
+    expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
+    expect(await screen.findByText('Access approved — return to your assistant')).toBeTruthy()
   })
 })

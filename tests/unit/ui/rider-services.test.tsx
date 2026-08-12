@@ -1,22 +1,16 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AeInstantQuote } from '@/components/ae/services/AeInstantQuote'
 import { AeServiceList } from '@/components/ae/services/AeServiceList'
 import { AeServiceRow } from '@/components/ae/services/AeServiceRow'
 import type { ConsumerPlan } from '@/modules/customer-request/application/public'
-import type { ServiceEndpointDto, ServiceDto } from '@/modules/registry/public'
+import type { ServiceDto } from '@/modules/registry/public'
 
-type QuoteResponse = Readonly<{
-  ok: boolean
-  status: number
-  json: () => Promise<unknown>
-}>
 
 afterEach(() => {
   cleanup()
@@ -38,7 +32,7 @@ describe('rider service surfaces', () => {
 
   it('turns an ask into three comparable options with one recommended action', () => {
     const services = Array.from({ length: 5 }, (_, index) => ({
-      ...serviceWithDemoQuote,
+      ...serviceWithPublishedPrice,
       id: `service:dental-checkup-${index}`,
       name: `Dental check-up option ${index + 1}`,
     }))
@@ -53,10 +47,10 @@ describe('rider service surfaces', () => {
     const moreMatches = container.querySelector('details > ol')
     expect(moreMatches?.children).toHaveLength(2)
     expect(screen.getByText('More matches (2)')).toBeTruthy()
-    expect(screen.getAllByText('Price')).toHaveLength(5)
-    expect(screen.getAllByText('Preview').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Published price')).toHaveLength(5)
+    expect(screen.getAllByText('Verified').length).toBeGreaterThan(0)
     expect(container.querySelectorAll('[data-variant="primary"]')).toHaveLength(1)
-    expect(container.querySelector('[data-variant="primary"]')?.getAttribute('aria-label')).toBe('Get a quote')
+    expect(container.querySelector('[data-variant="primary"]')?.textContent).toContain('See business details')
   })
 
   it('renders one-step frontier and comparable plan options with accessible state text', () => {
@@ -73,7 +67,7 @@ describe('rider service surfaces', () => {
           optionRef: 'option-1',
           business: { slug: 'demo-dental', name: 'Demo Dental', location: 'Adelaide, SA' },
           offering: { name: 'Dental check-up', summary: 'A routine check-up.' },
-          price: { kind: 'published', published: serviceWithDemoQuote.ae.offerings[0]!.price!, summary: 'From $95' },
+          price: { kind: 'published', published: serviceWithPublishedPrice.ae.offerings[0]!.price!, summary: 'From $95' },
           availability: { kind: 'needs_confirmation' },
           nextAction: { kind: 'inspect', label: 'See business details', href: '/demo-dental' },
           evidence: { source: 'business_published' },
@@ -109,95 +103,9 @@ describe('rider service surfaces', () => {
     expect(container.querySelectorAll('[data-variant="primary"]')).toHaveLength(1)
   })
 
-  it('keeps quote actions tappable, labels pending work, and demotes refresh', async () => {
-    let resolveQuote: ((response: QuoteResponse) => void) | undefined
-    const responsePromise = new Promise<QuoteResponse>((resolve) => {
-      resolveQuote = resolve
-    })
-    vi.stubGlobal('fetch', vi.fn(() => responsePromise))
-
-    render(<AeInstantQuote {...quoteProps} />)
-
-    const getQuote = screen.getByRole('button', { name: 'Get a quote' })
-    expect(getQuote.className).toContain('min-h-11')
-    expect(getQuote.getAttribute('data-variant')).toBe('primary')
-    fireEvent.click(getQuote)
-
-    const pending = screen.getByRole('button', { name: 'Getting your quote…' })
-    expect(pending.textContent).toContain('Getting your quote…')
-    expect(pending.hasAttribute('disabled')).toBe(true)
-
-    if (resolveQuote === undefined) throw new Error('quote response resolver was not installed')
-    resolveQuote({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        provenance: 'ae_sandbox_provider',
-        service: 'Dental check-up',
-        price: { amount: { currency: 'AUD', units: '12000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
-        nextAvailable: '2030-01-01T10:00:00.000Z',
-        validUntil: '2030-01-02T10:00:00.000Z',
-      }),
-    })
-
-    await waitFor(() => expect(screen.getByText('Preview')).toBeTruthy())
-    const quoteCard = document.querySelector('[role="status"][tabindex="-1"]')
-    if (quoteCard === null) throw new Error('quote card was not rendered')
-    await waitFor(() => expect(document.activeElement).toBe(quoteCard))
-    const contact = screen.getByRole('link', { name: 'Contact Demo Dental' })
-    expect(contact.getAttribute('href')).toBe('/demo-dental')
-    expect(contact.getAttribute('data-variant')).toBe('primary')
-    expect(contact.className).toContain('min-h-11')
-    const refresh = screen.getByRole('button', { name: 'Refresh quote' })
-    expect(refresh.className).toContain('min-h-11')
-    expect(refresh.getAttribute('data-variant')).toBe('ghost')
-    expect(refresh.getAttribute('data-size')).toBe('sm')
-    expect(screen.getByText('Price')).toBeTruthy()
-  })
-
-  it('makes a refused quote recoverable through the business page', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({ kind: 'refused', reason: 'quote_refused_internal' }),
-    } satisfies QuoteResponse))
-
-    render(<AeInstantQuote {...quoteProps} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Get a quote' }))
-
-    await waitFor(() => expect(screen.getByText('No quote returned')).toBeTruthy())
-    expect(screen.queryByText('quote_refused_internal')).toBeNull()
-    const contact = screen.getByRole('link', { name: 'See business details' })
-    expect(contact.getAttribute('href')).toBe('/demo-dental')
-    expect(contact.getAttribute('data-variant')).toBe('primary')
-    expect(contact.className).toContain('min-h-11')
-    expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('data-variant')).toBe('ghost')
-  })
 })
 
 
-const quoteEndpoint = {
-  url: '/api/demo-quote',
-  description: 'Returns a price for the selected service.',
-  providerName: 'Demo Dental',
-  serviceName: 'Demo Dental',
-  tags: [],
-  parameters: [],
-  quality: null,
-  ae: {
-    offeringRef: 'offering:demo-dental:checkup',
-    provenance: 'business_declared',
-    access: 'open',
-    authentication: { kind: 'keyless' },
-    execution: 'request_route',
-    settlementSupport: 'unpriced',
-  },
-} satisfies ServiceEndpointDto
-const quoteProps = {
-  endpoint: quoteEndpoint,
-  businessName: 'Demo Dental',
-  businessSlug: 'demo-dental',
-}
 
 const baseOffering = {
   offeringRef: 'offering:demo-dental:checkup',
@@ -218,8 +126,7 @@ const serviceWithNoQuotePath = {
   serviceName: 'Demo Dental',
   tags: [],
   ae: {
-    suburb: 'Adelaide',
-    stateTerritory: 'SA',
+    businessContext: { kind: 'local_human', suburb: 'Adelaide', stateTerritory: 'SA' },
     publicUrl: '/demo-dental',
     trustTier: 'claimed',
     photos: [] as const,
@@ -232,11 +139,10 @@ const serviceWithNoQuotePath = {
   endpoints: [],
 } satisfies ServiceDto
 
-const serviceWithDemoQuote = {
+const serviceWithPublishedPrice = {
   ...serviceWithNoQuotePath,
   ae: {
     ...serviceWithNoQuotePath.ae,
-    source: 'ae_sandbox' as const,
     offerings: [
       {
         ...baseOffering,
@@ -249,7 +155,6 @@ const serviceWithDemoQuote = {
       },
     ],
   },
-  endpoints: [quoteEndpoint],
 } satisfies ServiceDto
 
 function renderWithRouter(ui: ReactElement) {

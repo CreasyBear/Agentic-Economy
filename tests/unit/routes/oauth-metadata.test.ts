@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
+import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import {
+  AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
+  AGENT_ACCESS_OAUTH_GRANT_TYPES,
+  AGENT_ACCESS_POLL_INTERVAL_SECONDS,
+  AGENT_ACCESS_OAUTH_RESPONSE_TYPES,
+  AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
+} from '@/modules/agent-access/oauth-state'
 
 import {
   oauthAuthorizationServerResponse,
   oauthChallengeResponse,
   oauthProtectedResourceResponse,
-} from '@/lib/server/customer-request-agent-oauth-api'
+} from '@/lib/server/agent-access-oauth-api'
 
 describe('OAuth metadata surfaces', () => {
   it('publishes only AE implemented grant endpoints and mode scopes', async () => {
@@ -16,6 +24,7 @@ describe('OAuth metadata surfaces', () => {
       authorization_servers: ['https://local.example'],
       bearer_methods_supported: ['header'],
       scopes_supported: [
+        'market_operations:invoke',
         'customer_requests:create',
         'customer_requests:inspect_only',
         'customer_requests:approve_each',
@@ -54,10 +63,30 @@ describe('OAuth metadata surfaces', () => {
         authorization_endpoint: 'https://canonical.agentic.test/oauth/authorize',
       })
       expect(challenge.headers.get('WWW-Authenticate')).toBe(
-        'Bearer resource_metadata="https://canonical.agentic.test/.well-known/oauth-protected-resource", scope="customer_requests:create"'
+        'Bearer resource_metadata="https://canonical.agentic.test/.well-known/oauth-protected-resource", scope="market_operations:invoke"'
       )
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('keeps the device registration request aligned with OAuth metadata and polling constants', async () => {
+    const request = new Request('https://local.example/.well-known/oauth-authorization-server')
+    const metadata = await oauthAuthorizationServerResponse(request, 'https://local.example').json()
+
+    expect(metadata).toMatchObject({
+      grant_types_supported: [...AGENT_ACCESS_OAUTH_GRANT_TYPES],
+      response_types_supported: [...AGENT_ACCESS_OAUTH_RESPONSE_TYPES],
+      token_endpoint_auth_methods_supported: [...AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS],
+      code_challenge_methods_supported: [...AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS],
+    })
+    expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.grant_types).toEqual([
+      AGENT_ACCESS_OAUTH_GRANT_TYPES[1],
+    ])
+    expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.response_types).toEqual([])
+    expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.token_endpoint_auth_method)
+      .toBe(AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS[0])
+    expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).toBe(MARKET_OPERATIONS_INVOKE_SCOPE)
+    expect(AGENT_ACCESS_POLL_INTERVAL_SECONDS).toBe(5)
   })
 })

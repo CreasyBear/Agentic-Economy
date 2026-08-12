@@ -1,20 +1,31 @@
-import { type ClipboardEvent, useEffect, useId, useState } from 'react'
-import { SearchIcon } from 'lucide-react'
-
 import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputHeader,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-  type PromptInputMessage,
-} from '@/components/ai-elements/prompt-input'
-import { buttonVariants } from '@/components/ui/button-variants'
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react'
+import { ArrowUpIcon } from 'lucide-react'
+
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from '@/components/ui/input-group'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import { cn } from '@/lib/utils'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
@@ -100,6 +111,7 @@ function AeAnswerPromptInputInner({
   const placeholderId = `${inputId}-placeholder`
   const timingDateId = `${inputId}-timing-date`
   const [value, setValue] = useState(initialValue)
+  const composingRef = useRef(false)
   const [queryError, setQueryError] = useState(false)
   const [timing, setTiming] = useState<NeedTiming>(initialTiming)
   const hydrated = useClientMounted()
@@ -133,8 +145,20 @@ function AeAnswerPromptInputInner({
     onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
   }
 
-  function handlePromptSubmit(message: PromptInputMessage) {
-    submitQuery(message.text)
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    submitQuery(value)
+  }
+
+  function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey) {
+      return
+    }
+    if (composingRef.current || event.nativeEvent.isComposing) {
+      return
+    }
+    event.preventDefault()
+    event.currentTarget.form?.requestSubmit()
   }
 
   function handlePromptPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
@@ -151,38 +175,34 @@ function AeAnswerPromptInputInner({
 
   return (
     <div className={cn('flex w-full min-w-0 flex-col', compact ? 'gap-2' : 'gap-3')}>
-      <PromptInput
+      <form
         role="search"
         aria-label={ariaLabel}
+        aria-busy={busy}
         className="w-full min-w-0"
-        onSubmit={handlePromptSubmit}
+        onSubmit={handleFormSubmit}
       >
-        {!compact ? (
-          <PromptInputHeader>
-            <span className="inline-flex min-h-6 items-center gap-1 text-xs font-medium text-muted-foreground">
-              <SearchIcon aria-hidden="true" className="size-4" />
-              What you need done?
-            </span>
-            <span
-              id={counterId}
-              className={cn('inline-flex min-h-6 items-center font-mono text-xs leading-none text-muted-foreground', showCharacterLimit ? 'opacity-100' : 'opacity-0')}
-              data-numeric
-              aria-live={showCharacterLimit ? 'polite' : undefined}
-            >
-              {value.length} / {QUERY_MAX_LENGTH} characters
-            </span>
-          </PromptInputHeader>
-        ) : null}
-        <PromptInputBody>
+        <InputGroup className="overflow-hidden">
           <span id={placeholderId} className="sr-only">{placeholder}</span>
-          <PromptInputTextarea
+          <InputGroupTextarea
             id={inputId}
-            className={cn('max-h-36 min-w-0 w-full flex-1 overflow-y-auto py-1 text-base leading-snug text-foreground placeholder:text-muted-foreground', compact ? 'min-h-11 sm:min-h-9' : 'min-h-12')}
+            name="message"
+            className={cn(
+              'min-w-0 w-full flex-1 overflow-y-auto p-3.5 text-base leading-snug text-foreground placeholder:text-muted-foreground',
+              compact ? 'max-h-24 min-h-11 sm:min-h-9' : 'max-h-36 min-h-12',
+            )}
             placeholder={placeholder}
             value={value}
             maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => updateValue(event.currentTarget.value)}
+            onCompositionStart={() => {
+              composingRef.current = true
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false
+            }}
             onInvalid={() => setQueryError(true)}
+            onKeyDown={handlePromptKeyDown}
             onPaste={handlePromptPaste}
             role="searchbox"
             autoComplete="off"
@@ -194,35 +214,34 @@ function AeAnswerPromptInputInner({
             aria-label={inputLabel}
             disabled={busy || !hydrated}
           />
-        </PromptInputBody>
-        <PromptInputFooter className="flex-wrap">
-          {/* Timing selection is an idle-only choice: showing it disabled during a
-              turn implies the selection is still editable. Selected timing state
-              lives in this component, so it returns unchanged once the turn settles. */}
-          {busy || !showTiming ? null : (
-            <PromptInputTools className="flex-wrap">
-              <fieldset
-                className="flex min-w-0 flex-wrap items-center gap-1 border-0 p-0"
-                disabled={!hydrated}
-              >
-                <legend className="text-xs font-medium text-foreground">When do you need this?</legend>
-                <RadioGroup
+          <InputGroupAddon align="block-end" className="flex-wrap justify-between gap-2">
+            {/* Timing selection is an idle-only choice: showing it disabled during a
+                turn implies the selection is still editable. Selected timing state
+                lives in this component, so it returns unchanged once the turn settles. */}
+            {busy || !showTiming ? null : (
+              <>
+                <Select
                   value={timing}
                   onValueChange={(value) => setTiming(value as NeedTiming)}
                   disabled={!hydrated}
-                  aria-label="When do you need this?"
-                  className="flex flex-wrap gap-1.5"
                 >
-                  {NeedTimingValues.map((option) => (
-                    <RadioGroupItem
-                      key={option}
-                      value={option}
-                      className={cn(buttonVariants({ variant: timing === option ? 'default' : 'secondary', size: 'sm' }), 'aspect-auto w-auto [&_[data-slot=radio-group-indicator]]:hidden')}
-                    >
-                      {timingLabel(option)}
-                    </RadioGroupItem>
-                  ))}
-                </RadioGroup>
+                  <SelectTrigger
+                    size="sm"
+                    aria-label="When do you need this?"
+                    className="max-w-full flex-none"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {NeedTimingValues.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {timingLabel(option)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 {timing === 'date' ? (
                   <Field
                     orientation="horizontal"
@@ -237,35 +256,51 @@ function AeAnswerPromptInputInner({
                       value={timingDate}
                       min={localToday()}
                       required
+                      disabled={!hydrated}
                       className="h-8 w-auto min-w-0 bg-card px-2 text-xs max-sm:h-8 md:text-xs"
                       onChange={(event) => setTimingDate(event.currentTarget.value)}
                     />
                   </Field>
                 ) : null}
-              </fieldset>
-            </PromptInputTools>
-          )}
-          {!compact ? (
-            <span className="hidden text-xs text-muted-foreground sm:block">
-              Answers based on business information.
-            </span>
-          ) : (
-            <span
-              id={counterId}
-              className="font-mono text-xs tabular-nums text-muted-foreground"
-              data-numeric
-              aria-live={showCharacterLimit ? 'polite' : undefined}
+              </>
+            )}
+            {!compact ? (
+              <>
+                <span
+                  id={counterId}
+                  className={cn('font-mono text-xs leading-none text-muted-foreground', showCharacterLimit ? 'opacity-100' : 'opacity-0')}
+                  data-numeric
+                  aria-live={showCharacterLimit ? 'polite' : undefined}
+                >
+                  {value.length} / {QUERY_MAX_LENGTH} characters
+                </span>
+                <span className="hidden text-xs text-muted-foreground sm:block">
+                  Answers based on business information.
+                </span>
+              </>
+            ) : (
+              <span
+                id={counterId}
+                className="font-mono text-xs tabular-nums text-muted-foreground"
+                data-numeric
+                aria-live={showCharacterLimit ? 'polite' : undefined}
+              >
+                {value.length} / {QUERY_MAX_LENGTH} characters
+              </span>
+            )}
+            <InputGroupButton
+              type="submit"
+              size="icon-sm"
+              variant="default"
+              aria-label={busy ? 'Starting your thread' : submitLabel}
+              className="ml-auto flex-none"
+              disabled={busy || !hydrated || value.trim().length === 0 || queryTooLong || !timingDateValid}
             >
-              {value.length} / {QUERY_MAX_LENGTH} characters
-            </span>
-          )}
-          <PromptInputSubmit
-            aria-label={busy ? 'Starting your thread' : submitLabel}
-            disabled={busy || !hydrated || value.trim().length === 0 || queryTooLong || !timingDateValid}
-            status={busy ? 'submitted' : 'ready'}
-          />
-        </PromptInputFooter>
-      </PromptInput>
+              {busy ? <Spinner /> : <ArrowUpIcon />}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </form>
 
       {examples.length > 0 ? (
         <AeAnswerSuggestions
@@ -280,7 +315,7 @@ function AeAnswerPromptInputInner({
         />
       ) : null}
 
-      <p id={hintId} className="text-sm leading-snug text-muted-foreground">
+      <p id={hintId} className={compact ? 'sr-only' : 'text-sm leading-snug text-muted-foreground'}>
         {queryError || queryTooLong
           ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
           : `Describe what you need done. Add a place if it matters. Up to ${QUERY_MAX_LENGTH} characters.`}

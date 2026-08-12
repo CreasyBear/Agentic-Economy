@@ -11,25 +11,21 @@ async function expectInitialHitTarget(page: Page, button: Locator) {
   expect(await button.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), center)).toBe(true)
 }
 
-test('assistant setup copy buttons work by pointer and keyboard before scrolling', async ({ context, page }, testInfo) => {
-  test.skip(testInfo.project.name.includes('compact'), 'Both setup controls share the initial wide viewport only.')
+test('assistant setup primary copy control works by pointer and keyboard before scrolling', async ({ context, page }) => {
 
   await page.goto('/for-agents', { waitUntil: 'networkidle' })
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
 
-  const claudeCopyButton = page.getByRole('button', { name: 'Copy Claude command' })
-  const codexCopyButton = page.getByRole('button', { name: 'Copy Codex command' })
+  const manifestCopyButton = page.getByRole('button', { name: 'Copy Read the handshake command' })
 
-  await expectInitialHitTarget(page, claudeCopyButton)
-  await expectInitialHitTarget(page, codexCopyButton)
+  await expectInitialHitTarget(page, manifestCopyButton)
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 
-  await claudeCopyButton.click()
-  await expect(page.getByRole('status')).toHaveText('Claude command copied.')
+  await manifestCopyButton.click()
+  await expect(page.getByRole('status')).toHaveText('Read the handshake command copied.')
 
-  await codexCopyButton.focus()
-  await expect(codexCopyButton).toBeFocused()
+  await manifestCopyButton.focus()
+  await expect(manifestCopyButton).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('status')).toHaveText('Codex command copied.')
-  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  await expect(page.getByRole('status')).toHaveText('Read the handshake command copied.')
 })
