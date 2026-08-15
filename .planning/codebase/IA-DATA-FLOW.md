@@ -1,534 +1,754 @@
 # Info Architecture — Schemas & Data-Flow Routes
 
-**Analysis date: 2026-08-12**
+**Analysis date: 2026-08-15**
 
 ## Scope, evidence ceiling, and maintenance contract
 
-This map owns the current information architecture: durable schemas, source/projection boundaries,
-personas, HTTP/UI/CLI/MCP adapters, Operation discovery/invocation/recovery, owner supply and
-readiness, Answer/thread/share artifacts, Customer Requests, agent access/OAuth, money, inquiries,
-notifications, operator/security, and public discovery. Prompt internals, model/tool-loop mechanics,
-and evaluation harness detail belong to [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md).
+This map owns the current information architecture:
 
-- **Authority:** Convex durable rows and deterministic module/kernel seams own identity, validation,
-  authorization, dispatch, persistence, budgets, money, settlement, and evidence (`convex/schema.ts`,
-  `src/modules/**/public.ts`, and the corresponding `internal/*` seams). Models, providers, browser
-  state, and HTTP responses are observations or proposals until a source seam validates and persists
-  them.
-- **Adapter rule:** TanStack Start routes, UI loaders, CLI, and MCP expose or submit contracts; they
-  are not alternate authority (`src/routes/**`, `tools/ae/**`, `src/routes/mcp.ts`,
-  `src/modules/actions/index.ts`). Retired redirects are labelled as such rather than treated as
-  current flows.
-- **Evidence classes:** A source-integrated contract is not locally verified, eval-fixture-only,
-  config-gated, or hosted/live-certified proof. This document reports source facts only; no hosted
-  certification, external provider completion, payment settlement, or runtime SLO is implied.
-- **Maintenance:** Re-walk `convex/schema.ts`, public module seams, route files, and adapter registries
-  when changing this map. Keep caps and resource ownership next to the symbol that enforces them.
-  Do not restore retired DTOs, route authorities, or historical counts. Companion maps must retain their
-  assigned boundary. The resource table applies Brendan Gregg's USE lens (utilization, saturation,
-  errors) after inventory; `?` means the repository has no observation seam, never zero or healthy.
+- durable schemas and source/projection boundaries;
+- buyer, owner, administrator, developer, and agent personas;
+- HTTP, TanStack Start UI, CLI, and MCP adapters;
+- Market Operation discovery, invocation, cancellation, status, and reconciliation;
+- owner supply admission, publication, readiness, and supplier economic readback;
+- Answer threads, durable turns, sharing, and public projections;
+- Customer Requests, route plans, mandates, execution, recovery, and problems;
+- agent access, OAuth, grants, budgets, and approval modes;
+- internal billing, provider-direct x402 spend, Stripe, and payout evidence;
+- inquiries, notifications, operator/security surfaces, and public discovery.
+
+Prompt construction, model selection, tool-loop mechanics, model-visible schemas, and eval detail belong
+in [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md). This map links that boundary and does not duplicate those
+internals.
+
+- **Authority:** Convex durable rows plus deterministic module/kernel seams own identity, validation,
+  authorization, dispatch, persistence, budgets, money, settlement state, and evidence
+  (`convex/schema.ts`, `src/modules/**/public.ts`, and enforcing `internal/*` seams).
+- **Adapter rule:** TanStack Start routes, UI loaders, HTTP handlers, CLI, and MCP expose or submit
+  contracts. They are not alternate sources of truth (`src/routes/**`, `src/lib/server/**`,
+  `tools/ae/**`, `src/lib/server/mcp-api.ts`).
+- **Projection rule:** Search documents, public DTOs, Answer artifacts, status pages, and provider
+  responses are bounded projections or observations. A projection cannot grant authority or upgrade
+  uncertain work to completion.
+- **Evidence classes:** repository-integrated source, locally verified behavior, fixture/eval proof,
+  configured hosted observation, independently supplied evidence, and settled production evidence are
+  distinct classes. Source integration alone proves only source facts.
+- **Source-facts-only ceiling:** Nothing here certifies hosted uptime, external provider completion,
+  real-money settlement, payout, legal readiness, or an SLO unless a cited durable observation proves
+  that exact claim.
+- **Maintenance:** Re-walk `convex/schema.ts`, every spread source, public module seams, route files,
+  adapter registries, and dirty-tree changes before changing counts or flows.
+- **USE notation:** The resource table applies Brendan Gregg's utilization, saturation, errors lens
+  after inventory. `?` means no repository observation seam was found; it never means zero or healthy.
 
 ## 1. Authority spine and functional blocks
 
-The source of truth is a Convex schema made from **26 table bundles/spreads**: business, catalog,
-capability-contract-registry, capability-supply, customer-request, three agent-access bundles,
-action-invocation, capability-operation-invocation, answer-thread, demand, discovery, harness,
-inquiries, notification-outbox, observability, registry, routing-kernel, security, money, settings,
-project-spine, work-tree, study, and external-run (`convex/schema.ts`). The bundle count is not a
-claim about the number of individual tables; several bundles intentionally contain many durable
-command, attempt, projection, and evidence rows.
+`convex/schema.ts` registers **26 table bundles/spreads containing 205 application tables**.
+The spread count describes root composition; the table count describes concrete `defineTable(...)`
+registrations reachable through those spreads. Convex component-owned tables are outside this
+application-schema count.
 
 ```text
- Public/buyer                 Owner/admin/developer             Agent/CLI/MCP
- ────────────                 ─────────────────────             ───────────────
- /, /t/new, /$slug            /owner/*, /admin/*                OAuth + bearer
- /t/$threadId, /s/$token      /developers/discovery             /api/v1/operations/*
- /$slug/inquiry               /agent-access/*                  /api/v1/requests/*
-        │                              │                              │
-        │ read/submit adapters         │ identity + source writes      │ strict contracts
-        └──────────────┬───────────────┴──────────────┬───────────────┘
-                       ▼                              ▼
-        deterministic projections and admission seams (non-authoritative UI/API DTOs)
-                       │                              │
-                       ├──────────────┐               │
-                       ▼              ▼               ▼
-             Convex durable source  Convex actions   source write gates
-       identity/revision/evidence  reservation/worker  auth/idempotency/digest
-                       │              │               │
-                       │              ▼               │
-                       │      Workpool/scheduler      │
-                       │              │               │
-                       └──────────────┴───────┬───────┘
-                                              ▼
-          external effects: guarded provider HTTP/MCP/x402, Stripe, Novu/Resend
-                                              │
-                 response/payment/webhook is an observation, not authority
-                                              ▼
-       canonical terminal/reconciliation evidence → bounded owner/public readbacks
+ Public/buyer                 Owner/admin/developer               Agent/CLI/MCP
+ ────────────                 ─────────────────────               ─────────────
+ /, /t/new, /$slug            /owner/*, /admin/*                  OAuth + bearer
+ /t/$threadId, /s/$token      /developers/discovery              /api/v1/operations/*
+ /$slug/inquiry               /agent-access/*                    /api/v1/requests/*
+ /$slug/tools/*               /operations/invocations/*          /mcp, tools/ae
+        │                              │                                │
+        │ read/submit adapters         │ identity + source writes       │ strict contracts
+        └──────────────┬───────────────┴───────────────┬────────────────┘
+                       ▼                               ▼
+          deterministic projections         signed source-write admission
+          and public module seams            auth/scope/nonce/digest checks
+                       │                               │
+                       └──────────────┬────────────────┘
+                                      ▼
+                       Convex durable source rows
+             identity / revision / authority / evidence / money
+                                      │
+                    ┌─────────────────┴──────────────────┐
+                    ▼                                    ▼
+        Convex actions + mutations             Workpool + scheduler
+        reserve/claim/finalize                  bounded asynchronous work
+                    │                                    │
+                    └─────────────────┬──────────────────┘
+                                      ▼
+       guarded external effects: provider HTTP/MCP/x402, Stripe, Novu, Resend
+                                      │
+              response, webhook, chain receipt, or provider claim = observation
+                                      ▼
+     canonical terminal/reconciliation evidence → bounded owner/public readbacks
 ```
 
 ```text
-Supply draft → admission/import → publication + offering + binding
-      │                                  │
-      │ source/provenance/contract digest │ readiness cron (1 min)
-      ▼                                  ▼
-BusinessSupplyProjection → registry Operation/Service projections → public discovery
-      │                                  │
-      └──────────── catalog-origin exact join ────────┘
-
-Answer reservation → transient stream → checkpoint/finalization → answerThreads projection
-Customer Request aggregate → mandate/route plan → Workpool transport → outcome/recovery projection
-Agent OAuth consent → principal/grant → operation gateway → invocation envelope → status/reconcile
+Catalog source ──► BusinessSupplyProjection ──► public business/service DTOs
+      │                         │
+      │ exact offering/access-path lineage
+      ▼                         ▼
+Capability publication ──► current Operation projection ──► discovery only
+      │
+      ├─ readiness observation + revision/target/credential fence
+      └─ binding + provider connection + policy
+                              │
+                              ▼
+Agent grant ─► invocation reservation ─► canonical Action Invocation claim
+                              │                       │
+                              ▼                       ▼
+                       Workpool dispatch       release/effect fence
+                              │                       │
+                              └──────────┬────────────┘
+                                         ▼
+                           transport + money observation
+                                         ▼
+                           terminal or reconcile-only state
 ```
 
-The functional blocks are deliberately separate: capability supply establishes what can be offered;
-registry/catalog projections establish what can be discovered; agent access establishes who may call;
-operation invocation and the action-invocation kernel establish what may execute; money establishes
-exact charge/settlement; Customer Request route mandates establish business-side authorization; Answer
-persistence establishes what can be shown. The boundaries are implemented by the source modules named
-below, not by the diagrams.
+```text
+Answer reservation → transient stream → checkpoint/finalization → answerThreads readback
+Customer Request head → immutable revision → RoutePlan generation → mandate → route run
+Owner supply draft → import/admission → publication/binding → readiness → public projection
+OAuth consent → principal/grant → scoped adapter → invocation envelope → status/recovery
+```
+
+The functional blocks stay separate:
+
+1. **Business/catalog** owns public business identity, offerings, revisions, and access paths.
+2. **Capability supply** owns contract-backed publications, offerings, bindings, provider authority,
+   readiness observations, and Operation material.
+3. **Registry/discovery** owns deterministic public projections, manifests, search documents, and
+   repair/readback state.
+4. **Agent access** owns principals, OAuth clients/grants, policy grants, scope, authority mode,
+   generation, expiry, and budget/rate/concurrency policy.
+5. **Capability execution + Action Invocation** own invocation reservation, canonical claim, lease,
+   release, terminal outcome, and recovery.
+6. **Money** owns exact internal ledger state, credential-budget reservations, provider-direct external
+   spend reservations, Stripe observations, provider accrual, and payout rows.
+7. **Customer Request** owns request ancestry, route proposals, approval/mandate authority, route
+   dispatch, result evidence, cancellation, and problem reports.
+8. **Answer/thread** owns durable conversational lifecycle and sanitized readbacks. Its prompt/model
+   execution boundary remains in the companion prompt map.
 
 ## 2. Personas and current route inventory
 
+The current TanStack Start tree has **128 `createFileRoute(...)` modules plus `__root.tsx`**.
+The count includes the `/_operator` layout, `/api/$` catch-all, and two retained redirects.
+Route presence proves an adapter exists, not that its backing dependency is configured or healthy.
+
 ### Buyer/customer
 
-- `/` validates bounded `q`/`project`; a query redirects to `/t/new`, while an explicit project loads
-  the source-backed work-tree readback (`src/routes/index.tsx`, `Route`, `loadRootRoute`).
-- `/t/new` starts an Answer thread; `/t/$threadId` reads a pseudonymous-session-owned projection and
-  can switch, with a private access-key fragment, to `AeCustomerRecord`
-  (`src/routes/t.new.tsx`, `src/routes/t.$threadId.tsx`, `src/components/ae/inquiries/AeCustomerRecord.tsx`).
-- `/s/$shareToken` is an unowned, read-only, parsed public Answer projection; `/i/$threadId` is a
-  legacy 301 redirect to `/t/$threadId` (`src/routes/s.$shareToken.tsx`, `src/routes/i.$threadId.tsx`).
+- `/` validates bounded `q` and project state. A query enters `/t/new`; an explicit project reads the
+  source-backed root Work Tree (`src/routes/index.tsx`, `loadRootRoute`).
+- `/t/new` starts an Answer; `/t/$threadId` reads a pseudonymous-session-owned durable projection
+  (`src/routes/t.new.tsx`, `src/routes/t.$threadId.tsx`).
+- `/s/$shareToken` is an unowned, read-only, sanitized shared Answer projection. The token is a grant,
+  not thread authority (`src/routes/s.$shareToken.tsx`,
+  `src/modules/answer-thread/internal/share-token.ts`).
+- `/i/$threadId` is a retained **301** redirect to `/t/$threadId`; it is not a second record model
+  (`src/routes/i.$threadId.tsx`).
 - `/$slug` reads a source-backed public business page; `/$slug/inquiry` performs exact target
-  admission, governed-send review/digest, and one durable inquiry submit (`src/routes/$slug.tsx`,
-  `src/routes/$slug.inquiry.tsx`, `src/modules/inquiries/route-readbacks.ts`).
-- `/api/answer/turn`, `/api/answer/threads`, `/api/answer/threads/$threadId`, and the thread
-  share/stop siblings are bounded HTTP adapters. They reserve and finalize durable Answer state,
-  never treating an open stream as terminal truth (`src/routes/api.answer.turn.ts`,
-  `src/modules/answer-thread/answer-thread.functions.ts`).
+  admission and governed submission (`src/routes/$slug.tsx`, `src/routes/$slug.inquiry.tsx`).
+- `/$slug/tools/$toolId` exposes a business tool read contract and
+  `/$slug/tools/$toolId/prepare` exposes bounded preparation; neither bypasses action authority
+  (`src/routes/$slug.tools.$toolId.ts`, `src/routes/$slug.tools.$toolId.prepare.ts`,
+  `src/lib/server/business-tool-api.ts`).
+- `/about`, `/help`, `/privacy`, `/privacy/remove-business`, and `/terms` are public informational or
+  privacy adapters, not durable business authorities.
 
-### Public catalog and agent discovery
+### Answer HTTP family
 
-- `/api/businesses`, `/api/businesses/search`, `/api/businesses/$slug`, `/api/v1/services`,
-  `/api/v1/services/search`, and `/api/v1/services/$serviceId` read the same public catalog/source
-  projection; Service endpoints are an adapter projection, not a second catalog authority
-  (`src/routes/api.businesses.ts`, `src/routes/api.businesses.search.ts`,
-  `src/modules/registry/internal/services-api-projection.ts`, `src/modules/registry/internal/service-projection.ts`).
-- `/api/v1/market-operations/search`, `detail`, `compare`, and `inspect-plan` expose anonymous,
-  exact Operation discovery/inspection. They return current descriptors, contract/input, price and
-  evidence context, effects, authentication, availability, provenance, and recovery navigation;
-  they grant no invocation authority (`src/routes/api.v1.market-operations.search.ts`,
-  `src/modules/capability-supply/operation-projection.ts`, `convex/capabilitySupplyOperations.ts`).
-- `/operations/$operationRef` displays one exact Operation; `/operations/invocations/$invocationRef`
-  is owner-scoped status/cancel/reconcile UI (`src/routes/operations.$operationRef.tsx`,
-  `src/routes/operations.invocations.$invocationRef.tsx`).
-- `/for-agents`, `/for-providers`, `/[.]well-known/ucp`, `/$slug.ucp`, `/llms.txt`, `/SKILL.md`,
-  `/api/discovery/schema`, and `/api/discovery/examples` publish current route/catalog contracts,
-  manifests, freshness, or degraded state. They do not prove execution or reveal credentials
-  (`src/routes/for-agents.tsx`, `src/modules/discovery/public.ts`, `src/routes/api.discovery.schema.ts`).
-- `/mcp` is a Streamable MCP adapter over the one action registry. Anonymous actions are read-only;
-  authenticated actions require principal scope/authority. `/api/health` and `/api/ready` are health
-  and readiness adapters, not operation readiness (`src/routes/mcp.ts`, `src/lib/server/mcp-api.ts`,
-  `src/modules/actions/index.ts`).
+- `POST /api/answer/turn` reserves durable identity before transient streaming
+  (`src/routes/api.answer.turn.ts`, `convex/answerThreads.ts`).
+- `POST /api/answer/turn/stop` durably stops eligible work before client abort is treated as final
+  (`src/routes/api.answer.turn.stop.ts`).
+- `/api/answer/threads`, `/api/answer/threads/$threadId`, and
+  `/api/answer/threads/$threadId/share` expose bounded session-owned list/read/share operations.
+- `/api/answer/follow-up-chips` is a bounded Answer follow-up adapter.
+- `/api/answer/eval-status` reports gate/config state; it is not production Answer quality evidence.
+- Prompt, model, and tool-loop internals for these routes are documented only in
+  [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md).
 
-### Owner/supplier, admin, and developer
+### Public catalog, services, and Operation discovery
 
-- `/claim`, `/claim/form`, and `/claim/success` are the public claim path; `/owner/supply`,
-  `/owner/supply/$offeringRef`, `/owner/offerings`, `/owner/offerings/new`,
-  `/owner/offerings/$offeringRef`, `/owner/status`, `/owner/inquiries`,
-  `/owner/inquiries/$threadId`, `/owner/request-problems/$reportRef`, and `/owner/settings` are
-  source-backed owner surfaces (`src/routes/claim.tsx`, `src/routes/_operator/owner.supply.$offeringRef.tsx`,
-  `src/routes/_operator/owner.inquiries.$threadId.tsx`).
-- `/_operator` supplies one Clerk sign-in shell for `/owner/*`, `/admin/*`, `/developers/*`, and
-  `/agent-access/*`; per-surface durable membership/ownership decides access, so the shell is not a
-  role authority (`src/routes/_operator.tsx`, `src/lib/operator/route-options.ts`).
-- `/admin/claims`, `/admin/audit-events`, `/admin/index-health`, `/admin/request-problems`,
-  `/admin/runs`, `/admin/runs/$turnId`, and `/admin/search-gaps` expose bounded, redacted admin
-  readbacks; `/developers/discovery` is sign-in/read-only discovery and is not an admin projection
-  (`src/routes/_operator/admin.claims.tsx`, `convex/security.ts`,
-  `src/routes/_operator/developers.discovery.tsx`).
-- `/agent-access` and `/agent-access/authorize` issue/revoke owner-controlled access and pending
-  approval decisions. OAuth HTTP routes are `/oauth/register`, `/oauth/device_authorization`,
-  `/oauth/authorize`, `/oauth/token`, plus the OAuth well-known metadata routes
-  (`src/routes/_operator/agent-access.tsx`, `src/lib/server/agent-access-oauth-api.ts`,
-  `src/routes/oauth.token.ts`).
-- `/engine` redirects to `/`; it is retained only as a retired route and is not current authority
+- `/api/businesses`, `/api/businesses/search`, and `/api/businesses/$slug` read the public catalog
+  source projection (`src/modules/registry/internal/offering-api-projection.ts`).
+- `/api/v1/services`, `/api/v1/services/search`, and `/api/v1/services/$serviceId` project that same
+  catalog into Service DTOs. They are not a second catalog authority
+  (`src/modules/registry/internal/services-api-projection.ts`).
+- `/api/v1/market-operations/search`, `/detail`, `/compare`, and `/inspect-plan` expose read-only
+  Operation contracts from the canonical action registry
+  (`src/modules/registry/operation-action-contracts.ts`).
+- Search accepts a query of at most 200 characters and returns at most 20 results; compare and inspect
+  accept at most four exact Operation refs (caps: `operationSearchInputSchema`,
+  `operationCompareInputSchema`, `operationInspectPlanInputSchema`).
+- `/operations/$operationRef` displays one exact current Operation descriptor.
+- `/operations/invocations/$invocationRef` is an owner-scoped status/cancel/reconcile surface, not a
+  public invocation readback.
+- Discovery descriptors include contract/input, commercial, evidence, effect, authentication,
+  availability, provenance, and recovery navigation. They never grant invocation authority.
+
+### Public discovery and machine-readable adapters
+
+- `/for-agents` and `/for-providers` render current public guidance.
+- `/.well-known/ucp` is the site UCP manifest; `/$slug/ucp` is the current offering manifest route
+  (`src/routes/[.]well-known/ucp.ts`, `src/routes/$slug.ucp.ts`).
+- `/llms.txt`, `/SKILL.md`, `/robots.txt`, and `/sitemap.xml` derive bounded public files from current
+  registry/discovery seams.
+- `/api/discovery/schema` and `/api/discovery/examples` publish current contracts and examples.
+- `/.well-known/http-message-signatures-directory` publishes signature-key discovery material.
+- `/mcp` is the Streamable HTTP MCP adapter over the shared action registry
+  (`src/lib/server/mcp-api.ts`, `src/modules/actions/index.ts`).
+- `src/lib/mcp-protocol.ts` re-exports the installed SDK's `LATEST_PROTOCOL_VERSION`; MCP execution
+  refuses a publication pinned to a different version (`prepareRegisteredRouteTransportInvocation`).
+- Anonymous MCP lists/runs only read-only actions without credential admission. Authenticated MCP
+  resolves bearer principal, scope, and required authority mode before registering protected tools
+  (`createAeMcpServer`, `handleMcpRequest`).
+- `/api/health` and `/api/ready` are application health/readiness adapters. They do not prove a given
+  supplier binding or Operation is routeable.
+
+### Owner/supplier
+
+- `/claim`, `/claim/form`, and `/claim/success` are the public owner-claim funnel.
+- `/owner/supply` and `/owner/supply/$offeringRef` expose source-backed supply setup, publication,
+  readiness, testing, maintenance, and supplier economic readback.
+- `/owner/offerings`, `/owner/offerings/new`, and `/owner/offerings/$offeringRef` own offering source
+  editing and revisions.
+- `/owner/status`, `/owner/inquiries`, `/owner/inquiries/$threadId`,
+  `/owner/request-problems/$reportRef`, and `/owner/settings` expose bounded owner readbacks/actions.
+- Source files use the layout IDs `/_operator/owner/...`; user-visible paths omit the pathless layout
+  segment (`src/routes/_operator/owner.*`).
+- Owner supply currently reads provider earnings and payout state using owner-derived Business
+  authority (`src/modules/capability-supply/supply-funnel.functions.ts`,
+  `convex/moneyLedger.ts`).
+- Setup/test does not create a paid production invocation or supplier earnings. Its UI cannot serve as
+  Qualified Use or payout evidence.
+
+### Administrator and developer
+
+- `/_operator` supplies the Clerk-authenticated shell for owner, admin, developer, and agent-access
+  surfaces. Durable membership or ownership still decides each operation
+  (`src/routes/_operator.tsx`, `src/lib/operator/route-options.ts`).
+- `/admin/claims`, `/admin/audit-events`, `/admin/index-health`, `/admin/inquiries`,
+  `/admin/request-problems`, `/admin/runs`, `/admin/runs/$turnId`, and `/admin/search-gaps` expose
+  bounded redacted admin readbacks.
+- `/developers/discovery` reports discovery route health/freshness and is not an admin projection.
+- `/sign-in/$` and `/sign-up/$` are authentication adapters.
+- `/engine` is retained only as a redirect to `/`; it is not current product authority
   (`src/routes/engine.tsx`).
 
-### Operation, Customer Request, notification, and integration APIs
+### Agent access and OAuth
 
-- Operation gateway: `POST /api/v1/operations/execute`, `GET /api/v1/operations/$invocationRef`,
-  `POST .../$invocationRef/cancel`, and `POST .../$invocationRef/reconcile`. The gateway validates
-  bearer scope, strict input, principal-bound idempotency, durable status, and evidence-bound recovery
-  (`src/routes/api.v1.operations.execute.ts`, `src/lib/server/operation-invoke-api.ts`,
-  `convex/capabilityOperationInvocations.ts`).
-- Customer Request browser routes are `/api/requests`, `/api/requests/$requestRef` and its
-  `messages`, `options`, `facts`, `authorization`, `confirmation`, `run`, `cancellation`,
-  `evidence`, `problems`, `problems/$reportRef/replies`, and repeat-permission descendants.
-  Agent equivalents live under `/api/v1/requests`; `/api/v1/requests/schema` publishes the strict
-  contract. Browser adapters use a signed guest cookie or authenticated fallback; agent adapters use
-  bearer principal/customer scope (`src/lib/server/customer-request-browser-api.ts`,
-  `src/lib/server/customer-request-agent-api.ts`, `src/routes/api.v1.requests.ts`).
-- `/api/notification/novu-dispatch`, `/api/notification/resend-dispatch`, and
-  `/api/notification/resend-webhook` are system-authenticated, bounded, idempotent outbox/provider
-  adapters. `/api/stripe/webhook` is the bounded Stripe event adapter
-  (`src/lib/server/notification-dispatch.ts`, `convex/notificationOutbox.ts`,
-  `src/modules/money/internal/stripe-webhook.ts`).
-- `/api/storefront/import-draft` and `/api/storefront/enrich` are source-admission storefront
-  adapters; `/api/v1/release`, observability client-error/funnel routes, and sitemap/robots/legal
-  routes are separate bounded projections (`src/routes/api.storefront.import-draft.ts`,
-  `src/routes/api.observability.client-error.ts`).
-- `tools/ae` is a thin external CLI over the action/Operation registries: manifest, search, inspect,
-  compare, connect, invoke, status, recover, demand, and advanced commands. It preserves explicit
-  idempotency, source-local evidence, and unknown/recovery outcomes (`tools/ae/cli.ts`,
-  `tools/ae/commands/manifest.ts`, `tools/ae/commands/invoke.ts`).
+- `/agent-access` lists/issues/revokes owner-controlled access.
+- `/agent-access/authorize` handles pending approval decisions for operation authority.
+- `/oauth/register`, `/oauth/device_authorization`, `/oauth/authorize`, and `/oauth/token` implement
+  dynamic-client/device/authorization-code token flows through the durable OAuth store.
+- `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` publish OAuth
+  metadata.
+- OAuth adapters are bounded by `src/lib/server/agent-access-oauth-api.ts`; durable principals,
+  OAuth rows, and policy grants remain the authority.
+
+### Operation APIs
+
+- `POST /api/v1/operations/execute` invokes one exact Operation.
+- `GET /api/v1/operations/$invocationRef` reads principal-scoped status.
+- `POST /api/v1/operations/$invocationRef/cancel` requests cancellation.
+- `POST /api/v1/operations/$invocationRef/reconcile` submits evidence-bound reconciliation.
+- Invocation bodies are capped at 256 KiB; cancel/reconcile bodies at 64 KiB
+  (`MAX_OPERATION_INVOKE_BODY_BYTES`, `parseRecoveryBody` in
+  `src/lib/server/operation-invoke-api.ts`).
+- The gateway requires bearer scope `market_operations:invoke`, strict canonical schemas,
+  source-write admission, and principal-bound idempotency before source execution.
+
+### Customer Request and Work Tree APIs
+
+- Browser Customer Request routes start at `/api/requests`; agent equivalents start at
+  `/api/v1/requests`.
+- Both families expose request detail plus `messages`, `options`, `facts`, `confirmation`, `run`,
+  `cancellation`, `evidence`, `problems`, problem replies, repeat-permission list/detail/use, and
+  withdrawal descendants.
+- Browser-only `/api/requests/$requestRef/authorization` records the confirmation authority adapter.
+- `/api/v1/requests/schema` publishes the strict agent contract.
+- Browser adapters use signed guest identity or authenticated fallback; agent adapters use bearer
+  principal/customer scope (`src/lib/server/customer-request-browser-api.ts`,
+  `src/lib/server/customer-request-agent-api.ts`).
+- `/api/v1/work-tree/$operation` is the agent Work Tree command adapter. Durable Work Tree revisions,
+  events, receipts, repeat permissions/uses, and approvals remain source authority.
+
+### Notification, money, storefront, release, and observability APIs
+
+- `/api/notification/novu-dispatch`, `/resend-dispatch`, and `/resend-webhook` are system-authenticated,
+  bounded outbox/provider adapters.
+- `/api/stripe/webhook` is the bounded Stripe observation adapter. Browser success is never payment
+  authority.
+- `/api/storefront/import-draft` and `/api/storefront/enrich` submit guarded source-admission work.
+- `/api/v1/release` is a release contract adapter.
+- `/api/observability/client-error` and `/api/observability/funnel` submit bounded telemetry.
+- `/api/$` returns an API 404 rather than SPA HTML (`src/routes/api.$.ts`).
+
+### CLI
+
+- `tools/ae/cli.ts` is a thin external adapter over HTTP/action contracts.
+- Current commands cover ask, actions, business, cancel, compare, connect, discover, doctor, enrich,
+  eval, import, inspect, inspect-plan, invoke, journey, manifest, policy, recover, request, search,
+  and status (`tools/ae/commands/**`).
+- CLI output preserves explicit unknown/recovery states and source-local evidence. Local output is not
+  durable authority.
 
 ## 3. Durable schema inventory
 
-The following is the current authority inventory, grouped by source bundle. Exact field validators,
-indexes, and legacy unions remain in the cited schema; this map names the information-bearing rows
-without duplicating every validator.
+### Root count
 
-| Authority area | Durable rows and purpose | Current source |
-|---|---|---|
-| Business/catalog | `owners`, `businesses`, `businessContexts`, `claims`; `businessOfferings`, revisions, access paths, and `businessSupplyProjectionSnapshots` | `src/modules/business/internal/schema.ts`, `src/modules/catalog/internal/schema.ts` |
-| Capability contract/supply | Immutable contract documents; `capabilityPublications`, `capabilityOfferings`, `capabilityTransportBindings`, source drafts, provider connections/leases/approvals, registered mappings, call events | `src/modules/capability-contract-registry/internal/convex-schema.ts`, `src/modules/capability-supply/internal/convex-schema.ts` |
-| Registry/discovery | Registry projection items/attempts, search documents, index status; discovery manifests/attempts; demand and search-gap records | `src/modules/registry/internal/schema.ts`, `src/modules/discovery/internal/schema.ts`, `src/modules/demand/internal/schema.ts` |
-| Operation execution | Outer `capabilityOperationInvocations`; canonical `actionInvocationControls`, attempts, and history; routing admission meters/leases/decisions, provider telemetry, incident freeze/recovery/evidence rows | `src/modules/capability-execution/internal/convex-schema.ts`, `src/modules/action-invocation/internal/convex-schema.ts`, `src/modules/routing-kernel/internal/convex-schema.ts` |
-| Answer | `answerThreads`, `answerTurns`, `answerTurnReservations`, `answerToolCalls`, `answerThreadShares`; reservations bind session/thread/turn identity before model or provider work | `src/modules/answer-thread/internal/convex-schema.ts`, `convex/answerThreads.ts` |
-| Customer Request | V2 heads/submission shells/revisions/commands, route-plan generations, action preparations/disclosure/authority/egress/reconciliation/prepared-action rows; route mandates, step/data reservations, runs, cancellation/problem reports | `src/modules/customer-request/internal/convex-v2-schema.ts`, `src/modules/customer-request/internal/route-mandate-convex-schema.ts` |
-| Agent access | Principals; seven-day OAuth grants and dynamic clients; durable policy grants with generation, scopes, spend, concurrency, and rate limits | `src/modules/agent-access/internal/principal-convex-schema.ts`, `oauth-convex-schema.ts`, `convex-schema.ts` |
-| Money | Accounts, append-only ledger entries, transactions, usage, credential budgets, free-tier counters, topup/connect/Stripe events, payout accounts and payouts | `src/modules/money/internal/convex-schema.ts`, `convex/moneyLedger.ts` |
-| Inquiry/notification | Inquiry threads, customer access grants, messages, notifications/read states, abuse buckets, privacy tombstones, governed-send receipt/keys/lineage; notification dispatches/attempts/webhook events | `src/modules/inquiries/internal/convex-schema.ts`, `src/modules/notification-outbox/internal/schema.ts` |
-| Governance/operations | Admin disputes/suppression/memberships/nonces; operation keys/audit/funnel/operator controls/owner activation; settings preferences; project spine; work trees/events/decisions/repeat permissions/uses/approvals | `src/modules/security/internal/schema.ts`, `src/modules/observability/internal/schema.ts`, `src/modules/settings/internal/schema.ts`, `src/modules/project-spine/internal/convex-schema.ts`, `src/modules/work-tree/internal/convex-schema.ts` |
-| Study/run/harness | `studies` and append-only study events, external-run manifests/starts/evidence/gate decisions, harness sessions/entries | `src/modules/study/internal/convex-schema.ts`, `src/modules/external-run/internal/convex-schema.ts`, `src/modules/harness/internal/convex-schema.ts` |
+The exact current root is:
 
-`convex/schema.ts` is the registered root. Public catalog reads come from current, published,
-unsuppressed supply snapshots (`convex/registry.ts`, `registry:listPublicBusinessOfferingSupply`),
-while registry/search tables are projections and repair/index state. Capability publications and
-bindings are likewise source material for operation projections; they are not replaced by a browser,
-model, or registry search result.
+- **26 spreads** in `convex/schema.ts`;
+- **205 tables** across their concrete spread definitions;
+- **64 Customer Request tables**: 39 V2 ancestry/execution tables plus 25 route-mandate/run tables;
+- **44 routing-kernel tables**, the largest single bundle;
+- **13 money tables**, now including `moneyExternalSpendReservations`.
+
+| # | Root bundle/spread | Tables | Durable responsibility | Source |
+|---:|---|---:|---|---|
+| 1 | `actionInvocationTables` | 3 | controls, attempts, append-only history | `src/modules/action-invocation/internal/convex-schema.ts` |
+| 2 | `capabilityOperationInvocationTables` | 1 | outer agent-facing invocation envelope/projection | `src/modules/capability-execution/internal/convex-schema.ts` |
+| 3 | `answerThreadTables` | 5 | threads, turns, reservations, tool calls, shares | `src/modules/answer-thread/internal/convex-schema.ts` |
+| 4 | `businessTables` | 4 | owners, businesses, contexts, claims | `src/modules/business/internal/schema.ts` |
+| 5 | `catalogTables` | 4 | offerings, revisions, access paths, supply snapshots | `src/modules/catalog/internal/schema.ts` |
+| 6 | `capabilityContractRegistryTables` | 1 | immutable capability contract documents | `src/modules/capability-contract-registry/internal/convex-schema.ts` |
+| 7 | `capabilitySupplyTables` | 9 | publications, offerings, bindings, drafts, provider authority, mappings, call events | `src/modules/capability-supply/internal/convex-schema.ts` |
+| 8 | `customerRequestTables` | 64 | V2 ancestry, preparations, grants, attempts, mandates, runs, evidence, problems, x402 attempts | `src/modules/customer-request/internal/convex-schema.ts` |
+| 9 | `agentAccessPrincipalTables` | 1 | durable caller principals | `src/modules/agent-access/internal/principal-convex-schema.ts` |
+| 10 | `agentAccessOAuthTables` | 2 | OAuth grants and dynamic clients | `src/modules/agent-access/internal/oauth-convex-schema.ts` |
+| 11 | `agentAccessPolicyTables` | 1 | generation-bound policy grants | `src/modules/agent-access/internal/convex-schema.ts` |
+| 12 | `registryTables` | 4 | projection items/attempts, search documents, index status | `src/modules/registry/internal/schema.ts` |
+| 13 | `routingKernelTables` | 44 | admission, incident control, authority budgets, quote/run/protocol/evidence spine | `src/modules/routing-kernel/internal/convex-schema.ts` |
+| 14 | `demandTables` | 3 | demand signals and search-gap records | `src/modules/demand/internal/schema.ts` |
+| 15 | `discoveryTables` | 2 | manifests and generation attempts | `src/modules/discovery/internal/schema.ts` |
+| 16 | `harnessTables` | 2 | harness sessions and append-only entries | `src/modules/harness/internal/convex-schema.ts` |
+| 17 | `inquiryTables` | 12 | inquiry/access/message/read/privacy/governed-send rows | `src/modules/inquiries/internal/convex-schema.ts` |
+| 18 | `notificationOutboxTables` | 3 | dispatches, attempts, webhook events | `src/modules/notification-outbox/internal/schema.ts` |
+| 19 | `observabilityTables` | 5 | operation keys, audit, controls, funnel, owner activation | `src/modules/observability/internal/schema.ts` |
+| 20 | `securityTables` | 6 | disputes, suppression, admin membership/audit, fingerprints, source-write nonces | `src/modules/security/internal/schema.ts` |
+| 21 | `moneyTables` | 13 | accounts, ledger, transactions, usage, budgets, external spend, Stripe, payouts | `src/modules/money/internal/convex-schema.ts` |
+| 22 | `settingsTables` | 1 | owner notification preferences | `src/modules/settings/internal/schema.ts` |
+| 23 | `projectSpineTables` | 3 | project spine, events, quotes | `src/modules/project-spine/internal/convex-schema.ts` |
+| 24 | `workTreeTables` | 6 | trees, events, decisions, repeat permission/use, approval | `src/modules/work-tree/internal/convex-schema.ts` |
+| 25 | `studyTables` | 2 | studies and append-only study events | `src/modules/study/internal/convex-schema.ts` |
+| 26 | `externalRunTables` | 4 | frozen manifests, starts, evidence, gate decisions | `src/modules/external-run/internal/convex-schema.ts` |
+
+### Information-bearing row groups
+
+**Business/catalog.** `owners`, `businesses`, `businessContexts`, and `claims` establish durable public
+identity. `businessOfferings`, `businessOfferingRevisions`, `offeringAccessPaths`, and
+`businessSupplyProjectionSnapshots` establish versioned supply and bounded public snapshots.
+
+**Capability supply.** `capabilityContractDocuments`, `capabilityPublications`,
+`capabilityOfferings`, `capabilityTransportBindings`, and `capabilitySupplySourceDrafts` own admitted
+contract/transport material. Provider connections, leases, approvals, registered mappings, and call
+events own server-side authority and operational observations.
+
+**Registry/discovery.** Projection items/attempts, search documents, and index status are repairable
+projections. Discovery manifests/attempts are generated read contracts. Neither replaces source
+business or capability rows.
+
+**Operation execution.** `capabilityOperationInvocations` is the outer principal-owned envelope.
+`actionInvocationControls`, `actionInvocationAttempts`, and `actionInvocationHistory` are the canonical
+effect-lifecycle authority. Outer completion must agree with canonical terminal evidence.
+
+**Answer.** `answerTurnReservations` binds session, thread scope, request digest, turn ID, and sequence
+before model/provider work. `answerTurns` stores frozen terminal material; `answerToolCalls` and
+`answerThreadShares` support evidence and revocable sharing.
+
+**Customer Request.** Immutable heads/revisions/commands and route-plan generations preserve ancestry.
+Preparation, disclosure, approval, budget, idempotency, spend/data reservation, release, provider
+outcome, protocol evidence, reconciliation, and resolution rows preserve effect authority. Mandate,
+step reservation, run, cancellation, problem, outbox, and x402-attempt rows preserve business flow.
+
+**Agent access.** Principals, OAuth grants/clients, and policy grants separate caller identity,
+one-time OAuth lifecycle, and durable scope/budget policy.
+
+**Money.** Accounts/entries/transactions own AE-internal balances. Usage and credential-budget rows own
+charge attribution and budget accounting. `moneyExternalSpendReservations` owns provider-direct spend
+reservation, submission, settlement/release/unknown/reversal state without creating an AE supplier
+payout for that same x402 transfer.
+
+**Inquiry/notification.** Inquiry rows own customer/owner communication and governed-send evidence.
+Notification outbox rows own durable-before-send provider dispatch and webhook observations.
+
+**Governance.** Security, observability, settings, project, Work Tree, study, harness, and external-run
+bundles own bounded operational and evidence records. External-run gates cap 12 starts and 64 evidence
+records per start (`MAX_EXTERNAL_RUN_STARTS`, `MAX_EXTERNAL_RUN_EVIDENCE_PER_START`).
 
 ## 4. Numbered data-flow journeys
 
-### J1 — Buyer ask → Answer thread → private/share readback
+### J1 — Buyer ask → Answer reservation → durable/private/share readback
 
-1. `/` validates bounded query/project state; a query enters `/t/new`, while an explicit project uses
-   `readRootWorkTreeServer` (`src/routes/index.tsx`).
-2. `/api/answer/turn` requires JSON, a 16 KiB body, an `x-ae-turn-key` (≤128 chars), rate admission,
-   session identity, and strict request parsing (`src/routes/api.answer.turn.ts`,
-   `src/lib/server/bounded-request-body.ts`). `reserveAnswerTurn` atomically binds owner/session,
-   thread scope, request digest, turn identity, sequence, and the 25-turn ceiling before streaming
-   (`convex/answerThreads.ts`).
-3. The stream is transient. Checkpoint/finalization writes durable turn evidence and terminal status;
-   owner readback is the terminal confirmation. Same key+digest replays; changed material input
-   conflicts (`src/modules/answer-thread/internal/answer-turn-checkpoint.ts`,
-   `src/modules/answer-thread/internal/public-projection.ts`).
-4. `/t/$threadId` exposes a pseudonymous-session projection; share issue/revoke creates a durable
-   revocable grant; `/s/$shareToken` accepts only a 64-hex token and projects sanitized transcript
-   state (`src/modules/answer-thread/answer-thread.functions.ts`, `src/routes/s.$shareToken.tsx`).
-   Stop durably transitions a turn before browser abort, and never upgrades an interrupted stream to
-   completion (`src/routes/api.answer.turn.stop.ts`).
+1. `/` validates query/project state and routes an ask to `/t/new`.
+2. `/api/answer/turn` requires JSON, a 16 KiB body, session identity, rate admission, and a bounded
+   `x-ae-turn-key` (`src/routes/api.answer.turn.ts`).
+3. `reserveAnswerTurn` atomically binds reservation key, session, requested thread scope, request
+   digest, thread/turn identity, and sequence before streaming (`convex/answerThreads.ts`).
+4. A thread admits at most 25 turns; source reads 26 to detect overflow
+   (`ANSWER_THREAD_MAX_TURNS`, `ANSWER_THREAD_TURN_COUNT_SNAPSHOT_LIMIT`).
+5. The stream is transient. Checkpoint/finalization writes frozen evidence and a terminal status;
+   durable readback, not an open SSE frame, confirms completion.
+6. Public projection rejects malformed frozen evidence, recursive forbidden replay keys, inconsistent
+   Operation candidate/selection/outcome digests, and oversized artifacts
+   (`isCurrentFrozenEvidence`, `hasForbiddenReplayKey`).
+7. A pending/stopped reservation can be projected as lifecycle truth, but it never manufactures
+   prose, artifacts, work log, or tool payload (`buildPublicReservationTurn`).
+8. Share issue/revoke persists a revocable grant. `/s/$shareToken` projects only sanitized thread
+   state.
 
-### J2 — Public business catalog → exact inquiry → owner/customer record
+### J2 — Catalog → exact Service/Operation projection → inquiry or business tool
 
-1. Business/context/catalog writes are source-write-admitted and rebuild a bounded
-   `BusinessSupplyProjection`; public list/search/detail reads hide unpublished or suppressed supply
-   (`convex/capabilitySupplyProjection.ts`, `convex/registry.ts`,
-   `src/modules/catalog/internal/offering-supply.ts`).
-2. `projectServiceFromBusinessDto` projects one business to `ServiceDto.endpoints[]`. An Operation
-   enrichment occurs only for one exact catalog-origin match across offering revision, access path,
-   URL, and method; ambiguity remains catalog-only (`src/modules/registry/internal/services-api-projection.ts`).
-3. `/$slug/inquiry` re-reads target admission, renders exact governed-send fields, signs a canonical
-   intent digest, and submits through `submitPublicInquiryServer`. Convex verifies source-write
-   admission/rate limit and persists inquiry thread, access grant, message, receipt, and notification
-   outbox (`src/routes/$slug.inquiry.tsx`, `src/modules/inquiries/inquiry.functions.ts`,
-   `convex/inquiries.ts`).
-4. The customer record shows sent/delivery/reply evidence only. Owner inbox/detail actions require
-   owner identity and expected version; notification providers return IDs/hashes/status, not raw
-   addresses or credentials (`src/components/ae/inquiries/AeCustomerRecord.tsx`,
-   `src/modules/notification-outbox/public.ts`).
+1. Source-write-admitted business/catalog writes create or revise durable business, offering, and
+   access-path rows.
+2. Projection rebuild creates a bounded `BusinessSupplyProjection`; public reads hide unpublished,
+   suppressed, stale, or missing source.
+3. Service projection enriches an endpoint with Operation semantics only for one exact catalog-origin
+   join across offering revision, access path, URL, method, and source hashes
+   (`src/modules/registry/internal/services-api-projection.ts`).
+4. Operation search/detail/compare/inspect-plan read current supply and recompute
+   `operation:v1:<64hex>` identity (`createPublicOperationRef`).
+5. `/$slug/inquiry` re-reads exact target admission, signs governed-send intent, and persists inquiry,
+   access, message, receipt, and notification-outbox rows before provider dispatch.
+6. `/$slug/tools/$toolId` exposes a registered business tool; preparation remains a proposal until an
+   enforcing authority seam accepts it.
+7. Customer/owner readbacks expose delivery/reply/status evidence, not private recipient credentials or
+   a claim that the business accepted or completed the request.
 
-### J3 — Claim/owner supply → admission/import → projection/readiness
+### J3 — Owner claim/supply → admission/import → readiness → public projection
 
-1. Claim and offering editors persist owner/business/revision state with expected revision and
-   idempotent request keys (`src/modules/catalog/owner-claim.functions.ts`,
-   `src/routes/_operator/owner.offerings.$offeringRef.tsx`).
-2. The owner funnel reads source drafts and runs document/capability preflight, admission, readiness,
-   test, maintenance, withdraw, and republish against owner/business/offering/revision identity
-   (`src/routes/_operator/owner.supply.$offeringRef.tsx`,
-   `src/modules/capability-supply/supply-funnel.functions.ts`).
-3. `normalizeCapabilityPublication` and the OpenAPI/MCP/x402 importers bound source bytes/depth/nodes,
-   normalize transport/payment/schema, and emit named refusal reasons. `commitPreparedPublicationCommand`
-   persists provenance, contract, publication, offering, binding, and replay identity only after
-   deterministic checks (`src/modules/capability-supply/internal/publication-importers.ts`,
-   `src/modules/capability-supply/internal/publication/publish.ts`).
-4. A one-minute cron schedules at most 20 due probes; the probe uses guarded public-target lookup,
-   a bounded request/response, credential resolution, and revision/target fences. It records
-   `observedAt`, `validUntil`, request/response digests, credential/health state, and typed outcome
-   (`convex/crons.ts`, `convex/capabilitySupply.ts`, `convex/capabilitySupplyReadiness.ts`).
-5. Projection rebuilds and exact graph qualification fail closed on stale revision, invalid binding,
-   readiness expiry, source capacity, or insufficient evidence; public search/detail shows those
-   states instead of inventing routeability (`src/modules/capability-supply/internal/graph/qualify-candidate.ts`,
-   `convex/capabilitySupplyProjection.ts`).
+1. Claim and offering editors persist owner/business/revision state with expected version and
+   idempotent operation keys.
+2. Owner supply reads source drafts and runs document/capability preflight, admission, testing,
+   readiness, maintenance, withdrawal, and republish against exact owner/business/offering revision.
+3. OpenAPI, MCP, and x402 importers bound source bytes, depth, nodes, schemas, transport, and payment
+   configuration before creating prepared publication material.
+4. Commit persists provenance, contract document, publication, offering, binding, and replay identity
+   only after deterministic validation.
+5. Curated provider bootstrap uses the same generic contract→offering→binding→publication path. In
+   production it filters demo/development-keyed publications and refuses source drift as migration
+   required (`convex/curatedProviders.ts`, `seed`).
+6. Readiness is a separate guarded observation against exact revision, endpoint, credential state, and
+   target. Bootstrap never fabricates readiness.
+7. Public projection fails closed on stale revision, invalid binding, expired readiness, source
+   capacity, ambiguous catalog origin, or insufficient evidence.
 
-### J4 — Operation discovery → access/OAuth → invocation → recovery/money
+### J4 — Operation discovery → grant/OAuth → invocation → effect/recovery/money
 
-1. `searchCapabilityOperations` reads current publication snapshots, validates query/cursor/filters,
-   recomputes `operation:v1:<64hex>` identity, and returns bounded descriptors. Detail, compare, and
-   inspect-plan are exact reads/joins, not authority grants (`src/modules/capability-supply/operation-projection.ts`,
-   `convex/capabilitySupplyOperations.ts`).
-2. Owner consent through OAuth device or authorization-code/PKCE flow creates a principal and durable
-   grant before returning a one-time AE caller key. Grants carry scopes, environment, generation,
-   policy digest, spend/rate/concurrency limits, and seven-day expiry; supplier credentials stay
-   server-side (`src/lib/server/agent-access-oauth-api.ts`, `src/modules/agent-access/agent-access.ts`).
-3. The authenticated gateway checks bearer identity and `market_operations:invoke`, strict input,
-   operation source-write authority, grant/policy, and principal-bound idempotency before persisting
-   `capabilityOperationInvocations` (`src/lib/server/operation-invoke-api.ts`,
-   `convex/capabilityOperationInvocations.ts`).
-4. The durable worker re-reads grant/principal, current publication, operation material, readiness,
-   binding/provider approval, accepted authority, and budget. It claims an attempt/effect generation,
-   obtains provider lease when needed, persists a release fence, calls guarded HTTP/MCP/x402 transport,
-   settles money/lease, then persists canonical terminal evidence before projecting outer status
-   (`convex/capabilityOperationInvocationWorker.ts`, `src/modules/action-invocation/canonical-claim.ts`).
-5. Status is owner/principal scoped. Cancel can yield `cancelled/not_released`; transport uncertainty
-   yields `reconciliation_required/possibly_released`; reconcile requires matching attempt, input,
-   provider/payment/transport evidence and never creates a new effect (`src/modules/action-invocation/operation-public.ts`,
-   `src/routes/api.v1.operations.$invocationRef.reconcile.ts`).
-6. Dynamic published actions authorize exact price, debit operator credit, accrue provider earnings,
-   and record AE rake with immutable transaction/idempotency identity. Topup, refund, payout, Stripe
-   webhook, and outcome-unknown reconciliation are separate money commands (`src/modules/action-invocation/dynamic-published-adapter.ts`,
-   `convex/moneyLedger.ts`, `src/modules/money/internal/topup.ts`).
+1. Anonymous discovery returns bounded current descriptors but no execution authority.
+2. OAuth device/PKCE consent establishes a durable principal and policy grant before a one-time caller
+   key is returned. Supplier credentials stay server-side.
+3. The operation gateway authenticates bearer scope, parses strict input, computes principal-bound
+   operation/idempotency material, and obtains signed source-write admission.
+4. `capabilityOperationInvocations.reserve` replays exact identity and conflicts on changed principal,
+   grant, operation, input, request, or persisted publication material.
+5. Reservation enforces grant lifecycle/generation/expiry, per-credential rate limits, and maximum
+   concurrent pending/reconciliation rows before insert.
+6. Authority mode can permit a free read, require owner approval, or consume standing grant authority.
+   Approval re-reads current publication and exact persisted input before dispatch.
+7. Workpool dispatch re-reads principal/grant/current publication/readiness/provider authority and
+   opens the canonical Action Invocation claim.
+8. `authorizeInvocationCharge` now derives billing authority from persisted invocation, publication,
+   offering, grant, principal, canonical attempt, and exact price material; it is an internal source
+   mutation, not caller-supplied billing identity (`convex/moneyLedger.ts`).
+9. The worker persists release fencing before guarded HTTP/MCP/x402 effect. A provider response is
+   normalized and output-schema-validated before terminal delivery.
+10. AE-internal billing settles through the exact ledger. Provider-direct x402 reserves external spend,
+    records possible submission before send, verifies settlement evidence, and avoids a duplicate AE
+    provider payout lane.
+11. Status is principal/owner scoped. Cancellation is safe only before release; uncertain release
+    becomes `reconciliation_required`.
+12. Reconciliation binds invocation, attempt, effect generation, input, transport, payment, provider,
+    and evidence identity and never creates a fresh external effect.
 
-### J5 — Customer Request → route plan/mandate → external action → outcome/recovery
+### J5 — Customer Request → RoutePlan/mandate → Workpool transport → recovery
 
-1. Browser submit uses a signed, bounded-lived guest session; agent submit uses bearer principal and
-   customer scope. Both enter strict action contracts with command keys, expected revisions, and
-   source assertions (`src/lib/server/customer-request-browser-api.ts`,
-   `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/agent-contract.ts`).
-2. Deterministic aggregate/compiler/projection stores criteria, provenance, route candidates, required
-   facts, preparation/disclosure review, route plan generation, and next action. Model interpretation
-   is a proposal; compile/commit validates routeability against current supply (`src/modules/customer-request/compiler.ts`,
-   `src/modules/customer-request/customer-projection.ts`, `convex/customerRequestApplication.ts`).
-3. Confirmation/run requires `approve_each`; repeat permission requires a bounded mandate. Durable
-   route step admission checks principal/owner/mandate/target/effect scope and reserves command identity
-   before dispatch (`src/modules/customer-request/route-mandate.ts`,
-   `src/modules/customer-request/customer-request.actions.ts`).
-4. Route work is dispatched through the shared Workpool into the transport worker. The worker opens
-   dispatch, checks expiry/target safety, signs the call, authorizes x402 when applicable, records
-   response/evidence, and converges unknown/released outcomes; it never treats a provider response or
-   browser state as a completed business result (`convex/customerRequestRouteWorkpool.ts`,
-   `convex/customerRequestRouteTransportWorker.ts`).
-5. Browser and agent projections share the same durable Request aggregate but differ in authentication
-   and navigation. `outcome_unknown` and unsupported revision states are visible next actions, not
-   silent retries (`src/modules/customer-request/agent-navigation.ts`,
-   `src/modules/customer-request/customer-projection.ts`).
+1. Browser submission uses signed guest identity; agent submission uses bearer principal/customer
+   scope. Both enter strict contracts with command keys and expected revisions.
+2. Evaluation/compiler records facts, criteria, candidates, completion requirements, proposal
+   provenance, registry snapshot digest, and immutable RoutePlan generation.
+3. Interpretation is proposal-only. Commit revalidates current registered supply and source-owned
+   operation admission.
+4. Confirmation issues explicit or bounded standing authority. `compileRouteMandate` binds principal,
+   request revision, generation, route, spend, data/effect/evidence scope, expiry, and fallback policy.
+5. Step admission reserves spend/data/command identity before dispatch.
+6. Shared Workpool owns 32 parallel route slots and retries idempotent actions at most three attempts
+   with 1-second exponential backoff (`customerRequestRouteWorkpool`).
+7. The transport worker opens dispatch, checks cancellation/expiry/target/credential/readiness fences,
+   and signs one HTTP/MCP/x402 call.
+8. Route transport records request/response/output/evidence digests and typed release/settlement state.
+9. `outcome_unknown` is reconcile-only. Automatic retry cannot reinterpret possibly released work as
+   not released.
+10. Browser and agent projections share the same durable aggregate but expose different authentication
+    and navigation adapters.
 
-### J6 — Agent access/OAuth lifecycle
+### J6 — Agent access/OAuth and Work Tree approval lifecycle
 
-OAuth metadata and registration are public bounded adapters; device/PKCE consent is owner-controlled.
-`agentAccessOAuth` transitions are durable, one-time delivery is separated from token storage, and
-revoke persists the AE grant/principal lifecycle before provider key revocation (`src/routes/oauth.*`,
-`src/modules/agent-access/oauth-state.ts`, `src/modules/agent-access/agent-access.ts`). Policy
-checks active lifecycle, principal/application/environment, generation/digest, scopes, spend, rate,
-and concurrency (`src/modules/agent-access/policy.ts`, `convex/agentAccessPolicy.ts`). Owner
-readbacks omit secrets and supplier credentials; local E2E bypass is explicitly not production
-authorization (`src/lib/server/local-e2e-bypass.ts`).
+1. Public metadata and registration are bounded adapters.
+2. Device or authorization-code/PKCE consent creates durable OAuth state and one-time delivery material.
+3. Policy grant binds principal, application, environment, credential, generation, scopes, Operation
+   access, spend, rate, concurrency, and expiry.
+4. Revocation persists grant/principal lifecycle before external credential cleanup.
+5. Work Tree approval issuance derives owner from auth, checks owner-bound credential, exact tree
+   generation/revision, decision-node proposal digest, amount, expiry, and idempotency
+   (`convex/workTreeApprovals.ts`).
+6. Approval consumption checks the same binding and atomically marks the row consumed with receipt ID.
+7. Owner readbacks omit caller keys and supplier credentials. Local E2E bypass is explicitly not
+   production authorization.
 
-### J7 — Inquiry/notification/Stripe observations
+### J7 — Inquiry/notification/Stripe/x402 observations
 
-Inquiry submission persists a governed receipt and notification dispatch source row before provider
-send. Novu/Resend dispatchers resolve recipients server-side, bound webhook bodies, verify provider
-signatures, deduplicate provider events, and project status/error/hash/next-action readbacks
-(`convex/inquiries.ts`, `convex/notificationOutbox.ts`, `src/lib/server/notification-dispatch.ts`).
-Stripe checkout/connect webhook and payout paths preserve pending, succeeded, failed, reversed, and
-`outcome_unknown`; browser success is not payment evidence (`src/modules/money/internal/stripe-webhook.ts`,
-`src/modules/money/internal/payout-policy.ts`).
+1. Inquiry submission persists governed-send receipt and notification dispatch source rows before
+   provider send.
+2. Novu/Resend dispatch resolves recipients server-side, records attempts, and exposes only bounded
+   provider IDs, hashes, status, and redacted failure.
+3. Resend and Stripe webhooks verify bounded raw events, deduplicate durable event identity, and record
+   observations before projecting status.
+4. Internal topup/connect/payout paths preserve pending, succeeded, failed, reversed, and unknown
+   states; browser navigation cannot settle them.
+5. x402 challenge and authorization are bound to target, exact amount, network, asset, `payTo`,
+   attempt, effect generation, and operation identity.
+6. `verifyExactEvmX402Settlement` additionally requires a successful matching transaction, at least
+   12 confirmations, and an exact ERC-20 `Transfer` from payer to `payTo`
+   (`src/modules/capability-supply/internal/x402-settlement-verifier.ts`).
+7. Settlement evidence does not prove output schema validity or Qualified Use.
 
-### J8 — Operator/admin/developer readbacks and public discovery
+### J8 — Operator/admin/developer, public discovery, and external proof gates
 
-The operator layout authenticates a Clerk session, then source queries/mutations enforce ownership or
-admin membership/action matrices. Admin readbacks take bounded source rows and redact identity/content;
-developer discovery renders public route health, freshness, support, and gated/unavailable states
-(`src/lib/operator/route-options.ts`, `src/modules/security/internal/admin-authority.ts`,
-`convex/security.ts`, `src/modules/discovery/developer-discovery.ts`). Public UCP, llms, SKILL,
-catalog, and Operation manifests derive from route/action registries and current projections; they
-are documentation/read contracts, not proof of live routeability or settlement (`src/modules/discovery/public.ts`,
-`src/modules/actions/index.ts`).
+1. The operator shell authenticates Clerk; each source query/mutation still enforces ownership or the
+   admin action matrix.
+2. Admin readbacks cap source rows, redact identity/content, and expose truncation or bounded windows.
+3. Developer discovery renders route health, freshness, supported/degraded state, and repair action.
+4. Public UCP, llms, SKILL, catalog, Services, and Operation descriptors derive from current source
+   projections and route/action registries.
+5. External-run manifests are frozen, starts/evidence are capped and digest-bound, and final gate
+   decisions are durable (`convex/externalRuns.ts`).
+6. A release or external-run report proves only the evidence classes actually recorded. It cannot
+   promote fixture/local/source integration into hosted, independent-provider, customer, or settled
+   payment proof.
 
 ## 5. Authority, provenance, redaction, idempotency, and evidence invariants
 
-- **Identity and revisions:** Public Operation refs are recomputed from operation/publication/revision/
-  contract material (`src/modules/capability-supply/public.ts`, `src/modules/capability-supply/operation-projection.ts`).
-  Owner/source commands bind business, offering, revision, source digest, expected version, and
-  correlation/operation key (`src/modules/capability-supply/internal/publication/publish.ts`).
-- **Exact catalog origin:** Service endpoint enrichment requires one unambiguous catalog-offering
-  origin/link; no quote, model, or ambiguous URL creates an executable endpoint
-  (`src/modules/registry/internal/services-api-projection.ts`).
-- **Authority before effect:** Owner/admin/principal identity and source-write admission precede claim,
-  publication, inquiry, route, operation, money, and OAuth mutations (`src/lib/server/convex-source.ts`,
-  `src/modules/security/internal/admin-authority.ts`, `src/modules/agent-access/policy.ts`).
-- **Model/provider non-authority:** Model proposals select from deterministic descriptors; provider
-  responses, readiness probes, MCP state, browser state, and Stripe/notification webhooks are recorded
-  observations. Only durable source transitions can publish completion/evidence (`src/modules/customer-request/compiler.ts`,
-  `src/modules/capability-supply/internal/readiness-probe.ts`, `src/modules/action-invocation/canonical-claim.ts`).
-- **Redaction:** Public business/Service/Operation projections omit private source rows; Answer public
-  projections reject forbidden replay keys recursively and omit raw evidence/provider/model payloads;
-  inquiry/customer/admin/notification/OAuth projections expose refs, status, hashes, and bounded text,
-  not secrets or raw recipient credentials (`src/modules/answer-thread/internal/public-projection.ts`,
-  `src/modules/inquiries/internal/schema.ts`, `src/modules/security/internal/admin-readbacks.ts`).
-- **Idempotency/replay:** Answer reservation keys bind owner/session/scope/digest; Customer Request,
-  publication, route, operation, action-invocation, money, notification, OAuth, and payout commands
-  bind canonical command digests and expected versions. Replay returns the prior durable result;
-  material conflicts refuse (`convex/answerThreads.ts`, `src/modules/action-invocation/durable.ts`,
-  `convex/moneyLedger.ts`).
-- **Release/effect fencing:** Canonical action attempts track lease owner, effect generation,
-  release state, terminal outcome, and reconciliation evidence. `possibly_released` is never reported
-  as safe to retry (`src/modules/action-invocation/contracts.ts`, `src/modules/action-invocation/canonical-claim.ts`).
-- **Money identity:** Charge amount/currency/price digest, account version, transaction/refund
-  identity, credential budget generation, provider accrual, and rake are checked transactionally;
-  outcome unknown requires reconciliation (`src/modules/money/internal/ledger.ts`, `convex/moneyLedger.ts`).
-- **HTTP boundary:** `problem()` emits RFC 9457 `application/problem+json`; concrete routes guard
-  unsupported methods and the `/api/$` catch-all returns 404 instead of SPA HTML (`src/lib/server/problem.ts`,
-  `src/routes/api.$.ts`, `src/lib/server/method-guard.ts`). Coverage is a route contract, not evidence
-  that every external system is healthy.
+- **Registered root:** only tables spread through `convex/schema.ts` are application durable authority.
+- **Public Convex exposure:** sensitive helpers use `internalQuery`, `internalMutation`, and
+  `internalAction`; public functions remain explicit adapters.
+- **Identity and revision:** Operation refs derive from operation ID, publication ref/revision, and
+  contract ref (`createPublicOperationRef`). Admitted material additionally binds catalog and binding
+  lineage, readiness, commercial, and effect digests.
+- **Exact catalog origin:** no model result, URL similarity, or ambiguous offering creates an executable
+  Service endpoint.
+- **Authority before effect:** authentication, ownership/admin membership or principal/grant, source
+  write, expected revision, command digest, and consequence authority precede every consequential
+  mutation.
+- **Signed source writes:** `source-write:v2` binds scope, key ID, operation key, correlation ID,
+  command digest, request method/origin/path/query/body digest, issue time, nonce, and signature
+  (`requireSourceWrite`).
+- **Nonce replay:** accepted source writes consume `sourceWriteNonces`; cleanup deletes at most 200 per
+  batch and reschedules, capped at 500 (`SOURCE_WRITE_NONCE_CLEANUP_BATCH_SIZE`,
+  `SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE`).
+- **Model non-authority:** a model may propose interpretation or selection. Deterministic schemas,
+  current source descriptors, compiler checks, and durable command seams decide acceptance.
+- **Provider non-authority:** HTTP success, MCP output, x402 headers, readiness probes, Stripe events,
+  and notification webhooks are observations until validated and durably transitioned.
+- **Redaction:** public Answer projection recursively rejects token/secret/credential-shaped replay
+  keys. Public catalog, operation, inquiry, notification, OAuth, and admin projections omit private
+  source material.
+- **Credential locality:** provider credentials and x402 signing material resolve server-side from
+  opaque refs. Transport output is rejected/unknown if it contains outbound sensitive values.
+- **Idempotency:** Answer reservation, publication, Customer Request, route, Operation, canonical
+  Action Invocation, money, external spend, notification, OAuth, and payout commands bind stable
+  identity plus canonical material digest.
+- **Replay conflict:** exact replay returns prior durable result; same identity with changed material
+  refuses. Cache/TTL dedupe is never the authority.
+- **Release fencing:** canonical attempts bind attempt ref, effect generation, lease owner/expiry,
+  release state, and terminal/reconciliation evidence.
+- **Possibly released:** `possibly_released`, unknown submission, unknown settlement, and
+  `reconciliation_required` are never safe-to-retry completion states.
+- **Two money lanes:** AE-internal billing owns ledger debit/provider accrual/rake. Provider-direct x402
+  owns external-spend reservation and direct settlement evidence. One invocation must not pay through
+  both lanes.
+- **Exact money:** currency, exponent, units, price digest, account version, transaction identity,
+  credential-budget generation, provider accrual, and rake are checked transactionally.
+- **x402 ordering:** authorization is prepared, durable possible submission is recorded, payment is
+  sent, and settlement observation is persisted. Process loss restores signing material only through
+  an opaque custody digest.
+- **Completion:** Operation completion requires canonical terminal state and contract-valid output.
+  Payment settlement alone is not delivery; delivery alone is not a payout.
+- **HTTP boundary:** concrete handlers bound body, method, schema, auth, and rate; failures use RFC 9457
+  `application/problem+json` (`src/lib/server/problem.ts`, `src/lib/server/method-guard.ts`).
+- **MCP schema:** MCP projects the canonical action input/output schemas, including strict top-level
+  output unions; it does not own a parallel tool contract.
 
 ## 6. Resource-first USE inventory
 
-USE is applied to resources after listing them: utilization is used/busy capacity over the stated
-window/cap, saturation is waiting/queued work caused by unavailable capacity, and errors include
-failed, recovered, or retried attempts. Source state and per-request evidence exist, but aggregate
-telemetry is often absent. No `?` below means a current source-enforced bound, not a measured SLO.
+USE is applied after naming the resource. Utilization is used/busy capacity over a stated cap and
+window. Saturation is waiting caused by unavailable capacity. Errors include refused, failed,
+recovered, and retried work. A source-enforced cap is not an aggregate measurement.
 
-| Resource | Capacity/bound | Utilization observation | Saturation observation | Errors | Current observability | Owner/seam |
-|---|---|---|---|---|---|---|
-| Answer model/tool loop | 4 rounds; output 1,024 tokens; normalized tool calls; one default registry search limit 3; tool result 64 KiB; no model retries | Per-request model/token usage may be recorded; aggregate used-token/round utilization over a window `?` | Exhausted loop/tool budget (`budget_exceeded`); queued model work or context waiting `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: `budget_exceeded`, `result_too_large`, provider/model errors; `maxRetries: 0` | Request-level checkpoints and harness/model request observations; aggregate token/cost dashboard `?` | `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/answer-turn-checkpoint.ts`; Answer owns accounting |
-| Answer durable turns/checkpoints | 25 turns/thread; reads 26 to detect overflow; checkpoint 256 KiB, max 16 tool calls/digests/model requests, 25 providers, 32 replay messages; 30 s lease | Per-turn reservation/active status and checkpoint steps are durable; aggregate active-turn/lease utilization over a window `?` | `thread_turn_limit` records exhausted 25-turn capacity; queued or waiting turn reservations `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: digest/identity/checkpoint conflicts, stale lease, finalization errors | `answerTurnReservations`, `answerTurns`, checkpoint/final status; per-turn state only | `convex/answerThreads.ts`, `src/modules/answer-thread/internal/answer-turn-checkpoint.ts` |
-| Convex transactions/queries and projections | `?` platform byte/read/write ceilings; application pagination validator; source projections use bounded `take(+1)` | Convex per-transaction consumption may be platform-observed; repository aggregate used byte/read/write utilization over a window `?` | Queued/waiting or exhausted Convex platform capacity `?`; no repository observation seam | Windowed failed/recovered/retried count/rate `?`; taxonomy: capacity refusal, stale projection, query/transaction errors | Named capacity errors and bounded rows; live Convex byte/doc counters `?` | `convex/schema.ts`, `convex/capabilitySupplyProjection.ts`, `convex/security.ts`; each module owns its query shape |
-| Operation catalog source/search | Source 256 (+1 overflow), query 200, cursor 512, page 20, compare 4, inspect plan 4, mappings 32; schema 65,536 bytes/depth 24/properties 128/refs 64 | Per-request returned-row counts against page/source bounds; aggregate source/read capacity utilization over a window `?` | `source_capacity_exceeded` only when the source bound is exhausted; DB queue/wait `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: operation unavailable/not current, mapping cycle/incompatible, schema-bound refusal, invalid cursor/limit | Public pagination (`nextCursor`, `hasMore`) and typed unavailable result; aggregate search load `?` | `src/modules/capability-supply/operation-projection.ts`, `convex/capabilitySupplyOperations.ts`; registry/supply owns |
-| Eligible supply/catalog projection | Eligible max 256; catalog max 100 offerings/business and 20 access paths/offering; rebuild reads +1 and parallelizes per-offering joins | Per-rebuild row counts and projection generation/source digest; aggregate rebuild CPU/read utilization over a window `?` | `capacity-exceeded` only when an explicit source bound is exhausted; rebuild queue/wait `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: pending snapshot, offering/path overflow, lineage mismatch, source stale/invalid binding | `businessSupplyProjectionSnapshots`, registry projection attempts/index status; utilization `?` | `src/modules/capability-supply/internal/eligibility/list.ts`, `src/modules/catalog/internal/offering-source.ts`, `convex/capabilitySupplyProjection.ts` |
-| Customer Request graph/plan | Graph listRouteable 64, mappings 128; interpreter descriptors 512 KiB, projected input schema 256 KiB; compiler selections 64/facts 128/route plans 256; preview 32 steps/64 options | Per-request graph/plan row and step counts plus work observations; aggregate graph/model capacity utilization over a window `?` | Compiler overflow refusal is an exhausted bound; graph/plan queue or wait `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: needs-information, context-stale, route unavailable, unsafe interpretation, stale revision/mandate, unsupported/unknown outcome | Durable heads/revisions/commands/route runs/recovery evidence; aggregate route saturation `?` | `convex/customerRequestApplication.ts`, `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts` |
-| Shared route Workpool/scheduler | Workpool max parallelism 32; global Convex slot ceiling `?`; default max attempts 3, backoff 1 s, base 2; scheduler `runAfter(0)` | Durable work IDs/dispatch states and completion callbacks; active slots/worker busy time over a window `?` | Queue depth/age, retry backlog, or exhausted slots `?` (no aggregate queue/capacity observation) | Windowed failed/recovered/retried count/rate `?`; taxonomy: retry/completion failures and transport unknowns | `customerRequestRouteWorkpool`, dispatch state/work ID, cron invocation counts; no queue metrics | `convex/customerRequestRouteWorkpool.ts`, `convex/customerRequestRouteTransportWorker.ts`, `convex/capabilityOperationInvocations.ts`; Workpool owns dispatch |
-| Readiness probe capacity | 1-minute cron; refresh lead 90 s; max 20 due publications per run; healthy TTL 5 min/unhealthy TTL 1 min; probe response 64 KiB | Per-publication `observedAt`, `validUntil`, credential/health state, response digest/status; aggregate probe/cron capacity utilization over a window `?` | Due rows beyond 20 wait for next minute (source-enforced scheduler bound); probe queue/active-slot saturation `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: typed unreachable/redirect/4xx/5xx/content-type/too-large/invalid/credential failures | Publication lifecycle and evidence refs; aggregate latency/error/saturation `?` | `convex/crons.ts`, `convex/capabilitySupply.ts`, `convex/capabilitySupplyReadiness.ts`, `src/modules/capability-supply/internal/readiness-probe.ts` |
-| Provider HTTP/MCP/x402 transport | HTTP timeout 100..120,000 ms (probe default 10 s); execution response 512 KiB; manual redirects; MCP page 32/tool 4,096; MCP maxRetries 0 | Per-attempt request/response/evidence/unknown observation; aggregate cross-provider concurrency/byte utilization over a window `?` | Provider/client queue or exhausted transport capacity `?`; no source observation seam | Windowed failed/recovered/retried count/rate `?`; taxonomy: timeout, network unknown, malformed response, transport/refusal, payment unknown; Workpool retries selected outer actions only | Route transport observation, request/response digests, typed disposition/release; aggregate provider health `?` | `src/modules/capability-supply/route-transport-runtime.ts`, `src/modules/capability-supply/internal/readiness-probe.ts`, `convex/customerRequestRouteTransportWorker.ts` |
-| HTTP ingress/body and rate-limit buckets | Body guard; route caps 4 KiB–256 KiB (Answer 16 KiB, MCP 64 KiB, market search/inspect 16 KiB/detail 4 KiB/compare 8 KiB, OAuth 16 KiB, Stripe/webhooks 256 KiB); token buckets public read 120/min, mutation 5/min, OAuth 5/min, Answer 30/hour/60/hour/30/hour, inquiry 5/min, dispute 3/min | Per-request admission outcomes and Retry-After; aggregate used ingress/bucket capacity over a window `?` | 429 refusal + Retry-After (exhausted rate-limit bucket); server concurrency/in-flight `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: payload-too-large, rate_limited, parser/method errors | `rateLimit` component rows and RFC 9457 responses; aggregate ingress utilization `?` | `src/lib/server/bounded-request-body.ts`, `src/lib/server/rate-limit.ts`, `convex/lib/rateLimit.ts`; ingress/rate limiter owns |
-| Agent grant/credential budgets | Policy requires positive-safe spend/concurrency/rate; default policy zero spend, concurrency 1, 30/min, 300/hour; dynamic buckets clamp 60/min/300/hour; daily/monthly/per-invocation exact amounts | Durable budget reserved/consumed/released; calls and spend per credential are queryable; aggregate used budget/concurrency utilization over a window `?` | Concurrency/quota exhaustion (daily/monthly/per-invocation limits); queued or waiting work `?` | Windowed failed/recovered/retried count/rate `?`; taxonomy: stale/missing policy/generation, currency/account conflict, budget rejection | `moneyCredentialBudgetStates`, usage summaries/events, grant policy digest; no global spend SLO | `src/modules/agent-access/policy.ts`, `src/modules/money/internal/credential-budget.ts`, `convex/moneyLedger.ts` |
-| Money/Stripe/payout effects | Exact currency units/exponent; topup production USD $5–$25,000; Stripe webhook 256 KiB and 5 s retry hint; payout account/threshold/KYC gates | Ledger entries/transactions/account versions and payout transfer status; aggregate payment-provider used capacity over a window `?` | Payment/payout queue or exhausted provider capacity `?`; pending/outcome_unknown/reconciliation_required and payout held threshold/KYC are status/effect taxonomy, not saturation | Windowed failed/recovered/retried count/rate `?`; taxonomy: insufficient credit, idempotency/currency conflict, provider failure/unknown, reversal, pending/outcome_unknown/reconciliation_required | Append-only ledger, Stripe event digest, payout/transfer evidence; aggregate settlement latency `?` | `src/modules/money/internal/ledger.ts`, `topup.ts`, `payout-policy.ts`, `src/modules/money/internal/stripe-webhook.ts`, `convex/moneyLedger.ts` |
-| Notification outbox/providers | Dispatch/attempt/webhook rows; webhook body 256 KiB; provider retry policy is durable per dispatch, not global | Per-dispatch status, attempt count/provider IDs/payload hashes; aggregate dispatch/worker utilization over a window `?` | Dispatch queue/worker wait caused by unavailable capacity `?`; pending/held/retry are status/recovery taxonomy, not saturation | Windowed failed/recovered/retried count/rate `?`; taxonomy: duplicate, provider mismatch/disabled, signature rejection, send unknown | Redacted dispatch readback and webhook event status; aggregate provider error rate `?` | `src/modules/notification-outbox/internal/schema.ts`, `convex/notificationOutbox.ts`, `src/lib/server/notification-dispatch.ts` |
-| Browser/stream/client concurrency | UI duplicate-submit refs and typed SSE frames; no global browser fetch semaphore or HTTP in-flight cap found | Client turn/submit state and stream frames; aggregate client used/in-flight utilization over a window `?` | Browser in-flight/backpressure queue or exhausted client capacity `?`; durable stop/lease is correctness protection, not saturation | Windowed failed/recovered/retried count/rate `?`; taxonomy: disconnect, abort, malformed frame, stale client projection; never terminal authority | Browser state machine plus durable readback; global client telemetry `?` | `src/modules/answer/answer-ui-stream.ts`, `src/components/ae/chat/answer-turn-state.ts`, `src/routes/api.answer.turn.stop.ts` |
-| Admin/operator/discovery readbacks | Admin source reads cap 100 rows per source; discovery is projection/read-only | Per-readback row counts/truncation and route health/freshness; aggregate read-capacity utilization over a window `?` | Admin/discovery read queue or exhausted read capacity `?`; source stale/unavailable/degraded are status/error taxonomy, not saturation | Windowed failed/recovered/retried count/rate `?`; taxonomy: membership denied, source unavailable, malformed projection | `readAdminRows`, discovery health/state, redacted error codes; aggregate admin latency `?` | `convex/security.ts:704-753`, `src/modules/security/internal/admin-readbacks.ts`, `src/modules/discovery/developer-discovery.ts` |
+| Resource | Capacity/bound next to enforcing symbol | Utilization observation | Saturation observation | Errors | Authority/observation seam |
+|---|---|---|---|---|---|
+| Answer turn storage | 25 turns/thread; read 26 for overflow (`ANSWER_THREAD_MAX_TURNS`) | per-thread rows; windowed turn utilization `?` | `thread_turn_limit`; wait/queue `?` | reservation, digest, identity, finalization failures | `convex/answerThreads.ts` |
+| Answer checkpoint | 256 KiB; step ≤16 (`MAX_ANSWER_TURN_CHECKPOINT_BYTES`, `ANSWER_TURN_CHECKPOINT_MAX_STEP`) | per-turn checkpoint bytes/step; aggregate `?` | exhausted checkpoint/step cap | invalid/oversized/stale checkpoint | Answer thread checkpoint/finalization |
+| Answer model/tool loop | Prompt/model/tool caps live in companion map | request-level usage; aggregate tokens/cost `?` | model/provider queue `?` | bounded taxonomy; aggregate rate `?` | [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md) |
+| Convex transactions | platform transaction ceilings; application reads use bounded `take`/pagination | live bytes/docs/queries may exist platform-side; repo aggregate `?` | platform queue/limit `?` | capacity/transaction errors | each module source seam |
+| Operation search | source 256, query 200 chars, page 20, cursor 512, compare/inspect 4 | returned count/page | source-capacity refusal; DB queue `?` | invalid cursor/ref/unavailable/schema | Operation projection |
+| Catalog source | 100 offerings/business; 20 access paths/offering (`MAX_OFFERINGS_PER_BUSINESS`, `MAX_ACCESS_PATHS_PER_OFFERING`) | per-business row counts | explicit overflow; rebuild queue `?` | stale revision/lineage/projection | catalog source/projection |
+| Eligible capability supply | max 256 (`MAX_ELIGIBLE_SUPPLY`) | rows examined per qualification | source-capacity refusal | binding/readiness/evidence refusal | capability supply graph |
+| Agent grant rate | policy-bound minute/hour rates; dynamic ceilings | durable rate admissions | 429 + Retry-After | stale grant/scope/rate refusal | agent access + rate limiter |
+| Agent invocation concurrency | grant `maximumConcurrentInvocations` across pending + reconciliation rows | current bounded rows per credential | `concurrency_limited` | grant/rate/concurrency refusal | `capabilityOperationInvocations.reserve` |
+| Shared route Workpool | 32 parallel; 3 attempts; 1 s base-2 backoff (`customerRequestRouteWorkpool`) | work IDs/states; active-slot window `?` | queue depth/age `?` | completion/retry/transport failures | Workpool component + source callbacks |
+| Readiness scheduler | one-minute scheduling; 20 due probes/run; healthy 5 min/unhealthy 1 min | per-publication observed/valid times | due rows beyond batch wait; queue age `?` | typed probe failures | readiness source rows |
+| Provider HTTP transport | timeout 100–120,000 ms; response 512 KiB (`requestTimeout`, `MAX_RESPONSE_BYTES`) | per-attempt bytes/status/timing where recorded | provider/client queue `?` | network/status/content/schema/size | route transport observation |
+| Provider MCP transport | 32 pages; 4,096 tools; no reconnect retries (`MCP_TOOL_LIST_PAGE_LIMIT`, `MCP_TOOL_LIST_TOOL_LIMIT`, `maxRetries: 0`) | pages/tools per lookup | provider queue `?` | initialize/list/cursor/tool/result errors | MCP SDK transport observation |
+| MCP ingress | 64 KiB body (`MAX_MCP_REQUEST_BODY_BYTES`) | per-request admission; aggregate `?` | server in-flight `?` | 413/invalid JSON-RPC/auth/tool errors | `handleMcpRequest` |
+| Operation HTTP ingress | invoke 256 KiB; recovery 64 KiB | per-request body/admission; aggregate `?` | server in-flight `?` | schema/auth/source/provider errors | operation invoke API |
+| Source-write nonce store | 200 cleanup batch, max 500 | durable nonce rows; aggregate age/volume `?` | cleanup backlog `?` | replay/signature/age/origin mismatch | `sourceWriteNonces` |
+| Customer Request graph/plan | candidate/route/step/fact schema caps; immutable generations | per-request counts | compiler overflow; planning queue `?` | stale context/mandate/route/unknown | CR V2 rows |
+| Route x402 attempts | one row per attempt/effect identity; challenge accepts max 16; timeout max 86,400 s | reserved/possibly-submitted/observed rows | signer/facilitator/chain queue `?` | mismatch/unverified/unknown | CR x402 + money external spend |
+| External spend budget | grant daily/monthly/per-invocation/concurrency limits | reserved/settled/released amounts | budget concurrency exhaustion | identity/state/live-gate/reconcile refusal | `moneyExternalSpendReservations` |
+| Internal money ledger | exact units/exponent; OCC account version | accounts, entries, transactions, usage | provider/Stripe queue `?` | insufficient credit/conflict/unknown | money kernel |
+| x402 settlement verifier | exact EVM, ≥12 confirmations (`verifyExactEvmX402Settlement`) | per-receipt confirmation count | chain finality wait; aggregate age `?` | reverted/mismatch/unverified | x402 verifier + durable observation |
+| Notification outbox | bounded body 256 KiB; per-dispatch attempt state | per-dispatch attempts/status | queue depth/age `?` | signature/provider/duplicate/send unknown | notification outbox |
+| Inquiry governed send | rate-limited exact target; bounded messages/readback | per-thread activity | send queue `?` | abuse/target/provider/refusal | inquiry + outbox |
+| Admin readbacks | typically bounded source pages, often 100 | returned rows/truncation | read queue `?` | auth/source/projection errors | security/admin readbacks |
+| External-run proof | 12 starts; 64 evidence/start; 768 total (`MAX_EXTERNAL_RUN_*`) | starts/evidence against caps | cohort/evidence-full refusal | integrity/class/gate failures | external-run rows |
+| Browser/stream client | no global browser fetch semaphore found | local in-flight state; aggregate `?` | client backpressure `?` | abort/disconnect/malformed frame | UI state + durable Answer readback |
 
 ### USE interpretation and unknown metrics
 
-The table intentionally keeps three questions separate. For example, a 429 is an ingress error and
-saturation signal, but it is not proof of high utilization; a `take(257)` overflow is a projection
-capacity error, but not a measurement that 256 rows are normally busy; `outcome_unknown` is a
-correctness/effect uncertainty, not zero utilization. Proposed future SLOs would need explicit
-`[PROPOSED]` labels and a measurement seam; this map does not invent them.
-
-Unknowns requiring new observation rather than inference are: live Convex bytes/documents/transaction
-consumption; Workpool active slots, queue depth/age, retry saturation, and scheduler backlog; readiness
-and provider aggregate latency/error rates; model aggregate token/cost/context utilization; browser and
-HTTP global in-flight concurrency; and cross-surface read amplification. Current rows expose per-request
-status, count, digest, observedAt, validUntil, work ID, attempt, and retry state but not those aggregates
-(`convex/**`, `src/modules/**` sources cited in the table).
+- A 429 is an admission error and can be a saturation signal, but it does not prove measured
+  utilization.
+- A source `take(cap + 1)` overflow proves one bound was reached, not that the resource is normally
+  busy.
+- `outcome_unknown` describes effect uncertainty, not utilization or health.
+- Per-request rows expose IDs, counts, attempts, state, digests, `observedAt`, `validUntil`, and retry
+  status. They generally do not expose windowed utilization/saturation/error rates.
+- Unknown aggregate seams remain: Convex transaction consumption; Workpool active slots and queue
+  depth/age; readiness/provider aggregate latency; model token/cost totals; browser/HTTP in-flight
+  concurrency; external-spend reconciliation age; and notification queue saturation.
 
 ## 7. Proof ceilings and reachable gaps
 
 ### Proof ceilings
 
-- **Public discovery/catalog:** proves a current source projection, contract, price/evidence context,
-  provenance, and declared availability at read time. It does not prove provider uptime, execution,
-  payment, booking, or business acceptance (`src/modules/registry/internal/services-api-projection.ts`,
-  `src/modules/capability-supply/operation-projection.ts`).
-- **Readiness:** proves one bounded, guarded observation against a revision/target/credential at its
-  `observedAt`/`validUntil`; it is not an SLA or continuous health metric (`src/modules/capability-supply/internal/readiness-probe.ts`).
-- **Answer:** proves only durable frozen evidence and sanitized completion/error projection. Model prose
-  or an open stream cannot upgrade pending/unknown into completion (`src/modules/answer-thread/internal/public-projection.ts`).
-- **Inquiry/customer record:** proves what AE submitted, to whom (as bounded/verified identity), when,
-  delivery/readback, and recorded reply. It does not prove acceptance, availability, booking,
-  confirmation, compensation, or completed business work (`src/components/ae/inquiries/AeCustomerRecord.tsx`).
-- **Operation:** `completed` means the canonical source accepted a terminal provider observation with
-  matching input/contract/evidence. `pending`, transport unknown, `possibly_released`, and
-  `reconciliation_required` remain non-completion states (`src/modules/action-invocation/operation-public.ts`,
-  `convex/capabilityOperationInvocationWorker.ts`).
-- **Money:** ledger/Stripe evidence proves the recorded transaction/provider observation, not a browser
-  success screen. Unknown topups/charges/payouts require reconciliation; provider accrual is not a
-  payout (`src/modules/money/internal/ledger.ts`, `src/modules/money/internal/payout-policy.ts`).
-- **Operator/admin:** redacted readback proves an authorized view of bounded current source rows,
-  not adjudication, external causality, or remediation (`src/modules/security/internal/admin-authority.ts`,
-  `convex/security.ts`).
+- **Catalog/discovery:** proves a bounded current source projection, declared provenance, price,
+  contract, and availability state at read time. It does not prove provider uptime or business
+  acceptance.
+- **Readiness:** proves one guarded observation against a revision/target/credential at
+  `observedAt`/`validUntil`. It is not an SLA.
+- **Answer:** proves only durable frozen evidence and sanitized terminal/error projection. Model prose
+  and open streams cannot declare an external effect complete.
+- **Inquiry:** proves AE submission, governed target, durable message/dispatch lineage, and recorded
+  reply/delivery status. It does not prove booking, fulfilment, or compensation.
+- **Operation:** `completed` proves canonical terminal acceptance of matching contract-valid output.
+  Pending, possibly released, unknown payment, and reconciliation-required states remain incomplete.
+- **Internal money:** proves AE's exact ledger transition and recorded provider accrual/rake. Accrual is
+  not Stripe transfer or bank payout.
+- **x402:** proves only the bound external-spend and settlement observation accepted by the verifier.
+  It does not prove output-schema-valid delivery or Qualified Use.
+- **Stripe:** proves the recorded verified provider event/transfer observation, not browser success or
+  downstream bank payout.
+- **Owner/admin:** proves an authorized bounded redacted view, not external causality or adjudication.
+- **External run:** proves only the frozen manifest, admitted evidence classes, and deterministic gate
+  over those rows. Missing hosted/provider/customer/payment evidence stays missing.
 
-### Reachable gaps (current source, not historical backlog)
+### Reachable gaps in the current source
 
-1. **Worker-to-ledger identity seam:** the durable operation worker calls internal
-   `moneyLedger.authorizeInvocationCharge` after checking an operator account, but the ledger mutation
-   independently requires an authenticated `ctx.auth` identity for the principal and returns
-   `billing_identity_missing` otherwise. The worker action has no request identity injection at this
-   call site, so a configured paid invocation can refuse before transport (`convex/capabilityOperationInvocationWorker.ts`,
-   `convex/moneyLedger.ts`, `authorizeInvocationCharge`). This is a source-integrated gap, not proof
-   that a hosted deployment always fails.
-2. **Cancellation race:** worker cancellation checks occur before canonical claim/release, while the
-   recovery path can project a pending outer row to `cancelled` and clear work/attempt fields. A
-   cancellation acknowledged in that window can race a later claim/release; canonical effect state,
-   not the outer cancelled label, is the safety authority (`convex/capabilityOperationInvocationWorker.ts`,
-   `recover`, `openDispatch`, `src/modules/action-invocation/canonical-claim.ts`).
-3. **Possibly-released retry identity:** the worker rebuilds canonical claim material with a fresh
-   `recordedAt`; canonical claim command identity includes recorded-at material while the stable
-   command ID is attempt-based. A retry after a persisted possibly-released fence can therefore hit
-   `command_identity_conflict` instead of the intended reconciliation path (`convex/capabilityOperationInvocationWorker.ts`,
-   `operationInvocationAttemptIdentityDigest`, `src/modules/action-invocation/canonical-claim.ts`).
-4. **Readback truncation and pagination:** provider earnings/admin/inquiry/readback surfaces are bounded
-   source projections (for example admin rows take 100 and public operation/catalog pages are capped).
-   Consumers must honor `truncated`, `nextCursor`, or `hasMore`; there is no claim of a complete historical
-   statement from a bounded page (`convex/security.ts`, `convex/moneyLedger.ts`,
-   `src/modules/capability-supply/operation-projection.ts`).
-5. **Projection/readiness staleness is honest but visible:** catalog/capability projection pending,
-   revision mismatch, readiness expiry, source capacity, unsupported transport, and provider
-   `source_unavailable` can make a route unavailable. The current behavior fails closed; no source proves
-   that stale rows are automatically repaired within a target latency (`convex/capabilitySupplyProjection.ts`,
-   `convex/capabilitySupply.ts`, `src/modules/capability-execution/operation-execute.functions.ts`).
-6. **No aggregate USE telemetry:** source rows record bounded per-request observations, but no repository
-   seam reports Convex read/write utilization, Workpool queue depth/age/slot use, provider aggregate
-   saturation/error rate, model aggregate token budget, or browser/HTTP in-flight concurrency. These
-   remain `?`, not healthy zeros (`convex/customerRequestRouteWorkpool.ts`, `convex/crons.ts`,
-   `src/lib/server/rate-limit.ts`).
-7. **Hosted/live proof remains configuration-gated:** source has environment credentials, guarded target
-   checks, Stripe/OAuth/provider adapters, and local/eval fixture paths, but this map does not promote
-   them into hosted certification. Live completion, paid delivery, payout, and external business effect
-   require the corresponding configured deployment and durable evidence (`src/lib/server/local-e2e-bypass.ts`,
-   `src/modules/money/internal/live-money-gate.ts`, `tools/ae/README.md`).
+1. **Qualified Use is not durable yet.** ADR-034 defines an immutable Qualified Use receipt, but no
+   `qualifiedUse` table or source writer exists. `moneyUsageEvents` and `capabilityCallEvents` are not
+   equivalent because payment, call, or output observation alone does not prove the full authorized,
+   production, contract-valid delivery chain
+   (`.planning/adr/ADR-034-supplier-usage-qualified-use-and-payout-spine.md`).
+2. **Automatic daily supplier settlement remains policy, not an implemented authority spine.**
+   Existing payout rows, Connect adapters, provider earnings readback, and transfer recovery are real
+   source seams, but no source-owned daily full-balance settlement runner or immutable allocation from
+   Qualified Uses is present.
+3. **Live-money/legal gate remains fail-closed.** `evaluateLiveMoneyGate` can refuse production money
+   while operator/legal decisions are open. Source integration is not proof that jurisdiction,
+   reserve, tax, merchant-of-record, or emergency-stop policy is configured.
+4. **Provider-direct x402 is source-integrated but not hosted-certified here.** External spend,
+   durable possible-submission ordering, exact EVM verification, and reconciliation paths exist. The
+   repository alone does not prove funded custody, facilitator/chain reachability, a settled real
+   transfer, or supplier delivery.
+5. **Cancellation still has a narrow outer/canonical race surface.** Outer cancellation can mark a
+   pending invocation cancelled when no canonical control is yet visible, while an already enqueued
+   worker may be opening its claim. Canonical claim/release state remains the safety authority, not the
+   outer label (`cancelBeforeClaim`, `claimDispatch`).
+6. **Bounded readbacks are not complete history.** Provider earnings can report `truncated`; admin,
+   inquiry, catalog, and Operation surfaces use caps/cursors. Consumers must honor `truncated`,
+   `continueCursor`, `nextCursor`, or `hasMore`.
+7. **Projection/readiness repair has no source-proven latency SLO.** Current behavior truthfully fails
+   closed on pending/stale/expired/unsupported state, but the schema does not prove repair within a
+   target interval.
+8. **Aggregate USE telemetry is absent.** Per-request evidence exists; repository seams do not expose
+   the aggregate utilization, saturation, and error windows marked `?` in §6.
+9. **Curated supply is configuration- and environment-sensitive.** Production bootstrap excludes
+   demo/development-keyed publications and returns source drift as migration required. A seeded row is
+   not independent-provider or live-route proof.
+10. **Hosted completion remains deployment evidence.** OAuth keys, provider credentials, Stripe,
+    Novu/Resend, MCP, and public DNS guards are source adapters. Production claims require configured
+    deployment plus matching durable observations.
 
 ## 8. Primary-source register
 
-Repository-relative sources are authoritative for this map:
+Repository-relative sources authoritative for this map:
 
-- Schema root and durable adapters: `convex/schema.ts`; `convex/capabilitySupply.ts`,
-  `convex/capabilitySupplyProjection.ts`, `convex/capabilitySupplyOperations.ts`,
-  `convex/capabilityOperationInvocations.ts`, `convex/capabilityOperationInvocationWorker.ts`,
-  `convex/customerRequestApplication.ts`, `convex/customerRequestRouteTransportWorker.ts`,
-  `convex/answerThreads.ts`, `convex/inquiries.ts`, `convex/notificationOutbox.ts`,
-  `convex/moneyLedger.ts`, `convex/security.ts`.
-- Supply/registry/contracts: `src/modules/capability-supply/internal/publication-importers.ts`,
-  `src/modules/capability-supply/internal/publication/publish.ts`,
-  `src/modules/capability-supply/internal/readiness-probe.ts`,
-  `src/modules/capability-supply/operation-projection.ts`,
+- Root schema: `convex/schema.ts`.
+- Convex guidelines governing interpretation: `convex/_generated/ai/guidelines.md`.
+- Answer durability: `convex/answerThreads.ts`,
+  `src/modules/answer-thread/public.ts`,
+  `src/modules/answer-thread/internal/public-projection.ts`.
+- Capability supply/readiness: `convex/capabilitySupply.ts`,
+  `convex/capabilitySupplyReadiness.ts`,
+  `convex/capabilitySupplyProjection.ts`,
+  `convex/capabilitySupplyOperations.ts`,
+  `src/modules/capability-supply/public.ts`,
+  `src/modules/capability-supply/operation-projection.ts`.
+- Operation invocation/recovery: `convex/capabilityOperationInvocations.ts`,
+  `convex/capabilityOperationInvocationWorker.ts`,
+  `src/modules/capability-execution/public.ts`,
+  `src/lib/server/operation-invoke-api.ts`.
+- Canonical effect lifecycle: `src/modules/action-invocation/canonical-claim.ts`,
+  `src/modules/action-invocation/durable.ts`,
+  `src/modules/action-invocation/operation-public.ts`.
+- Customer Request: `src/modules/customer-request/public.ts`,
+  `src/modules/customer-request/internal/convex-v2-schema.ts`,
+  `src/modules/customer-request/internal/route-mandate-convex-schema.ts`,
+  `convex/customerRequestApplication.ts`,
+  `convex/customerRequestRouteTransportWorker.ts`.
+- Money and settlement: `src/modules/money/public.ts`,
+  `src/modules/money/internal/convex-schema.ts`,
+  `src/modules/money/internal/external-spend.ts`,
+  `convex/moneyLedger.ts`.
+- x402 transport/verification: `src/modules/capability-supply/route-transport-runtime.ts`,
+  `src/modules/capability-supply/internal/x402-payment-signer.ts`,
+  `src/modules/capability-supply/internal/x402-settlement-verifier.ts`.
+- Registry/catalog/discovery: `src/modules/registry/public.ts`,
+  `src/modules/registry/operation-action-contracts.ts`,
   `src/modules/registry/internal/services-api-projection.ts`,
-  `src/modules/registry/internal/offering-api-projection.ts`.
-- Durable action/authority/evidence: `src/modules/action-invocation/canonical-claim.ts`,
-  `src/modules/action-invocation/durable.ts`, `src/modules/action-invocation/operation-public.ts`,
-  `src/modules/agent-access/policy.ts`, `src/modules/agent-access/oauth-state.ts`,
-  `src/modules/money/internal/ledger.ts`, `src/modules/customer-request/customer-projection.ts`,
-  `src/modules/customer-request/route-mandate.ts`.
-- Route/adapters and contracts: `src/routes/**` families named in §2, `src/lib/server/problem.ts`,
-  `src/lib/server/rate-limit.ts`, `src/lib/server/bounded-request-body.ts`,
-  `src/lib/server/operation-invoke-api.ts`, `src/lib/server/customer-request-agent-api.ts`,
-  `src/lib/server/customer-request-browser-api.ts`, `src/lib/server/mcp-api.ts`, `tools/ae/cli.ts`,
+  `src/modules/catalog/public.ts`,
+  `src/modules/discovery/public.ts`.
+- Curated supply: `convex/curatedProviders.ts`,
+  `src/modules/capability-supply/curated-provider-publications.ts`.
+- Agent access/OAuth: `src/modules/agent-access/public.ts`,
+  `src/modules/agent-access/agent-access.ts`,
+  `src/modules/agent-access/policy.ts`,
+  `src/lib/server/agent-access-oauth-api.ts`.
+- Inquiries/notifications: `convex/inquiries.ts`, `convex/notificationOutbox.ts`,
+  `src/lib/server/notification-dispatch.ts`.
+- Source-write/security: `convex/sourceWriteAdmission.ts`, `convex/security.ts`,
+  `src/modules/security/source-write-admission.ts`.
+- Work Tree and external proof: `convex/workTreeApprovals.ts`, `convex/externalRuns.ts`.
+- MCP: `src/lib/server/mcp-api.ts`, `src/lib/mcp-protocol.ts`,
   `src/modules/actions/index.ts`.
-- External method: Brendan Gregg, “The USE Method”,
-  <https://www.brendangregg.com/usemethod.html> (retrieved 2026-08-12 as recorded in the refresh
-  contract). USE supplements correctness, authority, provenance, privacy, idempotency, and security;
-  it does not replace them.
+- Route/adapter inventory: `src/routes/**`, `src/lib/server/**`, `tools/ae/**`.
+- Supplier-use decision boundary:
+  `.planning/adr/ADR-034-supplier-usage-qualified-use-and-payout-spine.md`.
+- Prompt/model/tool/eval boundary: [PROMPT-DATA-FLOW.md](PROMPT-DATA-FLOW.md).
+- External method: Brendan Gregg, “The USE Method,”
+  <https://www.brendangregg.com/usemethod.html>.
 
-_Refreshed against the current dirty tree on 2026-08-12. This document intentionally contains no
-historical schema/route counts, no unverified runtime measurements, and no migration backlog._
+_Refreshed against the current dirty tree on 2026-08-15. Counts are current-source counts. This map
+does not infer hosted readiness, external effects, settlement, payout, or SLO health from source shape._
