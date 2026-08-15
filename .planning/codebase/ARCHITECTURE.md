@@ -1,84 +1,293 @@
+<!-- refreshed: 2026-08-15 -->
 # Architecture
-**Analysis Date:** 2026-08-12
+
+**Analysis Date:** 2026-08-15
+
+## System Overview
+
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         Public host surfaces                             │
+├───────────────────────┬──────────────────────┬───────────────────────────┤
+│ React/HTML + HTTP API │ MCP + agent files    │ External-agent CLI        │
+│ `src/routes/`         │ `src/routes/mcp.ts`  │ `tools/ae/cli.ts`         │
+└───────────┬───────────┴──────────┬───────────┴─────────────┬─────────────┘
+            │                      │                         │
+            ▼                      ▼                         ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                 Adapters, middleware, and action registry                │
+│ `src/start.ts` · `src/lib/server/` · `src/modules/actions/index.ts`      │
+└──────────────────────────────────┬───────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                     Domain/application modules                           │
+│ `src/modules/*/{public,server}.ts` · `src/modules/*/*.functions.ts`      │
+│ contracts → supply/registry → answer/customer request → invocation/money │
+└──────────────────────────────────┬───────────────────────────────────────┘
+                                   │ typed source ports
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                Convex source authority and durable workers               │
+│ `convex/schema.ts` · `convex/*.ts` · `convex/convex.config.ts`           │
+│ tables, transactions, schedules, workpool/workflow, external I/O actions │
+└──────────────────────────────────┬───────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Supplier runtimes, model providers, payment rails, Clerk, observability │
+│ reached only through guarded server/Convex action adapters               │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+## Component Responsibilities
+
+| Component | Responsibility | File |
+|-----------|----------------|------|
+| TanStack Start host | Owns SSR, file routes, server handlers, root document, and middleware composition | `src/start.ts`, `src/router.tsx`, `src/routes/__root.tsx` |
+| Route adapters | Parse HTTP/UI input, authenticate or rate-limit, call public module seams, and project responses | `src/routes/`, especially `src/routes/api.answer.turn.ts` and `src/routes/api.v1.operations.execute.ts` |
+| Canonical action plane | Defines one typed operation contract and explicitly projects it to UI, HTTP, Answer, CLI, agent JSON, and MCP | `src/modules/common/action.ts`, `src/modules/actions/index.ts` |
+| MCP adapter | Filters the action registry by read/write authority, validates MCP requests and action outputs, and serves Streamable HTTP | `src/lib/server/mcp-api.ts`, `src/routes/mcp.ts` |
+| Capability contract | Owns the transport-neutral capability grammar, JSON Schema validation, semantic input/evidence projection, and digests | `src/modules/capability-contract/public.ts` |
+| Capability supply | Owns admitted offerings, bindings, eligibility, publication, readiness, immutable operation identity, and route transport | `src/modules/capability-supply/` |
+| Registry | Projects source-owned business and Market Operation data into bounded public read DTOs | `src/modules/registry/public.ts`, `src/modules/registry/registry.actions.ts`, `src/modules/registry/operations.actions.ts` |
+| Answer runtime | Interprets a conversational request, selects tools/operations, assembles public artifacts, gates evidence, and streams typed events | `src/modules/answer/`, `src/modules/answer-thread/internal/turn-orchestrator.ts` |
+| Harness | Supplies the generic phase loop, tool validation/execution, model accounting, approval policy, evidence envelopes, and replay journal | `src/modules/harness/public.ts`, `src/modules/harness/run-loop.ts` |
+| Customer Request | Owns the broader outcome aggregate, semantic compilation, evaluation, preparation, route mandates, authority, execution journals, and recovery | `src/modules/customer-request/` |
+| Capability execution | Owns keyless reads and the authenticated operation invocation application service, including idempotency and recovery contracts | `src/modules/capability-execution/operation-execute.server.ts`, `src/modules/capability-execution/operation-invoke.ts` |
+| Action Invocation | Owns durable prepare/authorize/lease/execute/reconcile state transitions used by consequential operations | `src/modules/action-invocation/`, `convex/actionInvocationControl.ts` |
+| Money | Owns exact amounts, credit/budget admission, usage, internal ledger entries, provider accrual, external-spend reservations, Stripe, and payout state | `src/modules/money/`, `convex/moneyLedger.ts` |
+| Convex source | Composes domain-owned tables, executes transactions, hosts internal workers, and supplies generated function references | `convex/schema.ts`, `convex/`, `convex/_generated/` |
+| Source-write security | Binds writes to request origin/body/command, signing scope, correlation identity, and a single-use nonce | `src/modules/security/source-write-admission.ts`, `src/lib/server/source-write-admission.ts`, `convex/sourceWriteAdmission.ts` |
 
 ## Pattern Overview
-Agentic-Economy is a Convex-authoritative modular monolith with a TanStack Start web/server edge. File-based routes in `src/routes/` serve browser pages and machine HTTP endpoints; server adapters in `src/lib/server/` validate the request, establish identity/correlation, and call typed module ports. Durable state, source-of-truth reads, command idempotency, authority decisions, work scheduling, evidence, budgets, and settlement live behind Convex functions in `convex/`.
 
-The domain is organized as bounded contexts under `src/modules/`. Each context exposes a deliberately small public/server seam and keeps implementation, validators, ports, and Convex schema material under `internal/`. `convex/schema.ts` composes those context-owned tables. This is a layered modular system rather than a generic workflow engine: deterministic kernel code decides what is admitted, current, executable, authorized, persisted, and chargeable; model output is limited to a semantic proposal or answer prose and is never the authority for business facts, a capability contract, an operation endpoint, a grant, a route mandate, a payment, or an external effect.
+**Overall:** Modular monolith with hexagonal domain boundaries, file-based host adapters, Convex source authority, and asynchronous durable execution.
 
-There are two distinct execution lanes. A keyless, read-only operation can use the DB-held executable descriptor through `src/modules/capability-execution/operation-execute.functions.ts`; an authenticated or consequential operation uses the `operation.invoke:v1` gateway and the durable Convex invocation/worker path. Public operation discovery is read-only and its opaque `operationRef` is a current-publication reference, not execution authority. The authenticated lane binds identity, grant generation, authority, idempotency, current publication, leases, evidence, and money before dispatch.
-
-The active HTTP surface is TanStack Start. `convex/http.ts` and `src/modules/routing-kernel/retirement.ts` intentionally return a typed retirement response for the old routing/MCP paths; they are not active routing authority. Likewise, the source-owned catalog is Offering-based (`businessOfferings`, revisions, and access paths), with a public projection, not the retired BusinessService/service-capability table model documented by history.
+**Key Characteristics:**
+- Keep domain contracts and deterministic decisions in `src/modules/`; keep persistence and scheduling adapters in `convex/`.
+- Publish module behavior through explicit `public.ts`, `server.ts`, action definitions, or `*.functions.ts` seams; treat `internal/` as module-private.
+- Treat routes as adapters rather than owners of schema, persistence, execution state machines, or provider transport.
+- Define agent-callable operations once with `defineAction` in `src/modules/common/action.ts`, then explicitly register them in `src/modules/actions/index.ts`.
+- Use canonical digests and immutable references across capability, invocation, authority, evidence, money, and replay boundaries.
+- Separate read projection from write authority: anonymous reads are bounded projections; writes require authentication and/or source-write admission.
+- Keep consequential external work durable: reserve identity and authority transactionally, dispatch through Convex workpool/workflow, then reconcile uncertain outcomes.
+- Compose the Convex schema from table maps owned by domain modules rather than centralizing all table definitions in `convex/schema.ts`.
 
 ## Layers
-1. **Presentation and protocol edges.** `src/routes/` contains browser routes, API routes, OAuth endpoints, discovery files, and the MCP route. `src/components/`, `src/hooks/`, and `src/styles/` are the React presentation layer. `tools/ae/cli.ts` and `tools/ae/commands/` are an external-agent CLI client. These layers do parsing, media negotiation, method guards, and response projection; they do not own durable business state.
-2. **Server gateway/adapters.** `src/lib/server/` contains request bounds, RFC 9457 response projection, correlation headers, rate-limit admission, Clerk/agent authentication, source-write admission, Convex transport, Stripe webhook/provider adapters, operation gateway handling, Answer streaming, customer-request HTTP adapters, and MCP host adaptation. These files translate wire protocols into module commands and typed Convex calls.
-3. **Domain public modules.** `src/modules/business/`, `catalog/`, `capability-contract/`, `capability-supply/`, `registry/`, `discovery/`, `agent-access/`, `capability-execution/`, `action-invocation/`, `money/`, `answer/`, `answer-thread/`, `customer-request/`, `inquiries/`, and supporting contexts own the vocabulary and pure decisions for their lane. Public DTOs/projections are derived from source records; module internals are not route contracts.
-4. **Deterministic kernel seams.** `src/modules/capability-contract/public.ts` validates bounded JSON Schema contracts and computes canonical refs/digests. `src/modules/capability-supply/internal/` normalizes imports, admits publication material, qualifies candidates, checks readiness/provenance, and projects current operations. `src/modules/action-invocation/` owns the canonical begin/prepare/decide/lease/execute/reconcile state machine. `src/modules/money/internal/` owns exact amounts, pricing, budgets, ledger transitions, charge reconciliation, and payout policy. `src/modules/customer-request/` owns evaluation, compilation, route plans, mandates, preparation, and repeat authority. `src/modules/answer-thread/internal/` owns reservations, checkpoints, gates, evidence, finalization, and replay.
-5. **Convex source and workers.** `convex/` registers tables, queries, mutations, and actions; reads/writes are transactionally authoritative. `convex/capabilitySupply*.ts` owns publication/readiness/eligibility/operation projections, `convex/capabilityOperationInvocations.ts` owns operation reservations and recovery, `convex/capabilityOperationInvocationWorker.ts` owns authenticated operation dispatch, `convex/answerThreads.ts` owns Answer turn durability, `convex/customerRequest*.ts` owns request aggregates and route execution, and `convex/moneyLedger.ts` owns the money ledger. Node workers such as `convex/customerRequestRouteTransportWorker.ts` and `convex/capabilityOperationInvocationWorker.ts` perform guarded external I/O only after durable gates.
-6. **External systems.** OpenRouter is reached only through `src/modules/model-gateway/`; Clerk supplies browser/Convex identity; Stripe is adapted by `src/lib/server/stripe-money-provider.ts` and `src/modules/money/internal/stripe-webhook.ts`; admitted provider HTTP, MCP, and x402 targets are reached by `src/modules/capability-supply/route-transport-runtime.ts` under `src/modules/network-guard/`. These systems supply observations or transport effects, while AE persists the command/evidence/outcome.
 
-The normal dependency direction is `src/routes`/CLI/MCP → `src/lib/server` adapters → module public/server seams → Convex source functions and context internals. Domain cores depend downward on `src/modules/common/` and explicit ports; Convex entrypoints depend on those domain seams plus Convex validators. Model and provider adapters are replaceable edges, not sources of domain authority. Generated files (`src/routeTree.gen.ts`, `convex/_generated/`) are framework output, not hand-authored layers.
+**Host and Presentation:**
+- Purpose: Render public/operator interfaces and expose HTTP, OAuth, discovery, webhook, answer, and MCP endpoints.
+- Location: `src/routes/`, `src/components/`, `src/styles/`
+- Contains: TanStack file routes, React components, server handlers, SEO/agent discovery documents, webhooks.
+- Depends on: `src/lib/`, module public seams, server-function seams.
+- Used by: Browsers, crawlers, external agents, providers, operators.
+
+**Request Boundary and Infrastructure Adapters:**
+- Purpose: Normalize authentication, correlation, security headers, rate limits, bounded bodies, source-write admission, Convex transport, and provider-specific I/O.
+- Location: `src/start.ts`, `src/lib/server/`, `src/lib/http/`, `src/lib/observability/`
+- Contains: Middleware, Clerk/agent access adapters, RFC 9457 problem projection, Convex HTTP client, guarded operation gateway.
+- Depends on: Framework APIs, module contracts, environment configuration.
+- Used by: Routes, server functions, action surfaces.
+
+**Action Contract Plane:**
+- Purpose: Give each machine operation one input/output/effect/authority/retry contract and one implementation entry.
+- Location: `src/modules/common/action.ts`, `src/modules/actions/index.ts`, `src/modules/*/*.actions.ts`
+- Contains: Zod schemas, effect metadata, surface exposure, runners, deterministic MCP tool names.
+- Depends on: Domain module public contracts.
+- Used by: MCP, HTTP routes, Answer tools, CLI, harness, agent descriptors.
+
+**Domain and Application:**
+- Purpose: Own business invariants, state-transition decisions, projections, and ports without owning transport setup.
+- Location: `src/modules/`
+- Contains: Capability contracts, supply, registry, requests, answer threads, invocation, money, security, work trees, inquiries, observability.
+- Depends on: Other modules only through deliberate public/application seams and `src/modules/common/`.
+- Used by: Host adapters and Convex functions.
+
+**Durable Source and Workers:**
+- Purpose: Persist canonical state and atomically enforce indexes, ownership, idempotency, leases, admission, and money transitions.
+- Location: `convex/`
+- Contains: Public/internal queries and mutations, Node actions, workpool/workflow workers, crons, schema composition.
+- Depends on: `src/modules/*` validators and deterministic domain functions plus Convex components.
+- Used by: Server-side source transports in `src/lib/server/convex-source.ts`.
+
+**External Edges:**
+- Purpose: Invoke supplier-hosted operations, models, payments, email/notification services, authentication, and telemetry.
+- Location: `src/modules/capability-supply/internal/transport-adapters.ts`, `src/modules/model-gateway/`, `convex/capabilityOperationInvocationWorker.ts`, `src/lib/observability/`
+- Contains: Guarded fetch, DNS/SSRF policy, signing, x402 settlement verification, Stripe, OpenRouter, Sentry/PostHog.
+- Depends on: Server-only credentials and admitted immutable descriptors.
+- Used by: Convex actions and server-only application services.
 
 ## Data Flow
-### Supply admission to public operation discovery
-1. Owner or curated seed material enters `src/modules/capability-supply/supply-funnel.functions.ts` through a bounded source draft/import. `preflightOwnerOpenApiDocumentServer`, `preflightOwnerCapabilityServer`, and `admitOwnerCapabilityServer` perform source revision/digest, schema, commercial, authority, and endpoint checks before publication.
-2. `src/modules/capability-supply/internal/publication-importers.ts` normalizes AE envelopes, OpenAPI HTTP operations, MCP tools, agent-plugin MCP tools, or x402 resources. `src/modules/capability-contract/public.ts` validates the resulting contract; unsupported schema/transport/payment/provenance conditions become named refusals rather than partial publication.
-3. `convex/capabilitySupply.ts:publishPreparedCapability` atomically persists the contract, offering, binding, publication lifecycle, source identity, pricing, and eligibility material. `qualifySuppliedCandidate` is the shared full qualification decision consumed by list, exact, graph, and projection paths. Readiness probes are read from/recorded in `convex/capabilitySupply.ts` and scheduled by `convex/crons.ts`.
-4. `convex/capabilitySupplyOperations.ts` reads current, qualified source rows and projects redacted `PublicOperationDescriptor` values through `src/modules/capability-supply/operation-projection.ts`. `src/modules/registry/operations.actions.ts` exposes read-only search/detail/compare/inspect-plan actions, and `src/routes/api.v1.market-operations.*.ts` exposes the machine HTTP surface. The same source feeds registry/catalog projections and discovery files (`llms.txt`, `SKILL.md`, UCP, sitemap, and agent markdown).
 
-### Answer turn and operation execution
-1. `src/routes/api.answer.turn.ts` accepts a bounded JSON query, requires `X-AE-Turn-Key`, applies rate limiting, and calls `reserveAnswerTurn` in `src/modules/answer-thread/answer-thread.functions.ts`/`convex/answerThreads.ts`. The reservation key and request digest make retries replayable; a session cookie scopes browser threads.
-2. `src/modules/answer-thread/internal/turn-orchestrator.ts` runs the harness phases: context/safety, follow-up intent, route selection, operation candidate resolution, registry retrieval, model/tool execution, snapshot assembly, gate, checkpoint, and finalization. It can resume a checkpoint only when the request, generation, candidate-set digest, selected descriptor, and replay material still bind.
-3. `src/modules/answer/internal/answer-tool-use-agent.ts` uses the single OpenRouter seam and AI SDK tool loop. Fixed read tools call registry/web discovery actions through `tool-runner`; admitted keyless operation descriptors become closure-bound dynamic tools whose input is validated against the DB-derived JSON Schema. When an authenticated operation context is present, the selected call is routed to `operation.invoke`; otherwise `operation.execute` uses `executeKeylessOperation` and a descriptor read from `convex/capabilitySupplyOperations.ts` through `convexKeylessExecutableSource`.
-4. Tool results, operation candidates, selection, outcome, model requests, provider slugs, and timing are recorded as Answer evidence. `runAnswerGate`, catalog grounding, output-schema validation, and finalization reject unsupported or ungrounded prose. Convex persists checkpoints and the final turn before the SSE `complete` frame; `answer-turn-finalization.ts` and `answerThreads.ts` make duplicate streams replay a durable result rather than repeat effects.
+### Primary Request Path
 
-### Authenticated operation gateway to durable external effect
-1. `src/routes/api.v1.operations.execute.ts` and the status/cancel/reconcile route files delegate to `src/lib/server/operation-invoke-api.ts`. The adapter bounds/parses JSON, authenticates the agent API key through Clerk/Convex agent access, verifies the request/source-write admission, and projects typed results to Problem Details or JSON.
-2. `createOperationInvokeService` in `src/modules/capability-execution/operation-invoke.ts` validates the operation ref/input, reads the current published operation, verifies environment/grant/policy compatibility, and reserves the idempotency identity. Existing terminal or replayable reservations are returned without a new effect.
-3. `convex/capabilityOperationInvocations.ts` persists the reservation and enqueues the invocation worker. `convex/capabilityOperationInvocationWorker.ts` rechecks principal/grant generation, current publication snapshot, contract/input/readiness, provider approval/lease, authority expiry, and signed call identity. It claims an attempt in `src/modules/action-invocation/` before any provider effect, authorizes the exact charge through `convex/moneyLedger.ts`, and writes a release fence.
-4. `src/modules/capability-supply/route-transport-runtime.ts` prepares and invokes HTTP JSON, MCP JSON-RPC, or x402 transport with bounded bodies/timeouts, endpoint/response checks, credentials held server-side, guarded DNS/SSRF lookup, and payment callbacks where applicable. The worker records canonical terminal output/evidence, settles/reconciles money and provider leases, and projects status. A post-release uncertainty becomes `outcome_unknown`/`reconciliation_required`; it is not silently retried with a new identity.
+1. A browser submits a query through `/t/new`; TanStack resolves the generated route tree and root middleware (`src/router.tsx:6`, `src/start.ts:91`, `src/routes/t.new.tsx`).
+2. The chat client posts a bounded JSON command and `x-ae-turn-key` to the answer endpoint (`src/routes/api.answer.turn.ts:36`, `src/routes/api.answer.turn.ts:68`).
+3. The route establishes correlation/session identity, validates content and rate admission, optionally resolves an authenticated operation principal, and reserves a durable turn (`src/routes/api.answer.turn.ts:72`, `src/routes/api.answer.turn.ts:121`, `src/routes/api.answer.turn.ts:154`).
+4. The Answer orchestrator loads prior durable context, classifies safety/intent, selects a turn path, and runs the harness phases `context → intent → route → retrieval → model → gate → assemble → persist → report` (`src/modules/answer-thread/internal/turn-orchestrator.ts:772`, `src/modules/answer-thread/internal/turn-orchestrator.ts:964`, `src/modules/answer-thread/internal/turn-orchestrator.ts:1068`).
+5. Read tools resolve through the canonical action registry, execute through the harness, and buffer validated tool evidence rather than writing mid-stream (`src/modules/answer-thread/internal/answer-tool-registry.ts:17`, `src/modules/answer-thread/internal/tool-runner.ts:63`).
+6. Operation discovery/selection uses capability-supply descriptors; keyless operations use guarded server fetch, while authenticated operations use the shared invocation service (`src/modules/capability-execution/operation-execute.server.ts:22`, `src/modules/capability-execution/operation-invoke.ts:504`).
+7. The orchestrator gates and freezes public artifacts, persists the answer and harness journal through source-write-admitted Convex mutations, then sends the terminal typed frame (`src/modules/answer-thread/internal/turn-orchestrator.ts:1685`, `src/modules/answer-thread/internal/turn-orchestrator.ts:1762`, `convex/answerThreads.ts:235`).
+8. `createUIMessageStreamResponse` returns typed transient frames to the React transcript; durable thread reads reconstruct the public projection from Convex (`src/routes/api.answer.turn.ts:182`, `src/routes/api.answer.turn.ts:250`, `src/modules/answer-thread/answer-thread.functions.ts`).
 
-### Customer Request route lifecycle
-`src/routes/api.v1.requests.ts` delegates to `src/lib/server/customer-request-agent-api.ts`, which authenticates the required agent mode and maps submit/facts/refine/compare/confirm/run/cancel/repeat/problem/evidence operations to `convex/customerRequestApplication.ts`. The Convex action loads the current eligible supply graph, invokes `src/modules/customer-request/semantic-interpreter.ts` (deterministic matching or structured model proposal), and passes the proposal through `evaluation.ts`, `compiler.ts`, and `prepared-action-v2.ts`. The compiler creates bounded route-plan revisions and `convex/customerRequestV2.ts` commits the aggregate with command/revision/replay checks; it does not treat model output as authority. Confirmation compiles a route mandate and step grants, reserves spend, then `convex/customerRequestRouteExecution.ts` and `convex/customerRequestRouteTransportWorker.ts` claim, transport, record evidence, settle or reconcile money, and project completion/recovery. Browser request pages and owner/support routes use the corresponding `src/lib/server/customer-request-*-api.ts` adapters.
+### Market Operation Invocation
 
-### Money, top-up, and provider earnings flow
-Pricing is resolved from admitted supply by `src/modules/money/internal/pricing-config.ts`; exact integer units are used throughout. Operation and route workers call the Convex money mutations for credential budget admission, paid charge authorization, ledger entries, provider earnings, AE rake, and charge reconciliation. `src/modules/money/server.ts` wraps those source calls for server functions, Stripe Checkout/webhook handling, Connect account onboarding, and payout transfer/recovery. `convex/moneyLedger.ts` is the authority for account/transaction/usage/payout rows; Stripe is evidence/transport, not the ledger. Top-ups, payouts, and provider charges preserve immutable identities and represent uncertain provider outcomes explicitly.
+1. HTTP, MCP, CLI, or Answer chooses the same registered `operation.invoke` action; the adapter derives an `AgentAccessPrincipal` and injects one `OperationInvokeService` (`src/modules/actions/index.ts:53`, `src/lib/server/mcp-api.ts:270`, `src/lib/server/operation-invoke-api.ts`).
+2. The application service validates the public operation reference/input, reads the key grant, derives deterministic request/invocation identities, and reserves idempotency before dispatch (`src/modules/capability-execution/operation-invoke.ts:511`, `src/modules/capability-execution/operation-invoke.ts:536`, `src/modules/capability-execution/operation-invoke.ts:657`).
+3. Current immutable operation material and authority are checked against publication, binding, contract, environment, budget, and grant generation (`src/modules/capability-execution/operation-invoke.ts:571`, `src/modules/capability-execution/operation-invoke.ts:860`).
+4. Production dispatch is committed in Convex and enqueued to workpool; the Node worker claims the attempt before external I/O (`convex/capabilityOperationInvocations.ts`, `convex/capabilityOperationInvocationWorker.ts`).
+5. The worker signs and invokes the admitted supplier transport through public-target DNS guards; x402 payment uses a separately reserved external-spend identity and verifies settlement evidence (`src/modules/capability-supply/route-transport-runtime.ts`, `convex/capabilityOperationInvocationWorker.ts`, `src/modules/money/internal/external-spend.ts`).
+6. Transactional finalization records invocation evidence, usage, charge/provider/rake ledger effects, or a reconciliation-required state; status/cancel/reconcile read the same durable identity (`convex/capabilityOperationInvocations.ts`, `convex/moneyLedger.ts`).
+
+### Customer Request Execution
+
+1. Request routes/actions parse facts and call application seams rather than constructing routing authority (`src/routes/api.v1.requests.ts`, `src/modules/customer-request/customer-request.actions.ts`).
+2. The Customer Request aggregate compiles semantic intent against capability contracts, evaluates supply candidates, and prepares action options (`src/modules/customer-request/public.ts`, `src/modules/customer-request/application/`).
+3. Confirmation and route-mandate admission bind principal, facts, plan generation, spend, and exact route-step authority before execution (`src/modules/customer-request/route-mandate.ts`, `src/modules/customer-request/route-mandate-admission.ts`, `convex/customerRequestRouteMandateAdmission.ts`).
+4. Convex route execution and workpool workers journal dispatch, transport, cancellation, evidence, problems, and reconciliation (`convex/customerRequestRouteExecution.ts`, `convex/customerRequestRouteTransportWorker.ts`, `src/modules/customer-request/route-execution/`).
+
+### MCP and CLI Projection
+
+1. `/mcp` delegates GET/POST/DELETE to the rate-limited MCP adapter (`src/routes/mcp.ts:7`).
+2. Anonymous callers see only read-only, credential-free registered actions; authenticated calls are filtered by scope and authority mode (`src/lib/server/mcp-api.ts:270`, `src/lib/server/mcp-api.ts:360`).
+3. MCP input/output validation reuses each canonical action's Zod schemas; top-level union outputs are projected into `tools/list` without a second schema owner (`src/lib/server/mcp-api.ts:147`, `src/lib/server/mcp-api.ts:294`).
+4. `tools/ae/cli.ts` exercises public HTTP/OAuth surfaces as an external agent and does not import Convex persistence (`tools/ae/cli.ts:1`).
+
+**State Management:**
+- Durable canonical state lives in Convex tables composed by `convex/schema.ts`; indexes encode intended access paths.
+- React route/component state is ephemeral presentation state; source truth is reloaded through route loaders, server functions, or HTTP streams.
+- Answer turns use reservation keys, request digests, generations, leases, checkpoints, frozen evidence/prose, and replay-safe finalization.
+- Consequential operations use deterministic invocation/attempt references, idempotency reservations, authority generations, release fences, evidence hashes, and explicit uncertain-outcome states.
+- Shared process state is limited to bounded caches or test seams such as the compiled-schema caches in `src/modules/capability-contract/public.ts` and the test transport in `src/lib/server/convex-source.ts`.
 
 ## Key Abstractions
-- **Capability contract:** `CapabilityContract` and `CAPABILITY_CONTRACT_FORMAT` in `src/modules/capability-contract/public.ts` bind bounded input/output JSON Schemas, customer annotations, data-use/effect/evidence declarations, lifecycle, and canonical digest. `validateJsonSchema` is the runtime contract check; it is reused before execution.
-- **Supply qualification/public projection:** `qualifySuppliedCandidate` in `src/modules/capability-supply/internal/graph/qualify-candidate.ts` is the canonical current-supply gate. `CapabilityOperationSourceRecord` is the server-side source view; `PublicOperationDescriptor` is the redacted discovery view emitted by `projectCapabilityOperation`. Catalog/registry/discovery projections must consume these decisions rather than inventing eligibility.
-- **References and bindings:** `PublicOperationRef` identifies a current admitted publication/contract; `OperationExecutableDescriptor` binds the server-held endpoint/config/schema needed for keyless execution; `operationExecutionBindingDigest` fences descriptor drift. `canonicalOperationInvocationRef` identifies a durable authenticated invocation. Discovery refs never grant authority.
-- **Agent authority:** `AgentAccessPrincipal`, `AgentAccessGrant`, policy digests, lifecycle/generation, and authority modes in `src/modules/agent-access/` bind caller, credential, application, environment, scopes, budget, and expiry. `source-write-admission.ts` separately signs server-to-Convex command provenance and verifies method/origin/path/body/correlation before durable writes.
-- **Invocation state machine:** `CanonicalClaimSnapshot`, attempts, effect generations, lease ownership, `InvocationHost`, and `DynamicPublishedActionInvocationAdapter` in `src/modules/action-invocation/` provide OCC-fenced prepare/decide/acquire/execute/reconcile/cancel behavior. `convex/capabilityOperationInvocationWorker.ts` and the route worker are adapters onto this state machine, not alternate state authorities.
-- **Money kernel:** `ExactAmount`, `PricingConfig`, `MoneyTransaction`, immutable ledger entries, credential budget reservations, charge state, payout state, and `outcome_unknown`/reconciliation transitions in `src/modules/money/public.ts` and `convex/moneyLedger.ts` are the single pricing/settlement model.
-- **Answer artifacts and durability:** `AnswerSnapshot`, `AnswerOperationCandidate`, `AnswerOperationSelection`, `AnswerOperationOutcome`, typed tool-call records, turn reservations, bounded checkpoints, and `answerRunGate` in `src/modules/answer*` bind prose to observed operation/provider evidence and durable turn identity.
-- **Customer request aggregate:** `CustomerRequestV2Aggregate`, plan revisions, route generations, prepared actions, `RouteMandate`, and `RouteStepGrant` in `src/modules/customer-request/` are the durable plan/authority vocabulary for multi-capability work. A model can propose semantics; compiler/evaluation/mandate code accepts or refuses them.
-- **Guarded transport:** `prepareRegisteredRouteTransportInvocation` and `invokePreparedRouteTransport` in `src/modules/capability-supply/route-transport-runtime.ts` centralize adapter parsing, target serialization, credential resolution, bounded responses, MCP paging, x402 payment observation, and evidence hashes. `src/modules/network-guard/public.ts` blocks private/loopback/link-local DNS targets.
+
+**Action:**
+- Purpose: Canonical machine-operation contract spanning every host surface.
+- Examples: `src/modules/common/action.ts`, `src/modules/actions/index.ts`, `src/modules/registry/operations.actions.ts`
+- Pattern: Typed command with Zod input/output, effects, authority, retry semantics, explicit registration, and injected context.
+
+**Capability Contract and Published Operation:**
+- Purpose: Separate neutral input/output/effect/evidence semantics from supplier publication, transport, readiness, and commercial material.
+- Examples: `src/modules/capability-contract/public.ts`, `src/modules/capability-supply/public.ts`
+- Pattern: Immutable, digest-bound value objects projected through supply and registry ports.
+
+**Source Port:**
+- Purpose: Keep framework routes and domain logic independent of Convex function implementation details.
+- Examples: `src/lib/server/convex-source.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `src/modules/capability-supply/operation-source.ts`
+- Pattern: Typed `FunctionReference`/port wrappers with authenticated and public transports.
+
+**Harness Run Loop:**
+- Purpose: Apply one observable lifecycle to model/tool orchestration and durable evidence.
+- Examples: `src/modules/harness/run-loop.ts`, `src/modules/harness/public.ts`, `src/modules/answer-thread/internal/answer-harness-operation.ts`
+- Pattern: Generic phased state machine with tool policy, model accounting, gate, persist, and report hooks.
+
+**Reservation, Lease, and Fence:**
+- Purpose: Make retries safe and prevent stale workers from committing effects.
+- Examples: `src/modules/answer-thread/internal/answer-turn-checkpoint.ts`, `convex/answerThreads.ts`, `src/modules/action-invocation/`, `convex/capabilityOperationInvocations.ts`
+- Pattern: Deterministic identity plus generation/version checks and explicit replay/conflict/reconciliation outcomes.
+
+**Exact Amount and Ledger:**
+- Purpose: Represent money without floating-point ambiguity and separate internal accounting from external payment settlement.
+- Examples: `src/modules/money/public.ts`, `src/modules/money/internal/exact-amount.ts`, `src/modules/money/internal/external-spend.ts`, `convex/moneyLedger.ts`
+- Pattern: Currency/units/exponent values, append-oriented entries, idempotent transactions, and digest-bound evidence.
 
 ## Entry Points
-- **Web/server bootstrap:** `npm run dev` starts Vite/TanStack Start. `src/start.ts` installs Clerk (unless the explicit local E2E bypass is enabled), CSRF, source-write, security-header, content-negotiation, request-correlation, observability, and API-boundary middleware. `src/router.tsx` registers the generated `src/routeTree.gen.ts` with the React root in `src/routes/__root.tsx`.
-- **Answer UI/API:** `/t/new`, `/t/$threadId`, `/i/$threadId`, and `/s/$shareToken` render thread surfaces. `POST /api/answer/turn`, `POST /api/answer/turn/stop`, thread/share routes, and follow-up/eval routes are implemented by `src/routes/api.answer.*.ts`.
-- **Public operation discovery:** `/api/v1/market-operations/search`, `/detail`, `/compare`, and `/inspect-plan` are active read-only endpoints backed by `src/modules/registry/operations.actions.ts` and Convex capability-supply queries. `/operations/$operationRef` and `/operations/invocations/$invocationRef` are the browser inspection/status pages.
-- **Operation gateway:** `POST /api/v1/operations/execute` plus `/api/v1/operations/$invocationRef`, `/cancel`, and `/reconcile` are wired by `src/routes/api.v1.operations*.ts` to `operation-invoke-api.ts`. They are the active authenticated invocation boundary for CLI, MCP, and external agents.
-- **Customer Request API:** `/api/v1/requests` and its `$requestRef` facts/messages/options/confirmation/run/cancellation/evidence/repeat/problem routes enter `customer-request-agent-api.ts`; browser equivalents use `customer-request-browser-api.ts` and the request route files.
-- **Provider/owner surfaces:** `/for-providers`, `/claim`, and `_operator/owner.*`/`_operator/agent-access.*` routes drive catalog claims, owner supply admission, provider connections, agent grants, inquiries, and money onboarding. The durable owner/server functions are in `src/modules/capability-supply/supply-funnel.functions.ts`, `src/modules/catalog/`, `src/modules/agent-access/`, and `src/modules/money/server.ts`.
-- **Protocol/discovery surfaces:** `/mcp` is the active Streamable HTTP MCP host; `/oauth/*` handles agent OAuth; `/llms.txt`, `/SKILL.md`, `/.well-known/*`, UCP, robots, and sitemap routes project current public discovery/contracts. `convex/http.ts` is intentionally limited to retirement responses for old Convex `/v1/*` and `/mcp` routes.
-- **CLI:** `npm run ae -- ...` loads `tools/ae/cli.ts`; top-level commands cover manifest/search/inspect/compare/connect/invoke/status/recover and grouped demand/advanced commands. CLI commands call the HTTP surfaces, use the same operation/Answer schemas, and preserve invocation/idempotency refs on recovery.
-- **Convex runtime:** `convex/schema.ts` composes context schemas; `convex/convex.config.ts` installs workflow/workpool/rate-limiter/aggregate components; `convex/crons.ts` schedules readiness probes and bounded cleanup. `convex/devSeed.ts` is an internal development seed/fixture entrypoint, not a production authority.
+
+**Web/SSR Application:**
+- Location: `src/start.ts`, `src/router.tsx`, `src/routes/__root.tsx`
+- Triggers: Vite/Nitro request or browser navigation.
+- Responsibilities: Middleware, route tree, root providers, SSR document, global error/telemetry UI.
+
+**File Routes and APIs:**
+- Location: `src/routes/`, generated index at `src/routeTree.gen.ts`
+- Triggers: Browser navigation, HTTP requests, webhooks, OAuth, agent discovery.
+- Responsibilities: Boundary validation, admission, module dispatch, response projection.
+
+**MCP Host:**
+- Location: `src/routes/mcp.ts`, `src/lib/server/mcp-api.ts`
+- Triggers: MCP Streamable HTTP GET/POST/DELETE.
+- Responsibilities: Action discovery, authentication tiering, schema projection, tool execution.
+
+**AE CLI:**
+- Location: `tools/ae/cli.ts`
+- Triggers: `npm run -s ae -- <command>`.
+- Responsibilities: External-agent exercise of public HTTP and OAuth contracts.
+
+**Convex Function Surface:**
+- Location: `convex/*.ts`, schema at `convex/schema.ts`
+- Triggers: Convex clients, server source transports, schedulers, workpool/workflow.
+- Responsibilities: Transactional persistence, source authority, durable dispatch, background work.
+
+**Scheduled Maintenance:**
+- Location: `convex/crons.ts`
+- Triggers: Convex intervals.
+- Responsibilities: Supply readiness refresh and bounded cleanup of abuse buckets, source-write nonces, and OAuth grants.
+
+## Architectural Constraints
+
+- **Threading:** Web/server code uses the Node event loop; external work is asynchronous. Convex mutations are serializable transactions, actions perform I/O, and workpool/workflow provide durable background concurrency.
+- **Global state:** Avoid mutable module state. Existing state is bounded and deliberate: compiled validator caches in `src/modules/capability-contract/public.ts`, observability SDK initialization in `src/lib/observability/`, and the test-only source transport in `src/lib/server/convex-source.ts`.
+- **Circular imports:** No accepted domain cycle is documented. Import tests in `tests/imports/` enforce directional boundaries; use public/application seams rather than deep reciprocal imports.
+- **Server/client split:** Node-only code stays behind `server.ts`, server functions, route handlers, or Convex Node actions. Dynamic imports in `src/routes/api.answer.turn.ts` prevent answer execution from entering the client route graph.
+- **Convex runtime split:** Queries/mutations remain in the default runtime; Node actions such as `convex/capabilityOperationInvocationWorker.ts` carry `"use node"` and do not export queries/mutations.
+- **Source authority:** Product projections must consume source-owned records. Components, transcripts, browser state, fixture state, and provider responses do not mint authority.
+- **Bounded work:** Public bodies, result sets, thread lengths, schema/value depth, tool calls, cleanup batches, and retries have explicit caps.
+- **Trust boundaries:** Caller identity is not authority. Clerk/agent access establishes identity, source-write admission authorizes source mutations, and operation/route mandates authorize effects.
+- **Runtime ownership:** AE owns market, policy, invocation identity, evidence, metering, and reconciliation; supplier implementations remain supplier-hosted.
+- **Generated files:** Never hand-edit `src/routeTree.gen.ts` or `convex/_generated/`.
+
+## Anti-Patterns
+
+### Route-Owned Persistence or Domain Logic
+
+**What happens:** A route imports Convex schema/internals, creates a `ConvexHttpClient`, or reimplements a state transition.
+**Why it's wrong:** It creates a second source of truth and bypasses authentication, admission, idempotency, and import-boundary tests.
+**Do this instead:** Keep routes as adapters over `public.ts`, `server.ts`, `*.functions.ts`, or registered actions; use `src/lib/server/convex-source.ts` for source transport. The guardrail is `tests/imports/route-boundary.test.ts`.
+
+### Parallel Action or Execution Plane
+
+**What happens:** A new MCP/HTTP/CLI tool defines separate schemas or directly calls supplier transport.
+**Why it's wrong:** Surface behavior, authority, retries, evidence, and output validation drift.
+**Do this instead:** Define the contract with `defineAction` in the owning module, register it in `src/modules/actions/index.ts`, and route consequential execution through `src/modules/capability-execution/operation-invoke.ts`.
+
+### Deep Imports Across Module Boundaries
+
+**What happens:** A consumer imports another module's `internal/` files to reach persistence shapes or decision helpers.
+**Why it's wrong:** Ownership becomes ambiguous and domain layers couple to transport/storage details.
+**Do this instead:** Export the smallest necessary seam from the owner's `public.ts`, `server.ts`, or application index. Boundary examples are enforced by `tests/imports/capability-contract-boundaries.test.ts`, `tests/imports/capability-supply-boundaries.test.ts`, and `tests/imports/customer-request-boundaries.test.ts`.
+
+### External Effect Before Durable Claim
+
+**What happens:** Provider or payment I/O starts before reservation, authority, attempt identity, and release fencing commit.
+**Why it's wrong:** A crash or retry can duplicate an irreversible effect or lose reconciliation identity.
+**Do this instead:** Reserve and claim in Convex first, then invoke from `convex/capabilityOperationInvocationWorker.ts`; finish as completed, refused, or reconciliation-required.
+
+### Projection as Authority
+
+**What happens:** A public DTO, model response, prior transcript, fixture, or UI selection is trusted to authorize a write or effect.
+**Why it's wrong:** Projections can be stale, partial, manipulated, or semantically insufficient.
+**Do this instead:** Re-read current source records and verify digest/generation/ownership at the final mutation or worker boundary in `convex/`.
 
 ## Error Handling
-- Domain code favors discriminated result unions with named refusal/error codes (`refused`, `needs_authority`, `pending`, `completed`, `outcome_unknown`, and related context-specific results). Invalid source, stale revisions, unavailable evidence, provider failures, and authority changes are not collapsed into success.
-- `src/lib/errors.ts` is the shared RFC 9457/Google-code model. `src/lib/server/problem.ts`, route handlers, `mcp-api.ts`, and `tools/ae/lib/output.ts` project typed failures into HTTP Problem Details, JSON-RPC errors, or CLI envelopes without exposing provider secrets. Method guards and bounded-body helpers reject unsupported methods, media types, oversize bodies, malformed JSON, and invalid schemas at the edge.
-- Answer failures remain typed SSE data frames (`error` with a stable code/copy id) and are persisted/replayed through the Answer turn lifecycle. Gate failures such as empty prose, failed grounding, injection upgrade, unsupported provider claims, unavailable tools, and budget exhaustion do not become fabricated answers.
-- External effects are classified before and after release. The operation and route workers reconcile accepted charges/leases and persist a canonical terminal observation; if release or evidence is uncertain they return `outcome_unknown`/`reconciliation_required` and direct callers to status/reconcile, rather than silently issuing a duplicate effect.
-- Convex source transport distinguishes missing auth/URL, unavailable source, invalid result, and refusal. Model/provider unavailability is fail-closed for lanes that require it; no fallback may mint authority or bypass contract/readiness/identity checks.
+
+**Strategy:** Validate at every trust boundary, return typed discriminated outcomes for expected domain refusal/replay/conflict states, use RFC 9457 responses at HTTP boundaries, and preserve uncertain external outcomes for reconciliation.
+
+**Patterns:**
+- Parse untrusted JSON as `unknown`, bound body size first, then validate with Zod or Convex validators (`src/routes/api.answer.turn.ts`, `src/lib/server/bounded-request-body.ts`).
+- Return explicit `kind` unions for expected application outcomes such as `refused`, `pending`, `needs_authority`, `replayed`, `conflict`, and `reconciliation_required` (`src/modules/capability-execution/operation-invoke.ts`).
+- Convert boundary failures to stable problem kinds/codes with safe detail and correlation identity (`src/lib/errors.ts`, `src/lib/server/problem.ts`, `src/lib/server/mcp-api.ts`).
+- Do not expose raw provider/model/Convex errors to public projections; preserve private evidence and emit redacted public state (`src/modules/harness/evidence-envelope.ts`, `src/modules/answer-thread/internal/public-projection.ts`).
+- Never retry an unknown consequential outcome as if no work occurred; require status/reconciliation (`src/modules/action-invocation/`, `convex/capabilityOperationInvocationWorker.ts`).
+- Catch observability failures without changing product control flow (`src/start.ts`, `src/lib/observability/`).
 
 ## Cross-Cutting Concerns
-- **Identity and authorization:** Clerk JWT/session identity is configured in `convex/auth.config.ts` and consumed server-side; agent API keys/OAuth resolve to Convex principals and grants in `src/lib/server/agent-access-auth.ts`/`src/modules/agent-access/`; owner/admin routes require Clerk/operator sessions. Authorization derives identity server-side rather than trusting client user ids.
-- **Provenance and source writes:** `src/modules/security/source-write-admission.ts` uses scoped HMAC/message-signature admissions, key families, correlation/operation/command digests, body digests, nonce age, and exact request binding. Convex mutations require this evidence for server-originated source writes; provider secrets are kept out of public projections.
-- **Idempotency, replay, and concurrency:** Canonical digests, command keys, invocation refs, turn reservation keys, revision/generation checks, OCC versions, work IDs, effect generations, leases, and replay readbacks fence retries. Observers and telemetry are explicitly non-authoritative.
-- **Bounded and safe I/O:** JSON/schema/source sizes, nesting, nodes, MCP pages/tools, response bytes, request timeouts, tool rounds, turn count, route plan size, rate limits, and budget windows are bounded. `network-guard` and `undici` guarded lookup prevent SSRF/private-target access; redirects and unexpected content types are refused.
-- **Evidence and observability:** Correlation IDs flow through HTTP, Convex calls, worker records, Answer work steps, action tool calls, gateway telemetry, audit events, and source hashes. Sentry/PostHog integration is observational and sanitized; it cannot change command truth. Public readiness/provenance/price evidence is labelled and projected without credentials.
-- **Money and resource policy:** Exact amounts, price digests, free-tier counters, credential budgets, concurrency/rate limits, provider leases, AE rake, frozen-period accruals, Stripe binding, and payout recovery are evaluated at the deterministic kernel/Convex boundary. UI, CLI, and model prompts may display terms but cannot approve a charge or payout.
-- **Generated/retired and derivative boundaries:** `convex/_generated/` and `src/routeTree.gen.ts` are generated; do not hand-edit them. `convex/http.ts`/`routing-kernel/retirement.ts` are explicit retirement stubs, not a place to add a new route. Separately maintained [`PROMPT-DATA-FLOW.md`](PROMPT-DATA-FLOW.md) and [`IA-DATA-FLOW.md`](IA-DATA-FLOW.md) are derivative maps, not product authority, and are not replaced by this architecture map; when source flows, ownership, or boundaries change, re-walk the affected map and MUST update it.
+
+**Logging:** Request correlation starts in `src/start.ts`/`src/lib/server/request-correlation.ts`; structured harness/runtime events, gateway telemetry, Sentry, and PostHog carry bounded/redacted evidence from `src/modules/harness/`, `src/lib/server/gateway-telemetry.ts`, and `src/lib/observability/`.
+**Validation:** Zod owns TypeScript boundary contracts, Convex validators own persisted/function values, JSON Schema owns supplier capability I/O, and canonical digests bind immutable material in `src/modules/common/canonical-digest.ts`.
+**Authentication:** Clerk protects human/operator routes and supplies Convex JWTs through `convex/auth.config.ts`; agent OAuth/API keys resolve to `AgentAccessPrincipal` in `src/modules/agent-access/`; source-write admission and mandates remain separate authorization layers.
+
+---
+
+*Architecture analysis: 2026-08-15*
