@@ -24,7 +24,6 @@ export const OPERATION_INVOKE_ROUTE_CONTRACT = {
     routerPath: '/api/v1/operations/call',
     legacyPath: '/api/v1/operations/execute',
     legacyRouterPath: '/api/v1/operations/execute',
-    servedPaths: ['/api/v1/operations/call', '/api/v1/operations/execute'] as const,
     requiredHeaders: ['Authorization', 'Content-Type'] as const,
   },
   status: {

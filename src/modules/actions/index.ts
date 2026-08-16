@@ -148,9 +148,16 @@ const operationRouteContracts = [
   OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,
 ] as const
 
-type OperationRouteContractEntry = (typeof operationRouteContracts)[number]
+type PublicOperationRouteDescriptorBase = Readonly<{
+  actionId: string
+  contractVersion: string
+  method: string
+  path: string
+  routerPath: string
+  requiredHeaders: readonly string[]
+}>
 
-export type PublicOperationRouteDescriptor = OperationRouteContractEntry & Readonly<{
+export type PublicOperationRouteDescriptor = PublicOperationRouteDescriptorBase & Readonly<{
   inputJsonSchema?: AgentToolDescriptor['inputJsonSchema']
   outputJsonSchema?: AgentToolDescriptor['outputJsonSchema']
   mcpToolName?: string
@@ -162,7 +169,12 @@ export function listOperationRouteDescriptors(): readonly PublicOperationRouteDe
     if (action === undefined) throw new Error(`Operation route action is not registered: ${route.actionId}`)
     const descriptor = describeActionForAgent(action)
     return {
-      ...route,
+      actionId: route.actionId,
+      contractVersion: route.contractVersion,
+      method: route.method,
+      path: route.path,
+      routerPath: route.routerPath,
+      requiredHeaders: route.requiredHeaders,
       ...(descriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: descriptor.inputJsonSchema }),
       ...(descriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: descriptor.outputJsonSchema }),
       ...(action.surfaces.includes('mcp') ? { mcpToolName: mcpToolName(action) } : {}),
