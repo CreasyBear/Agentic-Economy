@@ -513,3 +513,25 @@ every target deployment and verifying zero missing fields. Main was not pushed. 
 fail-closed. Final main porcelain was empty.
 
 This records the committed card only; it is not a full release-gate result or hosted acceptance.
+
+## P1-d1 — committed
+
+Product commit `439c378a5592b356f35b8225b1acd2a33475c94e`; `main` was clean at acceptance and the commit was not pushed.
+
+Core invariants:
+
+- Qualified-Use payout allocation is immutable, replay-safe, and keyed by the canonical Qualified-Use material plus the UTC payout day.
+- Allocation validates the source money journal, owner/provider/rake account identities, exact amount conservation, and append-only reversal corrections.
+- The owner transfer-status surface is automatic/read-only; it reports recorded state without authorizing or initiating provider transfer I/O.
+- Period-close admission is required before transfer progression; live money remains closed and fail-closed.
+
+Observed Node 22 evidence:
+
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- Focused tests: 177 + remaining 101 PASS.
+- Seeded owner-route smoke: PASS.
+- Independent security review: PASS.
+- Correctness findings fixed, including period-close admission.
+
+Explicit exclusions: no cron, no pre-provider reservation, no hosted migration/provider transfer, and no full release gate.

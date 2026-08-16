@@ -34,7 +34,9 @@ Nothing deleted. Live money stays fail-closed. Each card runs executor → valid
 | P1-a-sweep | Decide and implement what happens to any legacy `clerk_api_key:*` buyer balance. P1-a-core only refuses when one is found; moving money needs its own card and evidence | P1-a-core | pending |
 | P1-a-proj | `callVia` + `paymentLane` on operation detail projections | P1-a-core, P1-e-2 | pending |
 | P1-c | Disputes, exact reversals, supplier `recoveryDue` | P1-b | committed |
-| P1-d | Idempotent daily settlement cron | P1-c | recon |
+| P1-d1 | Immutable Qualified-Use UTC-daily payout allocation plus automatic/read-only owner transfer status surface | P1-c | committed |
+| P1-d2 | Reserve provider earnings before provider transfer I/O; exact success/failure/unknown/reversal handling | P1-d1 | recon |
+| P1-d3 | Idempotent daily settlement cron | P1-d2 | recon |
 | P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers; agent keys publish under a narrow owner-bound scope; withdraw drains rather than cancels | P1-e-2 | recon |
 | P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 | recon |
 
